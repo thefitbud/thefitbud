@@ -1,0 +1,31 @@
+{
+  "name": "@fitbud/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "expo start",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint App.tsx index.js src --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fitbud/api-client": "workspace:*",
+    "@fitbud/contracts": "workspace:*",
+    "@fitbud/core": "workspace:*",
+    "@fitbud/ui-mobile": "workspace:*",
+    "expo": "~52.0.46",
+    "expo-status-bar": "~2.0.1",
+    "react": "18.3.1",
+    "react-native": "0.76.9"
+  },
+  "devDependencies": {
+    "@fitbud/config": "workspace:*",
+    "@types/react": "~18.3.20",
+    "eslint": "^9.24.0",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.29.1",
+    "vitest": "catalog:"
+  }
+}
