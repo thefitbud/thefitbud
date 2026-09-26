@@ -72,7 +72,7 @@ The project maintains six focused Confluence pages:
 4. FitBud Technical Architecture and SLOs - system boundaries, services, auth, offline sync, notifications, realtime, and operational targets.
 5. FitBud Conceptual API Contract - API behavior, authorization, sync, notifications, and realtime conventions.
 6. FitBud Conceptual Database Schema - entities, relationships, invariants, ownership, and sync metadata.
-The repository becomes authoritative for implemented contracts, schema, migrations, and commands. AGENTS.md contains the working rules for both agents and developers.
+The repository becomes authoritative for implemented contracts, schema, migrations, and commands. Agents.md contains the working rules for both agents and developers.
 Local development
 Use the scripts defined in the root package.json. The root workspace must expose scripts for:
 - Development.
@@ -92,4 +92,4 @@ Delivery rules
 - Test offline retry and idempotency for sync-capable mutations.
 - Keep notifications and realtime delivery separate from domain state.
 - Update the relevant authoritative document when product or architectural behavior changes.
-See AGENTS.md for the complete implementation workflow and completion criteria.
+See Agents.md for the complete implementation workflow and completion criteria.
