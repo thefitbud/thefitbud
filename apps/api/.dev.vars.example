@@ -1,0 +1,6 @@
+# Local Worker secrets / overrides (gitignored via root .gitignore pattern).
+# AUTH_MODE=test uses the documented Firebase test double — never production credentials.
+FIREBASE_PROJECT_ID=fitbud-local
+AUTH_MODE=test
+# Local push double only — never put production FCM credentials here.
+PUSH_PROVIDER_MODE=test
