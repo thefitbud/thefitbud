@@ -10,7 +10,7 @@ import type {
   CoachingRelationship,
   ProgressSummary,
 } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -181,8 +181,9 @@ export function ProgressTab({
 
   return (
     <Screen
+      chrome="app"
       title="Progress"
-      subtitle="Stored measurements and photos only — nothing invented."
+      subtitle="Measurements and photos you have logged."
     >
       {error ? <ErrorBanner message={error} /> : null}
 
@@ -289,8 +290,11 @@ export function ProgressTab({
 
 const styles = StyleSheet.create({
   panel: {
+    backgroundColor: colors.white,
+    borderRadius: radii.card,
     gap: spacing.sm,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
+    padding: spacing.xl,
   },
   panelTitle: {
     color: colors.nearBlack,
@@ -325,8 +329,8 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
   },
   banner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderRadius: radii.card,
     gap: spacing.xs,
     padding: spacing.md,
   },

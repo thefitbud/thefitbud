@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@babel/runtime": "^7.25.0",
     "@fitbud/api-client": "workspace:*",
     "@fitbud/contracts": "workspace:*",
     "@fitbud/core": "workspace:*",

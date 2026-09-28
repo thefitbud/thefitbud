@@ -8,6 +8,7 @@ import { CheckinsPage } from "./pages/CheckinsPage";
 import { ClientActivityPage } from "./pages/ClientActivityPage";
 import { ClientCheckinsPage } from "./pages/ClientCheckinsPage";
 import { ClientHistoryPage } from "./pages/ClientHistoryPage";
+import { ClientOverviewPage } from "./pages/ClientOverviewPage";
 import { ClientPlanPage } from "./pages/ClientPlanPage";
 import { ClientProgressPage } from "./pages/ClientProgressPage";
 import { ClientWorkspaceLayout } from "./pages/ClientWorkspaceLayout";
@@ -47,7 +48,8 @@ export function App() {
             path="/clients/:relationshipId"
             element={<ClientWorkspaceLayout />}
           >
-            <Route index element={<Navigate to="plan" replace />} />
+            <Route index element={<ClientOverviewPage />} />
+            <Route path="overview" element={<ClientOverviewPage />} />
             <Route path="plan" element={<ClientPlanPage />} />
             <Route path="activity" element={<ClientActivityPage />} />
             <Route path="progress" element={<ClientProgressPage />} />

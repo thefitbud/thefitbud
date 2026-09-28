@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state",
+    "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 0.0.0.0",
     "build": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",

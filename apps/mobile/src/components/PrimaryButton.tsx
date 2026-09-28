@@ -5,7 +5,7 @@ import {
   Text,
   type PressableProps,
 } from "react-native";
-import { colors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { colors, radii, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 
 type Props = PressableProps & {
   label: string;
@@ -58,7 +58,7 @@ export function PrimaryButton({
 const styles = StyleSheet.create({
   base: {
     minHeight: touchTargetMin,
-    borderRadius: 14,
+    borderRadius: radii.control,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.lg,

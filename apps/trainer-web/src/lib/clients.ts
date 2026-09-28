@@ -44,7 +44,7 @@ export function primaryActionForStatus(status: OnboardingStatus): {
     case "onboarding_submitted":
       return { label: "Review intake", href: "onboarding" };
     case "coaching_ready":
-      return { label: "Open workspace", href: "plan" };
+      return { label: "Open workspace", href: "overview" };
     default: {
       const _exhaustive: never = status;
       return _exhaustive;

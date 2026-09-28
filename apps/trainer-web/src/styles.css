@@ -15,11 +15,11 @@
   --warning: #f59e0b;
   --error: #ef4444;
   --info: #3b82f6;
-  --page-bg: #f6f5fb;
+  --page-bg: #f3f5fb;
   --surface: #ffffff;
-  --border: #e6e8eb;
-  --shadow: 0 1px 2px rgb(15 17 21 / 6%);
-  --radius: 12px;
+  --border: #e7e9f2;
+  --shadow: 0 8px 24px rgb(26 18 72 / 5%);
+  --radius: 20px;
   --font: "Satoshi", "Segoe UI", sans-serif;
   color: var(--near-black);
   background: var(--page-bg);
@@ -37,10 +37,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(1200px 480px at 10% -10%, rgb(69 39 198 / 8%), transparent),
-    radial-gradient(900px 420px at 100% 0%, rgb(255 88 125 / 7%), transparent),
-    var(--page-bg);
+  background: var(--page-bg);
 }
 
 a {
@@ -69,13 +66,10 @@ input {
 
 .brand-mark {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  background: linear-gradient(120deg, var(--indigo), var(--coral));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  letter-spacing: -0.03em;
+  color: var(--deep-navy);
 }
 
 .brand-tagline {
@@ -84,10 +78,55 @@ input {
   font-weight: 500;
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.brand-glyph {
+  width: 2.15rem;
+  height: 2.15rem;
+  flex: 0 0 2.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--indigo);
+  color: var(--white);
+}
+
 .app-shell {
   min-height: 100vh;
   display: flex;
+  align-items: stretch;
+}
+
+.side-nav {
+  width: 15.5rem;
+  flex: 0 0 15.5rem;
+  display: flex;
   flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem 0.875rem 1rem;
+  background: var(--white);
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.app-canvas {
+  flex: 1;
+  min-width: 0;
+  background: var(--page-bg);
 }
 
 .top-bar {
@@ -97,8 +136,7 @@ input {
   gap: 1rem 1.5rem;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: rgb(255 255 255 / 92%);
-  backdrop-filter: blur(8px);
+  background: var(--white);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -113,7 +151,8 @@ input {
 
 .primary-nav {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.25rem;
   flex: 1;
 }
 
@@ -121,14 +160,20 @@ input {
   text-decoration: none;
   color: var(--mid-grey);
   font-weight: 600;
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
+  font-size: 0.9375rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
   min-height: 2.75rem;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  gap: 0.625rem;
 }
 
-.nav-link:hover,
+.nav-link:hover {
+  color: var(--deep-navy);
+  background: var(--pale-lavender);
+}
+
 .nav-link:focus-visible {
   color: var(--deep-navy);
   background: var(--pale-lavender);
@@ -148,19 +193,27 @@ input {
 
 .top-bar-meta {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: auto;
 }
 
 .session-label {
   color: var(--mid-grey);
   font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.shell-add-client {
+  width: 100%;
 }
 
 .page-main {
-  width: min(72rem, 100%);
-  margin: 0 auto;
-  padding: 1.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 1.25rem 1.5rem 2.5rem;
+  background: var(--page-bg);
 }
 
 .page {
@@ -332,8 +385,9 @@ input {
 }
 
 .button-primary {
-  background: linear-gradient(120deg, var(--indigo), #5a3ad4 55%, var(--coral));
+  background: var(--indigo);
   color: var(--white);
+  border-radius: 999px;
 }
 
 .button-primary:hover,
@@ -1037,20 +1091,42 @@ input {
 }
 
 @media (max-width: 640px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .side-nav {
+    width: 100%;
+    flex-basis: auto;
+    height: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+  }
+
+  .primary-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .top-bar-meta {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 0;
+  }
+
   .page-main {
-    padding: 1rem;
+    padding: 1.5rem;
   }
 
   .top-bar {
     padding: 0.875rem 1rem;
     align-items: flex-start;
-  }
-
-  .primary-nav {
-    flex-basis: 100%;
-    order: 3;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
 
   .page-header {
@@ -1112,7 +1188,7 @@ input {
 
 @media (min-width: 641px) and (max-width: 960px) {
   .page-main {
-    padding: 1.25rem;
+    padding: 1.5rem 1.75rem;
   }
 
   .workspace-nav {

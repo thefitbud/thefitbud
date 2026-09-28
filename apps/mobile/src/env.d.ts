@@ -7,3 +7,11 @@ declare namespace NodeJS {
 declare const process: {
   env: NodeJS.ProcessEnv;
 };
+
+declare module "react-native/Libraries/Core/Devtools/getDevServer" {
+  export default function getDevServer(): {
+    url: string;
+    fullBundleUrl: string | null;
+    bundleLoadedFromServer: boolean;
+  };
+}

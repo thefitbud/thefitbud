@@ -250,7 +250,7 @@ export function ClientPlanPage() {
   const version: PlanVersion | null = effective?.version ?? null;
 
   return (
-    <div className="workspace-panel">
+    <div className="workspace-page workspace-plan">
       {error ? (
         <p className="form-error" role="alert">
           {error}
@@ -258,56 +258,79 @@ export function ClientPlanPage() {
       ) : null}
       {message ? <p className="form-success">{message}</p> : null}
 
-      {loading ? (
-        <p className="muted">Loading plan…</p>
-      ) : version ? (
-        <div className="stack-lg">
+      <section className="workspace-card" aria-labelledby="effective-plan-heading">
+        <div className="workspace-card-head">
           <div>
-            <h2>Effective plan</h2>
+            <h2 id="effective-plan-heading" className="workspace-card-title">
+              Effective plan
+            </h2>
+            <p className="lede">
+              The published version this client is following.
+            </p>
+          </div>
+        </div>
+        {loading ? (
+          <p className="muted">Loading plan…</p>
+        ) : version ? (
+          <div className="stack-lg">
             <p className="muted">
+              {effective?.plan?.title ? `${effective.plan.title} · ` : ""}
               Version {version.versionNumber} · effective{" "}
               {version.effectiveFrom ?? "now"}
             </p>
+            <ul className="plan-day-list">
+              {version.content.workoutDays.map((day) => (
+                <li key={day.id} className="plan-day">
+                  <h3>{day.name}</h3>
+                  <ul>
+                    {day.exercises.map((exercise) => (
+                      <li key={exercise.id}>
+                        <strong>{exercise.name}</strong>
+                        {exercise.setTargets.length > 0 ? (
+                          <span className="muted">
+                            {" "}
+                            · {exercise.setTargets.length} sets
+                            {exercise.setTargets[0]?.reps != null
+                              ? ` × ${exercise.setTargets[0].reps}`
+                              : ""}
+                            {exercise.setTargets[0]?.loadLabel
+                              ? ` @ ${exercise.setTargets[0].loadLabel}`
+                              : ""}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="plan-day-list">
-            {version.content.workoutDays.map((day) => (
-              <li key={day.id} className="plan-day">
-                <h3>{day.name}</h3>
-                <ul>
-                  {day.exercises.map((exercise) => (
-                    <li key={exercise.id}>
-                      <strong>{exercise.name}</strong>
-                      {exercise.setTargets.length > 0 ? (
-                        <span className="muted">
-                          {" "}
-                          · {exercise.setTargets.length} sets
-                          {exercise.setTargets[0]?.reps != null
-                            ? ` × ${exercise.setTargets[0].reps}`
-                            : ""}
-                          {exercise.setTargets[0]?.loadLabel
-                            ? ` @ ${exercise.setTargets[0].loadLabel}`
-                            : ""}
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <div className="empty-state">
-          <h2>No effective plan</h2>
-          <p>Reuse a template or publish a simple workout day to start.</p>
-        </div>
-      )}
+        ) : error ? null : (
+          <div className="empty-state">
+            <h3>No effective plan</h3>
+            <p>Reuse a template or publish a simple workout day to start.</p>
+          </div>
+        )}
+      </section>
 
+      <section className="workspace-card" aria-labelledby="draft-change-heading">
+        <div className="workspace-card-head">
+          <div>
+            <h2 id="draft-change-heading" className="workspace-card-title">
+              Draft a change
+            </h2>
+            <p className="lede">
+              Reuse a template or publish a new version. Published versions stay
+              unchanged.
+            </p>
+          </div>
+        </div>
+        <div className="workspace-draft">
       <form
         className="stack-lg form-panel"
         onSubmit={(event) => void onApplyTemplate(event)}
       >
-        <h2>Reuse template</h2>
+        <h3>Reuse template</h3>
         <p className="muted">
           Copies template content into a draft for this client.{" "}
           <Link to="/templates">Manage templates</Link>
@@ -341,13 +364,13 @@ export function ClientPlanPage() {
         className="stack-lg form-panel"
         onSubmit={(event) => void onPublish(event)}
       >
-        <h2>
+        <h3>
           {draftPreview
             ? "Customize and publish draft"
             : version
               ? "Publish adjustment"
               : "Publish first plan"}
-        </h2>
+        </h3>
         <p className="muted">
           {draftPreview
             ? `Draft from ${draftPreview.creationSource}. Publish creates an immutable version.`
@@ -409,6 +432,8 @@ export function ClientPlanPage() {
                 : "Publish plan"}
         </button>
       </form>
+        </div>
+      </section>
     </div>
   );
 }

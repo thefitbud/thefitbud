@@ -16,7 +16,7 @@ import type {
   MeResponse,
   Role,
 } from "@fitbud/contracts";
-import { createMobileApiClient } from "../lib/api";
+import { createMobileApiClient, resolveApiBaseUrl } from "../lib/api";
 import {
   resolveAppRoute,
   selectInitialMobileRole,
@@ -52,10 +52,12 @@ function messageFromError(error: unknown): string {
   if (error instanceof ApiClientError) {
     return error.message;
   }
-  if (error instanceof Error) {
-    return error.message;
+  const message =
+    error instanceof Error ? error.message : "Something went wrong.";
+  if (message === "Network request failed") {
+    return `Network request failed. Could not reach ${resolveApiBaseUrl()}.`;
   }
-  return "Something went wrong.";
+  return message;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

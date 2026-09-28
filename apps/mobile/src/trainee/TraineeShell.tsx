@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { colors, spacing } from "@fitbud/ui-mobile";
 import type {
   Checkin,
   CoachingRelationship,
   EffectivePlanResponse,
 } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { CheckinScreen, TodayCheckinCard } from "./CheckinScreen";
+import { CheckinScreen } from "./CheckinScreen";
 import { DietTab } from "./DietTab";
 import { ProgressTab } from "./ProgressTab";
+import { TodayTab } from "./TodayTab";
 import { WorkoutTab } from "./WorkoutTab";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
@@ -126,58 +127,17 @@ export function TraineeShell({
     <View style={styles.root}>
       <View style={styles.content}>
         {tab === "today" ? (
-          <Screen
-            title="Today"
-            subtitle="Your next useful actions from the effective plan."
-          >
-            <TodayCheckinCard
-              relationship={relationship}
-              onOpen={setActiveCheckin}
-            />
-            {effectivePlan?.version ? (
-              <View style={styles.banner}>
-                <Text style={styles.bannerTitle}>Effective plan</Text>
-                <Text style={styles.bannerBody}>
-                  {effectivePlan.plan?.title ?? "Plan"} · v
-                  {effectivePlan.version.versionNumber}
-                  {effectivePlan.version.effectiveFrom
-                    ? ` · from ${effectivePlan.version.effectiveFrom.slice(0, 10)}`
-                    : ""}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.banner}>
-                <Text style={styles.bannerTitle}>No effective plan yet</Text>
-                <Text style={styles.bannerBody}>
-                  When your trainer publishes an adjustment, it appears here
-                  once effective.
-                </Text>
-              </View>
-            )}
-            <View style={styles.banner}>
-              <Text style={styles.bannerTitle}>Today’s actions</Text>
-              <Text style={styles.bannerBody}>
-                Open Workout or Diet for assigned work from your effective plan.
-              </Text>
-            </View>
-            <PrimaryButton
-              label="Go to Workout"
-              onPress={() => setTab("workout")}
-            />
-            <PrimaryButton
-              label="Go to Diet"
-              variant="secondary"
-              onPress={() => setTab("diet")}
-            />
-            <PrimaryButton
-              label="Refresh"
-              variant="secondary"
-              onPress={() => {
-                void refreshSession();
-                void loadEffectivePlan();
-              }}
-            />
-          </Screen>
+          <TodayTab
+            relationship={relationship}
+            effectivePlan={effectivePlan}
+            onOpenWorkout={() => setTab("workout")}
+            onOpenDiet={() => setTab("diet")}
+            onOpenCheckin={setActiveCheckin}
+            onRefreshPlan={() => {
+              void refreshSession();
+              void loadEffectivePlan();
+            }}
+          />
         ) : null}
 
         {tab === "workout" ? <WorkoutTab relationship={relationship} /> : null}
@@ -187,7 +147,11 @@ export function TraineeShell({
         {tab === "progress" ? <ProgressTab relationship={relationship} /> : null}
 
         {tab === "more" ? (
-          <Screen title="More" subtitle="Account and secondary actions.">
+          <Screen
+            chrome="app"
+            title="More"
+            subtitle="Account and secondary actions."
+          >
             <View style={styles.banner}>
               <Text style={styles.bannerTitle}>Selected role</Text>
               <Text style={styles.bannerBody}>
@@ -264,7 +228,7 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: "row",
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.lightGrey,
     backgroundColor: colors.white,
     paddingBottom: spacing.sm,
@@ -287,9 +251,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   tabIndicator: {
-    width: 16,
+    width: 18,
     height: 3,
     borderRadius: 999,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.indigo,
   },
 });

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { WorkoutExecution } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -52,11 +52,12 @@ export function ActiveWorkoutScreen({
 
   return (
     <Screen
-      title="Active Workout"
+      chrome="app"
+      title={current ? current.exercise.name : "Workout"}
       subtitle={
         execution.status === "paused"
-          ? "Paused — resume when ready."
-          : "Complete the current set. Assigned values are kept unless you change them."
+          ? "Paused — resume when you are ready."
+          : `Set ${setsDone + (current ? 1 : 0)} of ${setsTotal}`
       }
     >
       {error ? <ErrorBanner message={error} /> : null}
@@ -71,7 +72,6 @@ export function ActiveWorkoutScreen({
       {current ? (
         <View style={styles.currentCard}>
           <Text style={styles.eyebrow}>Current set</Text>
-          <Text style={styles.exerciseName}>{current.exercise.name}</Text>
           <Text style={styles.target}>
             Set {current.set.order}
             {current.set.prescribedReps != null
@@ -304,27 +304,25 @@ const styles = StyleSheet.create({
   },
   currentCard: {
     backgroundColor: colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.lightGrey,
-    padding: spacing.lg,
+    borderRadius: radii.card,
+    padding: spacing.xl,
     gap: spacing.md,
     marginBottom: spacing.lg,
   },
   eyebrow: {
     color: colors.indigo,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    textTransform: "uppercase",
   },
   exerciseName: {
-    color: colors.nearBlack,
-    fontSize: 22,
+    color: colors.deepNavy,
+    fontSize: 28,
     fontWeight: "700",
   },
   target: {
-    color: colors.midGrey,
-    fontSize: 15,
+    color: colors.darkGrey,
+    fontSize: 18,
+    fontWeight: "600",
   },
   input: {
     borderWidth: 1,

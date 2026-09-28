@@ -1,57 +1,269 @@
-import { NavLink } from "react-router-dom";
-import type { ReactNode } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent, type ReactNode, type SVGProps } from "react";
 import { useAuth } from "../auth/AuthProvider";
+import { apiClient } from "../lib/api";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { email, me, signOut } = useAuth();
+  const { email, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [clientCount, setClientCount] = useState<number | null>(null);
+  const [attentionCount, setAttentionCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [relationships, invitations, attention] = await Promise.all([
+          apiClient.listRelationships({ limit: 50 }),
+          apiClient.listInvitations(),
+          apiClient.getAttentionFeed({ limit: 50 }),
+        ]);
+        if (cancelled) return;
+        const pendingInvites = invitations.items.filter(
+          (item) => item.status === "pending",
+        ).length;
+        setClientCount(relationships.items.length + pendingInvites);
+        setAttentionCount(attention.items.length);
+      } catch {
+        if (!cancelled) {
+          setClientCount(null);
+          setAttentionCount(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function onSearch(event: FormEvent) {
+    event.preventDefault();
+    const next = query.trim();
+    navigate(next ? `/clients?q=${encodeURIComponent(next)}` : "/clients");
+  }
+
+  const displayName = trainerName(email);
+  const today = new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(new Date());
 
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <header className="top-bar">
-        <div className="top-bar-brand">
-          <span className="brand-mark">FitBud</span>
-          <span className="brand-tagline">Progress, guided.</span>
+      <aside className="side-nav">
+        <div className="brand-lockup">
+          <span className="brand-glyph" aria-hidden="true">
+            <IconBolt />
+          </span>
+          <span className="brand-copy">
+            <span className="brand-mark">FitBud Coach</span>
+            <span className="brand-tagline">Active coaching</span>
+          </span>
         </div>
+        <NavLink className="button-primary shell-add-client" to="/clients/add">
+          <IconPlus />
+          Add Client
+        </NavLink>
+        <p className="nav-kicker">Menu</p>
         <nav className="primary-nav" aria-label="Primary">
           <NavLink to="/" end className={navClass}>
-            Home
+            <IconHome />
+            <span className="nav-label">Home</span>
+            {attentionCount !== null && attentionCount > 0 ? (
+              <span className="nav-alert" aria-label={`${attentionCount} need attention`}>
+                {attentionCount}
+              </span>
+            ) : null}
           </NavLink>
           <NavLink to="/clients" className={navClass}>
-            Clients
-          </NavLink>
-          <NavLink to="/checkins" className={navClass}>
-            Check-ins
+            <IconClients />
+            <span className="nav-label">Clients</span>
+            {clientCount !== null ? (
+              <span className="nav-count">{clientCount}</span>
+            ) : null}
           </NavLink>
           <NavLink to="/templates" className={navClass}>
-            Templates
+            <IconTemplates />
+            <span className="nav-label">Templates & Libraries</span>
+          </NavLink>
+          <NavLink to="/checkins" className={navClass}>
+            <IconCheckins />
+            <span className="nav-label">Schedules</span>
           </NavLink>
         </nav>
-        <div className="top-bar-meta">
-          <span className="session-label">
-            {email ?? me?.firebaseUid ?? "Trainer"}
+        <p className="nav-help">Help & Support</p>
+        <div className="trainer-card">
+          <span className="avatar" aria-hidden="true">
+            {initials(displayName)}
+          </span>
+          <span className="trainer-card-copy">
+            <span className="trainer-card-name">{displayName}</span>
+            <span className="trainer-card-role">Trainer</span>
           </span>
           <button
             type="button"
-            className="button-ghost"
+            className="trainer-signout"
             aria-label="Sign out of FitBud"
             onClick={() => {
               void signOut();
             }}
           >
-            Sign out
+            <IconSignOut />
           </button>
         </div>
-      </header>
-      <main id="main" className="page-main">
-        {children}
-      </main>
+      </aside>
+      <div className="app-canvas">
+        <header className="canvas-top">
+          <form className="canvas-search" onSubmit={onSearch}>
+            <IconSearch />
+            <label className="sr-only" htmlFor="global-search">
+              Search clients
+            </label>
+            <input
+              id="global-search"
+              type="search"
+              placeholder="Search clients, tasks, exceptions"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <kbd className="search-kbd">⌘K</kbd>
+          </form>
+          <time className="canvas-date" dateTime={new Date().toISOString().slice(0, 10)}>
+            {today}
+          </time>
+          <a className="canvas-bell" href="#attention-heading" aria-label="Needs attention">
+            <IconBell />
+            {attentionCount !== null && attentionCount > 0 ? (
+              <span className="bell-count">{attentionCount}</span>
+            ) : null}
+          </a>
+        </header>
+        <main id="main" className="page-main">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
 
+function trainerName(email: string | null): string {
+  const local = email?.split("@")[0]?.trim();
+  if (!local) return "Trainer";
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function initials(name: string): string {
+  const parts = name.split(" ").filter(Boolean);
+  const letters = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase());
+  return letters.join("") || "T";
+}
+
 function navClass({ isActive }: { isActive: boolean }): string {
   return isActive ? "nav-link is-active" : "nav-link";
+}
+
+function iconProps(): SVGProps<SVGSVGElement> {
+  return {
+    width: 18,
+    height: 18,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
+    focusable: false,
+  };
+}
+
+function IconBolt() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
+    </svg>
+  );
+}
+
+function IconBell() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false">
+      <path d="M6 8a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" strokeLinecap="round" />
+      <path d="M10 21a2 2 0 0 0 4 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconPlus() {
+  return (
+    <svg {...iconProps()} width={16} height={16}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function IconSearch() {
+  return (
+    <svg {...iconProps()} width={16} height={16}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function IconHome() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
+
+function IconClients() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+      <circle cx="9.5" cy="7" r="3" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 4.13a3 3 0 0 1 0 5.75" />
+    </svg>
+  );
+}
+
+function IconCheckins() {
+  return (
+    <svg {...iconProps()}>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M8 3v4M16 3v4M4 10h16" />
+    </svg>
+  );
+}
+
+function IconTemplates() {
+  return (
+    <svg {...iconProps()}>
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
+function IconSignOut() {
+  return (
+    <svg {...iconProps()} width={16} height={16}>
+      <path d="M9 6V4a2 2 0 0 1 2-2h7v20h-7a2 2 0 0 1-2-2v-2" />
+      <path d="M15 12H3m0 0 3-3m-3 3 3 3" />
+    </svg>
+  );
 }

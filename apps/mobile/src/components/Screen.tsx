@@ -7,20 +7,30 @@ type Props = {
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** `app` matches the trainee design: no product stamp, canvas background. */
+  chrome?: "page" | "app";
 };
 
-export function Screen({ title, subtitle, children, footer }: Props) {
+export function Screen({
+  title,
+  subtitle,
+  children,
+  footer,
+  chrome = "page",
+}: Props) {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.brand} accessibilityRole="header">
-          FitBud
-        </Text>
+        {chrome === "page" ? (
+          <Text style={styles.brand} accessibilityRole="header">
+            FitBud
+          </Text>
+        ) : null}
         <Text
-          style={styles.title}
+          style={[styles.title, chrome === "app" ? styles.titleApp : null]}
           accessibilityRole="header"
           accessibilityLabel={title}
         >
@@ -61,6 +71,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     marginBottom: spacing.sm,
+    letterSpacing: -0.4,
+  },
+  titleApp: {
+    fontSize: 30,
+    marginBottom: spacing.xs,
   },
   subtitle: {
     color: colors.midGrey,

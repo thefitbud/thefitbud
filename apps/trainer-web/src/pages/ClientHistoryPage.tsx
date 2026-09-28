@@ -73,69 +73,79 @@ export function ClientHistoryPage() {
   const empty = !loading && items.length === 0 && !error;
 
   return (
-    <div className="workspace-panel">
-      <div className="page-header compact">
-        <div>
-          <h2>History</h2>
-          <p className="muted">
-            Readable longitudinal coaching context — what happened, what
-            changed, and what you did. Not an internal event dump.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="button-secondary"
-          onClick={() => {
-            void load();
-          }}
-        >
-          Refresh
-        </button>
-      </div>
-
-      {error ? <p className="form-error">{error}</p> : null}
-      {loading ? <p className="muted">Loading…</p> : null}
-
-      {empty ? (
-        <p className="empty-state">
-          No coaching history yet. Onboarding, configuration, plans, execution,
-          check-ins, notes, and interventions appear here as they happen.
+    <div className="workspace-page">
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
         </p>
       ) : null}
 
-      {items.length > 0 ? (
-        <ol className="history-list">
-          {items.map((item) => (
-            <li key={`${item.kind}:${item.id}`} className="history-item">
-              <div className="history-item-meta">
-                <span className="history-kind">{kindLabel(item.kind)}</span>
-                <time dateTime={item.occurredAt}>
-                  {new Date(item.occurredAt).toLocaleString()}
-                </time>
-              </div>
-              <strong className="history-title">{item.title}</strong>
-              <p className="muted history-summary">{item.summary}</p>
-              {item.status ? (
-                <p className="history-status">
-                  Status: {item.status.replace(/_/g, " ")}
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      ) : null}
+      {!error || items.length > 0 ? (
+        <section className="workspace-card" aria-labelledby="history-list-heading">
+          <div className="workspace-card-head">
+            <div>
+              <h2 id="history-list-heading" className="workspace-card-title">
+                Coaching history
+              </h2>
+              <p className="lede">
+                What happened, what changed, and what you did.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => {
+                void load();
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+          {loading ? <p className="muted">Loading…</p> : null}
 
-      {nextCursor ? (
-        <button
-          type="button"
-          className="button-secondary"
-          disabled={loadingMore}
-          onClick={() => {
-            void load(nextCursor);
-          }}
-        >
-          {loadingMore ? "Loading…" : "Load older"}
-        </button>
+          {empty ? (
+            <p className="workspace-empty" role="status">
+              No coaching history yet. Onboarding, configuration, plans,
+              execution, check-ins, notes, and interventions appear here as they
+              happen.
+            </p>
+          ) : null}
+
+          {items.length > 0 ? (
+            <ol className="history-list">
+              {items.map((item) => (
+                <li key={`${item.kind}:${item.id}`} className="history-item">
+                  <div className="history-item-meta">
+                    <span className="workspace-kind">{kindLabel(item.kind)}</span>
+                    <time dateTime={item.occurredAt}>
+                      {new Date(item.occurredAt).toLocaleString()}
+                    </time>
+                    {item.status ? (
+                      <span className="history-status">
+                        {item.status.replace(/_/g, " ")}
+                      </span>
+                    ) : null}
+                  </div>
+                  <strong className="history-title">{item.title}</strong>
+                  <p className="muted history-summary">{item.summary}</p>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+
+          {nextCursor ? (
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={loadingMore}
+              onClick={() => {
+                void load(nextCursor);
+              }}
+            >
+              {loadingMore ? "Loading…" : "Load older"}
+            </button>
+          ) : null}
+        </section>
       ) : null}
     </div>
   );

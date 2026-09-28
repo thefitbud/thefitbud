@@ -7,7 +7,7 @@ import {
 } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Checkin, CoachingRelationship } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -162,6 +162,7 @@ export function CheckinScreen({
   if (submitted) {
     return (
       <Screen
+        chrome="app"
         title="Check-in submitted"
         subtitle="Your trainer can review this when ready."
       >
@@ -178,6 +179,7 @@ export function CheckinScreen({
 
   return (
     <Screen
+      chrome="app"
       title="Check-in"
       subtitle={`${statusLabel(checkin.status)} · due ${checkin.localDate}`}
     >
@@ -322,9 +324,9 @@ export function TodayCheckinCard({
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
-    padding: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: radii.card,
+    padding: spacing.xl,
     marginBottom: spacing.lg,
     gap: spacing.sm,
   },
@@ -351,7 +353,7 @@ const styles = StyleSheet.create({
     minHeight: 96,
     borderWidth: 1,
     borderColor: colors.lightGrey,
-    borderRadius: 12,
+    borderRadius: radii.control,
     padding: spacing.md,
     color: colors.nearBlack,
     backgroundColor: colors.white,
@@ -361,7 +363,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderWidth: 1,
     borderColor: colors.lightGrey,
-    borderRadius: 12,
+    borderRadius: radii.control,
     paddingHorizontal: spacing.md,
     color: colors.nearBlack,
     backgroundColor: colors.white,

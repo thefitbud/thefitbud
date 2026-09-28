@@ -103,15 +103,12 @@ export function ClientActivityPage() {
   }
 
   return (
-    <div className="workspace-panel">
-      <div className="page-header compact">
-        <div>
-          <h2>Activity</h2>
-          <p className="muted">
-            Workout adherence and meal compliance from the same records (
-            {fromDate} → {toDate}).
-          </p>
-        </div>
+    <div className="workspace-page">
+      <div className="workspace-toolbar">
+        <p className="lede">
+          Workout adherence and meal compliance from the same records (
+          {fromDate} to {toDate}).
+        </p>
         <button
           type="button"
           className="button-secondary"
@@ -130,132 +127,152 @@ export function ClientActivityPage() {
         </p>
       ) : null}
 
-      {loading ? (
-        <p className="muted">Loading activity…</p>
-      ) : (
-        <div className="stack-lg">
-          {adherence ? (
-            <section aria-labelledby="workout-adherence-heading">
-              <h3 id="workout-adherence-heading">Workouts</h3>
-              <dl className="stat-strip" aria-label="Workout adherence totals">
-                <div>
-                  <dt>Completed</dt>
-                  <dd>{adherence.totals.completed}</dd>
-                </div>
-                <div>
-                  <dt>Modified</dt>
-                  <dd>{adherence.totals.modified}</dd>
-                </div>
-                <div>
-                  <dt>Skipped</dt>
-                  <dd>{adherence.totals.skipped}</dd>
-                </div>
-                <div>
-                  <dt>Missed</dt>
-                  <dd>{adherence.totals.missed}</dd>
-                </div>
-                <div>
-                  <dt>Assigned</dt>
-                  <dd>{adherence.totals.assigned}</dd>
-                </div>
-                <div>
-                  <dt>In progress</dt>
-                  <dd>{adherence.totals.inProgress}</dd>
-                </div>
-              </dl>
+      {loading ? <p className="muted">Loading activity…</p> : null}
 
-              {adherence.items.length === 0 ? (
-                <div className="empty-state">
-                  <h3>No workout assignments yet</h3>
-                  <p>
-                    Publish an effective plan, then generate assignments for
-                    this window.
-                  </p>
-                </div>
-              ) : (
-                <ul className="activity-list">
-                  {adherence.items.map((item) => (
-                    <li key={item.assignmentId} className="activity-row">
-                      <div>
-                        <p className="client-name">{item.workoutDayName}</p>
-                        <p className="client-subtitle">
-                          {item.localDate}
-                          {item.sessionRpe != null
-                            ? ` · RPE ${item.sessionRpe}`
-                            : ""}
-                        </p>
-                      </div>
-                      <span className={`status-pill status-${item.status}`}>
-                        {statusLabel(item.status)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          ) : null}
+      {!loading && adherence ? (
+        <section
+          className="workspace-card"
+          aria-labelledby="workout-adherence-heading"
+        >
+          <div className="workspace-card-head">
+            <div>
+              <h2 id="workout-adherence-heading" className="workspace-card-title">
+                Workouts
+              </h2>
+              <p className="lede">
+                Assigned sessions and how they were completed in this window.
+              </p>
+            </div>
+          </div>
+          <dl className="kpi-row" aria-label="Workout adherence totals">
+            <div className="kpi kpi-success">
+              <dd>{adherence.totals.completed}</dd>
+              <dt>Completed</dt>
+            </div>
+            <div className="kpi kpi-neutral">
+              <dd>{adherence.totals.modified}</dd>
+              <dt>Modified</dt>
+            </div>
+            <div className="kpi kpi-warning">
+              <dd>{adherence.totals.skipped}</dd>
+              <dt>Skipped</dt>
+            </div>
+            <div className="kpi kpi-warning">
+              <dd>{adherence.totals.missed}</dd>
+              <dt>Missed</dt>
+            </div>
+            <div className="kpi kpi-neutral">
+              <dd>{adherence.totals.assigned}</dd>
+              <dt>Assigned</dt>
+            </div>
+            <div className="kpi kpi-info">
+              <dd>{adherence.totals.inProgress}</dd>
+              <dt>In progress</dt>
+            </div>
+          </dl>
 
-          {meals ? (
-            <section aria-labelledby="meal-compliance-heading">
-              <h3 id="meal-compliance-heading">Meals</h3>
-              <dl className="stat-strip" aria-label="Meal compliance totals">
-                <div>
-                  <dt>Confirmed</dt>
-                  <dd>{meals.totals.confirmed}</dd>
-                </div>
-                <div>
-                  <dt>Modified</dt>
-                  <dd>{meals.totals.modified}</dd>
-                </div>
-                <div>
-                  <dt>Skipped</dt>
-                  <dd>{meals.totals.skipped}</dd>
-                </div>
-                <div>
-                  <dt>Logged later</dt>
-                  <dd>{meals.totals.loggedLater}</dd>
-                </div>
-                <div>
-                  <dt>Overdue</dt>
-                  <dd>{meals.totals.overdue}</dd>
-                </div>
-                <div>
-                  <dt>Pending</dt>
-                  <dd>{meals.totals.pending}</dd>
-                </div>
-              </dl>
+          {adherence.items.length === 0 ? (
+            <div className="empty-state">
+              <h3>No workout assignments yet</h3>
+              <p>
+                Publish an effective plan, then generate assignments for this
+                window.
+              </p>
+            </div>
+          ) : (
+            <ul className="activity-list">
+              {adherence.items.map((item) => (
+                <li key={item.assignmentId} className="activity-row">
+                  <div className="workspace-row-copy">
+                    <p className="workspace-row-title">{item.workoutDayName}</p>
+                    <p className="workspace-row-meta">
+                      <span>{item.localDate}</span>
+                      {item.sessionRpe != null ? (
+                        <span>RPE {item.sessionRpe}</span>
+                      ) : null}
+                    </p>
+                  </div>
+                  <span className={`status-pill status-${item.status}`}>
+                    {statusLabel(item.status)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
-              {meals.items.length === 0 ? (
-                <div className="empty-state">
-                  <h3>No meal assignments yet</h3>
-                  <p>
-                    Publish meal prescriptions on the effective plan, then
-                    generate assignments.
-                  </p>
-                </div>
-              ) : (
-                <ul className="activity-list">
-                  {meals.items.map((item) => (
-                    <li key={item.assignmentId} className="activity-row">
-                      <div>
-                        <p className="client-name">{item.mealName}</p>
-                        <p className="client-subtitle">
-                          {item.localDate}
-                          {item.photoRequired ? " · Photo required" : ""}
-                          {item.hasPhotoIntent ? " · Photo noted" : ""}
-                        </p>
-                      </div>
-                      <span className={`status-pill status-${item.status}`}>
-                        {statusLabel(item.status)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          ) : null}
-        </div>
-      )}
+      {!loading && meals ? (
+        <section
+          className="workspace-card"
+          aria-labelledby="meal-compliance-heading"
+        >
+          <div className="workspace-card-head">
+            <div>
+              <h2 id="meal-compliance-heading" className="workspace-card-title">
+                Meals
+              </h2>
+              <p className="lede">
+                Meal assignments and compliance in the same window.
+              </p>
+            </div>
+          </div>
+          <dl className="kpi-row" aria-label="Meal compliance totals">
+            <div className="kpi kpi-success">
+              <dd>{meals.totals.confirmed}</dd>
+              <dt>Confirmed</dt>
+            </div>
+            <div className="kpi kpi-neutral">
+              <dd>{meals.totals.modified}</dd>
+              <dt>Modified</dt>
+            </div>
+            <div className="kpi kpi-warning">
+              <dd>{meals.totals.skipped}</dd>
+              <dt>Skipped</dt>
+            </div>
+            <div className="kpi kpi-info">
+              <dd>{meals.totals.loggedLater}</dd>
+              <dt>Logged later</dt>
+            </div>
+            <div className="kpi kpi-warning">
+              <dd>{meals.totals.overdue}</dd>
+              <dt>Overdue</dt>
+            </div>
+            <div className="kpi kpi-neutral">
+              <dd>{meals.totals.pending}</dd>
+              <dt>Pending</dt>
+            </div>
+          </dl>
+
+          {meals.items.length === 0 ? (
+            <div className="empty-state">
+              <h3>No meal assignments yet</h3>
+              <p>
+                Publish meal prescriptions on the effective plan, then generate
+                assignments.
+              </p>
+            </div>
+          ) : (
+            <ul className="activity-list">
+              {meals.items.map((item) => (
+                <li key={item.assignmentId} className="activity-row">
+                  <div className="workspace-row-copy">
+                    <p className="workspace-row-title">{item.mealName}</p>
+                    <p className="workspace-row-meta">
+                      <span>{item.localDate}</span>
+                      {item.photoRequired ? <span>Photo required</span> : null}
+                      {item.hasPhotoIntent ? <span>Photo noted</span> : null}
+                    </p>
+                  </div>
+                  <span className={`status-pill status-${item.status}`}>
+                    {statusLabel(item.status)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

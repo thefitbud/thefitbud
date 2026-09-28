@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-export { colors, spacing, touchTargetMin } from "./theme.js";
+export { colors, radii, spacing, touchTargetMin } from "./theme.js";
 
 /** Placeholder primitive shell for later trainee/trainer mobile UI. */
 export type ScreenProps = {

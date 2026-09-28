@@ -6,7 +6,7 @@ import type {
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -140,8 +140,9 @@ export function WorkoutTab({
 
   return (
     <Screen
+      chrome="app"
       title="Workout"
-      subtitle="Assigned workouts from your effective plan."
+      subtitle={today}
     >
       {error ? <ErrorBanner message={error} /> : null}
       {loading ? (
@@ -149,16 +150,30 @@ export function WorkoutTab({
       ) : (
         <View style={styles.stack}>
           <View style={styles.banner}>
-            <Text style={styles.bannerTitle}>Today · {today}</Text>
             {todayAssignment ? (
               <>
-                <Text style={styles.bannerBody}>
-                  {todayAssignment.workoutDayName} ·{" "}
-                  {statusLabel(todayAssignment.status)}
+                <Text style={styles.kicker}>Today</Text>
+                <Text style={styles.bannerTitle}>
+                  {todayAssignment.workoutDayName}
                 </Text>
-                <Text style={styles.meta}>
+                <Text style={styles.bannerBody}>
+                  {statusLabel(todayAssignment.status)} ·{" "}
                   {todayAssignment.workoutDay.exercises.length} exercises
                 </Text>
+                {todayAssignment.workoutDay.exercises.map((exercise) => (
+                  <View key={exercise.id} style={styles.exerciseRow}>
+                    <Text style={styles.rowTitle}>{exercise.name}</Text>
+                    <Text style={styles.rowMeta}>
+                      {exercise.setTargets.length} sets
+                      {exercise.setTargets[0]?.reps
+                        ? ` · ${exercise.setTargets[0].reps} reps`
+                        : ""}
+                      {exercise.setTargets[0]?.loadLabel
+                        ? ` · ${exercise.setTargets[0].loadLabel}`
+                        : ""}
+                    </Text>
+                  </View>
+                ))}
                 {todayAssignment.status === "assigned" ||
                 todayAssignment.status === "missed" ? (
                   <PrimaryButton
@@ -290,42 +305,48 @@ export function WorkoutTab({
 const styles = StyleSheet.create({
   stack: {
     gap: spacing.lg,
+    paddingTop: spacing.md,
   },
   banner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
-    padding: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: radii.card,
+    padding: spacing.xl,
     gap: spacing.sm,
   },
+  kicker: {
+    color: colors.indigo,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   bannerTitle: {
+    color: colors.deepNavy,
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  bannerBody: {
+    color: colors.midGrey,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  sectionTitle: {
     color: colors.deepNavy,
     fontSize: 16,
     fontWeight: "700",
   },
-  bannerBody: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  meta: {
-    color: colors.darkGrey,
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  sectionTitle: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "600",
-  },
   muted: {
     color: colors.midGrey,
-    fontSize: 14,
+    fontSize: 15,
+  },
+  exerciseRow: {
+    borderTopColor: colors.lightGrey,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+    paddingTop: spacing.sm,
   },
   row: {
     backgroundColor: colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.lightGrey,
+    borderRadius: radii.card,
     padding: spacing.lg,
   },
   rowMain: {
@@ -333,7 +354,7 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     color: colors.nearBlack,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
   rowMeta: {

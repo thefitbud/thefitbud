@@ -6,11 +6,12 @@ import type {
   MealAssignment,
   MealDeviationKind,
 } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { StatusChip } from "../components/StatusChip";
 import { createIdempotencyKey } from "../lib/idempotency";
 import {
   MINIMAL_PNG_CONTENT_TYPE,
@@ -36,7 +37,7 @@ function statusLabel(status: MealAssignment["status"]): string {
     case "pending":
       return "Pending";
     case "confirmed":
-      return "Confirmed";
+      return "As planned";
     case "modified":
       return "Modified";
     case "skipped":
@@ -50,6 +51,15 @@ function statusLabel(status: MealAssignment["status"]): string {
       return _exhaustive;
     }
   }
+}
+
+function statusTone(
+  status: MealAssignment["status"],
+): "neutral" | "positive" | "attention" | "warning" {
+  if (status === "confirmed" || status === "logged_later") return "positive";
+  if (status === "modified") return "attention";
+  if (status === "overdue" || status === "skipped") return "warning";
+  return "neutral";
 }
 
 function canActOnMeal(status: MealAssignment["status"]): boolean {
@@ -229,81 +239,79 @@ export function DietTab({
 
   return (
     <Screen
-      title="Today’s Diet"
-      subtitle="Confirm prescribed meals with minimum effort."
+      chrome="app"
+      title="Today’s diet"
+      subtitle={`${today} · confirm what you ate, then move on.`}
     >
       {error ? <ErrorBanner message={error} /> : null}
       {loading ? (
         <Text style={styles.muted}>Loading today’s meals…</Text>
       ) : (
         <View style={styles.stack}>
-          <View style={styles.banner}>
-            <Text style={styles.bannerTitle}>Today · {today}</Text>
-            <Text style={styles.bannerBody}>
-              Eat → Confirm → Move on. Use Deviate only when the meal changed.
-            </Text>
-          </View>
-
           {assignments.length === 0 ? (
-            <Text style={styles.muted}>
-              No meals assigned for today. Publish a nutrition plan and activate
-              coaching configuration first.
-            </Text>
+            <View style={styles.card}>
+              <Text style={styles.rowTitle}>No meals assigned</Text>
+              <Text style={styles.instructions}>
+                Meals appear here after your trainer publishes a nutrition plan
+                and coaching is active.
+              </Text>
+            </View>
           ) : (
             assignments.map((meal) => (
               <View key={meal.id} style={styles.card}>
-                <Text style={styles.rowTitle}>{meal.mealName}</Text>
-                <Text style={styles.rowMeta}>
-                  {statusLabel(meal.status)}
-                  {meal.prescription.scheduleHint
-                    ? ` · ${meal.prescription.scheduleHint}`
-                    : ""}
-                </Text>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.rowTitle}>{meal.mealName}</Text>
+                  <StatusChip
+                    label={statusLabel(meal.status)}
+                    tone={statusTone(meal.status)}
+                  />
+                </View>
+                {meal.prescription.scheduleHint ? (
+                  <Text style={styles.rowMeta}>
+                    {meal.prescription.scheduleHint}
+                  </Text>
+                ) : null}
                 {meal.prescription.instructions ? (
                   <Text style={styles.instructions}>
                     {meal.prescription.instructions}
                   </Text>
                 ) : null}
                 {meal.photoRequired ? (
-                  <Text style={styles.photoNote}>
-                    Photo required · association noted on confirm (upload in D1)
-                  </Text>
+                  <Text style={styles.photoNote}>Photo required</Text>
                 ) : null}
                 {canActOnMeal(meal.status) ? (
                   <View style={styles.actions}>
                     <PrimaryButton
-                      label="Confirm"
+                      label="Confirm eaten as planned"
                       loading={actingId === meal.id}
                       onPress={() => {
                         void confirmMeal(meal);
                       }}
                     />
-                    <PrimaryButton
-                      label="Deviate"
-                      variant="secondary"
-                      onPress={() => setDeviating(meal)}
-                    />
-                    <PrimaryButton
-                      label="Skip"
-                      variant="ghost"
-                      loading={actingId === `skip-${meal.id}`}
-                      onPress={() => {
-                        void skipMeal(meal);
-                      }}
-                    />
+                    <View style={styles.secondaryRow}>
+                      <View style={styles.secondaryAction}>
+                        <PrimaryButton
+                          label="Quick modify"
+                          variant="secondary"
+                          onPress={() => setDeviating(meal)}
+                        />
+                      </View>
+                      <View style={styles.secondaryAction}>
+                        <PrimaryButton
+                          label="Skip"
+                          variant="ghost"
+                          loading={actingId === `skip-${meal.id}`}
+                          onPress={() => {
+                            void skipMeal(meal);
+                          }}
+                        />
+                      </View>
+                    </View>
                   </View>
                 ) : null}
               </View>
             ))
           )}
-
-          <PrimaryButton
-            label="Refresh"
-            variant="secondary"
-            onPress={() => {
-              void load();
-            }}
-          />
         </View>
       )}
     </Screen>
@@ -313,56 +321,53 @@ export function DietTab({
 const styles = StyleSheet.create({
   stack: {
     gap: spacing.lg,
-  },
-  banner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  bannerTitle: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  bannerBody: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
+    paddingTop: spacing.md,
   },
   muted: {
     color: colors.midGrey,
-    fontSize: 14,
+    fontSize: 15,
   },
   card: {
     backgroundColor: colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.lightGrey,
-    padding: spacing.lg,
+    borderRadius: radii.card,
+    padding: spacing.xl,
     gap: spacing.sm,
   },
+  cardHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
   rowTitle: {
-    color: colors.nearBlack,
-    fontSize: 16,
-    fontWeight: "600",
+    color: colors.deepNavy,
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
   },
   rowMeta: {
     color: colors.midGrey,
-    fontSize: 13,
+    fontSize: 14,
   },
   instructions: {
     color: colors.darkGrey,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
   },
   photoNote: {
     color: colors.indigo,
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   actions: {
     gap: spacing.sm,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  secondaryRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  secondaryAction: {
+    flex: 1,
   },
 });
