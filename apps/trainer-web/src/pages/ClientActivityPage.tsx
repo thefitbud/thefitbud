@@ -105,10 +105,14 @@ export function ClientActivityPage() {
   return (
     <div className="workspace-page">
       <div className="workspace-toolbar">
-        <p className="lede">
-          Workout adherence and meal compliance from the same records (
-          {fromDate} to {toDate}).
-        </p>
+        <div>
+          <p className="workspace-kicker">Execution</p>
+          <h2 className="workspace-card-title">Activity</h2>
+          <p className="lede">
+            Workout adherence and meal compliance from the same records (
+            {fromDate} to {toDate}).
+          </p>
+        </div>
         <button
           type="button"
           className="button-secondary"
@@ -136,8 +140,9 @@ export function ClientActivityPage() {
         >
           <div className="workspace-card-head">
             <div>
+              <p className="workspace-kicker">Workouts</p>
               <h2 id="workout-adherence-heading" className="workspace-card-title">
-                Workouts
+                Assigned sessions
               </h2>
               <p className="lede">
                 Assigned sessions and how they were completed in this window.
@@ -209,8 +214,9 @@ export function ClientActivityPage() {
         >
           <div className="workspace-card-head">
             <div>
+              <p className="workspace-kicker">Meals</p>
               <h2 id="meal-compliance-heading" className="workspace-card-title">
-                Meals
+                Meal compliance
               </h2>
               <p className="lede">
                 Meal assignments and compliance in the same window.

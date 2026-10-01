@@ -1,14 +1,20 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CoachingRelationship,
   ExerciseLibraryItem,
   FoodLibraryItem,
+  Invitation,
   PlanTemplateSummary,
+  PlanTemplateType,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
+import { buildClientDirectoryRows } from "../lib/clients";
 import { createIdempotencyKey } from "../lib/idempotency";
+
+type LibrarySurface = "templates" | "libraries";
+type TemplateTypeFilter = "all" | PlanTemplateType;
 
 function newId(): string {
   return crypto.randomUUID();
@@ -32,13 +38,107 @@ function formatUpdated(value: string): string {
   }).format(date);
 }
 
+function templateTypeLabel(type: PlanTemplateType): string {
+  switch (type) {
+    case "workout":
+      return "Workout";
+    case "nutrition":
+      return "Nutrition";
+    case "combined":
+      return "Combined";
+    default: {
+      const _exhaustive: never = type;
+      return _exhaustive;
+    }
+  }
+}
+
+function iconProps() {
+  return {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true as const,
+    focusable: false as const,
+  };
+}
+
+function IconPlus() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function IconTemplate() {
+  return (
+    <svg {...iconProps()}>
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
+function IconExercise() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M7 8h10" />
+      <path d="M7 16h10" />
+      <rect x="3" y="6" width="4" height="12" rx="1.5" />
+      <rect x="17" y="6" width="4" height="12" rx="1.5" />
+    </svg>
+  );
+}
+
+function IconFood() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M8 3v10" />
+      <path d="M6 5c0 2 2 3 2 5" />
+      <path d="M10 5c0 2-2 3-2 5" />
+      <path d="M16 4v7a2 2 0 0 1-2 2h0V4" />
+      <path d="M8 13v8" />
+      <path d="M16 13v8" />
+    </svg>
+  );
+}
+
+function IconSearch() {
+  return (
+    <svg {...iconProps()}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function IconAssign() {
+  return (
+    <svg {...iconProps()} width={14} height={14}>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
+}
+
 export function TemplatesPage() {
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const applyClientRef = useRef<HTMLSelectElement>(null);
   const [templates, setTemplates] = useState<PlanTemplateSummary[]>([]);
   const [exercises, setExercises] = useState<ExerciseLibraryItem[]>([]);
   const [foods, setFoods] = useState<FoodLibraryItem[]>([]);
   const [relationships, setRelationships] = useState<CoachingRelationship[]>(
     [],
   );
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [title, setTitle] = useState("Reusable strength block");
   const [dayName, setDayName] = useState("Day A");
   const [exerciseName, setExerciseName] = useState("Goblet squat");
@@ -46,6 +146,9 @@ export function TemplatesPage() {
   const [loadLabel, setLoadLabel] = useState("Moderate");
   const [applyTemplateId, setApplyTemplateId] = useState("");
   const [applyRelationshipId, setApplyRelationshipId] = useState("");
+  const [surface, setSurface] = useState<LibrarySurface>("templates");
+  const [typeFilter, setTypeFilter] = useState<TemplateTypeFilter>("all");
+  const [templateQuery, setTemplateQuery] = useState("");
   const [exerciseQuery, setExerciseQuery] = useState("");
   const [foodQuery, setFoodQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -57,16 +160,21 @@ export function TemplatesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [templatePage, exercisePage, foodPage, relationshipPage] =
+      const [templatePage, exercisePage, foodPage, relationshipPage, invitationOutcome] =
         await Promise.all([
           apiClient.listPlanTemplates(),
           apiClient.listExerciseLibrary(),
           apiClient.listFoodLibrary(),
           apiClient.listRelationships(),
+          apiClient.listInvitations().then(
+            (value) => ({ ok: true as const, value }),
+            () => ({ ok: false as const }),
+          ),
         ]);
       setTemplates(templatePage.items);
       setExercises(exercisePage.items);
       setFoods(foodPage.items);
+      setInvitations(invitationOutcome.ok ? invitationOutcome.value.items : []);
       const ready = relationshipPage.items.filter(
         (item) => item.status === "coaching_ready",
       );
@@ -87,6 +195,38 @@ export function TemplatesPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const clientNames = useMemo(() => {
+    const rows = buildClientDirectoryRows({
+      invitations,
+      relationships,
+    });
+    const names = new Map<string, string>();
+    for (const row of rows) {
+      if (row.relationshipId) {
+        names.set(row.relationshipId, row.name);
+      }
+    }
+    return names;
+  }, [invitations, relationships]);
+
+  const presentTypes = useMemo(() => {
+    const seen = new Set<PlanTemplateType>();
+    for (const item of templates) {
+      seen.add(item.templateType);
+    }
+    const order: PlanTemplateType[] = ["workout", "nutrition", "combined"];
+    return order.filter((type) => seen.has(type));
+  }, [templates]);
+
+  const visibleTemplates = useMemo(() => {
+    return templates.filter((item) => {
+      if (typeFilter !== "all" && item.templateType !== typeFilter) {
+        return false;
+      }
+      return matchesName(item.title, templateQuery);
+    });
+  }, [templates, typeFilter, templateQuery]);
 
   async function onCreateTemplate(event: FormEvent) {
     event.preventDefault();
@@ -129,6 +269,7 @@ export function TemplatesPage() {
         createIdempotencyKey(),
       );
       setMessage("Template saved. Apply it to a client to create a draft.");
+      setSurface("templates");
       await load();
     } catch (err) {
       setError(
@@ -169,20 +310,67 @@ export function TemplatesPage() {
     }
   }
 
+  function focusCreate() {
+    setSurface("templates");
+    window.requestAnimationFrame(() => {
+      titleInputRef.current?.focus();
+    });
+  }
+
+  function selectTemplate(id: string) {
+    setApplyTemplateId(id);
+    window.requestAnimationFrame(() => {
+      applyClientRef.current?.focus();
+      applyClientRef.current?.scrollIntoView({ block: "nearest" });
+    });
+  }
+
   const visibleExercises = exercises.filter((item) =>
     matchesName(item.name, exerciseQuery),
   );
   const visibleFoods = foods.filter((item) => matchesName(item.name, foodQuery));
+  const libraryCount = exercises.length + foods.length;
+  const kpiValue = (value: number) => (loading ? "—" : value);
 
   return (
     <section className="page templates-page">
-      <header className="page-header">
+      <header className="page-header templates-hero">
         <div>
-          <p className="section-kicker">Libraries</p>
           <h1>Templates & Libraries</h1>
           <p className="lede">
-            Reusable workout structures, exercises, and foods.
+            Reusable workout structures, exercises, and foods you can copy into
+            a client draft.
           </p>
+        </div>
+        <div className="templates-hero-actions">
+          <div
+            className="templates-switch"
+            role="group"
+            aria-label="Templates or libraries"
+          >
+            <button
+              type="button"
+              className={surface === "templates" ? "segment-btn is-on" : "segment-btn"}
+              aria-pressed={surface === "templates"}
+              onClick={() => setSurface("templates")}
+            >
+              Templates
+              <span className="segment-count">{loading ? "—" : templates.length}</span>
+            </button>
+            <button
+              type="button"
+              className={surface === "libraries" ? "segment-btn is-on" : "segment-btn"}
+              aria-pressed={surface === "libraries"}
+              onClick={() => setSurface("libraries")}
+            >
+              Libraries
+              <span className="segment-count">{loading ? "—" : libraryCount}</span>
+            </button>
+          </div>
+          <button type="button" className="button-primary" onClick={focusCreate}>
+            <IconPlus />
+            Create template
+          </button>
         </div>
       </header>
 
@@ -196,348 +384,416 @@ export function TemplatesPage() {
       ) : null}
       {message ? <p className="form-success">{message}</p> : null}
 
+      <dl className="templates-stats" aria-label="Loaded library counts">
+        <div className="templates-stat">
+          <div>
+            <dt>Templates</dt>
+            <dd>{kpiValue(templates.length)}</dd>
+          </div>
+          <span className="templates-stat-icon" aria-hidden="true">
+            <IconTemplate />
+          </span>
+        </div>
+        <div className="templates-stat">
+          <div>
+            <dt>Exercises</dt>
+            <dd>{kpiValue(exercises.length)}</dd>
+          </div>
+          <span className="templates-stat-icon" aria-hidden="true">
+            <IconExercise />
+          </span>
+        </div>
+        <div className="templates-stat">
+          <div>
+            <dt>Foods</dt>
+            <dd>{kpiValue(foods.length)}</dd>
+          </div>
+          <span className="templates-stat-icon" aria-hidden="true">
+            <IconFood />
+          </span>
+        </div>
+        <div className="templates-stat">
+          <div>
+            <dt>Ready clients</dt>
+            <dd>{kpiValue(relationships.length)}</dd>
+          </div>
+          <span className="templates-stat-icon" aria-hidden="true">
+            <IconAssign />
+          </span>
+        </div>
+      </dl>
+
       {loading ? (
         <p className="muted" aria-busy="true">
           Loading templates…
         </p>
-      ) : (
-        <>
-          <dl className="templates-stats" aria-label="Loaded library counts">
-            <div className="templates-stat">
-              <span className="avatar" aria-hidden="true">
-                T
-              </span>
-              <div>
-                <dd>{templates.length}</dd>
-                <dt>Templates</dt>
-              </div>
-            </div>
-            <div className="templates-stat">
-              <span className="avatar" aria-hidden="true">
-                E
-              </span>
-              <div>
-                <dd>{exercises.length}</dd>
-                <dt>Exercises</dt>
-              </div>
-            </div>
-            <div className="templates-stat">
-              <span className="avatar" aria-hidden="true">
-                F
-              </span>
-              <div>
-                <dd>{foods.length}</dd>
-                <dt>Foods</dt>
-              </div>
-            </div>
-          </dl>
-
-          <div className="templates-stack">
-            <section className="templates-card" aria-labelledby="plan-templates-heading">
-              <header className="templates-card-header">
-                <span className="avatar" aria-hidden="true">
-                  P
-                </span>
-                <div>
-                  <p className="section-kicker">Templates</p>
-                  <h2 id="plan-templates-heading">Plan templates</h2>
-                  <p className="muted">
-                    Save a workout structure, then copy it into a coaching-ready
-                    client draft. Publish remains on the client Plan tab.
-                  </p>
-                </div>
-              </header>
-
-              <div className="templates-panels">
-                <form
-                  className="templates-panel templates-form"
-                  onSubmit={(event) => void onCreateTemplate(event)}
-                  aria-labelledby="create-template-heading"
+      ) : surface === "templates" ? (
+        <div className="templates-stack">
+          <div className="templates-toolbar">
+            <div className="segment" role="group" aria-label="Filter by template type">
+              <button
+                type="button"
+                className={typeFilter === "all" ? "segment-btn is-on" : "segment-btn"}
+                aria-pressed={typeFilter === "all"}
+                onClick={() => setTypeFilter("all")}
+              >
+                All templates
+                <span className="segment-count">{templates.length}</span>
+              </button>
+              {presentTypes.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={
+                    typeFilter === type ? "segment-btn is-on" : "segment-btn"
+                  }
+                  aria-pressed={typeFilter === type}
+                  onClick={() => setTypeFilter(type)}
                 >
-                  <div className="templates-panel-header">
-                    <h3 id="create-template-heading">Create workout template</h3>
-                    <p className="muted">
-                      Focused reuse structure — not a full programming IDE.
-                    </p>
-                  </div>
+                  {templateTypeLabel(type)}
+                  <span className="segment-count">
+                    {templates.filter((item) => item.templateType === type).length}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <label className="templates-filter-search">
+              <span className="sr-only">Filter templates by title</span>
+              <IconSearch />
+              <input
+                type="search"
+                value={templateQuery}
+                onChange={(event) => setTemplateQuery(event.target.value)}
+                placeholder="Filter by title"
+                autoComplete="off"
+              />
+            </label>
+          </div>
+
+          <div className="templates-panels">
+            <form
+              className="templates-panel templates-form"
+              onSubmit={(event) => void onCreateTemplate(event)}
+              aria-labelledby="create-template-heading"
+            >
+              <div className="templates-panel-header">
+                <h2 id="create-template-heading">Create workout template</h2>
+                <p className="muted">
+                  Save a reusable workout day, then copy it into a coaching-ready
+                  client draft.
+                </p>
+              </div>
+              <label className="field">
+                <span>Title</span>
+                <input
+                  ref={titleInputRef}
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Workout day name</span>
+                <input
+                  value={dayName}
+                  onChange={(event) => setDayName(event.target.value)}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Exercise</span>
+                <input
+                  value={exerciseName}
+                  onChange={(event) => setExerciseName(event.target.value)}
+                  required
+                />
+              </label>
+              <div className="field-row">
+                <label className="field">
+                  <span>Reps</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={reps}
+                    onChange={(event) => setReps(Number(event.target.value))}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Load label</span>
+                  <input
+                    value={loadLabel}
+                    onChange={(event) => setLoadLabel(event.target.value)}
+                  />
+                </label>
+              </div>
+              <button type="submit" className="button-primary" disabled={acting}>
+                {acting ? "Saving…" : "Save template"}
+              </button>
+            </form>
+
+            <section
+              className="templates-panel"
+              aria-labelledby="apply-template-heading"
+            >
+              <div className="templates-panel-header">
+                <h2 id="apply-template-heading">Apply to a client draft</h2>
+                <p className="muted">
+                  Copies template content into a draft. Publish remains on the
+                  client Plan tab.
+                </p>
+              </div>
+              {templates.length === 0 || relationships.length === 0 ? (
+                <p className="muted">
+                  {templates.length === 0
+                    ? "Create a template first."
+                    : "No coaching-ready clients yet."}
+                </p>
+              ) : (
+                <form
+                  className="templates-form"
+                  onSubmit={(event) => void onApplyTemplate(event)}
+                >
                   <label className="field">
-                    <span>Title</span>
-                    <input
-                      value={title}
-                      onChange={(event) => setTitle(event.target.value)}
+                    <span>Template</span>
+                    <select
+                      value={applyTemplateId}
+                      onChange={(event) => setApplyTemplateId(event.target.value)}
                       required
-                    />
+                    >
+                      {templates.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.title} ({templateTypeLabel(item.templateType)})
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="field">
-                    <span>Workout day name</span>
-                    <input
-                      value={dayName}
-                      onChange={(event) => setDayName(event.target.value)}
+                    <span>Client</span>
+                    <select
+                      ref={applyClientRef}
+                      value={applyRelationshipId}
+                      onChange={(event) =>
+                        setApplyRelationshipId(event.target.value)
+                      }
                       required
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Exercise</span>
-                    <input
-                      value={exerciseName}
-                      onChange={(event) => setExerciseName(event.target.value)}
-                      required
-                    />
+                    >
+                      {relationships.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {clientNames.get(item.id) ??
+                            `Client ${item.id.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <div className="field-row">
-                    <label className="field">
-                      <span>Reps</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={reps}
-                        onChange={(event) => setReps(Number(event.target.value))}
-                        required
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Load label</span>
-                      <input
-                        value={loadLabel}
-                        onChange={(event) => setLoadLabel(event.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <button type="submit" className="button-primary" disabled={acting}>
-                    {acting ? "Saving…" : "Save template"}
-                  </button>
-                </form>
-
-                <section className="templates-panel" aria-labelledby="apply-template-heading">
-                  <div className="templates-panel-header">
-                    <h3 id="apply-template-heading">Apply to a client draft</h3>
-                    <p className="muted">
-                      Creates or updates a plan draft from a template copy.
-                    </p>
-                  </div>
-                  {templates.length === 0 || relationships.length === 0 ? (
-                    <p className="muted">
-                      {templates.length === 0
-                        ? "Create a template first."
-                        : "No coaching-ready clients yet."}
-                    </p>
-                  ) : (
-                    <form
-                      className="templates-form"
-                      onSubmit={(event) => void onApplyTemplate(event)}
+                    <button
+                      type="submit"
+                      className="button-primary"
+                      disabled={acting}
                     >
-                      <label className="field">
-                        <span>Template</span>
-                        <select
-                          value={applyTemplateId}
-                          onChange={(event) => setApplyTemplateId(event.target.value)}
-                          required
-                        >
-                          {templates.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.title} ({item.templateType})
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Client</span>
-                        <select
-                          value={applyRelationshipId}
-                          onChange={(event) =>
-                            setApplyRelationshipId(event.target.value)
-                          }
-                          required
-                        >
-                          {relationships.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.id.slice(0, 8)}… · {item.status}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="field-row">
-                        <button
-                          type="submit"
-                          className="button-primary"
-                          disabled={acting}
-                        >
-                          {acting ? "Applying…" : "Apply to draft"}
-                        </button>
-                        {applyRelationshipId ? (
-                          <Link
-                            className="button-secondary"
-                            to={`/clients/${applyRelationshipId}/plan`}
-                          >
-                            Open Plan
-                          </Link>
-                        ) : null}
-                      </div>
-                    </form>
-                  )}
-                </section>
-              </div>
-
-              <div className="templates-table-scroll">
-                <table className="templates-table" aria-labelledby="templates-list-heading">
-                  <caption id="templates-list-heading" className="sr-only">
-                    Your templates
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Title</th>
-                      <th scope="col">Type</th>
-                      <th scope="col">Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {templates.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="templates-empty">
-                          No templates yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      templates.map((item) => (
-                        <tr key={item.id}>
-                          <td className="templates-name">{item.title}</td>
-                          <td>{item.templateType}</td>
-                          <td>
-                            <time dateTime={item.updatedAt}>
-                              {formatUpdated(item.updatedAt)}
-                            </time>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="templates-card" aria-labelledby="exercise-lib-heading">
-              <header className="templates-card-header">
-                <span className="avatar" aria-hidden="true">
-                  E
-                </span>
-                <div>
-                  <p className="section-kicker">Exercises</p>
-                  <h2 id="exercise-lib-heading">Exercise library</h2>
-                  <p className="muted">
-                    Global curated items and your own. Names, ownership, and
-                    default targets only.
-                  </p>
-                </div>
-              </header>
-              <label className="field templates-search" htmlFor="exercise-search">
-                <span>Search exercises</span>
-                <input
-                  id="exercise-search"
-                  type="search"
-                  value={exerciseQuery}
-                  onChange={(event) => setExerciseQuery(event.target.value)}
-                  autoComplete="off"
-                />
-              </label>
-              <div className="templates-table-scroll">
-                <table className="templates-table" aria-label="Exercise library">
-                  <thead>
-                    <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Ownership</th>
-                      <th scope="col">Reps</th>
-                      <th scope="col">Load</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {exercises.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="templates-empty">
-                          No exercises yet.
-                        </td>
-                      </tr>
-                    ) : visibleExercises.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="templates-empty" role="status">
-                          No exercises match that search.
-                        </td>
-                      </tr>
-                    ) : (
-                      visibleExercises.map((item) => (
-                        <tr key={item.id}>
-                          <td className="templates-name">{item.name}</td>
-                          <td>{item.ownership}</td>
-                          <td>{item.defaultReps != null ? item.defaultReps : "—"}</td>
-                          <td>{item.defaultLoadLabel ?? "—"}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="templates-card" aria-labelledby="food-lib-heading">
-              <header className="templates-card-header">
-                <span className="avatar" aria-hidden="true">
-                  F
-                </span>
-                <div>
-                  <p className="section-kicker">Foods</p>
-                  <h2 id="food-lib-heading">Food library</h2>
-                  <p className="muted">
-                    Household-portion copy-sources for meal prescriptions in drafts.
-                  </p>
-                </div>
-              </header>
-              <label className="field templates-search" htmlFor="food-search">
-                <span>Search foods</span>
-                <input
-                  id="food-search"
-                  type="search"
-                  value={foodQuery}
-                  onChange={(event) => setFoodQuery(event.target.value)}
-                  autoComplete="off"
-                />
-              </label>
-              <div className="templates-table-scroll">
-                <table className="templates-table" aria-label="Food library">
-                  <thead>
-                    <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Portion</th>
-                      <th scope="col">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {foods.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="templates-empty">
-                          No foods yet.
-                        </td>
-                      </tr>
-                    ) : visibleFoods.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="templates-empty" role="status">
-                          No foods match that search.
-                        </td>
-                      </tr>
-                    ) : (
-                      visibleFoods.map((item) => (
-                        <tr key={item.id}>
-                          <td className="templates-name">{item.name}</td>
-                          <td>{item.portionLabel}</td>
-                          <td>{item.notes ?? "—"}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      {acting ? "Applying…" : "Apply to draft"}
+                    </button>
+                    {applyRelationshipId ? (
+                      <Link
+                        className="button-secondary"
+                        to={`/clients/${applyRelationshipId}/plan`}
+                      >
+                        Open Plan
+                      </Link>
+                    ) : null}
+                  </div>
+                </form>
+              )}
             </section>
           </div>
-        </>
+
+          {visibleTemplates.length === 0 ? (
+            <div className="empty-state" role="status">
+              <h2>No matching templates</h2>
+              <p>
+                {templates.length === 0
+                  ? "Save a workout template to reuse it across clients."
+                  : "No loaded templates match this search or type."}
+              </p>
+            </div>
+          ) : (
+            <ul className="templates-grid">
+              {visibleTemplates.map((item) => {
+                const selected = item.id === applyTemplateId;
+                return (
+                  <li key={item.id}>
+                    <article
+                      className={
+                        selected
+                          ? "templates-item is-selected"
+                          : "templates-item"
+                      }
+                    >
+                      <header className="templates-item-top">
+                        <span
+                          className={`templates-type templates-type-${item.templateType}`}
+                        >
+                          {templateTypeLabel(item.templateType)}
+                        </span>
+                        <time dateTime={item.updatedAt}>
+                          Updated {formatUpdated(item.updatedAt)}
+                        </time>
+                      </header>
+                      <h3>{item.title}</h3>
+                      <p className="muted">
+                        Copied into a client draft when applied. Not linked live.
+                      </p>
+                      <div className="templates-item-actions">
+                        <button
+                          type="button"
+                          className="button-primary"
+                          disabled={
+                            acting ||
+                            !applyRelationshipId ||
+                            relationships.length === 0
+                          }
+                          onClick={() => selectTemplate(item.id)}
+                        >
+                          <IconAssign />
+                          Assign to client
+                        </button>
+                      </div>
+                    </article>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <div className="templates-library-grid">
+          <section className="templates-card" aria-labelledby="exercise-lib-heading">
+            <header className="templates-card-header">
+              <span className="templates-stat-icon" aria-hidden="true">
+                <IconExercise />
+              </span>
+              <div>
+                <h2 id="exercise-lib-heading">Exercise library</h2>
+                <p className="muted">
+                  Global curated items and your own. Names, ownership, and
+                  default targets only.
+                </p>
+              </div>
+              <span className="templates-count-chip">{exercises.length}</span>
+            </header>
+            <label className="templates-filter-search templates-search" htmlFor="exercise-search">
+              <span className="sr-only">Search exercises</span>
+              <IconSearch />
+              <input
+                id="exercise-search"
+                type="search"
+                value={exerciseQuery}
+                onChange={(event) => setExerciseQuery(event.target.value)}
+                placeholder="Search exercises"
+                autoComplete="off"
+              />
+            </label>
+            <div className="templates-table-scroll">
+              <table className="templates-table" aria-label="Exercise library">
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Ownership</th>
+                    <th scope="col">Reps</th>
+                    <th scope="col">Load</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exercises.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="templates-empty">
+                        No exercises yet.
+                      </td>
+                    </tr>
+                  ) : visibleExercises.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="templates-empty" role="status">
+                        No exercises match that search.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleExercises.map((item) => (
+                      <tr key={item.id}>
+                        <td className="templates-name">{item.name}</td>
+                        <td>{item.ownership}</td>
+                        <td>{item.defaultReps != null ? item.defaultReps : "—"}</td>
+                        <td>{item.defaultLoadLabel ?? "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="templates-card" aria-labelledby="food-lib-heading">
+            <header className="templates-card-header">
+              <span className="templates-stat-icon" aria-hidden="true">
+                <IconFood />
+              </span>
+              <div>
+                <h2 id="food-lib-heading">Food library</h2>
+                <p className="muted">
+                  Household-portion copy-sources for meal prescriptions in drafts.
+                </p>
+              </div>
+              <span className="templates-count-chip">{foods.length}</span>
+            </header>
+            <label className="templates-filter-search templates-search" htmlFor="food-search">
+              <span className="sr-only">Search foods</span>
+              <IconSearch />
+              <input
+                id="food-search"
+                type="search"
+                value={foodQuery}
+                onChange={(event) => setFoodQuery(event.target.value)}
+                placeholder="Search foods"
+                autoComplete="off"
+              />
+            </label>
+            <div className="templates-table-scroll">
+              <table className="templates-table" aria-label="Food library">
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Portion</th>
+                    <th scope="col">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {foods.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="templates-empty">
+                        No foods yet.
+                      </td>
+                    </tr>
+                  ) : visibleFoods.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="templates-empty" role="status">
+                        No foods match that search.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleFoods.map((item) => (
+                      <tr key={item.id}>
+                        <td className="templates-name">{item.name}</td>
+                        <td>{item.portionLabel}</td>
+                        <td>{item.notes ?? "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       )}
     </section>
   );

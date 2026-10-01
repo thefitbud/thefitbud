@@ -66,15 +66,19 @@ input {
 
 .brand-mark {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--deep-navy);
+  line-height: 1.2;
 }
 
 .brand-tagline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--mid-grey);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -92,13 +96,13 @@ input {
 }
 
 .brand-glyph {
-  width: 2.15rem;
-  height: 2.15rem;
-  flex: 0 0 2.15rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 2.25rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--indigo);
   color: var(--white);
 }
@@ -110,12 +114,12 @@ input {
 }
 
 .side-nav {
-  width: 15.5rem;
-  flex: 0 0 15.5rem;
+  width: 15.75rem;
+  flex: 0 0 15.75rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.25rem 0.875rem 1rem;
+  gap: 1.15rem;
+  padding: 1.35rem 1rem 1rem;
   background: var(--white);
   border-right: 1px solid var(--border);
   position: sticky;
@@ -160,10 +164,10 @@ input {
   text-decoration: none;
   color: var(--mid-grey);
   font-weight: 600;
-  font-size: 0.9375rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 12px;
-  min-height: 2.75rem;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 14px;
+  min-height: 2.6rem;
   display: flex;
   align-items: center;
   gap: 0.625rem;
@@ -182,8 +186,9 @@ input {
 }
 
 .nav-link.is-active {
-  color: var(--deep-navy);
+  color: var(--indigo);
   background: var(--pale-lavender);
+  font-weight: 600;
 }
 
 .nav-link.is-disabled {
@@ -207,12 +212,15 @@ input {
 
 .shell-add-client {
   width: 100%;
+  min-height: 2.65rem;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .page-main {
   width: 100%;
   margin: 0;
-  padding: 1.25rem 1.5rem 2.5rem;
+  padding: 1rem 1.75rem 2.5rem;
   background: var(--page-bg);
 }
 
@@ -236,9 +244,9 @@ input {
 
 .page-header h1 {
   margin: 0 0 0.5rem;
-  font-size: 1.75rem;
+  font-size: 1.875rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   color: var(--deep-navy);
 }
 
@@ -264,6 +272,7 @@ input {
   display: grid;
   place-items: center;
   padding: 1.5rem;
+  background: var(--page-bg);
 }
 
 .auth-panel {
@@ -282,7 +291,12 @@ input {
   margin: 0;
   font-size: 1.75rem;
   font-weight: 700;
+  letter-spacing: -0.03em;
   color: var(--deep-navy);
+}
+
+.auth-panel .button-primary {
+  width: 100%;
 }
 
 .stack-form {

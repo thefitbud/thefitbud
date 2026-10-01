@@ -173,7 +173,7 @@ export function CheckinReviewPage() {
   }
 
   return (
-    <section className="page">
+    <section className="page review-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">
@@ -202,19 +202,26 @@ export function CheckinReviewPage() {
           {error}
         </p>
       ) : null}
-      {message ? <p className="muted">{message}</p> : null}
+      {message ? <p className="form-success">{message}</p> : null}
 
       {loading || !context ? (
         <p className="muted">Loading review context…</p>
       ) : (
-        <div className="stack-lg">
-          <section aria-labelledby="submission-heading">
-            <h2 id="submission-heading">Submission</h2>
-            <p>
+        <div className="workspace-page workspace-overview">
+          <section
+            className="workspace-card"
+            aria-labelledby="submission-heading"
+          >
+            <div className="workspace-card-head">
+              <h2 id="submission-heading" className="workspace-card-title">
+                Submission
+              </h2>
               <span className={`status-pill status-${context.checkin.status}`}>
                 {statusLabel(context.checkin.status)}
-              </span>{" "}
-              · Due {context.checkin.localDate}
+              </span>
+            </div>
+            <p className="workspace-summary">
+              Due {context.checkin.localDate}
             </p>
             {context.checkin.answers ? (
               <dl className="detail-list">
@@ -236,95 +243,131 @@ export function CheckinReviewPage() {
                 </div>
               </dl>
             ) : (
-              <p className="muted">No answers submitted yet.</p>
+              <p className="workspace-empty">No answers submitted yet.</p>
             )}
           </section>
 
-          <section aria-labelledby="adherence-heading">
-            <h2 id="adherence-heading">Recent adherence</h2>
-            <dl className="stat-strip">
+          <section
+            className="workspace-card"
+            aria-labelledby="adherence-heading"
+          >
+            <div className="workspace-card-head">
+              <h2 id="adherence-heading" className="workspace-card-title">
+                Recent adherence
+              </h2>
+            </div>
+            <dl className="workspace-facts">
               <div>
-                <dt>Workouts completed</dt>
+                <dt className="section-kicker">Workouts completed</dt>
                 <dd>{context.recentWorkoutAdherence.completed}</dd>
               </div>
               <div>
-                <dt>Workouts missed</dt>
+                <dt className="section-kicker">Workouts missed</dt>
                 <dd>{context.recentWorkoutAdherence.missed}</dd>
               </div>
               <div>
-                <dt>Meals confirmed</dt>
+                <dt className="section-kicker">Meals confirmed</dt>
                 <dd>{context.recentMealCompliance.confirmed}</dd>
               </div>
               <div>
-                <dt>Meals overdue</dt>
+                <dt className="section-kicker">Meals overdue</dt>
                 <dd>{context.recentMealCompliance.overdue}</dd>
               </div>
             </dl>
           </section>
 
-          <section aria-labelledby="exceptions-heading">
-            <h2 id="exceptions-heading">Active exceptions</h2>
+          <section
+            className="workspace-card"
+            aria-labelledby="exceptions-heading"
+          >
+            <div className="workspace-card-head">
+              <h2 id="exceptions-heading" className="workspace-card-title">
+                Active exceptions
+              </h2>
+            </div>
             {context.activeExceptions.length === 0 ? (
-              <p className="muted">No active exceptions for this client.</p>
+              <p className="workspace-empty">
+                No active exceptions for this client.
+              </p>
             ) : (
               <ul className="activity-list">
                 {context.activeExceptions.map((item) => (
                   <li key={item.id} className="activity-row">
-                    <p>
-                      <span className={`status-pill status-${item.status}`}>
-                        {statusLabel(item.status)}
-                      </span>{" "}
-                      <strong>{statusLabel(item.type)}</strong>
-                    </p>
-                    <p>
-                      <Link to={`/exceptions/${item.id}`}>{item.summary}</Link>
-                    </p>
-                    <p className="client-subtitle">
-                      Detected {item.detectedAt}
-                    </p>
+                    <div className="workspace-row-copy">
+                      <p className="workspace-row-title">
+                        <span className={`status-pill status-${item.status}`}>
+                          {statusLabel(item.status)}
+                        </span>{" "}
+                        {statusLabel(item.type)}
+                      </p>
+                      <p className="workspace-row-meta">
+                        <Link to={`/exceptions/${item.id}`}>{item.summary}</Link>
+                        <span>Detected {item.detectedAt}</span>
+                      </p>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </section>
 
-          <section aria-labelledby="plan-heading">
-            <h2 id="plan-heading">Current plan and configuration</h2>
+          <section className="workspace-card" aria-labelledby="plan-heading">
+            <div className="workspace-card-head">
+              <h2 id="plan-heading" className="workspace-card-title">
+                Current plan and configuration
+              </h2>
+            </div>
             {context.currentPlan ? (
-              <p>
+              <p className="workspace-row-title">
                 {context.currentPlan.title} · v
                 {context.currentPlan.versionNumber}
               </p>
             ) : (
-              <p className="muted">No effective plan.</p>
+              <p className="workspace-empty">No effective plan.</p>
             )}
             {context.currentConfiguration ? (
-              <p className="muted">
-                Goal: {context.currentConfiguration.primaryGoal ?? "—"} ·
-                Cadence {context.currentConfiguration.checkinCadence} · Window{" "}
+              <p className="workspace-row-meta">
+                Goal: {context.currentConfiguration.primaryGoal ?? "—"} · Cadence{" "}
+                {context.currentConfiguration.checkinCadence} · Window{" "}
                 {context.currentConfiguration.dueWindowHours}h
               </p>
             ) : null}
           </section>
 
-          <section aria-labelledby="notes-heading">
-            <h2 id="notes-heading">Previous notes</h2>
+          <section
+            className="workspace-card workspace-span"
+            aria-labelledby="notes-heading"
+          >
+            <div className="workspace-card-head">
+              <h2 id="notes-heading" className="workspace-card-title">
+                Previous notes
+              </h2>
+            </div>
             {context.previousNotes.length === 0 ? (
-              <p className="muted">No trainer notes yet.</p>
+              <p className="workspace-empty">No trainer notes yet.</p>
             ) : (
               <ul className="activity-list">
                 {context.previousNotes.map((note) => (
                   <li key={note.id} className="activity-row">
-                    <p>{note.body}</p>
-                    <p className="client-subtitle">{note.createdAt}</p>
+                    <div className="workspace-row-copy">
+                      <p>{note.body}</p>
+                      <p className="workspace-row-meta">{note.createdAt}</p>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </section>
 
-          <section aria-labelledby="actions-heading" className="stack-md">
-            <h2 id="actions-heading">Actions</h2>
+          <section
+            className="workspace-card workspace-span"
+            aria-labelledby="actions-heading"
+          >
+            <div className="workspace-card-head">
+              <h2 id="actions-heading" className="workspace-card-title">
+                Actions
+              </h2>
+            </div>
 
             {context.checkin.status === "submitted" ? (
               <div className="form-stack">
@@ -361,21 +404,23 @@ export function CheckinReviewPage() {
                 </button>
               </div>
             ) : (
-              <p className="muted">
+              <p className="workspace-empty">
                 Record Outcome is available after the trainee submits.
               </p>
             )}
 
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={acting}
-              onClick={() => {
-                void scheduleNext();
-              }}
-            >
-              Schedule Next
-            </button>
+            <div className="button-row">
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={acting}
+                onClick={() => {
+                  void scheduleNext();
+                }}
+              >
+                Schedule Next
+              </button>
+            </div>
 
             <div className="form-stack">
               <label className="field">

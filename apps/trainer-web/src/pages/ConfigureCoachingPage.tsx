@@ -9,6 +9,7 @@ import type {
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
+import "../styles/plan.css";
 
 const DEFAULT_FORM = {
   primaryGoal: "",
@@ -204,7 +205,7 @@ export function ConfigureCoachingPage() {
 
   if (loading) {
     return (
-      <section className="page" aria-busy="true">
+      <section className="page plan-config-page" aria-busy="true">
         <p className="muted">Loading configuration…</p>
       </section>
     );
@@ -212,7 +213,7 @@ export function ConfigureCoachingPage() {
 
   if (error && !relationship) {
     return (
-      <section className="page">
+      <section className="page plan-config-page">
         <p className="form-error" role="alert">
           {error}
         </p>
@@ -237,7 +238,7 @@ export function ConfigureCoachingPage() {
   const canActivate = configuration?.status === "configured" && !acting;
 
   return (
-    <section className="page narrow">
+    <section className="page plan-config-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">
@@ -273,40 +274,46 @@ export function ConfigureCoachingPage() {
         </p>
       ) : null}
 
-      <form className="stack-form" onSubmit={saveDraft}>
-        <label className="field">
-          <span>Primary goal</span>
-          <input
-            type="text"
-            name="primaryGoal"
-            maxLength={500}
-            value={form.primaryGoal}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                primaryGoal: event.target.value,
-              }))
-            }
-            disabled={!canSave || acting}
-            required
-          />
-        </label>
+      <form className="plan-config-form" onSubmit={saveDraft}>
+        <div className="plan-card">
+          <p className="plan-kicker">Baseline</p>
+          <h2>Coaching intent</h2>
+          <div className="plan-form">
+            <label className="field">
+              <span>Primary goal</span>
+              <input
+                type="text"
+                name="primaryGoal"
+                maxLength={500}
+                value={form.primaryGoal}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    primaryGoal: event.target.value,
+                  }))
+                }
+                disabled={!canSave || acting}
+                required
+              />
+            </label>
 
-        <label className="field">
-          <span>Notes (optional)</span>
-          <textarea
-            name="notes"
-            maxLength={2000}
-            rows={3}
-            value={form.notes}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, notes: event.target.value }))
-            }
-            disabled={!canSave || acting}
-          />
-        </label>
+            <label className="field">
+              <span>Notes (optional)</span>
+              <textarea
+                name="notes"
+                maxLength={2000}
+                rows={3}
+                value={form.notes}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, notes: event.target.value }))
+                }
+                disabled={!canSave || acting}
+              />
+            </label>
+          </div>
+        </div>
 
-        <fieldset className="field-group" disabled={!canSave || acting}>
+        <fieldset className="plan-card field-group" disabled={!canSave || acting}>
           <legend>Workout expectations</legend>
           <label className="field">
             <span>Sessions per week</span>
@@ -340,7 +347,7 @@ export function ConfigureCoachingPage() {
           </label>
         </fieldset>
 
-        <fieldset className="field-group" disabled={!canSave || acting}>
+        <fieldset className="plan-card field-group" disabled={!canSave || acting}>
           <legend>Nutrition expectations</legend>
           <label className="field">
             <span>Meals per day</span>
@@ -391,7 +398,7 @@ export function ConfigureCoachingPage() {
           </label>
         </fieldset>
 
-        <fieldset className="field-group" disabled={!canSave || acting}>
+        <fieldset className="plan-card field-group" disabled={!canSave || acting}>
           <legend>Check-in schedule</legend>
           <label className="field">
             <span>Cadence</span>
@@ -426,7 +433,7 @@ export function ConfigureCoachingPage() {
           </label>
         </fieldset>
 
-        <fieldset className="field-group" disabled={!canSave || acting}>
+        <fieldset className="plan-card field-group" disabled={!canSave || acting}>
           <legend>Tracking requirements</legend>
           <label className="checkbox-field">
             <input
@@ -480,7 +487,7 @@ export function ConfigureCoachingPage() {
           </p>
         ) : null}
 
-        <div className="button-row">
+        <div className="plan-card button-row">
           <button
             type="submit"
             className="button-primary"

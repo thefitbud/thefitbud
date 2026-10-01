@@ -1,6 +1,8 @@
+import { useCallback, useEffect, useState, type SVGProps } from "react";
 import { Link, NavLink, Outlet, useMatch, useParams } from "react-router-dom";
-import { useCallback, useState } from "react";
+import type { OnboardingStatus } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
+import { onboardingStatusLabel } from "../lib/clients";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 
 function shortRelationshipId(relationshipId: string): string {
@@ -12,14 +14,27 @@ function clientHeading(relationshipId: string): string {
   return shortId ? `Client ${shortId}` : "Client";
 }
 
-function clientInitials(relationshipId: string): string {
-  const initials = shortRelationshipId(relationshipId).slice(0, 2).toUpperCase();
-  return initials || "—";
+function initialsFromLabel(label: string): string {
+  const words = label
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.replace(/[^A-Za-z0-9]/g, ""))
+    .filter(Boolean);
+  const first = words[0];
+  const second = words[1];
+  if (first && second) {
+    return `${first.charAt(0)}${second.charAt(0)}`.toUpperCase();
+  }
+  const compact = words[0] ?? label.replace(/[^A-Za-z0-9]/g, "");
+  return (compact.slice(0, 2) || "CL").toUpperCase();
 }
 
 export function ClientWorkspaceLayout() {
   const { relationshipId = "" } = useParams();
   const [refreshEpoch, setRefreshEpoch] = useState(0);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [onboardingStatus, setOnboardingStatus] =
+    useState<OnboardingStatus | null>(null);
   const onOverviewIndex = useMatch({
     path: "/clients/:relationshipId",
     end: true,
@@ -36,20 +51,60 @@ export function ClientWorkspaceLayout() {
 
   useRealtimeHints(apiClient, relationshipId || null, bump);
 
+  useEffect(() => {
+    if (!relationshipId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [relationship, invitations] = await Promise.all([
+          apiClient.getRelationship(relationshipId),
+          apiClient.listInvitations(),
+        ]);
+        if (cancelled) return;
+        const invitation =
+          invitations.items.find((item) => item.id === relationship.invitationId) ??
+          invitations.items.find(
+            (item) => item.coachingRelationshipId === relationshipId,
+          );
+        const name =
+          invitation?.recipientDisplayName?.trim() ||
+          invitation?.recipientEmail ||
+          null;
+        setDisplayName(name);
+        setOnboardingStatus(relationship.onboardingStatus);
+      } catch {
+        if (!cancelled) {
+          setDisplayName(null);
+          setOnboardingStatus(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [relationshipId]);
+
+  const heading = displayName ?? clientHeading(relationshipId);
+  const initials = initialsFromLabel(heading);
+  const status = onboardingStatus
+    ? onboardingStatusLabel(onboardingStatus)
+    : "Workspace";
+
   return (
     <section className="page workspace-shell">
       <header className="workspace-identity">
         <div className="workspace-identity-main">
           <Link className="workspace-back" to="/clients">
+            <IconChevronLeft />
             Clients
           </Link>
           <div className="workspace-identity-row">
             <span className="avatar workspace-avatar" aria-hidden="true">
-              {clientInitials(relationshipId)}
+              {initials}
             </span>
             <div>
-              <h1 className="workspace-title">{clientHeading(relationshipId)}</h1>
-              <p className="workspace-status">Workspace</p>
+              <h1 className="workspace-title">{heading}</h1>
+              <p className="workspace-status">{status}</p>
             </div>
           </div>
         </div>
@@ -106,4 +161,27 @@ function navClass({ isActive }: { isActive: boolean }): string {
 
 function tabClass(isActive: boolean): string {
   return isActive ? "workspace-tab is-active" : "workspace-tab";
+}
+
+function IconChevronLeft() {
+  return (
+    <svg {...iconProps()}>
+      <path d="M15 6 9 12l6 6" />
+    </svg>
+  );
+}
+
+function iconProps(): SVGProps<SVGSVGElement> {
+  return {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
+    focusable: false,
+  };
 }

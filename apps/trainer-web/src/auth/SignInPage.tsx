@@ -31,8 +31,18 @@ export function SignInPage() {
   return (
     <main className="auth-page">
       <div className="auth-panel">
-        <p className="brand-mark">FitBud</p>
-        <h1>Trainer sign in</h1>
+        <div className="brand-lockup">
+          <span className="brand-glyph" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
+            </svg>
+          </span>
+          <span className="brand-copy">
+            <span className="brand-mark">FitBud Coach</span>
+            <span className="brand-tagline">Trainer sign in</span>
+          </span>
+        </div>
+        <h1>Welcome back</h1>
         <p className="lede">
           Local development uses the API test identity double. Enter a trainer
           email to create a session against the running API.

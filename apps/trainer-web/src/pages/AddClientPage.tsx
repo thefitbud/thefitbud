@@ -38,58 +38,61 @@ export function AddClientPage() {
 
   if (created) {
     return (
-      <section className="page narrow">
+      <section className="page narrow add-client-page">
         <header className="page-header">
           <div>
             <h1>Invitation created</h1>
             <p className="lede">
-              Share the invite token with {created.recipientDisplayName || created.recipientEmail}.
-              The raw token is shown once.
+              Share the invite token with{" "}
+              {created.recipientDisplayName || created.recipientEmail}. The raw
+              token is shown once.
             </p>
           </div>
         </header>
-        <dl className="detail-list">
-          <div>
-            <dt>Recipient</dt>
-            <dd>{created.recipientEmail}</dd>
+        <div className="workspace-card">
+          <dl className="detail-list">
+            <div>
+              <dt>Recipient</dt>
+              <dd>{created.recipientEmail}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>Invited</dd>
+            </div>
+            <div>
+              <dt>Expires</dt>
+              <dd>{new Date(created.expiresAt).toLocaleString()}</dd>
+            </div>
+            <div>
+              <dt>Invite token</dt>
+              <dd>
+                <code className="token-block">{created.token}</code>
+              </dd>
+            </div>
+          </dl>
+          <div className="button-row">
+            <Link to="/clients" className="button-primary">
+              Back to Clients
+            </Link>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => {
+                setCreated(null);
+                setEmail("");
+                setDisplayName("");
+              }}
+            >
+              Invite another
+            </button>
           </div>
-          <div>
-            <dt>Status</dt>
-            <dd>Invited</dd>
-          </div>
-          <div>
-            <dt>Expires</dt>
-            <dd>{new Date(created.expiresAt).toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>Invite token</dt>
-            <dd>
-              <code className="token-block">{created.token}</code>
-            </dd>
-          </div>
-        </dl>
-        <div className="button-row">
-          <Link to="/clients" className="button-primary">
-            Back to Clients
-          </Link>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => {
-              setCreated(null);
-              setEmail("");
-              setDisplayName("");
-            }}
-          >
-            Invite another
-          </button>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="page narrow">
+    <section className="page narrow add-client-page">
       <header className="page-header">
         <div>
           <h1>Add Client</h1>
@@ -100,7 +103,7 @@ export function AddClientPage() {
         </div>
       </header>
 
-      <form className="stack-form" onSubmit={onSubmit}>
+      <form className="workspace-card stack-form" onSubmit={onSubmit}>
         <label className="field">
           <span>Client email</span>
           <input

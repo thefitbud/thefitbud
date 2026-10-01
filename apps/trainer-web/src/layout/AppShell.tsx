@@ -62,7 +62,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           <span className="brand-copy">
             <span className="brand-mark">FitBud Coach</span>
-            <span className="brand-tagline">Active coaching</span>
+            <span className="brand-tagline">
+              <span className="live-dot" aria-hidden="true" />
+              Active Coaching
+            </span>
           </span>
         </div>
         <NavLink className="button-primary shell-add-client" to="/clients/add">
@@ -91,30 +94,37 @@ export function AppShell({ children }: { children: ReactNode }) {
             <IconTemplates />
             <span className="nav-label">Templates & Libraries</span>
           </NavLink>
-          <NavLink to="/checkins" className={navClass}>
+          <NavLink to="/checkins" className={navClass} aria-label="Check-ins">
             <IconCheckins />
-            <span className="nav-label">Schedules</span>
+            <span className="nav-label">Check-ins</span>
           </NavLink>
         </nav>
-        <p className="nav-help">Help & Support</p>
-        <div className="trainer-card">
-          <span className="avatar" aria-hidden="true">
-            {initials(displayName)}
-          </span>
-          <span className="trainer-card-copy">
-            <span className="trainer-card-name">{displayName}</span>
-            <span className="trainer-card-role">Trainer</span>
-          </span>
-          <button
-            type="button"
-            className="trainer-signout"
-            aria-label="Sign out of FitBud"
-            onClick={() => {
-              void signOut();
-            }}
-          >
-            <IconSignOut />
-          </button>
+        <div className="side-nav-footer">
+          <p className="nav-help">
+            <span className="nav-help-icon" aria-hidden="true">
+              <IconHelp />
+            </span>
+            Help & Support
+          </p>
+          <div className="trainer-card">
+            <span className="avatar" aria-hidden="true">
+              {initials(displayName)}
+            </span>
+            <span className="trainer-card-copy">
+              <span className="trainer-card-name">{displayName}</span>
+              <span className="trainer-card-role">Trainer</span>
+            </span>
+            <button
+              type="button"
+              className="trainer-signout"
+              aria-label="Sign out of FitBud"
+              onClick={() => {
+                void signOut();
+              }}
+            >
+              <IconSignOut />
+            </button>
+          </div>
         </div>
       </aside>
       <div className="app-canvas">
@@ -134,6 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <kbd className="search-kbd">⌘K</kbd>
           </form>
           <time className="canvas-date" dateTime={new Date().toISOString().slice(0, 10)}>
+            <IconCalendar />
             {today}
           </time>
           <a className="canvas-bell" href="#attention-heading" aria-label="Needs attention">
@@ -220,6 +231,15 @@ function IconSearch() {
   );
 }
 
+function IconCalendar() {
+  return (
+    <svg {...iconProps()} width={16} height={16}>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M8 3v4M16 3v4M4 10h16" />
+    </svg>
+  );
+}
+
 function IconHome() {
   return (
     <svg {...iconProps()}>
@@ -255,6 +275,16 @@ function IconTemplates() {
       <rect x="13" y="4" width="7" height="7" rx="1.5" />
       <rect x="4" y="13" width="7" height="7" rx="1.5" />
       <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
+function IconHelp() {
+  return (
+    <svg {...iconProps()} width={16} height={16}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.7.4-1.4.9-1.4 1.7V14" />
+      <path d="M12 17h.01" />
     </svg>
   );
 }

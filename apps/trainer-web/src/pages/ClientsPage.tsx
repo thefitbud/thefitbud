@@ -157,7 +157,7 @@ export function ClientsPage() {
       <header className="page-header">
         <div>
           <h1 className="roster-title">
-            Client roster
+            Client Roster
             {!loading ? (
               <span className="roster-count" aria-label={`${rows.length} loaded`}>
                 {rows.length}
@@ -169,7 +169,7 @@ export function ClientsPage() {
           </p>
         </div>
         <Link to="/clients/add" className="button-primary">
-          Add Client
+          + Add Client
         </Link>
       </header>
 
@@ -183,7 +183,7 @@ export function ClientsPage() {
         <Kpi
           label="Onboarding"
           value={kpiValue(onboarding)}
-          tone="info"
+          tone="accent"
           detail="Onboarding pending and onboarding submitted"
         />
         <Kpi label="Invited" value={kpiValue(invited)} tone="warning" />
@@ -211,7 +211,7 @@ export function ClientsPage() {
             <h2>No clients yet</h2>
             <p>Invite a trainee to start onboarding.</p>
             <Link to="/clients/add" className="button-primary">
-              Add Client
+              + Add Client
             </Link>
           </div>
         ) : (
@@ -231,6 +231,7 @@ export function ClientsPage() {
             <div className="roster-toolbar">
               <label className="roster-search">
                 <span className="sr-only">Search clients</span>
+                <SearchIcon />
                 <input
                   id="clients-search"
                   type="search"
@@ -252,6 +253,7 @@ export function ClientsPage() {
                       key={filter}
                       type="button"
                       className={selected ? "segment-btn is-on" : "segment-btn"}
+                      data-filter={filter}
                       aria-pressed={selected}
                       onClick={() => setStatusFilter(filter)}
                     >
@@ -303,6 +305,25 @@ export function ClientsPage() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg
+      className="roster-search-icon"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
 function Kpi({
   label,
   value,
@@ -311,15 +332,26 @@ function Kpi({
 }: {
   label: string;
   value: number | string;
-  tone: "warning" | "neutral" | "info" | "success";
+  tone: "warning" | "neutral" | "info" | "success" | "accent";
   detail?: string;
 }) {
   return (
     <div className={`kpi kpi-${tone}`} title={detail}>
-      <dd>{value}</dd>
       <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
+}
+
+function splitDisplayName(name: string): { given: string; family: string | null } {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return { given: parts[0], family: parts.slice(1).join(" ") };
+  }
+  return { given: name.trim() || "Client", family: null };
 }
 
 function ClientRow({ row }: { row: ClientDirectoryRow }) {
@@ -328,6 +360,7 @@ function ClientRow({ row }: { row: ClientDirectoryRow }) {
     action.href && row.relationshipId
       ? `/clients/${row.relationshipId}/${action.href}`
       : null;
+  const display = splitDisplayName(row.name);
 
   return (
     <tr>
@@ -337,7 +370,10 @@ function ClientRow({ row }: { row: ClientDirectoryRow }) {
             {initials(row.name)}
           </span>
           <div className="roster-person-copy">
-            <p className="client-name">{row.name}</p>
+            <p className="client-name">
+              <span>{display.given}</span>
+              {display.family ? <span>{display.family}</span> : null}
+            </p>
             <p className="client-subtitle">{row.subtitle}</p>
           </div>
         </div>

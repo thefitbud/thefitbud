@@ -14,7 +14,8 @@
     "affected": "turbo run lint typecheck test --filter=...[HEAD^1]",
     "db:generate": "pnpm --filter @fitbud/api db:generate",
     "db:migrate:local": "pnpm --filter @fitbud/api db:migrate:local",
-    "db:migrate": "pnpm --filter @fitbud/api db:migrate"
+    "db:migrate": "pnpm --filter @fitbud/api db:migrate",
+    "db:seed:dev": "pnpm --filter @fitbud/api db:seed:dev"
   },
   "devDependencies": {
     "turbo": "^2.5.4",

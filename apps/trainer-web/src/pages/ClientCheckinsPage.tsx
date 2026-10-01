@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Checkin } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
+
+type WorkspaceOutlet = { refreshEpoch?: number };
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
@@ -15,8 +17,23 @@ function localDateUtc(offsetDays = 0): string {
   return date.toISOString().slice(0, 10);
 }
 
+function formatLocalDate(localDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
+  if (!match) return localDate;
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  );
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 export function ClientCheckinsPage() {
   const { relationshipId = "" } = useParams();
+  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
   const [items, setItems] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
@@ -43,7 +60,7 @@ export function ClientCheckinsPage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshEpoch]);
 
   async function scheduleToday() {
     if (!relationshipId) return;
@@ -85,6 +102,7 @@ export function ClientCheckinsPage() {
       <section className="workspace-card" aria-labelledby="checkins-heading">
         <div className="workspace-card-head">
           <div>
+            <p className="workspace-kicker">Schedule</p>
             <h2 id="checkins-heading" className="workspace-card-title">
               Check-ins
             </h2>
@@ -115,7 +133,9 @@ export function ClientCheckinsPage() {
             {items.map((item) => (
               <li key={item.id} className="workspace-row">
                 <div className="workspace-row-copy">
-                  <p className="workspace-row-title">{item.localDate}</p>
+                  <p className="workspace-row-title">
+                    {formatLocalDate(item.localDate)}
+                  </p>
                   <p className="workspace-row-meta">
                     <span className={`status-pill status-${item.status}`}>
                       {statusLabel(item.status)}

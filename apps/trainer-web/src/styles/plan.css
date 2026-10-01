@@ -1,0 +1,538 @@
+/* Plan tab, plan builder, and configure-coaching visual system. */
+
+.plan-page,
+.plan-config-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.plan-config-page {
+  max-width: 48rem;
+}
+
+.plan-config-page h1 {
+  margin: 0;
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  color: var(--deep-navy);
+}
+
+.plan-config-page .lede {
+  margin: 0.5rem 0 0;
+  max-width: 38rem;
+  font-size: 0.9375rem;
+}
+
+.plan-tab,
+.plan-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.plan-card {
+  background: #ffffff;
+  border: 1px solid #e7e9f2;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  min-width: 0;
+}
+
+.plan-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.plan-kicker {
+  margin: 0 0 0.25rem;
+  color: #98a0b3;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plan-card h2,
+.plan-config-page h1 {
+  color: var(--deep-navy);
+}
+
+.plan-card h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.plan-effective h2 {
+  font-size: 1.35rem;
+}
+
+.plan-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--deep-navy);
+}
+
+.plan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.5rem 0 0;
+  color: var(--mid-grey);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.plan-status {
+  text-transform: capitalize;
+}
+
+.plan-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 999px;
+  background: var(--pale-lavender);
+  color: var(--indigo);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.plan-chip-success {
+  background: #ecfdf5;
+  color: #047857;
+  text-transform: none;
+}
+
+.plan-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.plan-tab-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.plan-protocol-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.plan-protocol-list,
+.plan-split-list,
+.plan-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-protocol-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #fbfbfe;
+  border: 1px solid #e7e9f2;
+  border-radius: 12px;
+}
+
+.plan-protocol-badge {
+  min-width: 2.5rem;
+  height: 2rem;
+  padding: 0 0.4rem;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--pale-lavender);
+  color: var(--indigo);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.plan-protocol-badge-meal {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.plan-day-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-day-copy h4,
+.plan-note h4 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--deep-navy);
+}
+
+.plan-day-copy p {
+  margin: 0.25rem 0 0;
+}
+
+.plan-day-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--mid-grey);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plan-meals {
+  margin-top: 1.25rem;
+}
+
+.plan-note {
+  padding: 0.75rem 1rem;
+  background: #fbfbfe;
+  border: 1px solid #e7e9f2;
+  border-radius: 12px;
+}
+
+.plan-note p {
+  margin: 0.375rem 0 0;
+  color: var(--dark-grey);
+  font-size: 0.875rem;
+}
+
+.plan-builder {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.plan-split h2 {
+  margin-bottom: 0.75rem;
+  font-size: 1.0625rem;
+}
+
+.plan-split-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #e7e9f2;
+  border-radius: 12px;
+  background: #fbfbfe;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.plan-split-day.is-selected {
+  background: var(--pale-lavender);
+  border-color: #c9c0f5;
+  box-shadow: inset 3px 0 0 var(--indigo);
+}
+
+.plan-split-label {
+  color: var(--deep-navy);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.plan-split-apply {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e7e9f2;
+}
+
+.plan-card > .muted,
+.plan-composer-head > .muted,
+.plan-split-apply > .muted {
+  margin: 0.25rem 0 0.75rem;
+  max-width: 36rem;
+}
+
+.plan-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 0;
+}
+
+.plan-form .field input,
+.plan-form .field select,
+.plan-config-page .field input,
+.plan-config-page .field select,
+.plan-config-page .field textarea {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: 10px;
+}
+
+.plan-composer-head {
+  margin-bottom: 1rem;
+}
+
+.plan-composer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.plan-title-field {
+  gap: 0;
+}
+
+.plan-title-input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.25rem 0;
+  border: 0;
+  border-bottom: 1px solid #e7e9f2;
+  border-radius: 0;
+  background: transparent;
+  color: var(--deep-navy);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.plan-title-input:focus {
+  outline: none;
+  border-bottom-color: var(--indigo);
+}
+
+.plan-title-input:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.plan-exercise-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #fbfbfe;
+  border: 1px solid #e7e9f2;
+  border-radius: 16px;
+}
+
+.plan-exercise-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.plan-exercise-name {
+  flex: 1;
+  min-width: 0;
+  gap: 0;
+}
+
+.plan-exercise-name input {
+  min-height: 2.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--deep-navy);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.plan-exercise-name input:focus {
+  outline: none;
+}
+
+.plan-exercise-name input:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.plan-sets-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.plan-sets-table th {
+  padding: 0.5rem 0.5rem 0.375rem;
+  color: #98a0b3;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.plan-sets-table td {
+  padding: 0.375rem 0.5rem;
+  color: var(--deep-navy);
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.plan-sets-table td:first-child,
+.plan-sets-table th:first-child {
+  width: 3.5rem;
+}
+
+.plan-sets-table input {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid #e7e9f2;
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--near-black);
+  font: inherit;
+  font-weight: 600;
+}
+
+.plan-sets-table input:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.plan-rpe {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  color: var(--indigo);
+  font-weight: 700;
+}
+
+.plan-cue {
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  border-radius: 10px;
+  background: #fff8ee;
+  color: var(--dark-grey);
+  font-size: 0.875rem;
+}
+
+.plan-composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.plan-card .empty-state {
+  margin: 0;
+  padding: 0.5rem 0 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.plan-card .empty-state h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--deep-navy);
+}
+
+.plan-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 0;
+}
+
+.plan-config-page .plan-card.field-group {
+  padding: 1.25rem;
+  border: 1px solid #e7e9f2;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  gap: 1rem;
+}
+
+.plan-config-page .field-group legend {
+  float: none;
+  width: auto;
+  padding: 0;
+  margin-bottom: 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--deep-navy);
+}
+
+.plan-config-page .checkbox-field {
+  min-height: 2.75rem;
+}
+
+.plan-config-page .button-row {
+  gap: 0.75rem;
+}
+
+.plan-page a:focus-visible,
+.plan-page button:focus-visible,
+.plan-page input:focus-visible,
+.plan-page select:focus-visible,
+.plan-config-page a:focus-visible,
+.plan-config-page button:focus-visible,
+.plan-config-page input:focus-visible,
+.plan-config-page select:focus-visible,
+.plan-config-page textarea:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+@media (min-width: 960px) {
+  .plan-tab-grid.has-notes {
+    grid-template-columns: minmax(0, 1.2fr) minmax(16rem, 0.8fr);
+  }
+
+  .plan-builder {
+    grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .plan-head-actions,
+  .plan-composer-actions,
+  .plan-config-page .button-row {
+    width: 100%;
+  }
+
+  .plan-head-actions .button-primary,
+  .plan-head-actions .button-ghost,
+  .plan-composer-actions > *,
+  .plan-config-page .button-row > * {
+    flex: 1 1 auto;
+  }
+
+  .plan-title-input {
+    font-size: 1.35rem;
+  }
+}

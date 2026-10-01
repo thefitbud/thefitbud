@@ -143,7 +143,7 @@ export function CheckinsPage() {
             ) : null}
           </h1>
           <p className="lede">
-            Review check-ins that are due or have been submitted.
+            Review loaded check-ins that are due or have been submitted.
           </p>
         </div>
         <button
@@ -206,6 +206,7 @@ export function CheckinsPage() {
                 aria-label="Filter by check-in status"
               >
                 <StatusChip
+                  filter="all"
                   label="All"
                   count={countFor("all")}
                   selected={activeFilter === "all"}
@@ -214,6 +215,7 @@ export function CheckinsPage() {
                 {presentStatuses.map((status) => (
                   <StatusChip
                     key={status}
+                    filter={status}
                     label={statusLabel(status)}
                     count={countFor(status)}
                     selected={activeFilter === status}
@@ -265,18 +267,20 @@ function Kpi({
 }) {
   return (
     <div className={`kpi kpi-${tone}`}>
-      <dd>{value}</dd>
       <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
 }
 
 function StatusChip({
+  filter,
   label,
   count,
   selected,
   onSelect,
 }: {
+  filter: string;
   label: string;
   count: number;
   selected: boolean;
@@ -286,6 +290,7 @@ function StatusChip({
     <button
       type="button"
       className={selected ? "segment-btn is-on" : "segment-btn"}
+      data-filter={filter}
       aria-pressed={selected}
       onClick={onSelect}
     >
@@ -306,7 +311,7 @@ function CheckinRow({ item }: { item: TrainerCheckinInboxItem }) {
           </span>
           <div className="roster-person-copy">
             <p className="client-name" title={item.coachingRelationshipId}>
-              {label}
+              <span>{label}</span>
             </p>
           </div>
         </div>

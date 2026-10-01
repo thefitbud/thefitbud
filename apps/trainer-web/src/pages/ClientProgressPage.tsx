@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ProgressSummary } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
+
+type WorkspaceOutlet = { refreshEpoch?: number };
 
 function formatType(value: string): string {
   return value.replace(/_/g, " ");
@@ -10,6 +12,7 @@ function formatType(value: string): string {
 
 export function ClientProgressPage() {
   const { relationshipId = "" } = useParams();
+  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
   const [summary, setSummary] = useState<ProgressSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +37,7 @@ export function ClientProgressPage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshEpoch]);
 
   const measurements = summary?.measurements ?? [];
   const entries = summary?.entries ?? [];
@@ -54,6 +57,7 @@ export function ClientProgressPage() {
           <section className="workspace-card" aria-labelledby="measurements-heading">
             <div className="workspace-card-head">
               <div>
+                <p className="workspace-kicker">Stored data</p>
                 <h2 id="measurements-heading" className="workspace-card-title">
                   Measurements
                 </h2>
@@ -74,27 +78,39 @@ export function ClientProgressPage() {
                 No measurements yet
               </p>
             ) : (
-              <ul className="workspace-list">
-                {measurements.map((item) => (
-                  <li key={item.id} className="workspace-row">
-                    <div className="workspace-row-copy">
-                      <p className="workspace-row-title">
-                        {formatType(item.type)} · {item.value} {item.unit}
-                      </p>
-                      <p className="workspace-row-meta">
-                        <span>{new Date(item.observedAt).toLocaleString()}</span>
-                        <span className="workspace-kind">{item.source}</span>
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <div className="workspace-table-wrap">
+                <table className="workspace-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Type</th>
+                      <th scope="col">Value</th>
+                      <th scope="col">Observed</th>
+                      <th scope="col">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {measurements.map((item) => (
+                      <tr key={item.id}>
+                        <td>{formatType(item.type)}</td>
+                        <td>
+                          {item.value} {item.unit}
+                        </td>
+                        <td>{new Date(item.observedAt).toLocaleString()}</td>
+                        <td>
+                          <span className="workspace-kind">{item.source}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
 
           <section className="workspace-card" aria-labelledby="entries-heading">
             <div className="workspace-card-head">
               <div>
+                <p className="workspace-kicker">Notes</p>
                 <h2 id="entries-heading" className="workspace-card-title">
                   Progress entries
                 </h2>
@@ -130,6 +146,7 @@ export function ClientProgressPage() {
           <section className="workspace-card" aria-labelledby="photos-heading">
             <div className="workspace-card-head">
               <div>
+                <p className="workspace-kicker">Media</p>
                 <h2 id="photos-heading" className="workspace-card-title">
                   Photos on file
                 </h2>

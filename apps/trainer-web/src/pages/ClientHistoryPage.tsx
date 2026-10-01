@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
+
+type WorkspaceOutlet = { refreshEpoch?: number };
 
 const KIND_LABELS: Record<HistoryItemKind, string> = {
   intake_submitted: "Onboarding",
@@ -27,6 +29,7 @@ function kindLabel(kind: HistoryItemKind): string {
 
 export function ClientHistoryPage() {
   const { relationshipId = "" } = useParams();
+  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +71,7 @@ export function ClientHistoryPage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshEpoch]);
 
   const empty = !loading && items.length === 0 && !error;
 
@@ -84,6 +87,7 @@ export function ClientHistoryPage() {
         <section className="workspace-card" aria-labelledby="history-list-heading">
           <div className="workspace-card-head">
             <div>
+              <p className="workspace-kicker">Ledger</p>
               <h2 id="history-list-heading" className="workspace-card-title">
                 Coaching history
               </h2>

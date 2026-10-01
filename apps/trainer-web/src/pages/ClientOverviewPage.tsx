@@ -25,6 +25,20 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
+function formatLocalDate(localDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
+  if (!match) return localDate;
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  );
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
 export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
   const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
@@ -95,9 +109,12 @@ export function ClientOverviewPage() {
     <div className="workspace-page workspace-overview">
       <section className="workspace-card" aria-labelledby="overview-plan-heading">
         <div className="workspace-card-head">
-          <h2 id="overview-plan-heading" className="workspace-card-title">
-            Effective plan
-          </h2>
+          <div>
+            <p className="workspace-kicker">Plan</p>
+            <h2 id="overview-plan-heading" className="workspace-card-title">
+              Effective plan
+            </h2>
+          </div>
           {!loading && !planError ? (
             <Link className="button-primary" to={planHref}>
               {hasEffectivePlan ? "Adjust plan" : "Open plan"}
@@ -138,9 +155,12 @@ export function ClientOverviewPage() {
         aria-labelledby="overview-exceptions-heading"
       >
         <div className="workspace-card-head">
-          <h2 id="overview-exceptions-heading" className="workspace-card-title">
-            Open exceptions
-          </h2>
+          <div>
+            <p className="workspace-kicker">Attention</p>
+            <h2 id="overview-exceptions-heading" className="workspace-card-title">
+              Open exceptions
+            </h2>
+          </div>
         </div>
         {exceptionsError ? (
           <p className="form-error" role="alert">
@@ -180,9 +200,12 @@ export function ClientOverviewPage() {
         aria-labelledby="overview-checkins-heading"
       >
         <div className="workspace-card-head">
-          <h2 id="overview-checkins-heading" className="workspace-card-title">
-            Next check-ins
-          </h2>
+          <div>
+            <p className="workspace-kicker">Schedule</p>
+            <h2 id="overview-checkins-heading" className="workspace-card-title">
+              Next check-ins
+            </h2>
+          </div>
         </div>
         {checkinsError ? (
           <p className="form-error" role="alert">
@@ -202,7 +225,9 @@ export function ClientOverviewPage() {
             {upcomingCheckins.map((item) => (
               <li key={item.id} className="workspace-row">
                 <div className="workspace-row-copy">
-                  <p className="workspace-row-title">{item.localDate}</p>
+                  <p className="workspace-row-title">
+                    {formatLocalDate(item.localDate)}
+                  </p>
                   <p className="workspace-row-meta">
                     <span className={`status-pill status-${item.status}`}>
                       {statusLabel(item.status)}
