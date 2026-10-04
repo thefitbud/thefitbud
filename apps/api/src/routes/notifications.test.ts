@@ -23,6 +23,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   for (const file of [
     "0000_identity.sql",
     "0001_relationship_onboarding.sql",
+    "0012_invitation_whatsapp.sql",
     "0002_coaching_configuration.sql",
     "0003_plans.sql",
     "0004_workouts.sql",

@@ -11,6 +11,17 @@
   max-width: 48rem;
 }
 
+.workspace-shell .plan-config-page {
+  max-width: none;
+}
+
+.plan-config-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
 .plan-config-page h1 {
   margin: 0;
   font-size: 1.85rem;
@@ -509,8 +520,12 @@
 }
 
 @media (min-width: 960px) {
-  .plan-tab-grid.has-notes {
-    grid-template-columns: minmax(0, 1.2fr) minmax(16rem, 0.8fr);
+  .plan-tab-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .plan-config-split {
+    grid-template-columns: minmax(16rem, 0.9fr) minmax(20rem, 1.2fr);
   }
 
   .plan-builder {

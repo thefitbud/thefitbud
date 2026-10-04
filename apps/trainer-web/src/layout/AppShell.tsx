@@ -68,10 +68,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </span>
         </div>
-        <NavLink className="button-primary shell-add-client" to="/clients/add">
-          <IconPlus />
-          Add Client
-        </NavLink>
         <p className="nav-kicker">Menu</p>
         <nav className="primary-nav" aria-label="Primary">
           <NavLink to="/" end className={navClass}>
@@ -210,14 +206,6 @@ function IconBell() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false">
       <path d="M6 8a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" strokeLinecap="round" />
       <path d="M10 21a2 2 0 0 0 4 0" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconPlus() {
-  return (
-    <svg {...iconProps()} width={16} height={16}>
-      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }

@@ -12,6 +12,7 @@ export type ClientDirectoryRow = {
   onboardingStatus: OnboardingStatus;
   relationshipId: string | null;
   invitationId: string | null;
+  recipientWhatsappE164: string | null;
   updatedAt: string;
 };
 
@@ -93,6 +94,7 @@ export function buildClientDirectoryRows(input: {
         onboardingStatus: invitation.onboardingStatus,
         relationshipId: null,
         invitationId: invitation.id,
+        recipientWhatsappE164: invitation.recipientWhatsappE164,
         updatedAt: invitation.updatedAt,
       }),
     );
@@ -115,6 +117,7 @@ export function buildClientDirectoryRows(input: {
         onboardingStatus: relationship.onboardingStatus,
         relationshipId: relationship.id,
         invitationId: relationship.invitationId,
+        recipientWhatsappE164: invitation?.recipientWhatsappE164 ?? null,
         updatedAt: relationship.updatedAt,
       };
     });

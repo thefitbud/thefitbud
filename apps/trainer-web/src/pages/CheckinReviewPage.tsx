@@ -173,29 +173,39 @@ export function CheckinReviewPage() {
   }
 
   return (
-    <section className="page review-page">
-      <header className="page-header">
+    <div className="workspace-page">
+      <div className="workspace-toolbar">
         <div>
-          <p className="eyebrow">
-            <Link to="/checkins">Check-ins</Link> / Review
-          </p>
-          <h1>Check-in review</h1>
+          <p className="workspace-kicker">Check-in</p>
+          <h2 className="workspace-card-title">Review</h2>
           <p className="lede">
             Submission, recent adherence, notes, and current plan — no invented
             risk scores.
           </p>
         </div>
-        <button
-          type="button"
-          className="button-secondary"
-          disabled={acting || !context?.currentPlan}
-          onClick={() => {
-            void adjustCoaching();
-          }}
-        >
-          Adjust Coaching
-        </button>
-      </header>
+        <div className="workspace-header-actions">
+          <Link
+            className="button-ghost"
+            to={
+              relationshipId
+                ? `/clients/${relationshipId}/check-ins`
+                : "/checkins"
+            }
+          >
+            Back to check-ins
+          </Link>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={acting || !context?.currentPlan}
+            onClick={() => {
+              void adjustCoaching();
+            }}
+          >
+            Adjust Coaching
+          </button>
+        </div>
+      </div>
 
       {error ? (
         <p className="form-error" role="alert">
@@ -450,6 +460,6 @@ export function CheckinReviewPage() {
           </section>
         </div>
       )}
-    </section>
+    </div>
   );
 }

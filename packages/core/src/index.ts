@@ -141,3 +141,5 @@ export {
   entityTypeForRealtimeEvent,
   isAuthorizedRealtimeChannel,
 } from "./realtime.js";
+
+export { normalizeWhatsappE164, whatsappHref } from "./whatsapp.js";

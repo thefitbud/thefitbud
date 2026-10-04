@@ -8,6 +8,7 @@ import {
   invitationListResponseSchema,
   invitationSchema,
 } from "@fitbud/contracts";
+import { normalizeWhatsappE164 } from "@fitbud/core";
 import { createDb, type Db } from "../db/client";
 import {
   clientInvitations,
@@ -83,10 +84,26 @@ invitationRoutes.post(
       );
     }
 
+    let recipientWhatsappE164: string | null = null;
+    if (parsed.data.recipientWhatsapp) {
+      recipientWhatsappE164 = normalizeWhatsappE164(
+        parsed.data.recipientWhatsapp,
+      );
+      if (!recipientWhatsappE164) {
+        return fail(
+          c,
+          400,
+          "INVALID_REQUEST",
+          "WhatsApp number is not a valid phone number.",
+        );
+      }
+    }
+
     const fingerprint = await sha256Hex(
       JSON.stringify({
         recipientEmail: normalizeEmail(parsed.data.recipientEmail),
         recipientDisplayName: parsed.data.recipientDisplayName ?? null,
+        recipientWhatsappE164,
         expiresInDays: parsed.data.expiresInDays ?? DEFAULT_INVITE_DAYS,
       }),
     );
@@ -123,6 +140,7 @@ invitationRoutes.post(
       trainerUserId: actor.userId,
       recipientEmail,
       recipientDisplayName: parsed.data.recipientDisplayName ?? null,
+      recipientWhatsappE164,
       tokenHash,
       status: "pending",
       expiresAt,

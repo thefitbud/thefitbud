@@ -52,6 +52,7 @@ describe("FitBudApiClient", () => {
               trainerUserId: "00000000-0000-4000-8000-000000000002",
               recipientEmail: "client@example.com",
               recipientDisplayName: null,
+              recipientWhatsappE164: null,
               status: "pending",
               expiresAt: "2026-10-10T00:00:00.000Z",
               acceptedUserId: null,

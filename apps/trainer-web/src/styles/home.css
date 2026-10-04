@@ -276,6 +276,13 @@
 
 .cockpit-hero {
   display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.cockpit-hero-main {
+  display: flex;
   justify-content: space-between;
   gap: 1.25rem;
   align-items: flex-start;
@@ -310,8 +317,9 @@
 }
 
 .cockpit-sub {
-  margin: 0.4rem 0 0;
-  max-width: 36rem;
+  margin: 0.15rem 0 0;
+  width: 100%;
+  max-width: none;
   color: var(--mid-grey);
   font-size: 0.875rem;
   font-weight: 400;
@@ -320,8 +328,8 @@
 
 .callout {
   margin: 0;
-  flex: 0 1 17rem;
-  max-width: 17rem;
+  flex: 0 1 22rem;
+  max-width: 22rem;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -616,6 +624,27 @@
   min-height: 100%;
 }
 
+.exception-card.is-linked {
+  padding: 0;
+}
+
+.exception-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  flex: 1;
+  min-height: 100%;
+  padding: 0.9rem 1rem 0.85rem;
+  color: inherit;
+  text-decoration: none;
+  border-radius: inherit;
+}
+
+.exception-card-link:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: -3px;
+}
+
 .tone-missed_workout {
   background: #fff8f8;
   border-color: #f6c7c7;
@@ -716,6 +745,25 @@
   letter-spacing: -0.02em;
 }
 
+.exception-type-meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.exception-type-meta .category-pill {
+  margin-left: 0;
+}
+
+.exception-more {
+  color: var(--dark-grey);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .category-pill {
   margin-left: auto;
   padding: 0.2rem 0.55rem;
@@ -776,13 +824,6 @@
 .tone-overdue_meal .exception-type-icon { color: #d97706; }
 .tone-missed_workout .exception-type-icon { color: var(--coral); }
 .tone-overdue_checkin .exception-type-icon { color: var(--indigo); }
-
-.exception-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: auto;
-}
 
 .work-panel {
   background: var(--white);
@@ -907,12 +948,12 @@
 
 @media (min-width: 961px) {
   .attention-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 960px) {
-  .cockpit-hero,
+  .cockpit-hero-main,
   .work-row {
     display: flex;
     flex-direction: column;

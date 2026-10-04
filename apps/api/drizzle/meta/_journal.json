@@ -82,5 +82,12 @@
     "when": 1728316800000,
     "tag": "0011_templates_libraries",
     "breakpoints": true
+  },
+  {
+    "idx": 12,
+    "version": "7",
+    "when": 1728403200000,
+    "tag": "0012_invitation_whatsapp",
+    "breakpoints": true
   }
 ]

@@ -372,6 +372,13 @@
   white-space: nowrap;
 }
 
+.roster-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
 .roster-table .muted-action {
   font-size: 0.84rem;
   font-weight: 600;

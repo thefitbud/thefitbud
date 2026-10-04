@@ -121,6 +121,7 @@ export function mapInvitation(row: InvitationRow): Invitation {
     trainerUserId: row.trainerUserId,
     recipientEmail: row.recipientEmail,
     recipientDisplayName: row.recipientDisplayName,
+    recipientWhatsappE164: row.recipientWhatsappE164 ?? null,
     status: row.status,
     expiresAt: row.expiresAt,
     acceptedUserId: row.acceptedUserId,

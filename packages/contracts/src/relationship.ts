@@ -36,6 +36,8 @@ export type OnboardingStatus = z.infer<typeof onboardingStatusSchema>;
 export const createInvitationRequestSchema = z.object({
   recipientEmail: z.string().email().max(320),
   recipientDisplayName: z.string().trim().min(1).max(120).optional(),
+  /** WhatsApp number as entered by the trainer. Normalized to E.164 digits on the server. */
+  recipientWhatsapp: z.string().trim().min(8).max(20).optional(),
   expiresInDays: z.number().int().min(1).max(30).optional(),
 });
 export type CreateInvitationRequest = z.infer<typeof createInvitationRequestSchema>;
@@ -45,6 +47,8 @@ export const invitationSchema = z.object({
   trainerUserId: uuidSchema,
   recipientEmail: z.string().email(),
   recipientDisplayName: z.string().nullable(),
+  /** E.164 digits without +. Null when the trainer did not supply a WhatsApp number. */
+  recipientWhatsappE164: z.string().min(10).max(15).nullable(),
   status: invitationStatusSchema,
   expiresAt: isoDateTimeSchema,
   acceptedUserId: uuidSchema.nullable(),

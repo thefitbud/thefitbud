@@ -85,11 +85,12 @@
 
 .workspace-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.25rem;
   width: fit-content;
   max-width: 100%;
   padding: 0.25rem;
+  overflow-x: auto;
   background: #ffffff;
   border: 1px solid #e7e9f2;
   border-radius: 999px;
@@ -510,6 +511,67 @@
   gap: 0;
 }
 
+.workspace-identity-copy {
+  min-width: 0;
+}
+
+.workspace-meta,
+.workspace-coaching-status,
+.workspace-next-checkin,
+.workspace-attention {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.workspace-meta,
+.workspace-coaching-status,
+.workspace-next-checkin {
+  color: var(--mid-grey);
+}
+
+.workspace-attention {
+  color: #b45309;
+}
+
+.workspace-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.workspace-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 10px;
+  border: 1px solid #e7e9f2;
+  background: #ffffff;
+  color: var(--deep-navy);
+  text-decoration: none;
+}
+
+.workspace-icon-btn:hover,
+.workspace-icon-btn:focus-visible {
+  border-color: var(--indigo);
+  color: var(--indigo);
+}
+
+.workspace-icon-btn:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.workspace-icon-btn.is-active {
+  background: var(--pale-lavender);
+  border-color: var(--pale-lavender);
+}
+
 @media (min-width: 960px) {
   .workspace-overview {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -528,5 +590,17 @@
 
   .workspace-title {
     font-size: 1.2rem;
+  }
+
+  .workspace-header-actions {
+    width: 100%;
+  }
+
+  .workspace-header-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .workspace-icon-btn {
+    flex: 0 0 2.75rem;
   }
 }
