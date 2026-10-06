@@ -46,6 +46,15 @@ Architectural rules
 - Treat D1 and the API as authoritative. SQLite, notifications, and realtime events are projections or delivery mechanisms.
 - Use REST and sync for normal state. Use Durable Objects and WebSockets only for selected change notifications.
 - Do not add in-app chat, payment tracking, organization roles, or trainer-team permissions to the MVP.
+Provider portability rule
+- Cloudflare is an infrastructure choice, not a domain-model choice.
+- Product behavior, domain rules, shared contracts, and client behavior must remain provider-neutral.
+- Keep provider-specific implementations inside the API/infrastructure boundary; `packages/core` must remain independent of Cloudflare, D1, R2, Workers, Queues, Cron Triggers, Durable Objects, and other infrastructure providers.
+- Treat D1, R2, Workers, Queues, Cron Triggers, Durable Objects, and WebSockets as replaceable infrastructure capabilities, not product concepts.
+- A future provider migration may require infrastructure adapters and data/migration work, but must not require a rewrite of FitBud domain behavior or shared product contracts.
+- API contracts must describe FitBud behavior and domain semantics, not provider-specific implementation details.
+- Do not introduce speculative multi-provider abstractions. Add an abstraction only when it protects a real infrastructure boundary or a realistically foreseeable migration.
+- Cloudflare remains the current MVP infrastructure choice unless an explicit architecture decision changes it.
 Product invariants
 - Trainer and trainee surfaces show the same underlying coaching state.
 - A trainer may access only coaching relationships they own.
@@ -166,6 +175,15 @@ Run the checks relevant to the changed scope using root workspace scripts:
 - Accessibility checks for affected UI.
 - Visual review at supported responsive breakpoints for affected screens.
 Do not report a check as passing unless it was run successfully. State clearly when a check could not be run.
+Testing and data realism rules
+- Tests must exercise real product workflows using persisted domain data and the same contracts/resolution logic used by production code.
+- Do not introduce fake, hard-coded, mock-only domain keys or shortcuts that bypass real configuration, lookup, ownership, versioning, or state-transition behavior.
+- Onboarding tests must use persisted onboarding form definitions and exercise the real flow: form resolution → invitation → onboarding submission → trainer review → coaching-ready state.
+- When onboarding supports both global and trainer-specific definitions, tests must cover both resolution paths and verify that the submitted response remains tied to the exact definition/version used at submission time.
+- Test fixtures should resemble realistic product data and relationships rather than synthetic placeholders that could hide lifecycle, authorization, filtering, versioning, or migration problems.
+- A test helper may create fixture data, but it must create the same persisted entities and valid relationships that the production workflow expects.
+- Do not weaken production validation or introduce test-only behavior into domain logic merely to simplify tests.
+- When a product decision changes the data model or workflow, update the affected fixtures and integration tests so they continue to represent the real product flow.
 Definition of done
 A task is complete only when:
 - The requested user outcome works.
