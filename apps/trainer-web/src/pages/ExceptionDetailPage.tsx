@@ -117,7 +117,17 @@ export function ExceptionDetailPage() {
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            <Link to="/">Needs attention</Link> / Exception
+            <Link to="/">Needs attention</Link>
+            {detail?.coachingRelationshipId ? (
+              <>
+                {" / "}
+                <Link to={`/clients/${detail.coachingRelationshipId}/overview`}>
+                  Client workspace
+                </Link>
+              </>
+            ) : null}
+            {" / "}
+            Exception
           </p>
           <h1>Exception detail</h1>
           <p className="lede">

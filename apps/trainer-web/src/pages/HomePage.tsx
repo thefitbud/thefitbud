@@ -208,11 +208,13 @@ export function HomePage() {
     ACTIONABLE_CHECKIN_STATUSES.has(item.checkin.status),
   );
   const coachingReady = relationships.filter(
-    (item) => item.status === "coaching_ready",
+    (item) =>
+      item.onboardingStatus === "coaching_ready" ||
+      item.onboardingStatus === "active",
   ).length;
   const pendingInvites = invitations.filter((item) => item.status === "pending");
   const intakeReviews = relationships.filter(
-    (item) => item.status === "onboarding_submitted",
+    (item) => item.onboardingStatus === "onboarding_submitted",
   );
   const clientTotal = relationships.length + pendingInvites.length;
   const name = trainerName(email);

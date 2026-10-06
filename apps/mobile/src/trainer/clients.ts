@@ -26,6 +26,10 @@ export function onboardingStatusLabel(status: OnboardingStatus): string {
       return "Onboarding submitted";
     case "coaching_ready":
       return "Coaching ready";
+    case "active":
+      return "Active";
+    case "ended":
+      return "Ended";
     default: {
       const _exhaustive: never = status;
       return _exhaustive;

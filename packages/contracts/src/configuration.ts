@@ -5,6 +5,7 @@ export const coachingConfigurationStatusSchema = z.enum([
   "draft",
   "configured",
   "active",
+  "superseded",
 ]);
 export type CoachingConfigurationStatus = z.infer<
   typeof coachingConfigurationStatusSchema
@@ -52,7 +53,9 @@ export const coachingConfigurationSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
   status: coachingConfigurationStatusSchema,
-  version: z.number().int().nonnegative(),
+  versionNumber: z.number().int().positive(),
+  /** Optimistic concurrency token. Request expectedVersion means this field. */
+  recordVersion: z.number().int().nonnegative(),
   primaryGoal: z.string().max(500).nullable(),
   notes: z.string().max(2000).nullable(),
   workout: workoutExpectationsSchema,

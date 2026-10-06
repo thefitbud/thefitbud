@@ -19,7 +19,9 @@ import {
   canPromoteScheduledPlanVersion,
   canPublishPlanVersion,
   copyPlanContent,
+  isPastOnboardingReview,
 } from "@fitbud/core";
+import { onboardingStatusForRelationship } from "../domain/client-status";
 import { createDb } from "../db/client";
 import {
   coachingRelationships,
@@ -414,12 +416,16 @@ planRoutes.post(
       );
     }
 
-    if (relationship.status !== "coaching_ready") {
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      relationship,
+    );
+    if (!isPastOnboardingReview(onboardingStatus)) {
       return fail(
         c,
         409,
         "PLAN_NOT_ALLOWED",
-        "Plans require a coaching-ready relationship.",
+        "Plans require a coaching-ready or active client.",
       );
     }
 
@@ -549,12 +555,16 @@ planRoutes.post(
         "Coaching relationship not found.",
       );
     }
-    if (relationship.status !== "coaching_ready") {
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      relationship,
+    );
+    if (!isPastOnboardingReview(onboardingStatus)) {
       return fail(
         c,
         409,
         "PLAN_NOT_ALLOWED",
-        "Plans require a coaching-ready relationship.",
+        "Plans require a coaching-ready or active client.",
       );
     }
 

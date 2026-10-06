@@ -33,6 +33,7 @@ const MIGRATIONS = [
   "0008_progress_media.sql",
   "0009_sync.sql",
   "0010_notifications.sql",
+    "0013_domain_contracts.sql",
   "0011_templates_libraries.sql",
 ] as const;
 
@@ -136,7 +137,7 @@ async function reachCoachingReady(suffix: string) {
   const relationshipId = acceptBody.data.relationship.id;
 
   await app.request(
-    `/intake/relationships/${relationshipId}/draft`,
+    `/onboarding/relationships/${relationshipId}/draft`,
     {
       method: "PUT",
       headers: {
@@ -158,7 +159,7 @@ async function reachCoachingReady(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/submit`,
+    `/onboarding/relationships/${relationshipId}/submit`,
     {
       method: "POST",
       headers: {
@@ -172,7 +173,7 @@ async function reachCoachingReady(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/review`,
+    `/onboarding/relationships/${relationshipId}/review`,
     {
       method: "POST",
       headers: {

@@ -24,6 +24,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0003_plans.sql",
     "0009_sync.sql",
     "0010_notifications.sql",
+    "0013_domain_contracts.sql",
     "0011_templates_libraries.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
@@ -114,7 +115,7 @@ async function reachCoachingReady(suffix: string) {
   const relationshipId = acceptBody.data.relationship.id;
 
   await app.request(
-    `/intake/relationships/${relationshipId}/draft`,
+    `/onboarding/relationships/${relationshipId}/draft`,
     {
       method: "PUT",
       headers: {
@@ -136,7 +137,7 @@ async function reachCoachingReady(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/submit`,
+    `/onboarding/relationships/${relationshipId}/submit`,
     {
       method: "POST",
       headers: {
@@ -150,7 +151,7 @@ async function reachCoachingReady(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/review`,
+    `/onboarding/relationships/${relationshipId}/review`,
     {
       method: "POST",
       headers: {

@@ -1,13 +1,22 @@
 import type {
   CoachingConfigurationStatus,
-  CoachingRelationshipStatus,
+  OnboardingStatus,
 } from "@fitbud/contracts";
+import { isPastOnboardingReview } from "./onboarding.js";
 
-/** Configuration is only editable for coaching-ready relationships. */
+/** Configuration editing requires a reviewed client or an active configuration. */
 export function canEditCoachingConfiguration(
-  relationshipStatus: CoachingRelationshipStatus,
+  onboardingStatus: OnboardingStatus,
 ): boolean {
-  return relationshipStatus === "coaching_ready";
+  return isPastOnboardingReview(onboardingStatus);
+}
+
+/** A new version may be opened only from the active row, with no open draft. */
+export function canCreateConfigurationVersion(input: {
+  hasActive: boolean;
+  hasOpen: boolean;
+}): boolean {
+  return input.hasActive && !input.hasOpen;
 }
 
 /** Draft save is allowed before activation (draft or configured). */

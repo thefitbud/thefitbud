@@ -184,6 +184,7 @@ Testing and data realism rules
 - A test helper may create fixture data, but it must create the same persisted entities and valid relationships that the production workflow expects.
 - Do not weaken production validation or introduce test-only behavior into domain logic merely to simplify tests.
 - When a product decision changes the data model or workflow, update the affected fixtures and integration tests so they continue to represent the real product flow.
+- Subscription tests must use a persisted relationship-owned subscription version and exercise plan name, payment frequency, civil start and renewal dates, derived renewal state in the trainer timezone, the trainer attention list, and the `subscription_renewal_reminder` path. Do not invent amounts, invoices, or payment collection.
 Definition of done
 A task is complete only when:
 - The requested user outcome works.

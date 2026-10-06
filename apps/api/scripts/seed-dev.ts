@@ -32,7 +32,7 @@ import type {
   ExceptionListResponse,
   ExerciseLibraryListResponse,
   FoodLibraryListResponse,
-  IntakeSubmission,
+  OnboardingFormResponse,
   Invitation,
   InvitationListResponse,
   MealAssignment,
@@ -1353,9 +1353,9 @@ async function ensureIntake(
 ): Promise<void> {
   if (!spec.intake) return;
 
-  const current = await call<IntakeSubmission>({
+  const current = await call<OnboardingFormResponse>({
     method: "GET",
-    path: `/intake/relationships/${relationship.id}`,
+    path: `/onboarding/relationships/${relationship.id}`,
     actor: traineeActor,
   });
   let submission = current.status === 200 ? current.data : null;
@@ -1366,9 +1366,9 @@ async function ensureIntake(
   }
 
   if (!submission) {
-    const draft = await expectOk<IntakeSubmission>({
+    const draft = await expectOk<OnboardingFormResponse>({
       method: "PUT",
-      path: `/intake/relationships/${relationship.id}/draft`,
+      path: `/onboarding/relationships/${relationship.id}/draft`,
       actor: traineeActor,
       body: { answers: spec.intake, expectedVersion: 0 },
     });
@@ -1380,9 +1380,9 @@ async function ensureIntake(
     return;
   }
 
-  await expectOk<IntakeSubmission>({
+  await expectOk<OnboardingFormResponse>({
     method: "POST",
-    path: `/intake/relationships/${relationship.id}/submit`,
+    path: `/onboarding/relationships/${relationship.id}/submit`,
     actor: traineeActor,
     idempotencyKey: idempotencyKey("intake.submit", spec.key),
     body: { expectedVersion: submission.version },
@@ -1395,11 +1395,17 @@ async function ensureOnboardingReview(
   spec: TraineeSpec,
   relationship: CoachingRelationship,
 ): Promise<CoachingRelationship> {
-  if (relationship.status === "coaching_ready") return relationship;
+  if (
+    relationship.onboardingStatus === "coaching_ready" ||
+    relationship.onboardingStatus === "active" ||
+    relationship.onboardingStatus === "ended"
+  ) {
+    return relationship;
+  }
 
   const reviewed = await expectOk<{ relationship: CoachingRelationship }>({
     method: "POST",
-    path: `/intake/relationships/${relationship.id}/review`,
+    path: `/onboarding/relationships/${relationship.id}/review`,
     actor: trainer,
     idempotencyKey: idempotencyKey("onboarding.review", spec.key),
     body: { outcome: "coaching_ready" },
@@ -1467,7 +1473,7 @@ async function ensureConfiguration(
       path: `/configurations/relationships/${relationship.id}/configure`,
       actor: trainer,
       idempotencyKey: idempotencyKey("configuration.configure", spec.key),
-      body: { expectedVersion: configuration.version },
+      body: { expectedVersion: configuration.recordVersion },
     });
     configuration = configured.data!;
   }
@@ -1478,7 +1484,7 @@ async function ensureConfiguration(
       path: `/configurations/relationships/${relationship.id}/activate`,
       actor: trainer,
       idempotencyKey: idempotencyKey("configuration.activate", spec.key),
-      body: { expectedVersion: configuration.version },
+      body: { expectedVersion: configuration.recordVersion },
     });
   }
 
@@ -2305,7 +2311,7 @@ async function seedClient(trainer: Actor, spec: TraineeSpec): Promise<SeededClie
       trainer,
       `/relationships/${relationship.id}`,
     );
-    log(`held at ${relationship.status} by design`);
+    log(`held at ${relationship.onboardingStatus} by design`);
     await ensureTrainerNotes(trainer, spec, relationship);
     return { spec, relationship };
   }
@@ -2438,9 +2444,9 @@ async function buildInventory(trainer: Actor, clients: SeededClient[]): Promise<
   for (const client of clients) {
     const id = client.relationship.id;
 
-    const intake = await call<IntakeSubmission>({
+    const intake = await call<OnboardingFormResponse>({
       method: "GET",
-      path: `/intake/relationships/${id}`,
+      path: `/onboarding/relationships/${id}`,
       actor: trainer,
     });
     if (intake.data?.status === "submitted") inventory["Intake submissions (submitted)"]! += 1;

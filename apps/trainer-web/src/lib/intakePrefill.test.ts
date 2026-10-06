@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { IntakeDefinition } from "@fitbud/contracts";
+import type { OnboardingFormVersion } from "@fitbud/contracts";
 import {
   coachingPrefillFromIntake,
   intakeFieldPreview,
 } from "./intakePrefill";
 
-const definition: IntakeDefinition = {
+const definition: OnboardingFormVersion = {
   id: "11111111-1111-4111-8111-111111111111",
   key: "mvp",
   version: 1,

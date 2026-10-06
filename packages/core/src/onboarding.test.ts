@@ -1,55 +1,130 @@
 import { describe, expect, it } from "vitest";
 import {
   canMarkCoachingReady,
-  canSaveIntakeDraft,
-  canSubmitIntake,
-  missingRequiredIntakeFields,
-  onboardingStatusForInvitation,
-  onboardingStatusForRelationship,
+  canSaveOnboardingDraft,
+  canSubmitOnboarding,
+  deriveClientOnboardingStatus,
+  missingRequiredOnboardingFields,
+  resolveOnboardingForm,
 } from "./onboarding.js";
 
-describe("onboarding transitions", () => {
-  it("maps invitation and relationship statuses", () => {
-    expect(onboardingStatusForInvitation("pending")).toBe("invited");
-    expect(onboardingStatusForInvitation("accepted")).toBeNull();
-    expect(onboardingStatusForRelationship("onboarding_pending")).toBe(
-      "onboarding_pending",
-    );
-    expect(onboardingStatusForRelationship("onboarding_submitted")).toBe(
-      "onboarding_submitted",
-    );
-    expect(onboardingStatusForRelationship("coaching_ready")).toBe(
-      "coaching_ready",
-    );
-    expect(onboardingStatusForRelationship("ended")).toBeNull();
+const emptyFacts = {
+  invitationPending: false,
+  hasSubmittedResponse: false,
+  hasCoachingReadyReview: false,
+  hasActiveConfiguration: false,
+};
+
+describe("derived client status", () => {
+  it("walks invitation through an active configuration", () => {
+    expect(
+      deriveClientOnboardingStatus({
+        ...emptyFacts,
+        relationshipStatus: null,
+        invitationPending: true,
+      }),
+    ).toBe("invited");
+    expect(
+      deriveClientOnboardingStatus({
+        ...emptyFacts,
+        relationshipStatus: "active",
+      }),
+    ).toBe("onboarding_pending");
+    expect(
+      deriveClientOnboardingStatus({
+        ...emptyFacts,
+        relationshipStatus: "active",
+        hasSubmittedResponse: true,
+      }),
+    ).toBe("onboarding_submitted");
+    expect(
+      deriveClientOnboardingStatus({
+        ...emptyFacts,
+        relationshipStatus: "active",
+        hasSubmittedResponse: true,
+        hasCoachingReadyReview: true,
+      }),
+    ).toBe("coaching_ready");
+    expect(
+      deriveClientOnboardingStatus({
+        ...emptyFacts,
+        relationshipStatus: "active",
+        hasSubmittedResponse: true,
+        hasCoachingReadyReview: true,
+        hasActiveConfiguration: true,
+      }),
+    ).toBe("active");
+    expect(
+      deriveClientOnboardingStatus({
+        ...emptyFacts,
+        relationshipStatus: "ended",
+        hasSubmittedResponse: true,
+        hasCoachingReadyReview: true,
+        hasActiveConfiguration: true,
+      }),
+    ).toBe("ended");
   });
 
-  it("gates draft, submit, and coaching-ready actions", () => {
-    expect(canSaveIntakeDraft("onboarding_pending")).toBe(true);
-    expect(canSaveIntakeDraft("onboarding_submitted")).toBe(false);
-    expect(canSubmitIntake("onboarding_pending")).toBe(true);
-    expect(canSubmitIntake("coaching_ready")).toBe(false);
+  it("gates draft, submit, and coaching-ready actions on derived status", () => {
+    expect(canSaveOnboardingDraft("onboarding_pending")).toBe(true);
+    expect(canSaveOnboardingDraft("onboarding_submitted")).toBe(false);
+    expect(canSubmitOnboarding("onboarding_pending")).toBe(true);
+    expect(canSubmitOnboarding("coaching_ready")).toBe(false);
     expect(canMarkCoachingReady("onboarding_submitted")).toBe(true);
     expect(canMarkCoachingReady("onboarding_pending")).toBe(false);
+    expect(canMarkCoachingReady("active")).toBe(false);
   });
 
-  it("reports missing required intake fields", () => {
+  it("reports missing required onboarding fields", () => {
     const fields = [
       { id: "goals", required: true },
       { id: "schedule", required: true },
       { id: "preferences", required: false },
     ];
     expect(
-      missingRequiredIntakeFields(fields, {
+      missingRequiredOnboardingFields(fields, {
         goals: "Build strength",
         schedule: "  ",
       }),
     ).toEqual(["schedule"]);
     expect(
-      missingRequiredIntakeFields(fields, {
+      missingRequiredOnboardingFields(fields, {
         goals: "Build strength",
         schedule: "Evenings",
       }),
     ).toEqual([]);
+  });
+
+  it("prefers the highest trainer form and otherwise the highest global form", () => {
+    const forms = [
+      { id: "g1", scope: "global" as const, trainerUserId: null, version: 1 },
+      { id: "g2", scope: "global" as const, trainerUserId: null, version: 3 },
+      {
+        id: "t1",
+        scope: "trainer" as const,
+        trainerUserId: "trainer-a",
+        version: 1,
+      },
+      {
+        id: "t2",
+        scope: "trainer" as const,
+        trainerUserId: "trainer-a",
+        version: 2,
+      },
+      {
+        id: "other",
+        scope: "trainer" as const,
+        trainerUserId: "trainer-b",
+        version: 9,
+      },
+    ];
+    expect(resolveOnboardingForm(forms, "trainer-a")?.id).toBe("t2");
+    expect(resolveOnboardingForm(forms, "trainer-c")?.id).toBe("g2");
+    expect(
+      resolveOnboardingForm(
+        forms.filter((form) => form.trainerUserId !== "trainer-a"),
+        "trainer-a",
+      )?.id,
+    ).toBe("g2");
   });
 });

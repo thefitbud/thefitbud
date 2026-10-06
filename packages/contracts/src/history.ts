@@ -6,9 +6,10 @@ import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
  * Not an internal event-log dump.
  */
 export const historyItemKindSchema = z.enum([
-  "intake_submitted",
+  "onboarding_submitted",
   "onboarding_reviewed",
   "configuration_activated",
+  "subscription_revision",
   "plan_version",
   "workout_execution",
   "meal_compliance",

@@ -24,7 +24,7 @@ const relationship: CoachingRelationship = {
   id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   trainerUserId: invitation.trainerUserId,
   traineeUserId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-  status: "coaching_ready",
+  status: "active",
   onboardingStatus: "coaching_ready",
   invitationId: invitation.id,
   startedAt: "2026-09-02T00:00:00.000Z",

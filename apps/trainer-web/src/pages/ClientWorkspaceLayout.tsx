@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type SVGProps } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { Link, NavLink, Outlet, useMatch, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -7,7 +7,6 @@ import type {
   OnboardingStatus,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
-import { onboardingStatusLabel } from "../lib/clients";
 import { clientWhatsappHref } from "../lib/whatsapp";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 
@@ -63,15 +62,23 @@ function checkinCue(checkin: Checkin): string {
   return `Next check-in ${when}`;
 }
 
-function coachingStatusLabel(input: {
-  configurationStatus: CoachingConfiguration["status"] | null;
-  attentionCount: number;
-}): string | null {
-  if (input.attentionCount > 0) return "Needs attention";
-  if (input.configurationStatus === "active") return "Active";
-  if (input.configurationStatus === "configured") return "Configured";
-  if (input.configurationStatus === "draft") return "Configuring";
-  return null;
+/** Client lifecycle, separate from coaching configuration and attention. */
+function clientStatusLabel(status: OnboardingStatus | null): string | null {
+  if (!status) return null;
+  if (status === "coaching_ready" || status === "active") return "Active";
+  if (status === "ended") return "Ended";
+  return "Onboarding";
+}
+
+/** Coaching configuration, shown in the menu so it is not another "Active" badge. */
+function coachingStatusLabel(
+  status: CoachingConfiguration["status"] | null,
+): string {
+  if (status === "active") return "Active";
+  if (status === "configured") return "Configured";
+  if (status === "draft") return "Configuring";
+  if (status === "superseded") return "Superseded";
+  return "Not configured";
 }
 
 export function ClientWorkspaceLayout() {
@@ -88,6 +95,8 @@ export function ClientWorkspaceLayout() {
   const [planTitle, setPlanTitle] = useState<string | null>(null);
   const [attentionCount, setAttentionCount] = useState(0);
   const [nextCheckin, setNextCheckin] = useState<Checkin | null>(null);
+  const [reviewCheckin, setReviewCheckin] = useState<Checkin | null>(null);
+  const menuRef = useRef<HTMLDetailsElement>(null);
 
   const onOverviewIndex = useMatch({
     path: "/clients/:relationshipId",
@@ -167,8 +176,19 @@ export function ClientWorkspaceLayout() {
             .filter((item) => UPCOMING_CHECKIN_STATUSES.has(item.status))
             .sort((left, right) => left.localDate.localeCompare(right.localDate));
           setNextCheckin(upcoming[0] ?? null);
+          const reviewRank = (status: string) =>
+            status === "overdue" ? 0 : status === "due" ? 1 : status === "submitted" ? 2 : 3;
+          const reviewable = checkinResult.value.items
+            .filter((item) => reviewRank(item.status) < 3)
+            .sort(
+              (left, right) =>
+                reviewRank(left.status) - reviewRank(right.status) ||
+                left.localDate.localeCompare(right.localDate),
+            );
+          setReviewCheckin(reviewable[0] ?? null);
         } else {
           setNextCheckin(null);
+          setReviewCheckin(null);
         }
 
         if (configResult.status === "fulfilled") {
@@ -195,6 +215,7 @@ export function ClientWorkspaceLayout() {
           setPlanTitle(null);
           setAttentionCount(0);
           setNextCheckin(null);
+          setReviewCheckin(null);
         }
       }
     })();
@@ -205,46 +226,43 @@ export function ClientWorkspaceLayout() {
 
   const heading = displayName ?? clientHeading(relationshipId);
   const initials = initialsFromLabel(heading);
-  const coachingLabel = coachingStatusLabel({
-    configurationStatus,
-    attentionCount,
-  });
-  const clientStatus = onboardingStatus
-    ? onboardingStatusLabel(onboardingStatus)
-    : null;
-  const metaParts = [primaryGoal, clientStatus, planTitle].filter(
-    (part): part is string => Boolean(part),
-  );
-  const attentionParts: string[] = [];
-  if (attentionCount > 0) {
-    attentionParts.push(
-      attentionCount === 1
+  const clientStatus = clientStatusLabel(onboardingStatus);
+  const coachingLabel = coachingStatusLabel(configurationStatus);
+  const needsReminder =
+    onboardingStatus === "invited" || onboardingStatus === "onboarding_pending";
+  const attentionLabel =
+    attentionCount === 0
+      ? null
+      : attentionCount === 1
         ? "Needs attention"
-        : `${attentionCount} items need attention`,
-    );
-  }
-  if (nextCheckin) {
-    attentionParts.push(checkinCue(nextCheckin));
-  }
+        : `${attentionCount} need attention`;
 
   const whatsappHrefValue = clientWhatsappHref({
     phoneE164: whatsappE164,
     name: heading,
     onboardingStatus,
   });
+  const messageLabel = needsReminder ? "Remind" : "Message";
 
   const primaryAction = useMemo(() => {
     if (onboardingStatus === "onboarding_submitted") {
       return { label: "Review intake", to: `/clients/${relationshipId}/onboarding` };
     }
-    if (onboardingStatus === "onboarding_pending") {
+    if (onboardingStatus === "onboarding_pending" && !whatsappE164) {
       return { label: "View onboarding", to: `/clients/${relationshipId}/onboarding` };
     }
     if (
       onboardingStatus === "coaching_ready" &&
-      configurationStatus !== "active"
+      configurationStatus !== "active" &&
+      !reviewCheckin
     ) {
-      return { label: "Client settings", to: `/clients/${relationshipId}/configure` };
+      return { label: "Continue setup", to: `/clients/${relationshipId}/configure` };
+    }
+    if (reviewCheckin && (reviewCheckin.status === "due" || reviewCheckin.status === "overdue" || reviewCheckin.status === "submitted")) {
+      return {
+        label: "Review check-in",
+        to: `/clients/${relationshipId}/check-ins/${reviewCheckin.id}`,
+      };
     }
     if (planTitle) {
       return { label: "Adjust plan", to: `/clients/${relationshipId}/plan` };
@@ -253,10 +271,27 @@ export function ClientWorkspaceLayout() {
       return { label: "Open plan", to: `/clients/${relationshipId}/plan` };
     }
     return null;
-  }, [configurationStatus, onboardingStatus, planTitle, relationshipId]);
+  }, [
+    configurationStatus,
+    onboardingStatus,
+    planTitle,
+    relationshipId,
+    reviewCheckin,
+    whatsappE164,
+  ]);
+
+  function closeMenu() {
+    if (menuRef.current) menuRef.current.open = false;
+  }
+
+  const showPrimary =
+    primaryAction &&
+    !(onConfigure && primaryAction.to.endsWith("/configure")) &&
+    !(onOnboarding && primaryAction.to.endsWith("/onboarding"));
 
   return (
     <section className="page workspace-shell">
+      <div className="workspace-frame">
       <header className="workspace-identity">
         <div className="workspace-identity-main">
           <Link className="workspace-back" to="/clients">
@@ -268,50 +303,56 @@ export function ClientWorkspaceLayout() {
               {initials}
             </span>
             <div className="workspace-identity-copy">
-              <h1 className="workspace-title">{heading}</h1>
-              {metaParts.length > 0 ? (
-                <p className="workspace-meta">{metaParts.join(" · ")}</p>
-              ) : (
-                <p className="workspace-meta">Client workspace</p>
-              )}
-              {coachingLabel &&
-              coachingLabel !== "Needs attention" &&
-              coachingLabel !== clientStatus ? (
-                <p className="workspace-coaching-status">
-                  Coaching: {coachingLabel}
-                </p>
-              ) : null}
-              {attentionParts.length > 0 ? (
-                <p
-                  className={
-                    attentionCount > 0
-                      ? "workspace-attention"
-                      : "workspace-next-checkin"
-                  }
-                >
-                  {attentionCount > 0 ? <span aria-hidden="true">⚠ </span> : null}
-                  {attentionParts.join(" · ")}
-                </p>
+              <div className="workspace-name-row">
+                <h1 className="workspace-title">{heading}</h1>
+                {attentionLabel ? (
+                  <p className="workspace-attention-badge">
+                    <span aria-hidden="true">⚠</span>
+                    {attentionLabel}
+                  </p>
+                ) : null}
+              </div>
+              <p className="workspace-meta">
+                {primaryGoal ? <span>{primaryGoal}</span> : null}
+                {clientStatus ? (
+                  <span
+                    className={
+                      clientStatus === "Active"
+                        ? "workspace-client-status is-active"
+                        : "workspace-client-status is-onboarding"
+                    }
+                  >
+                    <span className="workspace-status-dot" aria-hidden="true" />
+                    {clientStatus}
+                  </span>
+                ) : (
+                  <span>Client workspace</span>
+                )}
+                {planTitle ? <span>{planTitle}</span> : null}
+              </p>
+              {nextCheckin ? (
+                <p className="workspace-next-checkin">{checkinCue(nextCheckin)}</p>
               ) : null}
             </div>
           </div>
         </div>
         <div className="workspace-header-actions">
-          {primaryAction &&
-          !(onConfigure && primaryAction.to.endsWith("/configure")) &&
-          !(onOnboarding && primaryAction.to.endsWith("/onboarding")) ? (
-            <Link to={primaryAction.to} className="button-primary">
+          {showPrimary && primaryAction ? (
+            <Link
+              to={primaryAction.to}
+              className={needsReminder && whatsappHrefValue ? "button-secondary" : "button-primary"}
+            >
               {primaryAction.label}
             </Link>
           ) : null}
           {whatsappHrefValue ? (
             <a
-              className="button-secondary"
+              className={needsReminder ? "button-primary" : "button-secondary"}
               href={whatsappHrefValue}
               target="_blank"
               rel="noopener noreferrer"
             >
-              Message
+              {messageLabel}
             </a>
           ) : (
             <button
@@ -320,22 +361,29 @@ export function ClientWorkspaceLayout() {
               disabled
               title="Add a WhatsApp number when inviting this client"
             >
-              Message
+              {messageLabel}
             </button>
           )}
-          <Link
-            to={`/clients/${relationshipId}/configure`}
-            className={
-              onConfigure
-                ? "workspace-icon-btn is-active"
-                : "workspace-icon-btn"
-            }
-            aria-current={onConfigure ? "page" : undefined}
-            aria-label="Client settings"
-            title="Client settings"
-          >
-            <IconSettings />
-          </Link>
+          <details className="workspace-menu" ref={menuRef}>
+            <summary className="workspace-icon-btn" aria-label="More client actions">
+              <IconMore />
+            </summary>
+            <div className="workspace-menu-panel">
+              {onConfigure ? (
+                <Link to={`/clients/${relationshipId}/overview`} onClick={closeMenu}>
+                  Back to overview
+                </Link>
+              ) : (
+                <Link to={`/clients/${relationshipId}/configure`} onClick={closeMenu}>
+                  Client settings
+                </Link>
+              )}
+              <p className="workspace-menu-status">
+                <span>Coaching</span>
+                {coachingLabel}
+              </p>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -372,6 +420,7 @@ export function ClientWorkspaceLayout() {
           History
         </NavLink>
       </nav>
+      </div>
 
       <Outlet context={{ refreshEpoch }} />
     </section>
@@ -394,11 +443,12 @@ function IconChevronLeft() {
   );
 }
 
-function IconSettings() {
+function IconMore() {
   return (
     <svg {...iconProps(18)}>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.6.9 1 1.5 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z" />
+      <circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none" />
     </svg>
   );
 }

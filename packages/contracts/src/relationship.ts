@@ -11,25 +11,25 @@ export const invitationStatusSchema = z.enum([
 export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
 
 /**
- * Coaching relationship lifecycle after acceptance.
- * Invited exists only on a pending invitation (no relationship row yet).
+ * Persisted coaching relationship lifecycle.
+ * Client onboarding progress is derived and is not stored here.
  */
-export const coachingRelationshipStatusSchema = z.enum([
-  "onboarding_pending",
-  "onboarding_submitted",
-  "coaching_ready",
-  "ended",
-]);
+export const coachingRelationshipStatusSchema = z.enum(["active", "ended"]);
 export type CoachingRelationshipStatus = z.infer<
   typeof coachingRelationshipStatusSchema
 >;
 
-/** User-visible onboarding status spanning invitation + relationship. */
+/**
+ * Derived client lifecycle spanning invitation, onboarding, configuration, and end.
+ * Clients must read this field rather than reconstructing it from raw rows.
+ */
 export const onboardingStatusSchema = z.enum([
   "invited",
   "onboarding_pending",
   "onboarding_submitted",
   "coaching_ready",
+  "active",
+  "ended",
 ]);
 export type OnboardingStatus = z.infer<typeof onboardingStatusSchema>;
 

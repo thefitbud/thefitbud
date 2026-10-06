@@ -28,6 +28,7 @@ const configurationMigration = join(
 const plansMigration = join(drizzleDir, "0003_plans.sql");
 const syncMigration = join(drizzleDir, "0009_sync.sql");
 const notificationsMigration = join(drizzleDir, "0010_notifications.sql");
+const domainContractsMigration = join(drizzleDir, "0013_domain_contracts.sql");
 const invitationWhatsappMigration = join(
   drizzleDir,
   "0012_invitation_whatsapp.sql",
@@ -43,6 +44,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   sqlite.exec(readFileSync(plansMigration, "utf8"));
   sqlite.exec(readFileSync(syncMigration, "utf8"));
   sqlite.exec(readFileSync(notificationsMigration, "utf8"));
+  sqlite.exec(readFileSync(domainContractsMigration, "utf8"));
   const db = drizzle(sqlite, { schema }) as unknown as Db;
   return {
     db,
@@ -352,7 +354,7 @@ describe("invitations and coaching relationships", () => {
       };
     };
     expect(acceptBody.data.invitation.status).toBe("accepted");
-    expect(acceptBody.data.relationship.status).toBe("onboarding_pending");
+    expect(acceptBody.data.relationship.status).toBe("active");
     expect(acceptBody.data.relationship.onboardingStatus).toBe(
       "onboarding_pending",
     );
@@ -444,7 +446,7 @@ describe("intake and onboarding", () => {
     const { trainerCookie, traineeToken, relationshipId } = await inviteAndAccept();
 
     const definition = await app.request(
-      "/intake/definitions/current",
+      "/onboarding/forms/current",
       {
         headers: {
           Authorization: `Bearer ${traineeToken}`,
@@ -470,7 +472,7 @@ describe("intake and onboarding", () => {
     );
 
     const draft = await app.request(
-      `/intake/relationships/${relationshipId}/draft`,
+      `/onboarding/relationships/${relationshipId}/draft`,
       {
         method: "PUT",
         headers: {
@@ -493,7 +495,7 @@ describe("intake and onboarding", () => {
     expect(draftBody.data.version).toBe(1);
 
     const incomplete = await app.request(
-      `/intake/relationships/${relationshipId}/submit`,
+      `/onboarding/relationships/${relationshipId}/submit`,
       {
         method: "POST",
         headers: {
@@ -509,7 +511,7 @@ describe("intake and onboarding", () => {
     expect(incomplete.status).toBe(422);
 
     const draft2 = await app.request(
-      `/intake/relationships/${relationshipId}/draft`,
+      `/onboarding/relationships/${relationshipId}/draft`,
       {
         method: "PUT",
         headers: {
@@ -532,7 +534,7 @@ describe("intake and onboarding", () => {
     const draft2Body = (await draft2.json()) as { data: { version: number } };
 
     const submit = await app.request(
-      `/intake/relationships/${relationshipId}/submit`,
+      `/onboarding/relationships/${relationshipId}/submit`,
       {
         method: "POST",
         headers: {
@@ -553,7 +555,7 @@ describe("intake and onboarding", () => {
     expect(submitBody.data.submittedAt).toBeTruthy();
 
     const overwrite = await app.request(
-      `/intake/relationships/${relationshipId}/draft`,
+      `/onboarding/relationships/${relationshipId}/draft`,
       {
         method: "PUT",
         headers: {
@@ -570,7 +572,7 @@ describe("intake and onboarding", () => {
     );
     expect(overwrite.status).toBe(409);
     const overwriteBody = (await overwrite.json()) as { error: { code: string } };
-    expect(["INTAKE_NOT_EDITABLE", "INTAKE_ALREADY_SUBMITTED"]).toContain(
+    expect(["ONBOARDING_NOT_EDITABLE", "ONBOARDING_ALREADY_SUBMITTED"]).toContain(
       overwriteBody.error.code,
     );
 
@@ -583,11 +585,11 @@ describe("intake and onboarding", () => {
     const relBody = (await rel.json()) as {
       data: { status: string; onboardingStatus: string };
     };
-    expect(relBody.data.status).toBe("onboarding_submitted");
+    expect(relBody.data.status).toBe("active");
     expect(relBody.data.onboardingStatus).toBe("onboarding_submitted");
 
     const review = await app.request(
-      `/intake/relationships/${relationshipId}/review`,
+      `/onboarding/relationships/${relationshipId}/review`,
       {
         method: "POST",
         headers: {
@@ -607,10 +609,10 @@ describe("intake and onboarding", () => {
       };
     };
     expect(reviewBody.data.onboardingStatus).toBe("coaching_ready");
-    expect(reviewBody.data.relationship.status).toBe("coaching_ready");
+    expect(reviewBody.data.relationship.status).toBe("active");
 
     const trainerIntake = await app.request(
-      `/intake/relationships/${relationshipId}`,
+      `/onboarding/relationships/${relationshipId}`,
       { headers: { Cookie: trainerCookie } },
       testEnv(),
     );
@@ -691,7 +693,7 @@ describe("coaching configuration", () => {
     const relationshipId = acceptBody.data.relationship.id;
 
     await app.request(
-      `/intake/relationships/${relationshipId}/draft`,
+      `/onboarding/relationships/${relationshipId}/draft`,
       {
         method: "PUT",
         headers: {
@@ -711,7 +713,7 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     const submit = await app.request(
-      `/intake/relationships/${relationshipId}/submit`,
+      `/onboarding/relationships/${relationshipId}/submit`,
       {
         method: "POST",
         headers: {
@@ -727,7 +729,7 @@ describe("coaching configuration", () => {
     expect(submit.status).toBe(200);
 
     const review = await app.request(
-      `/intake/relationships/${relationshipId}/review`,
+      `/onboarding/relationships/${relationshipId}/review`,
       {
         method: "POST",
         headers: {
@@ -800,7 +802,8 @@ describe("coaching configuration", () => {
     const draftBody = (await draft.json()) as {
       data: {
         status: string;
-        version: number;
+        recordVersion: number;
+        versionNumber: number;
         primaryGoal: string;
         workout: { sessionsPerWeek: number };
         nutrition: { photoRequirement: string };
@@ -808,7 +811,8 @@ describe("coaching configuration", () => {
       };
     };
     expect(draftBody.data.status).toBe("draft");
-    expect(draftBody.data.version).toBe(1);
+    expect(draftBody.data.recordVersion).toBe(1);
+    expect(draftBody.data.versionNumber).toBe(1);
     expect(draftBody.data.primaryGoal).toBe("Build strength");
     expect(draftBody.data.workout.sessionsPerWeek).toBe(4);
     expect(draftBody.data.nutrition.photoRequirement).toBe("selected_meals");
@@ -830,7 +834,7 @@ describe("coaching configuration", () => {
     // primary goal is present — should succeed
     expect(incomplete.status).toBe(200);
     const configuredBody = (await incomplete.json()) as {
-      data: { status: string; version: number; configuredAt: string | null };
+      data: { status: string; recordVersion: number; configuredAt: string | null };
     };
     expect(configuredBody.data.status).toBe("configured");
     expect(configuredBody.data.configuredAt).toBeTruthy();
@@ -845,7 +849,7 @@ describe("coaching configuration", () => {
           "Idempotency-Key": "cfg-activate",
         },
         body: JSON.stringify({
-          expectedVersion: configuredBody.data.version,
+          expectedVersion: configuredBody.data.recordVersion,
         }),
       },
       testEnv(),
@@ -878,7 +882,7 @@ describe("coaching configuration", () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          expectedVersion: configuredBody.data.version + 1,
+          expectedVersion: configuredBody.data.recordVersion + 1,
           ...SAMPLE_DRAFT,
           primaryGoal: "Should fail",
         }),
@@ -911,7 +915,7 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(draft.status).toBe(201);
-    const draftBody = (await draft.json()) as { data: { version: number } };
+    const draftBody = (await draft.json()) as { data: { recordVersion: number } };
 
     const configure = await app.request(
       `/configurations/relationships/${owner.relationshipId}/configure`,
@@ -922,7 +926,7 @@ describe("coaching configuration", () => {
           "Content-Type": "application/json",
           "Idempotency-Key": "cfg-no-goal",
         },
-        body: JSON.stringify({ expectedVersion: draftBody.data.version }),
+        body: JSON.stringify({ expectedVersion: draftBody.data.recordVersion }),
       },
       testEnv(),
     );

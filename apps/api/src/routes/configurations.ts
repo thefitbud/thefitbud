@@ -9,6 +9,7 @@ import {
 } from "@fitbud/contracts";
 import {
   canActivateConfiguration,
+  canCreateConfigurationVersion,
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
@@ -23,6 +24,7 @@ import {
   trackingRequirements,
   workoutExpectations,
 } from "../db/schema";
+import { onboardingStatusForRelationship } from "../domain/client-status";
 import { mapCoachingConfiguration } from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
@@ -39,6 +41,7 @@ import type { ActorContext, Env, Variables } from "../types";
 
 const CONFIGURE_OPERATION = "configuration.configure";
 const ACTIVATE_OPERATION = "configuration.activate";
+const NEW_VERSION_OPERATION = "configuration.new_version";
 
 export const configurationRoutes = new Hono<{
   Bindings: Env;
@@ -47,13 +50,37 @@ export const configurationRoutes = new Hono<{
 
 type Db = ReturnType<typeof createDb>;
 
-async function loadConfigurationBundle(db: Db, relationshipId: string) {
-  const configurations = await db
+function pickReadableConfiguration<T extends { status: string; versionNumber: number }>(
+  rows: T[],
+): T | null {
+  const open = rows.find(
+    (row) => row.status === "draft" || row.status === "configured",
+  );
+  if (open) return open;
+  const active = rows.find((row) => row.status === "active");
+  if (active) return active;
+  return (
+    [...rows].sort((left, right) => right.versionNumber - left.versionNumber)[0] ??
+    null
+  );
+}
+
+async function listConfigurations(db: Db, relationshipId: string) {
+  return db
     .select()
     .from(coachingConfigurations)
-    .where(eq(coachingConfigurations.coachingRelationshipId, relationshipId))
-    .limit(1);
-  const configuration = configurations[0];
+    .where(eq(coachingConfigurations.coachingRelationshipId, relationshipId));
+}
+
+async function loadConfigurationBundle(
+  db: Db,
+  relationshipId: string,
+  configurationId?: string,
+) {
+  const configurations = await listConfigurations(db, relationshipId);
+  const configuration = configurationId
+    ? configurations.find((row) => row.id === configurationId)
+    : pickReadableConfiguration(configurations);
   if (!configuration) {
     return null;
   }
@@ -311,13 +338,17 @@ configurationRoutes.put(
       );
     }
 
-    if (!canEditCoachingConfiguration(ownership.relationship.status)) {
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      ownership.relationship,
+    );
+    if (!canEditCoachingConfiguration(onboardingStatus)) {
       return fail(
         c,
         409,
         "RELATIONSHIP_NOT_READY",
-        "Configuration requires a coaching-ready relationship.",
-        { status: ownership.relationship.status },
+        "Configuration requires a coaching-ready or active client.",
+        { onboardingStatus },
       );
     }
 
@@ -333,7 +364,7 @@ configurationRoutes.put(
     }
 
     const expectedVersion = parsed.data.expectedVersion;
-    const currentVersion = existing?.configuration.version ?? 0;
+    const currentVersion = existing?.configuration.recordVersion ?? 0;
     if (currentVersion !== expectedVersion) {
       return fail(
         c,
@@ -362,13 +393,13 @@ configurationRoutes.put(
           primaryGoal,
           notes,
           configuredAt: null,
-          version: existing.configuration.version + 1,
+          recordVersion: existing.configuration.recordVersion + 1,
           updatedAt: timestamp,
         })
         .where(
           and(
             eq(coachingConfigurations.id, existing.configuration.id),
-            eq(coachingConfigurations.version, expectedVersion),
+            eq(coachingConfigurations.recordVersion, expectedVersion),
           ),
         );
 
@@ -389,7 +420,8 @@ configurationRoutes.put(
       id: configurationId,
       coachingRelationshipId: relationshipId,
       status: "draft",
-      version: 1,
+      versionNumber: 1,
+      recordVersion: 1,
       primaryGoal,
       notes,
       configuredAt: null,
@@ -491,13 +523,17 @@ configurationRoutes.post(
       );
     }
 
-    if (!canEditCoachingConfiguration(ownership.relationship.status)) {
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      ownership.relationship,
+    );
+    if (!canEditCoachingConfiguration(onboardingStatus)) {
       return fail(
         c,
         409,
         "RELATIONSHIP_NOT_READY",
-        "Configuration requires a coaching-ready relationship.",
-        { status: ownership.relationship.status },
+        "Configuration requires a coaching-ready or active client.",
+        { onboardingStatus },
       );
     }
 
@@ -545,7 +581,7 @@ configurationRoutes.post(
       );
     }
 
-    if (bundle.configuration.version !== parsed.data.expectedVersion) {
+    if (bundle.configuration.recordVersion !== parsed.data.expectedVersion) {
       return fail(
         c,
         409,
@@ -553,7 +589,7 @@ configurationRoutes.post(
         "Configuration was changed after this version was loaded.",
         {
           expectedVersion: parsed.data.expectedVersion,
-          currentVersion: bundle.configuration.version,
+          currentVersion: bundle.configuration.recordVersion,
         },
       );
     }
@@ -573,13 +609,13 @@ configurationRoutes.post(
       .set({
         status: "configured",
         configuredAt: timestamp,
-        version: bundle.configuration.version + 1,
+        recordVersion: bundle.configuration.recordVersion + 1,
         updatedAt: timestamp,
       })
       .where(
         and(
           eq(coachingConfigurations.id, bundle.configuration.id),
-          eq(coachingConfigurations.version, parsed.data.expectedVersion),
+          eq(coachingConfigurations.recordVersion, parsed.data.expectedVersion),
         ),
       );
 
@@ -679,13 +715,17 @@ configurationRoutes.post(
       );
     }
 
-    if (!canEditCoachingConfiguration(ownership.relationship.status)) {
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      ownership.relationship,
+    );
+    if (!canEditCoachingConfiguration(onboardingStatus)) {
       return fail(
         c,
         409,
         "RELATIONSHIP_NOT_READY",
-        "Configuration requires a coaching-ready relationship.",
-        { status: ownership.relationship.status },
+        "Configuration requires a coaching-ready or active client.",
+        { onboardingStatus },
       );
     }
 
@@ -724,7 +764,7 @@ configurationRoutes.post(
       );
     }
 
-    if (bundle.configuration.version !== parsed.data.expectedVersion) {
+    if (bundle.configuration.recordVersion !== parsed.data.expectedVersion) {
       return fail(
         c,
         409,
@@ -732,7 +772,7 @@ configurationRoutes.post(
         "Configuration was changed after this version was loaded.",
         {
           expectedVersion: parsed.data.expectedVersion,
-          currentVersion: bundle.configuration.version,
+          currentVersion: bundle.configuration.recordVersion,
         },
       );
     }
@@ -747,18 +787,32 @@ configurationRoutes.post(
     }
 
     const timestamp = nowIso();
+    const rows = await listConfigurations(db, relationshipId);
+    const previousActive = rows.find(
+      (row) => row.status === "active" && row.id !== bundle.configuration.id,
+    );
+    if (previousActive) {
+      await db
+        .update(coachingConfigurations)
+        .set({
+          status: "superseded",
+          updatedAt: timestamp,
+        })
+        .where(eq(coachingConfigurations.id, previousActive.id));
+    }
+
     await db
       .update(coachingConfigurations)
       .set({
         status: "active",
         activatedAt: timestamp,
-        version: bundle.configuration.version + 1,
+        recordVersion: bundle.configuration.recordVersion + 1,
         updatedAt: timestamp,
       })
       .where(
         and(
           eq(coachingConfigurations.id, bundle.configuration.id),
-          eq(coachingConfigurations.version, parsed.data.expectedVersion),
+          eq(coachingConfigurations.recordVersion, parsed.data.expectedVersion),
         ),
       );
 
@@ -775,5 +829,208 @@ configurationRoutes.post(
       expiresAt: addDaysIso(7),
     });
     return ok(c, data);
+  },
+);
+
+configurationRoutes.post(
+  "/relationships/:relationshipId/versions",
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = activateConfigurationRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(
+        c,
+        400,
+        "INVALID_REQUEST",
+        "Invalid new configuration version request.",
+        { issues: parsed.error.issues },
+      );
+    }
+
+    const idempotencyKey = c.req.header("idempotency-key")?.trim();
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required to open a configuration version.",
+      );
+    }
+
+    const relationshipId = c.req.param("relationshipId");
+    const fingerprint = await sha256Hex(
+      JSON.stringify({
+        relationshipId,
+        expectedVersion: parsed.data.expectedVersion,
+      }),
+    );
+    const db = createDb(c.env.DB);
+    const existingIdempotency = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: NEW_VERSION_OPERATION,
+      idempotencyKey,
+    });
+    if (existingIdempotency) {
+      if (existingIdempotency.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request payload.",
+        );
+      }
+      return c.json(
+        JSON.parse(existingIdempotency.responseBody),
+        existingIdempotency.responseStatus as 201,
+      );
+    }
+
+    const ownership = await loadRelationshipForTrainer(db, relationshipId, actor);
+    if (ownership.kind !== "ok") {
+      return fail(
+        c,
+        404,
+        "RELATIONSHIP_NOT_FOUND",
+        "Coaching relationship not found.",
+      );
+    }
+
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      ownership.relationship,
+    );
+    if (!canEditCoachingConfiguration(onboardingStatus)) {
+      return fail(
+        c,
+        409,
+        "RELATIONSHIP_NOT_READY",
+        "Configuration requires a coaching-ready or active client.",
+        { onboardingStatus },
+      );
+    }
+
+    const rows = await listConfigurations(db, relationshipId);
+    const active = rows.find((row) => row.status === "active") ?? null;
+    const open = rows.find(
+      (row) => row.status === "draft" || row.status === "configured",
+    );
+    if (
+      !canCreateConfigurationVersion({
+        hasActive: Boolean(active),
+        hasOpen: Boolean(open),
+      }) ||
+      !active
+    ) {
+      return fail(
+        c,
+        409,
+        open ? "CONFIGURATION_OPEN_VERSION_EXISTS" : "CONFIGURATION_NOT_ACTIVE",
+        open
+          ? "Finish the open configuration version before opening another."
+          : "An active configuration is required before opening a new version.",
+      );
+    }
+
+    if (active.recordVersion !== parsed.data.expectedVersion) {
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_VERSION_CONFLICT",
+        "Configuration was changed after this version was loaded.",
+        {
+          expectedVersion: parsed.data.expectedVersion,
+          currentVersion: active.recordVersion,
+        },
+      );
+    }
+
+    const source = await loadConfigurationBundle(db, relationshipId, active.id);
+    if (!source) {
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_INCOMPLETE",
+        "Active configuration is missing its expectation rows.",
+      );
+    }
+
+    const timestamp = nowIso();
+    const configurationId = createId();
+    const nextVersionNumber =
+      Math.max(...rows.map((row) => row.versionNumber)) + 1;
+    await db.insert(coachingConfigurations).values({
+      id: configurationId,
+      coachingRelationshipId: relationshipId,
+      status: "draft",
+      versionNumber: nextVersionNumber,
+      recordVersion: 1,
+      primaryGoal: source.configuration.primaryGoal,
+      notes: source.configuration.notes,
+      configuredAt: null,
+      activatedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(workoutExpectations).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      sessionsPerWeek: source.workout.sessionsPerWeek,
+      completionWindowHours: source.workout.completionWindowHours,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(nutritionExpectations).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      mealsPerDay: source.nutrition.mealsPerDay,
+      confirmationWindowHours: source.nutrition.confirmationWindowHours,
+      photoRequirement: source.nutrition.photoRequirement,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(checkinSchedules).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      coachingRelationshipId: relationshipId,
+      cadence: source.checkin.cadence,
+      dueWindowHours: source.checkin.dueWindowHours,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(trackingRequirements).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      requireBodyWeight: source.tracking.requireBodyWeight,
+      requireProgressPhotos: source.tracking.requireProgressPhotos,
+      requireSessionRpe: source.tracking.requireSessionRpe,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    const created = await loadConfigurationBundle(
+      db,
+      relationshipId,
+      configurationId,
+    );
+    const data = parseMappedConfiguration(created!);
+    const responseBody = { data };
+    await saveIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: NEW_VERSION_OPERATION,
+      idempotencyKey,
+      requestFingerprint: fingerprint,
+      responseStatus: 201,
+      responseBody,
+      expiresAt: addDaysIso(7),
+    });
+    return ok(c, data, 201);
   },
 );

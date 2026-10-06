@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CreateInvitationResponse,
-  IntakeDefinition,
+  OnboardingFormVersion,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
@@ -17,13 +17,13 @@ export function AddClientPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreateInvitationResponse | null>(null);
-  const [definition, setDefinition] = useState<IntakeDefinition | null>(null);
+  const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void apiClient
-      .getCurrentIntakeDefinition()
+      .getCurrentOnboardingForm()
       .then((value) => {
         if (!cancelled) setDefinition(value);
       })
@@ -185,9 +185,9 @@ export function AddClientPage() {
         <div>
           <h1>Add Client</h1>
           <p className="lede">
-            Create an invitation using the current onboarding form. After the
-            trainee accepts the invite code, they complete that form. You review
-            the answers and configure coaching.
+            Invite the client with a WhatsApp number so Message in their
+            workspace can remind them to accept and finish onboarding. This
+            invite uses the current onboarding form.
           </p>
         </div>
       </header>
@@ -257,9 +257,16 @@ export function AddClientPage() {
 
       <section className="workspace-card" aria-labelledby="onboarding-form-heading">
         <div className="workspace-card-head">
-          <h2 id="onboarding-form-heading" className="workspace-card-title">
-            Onboarding form the trainee will complete
-          </h2>
+          <div>
+            <h2 id="onboarding-form-heading" className="workspace-card-title">
+              Onboarding form
+            </h2>
+            <p className="lede">
+              {definition
+                ? `This invite uses the current form (${definition.key}, version ${definition.version}). Workout, nutrition, onboarding, and coaching templates stay in Templates until a trainer can select one here.`
+                : "The current platform form is attached when the trainee accepts."}
+            </p>
+          </div>
         </div>
         {fields.length === 0 ? (
           <p className="muted">

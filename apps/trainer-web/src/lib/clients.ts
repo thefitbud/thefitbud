@@ -26,6 +26,10 @@ export function onboardingStatusLabel(status: OnboardingStatus): string {
       return "Onboarding submitted";
     case "coaching_ready":
       return "Coaching ready";
+    case "active":
+      return "Active";
+    case "ended":
+      return "Ended";
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -45,7 +49,10 @@ export function primaryActionForStatus(status: OnboardingStatus): {
     case "onboarding_submitted":
       return { label: "Review intake", href: "onboarding" };
     case "coaching_ready":
+    case "active":
       return { label: "Open workspace", href: "overview" };
+    case "ended":
+      return { label: "Ended", href: null };
     default: {
       const _exhaustive: never = status;
       return _exhaustive;

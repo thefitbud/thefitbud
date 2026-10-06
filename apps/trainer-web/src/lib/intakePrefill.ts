@@ -1,6 +1,6 @@
-import type { IntakeAnswers, IntakeDefinition } from "@fitbud/contracts";
+import type { OnboardingAnswers, OnboardingFormVersion } from "@fitbud/contracts";
 
-export function coachingPrefillFromIntake(answers: IntakeAnswers): {
+export function coachingPrefillFromIntake(answers: OnboardingAnswers): {
   primaryGoal: string;
   notes: string;
 } {
@@ -19,7 +19,7 @@ export function coachingPrefillFromIntake(answers: IntakeAnswers): {
 }
 
 export function intakeFieldPreview(
-  definition: IntakeDefinition | null,
+  definition: OnboardingFormVersion | null,
 ): Array<{ id: string; label: string; required: boolean }> {
   if (!definition) return [];
   return definition.fields.map((field) => ({

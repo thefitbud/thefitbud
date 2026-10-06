@@ -51,29 +51,29 @@ export {
 export {
   createOnboardingReviewRequestSchema,
   createOnboardingReviewResponseSchema,
-  intakeAnswersSchema,
-  intakeDefinitionSchema,
-  intakeFieldDefinitionSchema,
-  intakeFieldTypeSchema,
-  intakeSubmissionSchema,
-  intakeSubmissionStatusSchema,
+  onboardingAnswersSchema,
+  onboardingFieldDefinitionSchema,
+  onboardingFieldTypeSchema,
+  onboardingFormResponseSchema,
+  onboardingFormResponseStatusSchema,
+  onboardingFormVersionSchema,
   onboardingReviewOutcomeSchema,
   onboardingReviewSchema,
-  saveIntakeDraftRequestSchema,
-  submitIntakeRequestSchema,
+  saveOnboardingDraftRequestSchema,
+  submitOnboardingRequestSchema,
   type CreateOnboardingReviewRequest,
   type CreateOnboardingReviewResponse,
-  type IntakeAnswers,
-  type IntakeDefinition,
-  type IntakeFieldDefinition,
-  type IntakeFieldType,
-  type IntakeSubmission,
-  type IntakeSubmissionStatus,
+  type OnboardingAnswers,
+  type OnboardingFieldDefinition,
+  type OnboardingFieldType,
+  type OnboardingFormResponse,
+  type OnboardingFormResponseStatus,
+  type OnboardingFormVersion,
   type OnboardingReview,
   type OnboardingReviewOutcome,
-  type SaveIntakeDraftRequest,
-  type SubmitIntakeRequest,
-} from "./intake.js";
+  type SaveOnboardingDraftRequest,
+  type SubmitOnboardingRequest,
+} from "./onboarding.js";
 
 export {
   activateConfigurationRequestSchema,
@@ -99,6 +99,21 @@ export {
   type TrackingRequirements,
   type WorkoutExpectations,
 } from "./configuration.js";
+
+export {
+  paymentFrequencySchema,
+  renewalStateSchema,
+  saveSubscriptionRequestSchema,
+  subscriptionAttentionItemSchema,
+  subscriptionAttentionResponseSchema,
+  subscriptionSchema,
+  type PaymentFrequency,
+  type RenewalState,
+  type SaveSubscriptionRequest,
+  type Subscription,
+  type SubscriptionAttentionItem,
+  type SubscriptionAttentionResponse,
+} from "./subscription.js";
 
 export {
   createPlanDraftFromVersionRequestSchema,

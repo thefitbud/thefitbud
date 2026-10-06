@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -126,7 +127,6 @@ export const clientInvitations = sqliteTable(
       .default("pending"),
     expiresAt: text("expires_at").notNull(),
     acceptedUserId: text("accepted_user_id").references(() => users.id),
-    coachingRelationshipId: text("coaching_relationship_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -151,15 +151,10 @@ export const coachingRelationships = sqliteTable(
       .notNull()
       .references(() => users.id),
     status: text("status", {
-      enum: [
-        "onboarding_pending",
-        "onboarding_submitted",
-        "coaching_ready",
-        "ended",
-      ],
+      enum: ["active", "ended"],
     })
       .notNull()
-      .default("onboarding_pending"),
+      .default("active"),
     invitationId: text("invitation_id").references(() => clientInvitations.id),
     startedAt: text("started_at").notNull(),
     endedAt: text("ended_at"),
@@ -176,8 +171,8 @@ export const coachingRelationships = sqliteTable(
   ],
 );
 
-export const intakeDefinitions = sqliteTable(
-  "intake_definitions",
+export const onboardingFormVersions = sqliteTable(
+  "onboarding_form_versions",
   {
     id: text("id").primaryKey(),
     key: text("key").notNull(),
@@ -190,20 +185,25 @@ export const intakeDefinitions = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("intake_definitions_key_version_uidx").on(table.key, table.version),
+    uniqueIndex("onboarding_form_versions_global_key_version_uidx")
+      .on(table.key, table.version)
+      .where(sql`${table.scope} = 'global'`),
+    uniqueIndex("onboarding_form_versions_trainer_key_version_uidx")
+      .on(table.trainerUserId, table.key, table.version)
+      .where(sql`${table.scope} = 'trainer'`),
   ],
 );
 
-export const intakeSubmissions = sqliteTable(
-  "intake_submissions",
+export const onboardingFormResponses = sqliteTable(
+  "onboarding_form_responses",
   {
     id: text("id").primaryKey(),
     coachingRelationshipId: text("coaching_relationship_id")
       .notNull()
       .references(() => coachingRelationships.id),
-    intakeDefinitionId: text("intake_definition_id")
+    onboardingFormVersionId: text("onboarding_form_version_id")
       .notNull()
-      .references(() => intakeDefinitions.id),
+      .references(() => onboardingFormVersions.id),
     traineeUserId: text("trainee_user_id")
       .notNull()
       .references(() => users.id),
@@ -217,10 +217,10 @@ export const intakeSubmissions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("intake_submissions_relationship_uidx").on(
+    uniqueIndex("onboarding_form_responses_relationship_uidx").on(
       table.coachingRelationshipId,
     ),
-    index("intake_submissions_trainee_idx").on(table.traineeUserId),
+    index("onboarding_form_responses_trainee_idx").on(table.traineeUserId),
   ],
 );
 
@@ -231,9 +231,9 @@ export const onboardingReviews = sqliteTable(
     coachingRelationshipId: text("coaching_relationship_id")
       .notNull()
       .references(() => coachingRelationships.id),
-    intakeSubmissionId: text("intake_submission_id")
+    onboardingFormResponseId: text("onboarding_form_response_id")
       .notNull()
-      .references(() => intakeSubmissions.id),
+      .references(() => onboardingFormResponses.id),
     trainerUserId: text("trainer_user_id")
       .notNull()
       .references(() => users.id),
@@ -241,7 +241,9 @@ export const onboardingReviews = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("onboarding_reviews_submission_uidx").on(table.intakeSubmissionId),
+    uniqueIndex("onboarding_reviews_response_uidx").on(
+      table.onboardingFormResponseId,
+    ),
     index("onboarding_reviews_relationship_idx").on(table.coachingRelationshipId),
   ],
 );
@@ -254,11 +256,12 @@ export const coachingConfigurations = sqliteTable(
       .notNull()
       .references(() => coachingRelationships.id),
     status: text("status", {
-      enum: ["draft", "configured", "active"],
+      enum: ["draft", "configured", "active", "superseded"],
     })
       .notNull()
       .default("draft"),
-    version: integer("version").notNull().default(0),
+    versionNumber: integer("version_number").notNull().default(1),
+    recordVersion: integer("record_version").notNull().default(0),
     primaryGoal: text("primary_goal"),
     notes: text("notes"),
     configuredAt: text("configured_at"),
@@ -267,10 +270,45 @@ export const coachingConfigurations = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("coaching_configurations_relationship_uidx").on(
+    uniqueIndex("coaching_configurations_relationship_version_uidx").on(
+      table.coachingRelationshipId,
+      table.versionNumber,
+    ),
+    uniqueIndex("coaching_configurations_one_active_uidx")
+      .on(table.coachingRelationshipId)
+      .where(sql`${table.status} = 'active'`),
+    uniqueIndex("coaching_configurations_one_open_uidx")
+      .on(table.coachingRelationshipId)
+      .where(sql`${table.status} in ('draft', 'configured')`),
+    index("coaching_configurations_status_idx").on(table.status),
+  ],
+);
+
+/** Append-only subscription revisions for one coaching relationship. */
+export const subscriptionVersions = sqliteTable(
+  "subscription_versions",
+  {
+    id: text("id").primaryKey(),
+    coachingRelationshipId: text("coaching_relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id),
+    versionNumber: integer("version_number").notNull(),
+    planName: text("plan_name").notNull(),
+    paymentFrequency: text("payment_frequency", {
+      enum: ["weekly", "monthly", "quarterly", "yearly"],
+    }).notNull(),
+    startsOn: text("starts_on").notNull(),
+    renewsOn: text("renews_on").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("subscription_versions_relationship_version_uidx").on(
+      table.coachingRelationshipId,
+      table.versionNumber,
+    ),
+    index("subscription_versions_relationship_idx").on(
       table.coachingRelationshipId,
     ),
-    index("coaching_configurations_status_idx").on(table.status),
   ],
 );
 
@@ -1055,6 +1093,11 @@ export const notificationPreferences = sqliteTable(
     checkinReminder: integer("checkin_reminder", { mode: "boolean" })
       .notNull()
       .default(true),
+    subscriptionRenewalReminder: integer("subscription_renewal_reminder", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(true),
     quietHoursStart: text("quiet_hours_start"),
     quietHoursEnd: text("quiet_hours_end"),
     createdAt: text("created_at").notNull(),
@@ -1071,7 +1114,12 @@ export const reminderRules = sqliteTable(
       .notNull()
       .references(() => coachingRelationships.id),
     reminderType: text("reminder_type", {
-      enum: ["workout_reminder", "meal_reminder", "checkin_reminder"],
+      enum: [
+        "workout_reminder",
+        "meal_reminder",
+        "checkin_reminder",
+        "subscription_renewal_reminder",
+      ],
     }).notNull(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull(),
@@ -1101,10 +1149,20 @@ export const notifications = sqliteTable(
       () => coachingRelationships.id,
     ),
     notificationType: text("notification_type", {
-      enum: ["workout_reminder", "meal_reminder", "checkin_reminder"],
+      enum: [
+        "workout_reminder",
+        "meal_reminder",
+        "checkin_reminder",
+        "subscription_renewal_reminder",
+      ],
     }).notNull(),
     domainEntityType: text("domain_entity_type", {
-      enum: ["workout_assignment", "meal_assignment", "checkin"],
+      enum: [
+        "workout_assignment",
+        "meal_assignment",
+        "checkin",
+        "coaching_relationship",
+      ],
     }).notNull(),
     domainEntityId: text("domain_entity_id").notNull(),
     state: text("state", {

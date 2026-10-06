@@ -5,58 +5,64 @@ import {
 } from "./relationship.js";
 import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 
-export const intakeFieldTypeSchema = z.enum(["text", "textarea"]);
-export type IntakeFieldType = z.infer<typeof intakeFieldTypeSchema>;
+export const onboardingFieldTypeSchema = z.enum(["text", "textarea"]);
+export type OnboardingFieldType = z.infer<typeof onboardingFieldTypeSchema>;
 
-export const intakeFieldDefinitionSchema = z.object({
+export const onboardingFieldDefinitionSchema = z.object({
   id: z.string().min(1).max(64),
-  type: intakeFieldTypeSchema,
+  type: onboardingFieldTypeSchema,
   label: z.string().min(1).max(200),
   required: z.boolean(),
   maxLength: z.number().int().min(1).max(10000).optional(),
 });
-export type IntakeFieldDefinition = z.infer<typeof intakeFieldDefinitionSchema>;
+export type OnboardingFieldDefinition = z.infer<
+  typeof onboardingFieldDefinitionSchema
+>;
 
-export const intakeDefinitionSchema = z.object({
+export const onboardingFormVersionSchema = z.object({
   id: uuidSchema,
   key: z.string().min(1),
   version: z.number().int().positive(),
   scope: z.enum(["global", "trainer"]),
-  fields: z.array(intakeFieldDefinitionSchema).min(1),
+  fields: z.array(onboardingFieldDefinitionSchema).min(1),
   createdAt: isoDateTimeSchema,
 });
-export type IntakeDefinition = z.infer<typeof intakeDefinitionSchema>;
+export type OnboardingFormVersion = z.infer<typeof onboardingFormVersionSchema>;
 
-export const intakeSubmissionStatusSchema = z.enum(["draft", "submitted"]);
-export type IntakeSubmissionStatus = z.infer<typeof intakeSubmissionStatusSchema>;
+export const onboardingFormResponseStatusSchema = z.enum(["draft", "submitted"]);
+export type OnboardingFormResponseStatus = z.infer<
+  typeof onboardingFormResponseStatusSchema
+>;
 
-export const intakeAnswersSchema = z.record(z.string().max(10000));
-export type IntakeAnswers = z.infer<typeof intakeAnswersSchema>;
+export const onboardingAnswersSchema = z.record(z.string().max(10000));
+export type OnboardingAnswers = z.infer<typeof onboardingAnswersSchema>;
 
-export const intakeSubmissionSchema = z.object({
+export const onboardingFormResponseSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
-  intakeDefinitionId: uuidSchema,
+  onboardingFormVersionId: uuidSchema,
   traineeUserId: uuidSchema,
-  status: intakeSubmissionStatusSchema,
-  answers: intakeAnswersSchema,
+  status: onboardingFormResponseStatusSchema,
+  answers: onboardingAnswersSchema,
   version: z.number().int().nonnegative(),
   submittedAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
-export type IntakeSubmission = z.infer<typeof intakeSubmissionSchema>;
+export type OnboardingFormResponse = z.infer<typeof onboardingFormResponseSchema>;
 
-export const saveIntakeDraftRequestSchema = z.object({
-  answers: intakeAnswersSchema,
+export const saveOnboardingDraftRequestSchema = z.object({
+  answers: onboardingAnswersSchema,
   expectedVersion: z.number().int().nonnegative(),
 });
-export type SaveIntakeDraftRequest = z.infer<typeof saveIntakeDraftRequestSchema>;
+export type SaveOnboardingDraftRequest = z.infer<
+  typeof saveOnboardingDraftRequestSchema
+>;
 
-export const submitIntakeRequestSchema = z.object({
+export const submitOnboardingRequestSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
 });
-export type SubmitIntakeRequest = z.infer<typeof submitIntakeRequestSchema>;
+export type SubmitOnboardingRequest = z.infer<typeof submitOnboardingRequestSchema>;
 
 export const onboardingReviewOutcomeSchema = z.enum(["coaching_ready"]);
 export type OnboardingReviewOutcome = z.infer<
@@ -73,7 +79,7 @@ export type CreateOnboardingReviewRequest = z.infer<
 export const onboardingReviewSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
-  intakeSubmissionId: uuidSchema,
+  onboardingFormResponseId: uuidSchema,
   trainerUserId: uuidSchema,
   outcome: onboardingReviewOutcomeSchema,
   createdAt: isoDateTimeSchema,

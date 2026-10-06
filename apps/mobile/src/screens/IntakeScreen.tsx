@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
-  IntakeAnswers,
-  IntakeDefinition,
-  IntakeSubmission,
+  OnboardingAnswers,
+  OnboardingFormResponse,
+  OnboardingFormVersion,
 } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth, messageFromError } from "../auth/AuthProvider";
@@ -20,10 +20,10 @@ type Props = {
 
 export function IntakeScreen({ relationshipId }: Props) {
   const { api, refreshSession, signOut } = useAuth();
-  const [definition, setDefinition] = useState<IntakeDefinition | null>(null);
-  const [answers, setAnswers] = useState<IntakeAnswers>({});
+  const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
+  const [answers, setAnswers] = useState<OnboardingAnswers>({});
   const [version, setVersion] = useState(0);
-  const [status, setStatus] = useState<IntakeSubmission["status"] | null>(null);
+  const [status, setStatus] = useState<OnboardingFormResponse["status"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -35,16 +35,16 @@ export function IntakeScreen({ relationshipId }: Props) {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const currentDefinition = await api.getCurrentIntakeDefinition();
+      const currentDefinition = await api.getCurrentOnboardingForm(relationshipId);
       setDefinition(currentDefinition);
 
       try {
-        const existing = await api.getIntake(relationshipId);
+        const existing = await api.getOnboardingResponse(relationshipId);
         setAnswers(existing.answers);
         setVersion(existing.version);
         setStatus(existing.status);
       } catch (error) {
-        if (error instanceof ApiClientError && error.code === "INTAKE_NOT_FOUND") {
+        if (error instanceof ApiClientError && error.code === "ONBOARDING_NOT_FOUND") {
           setAnswers({});
           setVersion(0);
           setStatus(null);
@@ -73,7 +73,7 @@ export function IntakeScreen({ relationshipId }: Props) {
     setErrorMessage(null);
     setInfoMessage(null);
     try {
-      const saved = await api.saveIntakeDraft(relationshipId, {
+      const saved = await api.saveOnboardingDraft(relationshipId, {
         answers,
         expectedVersion: version,
       });
@@ -83,7 +83,7 @@ export function IntakeScreen({ relationshipId }: Props) {
       setInfoMessage("Draft saved.");
     } catch (error) {
       setErrorMessage(messageFromError(error));
-      if (error instanceof ApiClientError && error.code === "INTAKE_VERSION_CONFLICT") {
+      if (error instanceof ApiClientError && error.code === "ONBOARDING_VERSION_CONFLICT") {
         await load();
       }
     } finally {
@@ -97,14 +97,14 @@ export function IntakeScreen({ relationshipId }: Props) {
     setInfoMessage(null);
     try {
       // Persist latest answers before submit so required fields are on the server.
-      const saved = await api.saveIntakeDraft(relationshipId, {
+      const saved = await api.saveOnboardingDraft(relationshipId, {
         answers,
         expectedVersion: version,
       });
       setVersion(saved.version);
       setAnswers(saved.answers);
 
-      const submitted = await api.submitIntake(
+      const submitted = await api.submitOnboarding(
         relationshipId,
         { expectedVersion: saved.version },
         submitIdempotencyKey.current,
@@ -118,8 +118,8 @@ export function IntakeScreen({ relationshipId }: Props) {
       setErrorMessage(messageFromError(error));
       if (
         error instanceof ApiClientError &&
-        (error.code === "INTAKE_VERSION_CONFLICT" ||
-          error.code === "INTAKE_REQUIRED_FIELDS_MISSING")
+        (error.code === "ONBOARDING_VERSION_CONFLICT" ||
+          error.code === "ONBOARDING_INCOMPLETE")
       ) {
         submitIdempotencyKey.current = createIdempotencyKey();
         await load();

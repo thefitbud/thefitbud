@@ -20,6 +20,7 @@ export const DEFAULT_REMINDER_TYPES: readonly NotificationType[] = [
   "workout_reminder",
   "meal_reminder",
   "checkin_reminder",
+  "subscription_renewal_reminder",
 ] as const;
 
 /** Stable dedupe key so retries cannot create duplicate user-visible reminders. */
@@ -40,6 +41,8 @@ export function domainEntityTypeForReminder(
       return "meal_assignment";
     case "checkin_reminder":
       return "checkin";
+    case "subscription_renewal_reminder":
+      return "coaching_relationship";
     default: {
       const _exhaustive: never = type;
       return _exhaustive;
@@ -121,6 +124,7 @@ export function isCategoryEnabled(input: {
     workoutReminder: boolean;
     mealReminder: boolean;
     checkinReminder: boolean;
+    subscriptionRenewalReminder: boolean;
   };
   type: NotificationType;
 }): boolean {
@@ -132,6 +136,8 @@ export function isCategoryEnabled(input: {
       return input.categories.mealReminder;
     case "checkin_reminder":
       return input.categories.checkinReminder;
+    case "subscription_renewal_reminder":
+      return input.categories.subscriptionRenewalReminder;
     default: {
       const _exhaustive: never = input.type;
       return _exhaustive;
@@ -254,6 +260,12 @@ export function routeTargetFromPushPayload(payload: PushPayload): {
         domainEntityId: payload.domainEntityId,
       };
     case "checkin_reminder":
+      return {
+        tab: "today",
+        domainEntityType: payload.domainEntityType,
+        domainEntityId: payload.domainEntityId,
+      };
+    case "subscription_renewal_reminder":
       return {
         tab: "today",
         domainEntityType: payload.domainEntityType,

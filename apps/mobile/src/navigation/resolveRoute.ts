@@ -68,21 +68,23 @@ export function resolveAppRoute(input: {
   }
 
   const pending = input.relationships.find(
-    (relationship) => relationship.status === "onboarding_pending",
+    (relationship) => relationship.onboardingStatus === "onboarding_pending",
   );
   if (pending) {
     return { name: "intake", relationshipId: pending.id };
   }
 
   const submitted = input.relationships.find(
-    (relationship) => relationship.status === "onboarding_submitted",
+    (relationship) => relationship.onboardingStatus === "onboarding_submitted",
   );
   if (submitted) {
     return { name: "waiting_review", relationship: submitted };
   }
 
   const ready = input.relationships.find(
-    (relationship) => relationship.status === "coaching_ready",
+    (relationship) =>
+      relationship.onboardingStatus === "coaching_ready" ||
+      relationship.onboardingStatus === "active",
   );
   if (ready) {
     return { name: "trainee_shell", relationship: ready };
