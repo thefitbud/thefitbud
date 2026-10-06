@@ -130,6 +130,7 @@ For each task:
 7. Run the relevant repository checks.
 8. Review the diff against product scope, architecture, authorization, offline behavior, and compatibility.
 9. Summarize the result, checks run, remaining risks, and any follow-up work.
+When a coherent slice is complete enough to treat as locked, commit it and push it to the remote. Commit only that slice. Do not include unrelated dirty working-tree changes. Do not commit secrets.
 Session plans are temporary. Do not add a permanent plan file unless a task explicitly requires a multi-session tracked plan.
 Plan format
 Use this compact format:
