@@ -3,6 +3,7 @@ import {
   coachingConfigurationSchema,
   createInvitationRequestSchema,
   healthResponseSchema,
+  onboardingFormDefinitionSchema,
   onboardingFormVersionSchema,
   meResponseSchema,
   onboardingStatusSchema,
@@ -77,6 +78,7 @@ describe("contracts", () => {
     expect(
       onboardingFormVersionSchema.parse({
         id: "11111111-1111-4111-8111-111111111111",
+        templateId: "10111111-1111-4111-8111-111111111111",
         key: "mvp",
         version: 1,
         scope: "global",
@@ -91,6 +93,25 @@ describe("contracts", () => {
         createdAt: "2026-09-26T00:00:00.000Z",
       }),
     ).toMatchObject({ key: "mvp", version: 1 });
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          {
+            id: "experience",
+            type: "select",
+            label: "Experience",
+            required: true,
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          { id: "score", type: "rating", label: "Score", required: true },
+        ],
+      }),
+    ).toThrow();
   });
 
   it("validates coaching configuration draft request", () => {

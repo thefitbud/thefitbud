@@ -29,6 +29,10 @@ const plansMigration = join(drizzleDir, "0003_plans.sql");
 const syncMigration = join(drizzleDir, "0009_sync.sql");
 const notificationsMigration = join(drizzleDir, "0010_notifications.sql");
 const domainContractsMigration = join(drizzleDir, "0013_domain_contracts.sql");
+const formTemplatesMigration = join(
+  drizzleDir,
+  "0014_onboarding_form_templates.sql",
+);
 const invitationWhatsappMigration = join(
   drizzleDir,
   "0012_invitation_whatsapp.sql",
@@ -45,6 +49,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   sqlite.exec(readFileSync(syncMigration, "utf8"));
   sqlite.exec(readFileSync(notificationsMigration, "utf8"));
   sqlite.exec(readFileSync(domainContractsMigration, "utf8"));
+  sqlite.exec(readFileSync(formTemplatesMigration, "utf8"));
   const db = drizzle(sqlite, { schema }) as unknown as Db;
   return {
     db,

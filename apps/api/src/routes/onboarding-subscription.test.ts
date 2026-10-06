@@ -17,6 +17,7 @@ import type { Env } from "../types.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 const SEEDED_GLOBAL_FORM_ID = "11111111-1111-4111-8111-111111111111";
+const HIGHER_GLOBAL_TEMPLATE_ID = "22222222-2222-4222-8222-222222222221";
 const HIGHER_GLOBAL_FORM_ID = "22222222-2222-4222-8222-222222222222";
 
 const MIGRATIONS_BEFORE_BACKFILL = [
@@ -173,6 +174,7 @@ const APP_MIGRATIONS = [
   "0009_sync.sql",
   "0010_notifications.sql",
   "0013_domain_contracts.sql",
+  "0014_onboarding_form_templates.sql",
 ];
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
@@ -217,8 +219,18 @@ describe("onboarding resolution and subscription", () => {
     db = memory.db;
     closeDb = memory.close;
     setTestDbOverride(db);
+    await db.insert(schema.onboardingFormTemplates).values({
+      id: HIGHER_GLOBAL_TEMPLATE_ID,
+      ownership: "global",
+      trainerUserId: null,
+      name: "Seasonal onboarding",
+      description: null,
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    });
     await db.insert(schema.onboardingFormVersions).values({
       id: HIGHER_GLOBAL_FORM_ID,
+      templateId: HIGHER_GLOBAL_TEMPLATE_ID,
       key: "seasonal",
       version: 5,
       scope: "global",
@@ -254,9 +266,20 @@ describe("onboarding resolution and subscription", () => {
 
   it("pins the resolved form through review, configuration, and a new version", async () => {
     const trainer = await trainerSession("forms-coach@example.com");
+    const trainerTemplateId = "33333333-3333-4333-8333-333333333331";
     const trainerFormId = "33333333-3333-4333-8333-333333333333";
+    await db.insert(schema.onboardingFormTemplates).values({
+      id: trainerTemplateId,
+      ownership: "trainer",
+      trainerUserId: trainer.userId,
+      name: "Studio onboarding",
+      description: null,
+      createdAt: "2026-10-02T00:00:00.000Z",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+    });
     await db.insert(schema.onboardingFormVersions).values({
       id: trainerFormId,
+      templateId: trainerTemplateId,
       key: "studio",
       version: 2,
       scope: "trainer",
@@ -270,20 +293,29 @@ describe("onboarding resolution and subscription", () => {
       { headers: { Cookie: trainer.cookie } },
       testEnv(),
     );
-    expect(current.status).toBe(200);
-    const currentBody = (await current.json()) as { data: { id: string; version: number } };
-    expect(currentBody.data.id).toBe(trainerFormId);
-    expect(currentBody.data.version).toBe(2);
+    expect(current.status).toBe(400);
 
     const other = await trainerSession("global-only-coach@example.com");
-    const globalCurrent = await app.request(
-      "/onboarding/forms/current",
-      { headers: { Cookie: other.cookie } },
+    const otherInvite = await app.request(
+      "/invitations",
+      {
+        method: "POST",
+        headers: {
+          Cookie: other.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "inv-global-only",
+        },
+        body: JSON.stringify({ recipientEmail: "global-only@example.com" }),
+      },
       testEnv(),
     );
-    const globalBody = (await globalCurrent.json()) as { data: { id: string } };
-    expect(globalBody.data.id).toBe(HIGHER_GLOBAL_FORM_ID);
-    expect(globalBody.data.id).not.toBe(SEEDED_GLOBAL_FORM_ID);
+    const otherBody = (await otherInvite.json()) as {
+      data: { onboardingFormTemplateVersionId: string };
+    };
+    expect(otherBody.data.onboardingFormTemplateVersionId).toBe(HIGHER_GLOBAL_FORM_ID);
+    expect(otherBody.data.onboardingFormTemplateVersionId).not.toBe(
+      SEEDED_GLOBAL_FORM_ID,
+    );
 
     const created = await app.request(
       "/invitations",
@@ -298,7 +330,11 @@ describe("onboarding resolution and subscription", () => {
       },
       testEnv(),
     );
-    const createdBody = (await created.json()) as { data: { token: string } };
+    const createdBody = (await created.json()) as {
+      data: { token: string; onboardingFormTemplateVersionId: string };
+    };
+    expect(created.status).toBe(200);
+    expect(createdBody.data.onboardingFormTemplateVersionId).toBe(trainerFormId);
     const traineeToken = createTestIdToken(
       "forms-trainee",
       "forms-trainee@example.com",

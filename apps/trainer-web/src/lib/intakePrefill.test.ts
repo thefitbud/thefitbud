@@ -7,6 +7,7 @@ import {
 
 const definition: OnboardingFormVersion = {
   id: "11111111-1111-4111-8111-111111111111",
+  templateId: "10111111-1111-4111-8111-111111111111",
   key: "mvp",
   version: 1,
   scope: "global",

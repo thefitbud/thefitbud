@@ -4,7 +4,10 @@ import {
   canSaveOnboardingDraft,
   canSubmitOnboarding,
   deriveClientOnboardingStatus,
+  latestOnboardingFormVersion,
   missingRequiredOnboardingFields,
+  onboardingAnswerErrors,
+  parseOnboardingFormFields,
   resolveOnboardingForm,
 } from "./onboarding.js";
 
@@ -120,6 +123,46 @@ describe("derived client status", () => {
     ];
     expect(resolveOnboardingForm(forms, "trainer-a")?.id).toBe("t2");
     expect(resolveOnboardingForm(forms, "trainer-c")?.id).toBe("g2");
+    expect(
+      latestOnboardingFormVersion(
+        [
+          { id: "v1", templateId: "template-a", version: 1 },
+          { id: "v2", templateId: "template-a", version: 2 },
+          { id: "other", templateId: "template-b", version: 9 },
+        ],
+        "template-a",
+      )?.id,
+    ).toBe("v2");
+    expect(latestOnboardingFormVersion([], "template-a")).toBeNull();
+    expect(
+      parseOnboardingFormFields([
+        {
+          id: "experience",
+          type: "select",
+          label: "Experience",
+          required: true,
+          options: ["New", "Returning"],
+        },
+      ]).ok,
+    ).toBe(true);
+    expect(
+      parseOnboardingFormFields([
+        { id: "experience", type: "select", label: "Experience", required: true },
+      ]).ok,
+    ).toBe(false);
+    expect(
+      onboardingAnswerErrors(
+        [
+          {
+            id: "experience",
+            type: "select",
+            required: true,
+            options: ["New", "Returning"],
+          },
+        ],
+        { experience: "Expert" },
+      ),
+    ).toEqual({ missingFieldIds: [], invalidFieldIds: ["experience"] });
     expect(
       resolveOnboardingForm(
         forms.filter((form) => form.trainerUserId !== "trainer-a"),

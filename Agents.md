@@ -130,6 +130,7 @@ For each task:
 7. Run the relevant repository checks.
 8. Review the diff against product scope, architecture, authorization, offline behavior, and compatibility.
 9. Summarize the result, checks run, remaining risks, and any follow-up work.
+Before starting a task, fetch when the branch tracks a remote. After a meaningful completed change, commit it and push that commit to the tracked remote. Keep the existing safety limits: no force push, no skipped hooks, no secrets, and no amend of a pushed commit.
 Session plans are temporary. Do not add a permanent plan file unless a task explicitly requires a multi-session tracked plan.
 Plan format
 Use this compact format:
@@ -178,8 +179,8 @@ Do not report a check as passing unless it was run successfully. State clearly w
 Testing and data realism rules
 - Tests must exercise real product workflows using persisted domain data and the same contracts/resolution logic used by production code.
 - Do not introduce fake, hard-coded, mock-only domain keys or shortcuts that bypass real configuration, lookup, ownership, versioning, or state-transition behavior.
-- Onboarding tests must use persisted onboarding form definitions and exercise the real flow: form resolution → invitation → onboarding submission → trainer review → coaching-ready state.
-- When onboarding supports both global and trainer-specific definitions, tests must cover both resolution paths and verify that the submitted response remains tied to the exact definition/version used at submission time.
+- Onboarding tests must use persisted onboarding form definitions and exercise the real flow: invitation creation pins an exact form version → onboarding submission → trainer review → coaching-ready state. A later form version does not retarget an issued invitation.
+- When onboarding supports both global and trainer-specific definitions, tests must cover both resolution paths and verify that the submitted response remains tied to the exact version pinned on the invitation.
 - Test fixtures should resemble realistic product data and relationships rather than synthetic placeholders that could hide lifecycle, authorization, filtering, versioning, or migration problems.
 - A test helper may create fixture data, but it must create the same persisted entities and valid relationships that the production workflow expects.
 - Do not weaken production validation or introduce test-only behavior into domain logic merely to simplify tests.

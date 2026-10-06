@@ -12,6 +12,7 @@ const baseInvitation: Invitation = {
   expiresAt: "2030-01-01T00:00:00.000Z",
   acceptedUserId: null,
   coachingRelationshipId: null,
+  onboardingFormTemplateVersionId: "66666666-6666-4666-8666-666666666666",
   onboardingStatus: "invited",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-02T00:00:00.000Z",

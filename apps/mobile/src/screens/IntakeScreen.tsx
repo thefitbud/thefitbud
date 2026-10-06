@@ -169,7 +169,7 @@ export function IntakeScreen({ relationshipId }: Props) {
           onChangeText={(value) => updateAnswer(field.id, value)}
           multiline={field.type === "textarea"}
           editable={!readOnly}
-          maxLength={field.maxLength}
+          maxLength={field.type === "select" ? undefined : field.maxLength}
         />
       ))}
 

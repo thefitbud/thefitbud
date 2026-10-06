@@ -1,9 +1,9 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   createOnboardingReviewRequestSchema,
   createOnboardingReviewResponseSchema,
-  onboardingFieldDefinitionSchema,
+  onboardingFormDefinitionSchema,
   onboardingFormResponseSchema,
   onboardingFormVersionSchema,
   saveOnboardingDraftRequestSchema,
@@ -13,8 +13,7 @@ import {
   canMarkCoachingReady,
   canSaveOnboardingDraft,
   canSubmitOnboarding,
-  missingRequiredOnboardingFields,
-  resolveOnboardingForm,
+  onboardingAnswerErrors,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
@@ -24,6 +23,8 @@ import {
   onboardingReviews,
 } from "../db/schema";
 import { onboardingStatusForRelationship } from "../domain/client-status";
+import { pinnedOnboardingVersionForRelationship } from "../domain/onboarding-forms";
+import { onboardingFormTemplateRoutes } from "./onboarding-templates";
 import {
   mapOnboardingFormResponse,
   mapOnboardingFormVersion,
@@ -54,20 +55,27 @@ export const onboardingRoutes = new Hono<{
 
 type Db = ReturnType<typeof createDb>;
 
-async function resolveFormForTrainer(db: Db, trainerUserId: string) {
-  const rows = await db
+onboardingRoutes.route("/form-templates", onboardingFormTemplateRoutes);
+
+async function currentFormForRelationship(
+  db: Db,
+  relationship: { id: string; invitationId: string | null },
+) {
+  const responses = await db
     .select()
-    .from(onboardingFormVersions)
-    .where(
-      or(
-        eq(onboardingFormVersions.scope, "global"),
-        and(
-          eq(onboardingFormVersions.scope, "trainer"),
-          eq(onboardingFormVersions.trainerUserId, trainerUserId),
-        ),
-      ),
-    );
-  return resolveOnboardingForm(rows, trainerUserId);
+    .from(onboardingFormResponses)
+    .where(eq(onboardingFormResponses.coachingRelationshipId, relationship.id))
+    .limit(1);
+  const response = responses[0];
+  if (response) {
+    const pinned = await db
+      .select()
+      .from(onboardingFormVersions)
+      .where(eq(onboardingFormVersions.id, response.onboardingFormVersionId))
+      .limit(1);
+    return pinned[0] ?? null;
+  }
+  return pinnedOnboardingVersionForRelationship(db, relationship);
 }
 
 onboardingRoutes.get(
@@ -82,7 +90,12 @@ onboardingRoutes.get(
 
     const db = createDb(c.env.DB);
     const relationshipId = c.req.query("relationshipId")?.trim();
-    let trainerUserId = actor.selectedRole === "trainer" ? actor.userId : null;
+    let relationship: {
+      id: string;
+      invitationId: string | null;
+      trainerUserId: string;
+      traineeUserId: string;
+    } | null = null;
 
     if (relationshipId) {
       const relationships = await db
@@ -90,8 +103,8 @@ onboardingRoutes.get(
         .from(coachingRelationships)
         .where(eq(coachingRelationships.id, relationshipId))
         .limit(1);
-      const relationship = relationships[0];
-      if (!relationship || !canAccessRelationship(actor, relationship)) {
+      const found = relationships[0];
+      if (!found || !canAccessRelationship(actor, found)) {
         return fail(
           c,
           404,
@@ -99,83 +112,31 @@ onboardingRoutes.get(
           "Coaching relationship not found.",
         );
       }
-      trainerUserId = relationship.trainerUserId;
-
-      const responses = await db
-        .select()
-        .from(onboardingFormResponses)
-        .where(eq(onboardingFormResponses.coachingRelationshipId, relationshipId))
-        .limit(1);
-      const response = responses[0];
-      if (response) {
-        const pinned = await db
-          .select()
-          .from(onboardingFormVersions)
-          .where(eq(onboardingFormVersions.id, response.onboardingFormVersionId))
-          .limit(1);
-        const form = pinned[0];
-        if (!form) {
-          return fail(
-            c,
-            500,
-            "ONBOARDING_FORM_MISSING",
-            "Onboarding form for this response is missing.",
-          );
-        }
-        return ok(
-          c,
-          onboardingFormVersionSchema.parse(mapOnboardingFormVersion(form)),
-        );
-      }
-    }
-
-    if (!trainerUserId) {
+      relationship = found;
+    } else if (actor.selectedRole === "trainee") {
       const relationships = await db
         .select()
         .from(coachingRelationships)
         .where(eq(coachingRelationships.traineeUserId, actor.userId));
-      const only = relationships.length === 1 ? relationships[0] : null;
-      if (only) {
-        trainerUserId = only.trainerUserId;
-        const responses = await db
-          .select()
-          .from(onboardingFormResponses)
-          .where(eq(onboardingFormResponses.coachingRelationshipId, only.id))
-          .limit(1);
-        const response = responses[0];
-        if (response) {
-          const pinned = await db
-            .select()
-            .from(onboardingFormVersions)
-            .where(eq(onboardingFormVersions.id, response.onboardingFormVersionId))
-            .limit(1);
-          const form = pinned[0];
-          if (form) {
-            return ok(
-              c,
-              onboardingFormVersionSchema.parse(mapOnboardingFormVersion(form)),
-            );
-          }
-        }
-      }
+      relationship = relationships.length === 1 ? relationships[0]! : null;
     }
 
-    if (!trainerUserId) {
+    if (!relationship) {
       return fail(
         c,
         400,
         "RELATIONSHIP_REQUIRED",
-        "Pass relationshipId to resolve the trainee onboarding form.",
+        "Pass relationshipId to read the pinned onboarding form.",
       );
     }
 
-    const form = await resolveFormForTrainer(db, trainerUserId);
+    const form = await currentFormForRelationship(db, relationship);
     if (!form) {
       return fail(
         c,
         500,
         "ONBOARDING_FORM_MISSING",
-        "No onboarding form is available.",
+        "No pinned onboarding form is available for this invitation.",
       );
     }
     return ok(c, onboardingFormVersionSchema.parse(mapOnboardingFormVersion(form)));
@@ -316,13 +277,13 @@ onboardingRoutes.put(
       );
     }
 
-    const form = await resolveFormForTrainer(db, relationship.trainerUserId);
+    const form = await pinnedOnboardingVersionForRelationship(db, relationship);
     if (!form) {
       return fail(
         c,
         500,
         "ONBOARDING_FORM_MISSING",
-        "No onboarding form is available.",
+        "No pinned onboarding form is available for this invitation.",
       );
     }
 
@@ -499,19 +460,32 @@ onboardingRoutes.post(
       );
     }
 
-    const mappedForm = mapOnboardingFormVersion(form);
-    const fields = mappedForm.fields.map((field) =>
-      onboardingFieldDefinitionSchema.parse(field),
+    const definition = onboardingFormDefinitionSchema.safeParse(
+      JSON.parse(form.schemaJson) as { fields?: unknown },
     );
+    if (!definition.success) {
+      return fail(
+        c,
+        500,
+        "ONBOARDING_FORM_MISSING",
+        "Pinned onboarding form definition is invalid.",
+      );
+    }
     const answers = JSON.parse(response.answersJson) as Record<string, string>;
-    const missing = missingRequiredOnboardingFields(fields, answers);
-    if (missing.length > 0) {
+    const answerErrors = onboardingAnswerErrors(definition.data.fields, answers);
+    if (
+      answerErrors.missingFieldIds.length > 0 ||
+      answerErrors.invalidFieldIds.length > 0
+    ) {
       return fail(
         c,
         422,
         "ONBOARDING_INCOMPLETE",
         "Required onboarding fields are missing.",
-        { missingFieldIds: missing },
+        {
+          missingFieldIds: answerErrors.missingFieldIds,
+          invalidFieldIds: answerErrors.invalidFieldIds,
+        },
       );
     }
 

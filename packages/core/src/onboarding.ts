@@ -1,4 +1,8 @@
-import type { OnboardingStatus } from "@fitbud/contracts";
+import {
+  onboardingFormDefinitionSchema,
+  type OnboardingFieldDefinition,
+  type OnboardingStatus,
+} from "@fitbud/contracts";
 
 export type ClientOnboardingFacts = {
   /** Null when the invitation has not created a coaching relationship. */
@@ -99,4 +103,72 @@ export function missingRequiredOnboardingFields(
       return typeof value !== "string" || value.trim().length === 0;
     })
     .map((field) => field.id);
+}
+
+export type OnboardingTemplateVersionCandidate = {
+  id: string;
+  templateId: string;
+  version: number;
+};
+
+/** Highest version row for one template. Ties keep the earlier candidate. */
+export function latestOnboardingFormVersion<
+  T extends OnboardingTemplateVersionCandidate,
+>(versions: readonly T[], templateId: string): T | null {
+  const matches = versions.filter((item) => item.templateId === templateId);
+  if (matches.length === 0) {
+    return null;
+  }
+  return matches.reduce((best, item) =>
+    item.version > best.version ? item : best,
+  );
+}
+
+export function canTrainerReadOnboardingTemplate(
+  template: { ownership: "global" | "trainer"; trainerUserId: string | null },
+  trainerUserId: string,
+): boolean {
+  if (template.ownership === "global") {
+    return template.trainerUserId == null;
+  }
+  return template.trainerUserId === trainerUserId;
+}
+
+/** Reject a definition that does not match the onboarding field schema. */
+export function parseOnboardingFormFields(
+  fields: unknown,
+):
+  | { ok: true; fields: OnboardingFieldDefinition[] }
+  | { ok: false } {
+  const parsed = onboardingFormDefinitionSchema.safeParse({ fields });
+  if (!parsed.success) {
+    return { ok: false };
+  }
+  return { ok: true, fields: parsed.data.fields };
+}
+
+export type OnboardingAnswerField = {
+  id: string;
+  required: boolean;
+  type?: "text" | "textarea" | "select";
+  options?: readonly string[];
+};
+
+/** Required blanks and select answers that are not in the pinned options. */
+export function onboardingAnswerErrors(
+  fields: readonly OnboardingAnswerField[],
+  answers: Record<string, string>,
+): { missingFieldIds: string[]; invalidFieldIds: string[] } {
+  const missingFieldIds = missingRequiredOnboardingFields(fields, answers);
+  const invalidFieldIds = fields
+    .filter((field) => field.type === "select")
+    .filter((field) => {
+      const value = answers[field.id];
+      if (typeof value !== "string" || value.trim().length === 0) {
+        return false;
+      }
+      return !(field.options ?? []).includes(value);
+    })
+    .map((field) => field.id);
+  return { missingFieldIds, invalidFieldIds };
 }

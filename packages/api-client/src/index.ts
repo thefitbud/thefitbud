@@ -34,7 +34,12 @@ import {
   foodLibraryListResponseSchema,
   healthResponseSchema,
   historyListResponseSchema,
+  createOnboardingFormTemplateRequestSchema,
+  createOnboardingFormTemplateVersionRequestSchema,
+  forkOnboardingFormTemplateRequestSchema,
   onboardingFormResponseSchema,
+  onboardingFormTemplateDetailSchema,
+  onboardingFormTemplateListResponseSchema,
   onboardingFormVersionSchema,
   invitationListResponseSchema,
   invitationSchema,
@@ -165,7 +170,12 @@ import {
   type GenerateWorkoutAssignmentsResponse,
   type HistoryListResponse,
   type HealthResponse,
+  type CreateOnboardingFormTemplateRequest,
+  type CreateOnboardingFormTemplateVersionRequest,
+  type ForkOnboardingFormTemplateRequest,
   type OnboardingFormResponse,
+  type OnboardingFormTemplateDetail,
+  type OnboardingFormTemplateListResponse,
   type OnboardingFormVersion,
   type Intervention,
   type InterventionListResponse,
@@ -421,6 +431,74 @@ export class FitBudApiClient {
       "POST",
       `/onboarding/relationships/${relationshipId}/submit`,
       onboardingFormResponseSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async listOnboardingFormTemplates(query?: {
+    cursor?: string;
+    limit?: number;
+  }): Promise<OnboardingFormTemplateListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request(
+      "GET",
+      `/onboarding/form-templates${suffix}`,
+      onboardingFormTemplateListResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async getOnboardingFormTemplate(
+    templateId: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    return this.request(
+      "GET",
+      `/onboarding/form-templates/${templateId}`,
+      onboardingFormTemplateDetailSchema,
+      { auth: true },
+    );
+  }
+
+  async createOnboardingFormTemplate(
+    body: CreateOnboardingFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    const parsed = createOnboardingFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      "/onboarding/form-templates",
+      onboardingFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async forkOnboardingFormTemplate(
+    templateId: string,
+    body: ForkOnboardingFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    const parsed = forkOnboardingFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/onboarding/form-templates/${templateId}/fork`,
+      onboardingFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async createOnboardingFormTemplateVersion(
+    templateId: string,
+    body: CreateOnboardingFormTemplateVersionRequest,
+    idempotencyKey: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    const parsed = createOnboardingFormTemplateVersionRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/onboarding/form-templates/${templateId}/versions`,
+      onboardingFormTemplateDetailSchema,
       { auth: true, body: parsed, idempotencyKey },
     );
   }

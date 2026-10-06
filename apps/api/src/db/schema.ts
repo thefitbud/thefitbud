@@ -127,6 +127,9 @@ export const clientInvitations = sqliteTable(
       .default("pending"),
     expiresAt: text("expires_at").notNull(),
     acceptedUserId: text("accepted_user_id").references(() => users.id),
+    onboardingFormTemplateVersionId: text("onboarding_form_template_version_id")
+      .notNull()
+      .references(() => onboardingFormVersions.id),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -136,6 +139,9 @@ export const clientInvitations = sqliteTable(
     index("client_invitations_trainer_email_idx").on(
       table.trainerUserId,
       table.recipientEmail,
+    ),
+    index("client_invitations_form_version_idx").on(
+      table.onboardingFormTemplateVersionId,
     ),
   ],
 );
@@ -171,10 +177,33 @@ export const coachingRelationships = sqliteTable(
   ],
 );
 
+/** Parent of immutable onboarding form versions. Global rows have no trainer. */
+export const onboardingFormTemplates = sqliteTable(
+  "onboarding_form_templates",
+  {
+    id: text("id").primaryKey(),
+    ownership: text("ownership", { enum: ["global", "trainer"] }).notNull(),
+    trainerUserId: text("trainer_user_id").references(() => users.id),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("onboarding_form_templates_ownership_idx").on(
+      table.ownership,
+      table.trainerUserId,
+    ),
+  ],
+);
+
 export const onboardingFormVersions = sqliteTable(
   "onboarding_form_versions",
   {
     id: text("id").primaryKey(),
+    templateId: text("template_id")
+      .notNull()
+      .references(() => onboardingFormTemplates.id),
     key: text("key").notNull(),
     version: integer("version").notNull(),
     scope: text("scope", { enum: ["global", "trainer"] })
@@ -185,6 +214,10 @@ export const onboardingFormVersions = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
+    uniqueIndex("onboarding_form_versions_template_version_uidx").on(
+      table.templateId,
+      table.version,
+    ),
     uniqueIndex("onboarding_form_versions_global_key_version_uidx")
       .on(table.key, table.version)
       .where(sql`${table.scope} = 'global'`),

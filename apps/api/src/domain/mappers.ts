@@ -1,41 +1,42 @@
-import type {
-  Checkin,
-  CheckinDraftAnswers,
-  CheckinReview,
-  CoachingConfiguration,
-  CoachingRelationship,
-  ExerciseExecution,
-  Invitation,
-  OnboardingFieldDefinition,
-  OnboardingFormResponse,
-  OnboardingFormVersion,
-  MealAssignment,
-  MealCompliance,
-  MealPhotoIntent,
-  MealPrescription,
-  OnboardingReview,
-  OnboardingStatus,
-  Plan,
-  PlanContent,
-  PlanVersion,
-  PlanVersionSummary,
-  SetExecution,
-  TrainerNote,
-  WorkoutAssignment,
-  WorkoutDay,
-  WorkoutExecution,
-  WorkoutExecutionSummary,
-  Exception,
-  ExceptionAction,
-  Intervention,
-  ActiveExceptionSummary,
-  Measurement,
-  MediaAsset,
-  ProgressEntry,
-  PlanTemplate,
-  PlanTemplateSummary,
-  ExerciseLibraryItem,
-  FoodLibraryItem,
+import {
+  onboardingFormDefinitionSchema,
+  type Checkin,
+  type CheckinDraftAnswers,
+  type CheckinReview,
+  type CoachingConfiguration,
+  type CoachingRelationship,
+  type ExerciseExecution,
+  type Invitation,
+  type OnboardingFormResponse,
+  type OnboardingFormTemplateDetail,
+  type OnboardingFormVersion,
+  type MealAssignment,
+  type MealCompliance,
+  type MealPhotoIntent,
+  type MealPrescription,
+  type OnboardingReview,
+  type OnboardingStatus,
+  type Plan,
+  type PlanContent,
+  type PlanVersion,
+  type PlanVersionSummary,
+  type SetExecution,
+  type TrainerNote,
+  type WorkoutAssignment,
+  type WorkoutDay,
+  type WorkoutExecution,
+  type WorkoutExecutionSummary,
+  type Exception,
+  type ExceptionAction,
+  type Intervention,
+  type ActiveExceptionSummary,
+  type Measurement,
+  type MediaAsset,
+  type ProgressEntry,
+  type PlanTemplate,
+  type PlanTemplateSummary,
+  type ExerciseLibraryItem,
+  type FoodLibraryItem,
 } from "@fitbud/contracts";
 import {
   deriveCheckinStatus,
@@ -52,6 +53,7 @@ import type {
   coachingRelationships,
   exerciseExecutions,
   onboardingFormResponses,
+  onboardingFormTemplates,
   onboardingFormVersions,
   mealAssignments,
   mealCompliance,
@@ -78,6 +80,7 @@ import type {
 
 type InvitationRow = typeof clientInvitations.$inferSelect;
 type RelationshipRow = typeof coachingRelationships.$inferSelect;
+type OnboardingFormTemplateRow = typeof onboardingFormTemplates.$inferSelect;
 type OnboardingFormVersionRow = typeof onboardingFormVersions.$inferSelect;
 type OnboardingFormResponseRow = typeof onboardingFormResponses.$inferSelect;
 type OnboardingReviewRow = typeof onboardingReviews.$inferSelect;
@@ -138,6 +141,7 @@ export function mapInvitation(
     expiresAt: row.expiresAt,
     acceptedUserId: row.acceptedUserId,
     coachingRelationshipId: linked?.coachingRelationshipId ?? null,
+    onboardingFormTemplateVersionId: row.onboardingFormTemplateVersionId,
     onboardingStatus,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -165,16 +169,38 @@ export function mapRelationship(
 export function mapOnboardingFormVersion(
   row: OnboardingFormVersionRow,
 ): OnboardingFormVersion {
-  const parsed = JSON.parse(row.schemaJson) as {
-    fields?: OnboardingFieldDefinition[];
-  };
+  const stored = JSON.parse(row.schemaJson) as { fields?: unknown };
+  const definition = onboardingFormDefinitionSchema.parse({
+    fields: stored.fields ?? [],
+  });
   return {
     id: row.id,
+    templateId: row.templateId,
     key: row.key,
     version: row.version,
     scope: row.scope,
-    fields: parsed.fields ?? [],
+    fields: definition.fields,
     createdAt: row.createdAt,
+  };
+}
+
+export function mapOnboardingFormTemplateDetail(
+  template: OnboardingFormTemplateRow,
+  versions: OnboardingFormVersionRow[],
+): OnboardingFormTemplateDetail {
+  const ordered = [...versions].sort((left, right) => left.version - right.version);
+  const latest = ordered[ordered.length - 1]!;
+  return {
+    id: template.id,
+    ownership: template.ownership,
+    trainerUserId: template.trainerUserId,
+    name: template.name,
+    description: template.description,
+    latestVersionId: latest.id,
+    latestVersionNumber: latest.version,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
+    versions: ordered.map(mapOnboardingFormVersion),
   };
 }
 

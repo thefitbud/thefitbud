@@ -34,6 +34,7 @@ const MIGRATIONS = [
   "0009_sync.sql",
   "0010_notifications.sql",
     "0013_domain_contracts.sql",
+  "0014_onboarding_form_templates.sql",
   "0011_templates_libraries.sql",
 ] as const;
 

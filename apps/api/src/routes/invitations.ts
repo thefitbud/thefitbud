@@ -27,6 +27,7 @@ import {
   relationshipForInvitation,
   relationshipIdByInvitation,
 } from "../domain/client-status";
+import { versionIdForNewInvitation } from "../domain/onboarding-forms";
 import {
   mapInvitation,
   mapRelationship,
@@ -110,6 +111,7 @@ invitationRoutes.post(
         recipientDisplayName: parsed.data.recipientDisplayName ?? null,
         recipientWhatsappE164,
         expiresInDays: parsed.data.expiresInDays ?? DEFAULT_INVITE_DAYS,
+        onboardingFormTemplateId: parsed.data.onboardingFormTemplateId ?? null,
       }),
     );
 
@@ -131,6 +133,28 @@ invitationRoutes.post(
       return c.json(JSON.parse(existing.responseBody), existing.responseStatus as 200);
     }
 
+    const pinned = await versionIdForNewInvitation(
+      db,
+      actor.userId,
+      parsed.data.onboardingFormTemplateId,
+    );
+    if (!pinned.ok) {
+      if (pinned.code === "TEMPLATE_NOT_FOUND") {
+        return fail(
+          c,
+          404,
+          "TEMPLATE_NOT_FOUND",
+          "Onboarding form template not found.",
+        );
+      }
+      return fail(
+        c,
+        500,
+        "ONBOARDING_FORM_MISSING",
+        "No onboarding form is available.",
+      );
+    }
+
     const token = createSessionToken();
     const tokenHash = await sha256Hex(token);
     const timestamp = nowIso();
@@ -150,6 +174,7 @@ invitationRoutes.post(
       status: "pending",
       expiresAt,
       acceptedUserId: null,
+      onboardingFormTemplateVersionId: pinned.versionId,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
