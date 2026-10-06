@@ -162,6 +162,101 @@ export function exceptionStatusParameter(): OpenApiParameter {
   };
 }
 
+export function planFilterParameters(): OpenApiParameter[] {
+  return [
+    {
+      name: "versionStatus",
+      in: "query",
+      required: false,
+      description:
+        "Optional plan version status: draft, published, scheduled, effective, or superseded. Omitted returns every version, including drafts.",
+      schema: {
+        type: "string",
+        enum: ["draft", "published", "scheduled", "effective", "superseded"],
+      },
+    },
+    {
+      name: "effectiveFrom",
+      in: "query",
+      required: false,
+      description:
+        "Optional ISO-8601 start of an effective-interval overlap window. Versions without effectiveFrom do not match a date window.",
+      schema: { type: "string", format: "date-time" },
+    },
+    {
+      name: "effectiveTo",
+      in: "query",
+      required: false,
+      description:
+        "Optional ISO-8601 end of an effective-interval overlap window. An open-ended version overlaps when it has already started.",
+      schema: { type: "string", format: "date-time" },
+    },
+  ];
+}
+
+export function historyFilterParameters(): OpenApiParameter[] {
+  return [
+    {
+      name: "kind",
+      in: "query",
+      required: false,
+      description:
+        "Optional history item kind. Applied in the matching source query before that source's row cap.",
+      schema: { type: "string" },
+    },
+    {
+      name: "occurredFrom",
+      in: "query",
+      required: false,
+      description:
+        "Optional ISO-8601 lower bound on the source occurred time. Applied before the per-source row cap.",
+      schema: { type: "string", format: "date-time" },
+    },
+    {
+      name: "occurredTo",
+      in: "query",
+      required: false,
+      description:
+        "Optional ISO-8601 upper bound on the source occurred time. Applied before the per-source row cap.",
+      schema: { type: "string", format: "date-time" },
+    },
+  ];
+}
+
+export function activityQueryParameters(): OpenApiParameter[] {
+  return [
+    {
+      name: "type",
+      in: "query",
+      required: true,
+      description: "Activity type: workout, meal, or checkin.",
+      schema: { type: "string", enum: ["workout", "meal", "checkin"] },
+    },
+    {
+      name: "state",
+      in: "query",
+      required: false,
+      description:
+        "Optional derived state for the requested type. A state that belongs to a different type is rejected.",
+      schema: { type: "string" },
+    },
+    {
+      name: "occurredFrom",
+      in: "query",
+      required: false,
+      description: "Optional civil start date (YYYY-MM-DD) on the assignment or check-in.",
+      schema: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    },
+    {
+      name: "occurredTo",
+      in: "query",
+      required: false,
+      description: "Optional civil end date (YYYY-MM-DD) on the assignment or check-in.",
+      schema: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    },
+  ];
+}
+
 export function relationshipIdQueryParameter(): OpenApiParameter {
   return {
     name: "relationshipId",

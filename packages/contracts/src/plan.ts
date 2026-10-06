@@ -151,3 +151,11 @@ export const effectivePlanResponseSchema = z.object({
   version: planVersionSchema.nullable(),
 });
 export type EffectivePlanResponse = z.infer<typeof effectivePlanResponseSchema>;
+
+/** Optional filters for GET /plans/relationships/:id. Omitted fields keep the unfiltered list. */
+export const planListFilterSchema = z.object({
+  versionStatus: planVersionStatusSchema.optional(),
+  effectiveFrom: isoDateTimeSchema.optional(),
+  effectiveTo: isoDateTimeSchema.optional(),
+});
+export type PlanListFilter = z.infer<typeof planListFilterSchema>;

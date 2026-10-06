@@ -76,4 +76,62 @@ describe("FitBudApiClient", () => {
     );
     expect(seenKey).toBe("idem-1");
   });
+
+  it("sends workspace, activity, plan, and history filters", async () => {
+    const seen: string[] = [];
+    const client = new FitBudApiClient({
+      baseUrl: "https://example.test",
+      fetch: async (input) => {
+        seen.push(String(input));
+        return new Response(
+          JSON.stringify({
+            data: {
+              items: [],
+              nextCursor: null,
+              header: {
+                relationshipId: "11111111-1111-4111-8111-111111111111",
+                traineeDisplayName: "Asha",
+                onboardingStatus: "active",
+                effectivePlan: null,
+                primaryGoal: null,
+                renewalState: null,
+              },
+              overview: {
+                openException: null,
+                nextCheckin: null,
+                recentActivity: [],
+                progress: { measurements: [], entries: [], media: [] },
+              },
+              plan: { plan: null, version: null },
+              configuration: { configuration: null, subscription: null },
+              history: {
+                relationshipId: "11111111-1111-4111-8111-111111111111",
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    });
+
+    const relationshipId = "11111111-1111-4111-8111-111111111111";
+    await client.getClientWorkspace(relationshipId);
+    await client.listWorkspaceActivity(relationshipId, {
+      type: "workout",
+      state: "assigned",
+      occurredFrom: "2026-10-01",
+      limit: 5,
+    });
+    await client.listPlans(relationshipId, { versionStatus: "effective" });
+    await client.listHistory(relationshipId, { kind: "subscription_revision" });
+
+    expect(seen[0]).toBe(
+      `https://example.test/workspaces/relationships/${relationshipId}`,
+    );
+    expect(seen[1]).toContain("type=workout");
+    expect(seen[1]).toContain("state=assigned");
+    expect(seen[1]).toContain("occurredFrom=2026-10-01");
+    expect(seen[2]).toContain("versionStatus=effective");
+    expect(seen[3]).toContain("kind=subscription_revision");
+  });
 });

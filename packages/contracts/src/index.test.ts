@@ -27,6 +27,9 @@ import {
   exerciseLibraryItemSchema,
   foodLibraryItemSchema,
   applyPlanTemplateRequestSchema,
+  workspaceActivityQuerySchema,
+  planListFilterSchema,
+  historyListFilterSchema,
 } from "./index.js";
 
 describe("contracts", () => {
@@ -485,5 +488,27 @@ describe("contracts", () => {
     ).toMatchObject({
       templateId: "11111111-1111-4111-8111-111111111111",
     });
+  });
+
+  it("rejects an activity state that does not belong to the type", () => {
+    expect(
+      workspaceActivityQuerySchema.safeParse({
+        type: "workout",
+        state: "overdue",
+      }).success,
+    ).toBe(false);
+    expect(
+      workspaceActivityQuerySchema.safeParse({
+        type: "checkin",
+        state: "overdue",
+        occurredFrom: "2026-10-01",
+      }).success,
+    ).toBe(true);
+    expect(
+      planListFilterSchema.safeParse({ versionStatus: "draft" }).success,
+    ).toBe(true);
+    expect(
+      historyListFilterSchema.safeParse({ kind: "subscription_revision" }).success,
+    ).toBe(true);
   });
 });

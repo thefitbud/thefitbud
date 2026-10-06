@@ -2,8 +2,9 @@ import {
   operation,
   cursorParameter,
   limitParameter,
+  planFilterParameters,
 } from "../openapi/document";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   createPlanDraftFromVersionRequestSchema,
@@ -13,6 +14,7 @@ import {
   applyPlanTemplateResponseSchema,
   effectivePlanResponseSchema,
   planContentSchema,
+  planListFilterSchema,
   planListResponseSchema,
   planVersionSchema,
   planWithVersionsSchema,
@@ -128,11 +130,44 @@ async function loadAccessiblePlan(
   return null;
 }
 
-async function listVersionsForPlan(db: Db, planId: string) {
+type PlanVersionFilter = {
+  versionStatus?: (typeof planVersions.$inferSelect)["status"];
+  effectiveFrom?: string;
+  effectiveTo?: string;
+};
+
+function versionIntervalOverlap(filter: PlanVersionFilter | undefined) {
+  if (!filter?.effectiveFrom && !filter?.effectiveTo) return undefined;
+  const parts = [isNotNull(planVersions.effectiveFrom)];
+  if (filter.effectiveTo) {
+    parts.push(lte(planVersions.effectiveFrom, filter.effectiveTo));
+  }
+  if (filter.effectiveFrom) {
+    parts.push(
+      or(
+        isNull(planVersions.effectiveTo),
+        gte(planVersions.effectiveTo, filter.effectiveFrom),
+      )!,
+    );
+  }
+  return and(...parts);
+}
+
+async function listVersionsForPlan(
+  db: Db,
+  planId: string,
+  filter?: PlanVersionFilter,
+) {
+  const conditions = [eq(planVersions.planId, planId)];
+  if (filter?.versionStatus) {
+    conditions.push(eq(planVersions.status, filter.versionStatus));
+  }
+  const overlap = versionIntervalOverlap(filter);
+  if (overlap) conditions.push(overlap);
   return db
     .select()
     .from(planVersions)
-    .where(eq(planVersions.planId, planId))
+    .where(and(...conditions))
     .orderBy(desc(planVersions.versionNumber));
 }
 
@@ -161,7 +196,7 @@ async function supersedeEffectiveVersions(
   }
 }
 
-async function promoteDueScheduledVersions(
+export async function promoteDueScheduledVersions(
   db: Db,
   relationshipId: string,
   now: string,
@@ -214,9 +249,11 @@ planRoutes.get(
   operation({
     tag: "Plans",
     summary: "Plans operation for GET /plans/relationships/:relationshipId.",
-    description: "Plans operation for GET /plans/relationships/:relationshipId.",
+    description:
+      "Plans operation for GET /plans/relationships/:relationshipId. Optional versionStatus, effectiveFrom, and effectiveTo select versions whose status matches and whose effective interval overlaps the date window. Omitted filters keep the unfiltered list, including drafts. The effective plan remains the version with status effective.",
     roles: ["trainer", "trainee"],
     parameters: [
+      ...planFilterParameters(),
       limitParameter({ defaultValue: 20, maximum: 1 }),
       cursorParameter(),
     ],
@@ -260,7 +297,52 @@ planRoutes.get(
       return fail(c, 400, "INVALID_CURSOR", "Cursor is invalid.");
     }
 
+    const filterParsed = planListFilterSchema.safeParse({
+      versionStatus: c.req.query("versionStatus") || undefined,
+      effectiveFrom: c.req.query("effectiveFrom") || undefined,
+      effectiveTo: c.req.query("effectiveTo") || undefined,
+    });
+    if (!filterParsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid plan filter.", {
+        issues: filterParsed.error.issues,
+      });
+    }
+    const versionFilter: PlanVersionFilter = {
+      versionStatus: filterParsed.data.versionStatus,
+      effectiveFrom: filterParsed.data.effectiveFrom
+        ? new Date(filterParsed.data.effectiveFrom).toISOString()
+        : undefined,
+      effectiveTo: filterParsed.data.effectiveTo
+        ? new Date(filterParsed.data.effectiveTo).toISOString()
+        : undefined,
+    };
+    const hasVersionFilter = Boolean(
+      versionFilter.versionStatus ||
+        versionFilter.effectiveFrom ||
+        versionFilter.effectiveTo,
+    );
+
     const conditions = [eq(plans.coachingRelationshipId, relationshipId)];
+    if (hasVersionFilter) {
+      const versionConditions = [
+        eq(plans.coachingRelationshipId, relationshipId),
+      ];
+      if (versionFilter.versionStatus) {
+        versionConditions.push(eq(planVersions.status, versionFilter.versionStatus));
+      }
+      const overlap = versionIntervalOverlap(versionFilter);
+      if (overlap) versionConditions.push(overlap);
+      const matching = await db
+        .select({ planId: planVersions.planId })
+        .from(planVersions)
+        .innerJoin(plans, eq(planVersions.planId, plans.id))
+        .where(and(...versionConditions));
+      const matchingIds = [...new Set(matching.map((row) => row.planId))];
+      if (matchingIds.length === 0) {
+        return ok(c, planListResponseSchema.parse({ items: [], nextCursor: null }));
+      }
+      conditions.push(inArray(plans.id, matchingIds));
+    }
     if (decoded) {
       conditions.push(
         or(
@@ -280,7 +362,11 @@ planRoutes.get(
     const page = buildPage(rows, limit, (item) => item.createdAt);
     const items = [];
     for (const plan of page.items) {
-      const versions = await listVersionsForPlan(db, plan.id);
+      const versions = await listVersionsForPlan(
+        db,
+        plan.id,
+        hasVersionFilter ? versionFilter : undefined,
+      );
       items.push(
         planWithVersionsSchema.parse({
           plan: mapPlan(plan),

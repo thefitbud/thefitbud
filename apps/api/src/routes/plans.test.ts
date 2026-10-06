@@ -447,4 +447,198 @@ describe("plans and versions", () => {
     };
     expect(effectiveBody.data.version).toBeNull();
   });
+
+  it("filters plan versions by status and effective interval and still pages", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("filter");
+
+    async function createDraft(title: string, key: string) {
+      const created = await app.request(
+        `/plans/relationships/${relationshipId}`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: trainerCookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify({ title, content: sampleContent() }),
+        },
+        testEnv(),
+      );
+      expect(created.status).toBe(201);
+      return (await created.json()) as {
+        data: {
+          plan: { id: string; title: string };
+          version: { id: string; recordVersion: number; status: string };
+        };
+      };
+    }
+
+    const first = await createDraft("Foundation block", "filter-create-1");
+    const published = await app.request(
+      `/plans/${first.data.plan.id}/versions/${first.data.version.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "filter-publish-1",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: first.data.version.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(200);
+
+    const next = await app.request(
+      `/plans/${first.data.plan.id}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "filter-draft-2",
+        },
+        body: JSON.stringify({ sourceVersionId: first.data.version.id }),
+      },
+      testEnv(),
+    );
+    expect(next.status).toBe(201);
+    const nextBody = (await next.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const publishedNext = await app.request(
+      `/plans/${first.data.plan.id}/versions/${nextBody.data.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "filter-publish-2",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: nextBody.data.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(publishedNext.status).toBe(200);
+
+    const draft = await createDraft("Unpublished block", "filter-create-draft");
+    const future = new Date(Date.now() + 7 * 86_400_000).toISOString();
+    const scheduledPlan = await createDraft("Later block", "filter-create-later");
+    const scheduled = await app.request(
+      `/plans/${scheduledPlan.data.plan.id}/versions/${scheduledPlan.data.version.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "filter-schedule",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: scheduledPlan.data.version.recordVersion,
+          mode: "scheduled",
+          effectiveFrom: future,
+        }),
+      },
+      testEnv(),
+    );
+    expect(scheduled.status).toBe(200);
+
+    async function list(query: string) {
+      const response = await app.request(
+        `/plans/relationships/${relationshipId}${query}`,
+        { headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        data: {
+          items: Array<{
+            plan: { id: string };
+            versions: Array<{ id: string; status: string; effectiveFrom: string | null }>;
+          }>;
+          nextCursor: string | null;
+        };
+      };
+    }
+
+    const unfiltered = await list("");
+    const foundation = unfiltered.data.items.find(
+      (item) => item.plan.id === first.data.plan.id,
+    );
+    expect(foundation?.versions.map((version) => version.status).sort()).toEqual([
+      "effective",
+      "superseded",
+    ]);
+    expect(
+      unfiltered.data.items.some((item) => item.plan.id === draft.data.plan.id),
+    ).toBe(true);
+
+    const effectiveOnly = await list("?versionStatus=effective");
+    expect(effectiveOnly.data.items).toHaveLength(1);
+    expect(effectiveOnly.data.items[0]?.versions.map((version) => version.status)).toEqual([
+      "effective",
+    ]);
+    const supersededOnly = await list("?versionStatus=superseded");
+    expect(supersededOnly.data.items[0]?.versions.map((version) => version.status)).toEqual([
+      "superseded",
+    ]);
+    expect(effectiveOnly.data.items[0]?.versions[0]?.id).not.toBe(
+      supersededOnly.data.items[0]?.versions[0]?.id,
+    );
+
+    const drafts = await list("?versionStatus=draft");
+    expect(drafts.data.items.map((item) => item.plan.id)).toEqual([draft.data.plan.id]);
+    expect(drafts.data.items[0]?.versions[0]?.status).toBe("draft");
+
+    const scheduledOnly = await list("?versionStatus=scheduled");
+    expect(scheduledOnly.data.items.map((item) => item.plan.id)).toEqual([
+      scheduledPlan.data.plan.id,
+    ]);
+
+    const beforeAny = await list("?effectiveTo=2020-01-01T00:00:00.000Z");
+    expect(beforeAny.data.items).toEqual([]);
+
+    const datedDrafts = await list(
+      "?versionStatus=draft&effectiveFrom=2020-01-01T00:00:00.000Z&effectiveTo=2030-01-01T00:00:00.000Z",
+    );
+    expect(datedDrafts.data.items).toEqual([]);
+
+    const overlapped = await list(
+      `?effectiveFrom=${encodeURIComponent(future)}&effectiveTo=${encodeURIComponent(future)}`,
+    );
+    const overlappedIds = overlapped.data.items.flatMap((item) =>
+      item.versions.map((version) => version.id),
+    );
+    expect(overlappedIds).toContain(scheduledPlan.data.version.id);
+    expect(overlappedIds).not.toContain(draft.data.version.id);
+
+    const invalid = await app.request(
+      `/plans/relationships/${relationshipId}?versionStatus=archived`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(invalid.status).toBe(400);
+
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    for (let page = 0; page < 5; page += 1) {
+      const suffix = cursor
+        ? `?limit=1&cursor=${encodeURIComponent(cursor)}`
+        : "?limit=1";
+      const body = await list(suffix);
+      expect(body.data.items).toHaveLength(1);
+      seen.add(body.data.items[0]!.plan.id);
+      cursor = body.data.nextCursor;
+      if (!cursor) break;
+    }
+    expect(cursor).toBeNull();
+    expect(seen.size).toBe(3);
+  });
 });
