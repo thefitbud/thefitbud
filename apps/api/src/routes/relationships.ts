@@ -1,3 +1,8 @@
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { and, desc, eq, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -37,6 +42,17 @@ function canAccessRelationship(
 
 relationshipRoutes.get(
   "/",
+  operation({
+    tag: "Relationships",
+    summary: "Relationships operation for GET /relationships.",
+    description: "Relationships operation for GET /relationships.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      limitParameter({ defaultValue: 20, maximum: 1 }),
+      cursorParameter(),
+    ],
+    response: relationshipListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -101,6 +117,13 @@ relationshipRoutes.get(
 
 relationshipRoutes.get(
   "/:relationshipId",
+  operation({
+    tag: "Relationships",
+    summary: "Relationships operation for GET /relationships/:relationshipId.",
+    description: "Relationships operation for GET /relationships/:relationshipId.",
+    roles: ["trainer", "trainee"],
+    response: coachingRelationshipSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),

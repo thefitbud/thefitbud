@@ -1,4 +1,7 @@
+import { Scalar } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
+import { openAPIRouteHandler } from "hono-openapi";
+import { z } from "zod";
 import { healthResponseSchema } from "@fitbud/contracts";
 import {
   handleReminderQueueBatch,
@@ -30,6 +33,7 @@ import { workoutRoutes } from "./routes/workouts";
 import { realtimeRoutes } from "./routes/realtime";
 import { templateRoutes } from "./routes/templates";
 import { libraryRoutes } from "./routes/libraries";
+import { openApiRouteOptions, operation } from "./openapi/document";
 import type { Env, Variables } from "./types";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -37,14 +41,25 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 app.use("*", requestIdMiddleware);
 app.use("*", requestLogMiddleware);
 
-app.get("/health", (c) =>
-  ok(
-    c,
-    healthResponseSchema.parse({
-      status: "ok",
-      service: "fitbud-api",
-    }),
-  ),
+app.get(
+  "/health",
+  operation({
+    tag: "Health",
+    summary: "Service health",
+    description: "Reports that the API process is serving requests.",
+    security: "public",
+    defaultErrors: false,
+    response: healthResponseSchema,
+    successDescription: "The service is up.",
+  }),
+  (c) =>
+    ok(
+      c,
+      healthResponseSchema.parse({
+        status: "ok",
+        service: "fitbud-api",
+      }),
+    ),
 );
 
 app.route("/auth", authRoutes);
@@ -69,6 +84,43 @@ app.route("/sync", syncRoutes);
 app.route("/notifications", notificationRoutes);
 app.route("/realtime", realtimeRoutes);
 bindSyncApp(app);
+
+const openApiDocumentSchema = z
+  .object({
+    openapi: z.string(),
+    info: z.object({ title: z.string(), version: z.string() }),
+    paths: z.record(z.unknown()),
+  })
+  .passthrough();
+
+app.get(
+  "/openapi.json",
+  operation({
+    tag: "Documentation",
+    summary: "OpenAPI document",
+    description: "Generated OpenAPI document for every mounted HTTP operation. Try-it-out calls this API directly and does not add credentials.",
+    security: "public",
+    defaultErrors: false,
+    response: openApiDocumentSchema,
+    envelope: false,
+    successDescription: "OpenAPI 3 document.",
+  }),
+  openAPIRouteHandler(app, openApiRouteOptions),
+);
+
+app.get(
+  "/docs",
+  operation({
+    tag: "Documentation",
+    summary: "Interactive API reference",
+    description: "Scalar reference served by this API. The page loads GET /openapi.json on the same origin. Try-it-out uses the caller's own credentials and does not bypass authentication.",
+    security: "public",
+    defaultErrors: false,
+    html: true,
+    successDescription: "HTML API reference.",
+  }),
+  Scalar({ url: "/openapi.json", pageTitle: "FitBud API" }),
+);
 
 app.notFound((c) =>
   c.json(

@@ -1,3 +1,8 @@
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -79,6 +84,17 @@ async function loadTemplate(db: Db, templateId: string) {
 
 onboardingFormTemplateRoutes.get(
   "/",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for GET /onboarding/form-templates.",
+    description: "Onboarding operation for GET /onboarding/form-templates.",
+    roles: ["trainer"],
+    parameters: [
+      limitParameter({ defaultValue: 20, maximum: 1 }),
+      cursorParameter(),
+    ],
+    response: onboardingFormTemplateListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -168,6 +184,16 @@ onboardingFormTemplateRoutes.get(
 
 onboardingFormTemplateRoutes.post(
   "/",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for POST /onboarding/form-templates.",
+    description: "Onboarding operation for POST /onboarding/form-templates.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createOnboardingFormTemplateRequestSchema,
+    successStatus: [201],
+    response: onboardingFormTemplateDetailSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -271,6 +297,13 @@ onboardingFormTemplateRoutes.post(
 
 onboardingFormTemplateRoutes.get(
   "/:templateId",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for GET /onboarding/form-templates/:templateId.",
+    description: "Onboarding operation for GET /onboarding/form-templates/:templateId.",
+    roles: ["trainer", "trainee"],
+    response: onboardingFormTemplateDetailSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -322,6 +355,16 @@ onboardingFormTemplateRoutes.get(
 
 onboardingFormTemplateRoutes.post(
   "/:templateId/fork",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for POST /onboarding/form-templates/:templateId/fork.",
+    description: "Onboarding operation for POST /onboarding/form-templates/:templateId/fork.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: forkOnboardingFormTemplateRequestSchema,
+    successStatus: [201],
+    response: onboardingFormTemplateDetailSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -453,6 +496,16 @@ onboardingFormTemplateRoutes.post(
 
 onboardingFormTemplateRoutes.post(
   "/:templateId/versions",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for POST /onboarding/form-templates/:templateId/versions.",
+    description: "Onboarding operation for POST /onboarding/form-templates/:templateId/versions.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createOnboardingFormTemplateVersionRequestSchema,
+    successStatus: [201],
+    response: onboardingFormTemplateDetailSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

@@ -1,3 +1,8 @@
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Hono as HonoApp } from "hono";
@@ -238,6 +243,14 @@ function statusFromHttp(
 
 syncRoutes.post(
   "/push",
+  operation({
+    tag: "Sync",
+    summary: "Applies offline trainee mutations",
+    description: "Applies offline trainee mutations. Each mutation carries its own idempotency key in the body.",
+    roles: ["trainee"],
+    body: syncPushRequestSchema,
+    response: syncPushResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -438,6 +451,17 @@ syncRoutes.post(
 
 syncRoutes.get(
   "/pull",
+  operation({
+    tag: "Sync",
+    summary: "Pulls authoritative changes for the trainee",
+    description: "Pulls authoritative changes for the trainee. The default limit is 50 and the maximum is 100.",
+    roles: ["trainee"],
+    parameters: [
+      limitParameter({ defaultValue: 50, maximum: 1, invalid: "reject" }),
+      cursorParameter(),
+    ],
+    response: syncPullResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),

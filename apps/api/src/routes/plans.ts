@@ -1,3 +1,8 @@
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { and, desc, eq, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -206,6 +211,17 @@ async function promoteDueScheduledVersions(
 
 planRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for GET /plans/relationships/:relationshipId.",
+    description: "Plans operation for GET /plans/relationships/:relationshipId.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      limitParameter({ defaultValue: 20, maximum: 1 }),
+      cursorParameter(),
+    ],
+    response: planListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -285,6 +301,13 @@ planRoutes.get(
 
 planRoutes.get(
   "/relationships/:relationshipId/effective",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for GET /plans/relationships/:relationshipId/effective.",
+    description: "Plans operation for GET /plans/relationships/:relationshipId/effective.",
+    roles: ["trainer", "trainee"],
+    response: effectivePlanResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -350,6 +373,16 @@ planRoutes.get(
 
 planRoutes.post(
   "/relationships/:relationshipId",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for POST /plans/relationships/:relationshipId.",
+    description: "Plans operation for POST /plans/relationships/:relationshipId.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createPlanRequestSchema,
+    successStatus: [201],
+    response: createPlanResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -484,6 +517,15 @@ planRoutes.post(
 
 planRoutes.post(
   "/relationships/:relationshipId/from-template",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for POST /plans/relationships/:relationshipId/from-template.",
+    description: "Plans operation for POST /plans/relationships/:relationshipId/from-template.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: applyPlanTemplateRequestSchema,
+    response: applyPlanTemplateResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -739,6 +781,13 @@ planRoutes.post(
 
 planRoutes.get(
   "/:planId",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for GET /plans/:planId.",
+    description: "Plans operation for GET /plans/:planId.",
+    roles: ["trainer", "trainee"],
+    response: planWithVersionsSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -779,6 +828,13 @@ planRoutes.get(
 
 planRoutes.get(
   "/:planId/versions/:versionId",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for GET /plans/:planId/versions/:versionId.",
+    description: "Plans operation for GET /plans/:planId/versions/:versionId.",
+    roles: ["trainer", "trainee"],
+    response: planVersionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -819,6 +875,14 @@ planRoutes.get(
 
 planRoutes.put(
   "/:planId/versions/:versionId",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for PUT /plans/:planId/versions/:versionId.",
+    description: "Plans operation for PUT /plans/:planId/versions/:versionId.",
+    roles: ["trainer"],
+    body: updatePlanDraftRequestSchema,
+    response: planVersionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -915,6 +979,13 @@ planRoutes.put(
 
 planRoutes.post(
   "/:planId/versions/:versionId/preview",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for POST /plans/:planId/versions/:versionId/preview.",
+    description: "Plans operation for POST /plans/:planId/versions/:versionId/preview.",
+    roles: ["trainer"],
+    response: planVersionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -969,6 +1040,15 @@ planRoutes.post(
 
 planRoutes.post(
   "/:planId/versions/:versionId/publish",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for POST /plans/:planId/versions/:versionId/publish.",
+    description: "Plans operation for POST /plans/:planId/versions/:versionId/publish.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: publishPlanRequestSchema,
+    response: planVersionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -1177,6 +1257,16 @@ planRoutes.post(
 
 planRoutes.post(
   "/:planId/versions",
+  operation({
+    tag: "Plans",
+    summary: "Plans operation for POST /plans/:planId/versions.",
+    description: "Plans operation for POST /plans/:planId/versions.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createPlanDraftFromVersionRequestSchema,
+    successStatus: [201],
+    response: planVersionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

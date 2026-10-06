@@ -1,3 +1,8 @@
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { historyListResponseSchema } from "@fitbud/contracts";
@@ -42,6 +47,17 @@ async function loadOwnedRelationship(
  */
 historyRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "History",
+    summary: "Returns readable coaching history for a trainer-owned relationship",
+    description: "Returns readable coaching history for a trainer-owned relationship. The default page size is 30.",
+    roles: ["trainer"],
+    parameters: [
+      limitParameter({ defaultValue: 30, maximum: 1 }),
+      cursorParameter(),
+    ],
+    response: historyListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

@@ -1,3 +1,7 @@
+import {
+  operation,
+  signedFileParameters,
+} from "../openapi/document";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -95,6 +99,15 @@ function requireMediaBucket(c: AppContext) {
 
 fileRoutes.post(
   "/upload-targets",
+  operation({
+    tag: "Files",
+    summary: "Files operation for POST /files/upload-targets.",
+    description: "Files operation for POST /files/upload-targets.",
+    roles: ["trainer", "trainee"],
+    idempotency: true,
+    body: createUploadTargetRequestSchema,
+    response: createUploadTargetResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -247,6 +260,21 @@ fileRoutes.post(
 
 fileRoutes.put(
   "/:mediaAssetId/content",
+  operation({
+    tag: "Files",
+    summary: "Uploads image bytes for a media asset",
+    description: "Uploads image bytes for a media asset. A session or a signed exp and sig query authorizes the write.",
+    parameters: [
+      ...signedFileParameters(),
+    ],
+    binaryRequest: true,
+    response: mediaAssetSchema,
+    errors: [
+      { status: 413, description: "The upload exceeds the maximum size." },
+      { status: 422, description: "Only image uploads are supported." },
+      { status: 503, description: "File storage is not configured." },
+    ],
+  }),
   optionalAuthMiddleware,
   async (c) => {
     const mediaAssetId = c.req.param("mediaAssetId");
@@ -379,6 +407,15 @@ fileRoutes.put(
 
 fileRoutes.post(
   "/:mediaAssetId/confirm",
+  operation({
+    tag: "Files",
+    summary: "Files operation for POST /files/:mediaAssetId/confirm.",
+    description: "Files operation for POST /files/:mediaAssetId/confirm.",
+    roles: ["trainer", "trainee"],
+    idempotency: true,
+    body: confirmUploadRequestSchema,
+    response: mediaAssetSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -517,6 +554,13 @@ fileRoutes.post(
 
 fileRoutes.get(
   "/:mediaAssetId/download-target",
+  operation({
+    tag: "Files",
+    summary: "Files operation for GET /files/:mediaAssetId/download-target.",
+    description: "Files operation for GET /files/:mediaAssetId/download-target.",
+    roles: ["trainer", "trainee"],
+    response: downloadTargetResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -566,6 +610,16 @@ fileRoutes.get(
 
 fileRoutes.get(
   "/:mediaAssetId/content",
+  operation({
+    tag: "Files",
+    summary: "Downloads file bytes",
+    description: "Downloads file bytes. A session or a signed exp and sig query authorizes the read. The body is not a data envelope.",
+    parameters: [
+      ...signedFileParameters(),
+    ],
+    binaryResponse: true,
+    errors: [{ status: 503, description: "File storage is not configured." }],
+  }),
   optionalAuthMiddleware,
   async (c) => {
     const mediaAssetId = c.req.param("mediaAssetId");
@@ -628,6 +682,13 @@ fileRoutes.get(
 
 fileRoutes.get(
   "/:mediaAssetId",
+  operation({
+    tag: "Files",
+    summary: "Files operation for GET /files/:mediaAssetId.",
+    description: "Files operation for GET /files/:mediaAssetId.",
+    roles: ["trainer", "trainee"],
+    response: mediaAssetSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),

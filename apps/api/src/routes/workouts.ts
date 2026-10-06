@@ -1,3 +1,7 @@
+import {
+  operation,
+  dateWindowParameters,
+} from "../openapi/document";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -227,6 +231,15 @@ function requireIdempotencyKey(c: {
 
 workoutRoutes.post(
   "/relationships/:relationshipId/assignments/generate",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/relationships/:relationshipId/assignments/generate.",
+    description: "Workouts operation for POST /workouts/relationships/:relationshipId/assignments/generate.",
+    roles: ["trainer", "trainee"],
+    idempotency: true,
+    body: generateWorkoutAssignmentsRequestSchema,
+    response: generateWorkoutAssignmentsResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -403,6 +416,16 @@ workoutRoutes.post(
 
 workoutRoutes.get(
   "/relationships/:relationshipId/assignments",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for GET /workouts/relationships/:relationshipId/assignments.",
+    description: "Workouts operation for GET /workouts/relationships/:relationshipId/assignments.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      ...dateWindowParameters(),
+    ],
+    response: workoutAssignmentListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -475,6 +498,16 @@ workoutRoutes.get(
 
 workoutRoutes.get(
   "/relationships/:relationshipId/adherence",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for GET /workouts/relationships/:relationshipId/adherence.",
+    description: "Workouts operation for GET /workouts/relationships/:relationshipId/adherence.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      ...dateWindowParameters(),
+    ],
+    response: workoutAdherenceResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -563,6 +596,13 @@ workoutRoutes.get(
 
 workoutRoutes.get(
   "/assignments/:assignmentId",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for GET /workouts/assignments/:assignmentId.",
+    description: "Workouts operation for GET /workouts/assignments/:assignmentId.",
+    roles: ["trainer", "trainee"],
+    response: workoutAssignmentSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -601,6 +641,14 @@ workoutRoutes.get(
 
 workoutRoutes.post(
   "/assignments/:assignmentId/start",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/assignments/:assignmentId/start.",
+    description: "Workouts operation for POST /workouts/assignments/:assignmentId/start.",
+    roles: ["trainee"],
+    idempotency: true,
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -843,6 +891,13 @@ function ownershipError(
 
 workoutRoutes.post(
   "/executions/:executionId/pause",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/executions/:executionId/pause.",
+    description: "Workouts operation for POST /workouts/executions/:executionId/pause.",
+    roles: ["trainee"],
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -893,6 +948,13 @@ workoutRoutes.post(
 
 workoutRoutes.post(
   "/executions/:executionId/resume",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/executions/:executionId/resume.",
+    description: "Workouts operation for POST /workouts/executions/:executionId/resume.",
+    roles: ["trainee"],
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -943,6 +1005,14 @@ workoutRoutes.post(
 
 workoutRoutes.post(
   "/executions/:executionId/sets/:setExecutionId/complete",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete.",
+    description: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete.",
+    roles: ["trainee"],
+    body: completeSetRequestSchema,
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -1048,6 +1118,13 @@ workoutRoutes.post(
 
 workoutRoutes.post(
   "/executions/:executionId/sets/:setExecutionId/skip",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/skip.",
+    description: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/skip.",
+    roles: ["trainee"],
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -1122,6 +1199,15 @@ workoutRoutes.post(
 
 workoutRoutes.post(
   "/executions/:executionId/complete",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/executions/:executionId/complete.",
+    description: "Workouts operation for POST /workouts/executions/:executionId/complete.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: completeWorkoutRequestSchema,
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -1244,6 +1330,14 @@ workoutRoutes.post(
 
 workoutRoutes.post(
   "/assignments/:assignmentId/skip",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for POST /workouts/assignments/:assignmentId/skip.",
+    description: "Workouts operation for POST /workouts/assignments/:assignmentId/skip.",
+    roles: ["trainee"],
+    idempotency: true,
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -1410,6 +1504,13 @@ workoutRoutes.post(
 
 workoutRoutes.get(
   "/executions/:executionId",
+  operation({
+    tag: "Workouts",
+    summary: "Workouts operation for GET /workouts/executions/:executionId.",
+    description: "Workouts operation for GET /workouts/executions/:executionId.",
+    roles: ["trainer", "trainee"],
+    response: workoutExecutionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),

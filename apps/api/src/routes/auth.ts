@@ -1,8 +1,13 @@
+import { z } from "zod";
+import {
+  operation,
+} from "../openapi/document";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import {
   createWebSessionRequestSchema,
   meResponseSchema,
+  createWebSessionResponseSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
 import { verifyFirebaseIdToken } from "../auth/firebase";
@@ -22,7 +27,16 @@ import type { Env, Variables } from "../types";
 
 export const authRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-authRoutes.post("/session", async (c) => {
+authRoutes.post("/session", 
+  operation({
+    tag: "Auth",
+    summary: "Exchanges a Firebase identity token for a trainer web session and provisions a trainer profile when one is missing.",
+    description: "Exchanges a Firebase identity token for a trainer web session and provisions a trainer profile when one is missing.",
+    security: "public",
+    body: createWebSessionRequestSchema,
+    response: createWebSessionResponseSchema,
+  }),
+  async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = createWebSessionRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -84,7 +98,14 @@ authRoutes.post("/session", async (c) => {
   });
 });
 
-authRoutes.delete("/session", optionalAuthMiddleware, requireAuthMiddleware, async (c) => {
+authRoutes.delete("/session", 
+  operation({
+    tag: "Auth",
+    summary: "Revokes the current web session and clears the session cookie.",
+    description: "Revokes the current web session and clears the session cookie.",
+    response: z.object({ ended: z.literal(true) }),
+  }),
+  optionalAuthMiddleware, requireAuthMiddleware, async (c) => {
   const cookieName = c.env.SESSION_COOKIE_NAME || "fitbud_session";
   const token = getCookie(c, cookieName);
 
@@ -99,7 +120,14 @@ authRoutes.delete("/session", optionalAuthMiddleware, requireAuthMiddleware, asy
 
 export const meRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-meRoutes.get("/", optionalAuthMiddleware, requireAuthMiddleware, async (c) => {
+meRoutes.get("/", 
+  operation({
+    tag: "Auth",
+    summary: "Returns the authenticated actor, permitted roles, and selected role.",
+    description: "Returns the authenticated actor, permitted roles, and selected role.",
+    response: meResponseSchema,
+  }),
+  optionalAuthMiddleware, requireAuthMiddleware, async (c) => {
   const actor = c.get("actor");
   if (!actor) {
     return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");

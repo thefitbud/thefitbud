@@ -1,3 +1,8 @@
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { and, desc, eq, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -63,6 +68,15 @@ export const invitationRoutes = new Hono<{
 
 invitationRoutes.post(
   "/",
+  operation({
+    tag: "Invitations",
+    summary: "Invitations operation for POST /invitations.",
+    description: "Invitations operation for POST /invitations.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createInvitationRequestSchema,
+    response: createInvitationResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -207,6 +221,17 @@ invitationRoutes.post(
 
 invitationRoutes.get(
   "/",
+  operation({
+    tag: "Invitations",
+    summary: "Invitations operation for GET /invitations.",
+    description: "Invitations operation for GET /invitations.",
+    roles: ["trainer"],
+    parameters: [
+      limitParameter({ defaultValue: 20, maximum: 1 }),
+      cursorParameter(),
+    ],
+    response: invitationListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -281,6 +306,13 @@ invitationRoutes.get(
 
 invitationRoutes.get(
   "/:invitationId",
+  operation({
+    tag: "Invitations",
+    summary: "Invitations operation for GET /invitations/:invitationId.",
+    description: "Invitations operation for GET /invitations/:invitationId.",
+    roles: ["trainer"],
+    response: invitationSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -328,7 +360,16 @@ invitationRoutes.get(
  * Accept an invitation. Creates/links the FitBud user from the Firebase bearer
  * token when the trainee does not yet exist.
  */
-invitationRoutes.post("/accept", async (c) => {
+invitationRoutes.post("/accept", 
+  operation({
+    tag: "Invitations",
+    summary: "Accepts an invitation with a Firebase bearer token and links or creates the trainee.",
+    description: "Accepts an invitation with a Firebase bearer token and links or creates the trainee.",
+    security: "bearer",
+    body: acceptInvitationRequestSchema,
+    response: acceptInvitationResponseSchema,
+  }),
+  async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = acceptInvitationRequestSchema.safeParse(body);
   if (!parsed.success) {

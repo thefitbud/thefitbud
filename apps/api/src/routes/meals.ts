@@ -1,3 +1,7 @@
+import {
+  operation,
+  dateWindowParameters,
+} from "../openapi/document";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -188,6 +192,15 @@ function serializePhotoIntent(
 
 mealRoutes.post(
   "/relationships/:relationshipId/assignments/generate",
+  operation({
+    tag: "Meals",
+    summary: "Meals operation for POST /meals/relationships/:relationshipId/assignments/generate.",
+    description: "Meals operation for POST /meals/relationships/:relationshipId/assignments/generate.",
+    roles: ["trainer", "trainee"],
+    idempotency: true,
+    body: generateMealAssignmentsRequestSchema,
+    response: generateMealAssignmentsResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -364,6 +377,16 @@ mealRoutes.post(
 
 mealRoutes.get(
   "/relationships/:relationshipId/assignments",
+  operation({
+    tag: "Meals",
+    summary: "Meals operation for GET /meals/relationships/:relationshipId/assignments.",
+    description: "Meals operation for GET /meals/relationships/:relationshipId/assignments.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      ...dateWindowParameters(),
+    ],
+    response: mealAssignmentListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -440,6 +463,16 @@ mealRoutes.get(
 
 mealRoutes.get(
   "/relationships/:relationshipId/compliance",
+  operation({
+    tag: "Meals",
+    summary: "Meals operation for GET /meals/relationships/:relationshipId/compliance.",
+    description: "Meals operation for GET /meals/relationships/:relationshipId/compliance.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      ...dateWindowParameters(),
+    ],
+    response: mealComplianceSummaryResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -528,6 +561,13 @@ mealRoutes.get(
 
 mealRoutes.get(
   "/assignments/:assignmentId",
+  operation({
+    tag: "Meals",
+    summary: "Meals operation for GET /meals/assignments/:assignmentId.",
+    description: "Meals operation for GET /meals/assignments/:assignmentId.",
+    roles: ["trainer", "trainee"],
+    response: mealAssignmentSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -754,6 +794,16 @@ async function recordCompliance(
 
 mealRoutes.post(
   "/assignments/:assignmentId/confirm",
+  operation({
+    tag: "Meals",
+    summary: "Meals operation for POST /meals/assignments/:assignmentId/confirm.",
+    description: "Meals operation for POST /meals/assignments/:assignmentId/confirm.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: confirmMealRequestSchema,
+    response: mealComplianceSchema,
+    errors: [{ status: 422, description: "A required meal photo was missing or invalid." }],
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -778,6 +828,15 @@ mealRoutes.post(
 
 mealRoutes.post(
   "/assignments/:assignmentId/deviate",
+  operation({
+    tag: "Meals",
+    summary: "Meals operation for POST /meals/assignments/:assignmentId/deviate.",
+    description: "Meals operation for POST /meals/assignments/:assignmentId/deviate.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: deviateMealRequestSchema,
+    response: mealComplianceSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -804,6 +863,15 @@ mealRoutes.post(
 
 mealRoutes.post(
   "/assignments/:assignmentId/skip",
+  operation({
+    tag: "Meals",
+    summary: "Meals operation for POST /meals/assignments/:assignmentId/skip.",
+    description: "Meals operation for POST /meals/assignments/:assignmentId/skip.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: skipMealRequestSchema,
+    response: mealComplianceSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),

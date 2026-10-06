@@ -1,3 +1,9 @@
+import { z } from "zod";
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { and, eq, gt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -33,6 +39,17 @@ export const libraryRoutes = new Hono<{
 
 libraryRoutes.get(
   "/exercises",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for GET /libraries/exercises.",
+    description: "Libraries operation for GET /libraries/exercises.",
+    roles: ["trainer"],
+    parameters: [
+      limitParameter({ defaultValue: 50, maximum: 10 }),
+      cursorParameter(),
+    ],
+    response: exerciseLibraryListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -90,6 +107,15 @@ libraryRoutes.get(
 
 libraryRoutes.post(
   "/exercises",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for POST /libraries/exercises.",
+    description: "Libraries operation for POST /libraries/exercises.",
+    roles: ["trainer"],
+    body: createExerciseLibraryItemRequestSchema,
+    successStatus: [201],
+    response: exerciseLibraryItemSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -145,6 +171,14 @@ libraryRoutes.post(
 
 libraryRoutes.put(
   "/exercises/:itemId",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for PUT /libraries/exercises/:itemId.",
+    description: "Libraries operation for PUT /libraries/exercises/:itemId.",
+    roles: ["trainer"],
+    body: updateExerciseLibraryItemRequestSchema,
+    response: exerciseLibraryItemSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -220,6 +254,13 @@ libraryRoutes.put(
 
 libraryRoutes.delete(
   "/exercises/:itemId",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for DELETE /libraries/exercises/:itemId.",
+    description: "Libraries operation for DELETE /libraries/exercises/:itemId.",
+    roles: ["trainer"],
+    response: z.object({ deleted: z.literal(true) }),
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -259,6 +300,17 @@ libraryRoutes.delete(
 
 libraryRoutes.get(
   "/foods",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for GET /libraries/foods.",
+    description: "Libraries operation for GET /libraries/foods.",
+    roles: ["trainer"],
+    parameters: [
+      limitParameter({ defaultValue: 50, maximum: 10 }),
+      cursorParameter(),
+    ],
+    response: foodLibraryListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -316,6 +368,15 @@ libraryRoutes.get(
 
 libraryRoutes.post(
   "/foods",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for POST /libraries/foods.",
+    description: "Libraries operation for POST /libraries/foods.",
+    roles: ["trainer"],
+    body: createFoodLibraryItemRequestSchema,
+    successStatus: [201],
+    response: foodLibraryItemSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -371,6 +432,14 @@ libraryRoutes.post(
 
 libraryRoutes.put(
   "/foods/:itemId",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for PUT /libraries/foods/:itemId.",
+    description: "Libraries operation for PUT /libraries/foods/:itemId.",
+    roles: ["trainer"],
+    body: updateFoodLibraryItemRequestSchema,
+    response: foodLibraryItemSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -442,6 +511,13 @@ libraryRoutes.put(
 
 libraryRoutes.delete(
   "/foods/:itemId",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for DELETE /libraries/foods/:itemId.",
+    description: "Libraries operation for DELETE /libraries/foods/:itemId.",
+    roles: ["trainer"],
+    response: z.object({ deleted: z.literal(true) }),
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
