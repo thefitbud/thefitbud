@@ -12,6 +12,7 @@ Read the applicable source before planning:
 6. FitBud Conceptual API Contract in Confluence for API behavior and cross-client contracts.
 7. FitBud Conceptual Database Schema in Confluence for data ownership, relationships, and invariants.
 8. Repository contracts, code, Drizzle schema, migrations, and tests for implemented behavior.
+Reconcile the current task, repository history, the authoritative FitBud docs above, and newer explicit product decisions. Investigate when they disagree. When an accepted decision changes the documented model, update the authoritative doc. Do not silently invent a resolution.
 When these sources conflict, stop and report the conflict. Do not silently select an interpretation.
 Context loading rule
 Read only the pages needed for the task:
@@ -133,6 +134,30 @@ For each task:
 When a coherent slice is complete enough to treat as locked, commit it and push it to the remote. Commit only that slice. Do not include unrelated dirty working-tree changes. Do not commit secrets.
 Before starting a task, fetch when the branch tracks a remote. After a meaningful completed change, commit it and push that commit to the tracked remote. Keep the existing safety limits: no force push, no skipped hooks, no secrets, and no amend of a pushed commit.
 Session plans are temporary. Do not add a permanent plan file unless a task explicitly requires a multi-session tracked plan.
+Branching policy
+FitBud is one monorepo with shared `@fitbud/contracts` used by the API, both apps, the API client, and core. A coherent slice is often a vertical cut across those packages, verified together. One developer plus agents integrate on a single line.
+
+Use short-lived feature branches from the latest `main`, merged back with `--no-ff` when the slice is coherent. Use a temporary stacked branch only when the child truly depends on unfinished parent work. Record that parent in the branch or PR description. Merge the child into the parent, then merge the parent into `main`. Do not keep permanent stacks.
+
+Do not keep permanent `work/backend`, `work/trainer-web`, or `work/mobile` workstreams. Those directories are not ownership boundaries. Later slices already span `apps/api`, `packages/contracts`, `packages/api-client`, `apps/trainer-web`, and `apps/mobile` together. Cut a branch by dependency and by what can be verified together. One branch may change the API, contracts, and trainer web. An isolated API or migration change may stay in the API. Do not split one feature across apps only because the directories differ.
+
+Before creating or switching branches, inspect:
+- `git status --short --branch`
+- `git branch -vv`
+- `git log --oneline --decorate -10`
+- `git fetch origin --prune`
+
+You are on the correct branch when those commands show the branch you intend, it tracks the expected remote when it has one, and its recent history is the work this task continues.
+
+Reuse the current branch when it is the intentional home of this same coherent work and it is not a completed shared branch that should stay untouched.
+
+Create a new feature branch from the latest `main` when the task is new, the current branch is another completed or unrelated task, or mixing the work would tangle unrelated product changes.
+
+Stack only for a real unfinished dependency. Do not create a permanent chain.
+
+Merge a feature branch into `main`. When the branch is stacked, merge it into its temporary parent, then merge that parent into `main`. There is no workstream-to-`main` path.
+
+Never start feature work from a stale branch without an explicit reason. Never hop branches silently. Never force-push. Never rewrite shared history. Never mix unrelated work into a locked slice. Never keep parallel backend and frontend copies of one feature.
 Plan format
 Use this compact format:
 Outcome
