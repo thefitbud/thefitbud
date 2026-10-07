@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CheckinCadence,
@@ -8,10 +8,14 @@ import type {
   OnboardingFormResponse,
   OnboardingFormVersion,
   MealPhotoRequirement,
+  PaymentFrequency,
+  Subscription,
 } from "@fitbud/contracts";
+import { paymentFrequencySchema } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { coachingPrefillFromIntake } from "../lib/intakePrefill";
+import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
 
 const DEFAULT_FORM = {
@@ -27,6 +31,13 @@ const DEFAULT_FORM = {
   requireBodyWeight: false,
   requireProgressPhotos: false,
   requireSessionRpe: false,
+};
+
+const EMPTY_SUBSCRIPTION = {
+  planName: "",
+  paymentFrequency: "monthly" as PaymentFrequency,
+  startsOn: "",
+  renewsOn: "",
 };
 
 function configurationStatusLabel(
@@ -52,6 +63,7 @@ function configurationStatusLabel(
 
 export function ConfigureCoachingPage() {
   const { relationshipId = "" } = useParams();
+  const { reloadWorkspace } = useOutletContext<WorkspaceOutletContext>();
   const [relationship, setRelationship] = useState<CoachingRelationship | null>(
     null,
   );
@@ -64,6 +76,13 @@ export function ConfigureCoachingPage() {
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [subscriptionForm, setSubscriptionForm] = useState(EMPTY_SUBSCRIPTION);
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
+  const [subscriptionMessage, setSubscriptionMessage] = useState<string | null>(
+    null,
+  );
+  const [savingSubscription, setSavingSubscription] = useState(false);
 
   const applyConfiguration = useCallback((config: CoachingConfiguration) => {
     setConfiguration(config);
@@ -83,6 +102,20 @@ export function ConfigureCoachingPage() {
     });
   }, []);
 
+  const applySubscription = useCallback((value: Subscription | null) => {
+    setSubscription(value);
+    setSubscriptionForm(
+      value
+        ? {
+            planName: value.planName,
+            paymentFrequency: value.paymentFrequency,
+            startsOn: value.startsOn,
+            renewsOn: value.renewsOn,
+          }
+        : EMPTY_SUBSCRIPTION,
+    );
+  }, []);
+
   const load = useCallback(async () => {
     if (!relationshipId) return;
     setLoading(true);
@@ -91,7 +124,8 @@ export function ConfigureCoachingPage() {
       const rel = await apiClient.getRelationship(relationshipId);
       setRelationship(rel);
 
-      const [configResult, intakeResult, definitionResult] = await Promise.all([
+      const [configResult, intakeResult, definitionResult, subscriptionResult] =
+        await Promise.all([
         apiClient.getCoachingConfiguration(relationshipId).then(
           (value) => ({ ok: true as const, value }),
           (err: unknown) => ({ ok: false as const, err }),
@@ -103,6 +137,10 @@ export function ConfigureCoachingPage() {
         apiClient.getCurrentOnboardingForm(relationshipId).then(
           (value) => ({ ok: true as const, value }),
           () => ({ ok: false as const }),
+        ),
+        apiClient.getSubscription(relationshipId).then(
+          (value) => ({ ok: true as const, value }),
+          (err: unknown) => ({ ok: false as const, err }),
         ),
       ]);
 
@@ -131,6 +169,23 @@ export function ConfigureCoachingPage() {
       } else {
         throw configResult.err;
       }
+
+      if (subscriptionResult.ok) {
+        applySubscription(subscriptionResult.value);
+        setSubscriptionError(null);
+      } else if (
+        subscriptionResult.err instanceof ApiClientError &&
+        subscriptionResult.err.status === 404
+      ) {
+        applySubscription(null);
+        setSubscriptionError(null);
+      } else {
+        setSubscriptionError(
+          subscriptionResult.err instanceof ApiClientError
+            ? subscriptionResult.err.message
+            : "Could not load the subscription.",
+        );
+      }
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -140,7 +195,7 @@ export function ConfigureCoachingPage() {
     } finally {
       setLoading(false);
     }
-  }, [applyConfiguration, relationshipId]);
+  }, [applyConfiguration, applySubscription, relationshipId]);
 
   useEffect(() => {
     void load();
@@ -240,6 +295,40 @@ export function ConfigureCoachingPage() {
     }
   }
 
+  async function saveSubscription(event: FormEvent) {
+    event.preventDefault();
+    if (!relationshipId || relationship?.status === "ended") return;
+    setSavingSubscription(true);
+    setSubscriptionError(null);
+    setSubscriptionMessage(null);
+    try {
+      const saved = await apiClient.saveSubscription(
+        relationshipId,
+        {
+          expectedVersion: subscription?.versionNumber ?? 0,
+          planName: subscriptionForm.planName.trim(),
+          paymentFrequency: subscriptionForm.paymentFrequency,
+          startsOn: subscriptionForm.startsOn,
+          renewsOn: subscriptionForm.renewsOn,
+        },
+        createIdempotencyKey(),
+      );
+      applySubscription(saved);
+      setSubscriptionMessage(
+        `Saved subscription version ${saved.versionNumber}. Renewal ${saved.renewalState.replace(/_/g, " ")}.`,
+      );
+      reloadWorkspace();
+    } catch (err) {
+      setSubscriptionError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not save the subscription.",
+      );
+    } finally {
+      setSavingSubscription(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="workspace-page plan-config-page" aria-busy="true">
@@ -322,6 +411,113 @@ export function ConfigureCoachingPage() {
           for this client next. These baseline expectations stay as recorded.
         </p>
       ) : null}
+
+      <form className="plan-card" onSubmit={(event) => void saveSubscription(event)}>
+        <p className="plan-kicker">Subscription</p>
+        <h2>Latest subscription</h2>
+        <p className="muted">
+          Plan name, payment frequency, start, and renewal. Saving stores a new
+          version. Renewal state is derived. No amount is collected.
+        </p>
+        {subscription ? (
+          <p className="lede">
+            Version {subscription.versionNumber}. Renewal{" "}
+            {subscription.renewalState.replace(/_/g, " ")}.
+          </p>
+        ) : (
+          <p className="lede">No subscription version yet.</p>
+        )}
+        <div className="plan-form">
+          <label className="field">
+            <span>Plan name</span>
+            <input
+              type="text"
+              name="planName"
+              maxLength={120}
+              required
+              value={subscriptionForm.planName}
+              disabled={savingSubscription || relationship.status === "ended"}
+              onChange={(event) =>
+                setSubscriptionForm((current) => ({
+                  ...current,
+                  planName: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Payment frequency</span>
+            <select
+              name="paymentFrequency"
+              value={subscriptionForm.paymentFrequency}
+              disabled={savingSubscription || relationship.status === "ended"}
+              onChange={(event) =>
+                setSubscriptionForm((current) => ({
+                  ...current,
+                  paymentFrequency: event.target.value as PaymentFrequency,
+                }))
+              }
+            >
+              {paymentFrequencySchema.options.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Starts on</span>
+            <input
+              type="date"
+              name="startsOn"
+              required
+              value={subscriptionForm.startsOn}
+              disabled={savingSubscription || relationship.status === "ended"}
+              onChange={(event) =>
+                setSubscriptionForm((current) => ({
+                  ...current,
+                  startsOn: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Renews on</span>
+            <input
+              type="date"
+              name="renewsOn"
+              required
+              value={subscriptionForm.renewsOn}
+              disabled={savingSubscription || relationship.status === "ended"}
+              onChange={(event) =>
+                setSubscriptionForm((current) => ({
+                  ...current,
+                  renewsOn: event.target.value,
+                }))
+              }
+            />
+          </label>
+        </div>
+        {subscriptionError ? (
+          <p className="form-error" role="alert">
+            {subscriptionError}
+          </p>
+        ) : null}
+        {subscriptionMessage ? (
+          <p className="banner-info" role="status">
+            {subscriptionMessage}
+          </p>
+        ) : null}
+        <div className="button-row">
+          <button
+            type="submit"
+            className="button-primary"
+            disabled={savingSubscription || relationship.status === "ended"}
+          >
+            {savingSubscription ? "Saving…" : "Save subscription"}
+          </button>
+        </div>
+      </form>
 
       <div className="plan-config-split">
         <aside className="plan-card" aria-labelledby="intake-context-heading">

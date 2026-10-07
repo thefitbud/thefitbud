@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CreateInvitationResponse,
+  OnboardingFormTemplateSummary,
   OnboardingFormVersion,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
@@ -14,26 +15,82 @@ export function AddClientPage() {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [templates, setTemplates] = useState<OnboardingFormTemplateSummary[]>([]);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreateInvitationResponse | null>(null);
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void apiClient
-      .getCurrentOnboardingForm()
-      .then((value) => {
-        if (!cancelled) setDefinition(value);
-      })
-      .catch(() => {
-        if (!cancelled) setDefinition(null);
-      });
+    void (async () => {
+      try {
+        const items: OnboardingFormTemplateSummary[] = [];
+        let cursor: string | undefined;
+        for (let page = 0; page < 10; page += 1) {
+          const result = await apiClient.listOnboardingFormTemplates({
+            cursor,
+            limit: 50,
+          });
+          items.push(...result.items);
+          if (!result.nextCursor) break;
+          cursor = result.nextCursor;
+        }
+        if (!cancelled) {
+          setTemplates(items);
+          setTemplatesError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTemplates([]);
+          setTemplatesError(
+            err instanceof ApiClientError
+              ? err.message
+              : "Could not load onboarding templates.",
+          );
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!templateId) {
+      setDefinition(null);
+      setPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    void apiClient
+      .getOnboardingFormTemplate(templateId)
+      .then((detail) => {
+        if (cancelled) return;
+        const latest =
+          detail.versions.find((version) => version.id === detail.latestVersionId) ??
+          [...detail.versions].sort((left, right) => right.version - left.version)[0] ??
+          null;
+        setDefinition(latest);
+        setPreviewError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setDefinition(null);
+        setPreviewError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not load that template.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [templateId]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,6 +102,7 @@ export function AddClientPage() {
           recipientEmail: email.trim(),
           recipientDisplayName: displayName.trim() || undefined,
           recipientWhatsapp: whatsapp.trim() || undefined,
+          ...(templateId ? { onboardingFormTemplateId: templateId } : {}),
         },
         createIdempotencyKey(),
       );
@@ -168,6 +226,7 @@ export function AddClientPage() {
                 setEmail("");
                 setDisplayName("");
                 setWhatsapp("");
+                setTemplateId("");
                 setCopied(false);
               }}
             >
@@ -186,8 +245,9 @@ export function AddClientPage() {
           <h1>Add Client</h1>
           <p className="lede">
             Invite the client with a WhatsApp number so Message in their
-            workspace can remind them to accept and finish onboarding. This
-            invite uses the current onboarding form.
+            workspace can remind them to accept and finish onboarding. Leave
+            the template empty to keep the server’s current form resolution, or
+            pin one existing template.
           </p>
         </div>
       </header>
@@ -240,6 +300,27 @@ export function AddClientPage() {
           Used for the Message shortcut in this client’s workspace. Ten-digit
           Indian numbers are stored with country code 91.
         </p>
+        <label className="field">
+          <span>Onboarding template</span>
+          <select
+            name="onboardingFormTemplateId"
+            value={templateId}
+            onChange={(event) => setTemplateId(event.target.value)}
+            disabled={submitting}
+          >
+            <option value="">Resolved form</option>
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name} ({template.ownership}, v{template.latestVersionNumber})
+              </option>
+            ))}
+          </select>
+        </label>
+        {templatesError ? (
+          <p className="form-error" role="alert">
+            {templatesError}
+          </p>
+        ) : null}
         {error ? (
           <p className="form-error" role="alert">
             {error}
@@ -263,15 +344,21 @@ export function AddClientPage() {
             </h2>
             <p className="lede">
               {definition
-                ? `This invite uses the current form (${definition.key}, version ${definition.version}). Workout, nutrition, onboarding, and coaching templates stay in Templates until a trainer can select one here.`
-                : "The current platform form is attached when the trainee accepts."}
+                ? `Latest version of the selected template (${definition.key}, version ${definition.version}). The invitation pins that version.`
+                : "No template selected. Create the invitation without a template id so the server pins the resolved form."}
             </p>
           </div>
         </div>
+        {previewError ? (
+          <p className="form-error" role="alert">
+            {previewError}
+          </p>
+        ) : null}
         {fields.length === 0 ? (
           <p className="muted">
-            The current intake definition could not be loaded. The trainee still
-            receives the platform onboarding form after accepting.
+            {templateId
+              ? "This template’s latest version could not be previewed."
+              : "Select a template to preview its latest questions. An empty choice does not send a template id."}
           </p>
         ) : (
           <ul className="intake-preview">
@@ -287,11 +374,6 @@ export function AddClientPage() {
             ))}
           </ul>
         )}
-        <p className="muted">
-          Template libraries for onboarding forms, workouts, nutrition, and
-          coaching configuration come later. Until then the platform form above
-          is what the trainee completes.
-        </p>
       </section>
     </section>
   );

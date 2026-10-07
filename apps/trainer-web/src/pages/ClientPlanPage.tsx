@@ -8,23 +8,25 @@ import {
 } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  CoachingConfiguration,
-  EffectivePlanResponse,
-  PlanTemplateSummary,
-  PlanVersion,
-  WorkoutDay,
-  WorkoutExercise,
+import {
+  planVersionStatusSchema,
+  type PlanTemplateSummary,
+  type PlanVersion,
+  type PlanVersionStatus,
+  type PlanWithVersions,
+  type WorkoutDay,
+  type WorkoutExercise,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
+import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
 import { createIdempotencyKey } from "../lib/idempotency";
+import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
 
 function newId(): string {
   return crypto.randomUUID();
 }
 
-type WorkspaceOutlet = { refreshEpoch?: number };
 type PlanSurface = "summary" | "builder";
 
 function formatWhen(value: string | null | undefined): string {
@@ -113,12 +115,15 @@ function IconAdjust() {
 
 export function ClientPlanPage() {
   const { relationshipId = "" } = useParams();
-  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
-  const [effective, setEffective] = useState<EffectivePlanResponse | null>(
-    null,
-  );
-  const [configuration, setConfiguration] =
-    useState<CoachingConfiguration | null>(null);
+  const {
+    workspace,
+    workspaceLoading,
+    workspaceError,
+    refreshEpoch = 0,
+    reloadWorkspace,
+  } = useOutletContext<WorkspaceOutletContext>();
+  const effective = workspace?.plan ?? null;
+  const configuration = workspace?.configuration.configuration ?? null;
   const [templates, setTemplates] = useState<PlanTemplateSummary[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [draftPreview, setDraftPreview] = useState<PlanVersion | null>(null);
@@ -130,67 +135,52 @@ export function ClientPlanPage() {
   const [exerciseName, setExerciseName] = useState("Squat");
   const [reps, setReps] = useState(5);
   const [loadLabel, setLoadLabel] = useState("RPE 7");
-  const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const didInitSurface = useRef(false);
 
-  useEffect(() => {
-    didInitSurface.current = false;
-  }, [relationshipId]);
-
   const load = useCallback(async () => {
     if (!relationshipId) return;
-    setLoading(true);
     setError(null);
-    let nextVersion: PlanVersion | null = null;
     try {
-      const [result, templatePage, configResult] = await Promise.all([
-        apiClient.getEffectivePlan(relationshipId),
-        apiClient.listPlanTemplates(),
-        apiClient.getCoachingConfiguration(relationshipId).then(
-          (value) => value,
-          (err: unknown) => {
-            if (err instanceof ApiClientError && err.status === 404) {
-              return null;
-            }
-            throw err;
-          },
-        ),
-      ]);
-      setEffective(result);
-      setConfiguration(configResult);
+      const templatePage = await apiClient.listPlanTemplates();
       setTemplates(templatePage.items);
       setSelectedTemplateId(
         (current) => current || templatePage.items[0]?.id || "",
       );
-      if (result.plan) {
-        setTitle(result.plan.title);
-      }
-      nextVersion = result.version;
-      const firstDay = result.version?.content.workoutDays[0];
-      if (firstDay) {
-        setSelectedDayId((current) => current || firstDay.id);
-      }
     } catch (err) {
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not load effective plan.",
+          : "Could not load plan templates.",
       );
-    } finally {
-      setLoading(false);
-      if (!didInitSurface.current) {
-        didInitSurface.current = true;
-        setSurface(nextVersion ? "summary" : "builder");
-      }
     }
   }, [relationshipId]);
 
   useEffect(() => {
     void load();
   }, [load, refreshEpoch]);
+
+  useEffect(() => {
+    didInitSurface.current = false;
+    setSelectedDayId("");
+    setDraftPreview(null);
+  }, [relationshipId]);
+
+  useEffect(() => {
+    if (workspaceLoading || !workspace) return;
+    if (workspace.header.relationshipId !== relationshipId) return;
+    if (effective?.plan) setTitle(effective.plan.title);
+    const firstDay = effective?.version?.content.workoutDays[0];
+    if (firstDay) {
+      setSelectedDayId((current) => current || firstDay.id);
+    }
+    if (!didInitSurface.current) {
+      didInitSurface.current = true;
+      setSurface(effective?.version ? "summary" : "builder");
+    }
+  }, [effective, relationshipId, workspace, workspaceLoading]);
 
   const version: PlanVersion | null = effective?.version ?? null;
   const sourceVersion = draftPreview ?? version;
@@ -391,6 +381,8 @@ export function ClientPlanPage() {
         `Published plan version ${publishVersion.versionNumber} and generated assignments.`,
       );
       setSurface("summary");
+      setDraftPreview(null);
+      reloadWorkspace();
       await load();
     } catch (err) {
       setError(
@@ -414,9 +406,14 @@ export function ClientPlanPage() {
       ) : null}
       {message ? <p className="form-success">{message}</p> : null}
 
-      {loading ? (
+      <PlanVersionList
+        relationshipId={relationshipId}
+        refreshEpoch={refreshEpoch}
+      />
+
+      {workspaceLoading && !workspace ? (
         <p className="muted">Loading plan…</p>
-      ) : showSummary && version ? (
+      ) : workspaceError && !workspace ? null : showSummary && version ? (
         <div className="plan-tab">
           <section className="plan-card plan-effective" aria-labelledby="effective-plan-heading">
             <div className="plan-card-head">
@@ -833,5 +830,176 @@ export function ClientPlanPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function PlanVersionList({
+  relationshipId,
+  refreshEpoch,
+}: {
+  relationshipId: string;
+  refreshEpoch: number;
+}) {
+  const [versionStatus, setVersionStatus] = useState<"" | PlanVersionStatus>("");
+  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveTo, setEffectiveTo] = useState("");
+  const [items, setItems] = useState<PlanWithVersions[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (cursor?: string | null) => {
+      if (!relationshipId) return;
+      const appending = Boolean(cursor);
+      if (appending) setLoadingMore(true);
+      else setLoading(true);
+      setError(null);
+      try {
+        const result = await apiClient.listPlans(relationshipId, {
+          cursor: cursor ?? undefined,
+          limit: 20,
+          versionStatus: versionStatus || undefined,
+          effectiveFrom: civilDateStart(effectiveFrom),
+          effectiveTo: civilDateEnd(effectiveTo),
+        });
+        setItems((current) =>
+          appending ? [...current, ...result.items] : result.items,
+        );
+        setNextCursor(result.nextCursor);
+      } catch (err) {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not load plan versions.",
+        );
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [effectiveFrom, effectiveTo, relationshipId, versionStatus],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load, refreshEpoch]);
+
+  const filtersActive = Boolean(versionStatus || effectiveFrom || effectiveTo);
+
+  return (
+    <section className="plan-card plan-versions" aria-labelledby="plan-versions-heading">
+      <div className="plan-card-head">
+        <div>
+          <p className="plan-kicker">Versions</p>
+          <h2 id="plan-versions-heading">Plan versions</h2>
+          <p className="muted">
+            Filter by status and effective dates. Clearing the filters returns
+            the full list.
+          </p>
+        </div>
+      </div>
+      <form
+        className="workspace-filters"
+        aria-label="Plan version filters"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <label className="field">
+          <span>Status</span>
+          <select
+            value={versionStatus}
+            onChange={(event) =>
+              setVersionStatus(event.target.value as "" | PlanVersionStatus)
+            }
+          >
+            <option value="">Any status</option>
+            {planVersionStatusSchema.options.map((option) => (
+              <option key={option} value={option}>
+                {versionStatusLabel(option)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Effective from</span>
+          <input
+            type="date"
+            value={effectiveFrom}
+            onChange={(event) => setEffectiveFrom(event.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Effective to</span>
+          <input
+            type="date"
+            value={effectiveTo}
+            onChange={(event) => setEffectiveTo(event.target.value)}
+          />
+        </label>
+        {filtersActive ? (
+          <button
+            type="button"
+            className="button-ghost"
+            onClick={() => {
+              setVersionStatus("");
+              setEffectiveFrom("");
+              setEffectiveTo("");
+            }}
+          >
+            Clear filters
+          </button>
+        ) : null}
+      </form>
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {loading ? <p className="muted">Loading versions…</p> : null}
+      {!loading && items.length === 0 && !error ? (
+        <p className="workspace-empty" role="status">
+          No plan versions for these filters.
+        </p>
+      ) : null}
+      {items.length > 0 ? (
+        <ul className="workspace-list">
+          {items.flatMap((row) =>
+            row.versions.map((item) => (
+              <li key={item.id} className="workspace-row">
+                <div className="workspace-row-copy">
+                  <p className="workspace-row-title">
+                    {row.plan.title} · v{item.versionNumber}
+                  </p>
+                  <p className="workspace-row-meta">
+                    <span className={`status-pill status-${item.status}`}>
+                      {versionStatusLabel(item.status)}
+                    </span>
+                    <span>
+                      Effective {formatWhen(item.effectiveFrom)}
+                      {item.effectiveTo
+                        ? ` – ${formatWhen(item.effectiveTo)}`
+                        : ""}
+                    </span>
+                  </p>
+                </div>
+              </li>
+            )),
+          )}
+        </ul>
+      ) : null}
+      {nextCursor ? (
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={loadingMore}
+          onClick={() => {
+            void load(nextCursor);
+          }}
+        >
+          {loadingMore ? "Loading…" : "Load more"}
+        </button>
+      ) : null}
+    </section>
   );
 }

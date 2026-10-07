@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  MealComplianceSummaryResponse,
-  WorkoutAdherenceResponse,
+import {
+  checkinStatusSchema,
+  mealAssignmentStatusSchema,
+  workoutAssignmentStatusSchema,
+  type WorkspaceActivityItem,
+  type WorkspaceActivityType,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
+import type { WorkspaceOutletContext } from "./workspaceContext";
 
 function localDateUtc(offsetDays = 0): string {
   const date = new Date();
@@ -18,48 +22,81 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
-type WorkspaceOutlet = { refreshEpoch?: number };
+function typeLabel(type: WorkspaceActivityType): string {
+  if (type === "workout") return "Workout";
+  if (type === "meal") return "Meal";
+  return "Check-in";
+}
+
+function statesFor(type: WorkspaceActivityType): readonly string[] {
+  if (type === "workout") return workoutAssignmentStatusSchema.options;
+  if (type === "meal") return mealAssignmentStatusSchema.options;
+  return checkinStatusSchema.options;
+}
 
 export function ClientActivityPage() {
   const { relationshipId = "" } = useParams();
-  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
-  const fromDate = useMemo(() => localDateUtc(-14), []);
-  const toDate = useMemo(() => localDateUtc(7), []);
-  const [adherence, setAdherence] = useState<WorkoutAdherenceResponse | null>(
-    null,
-  );
-  const [meals, setMeals] = useState<MealComplianceSummaryResponse | null>(
-    null,
-  );
+  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutletContext>();
+  const generateFrom = useMemo(() => localDateUtc(-14), []);
+  const generateTo = useMemo(() => localDateUtc(7), []);
+  const [activityType, setActivityType] = useState<WorkspaceActivityType>("workout");
+  const [state, setState] = useState("");
+  const [occurredFrom, setOccurredFrom] = useState("");
+  const [occurredTo, setOccurredTo] = useState("");
+  const [items, setItems] = useState<WorkspaceActivityItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!relationshipId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [workoutResult, mealResult] = await Promise.all([
-        apiClient.getWorkoutAdherence(relationshipId, { fromDate, toDate }),
-        apiClient.getMealCompliance(relationshipId, { fromDate, toDate }),
-      ]);
-      setAdherence(workoutResult);
-      setMeals(mealResult);
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load activity.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [relationshipId, fromDate, toDate]);
+  const stateOptions = statesFor(activityType);
+
+  const load = useCallback(
+    async (cursor?: string | null) => {
+      if (!relationshipId) return;
+      const appending = Boolean(cursor);
+      if (appending) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const result = await apiClient.listWorkspaceActivity(relationshipId, {
+          type: activityType,
+          state: state || undefined,
+          occurredFrom: occurredFrom || undefined,
+          occurredTo: occurredTo || undefined,
+          cursor: cursor ?? undefined,
+          limit: 30,
+        });
+        setItems((current) =>
+          appending ? [...current, ...result.items] : result.items,
+        );
+        setNextCursor(result.nextCursor);
+      } catch (err) {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not load activity.",
+        );
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [activityType, occurredFrom, occurredTo, relationshipId, state],
+  );
 
   useEffect(() => {
     void load();
   }, [load, refreshEpoch]);
+
+  function changeType(next: WorkspaceActivityType) {
+    setActivityType(next);
+    setState("");
+  }
 
   async function generateAssignments() {
     if (!relationshipId) return;
@@ -70,7 +107,7 @@ export function ClientActivityPage() {
       try {
         await apiClient.generateWorkoutAssignments(
           relationshipId,
-          { fromDate, toDate },
+          { fromDate: generateFrom, toDate: generateTo },
           createIdempotencyKey(),
         );
       } catch (err) {
@@ -83,7 +120,7 @@ export function ClientActivityPage() {
       try {
         await apiClient.generateMealAssignments(
           relationshipId,
-          { fromDate, toDate },
+          { fromDate: generateFrom, toDate: generateTo },
           createIdempotencyKey(),
         );
       } catch (err) {
@@ -109,8 +146,8 @@ export function ClientActivityPage() {
           <p className="workspace-kicker">Execution</p>
           <h2 className="workspace-card-title">Activity</h2>
           <p className="lede">
-            Workout adherence and meal compliance from the same records (
-            {fromDate} to {toDate}).
+            Workout, meal, and check-in rows for this client. Filters are applied
+            on the server.
           </p>
         </div>
         <button
@@ -125,160 +162,120 @@ export function ClientActivityPage() {
         </button>
       </div>
 
+      <form
+        className="workspace-filters"
+        aria-label="Activity filters"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <label className="field">
+          <span>Type</span>
+          <select
+            value={activityType}
+            onChange={(event) =>
+              changeType(event.target.value as WorkspaceActivityType)
+            }
+          >
+            <option value="workout">Workout</option>
+            <option value="meal">Meal</option>
+            <option value="checkin">Check-in</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>State</span>
+          <select value={state} onChange={(event) => setState(event.target.value)}>
+            <option value="">Any state</option>
+            {stateOptions.map((option) => (
+              <option key={option} value={option}>
+                {statusLabel(option)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>From</span>
+          <input
+            type="date"
+            value={occurredFrom}
+            onChange={(event) => setOccurredFrom(event.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>To</span>
+          <input
+            type="date"
+            value={occurredTo}
+            onChange={(event) => setOccurredTo(event.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          className="button-ghost"
+          onClick={() => {
+            setState("");
+            setOccurredFrom("");
+            setOccurredTo("");
+          }}
+        >
+          Clear filters
+        </button>
+      </form>
+
       {error ? (
         <p className="form-error" role="alert">
           {error}
         </p>
       ) : null}
 
-      {loading ? <p className="muted">Loading activity…</p> : null}
-
-      {!loading && adherence ? (
-        <section
-          className="workspace-card"
-          aria-labelledby="workout-adherence-heading"
-        >
-          <div className="workspace-card-head">
-            <div>
-              <p className="workspace-kicker">Workouts</p>
-              <h2 id="workout-adherence-heading" className="workspace-card-title">
-                Assigned sessions
-              </h2>
-              <p className="lede">
-                Assigned sessions and how they were completed in this window.
-              </p>
-            </div>
+      <section className="workspace-card" aria-labelledby="activity-list-heading">
+        <div className="workspace-card-head">
+          <div>
+            <p className="workspace-kicker">{typeLabel(activityType)}</p>
+            <h2 id="activity-list-heading" className="workspace-card-title">
+              {typeLabel(activityType)} activity
+            </h2>
+            <p className="lede">
+              Generate assignments still uses {generateFrom} to {generateTo}.
+            </p>
           </div>
-          <dl className="kpi-row" aria-label="Workout adherence totals">
-            <div className="kpi kpi-success">
-              <dd>{adherence.totals.completed}</dd>
-              <dt>Completed</dt>
-            </div>
-            <div className="kpi kpi-neutral">
-              <dd>{adherence.totals.modified}</dd>
-              <dt>Modified</dt>
-            </div>
-            <div className="kpi kpi-warning">
-              <dd>{adherence.totals.skipped}</dd>
-              <dt>Skipped</dt>
-            </div>
-            <div className="kpi kpi-warning">
-              <dd>{adherence.totals.missed}</dd>
-              <dt>Missed</dt>
-            </div>
-            <div className="kpi kpi-neutral">
-              <dd>{adherence.totals.assigned}</dd>
-              <dt>Assigned</dt>
-            </div>
-            <div className="kpi kpi-info">
-              <dd>{adherence.totals.inProgress}</dd>
-              <dt>In progress</dt>
-            </div>
-          </dl>
+        </div>
 
-          {adherence.items.length === 0 ? (
-            <div className="empty-state">
-              <h3>No workout assignments yet</h3>
-              <p>
-                Publish an effective plan, then generate assignments for this
-                window.
-              </p>
-            </div>
-          ) : (
-            <ul className="activity-list">
-              {adherence.items.map((item) => (
-                <li key={item.assignmentId} className="activity-row">
-                  <div className="workspace-row-copy">
-                    <p className="workspace-row-title">{item.workoutDayName}</p>
-                    <p className="workspace-row-meta">
-                      <span>{item.localDate}</span>
-                      {item.sessionRpe != null ? (
-                        <span>RPE {item.sessionRpe}</span>
-                      ) : null}
-                    </p>
-                  </div>
-                  <span className={`status-pill status-${item.status}`}>
-                    {statusLabel(item.status)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
-
-      {!loading && meals ? (
-        <section
-          className="workspace-card"
-          aria-labelledby="meal-compliance-heading"
-        >
-          <div className="workspace-card-head">
-            <div>
-              <p className="workspace-kicker">Meals</p>
-              <h2 id="meal-compliance-heading" className="workspace-card-title">
-                Meal compliance
-              </h2>
-              <p className="lede">
-                Meal assignments and compliance in the same window.
-              </p>
-            </div>
-          </div>
-          <dl className="kpi-row" aria-label="Meal compliance totals">
-            <div className="kpi kpi-success">
-              <dd>{meals.totals.confirmed}</dd>
-              <dt>Confirmed</dt>
-            </div>
-            <div className="kpi kpi-neutral">
-              <dd>{meals.totals.modified}</dd>
-              <dt>Modified</dt>
-            </div>
-            <div className="kpi kpi-warning">
-              <dd>{meals.totals.skipped}</dd>
-              <dt>Skipped</dt>
-            </div>
-            <div className="kpi kpi-info">
-              <dd>{meals.totals.loggedLater}</dd>
-              <dt>Logged later</dt>
-            </div>
-            <div className="kpi kpi-warning">
-              <dd>{meals.totals.overdue}</dd>
-              <dt>Overdue</dt>
-            </div>
-            <div className="kpi kpi-neutral">
-              <dd>{meals.totals.pending}</dd>
-              <dt>Pending</dt>
-            </div>
-          </dl>
-
-          {meals.items.length === 0 ? (
-            <div className="empty-state">
-              <h3>No meal assignments yet</h3>
-              <p>
-                Publish meal prescriptions on the effective plan, then generate
-                assignments.
-              </p>
-            </div>
-          ) : (
-            <ul className="activity-list">
-              {meals.items.map((item) => (
-                <li key={item.assignmentId} className="activity-row">
-                  <div className="workspace-row-copy">
-                    <p className="workspace-row-title">{item.mealName}</p>
-                    <p className="workspace-row-meta">
-                      <span>{item.localDate}</span>
-                      {item.photoRequired ? <span>Photo required</span> : null}
-                      {item.hasPhotoIntent ? <span>Photo noted</span> : null}
-                    </p>
-                  </div>
-                  <span className={`status-pill status-${item.status}`}>
-                    {statusLabel(item.status)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
+        {loading ? <p className="muted">Loading activity…</p> : null}
+        {!loading && items.length === 0 && !error ? (
+          <p className="workspace-empty" role="status">
+            No {typeLabel(activityType).toLowerCase()} activity for these filters.
+          </p>
+        ) : null}
+        {items.length > 0 ? (
+          <ul className="activity-list">
+            {items.map((item) => (
+              <li key={`${item.type}:${item.id}`} className="activity-row">
+                <div className="workspace-row-copy">
+                  <p className="workspace-row-title">{item.title}</p>
+                  <p className="workspace-row-meta">
+                    <span>{item.localDate}</span>
+                    <span className="workspace-kind">{typeLabel(item.type)}</span>
+                  </p>
+                </div>
+                <span className={`status-pill status-${item.state}`}>
+                  {statusLabel(item.state)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {nextCursor ? (
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={loadingMore}
+            onClick={() => {
+              void load(nextCursor);
+            }}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        ) : null}
+      </section>
     </div>
   );
 }

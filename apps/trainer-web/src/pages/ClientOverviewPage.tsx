@@ -1,27 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
-import type {
-  Checkin,
-  CoachingConfiguration,
-  CoachingRelationship,
-  EffectivePlanResponse,
-  Exception,
-} from "@fitbud/contracts";
-import { apiClient } from "../lib/api";
-
-type WorkspaceOutlet = { refreshEpoch?: number };
-
-const UPCOMING_CHECKIN_STATUSES = new Set(["scheduled", "due", "overdue"]);
-const OPEN_EXCEPTION_STATUSES = new Set([
-  "detected",
-  "active",
-  "acknowledged",
-]);
-
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiClientError ? err.message : fallback;
-}
+import type { RenewalState, WorkspaceActivityItem } from "@fitbud/contracts";
+import type { WorkspaceOutletContext } from "./workspaceContext";
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
@@ -41,105 +20,77 @@ function formatLocalDate(localDate: string): string {
   }).format(date);
 }
 
+function formatWhen(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function renewalLabel(state: RenewalState): string {
+  switch (state) {
+    case "current":
+      return "Renewal current";
+    case "upcoming":
+      return "Renewal upcoming";
+    case "due":
+      return "Renewal due";
+    case "expired":
+      return "Renewal expired";
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
+}
+
+function activityKind(item: WorkspaceActivityItem): string {
+  if (item.type === "workout") return "Workout";
+  if (item.type === "meal") return "Meal";
+  return "Check-in";
+}
+
 export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
-  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
-  const [plan, setPlan] = useState<EffectivePlanResponse | null>(null);
-  const [relationship, setRelationship] = useState<CoachingRelationship | null>(
-    null,
-  );
-  const [configuration, setConfiguration] =
-    useState<CoachingConfiguration | null>(null);
-  const [exceptions, setExceptions] = useState<Exception[] | null>(null);
-  const [checkins, setCheckins] = useState<Checkin[] | null>(null);
-  const [planError, setPlanError] = useState<string | null>(null);
-  const [exceptionsError, setExceptionsError] = useState<string | null>(null);
-  const [checkinsError, setCheckinsError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { workspace, workspaceLoading, workspaceError } =
+    useOutletContext<WorkspaceOutletContext>();
 
-  const load = useCallback(async () => {
-    if (!relationshipId) return;
-    setLoading(true);
-    setPlanError(null);
-    setExceptionsError(null);
-    setCheckinsError(null);
+  if (workspaceLoading && !workspace) {
+    return (
+      <div className="workspace-page workspace-overview" aria-busy="true">
+        <p className="muted">Loading overview…</p>
+      </div>
+    );
+  }
 
-    const [planResult, exceptionResult, checkinResult, relationshipResult, configResult] =
-      await Promise.allSettled([
-        apiClient.getEffectivePlan(relationshipId),
-        apiClient.listExceptions(relationshipId),
-        apiClient.listCheckins(relationshipId),
-        apiClient.getRelationship(relationshipId),
-        apiClient.getCoachingConfiguration(relationshipId),
-      ]);
+  if (!workspace) {
+    return (
+      <div className="workspace-page workspace-overview">
+        <p className="form-error" role="alert">
+          {workspaceError ?? "Could not load this client."}
+        </p>
+      </div>
+    );
+  }
 
-    if (planResult.status === "fulfilled") {
-      setPlan(planResult.value);
-    } else {
-      setPlan(null);
-      setPlanError(errorMessage(planResult.reason, "Could not load effective plan."));
-    }
-
-    if (exceptionResult.status === "fulfilled") {
-      setExceptions(exceptionResult.value.items);
-    } else {
-      setExceptions(null);
-      setExceptionsError(
-        errorMessage(exceptionResult.reason, "Could not load exceptions."),
-      );
-    }
-
-    if (checkinResult.status === "fulfilled") {
-      setCheckins(checkinResult.value.items);
-    } else {
-      setCheckins(null);
-      setCheckinsError(
-        errorMessage(checkinResult.reason, "Could not load check-ins."),
-      );
-    }
-
-    if (relationshipResult.status === "fulfilled") {
-      setRelationship(relationshipResult.value);
-    } else {
-      setRelationship(null);
-    }
-
-    if (configResult.status === "fulfilled") {
-      setConfiguration(configResult.value);
-    } else if (
-      configResult.status === "rejected" &&
-      configResult.reason instanceof ApiClientError &&
-      configResult.reason.status === 404
-    ) {
-      setConfiguration(null);
-    } else {
-      setConfiguration(null);
-    }
-
-    setLoading(false);
-  }, [relationshipId]);
-
-  useEffect(() => {
-    void load();
-  }, [load, refreshEpoch]);
-
-  const version = plan?.version ?? null;
-  const hasEffectivePlan = Boolean(plan?.plan && version);
+  const { header, overview, plan, configuration } = workspace;
+  const version = plan.version;
+  const hasEffectivePlan = Boolean(plan.plan && version);
   const planHref = `/clients/${relationshipId}/plan`;
-  const upcomingCheckins = (checkins ?? [])
-    .filter((item) => UPCOMING_CHECKIN_STATUSES.has(item.status))
-    .sort((left, right) => left.localDate.localeCompare(right.localDate));
-  const openExceptions = (exceptions ?? []).filter((item) =>
-    OPEN_EXCEPTION_STATUSES.has(item.status),
-  );
-  const onboardingStatus = relationship?.onboardingStatus;
+  const onboardingStatus = header.onboardingStatus;
+  const configurationStatus = configuration.configuration?.status ?? null;
   const needsOnboardingReview =
     onboardingStatus === "onboarding_pending" ||
     onboardingStatus === "onboarding_submitted";
   const needsConfiguration =
-    onboardingStatus === "coaching_ready" &&
-    configuration?.status !== "active";
+    onboardingStatus === "coaching_ready" && configurationStatus !== "active";
   const needsPlan = onboardingStatus === "active" && !hasEffectivePlan;
+  const subscription = configuration.subscription;
+  const recentMeasurements = [...overview.progress.measurements]
+    .sort((left, right) => right.observedAt.localeCompare(left.observedAt))
+    .slice(0, 3);
+  const recentEntries = [...overview.progress.entries]
+    .sort((left, right) => right.observedAt.localeCompare(left.observedAt))
+    .slice(0, 3);
 
   return (
     <div className="workspace-page workspace-overview">
@@ -168,27 +119,20 @@ export function ClientOverviewPage() {
           <Link to={planHref}>Open plan</Link>
         </p>
       ) : null}
+
       <section className="workspace-card" aria-labelledby="overview-plan-heading">
         <div className="workspace-card-head">
           <div>
             <p className="workspace-kicker">Plan</p>
             <h2 id="overview-plan-heading" className="workspace-card-title">
-              Effective plan
+              Current program
             </h2>
           </div>
-          {!loading && !planError ? (
-            <Link className="button-primary" to={planHref}>
-              {hasEffectivePlan ? "Adjust plan" : "Open plan"}
-            </Link>
-          ) : null}
+          <Link className="button-primary" to={planHref}>
+            {hasEffectivePlan ? "Adjust plan" : "Open plan"}
+          </Link>
         </div>
-        {planError ? (
-          <p className="form-error" role="alert">
-            {planError}
-          </p>
-        ) : null}
-        {loading ? <p className="muted">Loading plan…</p> : null}
-        {!loading && !planError && hasEffectivePlan && plan?.plan && version ? (
+        {hasEffectivePlan && plan.plan && version ? (
           <dl className="workspace-facts">
             <div>
               <dt className="section-kicker">Title</dt>
@@ -203,12 +147,50 @@ export function ClientOverviewPage() {
               <dd>{version.effectiveFrom ?? "now"}</dd>
             </div>
           </dl>
-        ) : null}
-        {!loading && !planError && !hasEffectivePlan ? (
+        ) : (
           <p className="workspace-empty" role="status">
             No effective plan
           </p>
-        ) : null}
+        )}
+      </section>
+
+      <section className="workspace-card" aria-labelledby="overview-renewal-heading">
+        <div className="workspace-card-head">
+          <div>
+            <p className="workspace-kicker">Subscription</p>
+            <h2 id="overview-renewal-heading" className="workspace-card-title">
+              Renewal
+            </h2>
+          </div>
+        </div>
+        {header.renewalState ? (
+          <dl className="workspace-facts">
+            <div>
+              <dt className="section-kicker">State</dt>
+              <dd>{renewalLabel(header.renewalState)}</dd>
+            </div>
+            {subscription ? (
+              <>
+                <div>
+                  <dt className="section-kicker">Plan</dt>
+                  <dd>{subscription.planName}</dd>
+                </div>
+                <div>
+                  <dt className="section-kicker">Frequency</dt>
+                  <dd>{statusLabel(subscription.paymentFrequency)}</dd>
+                </div>
+                <div>
+                  <dt className="section-kicker">Renews</dt>
+                  <dd>{formatLocalDate(subscription.renewsOn)}</dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
+        ) : (
+          <p className="workspace-empty" role="status">
+            No subscription renewal
+          </p>
+        )}
       </section>
 
       <section
@@ -219,95 +201,172 @@ export function ClientOverviewPage() {
           <div>
             <p className="workspace-kicker">Attention</p>
             <h2 id="overview-exceptions-heading" className="workspace-card-title">
-              Open exceptions
+              Open exception
             </h2>
           </div>
         </div>
-        {exceptionsError ? (
-          <p className="form-error" role="alert">
-            {exceptionsError}
-          </p>
-        ) : null}
-        {loading ? <p className="muted">Loading exceptions…</p> : null}
-        {!loading && !exceptionsError && openExceptions.length === 0 ? (
+        {overview.openException ? (
+          <div className="workspace-row">
+            <div className="workspace-row-copy">
+              <p className="workspace-row-title">{overview.openException.summary}</p>
+              <p className="workspace-row-meta">
+                <span className="workspace-kind">
+                  {statusLabel(overview.openException.type)}
+                </span>
+                <span className={`status-pill status-${overview.openException.status}`}>
+                  {statusLabel(overview.openException.status)}
+                </span>
+              </p>
+            </div>
+            <Link
+              className="button-secondary"
+              to={`/exceptions/${overview.openException.id}`}
+            >
+              Open
+            </Link>
+          </div>
+        ) : (
           <p className="workspace-empty" role="status">
-            No open exceptions
+            No open exception
           </p>
-        ) : null}
-        {!loading && openExceptions.length > 0 ? (
-          <ul className="workspace-list">
-            {openExceptions.map((item) => (
-              <li key={item.id} className="workspace-row">
-                <div className="workspace-row-copy">
-                  <p className="workspace-row-title">{item.summary}</p>
-                  <p className="workspace-row-meta">
-                    <span className="workspace-kind">{statusLabel(item.type)}</span>
-                    <span className={`status-pill status-${item.status}`}>
-                      {statusLabel(item.status)}
-                    </span>
-                  </p>
-                </div>
-                <Link className="button-secondary" to={`/exceptions/${item.id}`}>
-                  Open
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        )}
       </section>
 
-      <section
-        className="workspace-card workspace-span"
-        aria-labelledby="overview-checkins-heading"
-      >
+      <section className="workspace-card" aria-labelledby="overview-checkins-heading">
         <div className="workspace-card-head">
           <div>
             <p className="workspace-kicker">Schedule</p>
             <h2 id="overview-checkins-heading" className="workspace-card-title">
-              Next check-ins
+              Next check-in
             </h2>
           </div>
         </div>
-        {checkinsError ? (
-          <p className="form-error" role="alert">
-            {checkinsError}
-          </p>
-        ) : null}
-        {loading ? <p className="muted">Loading check-ins…</p> : null}
-        {!loading && !checkinsError && upcomingCheckins.length === 0 ? (
+        {overview.nextCheckin ? (
+          <div className="workspace-row">
+            <div className="workspace-row-copy">
+              <p className="workspace-row-title">
+                {formatLocalDate(overview.nextCheckin.localDate)}
+              </p>
+              <p className="workspace-row-meta">
+                <span className={`status-pill status-${overview.nextCheckin.status}`}>
+                  {statusLabel(overview.nextCheckin.status)}
+                </span>
+                <span>
+                  Window ends {formatWhen(overview.nextCheckin.windowEndsAt)}
+                </span>
+              </p>
+            </div>
+            <Link
+              className="button-secondary"
+              to={`/clients/${relationshipId}/check-ins/${overview.nextCheckin.id}`}
+            >
+              Review
+            </Link>
+          </div>
+        ) : (
           <p className="workspace-empty" role="status">
-            {(checkins?.length ?? 0) === 0
-              ? "No check-ins yet"
-              : "No upcoming check-ins"}
+            No next check-in
           </p>
-        ) : null}
-        {!loading && upcomingCheckins.length > 0 ? (
+        )}
+      </section>
+
+      <section
+        className="workspace-card workspace-span"
+        aria-labelledby="overview-activity-heading"
+      >
+        <div className="workspace-card-head">
+          <div>
+            <p className="workspace-kicker">Recent</p>
+            <h2 id="overview-activity-heading" className="workspace-card-title">
+              Recent activity
+            </h2>
+          </div>
+          <Link className="button-secondary" to={`/clients/${relationshipId}/activity`}>
+            Open activity
+          </Link>
+        </div>
+        {overview.recentActivity.length === 0 ? (
+          <p className="workspace-empty" role="status">
+            No recent activity
+          </p>
+        ) : (
           <ul className="workspace-list">
-            {upcomingCheckins.map((item) => (
-              <li key={item.id} className="workspace-row">
+            {overview.recentActivity.map((item) => (
+              <li key={`${item.type}:${item.id}`} className="workspace-row">
                 <div className="workspace-row-copy">
-                  <p className="workspace-row-title">
-                    {formatLocalDate(item.localDate)}
-                  </p>
+                  <p className="workspace-row-title">{item.title}</p>
                   <p className="workspace-row-meta">
-                    <span className={`status-pill status-${item.status}`}>
-                      {statusLabel(item.status)}
-                    </span>
-                    <span>
-                      Window ends {new Date(item.windowEndsAt).toLocaleString()}
+                    <span className="workspace-kind">{activityKind(item)}</span>
+                    <span>{formatLocalDate(item.localDate)}</span>
+                    <span className={`status-pill status-${item.state}`}>
+                      {statusLabel(item.state)}
                     </span>
                   </p>
                 </div>
-                <Link
-                  className="button-secondary"
-                  to={`/clients/${relationshipId}/check-ins/${item.id}`}
-                >
-                  Review
-                </Link>
               </li>
             ))}
           </ul>
-        ) : null}
+        )}
+      </section>
+
+      <section className="workspace-card workspace-span" aria-labelledby="overview-progress-heading">
+        <div className="workspace-card-head">
+          <div>
+            <p className="workspace-kicker">Progress</p>
+            <h2 id="overview-progress-heading" className="workspace-card-title">
+              Progress summary
+            </h2>
+          </div>
+          <Link className="button-secondary" to={`/clients/${relationshipId}/progress`}>
+            Open progress
+          </Link>
+        </div>
+        <dl className="workspace-facts">
+          <div>
+            <dt className="section-kicker">Measurements</dt>
+            <dd>{overview.progress.measurements.length}</dd>
+          </div>
+          <div>
+            <dt className="section-kicker">Entries</dt>
+            <dd>{overview.progress.entries.length}</dd>
+          </div>
+          <div>
+            <dt className="section-kicker">Media</dt>
+            <dd>{overview.progress.media.length}</dd>
+          </div>
+        </dl>
+        {recentMeasurements.length === 0 && recentEntries.length === 0 ? (
+          <p className="workspace-empty" role="status">
+            No progress records in this summary
+          </p>
+        ) : (
+          <ul className="workspace-list">
+            {recentMeasurements.map((item) => (
+              <li key={item.id} className="workspace-row">
+                <div className="workspace-row-copy">
+                  <p className="workspace-row-title">
+                    {statusLabel(item.type)} · {item.value} {item.unit}
+                  </p>
+                  <p className="workspace-row-meta">
+                    <span>{formatWhen(item.observedAt)}</span>
+                  </p>
+                </div>
+              </li>
+            ))}
+            {recentEntries.map((item) => (
+              <li key={item.id} className="workspace-row">
+                <div className="workspace-row-copy">
+                  <p className="workspace-row-title">
+                    {item.title?.trim() || statusLabel(item.entryType)}
+                  </p>
+                  <p className="workspace-row-meta">
+                    <span>{formatWhen(item.observedAt)}</span>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
