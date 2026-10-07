@@ -1,12 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type { ExceptionDetail } from "@fitbud/contracts";
+import type { ExceptionDetail, ExceptionType } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 
+const EXCEPTION_TYPE_LABEL: Record<ExceptionType, string> = {
+  missed_workout: "Missed workout",
+  overdue_meal: "Meal gap",
+  overdue_checkin: "Check-in",
+};
+
 function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 export function ExceptionDetailPage() {
@@ -94,11 +113,11 @@ export function ExceptionDetailPage() {
   }
 
   return (
-    <section className="page">
+    <section className="page exception-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">
-            <Link to="/">Attention</Link> / Exception
+            <Link to="/">Needs attention</Link> / Exception
           </p>
           <h1>Exception detail</h1>
           <p className="lede">
@@ -108,7 +127,7 @@ export function ExceptionDetailPage() {
         </div>
         {detail ? (
           <Link
-            className="button-secondary"
+            className="pill-btn"
             to={`/clients/${detail.coachingRelationshipId}/plan`}
           >
             Adjust plan
@@ -127,14 +146,16 @@ export function ExceptionDetailPage() {
         <p className="muted">Loading exception…</p>
       ) : (
         <div className="stack-lg">
-          <section>
-            <p>
+          <article className={`exception-card tone-${detail.type}`}>
+            <div className="exception-top">
               <span className={`status-pill status-${detail.status}`}>
                 {statusLabel(detail.status)}
-              </span>{" "}
-              · {detail.type.replace(/_/g, " ")}
-            </p>
-            <h2>{detail.summary}</h2>
+              </span>
+              <span className={`category-pill type-${detail.type}`}>
+                {EXCEPTION_TYPE_LABEL[detail.type]}
+              </span>
+            </div>
+            <h2 className="exception-name">{detail.summary}</h2>
             <dl className="detail-list">
               <div>
                 <dt>Rule</dt>
@@ -143,64 +164,75 @@ export function ExceptionDetailPage() {
               <div>
                 <dt>Source</dt>
                 <dd>
-                  {detail.sourceEntityType} · {detail.sourceEntityId}
+                  {detail.sourceEntityType.replace(/_/g, " ")} · {detail.sourceEntityId}
                 </dd>
               </div>
               <div>
                 <dt>Detected</dt>
-                <dd>{detail.detectedAt}</dd>
+                <dd>{formatDateTime(detail.detectedAt)}</dd>
               </div>
             </dl>
-          </section>
+          </article>
 
-          <section>
-            <h2>Actions</h2>
-            <label className="field">
-              <span>Note (optional)</span>
-              <textarea
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                rows={3}
-              />
-            </label>
-            <div className="button-row">
-              {(detail.status === "detected" || detail.status === "active") && (
-                <button
-                  type="button"
-                  className="button-primary"
-                  disabled={acting}
-                  onClick={() => void acknowledge()}
+          <section className="work-panel exception-action-panel">
+            <div className="section-head">
+              <h2>Actions</h2>
+            </div>
+            <div className="exception-action-body">
+              <label className="field">
+                <span>Note (optional)</span>
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  rows={3}
+                />
+              </label>
+              <div className="button-row">
+                {(detail.status === "detected" || detail.status === "active") && (
+                  <button
+                    type="button"
+                    className="button-primary"
+                    disabled={acting}
+                    onClick={() => void acknowledge()}
+                  >
+                    Acknowledge
+                  </button>
+                )}
+                {detail.status === "acknowledged" && (
+                  <button
+                    type="button"
+                    className="button-primary"
+                    disabled={acting}
+                    onClick={() => void resolve()}
+                  >
+                    Resolve
+                  </button>
+                )}
+                <Link
+                  className="button-secondary"
+                  to={`/clients/${detail.coachingRelationshipId}/plan`}
                 >
-                  Acknowledge
-                </button>
-              )}
-              {detail.status === "acknowledged" && (
-                <button
-                  type="button"
-                  className="button-primary"
-                  disabled={acting}
-                  onClick={() => void resolve()}
-                >
-                  Resolve
-                </button>
-              )}
-              <Link
-                className="button-secondary"
-                to={`/clients/${detail.coachingRelationshipId}/plan`}
-              >
-                Publish plan adjustment
-              </Link>
+                  Publish plan adjustment
+                </Link>
+              </div>
             </div>
           </section>
 
           {detail.actions.length > 0 ? (
-            <section>
-              <h2>History</h2>
-              <ul>
+            <section className="work-panel">
+              <div className="section-head">
+                <h2>History</h2>
+              </div>
+              <ul className="exception-history">
                 {detail.actions.map((action) => (
-                  <li key={action.id}>
-                    {statusLabel(action.action)} · {action.createdAt}
-                    {action.note ? ` — ${action.note}` : ""}
+                  <li key={action.id} className="work-row">
+                    <span className={`status-pill status-${action.action}`}>
+                      {statusLabel(action.action)}
+                    </span>
+                    <div>
+                      <p className="work-title">{formatDateTime(action.createdAt)}</p>
+                      {action.note ? <p className="work-copy">{action.note}</p> : null}
+                    </div>
                   </li>
                 ))}
               </ul>

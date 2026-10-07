@@ -102,7 +102,7 @@ export function OnboardingReviewPage() {
 
   if (loading) {
     return (
-      <section className="page" aria-busy="true">
+      <section className="page onboarding-review-page" aria-busy="true">
         <p className="muted">Loading intake…</p>
       </section>
     );
@@ -110,7 +110,7 @@ export function OnboardingReviewPage() {
 
   if (error && !relationship) {
     return (
-      <section className="page">
+      <section className="page onboarding-review-page">
         <p className="form-error" role="alert">
           {error}
         </p>
@@ -130,7 +130,7 @@ export function OnboardingReviewPage() {
     relationship.onboardingStatus === "coaching_ready";
 
   return (
-    <section className="page narrow">
+    <section className="page narrow onboarding-review-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">
@@ -145,9 +145,11 @@ export function OnboardingReviewPage() {
       </header>
 
       {intakeMissing ? (
-        <div className="empty-state" role="status">
-          <h2>Intake not started</h2>
-          <p>The trainee has not saved or submitted intake yet.</p>
+        <div className="workspace-card">
+          <div className="empty-state" role="status">
+            <h2>Intake not started</h2>
+            <p>The trainee has not saved or submitted intake yet.</p>
+          </div>
         </div>
       ) : null}
 
@@ -159,14 +161,21 @@ export function OnboardingReviewPage() {
       ) : null}
 
       {intake ? (
-        <dl className="detail-list intake-answers">
-          {fields.map((field) => (
-            <div key={field.id}>
-              <dt>{field.label}</dt>
-              <dd>{field.value}</dd>
-            </div>
-          ))}
-        </dl>
+        <section className="workspace-card" aria-labelledby="intake-heading">
+          <div className="workspace-card-head">
+            <h2 id="intake-heading" className="workspace-card-title">
+              Submitted intake
+            </h2>
+          </div>
+          <dl className="detail-list intake-answers">
+            {fields.map((field) => (
+              <div key={field.id}>
+                <dt>{field.label}</dt>
+                <dd>{field.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       ) : null}
 
       {error ? (
@@ -175,26 +184,28 @@ export function OnboardingReviewPage() {
         </p>
       ) : null}
 
-      <div className="button-row">
-        <button
-          type="button"
-          className="button-primary"
-          disabled={!canConfigure || acting}
-          onClick={() => {
-            void configureCoaching();
-          }}
-        >
-          {acting ? "Working…" : "Configure Coaching"}
-        </button>
-        <Link to="/clients" className="button-ghost">
-          Back to Clients
-        </Link>
+      <div className="workspace-card">
+        <div className="button-row">
+          <button
+            type="button"
+            className="button-primary"
+            disabled={!canConfigure || acting}
+            onClick={() => {
+              void configureCoaching();
+            }}
+          >
+            {acting ? "Working…" : "Configure Coaching"}
+          </button>
+          <Link to="/clients" className="button-ghost">
+            Back to Clients
+          </Link>
+        </div>
+        {!canConfigure ? (
+          <p className="muted">
+            Configure Coaching unlocks after the trainee submits intake.
+          </p>
+        ) : null}
       </div>
-      {!canConfigure ? (
-        <p className="muted">
-          Configure Coaching unlocks after the trainee submits intake.
-        </p>
-      ) : null}
     </section>
   );
 }

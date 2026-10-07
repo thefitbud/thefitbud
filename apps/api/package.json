@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state",
+    "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 0.0.0.0",
     "build": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "eslint src scripts --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply fitbud --local --persist-to .wrangler/state",
-    "db:migrate": "wrangler d1 migrations apply fitbud"
+    "db:migrate": "wrangler d1 migrations apply fitbud",
+    "db:seed:dev": "node scripts/seed-dev.ts"
   },
   "dependencies": {
     "@fitbud/contracts": "workspace:*",

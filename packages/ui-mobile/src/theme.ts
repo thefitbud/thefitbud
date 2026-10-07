@@ -17,8 +17,15 @@ export const colors = {
   warning: "#F59E0B",
   error: "#EF4444",
   info: "#3B82F6",
-  /** Approved light trainee surface. */
-  background: "#F7F8FB",
+  /** Approved light trainee canvas from the FitBud design. */
+  background: "#F6F5FB",
+  card: "#FFFFFF",
+} as const;
+
+export const radii = {
+  card: 20,
+  control: 16,
+  pill: 999,
 } as const;
 
 export const spacing = {
