@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import {
@@ -34,9 +34,38 @@ function statesFor(type: WorkspaceActivityType): readonly string[] {
   return checkinStatusSchema.options;
 }
 
+function PlanVersionReference({
+  planVersionId,
+  effectiveVersionId,
+  effectiveTitle,
+  workspaceReady,
+}: {
+  planVersionId: string | null;
+  effectiveVersionId: string | null;
+  effectiveTitle: string | null;
+  workspaceReady: boolean;
+}) {
+  if (!planVersionId) return null;
+  let label = "Plan version";
+  if (workspaceReady) {
+    if (planVersionId === effectiveVersionId) {
+      label = effectiveTitle ? `Effective plan · ${effectiveTitle}` : "Effective plan";
+    } else {
+      label = "Earlier plan version";
+    }
+  }
+  return (
+    <p className="activity-plan-ref">
+      {label}
+      <span className="activity-plan-id">{planVersionId}</span>
+    </p>
+  );
+}
+
 export function ClientActivityPage() {
   const { relationshipId = "" } = useParams();
-  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutletContext>();
+  const { workspace, workspaceLoading, refreshEpoch = 0 } =
+    useOutletContext<WorkspaceOutletContext>();
   const generateFrom = useMemo(() => localDateUtc(-14), []);
   const generateTo = useMemo(() => localDateUtc(7), []);
   const [activityType, setActivityType] = useState<WorkspaceActivityType>("workout");
@@ -49,17 +78,24 @@ export function ClientActivityPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
+  const filterKey = `${relationshipId}|${activityType}|${state}|${occurredFrom}|${occurredTo}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   const stateOptions = statesFor(activityType);
+  const listReady = loadedKey === filterKey && !loading;
 
   const load = useCallback(
     async (cursor?: string | null) => {
       if (!relationshipId) return;
+      const id = ++requestId.current;
       const appending = Boolean(cursor);
       if (appending) {
         setLoadingMore(true);
       } else {
         setLoading(true);
+        setItems([]);
+        setNextCursor(null);
       }
       setError(null);
       try {
@@ -71,22 +107,28 @@ export function ClientActivityPage() {
           cursor: cursor ?? undefined,
           limit: 30,
         });
+        if (requestId.current !== id) return;
         setItems((current) =>
           appending ? [...current, ...result.items] : result.items,
         );
         setNextCursor(result.nextCursor);
+        if (!appending) setLoadedKey(filterKey);
       } catch (err) {
+        if (requestId.current !== id) return;
         setError(
           err instanceof ApiClientError
             ? err.message
             : "Could not load activity.",
         );
+        if (!appending) setLoadedKey(filterKey);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (requestId.current === id) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [activityType, occurredFrom, occurredTo, relationshipId, state],
+    [activityType, filterKey, occurredFrom, occurredTo, relationshipId, state],
   );
 
   useEffect(() => {
@@ -146,8 +188,8 @@ export function ClientActivityPage() {
           <p className="workspace-kicker">Execution</p>
           <h2 className="workspace-card-title">Activity</h2>
           <p className="lede">
-            Workout, meal, and check-in rows for this client. Filters are applied
-            on the server.
+            Workout, meal, and check-in rows for this client. Type, state, and
+            civil dates are one server filter each.
           </p>
         </div>
         <button
@@ -239,13 +281,13 @@ export function ClientActivityPage() {
           </div>
         </div>
 
-        {loading ? <p className="muted">Loading activity…</p> : null}
-        {!loading && items.length === 0 && !error ? (
+        {!listReady ? <p className="muted">Loading activity…</p> : null}
+        {listReady && items.length === 0 && !error ? (
           <p className="workspace-empty" role="status">
             No {typeLabel(activityType).toLowerCase()} activity for these filters.
           </p>
         ) : null}
-        {items.length > 0 ? (
+        {listReady && items.length > 0 ? (
           <ul className="activity-list">
             {items.map((item) => (
               <li key={`${item.type}:${item.id}`} className="activity-row">
@@ -255,6 +297,12 @@ export function ClientActivityPage() {
                     <span>{item.localDate}</span>
                     <span className="workspace-kind">{typeLabel(item.type)}</span>
                   </p>
+                  <PlanVersionReference
+                    planVersionId={item.planVersionId}
+                    effectiveVersionId={workspace?.plan.version?.id ?? null}
+                    effectiveTitle={workspace?.plan.plan?.title ?? null}
+                    workspaceReady={Boolean(workspace) && !workspaceLoading}
+                  />
                 </div>
                 <span className={`status-pill status-${item.state}`}>
                   {statusLabel(item.state)}
@@ -263,7 +311,7 @@ export function ClientActivityPage() {
             ))}
           </ul>
         ) : null}
-        {nextCursor ? (
+        {listReady && nextCursor ? (
           <button
             type="button"
             className="button-secondary"

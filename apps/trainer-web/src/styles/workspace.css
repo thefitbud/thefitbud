@@ -583,6 +583,24 @@
   background: #64748b;
 }
 
+.workspace-adherence {
+  display: inline-flex;
+  align-items: center;
+}
+
+.workspace-adherence.is-on-track {
+  color: #15803d;
+}
+
+.workspace-adherence.is-needs-attention {
+  color: #c2410c;
+}
+
+.workspace-adherence.is-no-recent-data,
+.workspace-adherence.is-not-available {
+  color: var(--deep-navy);
+}
+
 .workspace-filters {
   display: flex;
   flex-wrap: wrap;
@@ -713,6 +731,142 @@
 .workspace-icon-btn.is-active {
   background: var(--pale-lavender);
   border-color: var(--pale-lavender);
+}
+
+.measurement-series-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.measurement-series h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--deep-navy);
+}
+
+.measurement-series + .measurement-series {
+  padding-top: 0.85rem;
+  border-top: 1px solid #e7e9f2;
+}
+
+.trend-chart {
+  margin: 0;
+  color: var(--indigo);
+}
+
+.trend-plot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.trend-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--mid-grey);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.trend-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.trend-chart.is-compact {
+  max-width: 22rem;
+}
+
+.trend-caption,
+.trend-single {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  align-items: baseline;
+  margin: 0.4rem 0 0;
+  color: var(--deep-navy);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.trend-single time,
+.trend-caption time,
+.trend-caption .muted,
+.trend-values {
+  font-weight: 600;
+}
+
+.trend-values {
+  margin-top: 0.45rem;
+  color: var(--mid-grey);
+  font-size: 0.8125rem;
+}
+
+.trend-values ol {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.activity-plan-ref {
+  margin: 0.2rem 0 0;
+  color: var(--deep-navy);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.activity-plan-id {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--mid-grey);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.progress-compare {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.progress-photo,
+.progress-photo-row .workspace-row-copy {
+  min-width: 0;
+}
+
+.progress-photo {
+  margin: 0;
+}
+
+.progress-photo figcaption {
+  margin-bottom: 0.4rem;
+  color: var(--deep-navy);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.linked-media {
+  display: block;
+  width: 100%;
+  max-height: 18rem;
+  margin-top: 0.45rem;
+  object-fit: contain;
+  background: #f7f8fc;
+  border: 1px solid #e7e9f2;
+  border-radius: 12px;
+}
+
+@media (min-width: 720px) {
+  .progress-compare {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (min-width: 960px) {

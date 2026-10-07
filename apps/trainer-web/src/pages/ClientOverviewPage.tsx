@@ -1,5 +1,10 @@
 import { Link, useOutletContext, useParams } from "react-router-dom";
-import type { RenewalState, WorkspaceActivityItem } from "@fitbud/contracts";
+import type { MeasurementType, RenewalState, WorkspaceActivityItem } from "@fitbud/contracts";
+import {
+  MEASUREMENT_SERIES,
+  MeasurementTrend,
+  measurementTypeLabel,
+} from "../components/MeasurementTrend";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
 function statusLabel(status: string): string {
@@ -41,6 +46,15 @@ function renewalLabel(state: RenewalState): string {
       return _exhaustive;
     }
   }
+}
+
+function orderedMeasurementTypes(types: string[]): string[] {
+  const unique = [...new Set(types)];
+  const preferred = MEASUREMENT_SERIES.filter((type) => unique.includes(type));
+  const rest = unique.filter(
+    (type) => !MEASUREMENT_SERIES.includes(type as MeasurementType),
+  );
+  return [...preferred, ...rest];
 }
 
 function activityKind(item: WorkspaceActivityItem): string {
@@ -85,9 +99,9 @@ export function ClientOverviewPage() {
     onboardingStatus === "coaching_ready" && configurationStatus !== "active";
   const needsPlan = onboardingStatus === "active" && !hasEffectivePlan;
   const subscription = configuration.subscription;
-  const recentMeasurements = [...overview.progress.measurements]
-    .sort((left, right) => right.observedAt.localeCompare(left.observedAt))
-    .slice(0, 3);
+  const measurementTypes = orderedMeasurementTypes(
+    overview.progress.measurements.map((item) => item.type),
+  );
   const recentEntries = [...overview.progress.entries]
     .sort((left, right) => right.observedAt.localeCompare(left.observedAt))
     .slice(0, 3);
@@ -321,38 +335,33 @@ export function ClientOverviewPage() {
             Open progress
           </Link>
         </div>
-        <dl className="workspace-facts">
-          <div>
-            <dt className="section-kicker">Measurements</dt>
-            <dd>{overview.progress.measurements.length}</dd>
-          </div>
-          <div>
-            <dt className="section-kicker">Entries</dt>
-            <dd>{overview.progress.entries.length}</dd>
-          </div>
-          <div>
-            <dt className="section-kicker">Media</dt>
-            <dd>{overview.progress.media.length}</dd>
-          </div>
-        </dl>
-        {recentMeasurements.length === 0 && recentEntries.length === 0 ? (
+        {measurementTypes.length === 0 ? (
           <p className="workspace-empty" role="status">
-            No progress records in this summary
+            No measurements in this summary
           </p>
         ) : (
-          <ul className="workspace-list">
-            {recentMeasurements.map((item) => (
-              <li key={item.id} className="workspace-row">
-                <div className="workspace-row-copy">
-                  <p className="workspace-row-title">
-                    {statusLabel(item.type)} · {item.value} {item.unit}
-                  </p>
-                  <p className="workspace-row-meta">
-                    <span>{formatWhen(item.observedAt)}</span>
-                  </p>
-                </div>
-              </li>
+          <div className="measurement-series-list">
+            {measurementTypes.map((type) => (
+              <div key={type} className="measurement-series">
+                <h3>{measurementTypeLabel(type)}</h3>
+                <MeasurementTrend
+                  compact
+                  label={measurementTypeLabel(type)}
+                  points={overview.progress.measurements
+                    .filter((item) => item.type === type)
+                    .map((item) => ({
+                      id: item.id,
+                      value: item.value,
+                      unit: item.unit,
+                      observedAt: item.observedAt,
+                    }))}
+                />
+              </div>
             ))}
+          </div>
+        )}
+        {recentEntries.length > 0 ? (
+          <ul className="workspace-list">
             {recentEntries.map((item) => (
               <li key={item.id} className="workspace-row">
                 <div className="workspace-row-copy">
@@ -366,7 +375,7 @@ export function ClientOverviewPage() {
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </section>
     </div>
   );

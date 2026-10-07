@@ -551,3 +551,122 @@
     font-size: 1.35rem;
   }
 }
+
+.plan-readonly-note {
+  margin: 0.85rem 0 0;
+}
+
+.plan-comp {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.plan-comp-block {
+  min-width: 0;
+}
+
+.plan-comp-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.plan-comp-rail,
+.plan-comp-stack,
+.plan-comp-main,
+.plan-comp-library {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.plan-comp-row-actions,
+.plan-comp-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+.plan-comp-card-head {
+  justify-content: space-between;
+}
+
+.plan-comp-name {
+  margin: 0;
+  color: var(--deep-navy);
+  font-weight: 700;
+}
+
+.plan-comp-readonly {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.plan-comp-readonly h4 {
+  margin: 0 0 0.35rem;
+  color: var(--deep-navy);
+  font-size: 0.9375rem;
+}
+
+.plan-comp-readonly ul,
+.plan-comp-readonly ol {
+  margin: 0.35rem 0 0.85rem;
+  padding-left: 1.1rem;
+}
+
+.plan-comp-source {
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+
+.plan-comp-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.plan-comp-check input {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.plan-comp-food-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .plan-comp-food-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 960px) {
+  .plan-comp-columns {
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  }
+
+  .plan-comp-columns.has-library {
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  }
+
+  .plan-comp-columns.has-library .plan-comp-library {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1200px) {
+  .plan-comp-columns.has-library {
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr) minmax(16rem, 22rem);
+  }
+
+  .plan-comp-columns.has-library .plan-comp-library {
+    grid-column: auto;
+  }
+}

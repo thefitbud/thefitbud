@@ -1229,11 +1229,18 @@ export class FitBudApiClient {
 
   async listCheckins(
     relationshipId: string,
-    query?: { fromDate?: string; toDate?: string },
+    query?: {
+      fromDate?: string;
+      toDate?: string;
+      cursor?: string;
+      limit?: number;
+    },
   ): Promise<CheckinListResponse> {
     const params = new URLSearchParams();
     if (query?.fromDate) params.set("fromDate", query.fromDate);
     if (query?.toDate) params.set("toDate", query.toDate);
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
@@ -1547,10 +1554,15 @@ export class FitBudApiClient {
 
   async listMeasurements(
     relationshipId: string,
+    query?: { cursor?: string; limit?: number },
   ): Promise<MeasurementListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
-      `/progress/relationships/${relationshipId}/measurements`,
+      `/progress/relationships/${relationshipId}/measurements${suffix}`,
       measurementListResponseSchema,
       { auth: true },
     );
@@ -1572,10 +1584,15 @@ export class FitBudApiClient {
 
   async listProgressEntries(
     relationshipId: string,
+    query?: { cursor?: string; limit?: number },
   ): Promise<ProgressEntryListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
-      `/progress/relationships/${relationshipId}/entries`,
+      `/progress/relationships/${relationshipId}/entries${suffix}`,
       progressEntryListResponseSchema,
       { auth: true },
     );

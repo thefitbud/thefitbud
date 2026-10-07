@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import {
@@ -46,19 +46,26 @@ export function ClientHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const kind = parseKind(searchParams.get("kind"));
   const occurredFrom = searchParams.get("occurredFrom") ?? "";
   const occurredTo = searchParams.get("occurredTo") ?? "";
+  const filterKey = `${relationshipId}|${kind ?? ""}|${occurredFrom}|${occurredTo}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const listReady = loadedKey === filterKey && !loading;
 
   const load = useCallback(
     async (cursor?: string | null) => {
       if (!relationshipId) return;
+      const id = ++requestId.current;
       const appending = Boolean(cursor);
       if (appending) {
         setLoadingMore(true);
       } else {
         setLoading(true);
+        setItems([]);
+        setNextCursor(null);
       }
       setError(null);
       try {
@@ -69,22 +76,28 @@ export function ClientHistoryPage() {
           occurredFrom: civilDateStart(occurredFrom),
           occurredTo: civilDateEnd(occurredTo),
         });
+        if (requestId.current !== id) return;
         setItems((current) =>
           appending ? [...current, ...result.items] : result.items,
         );
         setNextCursor(result.nextCursor);
+        if (!appending) setLoadedKey(filterKey);
       } catch (err) {
+        if (requestId.current !== id) return;
         setError(
           err instanceof ApiClientError
             ? err.message
             : "Could not load history.",
         );
+        if (!appending) setLoadedKey(filterKey);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (requestId.current === id) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [kind, occurredFrom, occurredTo, relationshipId],
+    [filterKey, kind, occurredFrom, occurredTo, relationshipId],
   );
 
   useEffect(() => {
@@ -137,8 +150,8 @@ export function ClientHistoryPage() {
             </h2>
             <p className="lede">
               {kind === "plan_version"
-                ? "Published plan versions for this client."
-                : "What happened, what changed, and what you did."}
+                ? "Published plan versions for this client. Kind is a single server filter."
+                : "What happened, what changed, and what you did. Kind is a single server filter."}
             </p>
           </div>
           <button
@@ -211,9 +224,9 @@ export function ClientHistoryPage() {
           ) : null}
         </form>
 
-        {loading ? <p className="muted">Loading…</p> : null}
+        {!listReady ? <p className="muted">Loading…</p> : null}
 
-        {empty ? (
+        {listReady && empty ? (
           <p className="workspace-empty" role="status">
             {filtersActive
               ? "No coaching history matches these filters."
@@ -221,7 +234,7 @@ export function ClientHistoryPage() {
           </p>
         ) : null}
 
-        {items.length > 0 ? (
+        {listReady && items.length > 0 ? (
           <ol className="history-list">
             {items.map((item) => (
               <li key={`${item.kind}:${item.id}`} className="history-item">
@@ -243,7 +256,7 @@ export function ClientHistoryPage() {
           </ol>
         ) : null}
 
-        {nextCursor ? (
+        {listReady && nextCursor ? (
           <button
             type="button"
             className="button-secondary"

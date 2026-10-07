@@ -35,18 +35,28 @@ export function ClientCheckinsPage() {
   const { relationshipId = "" } = useParams();
   const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
   const [items, setItems] = useState<Checkin[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (cursor?: string | null) => {
     if (!relationshipId) return;
-    setLoading(true);
+    const appending = Boolean(cursor);
+    if (appending) setLoadingMore(true);
+    else setLoading(true);
     setError(null);
     try {
-      const result = await apiClient.listCheckins(relationshipId);
-      setItems(result.items);
+      const result = await apiClient.listCheckins(relationshipId, {
+        cursor: cursor ?? undefined,
+        limit: 30,
+      });
+      setItems((current) =>
+        appending ? [...current, ...result.items] : result.items,
+      );
+      setNextCursor(result.nextCursor);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -55,6 +65,7 @@ export function ClientCheckinsPage() {
       );
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [relationshipId]);
 
@@ -107,7 +118,8 @@ export function ClientCheckinsPage() {
               Check-ins
             </h2>
             <p className="lede">
-              Upcoming, submitted, reviewed, and overdue for this client.
+              Upcoming, submitted, reviewed, and overdue for this client. Load more
+              uses the list cursor when the server returns one.
             </p>
           </div>
           <button
@@ -154,6 +166,18 @@ export function ClientCheckinsPage() {
               </li>
             ))}
           </ul>
+        ) : null}
+        {nextCursor ? (
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={loadingMore}
+            onClick={() => {
+              void load(nextCursor);
+            }}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
         ) : null}
       </section>
     </div>

@@ -1,40 +1,47 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   planVersionStatusSchema,
+  type PlanContent,
   type PlanTemplateSummary,
   type PlanVersion,
   type PlanVersionStatus,
   type PlanWithVersions,
-  type WorkoutDay,
-  type WorkoutExercise,
 } from "@fitbud/contracts";
+import {
+  PlanCompositionEditor,
+  clonePlanContent,
+  createBlankPlanContent,
+  isEditablePlanStatus,
+  planContentError,
+} from "../components/plan-composition";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
 import { createIdempotencyKey } from "../lib/idempotency";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
 
-function newId(): string {
-  return crypto.randomUUID();
-}
+type DraftSession = {
+  planId: string | null;
+  versionId: string | null;
+  recordVersion: number | null;
+  title: string;
+  content: PlanContent;
+  savedTitle: string;
+  savedContentJson: string;
+  asAdjustment: boolean;
+};
 
-type PlanSurface = "summary" | "builder";
+type PlanFocus =
+  | { kind: "effective" }
+  | { kind: "version"; planTitle: string; version: PlanVersion }
+  | { kind: "editor"; draft: DraftSession };
 
 function formatWhen(value: string | null | undefined): string {
   if (!value) return "now";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
@@ -42,74 +49,38 @@ function formatWhen(value: string | null | undefined): string {
   }).format(date);
 }
 
-function versionStatusLabel(status: PlanVersion["status"]): string {
+function versionStatusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
-function dayBadge(day: WorkoutDay): string {
-  return `D${day.order}`;
+function localDateUtc(offsetDays = 0): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
 }
 
-function setCount(day: WorkoutDay): number {
-  return day.exercises.reduce((total, exercise) => {
-    return total + exercise.setTargets.length;
-  }, 0);
+function sessionFromVersion(
+  version: PlanVersion,
+  title: string,
+  asAdjustment: boolean,
+): DraftSession {
+  const content = clonePlanContent(version.content);
+  return {
+    planId: version.planId,
+    versionId: version.id,
+    recordVersion: version.recordVersion,
+    title,
+    content,
+    savedTitle: title,
+    savedContentJson: JSON.stringify(content),
+    asAdjustment,
+  };
 }
 
-function applyExerciseToForm(
-  exercise: WorkoutExercise | undefined,
-  setters: {
-    setExerciseName: (value: string) => void;
-    setReps: (value: number) => void;
-    setLoadLabel: (value: string) => void;
-  },
-) {
-  if (!exercise) return;
-  setters.setExerciseName(exercise.name);
-  const set = exercise.setTargets[0];
-  if (set?.reps != null) setters.setReps(set.reps);
-  if (set?.loadLabel) setters.setLoadLabel(set.loadLabel);
-}
-
-function collectInstructions(version: PlanVersion): {
-  title: string;
-  body: string;
-}[] {
-  const notes: { title: string; body: string }[] = [];
-  for (const day of version.content.workoutDays) {
-    for (const exercise of day.exercises) {
-      const body = exercise.instructions?.trim();
-      if (body) {
-        notes.push({ title: exercise.name, body });
-      }
-    }
-  }
-  for (const meal of version.content.mealPrescriptions) {
-    const body = meal.instructions?.trim();
-    if (body) {
-      notes.push({ title: meal.name, body });
-    }
-  }
-  return notes;
-}
-
-function IconAdjust() {
+function isDirty(draft: DraftSession): boolean {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
+    draft.title !== draft.savedTitle ||
+    JSON.stringify(draft.content) !== draft.savedContentJson
   );
 }
 
@@ -126,29 +97,17 @@ export function ClientPlanPage() {
   const configuration = workspace?.configuration.configuration ?? null;
   const [templates, setTemplates] = useState<PlanTemplateSummary[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [draftPreview, setDraftPreview] = useState<PlanVersion | null>(null);
-  const [surface, setSurface] = useState<PlanSurface>("summary");
-  const [replaceIntent, setReplaceIntent] = useState(false);
-  const [selectedDayId, setSelectedDayId] = useState("");
-  const [title, setTitle] = useState("Training block");
-  const [dayName, setDayName] = useState("Day A");
-  const [exerciseName, setExerciseName] = useState("Squat");
-  const [reps, setReps] = useState(5);
-  const [loadLabel, setLoadLabel] = useState("RPE 7");
+  const [focus, setFocus] = useState<PlanFocus>({ kind: "effective" });
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const didInitSurface = useRef(false);
 
-  const load = useCallback(async () => {
-    if (!relationshipId) return;
+  const loadTemplates = useCallback(async () => {
     setError(null);
     try {
       const templatePage = await apiClient.listPlanTemplates();
       setTemplates(templatePage.items);
-      setSelectedTemplateId(
-        (current) => current || templatePage.items[0]?.id || "",
-      );
+      setSelectedTemplateId((current) => current || templatePage.items[0]?.id || "");
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -156,89 +115,88 @@ export function ClientPlanPage() {
           : "Could not load plan templates.",
       );
     }
+  }, []);
+
+  useEffect(() => {
+    void loadTemplates();
+  }, [loadTemplates, refreshEpoch]);
+
+  useEffect(() => {
+    setFocus({ kind: "effective" });
+    setMessage(null);
+    setError(null);
   }, [relationshipId]);
 
-  useEffect(() => {
-    void load();
-  }, [load, refreshEpoch]);
-
-  useEffect(() => {
-    didInitSurface.current = false;
-    setSelectedDayId("");
-    setDraftPreview(null);
-  }, [relationshipId]);
-
-  useEffect(() => {
-    if (workspaceLoading || !workspace) return;
-    if (workspace.header.relationshipId !== relationshipId) return;
-    if (effective?.plan) setTitle(effective.plan.title);
-    const firstDay = effective?.version?.content.workoutDays[0];
-    if (firstDay) {
-      setSelectedDayId((current) => current || firstDay.id);
+  async function openVersion(planId: string, versionId: string, planTitle: string) {
+    setActing(true);
+    setError(null);
+    try {
+      const version = await apiClient.getPlanVersion(planId, versionId);
+      if (isEditablePlanStatus(version.status)) {
+        setFocus({
+          kind: "editor",
+          draft: sessionFromVersion(
+            version,
+            planTitle,
+            version.creationSource === "adjustment",
+          ),
+        });
+      } else {
+        setFocus({ kind: "version", planTitle, version });
+      }
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not load that version.",
+      );
+    } finally {
+      setActing(false);
     }
-    if (!didInitSurface.current) {
-      didInitSurface.current = true;
-      setSurface(effective?.version ? "summary" : "builder");
-    }
-  }, [effective, relationshipId, workspace, workspaceLoading]);
-
-  const version: PlanVersion | null = effective?.version ?? null;
-  const sourceVersion = draftPreview ?? version;
-  const splitDays = sourceVersion?.content.workoutDays ?? [];
-  const workoutDays = version?.content.workoutDays ?? [];
-  const meals = version?.content.mealPrescriptions ?? [];
-  const coachNotes = version ? collectInstructions(version) : [];
-  const selectedDay =
-    splitDays.find((day) => day.id === selectedDayId) ?? splitDays[0] ?? null;
-  const selectedExercise = selectedDay?.exercises[0];
-  const snapshotRpe = selectedExercise?.setTargets[0]?.rpe ?? null;
-
-  const selectedDayMeta = useMemo(() => {
-    if (!selectedDay) return null;
-    return {
-      exercises: selectedDay.exercises.length,
-      sets: setCount(selectedDay),
-    };
-  }, [selectedDay]);
-
-  function buildContent() {
-    return {
-      workoutDays: [
-        {
-          id: newId(),
-          order: 1,
-          name: dayName.trim() || "Day A",
-          exercises: [
-            {
-              id: newId(),
-              order: 1,
-              name: exerciseName.trim() || "Exercise",
-              instructions: selectedExercise?.instructions ?? null,
-              setTargets: [
-                {
-                  id: newId(),
-                  order: 1,
-                  reps,
-                  loadLabel: loadLabel.trim() || null,
-                  rpe: snapshotRpe,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-      mealPrescriptions: [] as never[],
-    };
   }
 
-  function selectDay(day: WorkoutDay) {
-    setSelectedDayId(day.id);
-    setDayName(day.name);
-    applyExerciseToForm(day.exercises[0], {
-      setExerciseName,
-      setReps,
-      setLoadLabel,
+  async function startAdjustment(planId: string, sourceVersionId: string, title: string) {
+    setActing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const draft = await apiClient.createPlanDraftFromVersion(
+        planId,
+        { sourceVersionId, asAdjustment: true },
+        createIdempotencyKey(),
+      );
+      setFocus({
+        kind: "editor",
+        draft: sessionFromVersion(draft, title, true),
+      });
+      setMessage(`Adjustment draft v${draft.versionNumber} created. Publish it as a new version.`);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not create an adjustment draft.",
+      );
+    } finally {
+      setActing(false);
+    }
+  }
+
+  function startBlank() {
+    const content = createBlankPlanContent();
+    const title = effective?.plan?.title ?? "Training block";
+    setFocus({
+      kind: "editor",
+      draft: {
+        planId: null,
+        versionId: null,
+        recordVersion: null,
+        title,
+        content,
+        savedTitle: title,
+        savedContentJson: JSON.stringify(content),
+        asAdjustment: false,
+      },
     });
+    setError(null);
+    setMessage(null);
   }
 
   async function onApplyTemplate(event: FormEvent) {
@@ -253,149 +211,158 @@ export function ClientPlanPage() {
         { templateId: selectedTemplateId },
         createIdempotencyKey(),
       );
-      setDraftPreview(result.version);
-      setTitle(result.plan.title);
-      const day = result.version.content.workoutDays[0];
-      if (day) {
-        setSelectedDayId(day.id);
-        setDayName(day.name);
-        applyExerciseToForm(day.exercises[0], {
-          setExerciseName,
-          setReps,
-          setLoadLabel,
-        });
-      }
-      setSurface("builder");
+      setFocus({
+        kind: "editor",
+        draft: sessionFromVersion(result.version, result.plan.title, false),
+      });
       setMessage(
         result.updatedExistingDraft
-          ? `Draft v${result.version.versionNumber} updated from template (copied). Customize below, then publish.`
-          : `Draft v${result.version.versionNumber} created from template (copied). Customize below, then publish.`,
+          ? `Draft v${result.version.versionNumber} updated from the template copy.`
+          : `Draft v${result.version.versionNumber} created from the template copy.`,
       );
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not apply template.",
+        err instanceof ApiClientError ? err.message : "Could not apply template.",
       );
     } finally {
       setActing(false);
     }
   }
 
-  async function onPublish(event: FormEvent) {
-    event.preventDefault();
-    if (!relationshipId) return;
+  async function persistDraft(draft: DraftSession): Promise<DraftSession> {
+    const contentError = planContentError(draft.content);
+    if (contentError) {
+      throw new Error(contentError);
+    }
+    const title = draft.title.trim();
+    if (!title) {
+      throw new Error("Title is required.");
+    }
+    if (!draft.planId || !draft.versionId || draft.recordVersion == null) {
+      const created = await apiClient.createPlan(
+        relationshipId,
+        { title, content: draft.content },
+        createIdempotencyKey(),
+      );
+      return sessionFromVersion(created.version, created.plan.title, draft.asAdjustment);
+    }
+    if (!isDirty(draft)) return draft;
+    const updated = await apiClient.updatePlanDraft(draft.planId, draft.versionId, {
+      expectedRecordVersion: draft.recordVersion,
+      title,
+      content: draft.content,
+    });
+    return sessionFromVersion(updated, title, draft.asAdjustment);
+  }
+
+  async function onSaveDraft() {
+    if (focus.kind !== "editor") return;
     setActing(true);
     setError(null);
     setMessage(null);
     try {
-      const content = buildContent();
-      let planId: string;
-      let publishVersion: PlanVersion;
+      const saved = await persistDraft(focus.draft);
+      setFocus({ kind: "editor", draft: saved });
+      setMessage(
+        saved.versionId
+          ? "Draft saved with days, exercises, sets, and meals."
+          : "Draft saved.",
+      );
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : "Could not save draft.");
+    } finally {
+      setActing(false);
+    }
+  }
 
-      if (draftPreview) {
-        const updated = await apiClient.updatePlanDraft(
-          draftPreview.planId,
-          draftPreview.id,
-          {
-            expectedRecordVersion: draftPreview.recordVersion,
-            title: title.trim(),
-            content,
-          },
-        );
-        planId = draftPreview.planId;
-        publishVersion = await apiClient.publishPlanVersion(
-          planId,
-          updated.id,
-          {
-            expectedRecordVersion: updated.recordVersion,
-            mode: "immediate",
-          },
-          createIdempotencyKey(),
-        );
-        setDraftPreview(null);
-      } else if (effective?.plan && effective.version) {
-        const draft = await apiClient.createPlanDraftFromVersion(
-          effective.plan.id,
-          {
-            sourceVersionId: effective.version.id,
-            asAdjustment: true,
-          },
-          createIdempotencyKey(),
-        );
-        planId = effective.plan.id;
-        const updated = await apiClient.updatePlanDraft(planId, draft.id, {
-          expectedRecordVersion: draft.recordVersion,
-          title: title.trim(),
-          content,
-        });
-        publishVersion = await apiClient.publishPlanVersion(
-          planId,
-          updated.id,
-          {
-            expectedRecordVersion: updated.recordVersion,
-            mode: "immediate",
-          },
-          createIdempotencyKey(),
-        );
-        await apiClient.createIntervention(
-          relationshipId,
-          {
-            kind: "plan_adjustment",
-            summary: `Published plan adjustment v${publishVersion.versionNumber}`,
-            resultingPlanVersionId: publishVersion.id,
-          },
-          createIdempotencyKey(),
-        );
-      } else {
-        const created = await apiClient.createPlan(
-          relationshipId,
-          {
-            title: title.trim(),
-            content,
-          },
-          createIdempotencyKey(),
-        );
-        planId = created.plan.id;
-        publishVersion = await apiClient.publishPlanVersion(
-          planId,
-          created.version.id,
-          {
-            expectedRecordVersion: created.version.recordVersion,
-            mode: "immediate",
-          },
-          createIdempotencyKey(),
-        );
+  async function onPublish() {
+    if (focus.kind !== "editor") return;
+    setActing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved =
+        isDirty(focus.draft) || focus.draft.versionId == null
+          ? await persistDraft(focus.draft)
+          : focus.draft;
+      if (!saved.planId || !saved.versionId || saved.recordVersion == null) {
+        throw new Error("Draft was not saved.");
       }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const toDate = new Date(Date.now() + 13 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
-      await apiClient.generateWorkoutAssignments(
-        relationshipId,
-        { fromDate: today, toDate },
+      const published = await apiClient.publishPlanVersion(
+        saved.planId,
+        saved.versionId,
+        {
+          expectedRecordVersion: saved.recordVersion,
+          mode: "immediate",
+        },
         createIdempotencyKey(),
       );
+      let assignmentNote = "";
+      if (saved.asAdjustment) {
+        try {
+          await apiClient.createIntervention(
+            relationshipId,
+            {
+              kind: "plan_adjustment",
+              summary: `Published plan adjustment v${published.versionNumber}`,
+              resultingPlanVersionId: published.id,
+            },
+            createIdempotencyKey(),
+          );
+        } catch (err) {
+          assignmentNote =
+            err instanceof ApiClientError
+              ? err.message
+              : "The adjustment was published, and the intervention was not recorded.";
+        }
+      }
+      try {
+        await apiClient.generateWorkoutAssignments(
+          relationshipId,
+          { fromDate: localDateUtc(0), toDate: localDateUtc(13) },
+          createIdempotencyKey(),
+        );
+      } catch (err) {
+        if (!(err instanceof ApiClientError && err.code === "NO_WORKOUT_DAYS")) {
+          const generateNote =
+            err instanceof ApiClientError
+              ? err.message
+              : "Workout assignments were not generated.";
+          assignmentNote = [assignmentNote, generateNote].filter(Boolean).join(" ");
+        }
+      }
+      setFocus({ kind: "effective" });
       setMessage(
-        `Published plan version ${publishVersion.versionNumber} and generated assignments.`,
+        assignmentNote
+          ? `Published version ${published.versionNumber}. ${assignmentNote}`
+          : `Published version ${published.versionNumber}.`,
       );
-      setSurface("summary");
-      setDraftPreview(null);
       reloadWorkspace();
-      await load();
     } catch (err) {
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not publish plan.",
+          : err instanceof Error
+            ? err.message
+            : "Could not publish plan.",
       );
     } finally {
       setActing(false);
     }
   }
 
-  const showSummary = surface === "summary" && Boolean(version);
+  const viewed =
+    focus.kind === "version"
+      ? focus
+      : focus.kind === "effective" && effective?.plan && effective.version
+        ? {
+            kind: "version" as const,
+            planTitle: effective.plan.title,
+            version: effective.version,
+          }
+        : null;
+  const editor = focus.kind === "editor" ? focus.draft : null;
+  const contentIssue = editor ? planContentError(editor.content) : null;
 
   return (
     <div className="plan-page">
@@ -409,48 +376,155 @@ export function ClientPlanPage() {
       <PlanVersionList
         relationshipId={relationshipId}
         refreshEpoch={refreshEpoch}
+        acting={acting}
+        onOpen={(planId, versionId, planTitle) => {
+          void openVersion(planId, versionId, planTitle);
+        }}
       />
 
       {workspaceLoading && !workspace ? (
         <p className="muted">Loading plan…</p>
-      ) : workspaceError && !workspace ? null : showSummary && version ? (
+      ) : workspaceError && !workspace ? null : editor ? (
+        <section className="plan-card plan-composer" aria-labelledby="draft-change-heading">
+          <header className="plan-composer-head">
+            <div className="plan-composer-tags">
+              <span className="plan-chip">
+                {editor.asAdjustment ? "Adjustment draft" : editor.versionId ? "Draft" : "New plan"}
+              </span>
+            </div>
+            <label className="field plan-title-field">
+              <span className="sr-only">Title</span>
+              <input
+                id="draft-change-heading"
+                className="plan-title-input"
+                value={editor.title}
+                onChange={(event) => {
+                  const title = event.target.value;
+                  setFocus((current) =>
+                    current.kind === "editor"
+                      ? { kind: "editor", draft: { ...current.draft, title } }
+                      : current,
+                  );
+                }}
+                required
+              />
+            </label>
+            <p className="muted">
+              {editor.asAdjustment
+                ? "This adjustment is a new version. Older published versions stay unchanged."
+                : "Saving writes this draft. Publishing creates an immutable version."}
+            </p>
+          </header>
+          <form className="plan-form plan-split-apply" onSubmit={(event) => void onApplyTemplate(event)}>
+            <h3 className="plan-section-title">Apply a template</h3>
+            <p className="muted">
+              Copies the template into this draft, including meals and food snapshots.{" "}
+              <Link to="/templates">Manage templates</Link>
+            </p>
+            {templates.length === 0 ? (
+              <p className="muted">No templates yet.</p>
+            ) : (
+              <>
+                <label className="field">
+                  <span>Template</span>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+                    required
+                  >
+                    {templates.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title} ({item.templateType})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" className="button-secondary" disabled={acting}>
+                  {acting ? "Applying…" : "Apply to draft"}
+                </button>
+              </>
+            )}
+          </form>
+          <PlanCompositionEditor
+            key={editor.versionId ?? "new-plan"}
+            content={editor.content}
+            onChange={(content) =>
+              setFocus((current) =>
+                current.kind === "editor"
+                  ? { kind: "editor", draft: { ...current.draft, content } }
+                  : current,
+              )
+            }
+          />
+          {contentIssue ? (
+            <p className="form-error" role="alert">
+              {contentIssue}
+            </p>
+          ) : null}
+          <div className="plan-composer-actions">
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={acting || Boolean(contentIssue) || !editor.title.trim()}
+              onClick={() => {
+                void onSaveDraft();
+              }}
+            >
+              {acting ? "Saving…" : "Save draft"}
+            </button>
+            <button
+              type="button"
+              className="button-primary"
+              disabled={acting || Boolean(contentIssue) || !editor.title.trim()}
+              onClick={() => {
+                void onPublish();
+              }}
+            >
+              {acting ? "Publishing…" : editor.asAdjustment ? "Publish adjustment" : "Publish"}
+            </button>
+            <button
+              type="button"
+              className="button-ghost"
+              onClick={() => setFocus({ kind: "effective" })}
+            >
+              Back to plan
+            </button>
+          </div>
+        </section>
+      ) : viewed ? (
         <div className="plan-tab">
           <section className="plan-card plan-effective" aria-labelledby="effective-plan-heading">
             <div className="plan-card-head">
               <div>
-                <p className="plan-kicker">Current effective plan</p>
-                <h2 id="effective-plan-heading">{effective?.plan?.title}</h2>
+                <p className="plan-kicker">
+                  {focus.kind === "effective" ? "Current effective plan" : "Plan version"}
+                </p>
+                <h2 id="effective-plan-heading">{viewed.planTitle}</h2>
                 <p className="plan-meta">
                   <span className="plan-chip plan-chip-success">
-                    Effective {formatWhen(version.effectiveFrom)} (Version{" "}
-                    {version.versionNumber})
+                    {versionStatusLabel(viewed.version.status)}{" "}
+                    {formatWhen(viewed.version.effectiveFrom)} (Version{" "}
+                    {viewed.version.versionNumber})
                   </span>
-                  <span className="plan-status">
-                    {versionStatusLabel(version.status)}
-                  </span>
+                  {viewed.version.effectiveTo ? (
+                    <span>Until {formatWhen(viewed.version.effectiveTo)}</span>
+                  ) : null}
                 </p>
               </div>
               <div className="plan-head-actions">
                 <button
                   type="button"
                   className="button-primary"
+                  disabled={acting}
                   onClick={() => {
-                    setReplaceIntent(false);
-                    setSurface("builder");
+                    void startAdjustment(
+                      viewed.version.planId,
+                      viewed.version.id,
+                      viewed.planTitle,
+                    );
                   }}
                 >
-                  <IconAdjust />
-                  Modify plan
-                </button>
-                <button
-                  type="button"
-                  className="button-secondary"
-                  onClick={() => {
-                    setReplaceIntent(true);
-                    setSurface("builder");
-                  }}
-                >
-                  Replace plan
+                  Adjust plan
                 </button>
                 <Link
                   className="button-ghost"
@@ -460,100 +534,15 @@ export function ClientPlanPage() {
                 </Link>
               </div>
             </div>
+            <p className="muted plan-readonly-note">
+              Published, scheduled, effective, and superseded versions stay read-only.
+              Adjust creates a new version.
+            </p>
           </section>
-
-          <div className="plan-tab-grid">
-            <section className="plan-card" aria-labelledby="workout-protocol-heading">
-              <div className="plan-protocol-head">
-                <h3 id="workout-protocol-heading" className="plan-section-title">
-                  Workout
-                  {workoutDays.length > 0
-                    ? ` (${workoutDays.length}-day split)`
-                    : ""}
-                </h3>
-              </div>
-              {workoutDays.length === 0 ? (
-                <p className="muted">No workout days on this version.</p>
-              ) : (
-                <ul className="plan-protocol-list">
-                  {workoutDays.map((day) => (
-                    <li key={day.id} className="plan-protocol-row">
-                      <span className="plan-protocol-badge" aria-hidden="true">
-                        {dayBadge(day)}
-                      </span>
-                      <div className="plan-day-copy">
-                        <h4>{day.name}</h4>
-                        {day.exercises.length > 0 ? (
-                          <p className="muted">
-                            {day.exercises
-                              .slice(0, 3)
-                              .map((exercise) => exercise.name)
-                              .join(" · ")}
-                            {day.exercises.length > 3
-                              ? ` · +${day.exercises.length - 3}`
-                              : ""}
-                          </p>
-                        ) : (
-                          <p className="muted">No exercises on this day.</p>
-                        )}
-                      </div>
-                      <span className="plan-day-count">
-                        {day.exercises.length}{" "}
-                        {day.exercises.length === 1 ? "exercise" : "exercises"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="plan-card" aria-labelledby="nutrition-protocol-heading">
-              <h3 id="nutrition-protocol-heading" className="plan-section-title">
-                Nutrition
-              </h3>
-              {meals.length === 0 ? (
-                <p className="muted">No nutrition prescriptions on this version.</p>
-              ) : (
-                <ul className="plan-protocol-list">
-                  {meals.map((meal) => (
-                    <li key={meal.id} className="plan-protocol-row">
-                      <span
-                        className="plan-protocol-badge plan-protocol-badge-meal"
-                        aria-hidden="true"
-                      >
-                        {meal.order}
-                      </span>
-                      <div className="plan-day-copy">
-                        <h4>{meal.name}</h4>
-                        <p className="muted">
-                          {meal.scheduleHint ?? "Meal prescription"}
-                          {meal.photoRequired ? " · photo required" : ""}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="plan-card" aria-labelledby="coach-notes-heading">
-              <h3 id="coach-notes-heading" className="plan-section-title">
-                Instructions
-              </h3>
-              {coachNotes.length === 0 ? (
-                <p className="muted">No stored instructions on this version.</p>
-              ) : (
-                <ul className="plan-note-list">
-                  {coachNotes.map((note) => (
-                    <li key={`${note.title}:${note.body}`} className="plan-note">
-                      <h4>{note.title}</h4>
-                      <p>{note.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
+          <section className="plan-card">
+            <PlanCompositionEditor content={viewed.version.content} />
+          </section>
+          {focus.kind === "effective" ? (
             <section className="plan-card" aria-labelledby="tracking-heading">
               <h3 id="tracking-heading" className="plan-section-title">
                 Tracking expectations
@@ -571,32 +560,25 @@ export function ClientPlanPage() {
                     <dt className="section-kicker">Nutrition</dt>
                     <dd>
                       {configuration.nutrition.mealsPerDay} meals / day · photos{" "}
-                      {configuration.nutrition.photoRequirement.replace(
-                        /_/g,
-                        " ",
-                      )}
+                      {configuration.nutrition.photoRequirement.replace(/_/g, " ")}
                     </dd>
                   </div>
                   <div>
                     <dt className="section-kicker">Check-ins</dt>
                     <dd>
-                      {configuration.checkin.cadence} ·{" "}
-                      {configuration.checkin.dueWindowHours}h due window
+                      {configuration.checkin.cadence} · {configuration.checkin.dueWindowHours}h
+                      due window
                     </dd>
                   </div>
                   <div>
                     <dt className="section-kicker">Evidence</dt>
                     <dd>
                       {[
-                        configuration.tracking.requireBodyWeight
-                          ? "body weight"
-                          : null,
+                        configuration.tracking.requireBodyWeight ? "body weight" : null,
                         configuration.tracking.requireProgressPhotos
                           ? "progress photos"
                           : null,
-                        configuration.tracking.requireSessionRpe
-                          ? "session RPE"
-                          : null,
+                        configuration.tracking.requireSessionRpe ? "session RPE" : null,
                       ]
                         .filter(Boolean)
                         .join(" · ") || "None required"}
@@ -606,228 +588,85 @@ export function ClientPlanPage() {
               ) : (
                 <p className="muted">
                   Set tracking expectations in{" "}
-                  <Link to={`/clients/${relationshipId}/configure`}>
-                    client settings
-                  </Link>
-                  .
+                  <Link to={`/clients/${relationshipId}/configure`}>client settings</Link>.
                 </p>
               )}
             </section>
-          </div>
-        </div>
-      ) : error && !version ? null : (
-        <div className="plan-builder">
-          <aside className="plan-card plan-split" aria-labelledby="split-heading">
-            <p className="plan-kicker">Weekly split</p>
-            <h2 id="split-heading">Program cadence</h2>
-            {splitDays.length === 0 ? (
-              <p className="muted">
-                No days on a draft yet. Name the day in the editor, then publish.
-              </p>
+          ) : (
+            <button
+              type="button"
+              className="button-ghost"
+              onClick={() => setFocus({ kind: "effective" })}
+            >
+              Back to effective plan
+            </button>
+          )}
+          <form className="plan-card plan-form" onSubmit={(event) => void onApplyTemplate(event)}>
+            <h3 className="plan-section-title">Apply a template</h3>
+            <p className="muted">
+              Copies a template into a new or existing draft. It does not edit this
+              version. <Link to="/templates">Manage templates</Link>
+            </p>
+            {templates.length === 0 ? (
+              <p className="muted">No templates yet.</p>
             ) : (
-              <ul className="plan-split-list">
-                {splitDays.map((day) => {
-                  const selected = day.id === (selectedDay?.id ?? "");
-                  return (
-                    <li key={day.id}>
-                      <button
-                        type="button"
-                        className={
-                          selected ? "plan-split-day is-selected" : "plan-split-day"
-                        }
-                        onClick={() => selectDay(day)}
-                      >
-                        <span className="plan-split-label">
-                          {dayBadge(day)} · {day.name}
-                        </span>
-                        <span className="muted">
-                          {day.exercises.length} ex · {setCount(day)} sets
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            <form
-              className="plan-form plan-split-apply"
-              onSubmit={(event) => void onApplyTemplate(event)}
-            >
-              <h3 className="plan-section-title">
-                {replaceIntent ? "Replace from template" : "Apply a template"}
-              </h3>
-              <p className="muted">
-                {replaceIntent
-                  ? "Copies a template into a new draft. Publishing creates a new immutable version; it does not edit the current published plan."
-                  : "Copies into a draft."}{" "}
-                <Link to="/templates">Manage templates</Link>
-              </p>
-              {templates.length === 0 ? (
-                <p className="muted">No templates yet.</p>
-              ) : (
-                <>
-                  <label className="field">
-                    <span>Template</span>
-                    <select
-                      value={selectedTemplateId}
-                      onChange={(event) =>
-                        setSelectedTemplateId(event.target.value)
-                      }
-                      required
-                    >
-                      {templates.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.title} ({item.templateType})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="submit"
-                    className="button-secondary"
-                    disabled={acting}
+              <>
+                <label className="field">
+                  <span>Template</span>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+                    required
                   >
-                    {acting ? "Applying…" : "Apply to draft"}
-                  </button>
-                </>
-              )}
-            </form>
-          </aside>
-
-          <section className="plan-card plan-composer" aria-labelledby="draft-change-heading">
-            <header className="plan-composer-head">
-              <div className="plan-composer-tags">
-                {draftPreview ? (
-                  <span className="plan-chip">Active draft</span>
-                ) : version ? (
-                  <span className="plan-chip">Adjustment</span>
-                ) : (
-                  <span className="plan-chip">New plan</span>
-                )}
-                {selectedDayMeta ? (
-                  <span className="muted">
-                    {selectedDayMeta.exercises} exercises · {selectedDayMeta.sets}{" "}
-                    sets on this day
-                  </span>
-                ) : null}
-              </div>
-              <label className="field plan-title-field">
-                <span className="sr-only">Title</span>
-                <input
-                  id="draft-change-heading"
-                  className="plan-title-input"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  required
-                />
-              </label>
-              <p className="muted">
-                {draftPreview
-                  ? `Draft from ${draftPreview.creationSource}. Publish creates an immutable version.`
-                  : version
-                    ? "Creates a new draft from the effective version, then publishes it. Does not edit published content."
-                    : "Creates a new immutable version. Does not edit published content."}
-              </p>
-            </header>
-
-            <form
-              className="plan-form"
-              onSubmit={(event) => void onPublish(event)}
-            >
-              <label className="field">
-                <span>Workout day</span>
-                <input
-                  value={dayName}
-                  onChange={(event) => setDayName(event.target.value)}
-                  required
-                />
-              </label>
-
-              <article className="plan-exercise-card">
-                <div className="plan-exercise-head">
-                  <span className="plan-protocol-badge" aria-hidden="true">
-                    1
-                  </span>
-                  <label className="field plan-exercise-name">
-                    <span className="sr-only">Exercise</span>
-                    <input
-                      value={exerciseName}
-                      onChange={(event) => setExerciseName(event.target.value)}
-                      required
-                    />
-                  </label>
-                </div>
-                <table className="plan-sets-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Set</th>
-                      <th scope="col">Load</th>
-                      <th scope="col">Reps</th>
-                      {snapshotRpe != null ? <th scope="col">RPE</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>1</td>
-                      <td>
-                        <input
-                          value={loadLabel}
-                          onChange={(event) => setLoadLabel(event.target.value)}
-                          aria-label="Load"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={reps}
-                          onChange={(event) =>
-                            setReps(Number(event.target.value))
-                          }
-                          required
-                          aria-label="Reps"
-                        />
-                      </td>
-                      {snapshotRpe != null ? (
-                        <td>
-                          <span className="plan-rpe">{snapshotRpe}</span>
-                        </td>
-                      ) : null}
-                    </tr>
-                  </tbody>
-                </table>
-                {selectedExercise?.instructions ? (
-                  <p className="plan-cue">{selectedExercise.instructions}</p>
-                ) : null}
-              </article>
-
-              <div className="plan-composer-actions">
-                <button type="submit" className="button-primary" disabled={acting}>
-                  {acting
-                    ? "Publishing…"
-                    : draftPreview
-                      ? "Publish draft"
-                      : version
-                        ? "Publish adjustment"
-                        : "Publish plan"}
+                    {templates.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title} ({item.templateType})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" className="button-secondary" disabled={acting}>
+                  {acting ? "Applying…" : "Apply to draft"}
                 </button>
-                {version ? (
-                  <button
-                    type="button"
-                    className="button-ghost"
-                    onClick={() => {
-                      setReplaceIntent(false);
-                      setSurface("summary");
-                    }}
-                  >
-                    Back to plan
-                  </button>
-                ) : null}
-              </div>
-            </form>
-          </section>
+              </>
+            )}
+          </form>
         </div>
+      ) : (
+        <section className="plan-card">
+          <h2>No effective plan</h2>
+          <p className="muted">Create a draft with workout days and meals, then publish it.</p>
+          <div className="plan-composer-actions">
+            <button type="button" className="button-primary" onClick={startBlank}>
+              Create plan
+            </button>
+          </div>
+          <form className="plan-form" onSubmit={(event) => void onApplyTemplate(event)}>
+            {templates.length === 0 ? (
+              <p className="muted">No templates yet.</p>
+            ) : (
+              <>
+                <label className="field">
+                  <span>Template</span>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+                    required
+                  >
+                    {templates.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title} ({item.templateType})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" className="button-secondary" disabled={acting}>
+                  {acting ? "Applying…" : "Apply template"}
+                </button>
+              </>
+            )}
+          </form>
+        </section>
       )}
     </div>
   );
@@ -836,9 +675,13 @@ export function ClientPlanPage() {
 function PlanVersionList({
   relationshipId,
   refreshEpoch,
+  acting,
+  onOpen,
 }: {
   relationshipId: string;
   refreshEpoch: number;
+  acting: boolean;
+  onOpen: (planId: string, versionId: string, planTitle: string) => void;
 }) {
   const [versionStatus, setVersionStatus] = useState<"" | PlanVersionStatus>("");
   const [effectiveFrom, setEffectiveFrom] = useState("");
@@ -895,8 +738,8 @@ function PlanVersionList({
           <p className="plan-kicker">Versions</p>
           <h2 id="plan-versions-heading">Plan versions</h2>
           <p className="muted">
-            Filter by status and effective dates. Clearing the filters returns
-            the full list.
+            Filter by status and effective dates. Clearing the filters returns the
+            full list.
           </p>
         </div>
       </div>
@@ -977,12 +820,18 @@ function PlanVersionList({
                     </span>
                     <span>
                       Effective {formatWhen(item.effectiveFrom)}
-                      {item.effectiveTo
-                        ? ` – ${formatWhen(item.effectiveTo)}`
-                        : ""}
+                      {item.effectiveTo ? ` – ${formatWhen(item.effectiveTo)}` : ""}
                     </span>
                   </p>
                 </div>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={acting}
+                  onClick={() => onOpen(row.plan.id, item.id, row.plan.title)}
+                >
+                  {isEditablePlanStatus(item.status) ? "Edit draft" : "View"}
+                </button>
               </li>
             )),
           )}

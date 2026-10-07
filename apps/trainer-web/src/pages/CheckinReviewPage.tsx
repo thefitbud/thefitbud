@@ -7,6 +7,8 @@ import type {
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { LinkedMedia } from "../components/LinkedMedia";
+import { formatObservedAt } from "../components/MeasurementTrend";
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
@@ -251,9 +253,76 @@ export function CheckinReviewPage() {
                       : "—"}
                   </dd>
                 </div>
+                <div>
+                  <dt>Photo intent</dt>
+                  <dd>
+                    {context.checkin.answers.photoIntent ? (
+                      <>
+                        Recorded{" "}
+                        {formatObservedAt(context.checkin.answers.photoIntent.notedAt)}
+                        {context.checkin.answers.photoIntent.contentType
+                          ? ` · ${context.checkin.answers.photoIntent.contentType}`
+                          : ""}
+                        {context.checkin.answers.photoIntent.clientRef
+                          ? ` · ${context.checkin.answers.photoIntent.clientRef}`
+                          : ""}
+                        . Photo intent has no media file, so there is nothing to
+                        download.
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </dd>
+                </div>
               </dl>
             ) : (
               <p className="workspace-empty">No answers submitted yet.</p>
+            )}
+            {context.checkin.review ? (
+              <p className="workspace-row-meta">
+                Recorded outcome {statusLabel(context.checkin.review.outcome)}
+                {context.checkin.review.notes
+                  ? ` · ${context.checkin.review.notes}`
+                  : ""}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="workspace-card" aria-labelledby="measurements-heading">
+            <div className="workspace-card-head">
+              <h2 id="measurements-heading" className="workspace-card-title">
+                Measurements
+              </h2>
+            </div>
+            {context.measurements.length === 0 ? (
+              <p className="workspace-empty">No stored measurements in this review.</p>
+            ) : (
+              <ul className="workspace-list">
+                {context.measurements.map((item) => (
+                  <li
+                    key={item.id ?? `${item.type}:${item.observedAt}:${item.value}`}
+                    className="workspace-row progress-photo-row"
+                  >
+                    <div className="workspace-row-copy">
+                      <p className="workspace-row-title">
+                        {statusLabel(item.type)} · {item.value}
+                        {item.unit ? ` ${item.unit}` : ""}
+                      </p>
+                      <p className="workspace-row-meta">
+                        <time dateTime={item.observedAt}>
+                          {formatObservedAt(item.observedAt)}
+                        </time>
+                      </p>
+                      {item.mediaAssetId ? (
+                        <LinkedMedia
+                          mediaAssetId={item.mediaAssetId}
+                          label={`${statusLabel(item.type)} photo`}
+                        />
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
 
@@ -276,12 +345,36 @@ export function CheckinReviewPage() {
                 <dd>{context.recentWorkoutAdherence.missed}</dd>
               </div>
               <div>
+                <dt className="section-kicker">Workouts modified</dt>
+                <dd>{context.recentWorkoutAdherence.modified}</dd>
+              </div>
+              <div>
+                <dt className="section-kicker">Workouts skipped</dt>
+                <dd>{context.recentWorkoutAdherence.skipped}</dd>
+              </div>
+              <div>
+                <dt className="section-kicker">Workouts pending</dt>
+                <dd>{context.recentWorkoutAdherence.pending}</dd>
+              </div>
+              <div>
                 <dt className="section-kicker">Meals confirmed</dt>
                 <dd>{context.recentMealCompliance.confirmed}</dd>
               </div>
               <div>
+                <dt className="section-kicker">Meals modified</dt>
+                <dd>{context.recentMealCompliance.modified}</dd>
+              </div>
+              <div>
+                <dt className="section-kicker">Meals skipped</dt>
+                <dd>{context.recentMealCompliance.skipped}</dd>
+              </div>
+              <div>
                 <dt className="section-kicker">Meals overdue</dt>
                 <dd>{context.recentMealCompliance.overdue}</dd>
+              </div>
+              <div>
+                <dt className="section-kicker">Meals pending</dt>
+                <dd>{context.recentMealCompliance.pending}</dd>
               </div>
             </dl>
           </section>
