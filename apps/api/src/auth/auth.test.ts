@@ -28,12 +28,17 @@ const configurationMigration = join(
 const plansMigration = join(drizzleDir, "0003_plans.sql");
 const syncMigration = join(drizzleDir, "0009_sync.sql");
 const notificationsMigration = join(drizzleDir, "0010_notifications.sql");
+const invitationWhatsappMigration = join(
+  drizzleDir,
+  "0012_invitation_whatsapp.sql",
+);
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   const SQL = await initSqlJs();
   const sqlite = new SQL.Database();
   sqlite.exec(readFileSync(identityMigration, "utf8"));
   sqlite.exec(readFileSync(relationshipMigration, "utf8"));
+  sqlite.exec(readFileSync(invitationWhatsappMigration, "utf8"));
   sqlite.exec(readFileSync(configurationMigration, "utf8"));
   sqlite.exec(readFileSync(plansMigration, "utf8"));
   sqlite.exec(readFileSync(syncMigration, "utf8"));
@@ -228,6 +233,10 @@ describe("invitations and coaching relationships", () => {
     expect(firstBody.data.recipientEmail).toBe("client@example.com");
     expect(firstBody.data.onboardingStatus).toBe("invited");
     expect(firstBody.data.token).toBeTruthy();
+    expect(
+      (firstBody.data as { recipientWhatsappE164?: string | null })
+        .recipientWhatsappE164,
+    ).toBeNull();
 
     const replay = await app.request(
       "/invitations",
@@ -263,6 +272,32 @@ describe("invitations and coaching relationships", () => {
     expect(listB.status).toBe(200);
     const listBody = (await listB.json()) as { data: { items: unknown[] } };
     expect(listBody.data.items).toHaveLength(0);
+  });
+
+  it("stores a normalized WhatsApp number on invitation create", async () => {
+    const trainer = await createTrainerSession("whatsapp-coach@example.com");
+    const created = await app.request(
+      "/invitations",
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "inv-wa-1",
+        },
+        body: JSON.stringify({
+          recipientEmail: "wa-client@example.com",
+          recipientDisplayName: "WhatsApp Client",
+          recipientWhatsapp: "98765 43210",
+        }),
+      },
+      testEnv(),
+    );
+    expect(created.status).toBe(200);
+    const body = (await created.json()) as {
+      data: { recipientWhatsappE164: string | null };
+    };
+    expect(body.data.recipientWhatsappE164).toBe("919876543210");
   });
 
   it("accepts an invitation and creates a trainee-linked relationship", async () => {

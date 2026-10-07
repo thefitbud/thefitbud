@@ -5,10 +5,13 @@ import type {
   CheckinCadence,
   CoachingConfiguration,
   CoachingRelationship,
+  IntakeDefinition,
+  IntakeSubmission,
   MealPhotoRequirement,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { coachingPrefillFromIntake } from "../lib/intakePrefill";
 import "../styles/plan.css";
 
 const DEFAULT_FORM = {
@@ -53,6 +56,8 @@ export function ConfigureCoachingPage() {
   const [configuration, setConfiguration] =
     useState<CoachingConfiguration | null>(null);
   const [form, setForm] = useState(DEFAULT_FORM);
+  const [intake, setIntake] = useState<IntakeSubmission | null>(null);
+  const [definition, setDefinition] = useState<IntakeDefinition | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,16 +88,46 @@ export function ConfigureCoachingPage() {
     try {
       const rel = await apiClient.getRelationship(relationshipId);
       setRelationship(rel);
-      try {
-        const config = await apiClient.getCoachingConfiguration(relationshipId);
-        applyConfiguration(config);
-      } catch (err) {
-        if (err instanceof ApiClientError && err.status === 404) {
-          setConfiguration(null);
-          setForm(DEFAULT_FORM);
-        } else {
-          throw err;
-        }
+
+      const [configResult, intakeResult, definitionResult] = await Promise.all([
+        apiClient.getCoachingConfiguration(relationshipId).then(
+          (value) => ({ ok: true as const, value }),
+          (err: unknown) => ({ ok: false as const, err }),
+        ),
+        apiClient.getIntake(relationshipId).then(
+          (value) => ({ ok: true as const, value }),
+          (err: unknown) => ({ ok: false as const, err }),
+        ),
+        apiClient.getCurrentIntakeDefinition().then(
+          (value) => ({ ok: true as const, value }),
+          () => ({ ok: false as const }),
+        ),
+      ]);
+
+      const submittedIntake =
+        intakeResult.ok && intakeResult.value.status === "submitted"
+          ? intakeResult.value
+          : null;
+      setIntake(submittedIntake);
+      setDefinition(definitionResult.ok ? definitionResult.value : null);
+
+      if (configResult.ok) {
+        applyConfiguration(configResult.value);
+      } else if (
+        configResult.err instanceof ApiClientError &&
+        configResult.err.status === 404
+      ) {
+        setConfiguration(null);
+        const prefill = submittedIntake
+          ? coachingPrefillFromIntake(submittedIntake.answers)
+          : { primaryGoal: "", notes: "" };
+        setForm({
+          ...DEFAULT_FORM,
+          primaryGoal: prefill.primaryGoal,
+          notes: prefill.notes,
+        });
+      } else {
+        throw configResult.err;
       }
     } catch (err) {
       setError(
@@ -191,7 +226,7 @@ export function ConfigureCoachingPage() {
         createIdempotencyKey(),
       );
       applyConfiguration(updated);
-      setMessage("Configuration is active. Publish a plan next.");
+      setMessage("Configuration is active. Publish a plan so the trainee can start.");
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -205,22 +240,22 @@ export function ConfigureCoachingPage() {
 
   if (loading) {
     return (
-      <section className="page plan-config-page" aria-busy="true">
+      <div className="workspace-page plan-config-page" aria-busy="true">
         <p className="muted">Loading configuration…</p>
-      </section>
+      </div>
     );
   }
 
   if (error && !relationship) {
     return (
-      <section className="page plan-config-page">
+      <div className="workspace-page plan-config-page">
         <p className="form-error" role="alert">
           {error}
         </p>
         <Link to="/clients" className="button-secondary">
           Back to Clients
         </Link>
-      </section>
+      </div>
     );
   }
 
@@ -236,43 +271,78 @@ export function ConfigureCoachingPage() {
     Boolean(form.primaryGoal.trim()) &&
     !acting;
   const canActivate = configuration?.status === "configured" && !acting;
+  const intakeFields =
+    definition && intake
+      ? definition.fields.map((field) => ({
+          id: field.id,
+          label: field.label,
+          value: intake.answers[field.id]?.trim() || "—",
+        }))
+      : [];
 
   return (
-    <section className="page plan-config-page">
-      <header className="page-header">
+    <div className="workspace-page plan-config-page">
+      <div className="workspace-toolbar">
         <div>
-          <p className="eyebrow">
-            <Link to="/clients">Clients</Link>
-            {" / "}
-            <Link to={`/clients/${relationship.id}/onboarding`}>
-              Onboarding review
-            </Link>
-            {" / Configure Coaching"}
-          </p>
-          <h1>Configure Coaching</h1>
+          <p className="workspace-kicker">Client settings</p>
+          <h2 className="workspace-card-title">Coaching configuration</h2>
           <p className="lede">
-            Set workout, nutrition, check-in, and tracking expectations. This is
-            separate from the plan the trainee will follow.
+            Use submitted onboarding answers beside these expectations. Activate
+            when the baseline is ready. This is separate from the plan.
           </p>
         </div>
         <span className={`status-badge status-${statusKey}`}>
           <span className="status-dot" aria-hidden="true" />
           {configurationStatusLabel(statusKey)}
         </span>
-      </header>
+      </div>
 
       {relationship.onboardingStatus !== "coaching_ready" ? (
         <p className="banner-info" role="status">
-          Finish onboarding review before editing coaching expectations.
+          Finish onboarding review before editing coaching expectations.{" "}
+          <Link to={`/clients/${relationship.id}/onboarding`}>
+            Open onboarding review
+          </Link>
         </p>
       ) : null}
 
       {readOnly ? (
         <p className="banner-info" role="status">
-          This configuration is active and locked. Plan adjustments come later;
-          they do not rewrite these baseline expectations in this slice.
+          This configuration is active and locked. Publish or adjust the plan
+          for this client next. These baseline expectations stay as recorded.
         </p>
       ) : null}
+
+      <div className="plan-config-split">
+        <aside className="plan-card" aria-labelledby="intake-context-heading">
+          <div className="workspace-card-head">
+            <h2 id="intake-context-heading" className="plan-section-title">
+              Submitted onboarding
+            </h2>
+            <Link
+              className="text-link"
+              to={`/clients/${relationship.id}/onboarding`}
+            >
+              Full review
+            </Link>
+          </div>
+          {intakeFields.length > 0 ? (
+            <dl className="detail-list intake-answers">
+              {intakeFields.map((field) => (
+                <div key={field.id}>
+                  <dt>{field.label}</dt>
+                  <dd>{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="muted">
+              {relationship.onboardingStatus === "onboarding_pending"
+                ? "The trainee has not submitted onboarding yet."
+                : "No submitted onboarding answers to show."}
+            </p>
+          )}
+        </aside>
 
       <form className="plan-config-form" onSubmit={saveDraft}>
         <div className="plan-card">
@@ -515,11 +585,23 @@ export function ConfigureCoachingPage() {
           >
             Activate
           </button>
-          <Link to="/clients" className="button-ghost">
-            Back to Clients
+          {configuration?.status === "active" ? (
+            <Link
+              to={`/clients/${relationship.id}/plan`}
+              className="button-primary"
+            >
+              Open plan
+            </Link>
+          ) : null}
+          <Link
+            to={`/clients/${relationship.id}/overview`}
+            className="button-ghost"
+          >
+            Back to workspace
           </Link>
         </div>
       </form>
-    </section>
+      </div>
+    </div>
   );
 }

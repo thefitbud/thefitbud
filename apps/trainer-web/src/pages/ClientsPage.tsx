@@ -9,6 +9,7 @@ import {
   primaryActionForStatus,
   type ClientDirectoryRow,
 } from "../lib/clients";
+import { clientWhatsappHref } from "../lib/whatsapp";
 
 const STATUS_FILTERS = [
   "all",
@@ -165,7 +166,8 @@ export function ClientsPage() {
             ) : null}
           </h1>
           <p className="lede">
-            Search loaded clients and open the next action for their status.
+            Invite a trainee, then follow onboarding until coaching is
+            configured and a plan is published.
           </p>
         </div>
         <Link to="/clients/add" className="button-primary">
@@ -349,7 +351,8 @@ function splitDisplayName(name: string): { given: string; family: string | null 
     .split(/\s+/)
     .filter(Boolean);
   if (parts.length >= 2) {
-    return { given: parts[0], family: parts.slice(1).join(" ") };
+    const given = parts[0] ?? (name.trim() || "Client");
+    return { given, family: parts.slice(1).join(" ") };
   }
   return { given: name.trim() || "Client", family: null };
 }
@@ -361,6 +364,11 @@ function ClientRow({ row }: { row: ClientDirectoryRow }) {
       ? `/clients/${row.relationshipId}/${action.href}`
       : null;
   const display = splitDisplayName(row.name);
+  const messageHref = clientWhatsappHref({
+    phoneE164: row.recipientWhatsappE164,
+    name: row.name,
+    onboardingStatus: row.onboardingStatus,
+  });
 
   return (
     <tr>
@@ -387,17 +395,30 @@ function ClientRow({ row }: { row: ClientDirectoryRow }) {
         </time>
       </td>
       <td>
-        {href ? (
-          <Link
-            to={href}
-            className="button-secondary"
-            aria-label={`${action.label} for ${row.name}`}
-          >
-            {action.label}
-          </Link>
-        ) : (
-          <span className="muted-action">{action.label}</span>
-        )}
+        <div className="roster-actions">
+          {messageHref ? (
+            <a
+              className="button-secondary"
+              href={messageHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Message ${row.name} on WhatsApp`}
+            >
+              Message
+            </a>
+          ) : null}
+          {href ? (
+            <Link
+              to={href}
+              className="button-secondary"
+              aria-label={`${action.label} for ${row.name}`}
+            >
+              {action.label}
+            </Link>
+          ) : messageHref ? null : (
+            <span className="muted-action">{action.label}</span>
+          )}
+        </div>
       </td>
     </tr>
   );

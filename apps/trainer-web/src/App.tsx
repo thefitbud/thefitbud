@@ -33,18 +33,6 @@ export function App() {
           <Route path="/clients/add" element={<AddClientPage />} />
           <Route path="/clients/new" element={<Navigate to="/clients/add" replace />} />
           <Route
-            path="/clients/:relationshipId/onboarding"
-            element={<OnboardingReviewPage />}
-          />
-          <Route
-            path="/clients/:relationshipId/configure"
-            element={<ConfigureCoachingPage />}
-          />
-          <Route
-            path="/clients/:relationshipId/check-ins/:checkinId"
-            element={<CheckinReviewPage />}
-          />
-          <Route
             path="/clients/:relationshipId"
             element={<ClientWorkspaceLayout />}
           >
@@ -54,7 +42,10 @@ export function App() {
             <Route path="activity" element={<ClientActivityPage />} />
             <Route path="progress" element={<ClientProgressPage />} />
             <Route path="check-ins" element={<ClientCheckinsPage />} />
+            <Route path="check-ins/:checkinId" element={<CheckinReviewPage />} />
             <Route path="history" element={<ClientHistoryPage />} />
+            <Route path="onboarding" element={<OnboardingReviewPage />} />
+            <Route path="configure" element={<ConfigureCoachingPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

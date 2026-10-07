@@ -10,6 +10,7 @@ const invitation: Invitation = {
   trainerUserId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   recipientEmail: "client@example.com",
   recipientDisplayName: "Alex Client",
+  recipientWhatsappE164: "919876543210",
   status: "accepted",
   expiresAt: "2026-10-01T00:00:00.000Z",
   acceptedUserId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",

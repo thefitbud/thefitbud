@@ -7,6 +7,7 @@ const baseInvitation: Invitation = {
   trainerUserId: "22222222-2222-4222-8222-222222222222",
   recipientEmail: "alex@example.com",
   recipientDisplayName: "Alex",
+  recipientWhatsappE164: null,
   status: "pending",
   expiresAt: "2030-01-01T00:00:00.000Z",
   acceptedUserId: null,
@@ -52,5 +53,6 @@ describe("buildClientDirectoryRows", () => {
     expect(roster[0]?.relationshipId).toBe(baseRelationship.id);
     expect(roster[1]?.onboardingStatus).toBe("invited");
     expect(roster[1]?.name).toBe("Alex");
+    expect(roster[1]?.recipientWhatsappE164).toBeNull();
   });
 });

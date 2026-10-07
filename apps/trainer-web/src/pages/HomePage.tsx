@@ -73,6 +73,35 @@ function formatLocalDate(localDate: string): string {
   }).format(date);
 }
 
+function groupAttentionByClient(items: AttentionItem[]): Array<{
+  item: AttentionItem;
+  otherCount: number;
+}> {
+  const groups = new Map<string, AttentionItem[]>();
+  const order: string[] = [];
+  for (const item of items) {
+    const key = item.coachingRelationshipId;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(item);
+    } else {
+      groups.set(key, [item]);
+      order.push(key);
+    }
+  }
+  return order.flatMap((key) => {
+    const group = groups.get(key) ?? [];
+    const item = group[0];
+    if (!item) return [];
+    return [
+      {
+        item,
+        otherCount: Math.max(0, group.length - 1),
+      },
+    ];
+  });
+}
+
 function checkinWorkTitle(status: string): string {
   if (status === "submitted") return "Check-in Awaiting Review";
   if (status === "due") return "Check-in Due";
@@ -80,8 +109,17 @@ function checkinWorkTitle(status: string): string {
   return `Check-in ${statusLabel(status)}`;
 }
 
-function SummaryText({ text }: { text: string }) {
+function SummaryText({
+  text,
+  omitDetails = false,
+}: {
+  text: string;
+  omitDetails?: boolean;
+}) {
   const idx = text.indexOf(":");
+  if (omitDetails && idx > 0) {
+    return <strong>{text.slice(0, idx)}</strong>;
+  }
   if (idx <= 0 || idx > 56) return text;
   return (
     <>
@@ -173,12 +211,18 @@ export function HomePage() {
     (item) => item.status === "coaching_ready",
   ).length;
   const pendingInvites = invitations.filter((item) => item.status === "pending");
+  const intakeReviews = relationships.filter(
+    (item) => item.status === "onboarding_submitted",
+  );
   const clientTotal = relationships.length + pendingInvites.length;
   const name = trainerName(email);
   const showAttention = filter === "all" || filter === "attention";
   const showCheckins = filter === "all" || filter === "checkins";
-  const todayWorkCount = actionableCheckins.length + pendingInvites.length;
+  const todayWorkCount =
+    actionableCheckins.length + pendingInvites.length + intakeReviews.length;
   const kpiValue = (value: number) => (loading ? "—" : value);
+
+  const attentionCards = useMemo(() => groupAttentionByClient(items), [items]);
 
   const nameByRelationship = useMemo(() => {
     const names = new Map<string, string>();
@@ -200,30 +244,32 @@ export function HomePage() {
   return (
     <div className="cockpit">
       <header className="cockpit-hero">
-        <div className="cockpit-intro">
-          <div className="cockpit-title-row">
-            <h1>
-              {greeting(now)}, <span className="cockpit-name">{name}</span>
-            </h1>
-            <p className={items.length > 0 ? "callout is-hot" : "callout"}>
-              {items.length > 0 ? <IconWarn /> : null}
-              <span>{calloutParts.join(" • ")}</span>
-            </p>
+        <div className="cockpit-hero-main">
+          <div className="cockpit-intro">
+            <div className="cockpit-title-row">
+              <h1>
+                {greeting(now)}, <span className="cockpit-name">{name}</span>
+              </h1>
+              <p className={items.length > 0 ? "callout is-hot" : "callout"}>
+                {items.length > 0 ? <IconWarn /> : null}
+                <span>{calloutParts.join(" • ")}</span>
+              </p>
+            </div>
           </div>
-          <p className="cockpit-sub">
-            Operational snapshot. Normal client activity remains silent. Meaningful
-            deviations are surfaced below.
-          </p>
+          <dl className="kpi-cluster" aria-label="Coaching snapshot">
+            <Kpi label="Active Trainees" value={kpiValue(clientTotal)} tone="neutral" />
+            <Kpi label="Quietly On Track" value={kpiValue(coachingReady)} tone="success" />
+            <Kpi
+              label="Exceptions Surfaced"
+              value={loading || error ? "—" : items.length}
+              tone="warning"
+            />
+          </dl>
         </div>
-        <dl className="kpi-cluster" aria-label="Coaching snapshot">
-          <Kpi label="Active Trainees" value={kpiValue(clientTotal)} tone="neutral" />
-          <Kpi label="Quietly On Track" value={kpiValue(coachingReady)} tone="success" />
-          <Kpi
-            label="Exceptions Surfaced"
-            value={loading || error ? "—" : items.length}
-            tone="warning"
-          />
-        </dl>
+        <p className="cockpit-sub">
+          Operational snapshot. Normal client activity remains silent. Meaningful
+          deviations are surfaced below.
+        </p>
       </header>
 
       <div className="quick-row">
@@ -305,8 +351,12 @@ export function HomePage() {
           ) : null}
           {items.length > 0 ? (
             <ul className="attention-grid">
-              {items.map((item) => (
-                <AttentionCard key={item.exception.id} item={item} />
+              {attentionCards.map(({ item, otherCount }) => (
+                <AttentionCard
+                  key={item.coachingRelationshipId}
+                  item={item}
+                  otherCount={otherCount}
+                />
               ))}
             </ul>
           ) : null}
@@ -324,7 +374,7 @@ export function HomePage() {
                 Today&apos;s Work
                 <span className="commit-pill">{todayWorkCount} Commitments</span>
               </h2>
-              <p>Due check-ins and invitations still waiting on the trainee.</p>
+              <p>Due check-ins, invitations, and onboarding waiting for you.</p>
             </div>
             <Link className="text-link" to="/checkins">
               View all check-ins →
@@ -358,7 +408,45 @@ export function HomePage() {
                 </article>
               );
             })}
-            {!loading && !checkinError && actionableCheckins.length === 0 && pendingInvites.length === 0 ? (
+            {intakeReviews.map((relationship) => {
+              const invite = invitations.find(
+                (item) =>
+                  item.coachingRelationshipId === relationship.id ||
+                  item.id === relationship.invitationId,
+              );
+              const label =
+                invite?.recipientDisplayName?.trim() ||
+                invite?.recipientEmail ||
+                `Client ${relationship.id.slice(0, 8)}`;
+              return (
+                <article key={relationship.id} className="work-row">
+                  <span className="work-icon" aria-hidden="true">
+                    {initials(label)}
+                  </span>
+                  <div>
+                    <p className="work-title">
+                      Onboarding ready to review
+                      <span className="person-chip">{label}</span>
+                      <span className="person-chip">Submitted</span>
+                    </p>
+                    <p className="work-copy">
+                      Review the answers, then configure coaching.
+                    </p>
+                  </div>
+                  <Link
+                    className="pill-btn is-solid"
+                    to={`/clients/${relationship.id}/onboarding`}
+                  >
+                    Review intake →
+                  </Link>
+                </article>
+              );
+            })}
+            {!loading &&
+            !checkinError &&
+            actionableCheckins.length === 0 &&
+            pendingInvites.length === 0 &&
+            intakeReviews.length === 0 ? (
               <p className="panel-empty">Nothing is due, overdue, or submitted right now.</p>
             ) : null}
             {actionableCheckins.map((item) => {
@@ -401,46 +489,50 @@ export function HomePage() {
   );
 }
 
-function AttentionCard({ item }: { item: AttentionItem }) {
+function AttentionCard({
+  item,
+  otherCount,
+}: {
+  item: AttentionItem;
+  otherCount: number;
+}) {
   const name = item.traineeDisplayName ?? "Trainee";
   const type = item.exception.type;
   return (
-    <li className={`exception-card tone-${type}`}>
-      <div className="exception-top">
-        <span className="avatar" aria-hidden="true">
-          {initials(name)}
-        </span>
-        <div className="exception-id">
-          <p className="exception-name">{name}</p>
-          <span className={`status-pill status-${item.exception.status}`}>
-            {statusLabel(item.exception.status)}
+    <li className={`exception-card is-linked tone-${type}`}>
+      <Link className="exception-card-link" to={`/exceptions/${item.exception.id}`}>
+        <div className="exception-top">
+          <span className="avatar" aria-hidden="true">
+            {initials(name)}
+          </span>
+          <div className="exception-id">
+            <p className="exception-name">{name}</p>
+            <span className={`status-pill status-${item.exception.status}`}>
+              {statusLabel(item.exception.status)}
+            </span>
+          </div>
+          <span className="exception-type-meta">
+            <span className={`category-pill type-${type}`}>{EXCEPTION_TYPE_LABEL[type]}</span>
+            {otherCount > 0 ? (
+              <span className="exception-more">
+                +{otherCount}
+                <span className="sr-only"> other exceptions</span>
+              </span>
+            ) : null}
           </span>
         </div>
-        <span className={`category-pill type-${type}`}>{EXCEPTION_TYPE_LABEL[type]}</span>
-      </div>
-      <p className="exception-summary">
-        <span className="exception-type-icon" aria-hidden="true">
-          <TypeIcon type={type} />
-        </span>
-        <span>
-          <SummaryText text={item.exception.summary} />
-        </span>
-      </p>
-      <div className="exception-actions">
-        <Link className="pill-btn" to={`/exceptions/${item.exception.id}`}>
-          Open
-        </Link>
-        <Link
-          className="pill-btn is-solid"
-          to={
-            type === "overdue_checkin"
-              ? `/clients/${item.coachingRelationshipId}/check-ins`
-              : `/clients/${item.coachingRelationshipId}/plan`
-          }
-        >
-          {type === "overdue_checkin" ? "Review check-in" : "Open client"}
-        </Link>
-      </div>
+        <p className="exception-summary">
+          <span className="exception-type-icon" aria-hidden="true">
+            <TypeIcon type={type} />
+          </span>
+          <span>
+            <SummaryText
+              text={item.exception.summary}
+              omitDetails={type === "overdue_meal"}
+            />
+          </span>
+        </p>
+      </Link>
     </li>
   );
 }

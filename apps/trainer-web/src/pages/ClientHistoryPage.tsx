@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
@@ -29,6 +29,7 @@ function kindLabel(kind: HistoryItemKind): string {
 
 export function ClientHistoryPage() {
   const { relationshipId = "" } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -74,6 +75,28 @@ export function ClientHistoryPage() {
   }, [load, refreshEpoch]);
 
   const empty = !loading && items.length === 0 && !error;
+  const kindFilter = searchParams.get("kind") as HistoryItemKind | null;
+  const visibleItems = useMemo(() => {
+    if (!kindFilter) return items;
+    return items.filter((item) => item.kind === kindFilter);
+  }, [items, kindFilter]);
+  const filteredEmpty =
+    !loading && items.length > 0 && visibleItems.length === 0;
+
+  function setKindFilter(next: HistoryItemKind | null) {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (next) {
+          params.set("kind", next);
+        } else {
+          params.delete("kind");
+        }
+        return params;
+      },
+      { replace: true },
+    );
+  }
 
   return (
     <div className="workspace-page">
@@ -89,21 +112,36 @@ export function ClientHistoryPage() {
             <div>
               <p className="workspace-kicker">Ledger</p>
               <h2 id="history-list-heading" className="workspace-card-title">
-                Coaching history
+                {kindFilter === "plan_version"
+                  ? "Plan history"
+                  : "Coaching history"}
               </h2>
               <p className="lede">
-                What happened, what changed, and what you did.
+                {kindFilter === "plan_version"
+                  ? "Published plan versions for this client."
+                  : "What happened, what changed, and what you did."}
               </p>
             </div>
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={() => {
-                void load();
-              }}
-            >
-              Refresh
-            </button>
+            <div className="workspace-header-actions">
+              {kindFilter ? (
+                <button
+                  type="button"
+                  className="button-ghost"
+                  onClick={() => setKindFilter(null)}
+                >
+                  All history
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => {
+                  void load();
+                }}
+              >
+                Refresh
+              </button>
+            </div>
           </div>
           {loading ? <p className="muted">Loading…</p> : null}
 
@@ -115,9 +153,22 @@ export function ClientHistoryPage() {
             </p>
           ) : null}
 
-          {items.length > 0 ? (
+          {filteredEmpty ? (
+            <p className="workspace-empty" role="status">
+              No matching history in the loaded page.{" "}
+              <button
+                type="button"
+                className="button-link"
+                onClick={() => setKindFilter(null)}
+              >
+                Clear filter
+              </button>
+            </p>
+          ) : null}
+
+          {visibleItems.length > 0 ? (
             <ol className="history-list">
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <li key={`${item.kind}:${item.id}`} className="history-item">
                   <div className="history-item-meta">
                     <span className="workspace-kind">{kindLabel(item.kind)}</span>

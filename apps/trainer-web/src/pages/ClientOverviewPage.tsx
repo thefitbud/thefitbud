@@ -3,6 +3,8 @@ import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   Checkin,
+  CoachingConfiguration,
+  CoachingRelationship,
   EffectivePlanResponse,
   Exception,
 } from "@fitbud/contracts";
@@ -43,6 +45,11 @@ export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
   const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
   const [plan, setPlan] = useState<EffectivePlanResponse | null>(null);
+  const [relationship, setRelationship] = useState<CoachingRelationship | null>(
+    null,
+  );
+  const [configuration, setConfiguration] =
+    useState<CoachingConfiguration | null>(null);
   const [exceptions, setExceptions] = useState<Exception[] | null>(null);
   const [checkins, setCheckins] = useState<Checkin[] | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
@@ -57,11 +64,14 @@ export function ClientOverviewPage() {
     setExceptionsError(null);
     setCheckinsError(null);
 
-    const [planResult, exceptionResult, checkinResult] = await Promise.allSettled([
-      apiClient.getEffectivePlan(relationshipId),
-      apiClient.listExceptions(relationshipId),
-      apiClient.listCheckins(relationshipId),
-    ]);
+    const [planResult, exceptionResult, checkinResult, relationshipResult, configResult] =
+      await Promise.allSettled([
+        apiClient.getEffectivePlan(relationshipId),
+        apiClient.listExceptions(relationshipId),
+        apiClient.listCheckins(relationshipId),
+        apiClient.getRelationship(relationshipId),
+        apiClient.getCoachingConfiguration(relationshipId),
+      ]);
 
     if (planResult.status === "fulfilled") {
       setPlan(planResult.value);
@@ -88,6 +98,24 @@ export function ClientOverviewPage() {
       );
     }
 
+    if (relationshipResult.status === "fulfilled") {
+      setRelationship(relationshipResult.value);
+    } else {
+      setRelationship(null);
+    }
+
+    if (configResult.status === "fulfilled") {
+      setConfiguration(configResult.value);
+    } else if (
+      configResult.status === "rejected" &&
+      configResult.reason instanceof ApiClientError &&
+      configResult.reason.status === 404
+    ) {
+      setConfiguration(null);
+    } else {
+      setConfiguration(null);
+    }
+
     setLoading(false);
   }, [relationshipId]);
 
@@ -104,9 +132,45 @@ export function ClientOverviewPage() {
   const openExceptions = (exceptions ?? []).filter((item) =>
     OPEN_EXCEPTION_STATUSES.has(item.status),
   );
+  const onboardingStatus = relationship?.onboardingStatus;
+  const needsOnboardingReview =
+    onboardingStatus === "onboarding_pending" ||
+    onboardingStatus === "onboarding_submitted";
+  const needsConfiguration =
+    onboardingStatus === "coaching_ready" &&
+    configuration?.status !== "active";
+  const needsPlan =
+    onboardingStatus === "coaching_ready" &&
+    configuration?.status === "active" &&
+    !hasEffectivePlan;
 
   return (
     <div className="workspace-page workspace-overview">
+      {needsOnboardingReview ? (
+        <p className="banner-info" role="status">
+          {onboardingStatus === "onboarding_submitted"
+            ? "This trainee submitted onboarding. Review the answers, then configure coaching."
+            : "Waiting for the trainee to finish the onboarding form."}{" "}
+          <Link to={`/clients/${relationshipId}/onboarding`}>
+            Open onboarding review
+          </Link>
+        </p>
+      ) : null}
+      {needsConfiguration ? (
+        <p className="banner-info" role="status">
+          Onboarding is complete. Configure coaching expectations before
+          publishing a plan.{" "}
+          <Link to={`/clients/${relationshipId}/configure`}>
+            Configure coaching
+          </Link>
+        </p>
+      ) : null}
+      {needsPlan ? (
+        <p className="banner-info" role="status">
+          Coaching is configured. Publish a plan so the trainee can start.{" "}
+          <Link to={planHref}>Open plan</Link>
+        </p>
+      ) : null}
       <section className="workspace-card" aria-labelledby="overview-plan-heading">
         <div className="workspace-card-head">
           <div>

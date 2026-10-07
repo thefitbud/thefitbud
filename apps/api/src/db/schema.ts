@@ -117,6 +117,7 @@ export const clientInvitations = sqliteTable(
       .references(() => users.id),
     recipientEmail: text("recipient_email").notNull(),
     recipientDisplayName: text("recipient_display_name"),
+    recipientWhatsappE164: text("recipient_whatsapp_e164"),
     tokenHash: text("token_hash").notNull(),
     status: text("status", {
       enum: ["pending", "accepted", "expired", "revoked"],

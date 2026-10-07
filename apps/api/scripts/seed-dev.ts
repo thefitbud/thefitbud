@@ -687,6 +687,8 @@ type TraineeSpec = {
   email: string;
   timezone: string;
   stage: Stage;
+  /** Optional WhatsApp digits for the invite Message shortcut. */
+  whatsapp?: string;
   intake?: Record<string, string>;
   /** Leaves intake as an unsubmitted draft (onboarding_pending clients). */
   intakeDraftOnly?: boolean;
@@ -1275,6 +1277,14 @@ async function findInvitation(
   return list.items.find((item) => item.recipientEmail === email);
 }
 
+function seedWhatsapp(key: string): string {
+  let n = 0;
+  for (const ch of key) {
+    n = (n * 31 + ch.charCodeAt(0)) % 100_000_000;
+  }
+  return `9198${String(n).padStart(8, "0")}`;
+}
+
 async function createInvitation(
   trainer: Actor,
   spec: TraineeSpec,
@@ -1287,6 +1297,7 @@ async function createInvitation(
     body: {
       recipientEmail: spec.email,
       recipientDisplayName: spec.displayName,
+      recipientWhatsapp: spec.whatsapp ?? seedWhatsapp(spec.key),
       expiresInDays: 21,
     },
   });

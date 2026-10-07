@@ -210,13 +210,6 @@ input {
   overflow-wrap: anywhere;
 }
 
-.shell-add-client {
-  width: 100%;
-  min-height: 2.65rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
 .page-main {
   width: 100%;
   margin: 0;
@@ -417,7 +410,8 @@ input {
   outline-offset: 2px;
 }
 
-.button-primary:disabled {
+.button-primary:disabled,
+.button-secondary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   filter: none;
@@ -622,6 +616,71 @@ input {
   font-size: 0.875rem;
 }
 
+.workflow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--light-grey);
+  background: var(--white);
+  color: var(--mid-grey);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.workflow-steps li.is-current {
+  border-color: var(--indigo);
+  background: var(--pale-lavender);
+  color: var(--deep-navy);
+}
+
+.workflow-steps li.is-done {
+  color: var(--success);
+  border-color: #a7f3d0;
+}
+
+.intake-preview {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.intake-preview li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--light-grey);
+  font-size: 0.9rem;
+}
+
+.intake-preview li:last-child {
+  border-bottom: 0;
+}
+
+.required-mark,
+.optional-mark {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--mid-grey);
+}
+
+.required-mark {
+  color: var(--indigo);
+}
+
 .banner-info {
   margin: 0;
   padding: 0.875rem 1rem;
@@ -629,6 +688,11 @@ input {
   background: #eff6ff;
   color: #1e3a8a;
   border: 1px solid #bfdbfe;
+}
+
+.banner-info a {
+  font-weight: 600;
+  color: inherit;
 }
 
 .field textarea,

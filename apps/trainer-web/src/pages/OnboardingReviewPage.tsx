@@ -102,22 +102,22 @@ export function OnboardingReviewPage() {
 
   if (loading) {
     return (
-      <section className="page onboarding-review-page" aria-busy="true">
+      <div className="workspace-page" aria-busy="true">
         <p className="muted">Loading intake…</p>
-      </section>
+      </div>
     );
   }
 
   if (error && !relationship) {
     return (
-      <section className="page onboarding-review-page">
+      <div className="workspace-page">
         <p className="form-error" role="alert">
           {error}
         </p>
         <Link to="/clients" className="button-secondary">
           Back to Clients
         </Link>
-      </section>
+      </div>
     );
   }
 
@@ -130,19 +130,18 @@ export function OnboardingReviewPage() {
     relationship.onboardingStatus === "coaching_ready";
 
   return (
-    <section className="page narrow onboarding-review-page">
-      <header className="page-header">
+    <div className="workspace-page">
+      <div className="workspace-toolbar">
         <div>
-          <p className="eyebrow">
-            <Link to="/clients">Clients</Link> / Onboarding review
-          </p>
-          <h1>Onboarding review</h1>
+          <p className="workspace-kicker">Onboarding</p>
+          <h2 className="workspace-card-title">Review intake</h2>
           <p className="lede">
-            Review submitted intake, then continue to coaching configuration.
+            Review the trainee’s onboarding answers, then configure coaching
+            from those responses.
           </p>
         </div>
         <StatusBadge status={relationship.onboardingStatus} />
-      </header>
+      </div>
 
       {intakeMissing ? (
         <div className="workspace-card">
@@ -196,8 +195,11 @@ export function OnboardingReviewPage() {
           >
             {acting ? "Working…" : "Configure Coaching"}
           </button>
-          <Link to="/clients" className="button-ghost">
-            Back to Clients
+          <Link
+            to={`/clients/${relationship.id}/overview`}
+            className="button-ghost"
+          >
+            Back to workspace
           </Link>
         </div>
         {!canConfigure ? (
@@ -206,6 +208,6 @@ export function OnboardingReviewPage() {
           </p>
         ) : null}
       </div>
-    </section>
+    </div>
   );
 }

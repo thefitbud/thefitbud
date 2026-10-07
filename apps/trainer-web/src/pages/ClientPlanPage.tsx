@@ -9,6 +9,7 @@ import {
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
+  CoachingConfiguration,
   EffectivePlanResponse,
   PlanTemplateSummary,
   PlanVersion,
@@ -116,10 +117,13 @@ export function ClientPlanPage() {
   const [effective, setEffective] = useState<EffectivePlanResponse | null>(
     null,
   );
+  const [configuration, setConfiguration] =
+    useState<CoachingConfiguration | null>(null);
   const [templates, setTemplates] = useState<PlanTemplateSummary[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [draftPreview, setDraftPreview] = useState<PlanVersion | null>(null);
   const [surface, setSurface] = useState<PlanSurface>("summary");
+  const [replaceIntent, setReplaceIntent] = useState(false);
   const [selectedDayId, setSelectedDayId] = useState("");
   const [title, setTitle] = useState("Training block");
   const [dayName, setDayName] = useState("Day A");
@@ -142,11 +146,21 @@ export function ClientPlanPage() {
     setError(null);
     let nextVersion: PlanVersion | null = null;
     try {
-      const [result, templatePage] = await Promise.all([
+      const [result, templatePage, configResult] = await Promise.all([
         apiClient.getEffectivePlan(relationshipId),
         apiClient.listPlanTemplates(),
+        apiClient.getCoachingConfiguration(relationshipId).then(
+          (value) => value,
+          (err: unknown) => {
+            if (err instanceof ApiClientError && err.status === 404) {
+              return null;
+            }
+            throw err;
+          },
+        ),
       ]);
       setEffective(result);
+      setConfiguration(configResult);
       setTemplates(templatePage.items);
       setSelectedTemplateId(
         (current) => current || templatePage.items[0]?.id || "",
@@ -423,14 +437,27 @@ export function ClientPlanPage() {
                 <button
                   type="button"
                   className="button-primary"
-                  onClick={() => setSurface("builder")}
+                  onClick={() => {
+                    setReplaceIntent(false);
+                    setSurface("builder");
+                  }}
                 >
                   <IconAdjust />
                   Modify plan
                 </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => {
+                    setReplaceIntent(true);
+                    setSurface("builder");
+                  }}
+                >
+                  Replace plan
+                </button>
                 <Link
                   className="button-ghost"
-                  to={`/clients/${relationshipId}/history`}
+                  to={`/clients/${relationshipId}/history?kind=plan_version`}
                 >
                   View plan history
                 </Link>
@@ -438,11 +465,11 @@ export function ClientPlanPage() {
             </div>
           </section>
 
-          <div className={coachNotes.length > 0 ? "plan-tab-grid has-notes" : "plan-tab-grid"}>
+          <div className="plan-tab-grid">
             <section className="plan-card" aria-labelledby="workout-protocol-heading">
               <div className="plan-protocol-head">
                 <h3 id="workout-protocol-heading" className="plan-section-title">
-                  Workout protocol
+                  Workout
                   {workoutDays.length > 0
                     ? ` (${workoutDays.length}-day split)`
                     : ""}
@@ -481,38 +508,44 @@ export function ClientPlanPage() {
                   ))}
                 </ul>
               )}
-              {meals.length > 0 ? (
-                <div className="plan-meals">
-                  <h3 className="plan-section-title">Nutrition protocol</h3>
-                  <ul className="plan-protocol-list">
-                    {meals.map((meal) => (
-                      <li key={meal.id} className="plan-protocol-row">
-                        <span
-                          className="plan-protocol-badge plan-protocol-badge-meal"
-                          aria-hidden="true"
-                        >
-                          {meal.order}
-                        </span>
-                        <div className="plan-day-copy">
-                          <h4>{meal.name}</h4>
-                          <p className="muted">
-                            {meal.scheduleHint ?? "Meal prescription"}
-                            {meal.photoRequired ? " · photo required" : ""}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
             </section>
 
-            {coachNotes.length > 0 ? (
-              <aside className="plan-card" aria-labelledby="coach-notes-heading">
-                <h3 id="coach-notes-heading" className="plan-section-title">
-                  Coach instructions
-                </h3>
-                <p className="muted">Stored with this published version.</p>
+            <section className="plan-card" aria-labelledby="nutrition-protocol-heading">
+              <h3 id="nutrition-protocol-heading" className="plan-section-title">
+                Nutrition
+              </h3>
+              {meals.length === 0 ? (
+                <p className="muted">No nutrition prescriptions on this version.</p>
+              ) : (
+                <ul className="plan-protocol-list">
+                  {meals.map((meal) => (
+                    <li key={meal.id} className="plan-protocol-row">
+                      <span
+                        className="plan-protocol-badge plan-protocol-badge-meal"
+                        aria-hidden="true"
+                      >
+                        {meal.order}
+                      </span>
+                      <div className="plan-day-copy">
+                        <h4>{meal.name}</h4>
+                        <p className="muted">
+                          {meal.scheduleHint ?? "Meal prescription"}
+                          {meal.photoRequired ? " · photo required" : ""}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="plan-card" aria-labelledby="coach-notes-heading">
+              <h3 id="coach-notes-heading" className="plan-section-title">
+                Instructions
+              </h3>
+              {coachNotes.length === 0 ? (
+                <p className="muted">No stored instructions on this version.</p>
+              ) : (
                 <ul className="plan-note-list">
                   {coachNotes.map((note) => (
                     <li key={`${note.title}:${note.body}`} className="plan-note">
@@ -521,8 +554,68 @@ export function ClientPlanPage() {
                     </li>
                   ))}
                 </ul>
-              </aside>
-            ) : null}
+              )}
+            </section>
+
+            <section className="plan-card" aria-labelledby="tracking-heading">
+              <h3 id="tracking-heading" className="plan-section-title">
+                Tracking expectations
+              </h3>
+              {configuration ? (
+                <dl className="workspace-facts">
+                  <div>
+                    <dt className="section-kicker">Workout</dt>
+                    <dd>
+                      {configuration.workout.sessionsPerWeek} sessions / week ·{" "}
+                      {configuration.workout.completionWindowHours}h window
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="section-kicker">Nutrition</dt>
+                    <dd>
+                      {configuration.nutrition.mealsPerDay} meals / day · photos{" "}
+                      {configuration.nutrition.photoRequirement.replace(
+                        /_/g,
+                        " ",
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="section-kicker">Check-ins</dt>
+                    <dd>
+                      {configuration.checkin.cadence} ·{" "}
+                      {configuration.checkin.dueWindowHours}h due window
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="section-kicker">Evidence</dt>
+                    <dd>
+                      {[
+                        configuration.tracking.requireBodyWeight
+                          ? "body weight"
+                          : null,
+                        configuration.tracking.requireProgressPhotos
+                          ? "progress photos"
+                          : null,
+                        configuration.tracking.requireSessionRpe
+                          ? "session RPE"
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "None required"}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="muted">
+                  Set tracking expectations in{" "}
+                  <Link to={`/clients/${relationshipId}/configure`}>
+                    client settings
+                  </Link>
+                  .
+                </p>
+              )}
+            </section>
           </div>
         </div>
       ) : error && !version ? null : (
@@ -563,9 +656,13 @@ export function ClientPlanPage() {
               className="plan-form plan-split-apply"
               onSubmit={(event) => void onApplyTemplate(event)}
             >
-              <h3 className="plan-section-title">Apply a template</h3>
+              <h3 className="plan-section-title">
+                {replaceIntent ? "Replace from template" : "Apply a template"}
+              </h3>
               <p className="muted">
-                Copies into a draft.{" "}
+                {replaceIntent
+                  ? "Copies a template into a new draft. Publishing creates a new immutable version; it does not edit the current published plan."
+                  : "Copies into a draft."}{" "}
                 <Link to="/templates">Manage templates</Link>
               </p>
               {templates.length === 0 ? (
@@ -722,7 +819,10 @@ export function ClientPlanPage() {
                   <button
                     type="button"
                     className="button-ghost"
-                    onClick={() => setSurface("summary")}
+                    onClick={() => {
+                      setReplaceIntent(false);
+                      setSurface("summary");
+                    }}
                   >
                     Back to plan
                   </button>

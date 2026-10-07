@@ -4,16 +4,20 @@
   "version": "0.0.0",
   "orientation": "portrait",
   "userInterfaceStyle": "light",
+  "scheme": "fitbud",
   "splash": {
     "resizeMode": "contain",
     "backgroundColor": "#F7F8FB"
   },
   "ios": {
-    "supportsTablet": true
+    "supportsTablet": true,
+    "bundleIdentifier": "com.thefitbud.mobile"
   },
   "android": {
+    "package": "com.thefitbud.mobile",
     "adaptiveIcon": {
       "backgroundColor": "#F7F8FB"
     }
-  }
+  },
+  "plugins": ["expo-dev-client"]
 }
