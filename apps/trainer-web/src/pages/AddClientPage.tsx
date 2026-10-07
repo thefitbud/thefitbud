@@ -129,6 +129,15 @@ export function AddClientPage() {
   }
 
   const fields = intakeFieldPreview(definition);
+  const selectedTemplate =
+    templates.find((template) => template.id === templateId) ?? null;
+  const previewCopy = !templateId
+    ? "No template selected. The template id is omitted so the server resolves the form."
+    : definition
+      ? `The invitation stores version ${definition.version} of this template (${definition.key}). A later version does not retarget it.`
+      : previewError
+        ? "The latest version could not be previewed. Creating the invitation still stores the latest version of the selected template, and a later version does not retarget it."
+        : "Loading the latest version. The invitation stores that version, and a later version does not retarget it.";
   const inviteWhatsappHref = created
     ? clientWhatsappHref({
         phoneE164: created.recipientWhatsappE164,
@@ -342,11 +351,13 @@ export function AddClientPage() {
             <h2 id="onboarding-form-heading" className="workspace-card-title">
               Onboarding form
             </h2>
-            <p className="lede">
-              {definition
-                ? `Latest version of the selected template (${definition.key}, version ${definition.version}). The invitation pins that version.`
-                : "No template selected. Create the invitation without a template id so the server pins the resolved form."}
-            </p>
+            <p className="lede">{previewCopy}</p>
+            {selectedTemplate?.ownership === "global" ? (
+              <p className="muted">
+                Selecting this shared template does not create a trainer-owned
+                copy.
+              </p>
+            ) : null}
           </div>
         </div>
         {previewError ? (

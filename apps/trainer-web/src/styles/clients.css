@@ -39,23 +39,6 @@
   gap: 0.55rem;
 }
 
-.roster-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.35rem;
-  min-height: 1.25rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  background: var(--pale-lavender);
-  color: var(--indigo);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -160,6 +143,35 @@
   outline-offset: 2px;
 }
 
+.roster-filters {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.roster-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  width: 100%;
+}
+
+.roster-filter-label {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  color: #98a0b3;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.roster-filter-row .segment {
+  flex: 1 1 auto;
+}
+
 .clients-page .segment,
 .checkins-page .segment {
   gap: 0.2rem;
@@ -243,6 +255,10 @@
   width: 100%;
   min-width: 40rem;
   border-collapse: collapse;
+}
+
+.clients-page .roster-table {
+  min-width: 64rem;
 }
 
 .roster-table th,
@@ -384,6 +400,53 @@
   font-weight: 600;
 }
 
+.clients-page .roster-table td {
+  vertical-align: top;
+}
+
+.roster-checkin {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.roster-plan {
+  display: block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.roster-table .adherence-on_track {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.roster-table .adherence-needs_attention {
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.roster-table .adherence-no_recent_data {
+  background: var(--light-grey);
+  color: var(--dark-grey);
+}
+
+.roster-table .adherence-not_available {
+  background: #f4f5f8;
+  color: var(--mid-grey);
+}
+
+.roster-more {
+  display: flex;
+  justify-content: center;
+  padding: 0.85rem 1.05rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
 .roster-table .status-pill.status-scheduled {
   background: var(--light-grey);
   color: var(--dark-grey);
@@ -455,5 +518,9 @@
 
   .roster-table {
     min-width: 32rem;
+  }
+
+  .clients-page .roster-table {
+    min-width: 52rem;
   }
 }
