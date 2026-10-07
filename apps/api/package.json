@@ -1,0 +1,36 @@
+{
+  "name": "@fitbud/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply fitbud --local --persist-to .wrangler/state",
+    "db:migrate": "wrangler d1 migrations apply fitbud"
+  },
+  "dependencies": {
+    "@fitbud/contracts": "workspace:*",
+    "@fitbud/core": "workspace:*",
+    "drizzle-orm": "^0.42.0",
+    "hono": "^4.7.7",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250416.0",
+    "@fitbud/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/sql.js": "^1.4.9",
+    "drizzle-kit": "^0.31.0",
+    "eslint": "^9.24.0",
+    "sql.js": "^1.13.0",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.29.1",
+    "vitest": "catalog:",
+    "wrangler": "^4.12.0"
+  }
+}

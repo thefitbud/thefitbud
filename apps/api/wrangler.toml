@@ -1,0 +1,61 @@
+# FitBud API — Cloudflare Workers
+# Operating / SLO guardrails (Technical Architecture §§16–17) — comments only,
+# not dashboards. Exit free tier before these become routine:
+# - ≤50k Worker requests/day; ≤75 RPM sustained / ≤300 RPM peak
+# - D1 ≤3M reads/day, ≤50k writes/day, ≤350 MB
+# - R2 ≤7 GB; ≤500k Class A / ≤5M Class B ops/month
+# - Realtime ≤250 sockets / ≤20k WS messages/day
+# - Background jobs ≤2,500/day; reminder cron ~every 15m
+# - API latency targets: p95 <500ms, p99 <1s for normal CRUD/sync
+# Shared constants: packages/config/slo-guardrails.js
+
+name = "fitbud-api"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fitbud"
+database_id = "00000000-0000-4000-8000-000000000001"
+migrations_dir = "drizzle"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "fitbud-media"
+preview_bucket_name = "fitbud-media-preview"
+
+# Reminder delivery queue (local name; override via gitignored Cloudflare config if present).
+# Do not commit production account/queue secrets.
+# Guardrail: ≤2,500 queued jobs/day; pickup p95 < 2 minutes.
+[[queues.producers]]
+binding = "REMINDER_QUEUE"
+queue = "fitbud-jobs-dev"
+
+[[queues.consumers]]
+queue = "fitbud-jobs-dev"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+
+# Evaluate due reminders from authoritative schedules (~every 15 minutes UTC).
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Selected realtime: one DO room per coaching relationship (plan/execution/
+# compliance/check-in/exception hints). REST/sync remain authoritative.
+# Realtime operating guardrail (Tech Architecture §16): ≤250 sockets / ≤20k WS msgs/day.
+[[durable_objects.bindings]]
+name = "RELATIONSHIP_REALTIME"
+class_name = "RelationshipRealtimeRoom"
+
+[[migrations]]
+tag = "v1-realtime"
+new_classes = ["RelationshipRealtimeRoom"]
+
+[vars]
+FIREBASE_PROJECT_ID = "fitbud-local"
+SESSION_COOKIE_NAME = "fitbud_session"
+AUTH_MODE = "test"
+PUSH_PROVIDER_MODE = "test"
+MEDIA_SIGNING_SECRET = "local-dev-media-signing-secret"

@@ -1,0 +1,86 @@
+[
+  {
+    "idx": 0,
+    "version": "7",
+    "when": 1727366400000,
+    "tag": "0000_identity",
+    "breakpoints": true
+  },
+  {
+    "idx": 1,
+    "version": "7",
+    "when": 1727452800000,
+    "tag": "0001_relationship_onboarding",
+    "breakpoints": true
+  },
+  {
+    "idx": 2,
+    "version": "7",
+    "when": 1727539200000,
+    "tag": "0002_coaching_configuration",
+    "breakpoints": true
+  },
+  {
+    "idx": 3,
+    "version": "7",
+    "when": 1727625600000,
+    "tag": "0003_plans",
+    "breakpoints": true
+  },
+  {
+    "idx": 4,
+    "version": "7",
+    "when": 1727712000000,
+    "tag": "0004_workouts",
+    "breakpoints": true
+  },
+  {
+    "idx": 5,
+    "version": "7",
+    "when": 1727798400000,
+    "tag": "0005_meals",
+    "breakpoints": true
+  },
+  {
+    "idx": 6,
+    "version": "7",
+    "when": 1727884800000,
+    "tag": "0006_checkins",
+    "breakpoints": true
+  },
+  {
+    "idx": 7,
+    "version": "7",
+    "when": 1727971200000,
+    "tag": "0007_exceptions",
+    "breakpoints": true
+  },
+  {
+    "idx": 8,
+    "version": "7",
+    "when": 1728057600000,
+    "tag": "0008_progress_media",
+    "breakpoints": true
+  },
+  {
+    "idx": 9,
+    "version": "7",
+    "when": 1728144000000,
+    "tag": "0009_sync",
+    "breakpoints": true
+  },
+  {
+    "idx": 10,
+    "version": "7",
+    "when": 1728230400000,
+    "tag": "0010_notifications",
+    "breakpoints": true
+  },
+  {
+    "idx": 11,
+    "version": "7",
+    "when": 1728316800000,
+    "tag": "0011_templates_libraries",
+    "breakpoints": true
+  }
+]
