@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from
 import { Link, NavLink, Outlet, useMatch, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
+  AdherenceState,
   Checkin,
+  CheckinStatus,
   ClientWorkspace,
   CoachingConfiguration,
   OnboardingStatus,
   RenewalState,
+  WorkspaceTraineeProfile,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { clientWhatsappHref } from "../lib/whatsapp";
@@ -80,6 +83,73 @@ function renewalLabel(state: RenewalState): string {
       return _exhaustive;
     }
   }
+}
+
+/** Text label for the derived adherence state. Color never stands alone. */
+function adherenceLabel(state: AdherenceState): string {
+  switch (state) {
+    case "on_track":
+      return "On track";
+    case "needs_attention":
+      return "Needs attention";
+    case "no_recent_data":
+      return "No recent data";
+    case "not_available":
+      return "Not available";
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
+}
+
+function adherenceClass(state: AdherenceState): string {
+  return `workspace-adherence is-${state.replaceAll("_", "-")}`;
+}
+
+function checkinStatusLabel(status: CheckinStatus): string {
+  switch (status) {
+    case "scheduled":
+      return "Scheduled";
+    case "due":
+      return "Due";
+    case "submitted":
+      return "Submitted";
+    case "reviewed":
+      return "Reviewed";
+    case "overdue":
+      return "Overdue";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+function formatCheckinDate(localDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
+  if (!match) return localDate;
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  );
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function nextCheckinLabel(checkin: Checkin): string {
+  return `Next check-in ${formatCheckinDate(checkin.localDate)} · ${checkinStatusLabel(checkin.status)}`;
+}
+
+/** Age and gender only. Omits the profile display name and any missing field. */
+function compactProfileLabel(profile: WorkspaceTraineeProfile): string | null {
+  const gender = profile.gender?.trim() || null;
+  if (profile.age != null && gender) return `${profile.age} · ${gender}`;
+  if (profile.age != null) return `Age ${profile.age}`;
+  return gender;
 }
 
 /** Coaching configuration, shown in the menu so it is not another status badge. */
@@ -216,6 +286,8 @@ export function ClientWorkspaceLayout() {
   const needsReminder =
     onboardingStatus === "invited" || onboardingStatus === "onboarding_pending";
   const planTitle = header?.effectivePlan?.title ?? null;
+  const nextCheckin = workspace?.overview.nextCheckin ?? null;
+  const profileLabel = header ? compactProfileLabel(header.traineeProfile) : null;
 
   const whatsappHrefValue = clientWhatsappHref({
     phoneE164: whatsappE164,
@@ -305,19 +377,30 @@ export function ClientWorkspaceLayout() {
                   <h1 className="workspace-title">{heading}</h1>
                 </div>
                 <p className="workspace-meta">
-                  {clientStatus && onboardingStatus ? (
-                    <span className={clientStatusClass(onboardingStatus)}>
-                      <span className="workspace-status-dot" aria-hidden="true" />
-                      {clientStatus}
-                    </span>
+                  {header && onboardingStatus ? (
+                    <>
+                      {header.goalShort ? <span>{header.goalShort}</span> : null}
+                      {clientStatus ? (
+                        <span className={clientStatusClass(onboardingStatus)}>
+                          <span className="workspace-status-dot" aria-hidden="true" />
+                          {clientStatus}
+                        </span>
+                      ) : null}
+                      <span className={adherenceClass(header.adherenceState)}>
+                        {adherenceLabel(header.adherenceState)}
+                      </span>
+                      {planTitle ? <span>{planTitle}</span> : null}
+                      {nextCheckin ? (
+                        <span>{nextCheckinLabel(nextCheckin)}</span>
+                      ) : null}
+                      {profileLabel ? <span>{profileLabel}</span> : null}
+                      {header.renewalState ? (
+                        <span>{renewalLabel(header.renewalState)}</span>
+                      ) : null}
+                    </>
                   ) : (
                     <span>{workspaceLoading ? "Loading client…" : "Client workspace"}</span>
                   )}
-                  {planTitle ? <span>{planTitle}</span> : null}
-                  {header?.goalShort ? <span>{header.goalShort}</span> : null}
-                  {header?.renewalState ? (
-                    <span>{renewalLabel(header.renewalState)}</span>
-                  ) : null}
                 </p>
                 {workspaceError ? (
                   <p className="form-error" role="alert">
