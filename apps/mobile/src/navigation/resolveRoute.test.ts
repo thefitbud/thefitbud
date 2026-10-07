@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { CoachingRelationship, MeResponse } from "@fitbud/contracts";
+import type {
+  CoachingRelationship,
+  MeResponse,
+  OnboardingStatus,
+} from "@fitbud/contracts";
 import {
   resolveAppRoute,
   selectInitialMobileRole,
@@ -33,22 +37,13 @@ const meDual: MeResponse = {
   traineeProfileId: "22222222-2222-4222-8222-222222222222",
 };
 
-function relationship(
-  status: CoachingRelationship["status"],
-): CoachingRelationship {
+function relationship(onboardingStatus: OnboardingStatus): CoachingRelationship {
   return {
     id: "44444444-4444-4444-8444-444444444444",
     trainerUserId: "55555555-5555-4555-8555-555555555555",
     traineeUserId: meTrainee.userId,
-    status,
-    onboardingStatus:
-      status === "onboarding_pending"
-        ? "onboarding_pending"
-        : status === "onboarding_submitted"
-          ? "onboarding_submitted"
-          : status === "coaching_ready"
-            ? "coaching_ready"
-            : "coaching_ready",
+    status: onboardingStatus === "ended" ? "ended" : "active",
+    onboardingStatus,
     invitationId: null,
     startedAt: "2026-09-26T00:00:00.000Z",
     endedAt: null,
@@ -154,6 +149,17 @@ describe("resolveAppRoute", () => {
         selectedRole: "trainee",
         needsAccountLink: false,
         relationships: [relationship("coaching_ready")],
+      }).name,
+    ).toBe("trainee_shell");
+
+    expect(
+      resolveAppRoute({
+        accessToken: "test.token",
+        bootstrapping: false,
+        me: meTrainee,
+        selectedRole: "trainee",
+        needsAccountLink: false,
+        relationships: [relationship("active")],
       }).name,
     ).toBe("trainee_shell");
   });

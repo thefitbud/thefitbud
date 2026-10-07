@@ -176,7 +176,9 @@ export function TemplatesPage() {
       setFoods(foodPage.items);
       setInvitations(invitationOutcome.ok ? invitationOutcome.value.items : []);
       const ready = relationshipPage.items.filter(
-        (item) => item.status === "coaching_ready",
+        (item) =>
+          item.onboardingStatus === "coaching_ready" ||
+          item.onboardingStatus === "active",
       );
       setRelationships(ready);
       setApplyTemplateId((current) => current || templatePage.items[0]?.id || "");

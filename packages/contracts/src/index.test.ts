@@ -3,7 +3,8 @@ import {
   coachingConfigurationSchema,
   createInvitationRequestSchema,
   healthResponseSchema,
-  intakeDefinitionSchema,
+  onboardingFormDefinitionSchema,
+  onboardingFormVersionSchema,
   meResponseSchema,
   onboardingStatusSchema,
   planContentSchema,
@@ -69,12 +70,15 @@ describe("contracts", () => {
 
   it("accepts onboarding status values", () => {
     expect(onboardingStatusSchema.parse("coaching_ready")).toBe("coaching_ready");
+    expect(onboardingStatusSchema.parse("active")).toBe("active");
+    expect(onboardingStatusSchema.parse("ended")).toBe("ended");
   });
 
-  it("validates intake definition shape", () => {
+  it("validates onboarding form version shape", () => {
     expect(
-      intakeDefinitionSchema.parse({
+      onboardingFormVersionSchema.parse({
         id: "11111111-1111-4111-8111-111111111111",
+        templateId: "10111111-1111-4111-8111-111111111111",
         key: "mvp",
         version: 1,
         scope: "global",
@@ -89,6 +93,25 @@ describe("contracts", () => {
         createdAt: "2026-09-26T00:00:00.000Z",
       }),
     ).toMatchObject({ key: "mvp", version: 1 });
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          {
+            id: "experience",
+            type: "select",
+            label: "Experience",
+            required: true,
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          { id: "score", type: "rating", label: "Score", required: true },
+        ],
+      }),
+    ).toThrow();
   });
 
   it("validates coaching configuration draft request", () => {
@@ -118,7 +141,8 @@ describe("contracts", () => {
         id: "11111111-1111-4111-8111-111111111111",
         coachingRelationshipId: "22222222-2222-4222-8222-222222222222",
         status: "draft",
-        version: 1,
+        versionNumber: 1,
+        recordVersion: 1,
         primaryGoal: "Strength",
         notes: null,
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
@@ -138,7 +162,7 @@ describe("contracts", () => {
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
-    ).toMatchObject({ status: "draft", version: 1 });
+    ).toMatchObject({ status: "draft", versionNumber: 1, recordVersion: 1 });
   });
 
   it("validates plan content snapshots", () => {
@@ -372,6 +396,7 @@ describe("contracts", () => {
           workoutReminder: true,
           mealReminder: true,
           checkinReminder: true,
+          subscriptionRenewalReminder: true,
         },
         quietHoursStart: null,
         quietHoursEnd: null,

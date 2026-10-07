@@ -62,6 +62,7 @@ export const notificationTypeSchema = z.enum([
   "workout_reminder",
   "meal_reminder",
   "checkin_reminder",
+  "subscription_renewal_reminder",
 ]);
 export type NotificationType = z.infer<typeof notificationTypeSchema>;
 
@@ -77,6 +78,7 @@ export const notificationPreferencesSchema = z.object({
     workoutReminder: z.boolean(),
     mealReminder: z.boolean(),
     checkinReminder: z.boolean(),
+    subscriptionRenewalReminder: z.boolean(),
   }),
   quietHoursStart: z
     .string()
@@ -99,6 +101,7 @@ export const updateNotificationPreferencesRequestSchema = z.object({
       workoutReminder: z.boolean().optional(),
       mealReminder: z.boolean().optional(),
       checkinReminder: z.boolean().optional(),
+      subscriptionRenewalReminder: z.boolean().optional(),
     })
     .optional(),
   quietHoursStart: z
@@ -160,6 +163,7 @@ export const notificationDomainEntityTypeSchema = z.enum([
   "workout_assignment",
   "meal_assignment",
   "checkin",
+  "coaching_relationship",
 ]);
 export type NotificationDomainEntityType = z.infer<
   typeof notificationDomainEntityTypeSchema

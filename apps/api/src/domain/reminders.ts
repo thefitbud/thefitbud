@@ -6,14 +6,18 @@ import type {
 } from "@fitbud/contracts";
 import {
   DEFAULT_REMINDER_TYPES,
+  deriveRenewalState,
   domainEntityTypeForReminder,
+  formatLocalDate,
   isCategoryEnabled,
   isCheckinReminderEligible,
   isMealReminderEligible,
+  isSubscriptionRenewalReminderEligible,
   isWithinQuietHours,
   isWorkoutReminderEligible,
   localTimeHhMm,
   reminderDedupeKey,
+  subscriptionRenewalDedupeKey,
 } from "@fitbud/core";
 import type { createDb } from "../db/client";
 import {
@@ -27,6 +31,7 @@ import {
   notifications,
   reminderRules,
   scheduledJobs,
+  subscriptionVersions,
   users,
   workoutAssignments,
   workoutExecutions,
@@ -66,6 +71,7 @@ async function loadOrDefaultPreferences(db: Db, userId: string) {
         workoutReminder: row.workoutReminder,
         mealReminder: row.mealReminder,
         checkinReminder: row.checkinReminder,
+        subscriptionRenewalReminder: row.subscriptionRenewalReminder,
       },
       quietHoursStart: row.quietHoursStart,
       quietHoursEnd: row.quietHoursEnd,
@@ -77,6 +83,7 @@ async function loadOrDefaultPreferences(db: Db, userId: string) {
       workoutReminder: true,
       mealReminder: true,
       checkinReminder: true,
+      subscriptionRenewalReminder: true,
     },
     quietHoursStart: null as string | null,
     quietHoursEnd: null as string | null,
@@ -113,7 +120,7 @@ async function collectCandidates(
   const relationships = await db
     .select()
     .from(coachingRelationships)
-    .where(eq(coachingRelationships.status, "coaching_ready"));
+    .where(eq(coachingRelationships.status, "active"));
 
   const candidates: ReminderCandidate[] = [];
 
@@ -244,6 +251,44 @@ async function collectCandidates(
             domainEntityId: checkin.id,
           }),
         });
+      }
+    }
+
+    if (enabled.has("subscription_renewal_reminder")) {
+      const versions = await db
+        .select()
+        .from(subscriptionVersions)
+        .where(eq(subscriptionVersions.coachingRelationshipId, relationship.id))
+        .orderBy(desc(subscriptionVersions.versionNumber))
+        .limit(1);
+      const current = versions[0];
+      if (current) {
+        const trainer = await db
+          .select({ timezone: users.timezone })
+          .from(users)
+          .where(eq(users.id, relationship.trainerUserId))
+          .limit(1);
+        const today = formatLocalDate(
+          new Date(now),
+          trainer[0]?.timezone ?? "UTC",
+        );
+        const renewalState = deriveRenewalState({
+          today,
+          renewsOn: current.renewsOn,
+        });
+        if (isSubscriptionRenewalReminderEligible(renewalState)) {
+          candidates.push({
+            type: "subscription_renewal_reminder",
+            recipientUserId: relationship.traineeUserId,
+            coachingRelationshipId: relationship.id,
+            domainEntityId: relationship.id,
+            dedupeKey: subscriptionRenewalDedupeKey({
+              relationshipId: relationship.id,
+              renewsOn: current.renewsOn,
+              renewalState,
+            }),
+          });
+        }
       }
     }
   }

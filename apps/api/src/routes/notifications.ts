@@ -86,6 +86,7 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
     workoutReminder: true,
     mealReminder: true,
     checkinReminder: true,
+    subscriptionRenewalReminder: true,
     quietHoursStart: null,
     quietHoursEnd: null,
     createdAt: now,
@@ -290,6 +291,9 @@ notificationRoutes.put(
           parsed.data.categories?.mealReminder ?? current.mealReminder,
         checkinReminder:
           parsed.data.categories?.checkinReminder ?? current.checkinReminder,
+        subscriptionRenewalReminder:
+          parsed.data.categories?.subscriptionRenewalReminder ??
+          current.subscriptionRenewalReminder,
         quietHoursStart:
           parsed.data.quietHoursStart === undefined
             ? current.quietHoursStart

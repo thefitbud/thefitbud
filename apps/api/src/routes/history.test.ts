@@ -29,6 +29,8 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0008_progress_media.sql",
     "0009_sync.sql",
     "0010_notifications.sql",
+    "0013_domain_contracts.sql",
+  "0014_onboarding_form_templates.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -121,7 +123,7 @@ async function reachActiveConfig(suffix: string) {
   const relationshipId = acceptBody.data.relationship.id;
 
   await app.request(
-    `/intake/relationships/${relationshipId}/draft`,
+    `/onboarding/relationships/${relationshipId}/draft`,
     {
       method: "PUT",
       headers: {
@@ -143,7 +145,7 @@ async function reachActiveConfig(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/submit`,
+    `/onboarding/relationships/${relationshipId}/submit`,
     {
       method: "POST",
       headers: {
@@ -157,7 +159,7 @@ async function reachActiveConfig(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/review`,
+    `/onboarding/relationships/${relationshipId}/review`,
     {
       method: "POST",
       headers: {
@@ -343,7 +345,7 @@ describe("history view", () => {
     };
 
     const kinds = new Set(body.data.items.map((item) => item.kind));
-    expect(kinds.has("intake_submitted")).toBe(true);
+    expect(kinds.has("onboarding_submitted")).toBe(true);
     expect(kinds.has("onboarding_reviewed")).toBe(true);
     expect(kinds.has("configuration_activated")).toBe(true);
     expect(kinds.has("trainer_note")).toBe(true);

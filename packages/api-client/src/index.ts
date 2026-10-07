@@ -34,8 +34,13 @@ import {
   foodLibraryListResponseSchema,
   healthResponseSchema,
   historyListResponseSchema,
-  intakeDefinitionSchema,
-  intakeSubmissionSchema,
+  createOnboardingFormTemplateRequestSchema,
+  createOnboardingFormTemplateVersionRequestSchema,
+  forkOnboardingFormTemplateRequestSchema,
+  onboardingFormResponseSchema,
+  onboardingFormTemplateDetailSchema,
+  onboardingFormTemplateListResponseSchema,
+  onboardingFormVersionSchema,
   invitationListResponseSchema,
   invitationSchema,
   interventionListResponseSchema,
@@ -51,8 +56,11 @@ import {
   relationshipListResponseSchema,
   coachingRelationshipSchema,
   saveConfigurationDraftRequestSchema,
-  saveIntakeDraftRequestSchema,
-  submitIntakeRequestSchema,
+  saveOnboardingDraftRequestSchema,
+  saveSubscriptionRequestSchema,
+  submitOnboardingRequestSchema,
+  subscriptionAttentionResponseSchema,
+  subscriptionSchema,
   syncPullResponseSchema,
   syncPushRequestSchema,
   syncPushResponseSchema,
@@ -162,8 +170,13 @@ import {
   type GenerateWorkoutAssignmentsResponse,
   type HistoryListResponse,
   type HealthResponse,
-  type IntakeDefinition,
-  type IntakeSubmission,
+  type CreateOnboardingFormTemplateRequest,
+  type CreateOnboardingFormTemplateVersionRequest,
+  type ForkOnboardingFormTemplateRequest,
+  type OnboardingFormResponse,
+  type OnboardingFormTemplateDetail,
+  type OnboardingFormTemplateListResponse,
+  type OnboardingFormVersion,
   type Intervention,
   type InterventionListResponse,
   type Invitation,
@@ -190,13 +203,16 @@ import {
   type ResolveExceptionRequest,
   type SaveCheckinDraftRequest,
   type SaveConfigurationDraftRequest,
-  type SaveIntakeDraftRequest,
+  type SaveOnboardingDraftRequest,
+  type SaveSubscriptionRequest,
   type ScheduleCheckinRequest,
   type ScheduleCheckinResponse,
   type ScheduleNextCheckinRequest,
   type SkipMealRequest,
   type SubmitCheckinRequest,
-  type SubmitIntakeRequest,
+  type SubmitOnboardingRequest,
+  type Subscription,
+  type SubscriptionAttentionResponse,
   type SyncPullResponse,
   type SyncPushRequest,
   type SyncPushResponse,
@@ -367,47 +383,122 @@ export class FitBudApiClient {
     );
   }
 
-  async getCurrentIntakeDefinition(): Promise<IntakeDefinition> {
+  async getCurrentOnboardingForm(
+    relationshipId?: string,
+  ): Promise<OnboardingFormVersion> {
+    const suffix = relationshipId
+      ? `?relationshipId=${encodeURIComponent(relationshipId)}`
+      : "";
     return this.request(
       "GET",
-      "/intake/definitions/current",
-      intakeDefinitionSchema,
+      `/onboarding/forms/current${suffix}`,
+      onboardingFormVersionSchema,
       { auth: true },
     );
   }
 
-  async getIntake(relationshipId: string): Promise<IntakeSubmission> {
-    return this.request(
-      "GET",
-      `/intake/relationships/${relationshipId}`,
-      intakeSubmissionSchema,
-      { auth: true },
-    );
-  }
-
-  async saveIntakeDraft(
+  async getOnboardingResponse(
     relationshipId: string,
-    body: SaveIntakeDraftRequest,
-  ): Promise<IntakeSubmission> {
-    const parsed = saveIntakeDraftRequestSchema.parse(body);
+  ): Promise<OnboardingFormResponse> {
+    return this.request(
+      "GET",
+      `/onboarding/relationships/${relationshipId}`,
+      onboardingFormResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async saveOnboardingDraft(
+    relationshipId: string,
+    body: SaveOnboardingDraftRequest,
+  ): Promise<OnboardingFormResponse> {
+    const parsed = saveOnboardingDraftRequestSchema.parse(body);
     return this.request(
       "PUT",
-      `/intake/relationships/${relationshipId}/draft`,
-      intakeSubmissionSchema,
+      `/onboarding/relationships/${relationshipId}/draft`,
+      onboardingFormResponseSchema,
       { auth: true, body: parsed },
     );
   }
 
-  async submitIntake(
+  async submitOnboarding(
     relationshipId: string,
-    body: SubmitIntakeRequest,
+    body: SubmitOnboardingRequest,
     idempotencyKey: string,
-  ): Promise<IntakeSubmission> {
-    const parsed = submitIntakeRequestSchema.parse(body);
+  ): Promise<OnboardingFormResponse> {
+    const parsed = submitOnboardingRequestSchema.parse(body);
     return this.request(
       "POST",
-      `/intake/relationships/${relationshipId}/submit`,
-      intakeSubmissionSchema,
+      `/onboarding/relationships/${relationshipId}/submit`,
+      onboardingFormResponseSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async listOnboardingFormTemplates(query?: {
+    cursor?: string;
+    limit?: number;
+  }): Promise<OnboardingFormTemplateListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request(
+      "GET",
+      `/onboarding/form-templates${suffix}`,
+      onboardingFormTemplateListResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async getOnboardingFormTemplate(
+    templateId: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    return this.request(
+      "GET",
+      `/onboarding/form-templates/${templateId}`,
+      onboardingFormTemplateDetailSchema,
+      { auth: true },
+    );
+  }
+
+  async createOnboardingFormTemplate(
+    body: CreateOnboardingFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    const parsed = createOnboardingFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      "/onboarding/form-templates",
+      onboardingFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async forkOnboardingFormTemplate(
+    templateId: string,
+    body: ForkOnboardingFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    const parsed = forkOnboardingFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/onboarding/form-templates/${templateId}/fork`,
+      onboardingFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async createOnboardingFormTemplateVersion(
+    templateId: string,
+    body: CreateOnboardingFormTemplateVersionRequest,
+    idempotencyKey: string,
+  ): Promise<OnboardingFormTemplateDetail> {
+    const parsed = createOnboardingFormTemplateVersionRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/onboarding/form-templates/${templateId}/versions`,
+      onboardingFormTemplateDetailSchema,
       { auth: true, body: parsed, idempotencyKey },
     );
   }
@@ -420,7 +511,7 @@ export class FitBudApiClient {
     const parsed = createOnboardingReviewRequestSchema.parse(body);
     return this.request(
       "POST",
-      `/intake/relationships/${relationshipId}/review`,
+      `/onboarding/relationships/${relationshipId}/review`,
       createOnboardingReviewResponseSchema,
       { auth: true, body: parsed, idempotencyKey },
     );
@@ -461,6 +552,52 @@ export class FitBudApiClient {
       `/configurations/relationships/${relationshipId}/configure`,
       coachingConfigurationSchema,
       { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async createConfigurationVersion(
+    relationshipId: string,
+    body: ActivateConfigurationRequest,
+    idempotencyKey: string,
+  ): Promise<CoachingConfiguration> {
+    const parsed = activateConfigurationRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/configurations/relationships/${relationshipId}/versions`,
+      coachingConfigurationSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async getSubscription(relationshipId: string): Promise<Subscription> {
+    return this.request(
+      "GET",
+      `/relationships/${relationshipId}/subscription`,
+      subscriptionSchema,
+      { auth: true },
+    );
+  }
+
+  async saveSubscription(
+    relationshipId: string,
+    body: SaveSubscriptionRequest,
+    idempotencyKey: string,
+  ): Promise<Subscription> {
+    const parsed = saveSubscriptionRequestSchema.parse(body);
+    return this.request(
+      "PUT",
+      `/relationships/${relationshipId}/subscription`,
+      subscriptionSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async listSubscriptionAttention(): Promise<SubscriptionAttentionResponse> {
+    return this.request(
+      "GET",
+      "/subscriptions/attention",
+      subscriptionAttentionResponseSchema,
+      { auth: true },
     );
   }
 

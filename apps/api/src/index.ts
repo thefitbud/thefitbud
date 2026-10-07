@@ -14,7 +14,11 @@ import { configurationRoutes } from "./routes/configurations";
 import { exceptionRoutes } from "./routes/exceptions";
 import { fileRoutes } from "./routes/files";
 import { invitationRoutes } from "./routes/invitations";
-import { intakeRoutes } from "./routes/intake";
+import { onboardingRoutes } from "./routes/onboarding";
+import {
+  subscriptionAttentionRoutes,
+  subscriptionRoutes,
+} from "./routes/subscriptions";
 import { mealRoutes } from "./routes/meals";
 import { notificationRoutes } from "./routes/notifications";
 import { planRoutes } from "./routes/plans";
@@ -46,8 +50,10 @@ app.get("/health", (c) =>
 app.route("/auth", authRoutes);
 app.route("/me", meRoutes);
 app.route("/invitations", invitationRoutes);
+app.route("/relationships", subscriptionRoutes);
 app.route("/relationships", relationshipRoutes);
-app.route("/intake", intakeRoutes);
+app.route("/subscriptions", subscriptionAttentionRoutes);
+app.route("/onboarding", onboardingRoutes);
 app.route("/configurations", configurationRoutes);
 app.route("/plans", planRoutes);
 app.route("/templates", templateRoutes);

@@ -139,10 +139,7 @@ export function ClientOverviewPage() {
   const needsConfiguration =
     onboardingStatus === "coaching_ready" &&
     configuration?.status !== "active";
-  const needsPlan =
-    onboardingStatus === "coaching_ready" &&
-    configuration?.status === "active" &&
-    !hasEffectivePlan;
+  const needsPlan = onboardingStatus === "active" && !hasEffectivePlan;
 
   return (
     <div className="workspace-page workspace-overview">

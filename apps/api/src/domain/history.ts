@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import type { HistoryItem } from "@fitbud/contracts";
 import {
   compareHistoryItemsNewestFirst,
@@ -11,7 +11,8 @@ import {
   coachingConfigurations,
   exceptions,
   interventions,
-  intakeSubmissions,
+  onboardingFormResponses,
+  subscriptionVersions,
   mealAssignments,
   mealCompliance,
   measurements,
@@ -50,7 +51,8 @@ export async function assembleRelationshipHistory(
   const items: HistoryItem[] = [];
 
   const [
-    intakeRows,
+    onboardingRows,
+    subscriptionRows,
     reviewRows,
     configRows,
     planVersionRows,
@@ -67,14 +69,20 @@ export async function assembleRelationshipHistory(
   ] = await Promise.all([
     db
       .select()
-      .from(intakeSubmissions)
+      .from(onboardingFormResponses)
       .where(
         and(
-          eq(intakeSubmissions.coachingRelationshipId, relationshipId),
-          eq(intakeSubmissions.status, "submitted"),
+          eq(onboardingFormResponses.coachingRelationshipId, relationshipId),
+          eq(onboardingFormResponses.status, "submitted"),
         ),
       )
-      .orderBy(desc(intakeSubmissions.submittedAt))
+      .orderBy(desc(onboardingFormResponses.submittedAt))
+      .limit(SOURCE_FETCH_LIMIT),
+    db
+      .select()
+      .from(subscriptionVersions)
+      .where(eq(subscriptionVersions.coachingRelationshipId, relationshipId))
+      .orderBy(desc(subscriptionVersions.createdAt))
       .limit(SOURCE_FETCH_LIMIT),
     db
       .select()
@@ -88,7 +96,7 @@ export async function assembleRelationshipHistory(
       .where(
         and(
           eq(coachingConfigurations.coachingRelationshipId, relationshipId),
-          eq(coachingConfigurations.status, "active"),
+          isNotNull(coachingConfigurations.activatedAt),
         ),
       )
       .orderBy(desc(coachingConfigurations.activatedAt))
@@ -216,17 +224,30 @@ export async function assembleRelationshipHistory(
       .limit(SOURCE_FETCH_LIMIT),
   ]);
 
-  for (const row of intakeRows) {
+  for (const row of onboardingRows) {
     if (!row.submittedAt) continue;
     items.push({
       id: row.id,
-      kind: "intake_submitted",
+      kind: "onboarding_submitted",
       occurredAt: row.submittedAt,
-      title: "Intake submitted",
-      summary: "Trainee submitted onboarding intake for review.",
-      sourceEntityType: "intake_submission",
+      title: "Onboarding submitted",
+      summary: "Trainee submitted the onboarding form for review.",
+      sourceEntityType: "onboarding_form_response",
       sourceEntityId: row.id,
       status: row.status,
+    });
+  }
+
+  for (const row of subscriptionRows) {
+    items.push({
+      id: row.id,
+      kind: "subscription_revision",
+      occurredAt: row.createdAt,
+      title: `Subscription v${row.versionNumber}`,
+      summary: `${row.planName} renews ${row.renewsOn} (${humanize(row.paymentFrequency)}).`,
+      sourceEntityType: "subscription_version",
+      sourceEntityId: row.id,
+      status: String(row.versionNumber),
     });
   }
 

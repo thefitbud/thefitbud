@@ -24,6 +24,8 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0003_plans.sql",
     "0009_sync.sql",
     "0010_notifications.sql",
+    "0013_domain_contracts.sql",
+  "0014_onboarding_form_templates.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -113,7 +115,7 @@ async function reachCoachingReady(suffix: string) {
   const relationshipId = acceptBody.data.relationship.id;
 
   await app.request(
-    `/intake/relationships/${relationshipId}/draft`,
+    `/onboarding/relationships/${relationshipId}/draft`,
     {
       method: "PUT",
       headers: {
@@ -135,7 +137,7 @@ async function reachCoachingReady(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/submit`,
+    `/onboarding/relationships/${relationshipId}/submit`,
     {
       method: "POST",
       headers: {
@@ -149,7 +151,7 @@ async function reachCoachingReady(suffix: string) {
     testEnv(),
   );
   await app.request(
-    `/intake/relationships/${relationshipId}/review`,
+    `/onboarding/relationships/${relationshipId}/review`,
     {
       method: "POST",
       headers: {
@@ -235,10 +237,16 @@ describe("coaching configuration", () => {
     );
     expect(draft.status).toBe(201);
     const draftParsed = (await draft.json()) as {
-      data: { status: string; version: number; workout: { sessionsPerWeek: number } };
+      data: {
+        status: string;
+        recordVersion: number;
+        versionNumber: number;
+        workout: { sessionsPerWeek: number };
+      };
     };
     expect(draftParsed.data.status).toBe("draft");
-    expect(draftParsed.data.version).toBe(1);
+    expect(draftParsed.data.recordVersion).toBe(1);
+    expect(draftParsed.data.versionNumber).toBe(1);
     expect(draftParsed.data.workout.sessionsPerWeek).toBe(4);
 
     const traineeRead = await app.request(
@@ -268,7 +276,7 @@ describe("coaching configuration", () => {
     );
     expect(configure.status).toBe(200);
     const configured = (await configure.json()) as {
-      data: { status: string; version: number; configuredAt: string | null };
+      data: { status: string; recordVersion: number; configuredAt: string | null };
     };
     expect(configured.data.status).toBe("configured");
     expect(configured.data.configuredAt).toBeTruthy();
@@ -282,13 +290,13 @@ describe("coaching configuration", () => {
           "Content-Type": "application/json",
           "Idempotency-Key": "activate-1",
         },
-        body: JSON.stringify({ expectedVersion: configured.data.version }),
+        body: JSON.stringify({ expectedVersion: configured.data.recordVersion }),
       },
       testEnv(),
     );
     expect(activate.status).toBe(200);
     const activated = (await activate.json()) as {
-      data: { status: string; version: number };
+      data: { status: string; recordVersion: number };
     };
     expect(activated.data.status).toBe("active");
 
@@ -302,7 +310,7 @@ describe("coaching configuration", () => {
         },
         body: JSON.stringify({
           ...draftBody,
-          expectedVersion: activated.data.version,
+          expectedVersion: activated.data.recordVersion,
           primaryGoal: "Should fail",
         }),
       },

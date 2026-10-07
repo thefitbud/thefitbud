@@ -1,30 +1,33 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   createOnboardingReviewRequestSchema,
   createOnboardingReviewResponseSchema,
-  intakeDefinitionSchema,
-  intakeFieldDefinitionSchema,
-  intakeSubmissionSchema,
-  saveIntakeDraftRequestSchema,
-  submitIntakeRequestSchema,
+  onboardingFormDefinitionSchema,
+  onboardingFormResponseSchema,
+  onboardingFormVersionSchema,
+  saveOnboardingDraftRequestSchema,
+  submitOnboardingRequestSchema,
 } from "@fitbud/contracts";
 import {
   canMarkCoachingReady,
-  canSaveIntakeDraft,
-  canSubmitIntake,
-  missingRequiredIntakeFields,
+  canSaveOnboardingDraft,
+  canSubmitOnboarding,
+  onboardingAnswerErrors,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
   coachingRelationships,
-  intakeDefinitions,
-  intakeSubmissions,
+  onboardingFormResponses,
+  onboardingFormVersions,
   onboardingReviews,
 } from "../db/schema";
+import { onboardingStatusForRelationship } from "../domain/client-status";
+import { pinnedOnboardingVersionForRelationship } from "../domain/onboarding-forms";
+import { onboardingFormTemplateRoutes } from "./onboarding-templates";
 import {
-  mapIntakeDefinition,
-  mapIntakeSubmission,
+  mapOnboardingFormResponse,
+  mapOnboardingFormVersion,
   mapOnboardingReview,
   mapRelationship,
 } from "../domain/mappers";
@@ -42,45 +45,105 @@ import {
 import { canAccessRelationship } from "./relationships";
 import type { Env, Variables } from "../types";
 
-const MVP_INTAKE_KEY = "mvp";
-const SUBMIT_INTAKE_OPERATION = "intake.submit";
-const REVIEW_ONBOARDING_OPERATION = "onboarding.review";
+const SUBMIT_OPERATION = "onboarding.submit";
+const REVIEW_OPERATION = "onboarding.review";
 
-export const intakeRoutes = new Hono<{
+export const onboardingRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
 }>();
 
-async function loadCurrentMvpDefinition(db: ReturnType<typeof createDb>) {
-  const rows = await db
+type Db = ReturnType<typeof createDb>;
+
+onboardingRoutes.route("/form-templates", onboardingFormTemplateRoutes);
+
+async function currentFormForRelationship(
+  db: Db,
+  relationship: { id: string; invitationId: string | null },
+) {
+  const responses = await db
     .select()
-    .from(intakeDefinitions)
-    .where(eq(intakeDefinitions.key, MVP_INTAKE_KEY))
-    .orderBy(desc(intakeDefinitions.version))
+    .from(onboardingFormResponses)
+    .where(eq(onboardingFormResponses.coachingRelationshipId, relationship.id))
     .limit(1);
-  return rows[0] ?? null;
+  const response = responses[0];
+  if (response) {
+    const pinned = await db
+      .select()
+      .from(onboardingFormVersions)
+      .where(eq(onboardingFormVersions.id, response.onboardingFormVersionId))
+      .limit(1);
+    return pinned[0] ?? null;
+  }
+  return pinnedOnboardingVersionForRelationship(db, relationship);
 }
 
-intakeRoutes.get(
-  "/definitions/current",
+onboardingRoutes.get(
+  "/forms/current",
   optionalAuthMiddleware,
   requireAuthMiddleware,
   async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
     const db = createDb(c.env.DB);
-    const definition = await loadCurrentMvpDefinition(db);
-    if (!definition) {
+    const relationshipId = c.req.query("relationshipId")?.trim();
+    let relationship: {
+      id: string;
+      invitationId: string | null;
+      trainerUserId: string;
+      traineeUserId: string;
+    } | null = null;
+
+    if (relationshipId) {
+      const relationships = await db
+        .select()
+        .from(coachingRelationships)
+        .where(eq(coachingRelationships.id, relationshipId))
+        .limit(1);
+      const found = relationships[0];
+      if (!found || !canAccessRelationship(actor, found)) {
+        return fail(
+          c,
+          404,
+          "RELATIONSHIP_NOT_FOUND",
+          "Coaching relationship not found.",
+        );
+      }
+      relationship = found;
+    } else if (actor.selectedRole === "trainee") {
+      const relationships = await db
+        .select()
+        .from(coachingRelationships)
+        .where(eq(coachingRelationships.traineeUserId, actor.userId));
+      relationship = relationships.length === 1 ? relationships[0]! : null;
+    }
+
+    if (!relationship) {
+      return fail(
+        c,
+        400,
+        "RELATIONSHIP_REQUIRED",
+        "Pass relationshipId to read the pinned onboarding form.",
+      );
+    }
+
+    const form = await currentFormForRelationship(db, relationship);
+    if (!form) {
       return fail(
         c,
         500,
-        "INTAKE_DEFINITION_MISSING",
-        "MVP intake definition is not seeded.",
+        "ONBOARDING_FORM_MISSING",
+        "No pinned onboarding form is available for this invitation.",
       );
     }
-    return ok(c, intakeDefinitionSchema.parse(mapIntakeDefinition(definition)));
+    return ok(c, onboardingFormVersionSchema.parse(mapOnboardingFormVersion(form)));
   },
 );
 
-intakeRoutes.get(
+onboardingRoutes.get(
   "/relationships/:relationshipId",
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -103,21 +166,24 @@ intakeRoutes.get(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
-    const submissions = await db
+    const responses = await db
       .select()
-      .from(intakeSubmissions)
-      .where(eq(intakeSubmissions.coachingRelationshipId, relationshipId))
+      .from(onboardingFormResponses)
+      .where(eq(onboardingFormResponses.coachingRelationshipId, relationshipId))
       .limit(1);
-    const submission = submissions[0];
-    if (!submission) {
-      return fail(c, 404, "INTAKE_NOT_FOUND", "Intake submission not found.");
+    const response = responses[0];
+    if (!response) {
+      return fail(c, 404, "ONBOARDING_NOT_FOUND", "Onboarding response not found.");
     }
 
-    return ok(c, intakeSubmissionSchema.parse(mapIntakeSubmission(submission)));
+    return ok(
+      c,
+      onboardingFormResponseSchema.parse(mapOnboardingFormResponse(response)),
+    );
   },
 );
 
-intakeRoutes.put(
+onboardingRoutes.put(
   "/relationships/:relationshipId/draft",
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -129,9 +195,9 @@ intakeRoutes.put(
     }
 
     const body = await c.req.json().catch(() => null);
-    const parsed = saveIntakeDraftRequestSchema.safeParse(body);
+    const parsed = saveOnboardingDraftRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return fail(c, 400, "INVALID_REQUEST", "Invalid intake draft request.", {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid onboarding draft request.", {
         issues: parsed.error.issues,
       });
     }
@@ -148,31 +214,22 @@ intakeRoutes.put(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
-    if (!canSaveIntakeDraft(relationship.status)) {
+    const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
+    if (!canSaveOnboardingDraft(onboardingStatus)) {
       return fail(
         c,
         409,
-        "INTAKE_NOT_EDITABLE",
-        "Submitted intake cannot be overwritten.",
-        { status: relationship.status },
-      );
-    }
-
-    const definition = await loadCurrentMvpDefinition(db);
-    if (!definition) {
-      return fail(
-        c,
-        500,
-        "INTAKE_DEFINITION_MISSING",
-        "MVP intake definition is not seeded.",
+        "ONBOARDING_NOT_EDITABLE",
+        "Submitted onboarding cannot be overwritten.",
+        { onboardingStatus },
       );
     }
 
     const timestamp = nowIso();
     const existingRows = await db
       .select()
-      .from(intakeSubmissions)
-      .where(eq(intakeSubmissions.coachingRelationshipId, relationshipId))
+      .from(onboardingFormResponses)
+      .where(eq(onboardingFormResponses.coachingRelationshipId, relationshipId))
       .limit(1);
     const existing = existingRows[0];
 
@@ -181,16 +238,16 @@ intakeRoutes.put(
         return fail(
           c,
           409,
-          "INTAKE_ALREADY_SUBMITTED",
-          "Submitted intake cannot be overwritten.",
+          "ONBOARDING_ALREADY_SUBMITTED",
+          "Submitted onboarding cannot be overwritten.",
         );
       }
       if (existing.version !== parsed.data.expectedVersion) {
         return fail(
           c,
           409,
-          "INTAKE_VERSION_CONFLICT",
-          "Intake draft was changed after this version was loaded.",
+          "ONBOARDING_VERSION_CONFLICT",
+          "Onboarding draft was changed after this version was loaded.",
           {
             expectedVersion: parsed.data.expectedVersion,
             currentVersion: existing.version,
@@ -199,39 +256,52 @@ intakeRoutes.put(
       }
 
       await db
-        .update(intakeSubmissions)
+        .update(onboardingFormResponses)
         .set({
           answersJson: JSON.stringify(parsed.data.answers),
           version: existing.version + 1,
           updatedAt: timestamp,
         })
-        .where(eq(intakeSubmissions.id, existing.id));
+        .where(eq(onboardingFormResponses.id, existing.id));
 
       const updated = (
         await db
           .select()
-          .from(intakeSubmissions)
-          .where(eq(intakeSubmissions.id, existing.id))
+          .from(onboardingFormResponses)
+          .where(eq(onboardingFormResponses.id, existing.id))
           .limit(1)
       )[0]!;
-      return ok(c, intakeSubmissionSchema.parse(mapIntakeSubmission(updated)));
+      return ok(
+        c,
+        onboardingFormResponseSchema.parse(mapOnboardingFormResponse(updated)),
+      );
+    }
+
+    const form = await pinnedOnboardingVersionForRelationship(db, relationship);
+    if (!form) {
+      return fail(
+        c,
+        500,
+        "ONBOARDING_FORM_MISSING",
+        "No pinned onboarding form is available for this invitation.",
+      );
     }
 
     if (parsed.data.expectedVersion !== 0) {
       return fail(
         c,
         409,
-        "INTAKE_VERSION_CONFLICT",
-        "Intake draft was changed after this version was loaded.",
+        "ONBOARDING_VERSION_CONFLICT",
+        "Onboarding draft was changed after this version was loaded.",
         { expectedVersion: parsed.data.expectedVersion, currentVersion: 0 },
       );
     }
 
-    const submissionId = createId();
-    await db.insert(intakeSubmissions).values({
-      id: submissionId,
+    const responseId = createId();
+    await db.insert(onboardingFormResponses).values({
+      id: responseId,
       coachingRelationshipId: relationshipId,
-      intakeDefinitionId: definition.id,
+      onboardingFormVersionId: form.id,
       traineeUserId: actor.userId,
       status: "draft",
       answersJson: JSON.stringify(parsed.data.answers),
@@ -244,15 +314,19 @@ intakeRoutes.put(
     const created = (
       await db
         .select()
-        .from(intakeSubmissions)
-        .where(eq(intakeSubmissions.id, submissionId))
+        .from(onboardingFormResponses)
+        .where(eq(onboardingFormResponses.id, responseId))
         .limit(1)
     )[0]!;
-    return ok(c, intakeSubmissionSchema.parse(mapIntakeSubmission(created)), 201);
+    return ok(
+      c,
+      onboardingFormResponseSchema.parse(mapOnboardingFormResponse(created)),
+      201,
+    );
   },
 );
 
-intakeRoutes.post(
+onboardingRoutes.post(
   "/relationships/:relationshipId/submit",
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -264,9 +338,9 @@ intakeRoutes.post(
     }
 
     const body = await c.req.json().catch(() => null);
-    const parsed = submitIntakeRequestSchema.safeParse(body);
+    const parsed = submitOnboardingRequestSchema.safeParse(body);
     if (!parsed.success) {
-      return fail(c, 400, "INVALID_REQUEST", "Invalid intake submit request.", {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid onboarding submit request.", {
         issues: parsed.error.issues,
       });
     }
@@ -277,7 +351,7 @@ intakeRoutes.post(
         c,
         400,
         "IDEMPOTENCY_KEY_REQUIRED",
-        "Idempotency-Key header is required to submit intake.",
+        "Idempotency-Key header is required to submit onboarding.",
       );
     }
 
@@ -292,7 +366,7 @@ intakeRoutes.post(
     const db = createDb(c.env.DB);
     const existingIdempotency = await findIdempotencyRecord(db, {
       actorUserId: actor.userId,
-      operation: SUBMIT_INTAKE_OPERATION,
+      operation: SUBMIT_OPERATION,
       idempotencyKey,
     });
     if (existingIdempotency) {
@@ -320,22 +394,24 @@ intakeRoutes.post(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
-    const submissions = await db
+    const responses = await db
       .select()
-      .from(intakeSubmissions)
-      .where(eq(intakeSubmissions.coachingRelationshipId, relationshipId))
+      .from(onboardingFormResponses)
+      .where(eq(onboardingFormResponses.coachingRelationshipId, relationshipId))
       .limit(1);
-    const submission = submissions[0];
-    if (!submission) {
-      return fail(c, 404, "INTAKE_NOT_FOUND", "Intake draft not found.");
+    const response = responses[0];
+    if (!response) {
+      return fail(c, 404, "ONBOARDING_NOT_FOUND", "Onboarding draft not found.");
     }
 
-    if (submission.status === "submitted") {
-      const data = intakeSubmissionSchema.parse(mapIntakeSubmission(submission));
+    if (response.status === "submitted") {
+      const data = onboardingFormResponseSchema.parse(
+        mapOnboardingFormResponse(response),
+      );
       const responseBody = { data };
       await saveIdempotencyRecord(db, {
         actorUserId: actor.userId,
-        operation: SUBMIT_INTAKE_OPERATION,
+        operation: SUBMIT_OPERATION,
         idempotencyKey,
         requestFingerprint: fingerprint,
         responseStatus: 200,
@@ -345,96 +421,104 @@ intakeRoutes.post(
       return ok(c, data);
     }
 
-    if (!canSubmitIntake(relationship.status)) {
+    const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
+    if (!canSubmitOnboarding(onboardingStatus)) {
       return fail(
         c,
         409,
         "UNSUPPORTED_TRANSITION",
-        "Intake cannot be submitted in the current relationship state.",
-        { status: relationship.status },
+        "Onboarding cannot be submitted in the current client state.",
+        { onboardingStatus },
       );
     }
 
-    if (submission.version !== parsed.data.expectedVersion) {
+    if (response.version !== parsed.data.expectedVersion) {
       return fail(
         c,
         409,
-        "INTAKE_VERSION_CONFLICT",
-        "Intake draft was changed after this version was loaded.",
+        "ONBOARDING_VERSION_CONFLICT",
+        "Onboarding draft was changed after this version was loaded.",
         {
           expectedVersion: parsed.data.expectedVersion,
-          currentVersion: submission.version,
+          currentVersion: response.version,
         },
       );
     }
 
-    const definitionRows = await db
+    const formRows = await db
       .select()
-      .from(intakeDefinitions)
-      .where(eq(intakeDefinitions.id, submission.intakeDefinitionId))
+      .from(onboardingFormVersions)
+      .where(eq(onboardingFormVersions.id, response.onboardingFormVersionId))
       .limit(1);
-    const definition = definitionRows[0];
-    if (!definition) {
+    const form = formRows[0];
+    if (!form) {
       return fail(
         c,
         500,
-        "INTAKE_DEFINITION_MISSING",
-        "Intake definition for this submission is missing.",
+        "ONBOARDING_FORM_MISSING",
+        "Onboarding form for this response is missing.",
       );
     }
 
-    const mappedDefinition = mapIntakeDefinition(definition);
-    const fields = mappedDefinition.fields.map((field) =>
-      intakeFieldDefinitionSchema.parse(field),
+    const definition = onboardingFormDefinitionSchema.safeParse(
+      JSON.parse(form.schemaJson) as { fields?: unknown },
     );
-    const answers = JSON.parse(submission.answersJson) as Record<string, string>;
-    const missing = missingRequiredIntakeFields(fields, answers);
-    if (missing.length > 0) {
+    if (!definition.success) {
+      return fail(
+        c,
+        500,
+        "ONBOARDING_FORM_MISSING",
+        "Pinned onboarding form definition is invalid.",
+      );
+    }
+    const answers = JSON.parse(response.answersJson) as Record<string, string>;
+    const answerErrors = onboardingAnswerErrors(definition.data.fields, answers);
+    if (
+      answerErrors.missingFieldIds.length > 0 ||
+      answerErrors.invalidFieldIds.length > 0
+    ) {
       return fail(
         c,
         422,
-        "INTAKE_INCOMPLETE",
-        "Required intake fields are missing.",
-        { missingFieldIds: missing },
+        "ONBOARDING_INCOMPLETE",
+        "Required onboarding fields are missing.",
+        {
+          missingFieldIds: answerErrors.missingFieldIds,
+          invalidFieldIds: answerErrors.invalidFieldIds,
+        },
       );
     }
 
     const timestamp = nowIso();
     await db
-      .update(intakeSubmissions)
+      .update(onboardingFormResponses)
       .set({
         status: "submitted",
         submittedAt: timestamp,
-        version: submission.version + 1,
+        version: response.version + 1,
         updatedAt: timestamp,
       })
       .where(
         and(
-          eq(intakeSubmissions.id, submission.id),
-          eq(intakeSubmissions.version, submission.version),
+          eq(onboardingFormResponses.id, response.id),
+          eq(onboardingFormResponses.version, response.version),
         ),
       );
-
-    await db
-      .update(coachingRelationships)
-      .set({
-        status: "onboarding_submitted",
-        updatedAt: timestamp,
-      })
-      .where(eq(coachingRelationships.id, relationshipId));
 
     const updated = (
       await db
         .select()
-        .from(intakeSubmissions)
-        .where(eq(intakeSubmissions.id, submission.id))
+        .from(onboardingFormResponses)
+        .where(eq(onboardingFormResponses.id, response.id))
         .limit(1)
     )[0]!;
-    const data = intakeSubmissionSchema.parse(mapIntakeSubmission(updated));
+    const data = onboardingFormResponseSchema.parse(
+      mapOnboardingFormResponse(updated),
+    );
     const responseBody = { data };
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
-      operation: SUBMIT_INTAKE_OPERATION,
+      operation: SUBMIT_OPERATION,
       idempotencyKey,
       requestFingerprint: fingerprint,
       responseStatus: 200,
@@ -445,7 +529,7 @@ intakeRoutes.post(
   },
 );
 
-intakeRoutes.post(
+onboardingRoutes.post(
   "/relationships/:relationshipId/review",
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -485,7 +569,7 @@ intakeRoutes.post(
     const db = createDb(c.env.DB);
     const existingIdempotency = await findIdempotencyRecord(db, {
       actorUserId: actor.userId,
-      operation: REVIEW_ONBOARDING_OPERATION,
+      operation: REVIEW_OPERATION,
       idempotencyKey,
     });
     if (existingIdempotency) {
@@ -513,30 +597,30 @@ intakeRoutes.post(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
-    const submissions = await db
+    const responses = await db
       .select()
-      .from(intakeSubmissions)
+      .from(onboardingFormResponses)
       .where(
         and(
-          eq(intakeSubmissions.coachingRelationshipId, relationshipId),
-          eq(intakeSubmissions.status, "submitted"),
+          eq(onboardingFormResponses.coachingRelationshipId, relationshipId),
+          eq(onboardingFormResponses.status, "submitted"),
         ),
       )
       .limit(1);
-    const submission = submissions[0];
-    if (!submission) {
+    const response = responses[0];
+    if (!response) {
       return fail(
         c,
         409,
-        "INTAKE_NOT_SUBMITTED",
-        "Intake must be submitted before onboarding review.",
+        "ONBOARDING_NOT_SUBMITTED",
+        "Onboarding must be submitted before review.",
       );
     }
 
     const existingReviews = await db
       .select()
       .from(onboardingReviews)
-      .where(eq(onboardingReviews.intakeSubmissionId, submission.id))
+      .where(eq(onboardingReviews.onboardingFormResponseId, response.id))
       .limit(1);
     if (existingReviews[0]) {
       const currentRelationship = (
@@ -546,15 +630,19 @@ intakeRoutes.post(
           .where(eq(coachingRelationships.id, relationshipId))
           .limit(1)
       )[0]!;
+      const onboardingStatus = await onboardingStatusForRelationship(
+        db,
+        currentRelationship,
+      );
       const data = createOnboardingReviewResponseSchema.parse({
         review: mapOnboardingReview(existingReviews[0]),
-        relationship: mapRelationship(currentRelationship),
-        onboardingStatus: mapRelationship(currentRelationship).onboardingStatus,
+        relationship: mapRelationship(currentRelationship, onboardingStatus),
+        onboardingStatus,
       });
       const responseBody = { data };
       await saveIdempotencyRecord(db, {
         actorUserId: actor.userId,
-        operation: REVIEW_ONBOARDING_OPERATION,
+        operation: REVIEW_OPERATION,
         idempotencyKey,
         requestFingerprint: fingerprint,
         responseStatus: 200,
@@ -564,13 +652,14 @@ intakeRoutes.post(
       return ok(c, data);
     }
 
-    if (!canMarkCoachingReady(relationship.status)) {
+    const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
+    if (!canMarkCoachingReady(onboardingStatus)) {
       return fail(
         c,
         409,
         "UNSUPPORTED_TRANSITION",
-        "Relationship is not ready for coaching-ready review.",
-        { status: relationship.status },
+        "Client is not ready for coaching-ready review.",
+        { onboardingStatus },
       );
     }
 
@@ -583,19 +672,11 @@ intakeRoutes.post(
     await db.insert(onboardingReviews).values({
       id: reviewId,
       coachingRelationshipId: relationshipId,
-      intakeSubmissionId: submission.id,
+      onboardingFormResponseId: response.id,
       trainerUserId: actor.userId,
       outcome: "coaching_ready",
       createdAt: timestamp,
     });
-
-    await db
-      .update(coachingRelationships)
-      .set({
-        status: "coaching_ready",
-        updatedAt: timestamp,
-      })
-      .where(eq(coachingRelationships.id, relationshipId));
 
     const review = (
       await db
@@ -611,16 +692,20 @@ intakeRoutes.post(
         .where(eq(coachingRelationships.id, relationshipId))
         .limit(1)
     )[0]!;
+    const updatedStatus = await onboardingStatusForRelationship(
+      db,
+      updatedRelationship,
+    );
 
     const data = createOnboardingReviewResponseSchema.parse({
       review: mapOnboardingReview(review),
-      relationship: mapRelationship(updatedRelationship),
-      onboardingStatus: mapRelationship(updatedRelationship).onboardingStatus,
+      relationship: mapRelationship(updatedRelationship, updatedStatus),
+      onboardingStatus: updatedStatus,
     });
     const responseBody = { data };
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
-      operation: REVIEW_ONBOARDING_OPERATION,
+      operation: REVIEW_OPERATION,
       idempotencyKey,
       requestFingerprint: fingerprint,
       responseStatus: 200,

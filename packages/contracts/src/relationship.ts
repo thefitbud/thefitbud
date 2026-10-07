@@ -11,25 +11,25 @@ export const invitationStatusSchema = z.enum([
 export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
 
 /**
- * Coaching relationship lifecycle after acceptance.
- * Invited exists only on a pending invitation (no relationship row yet).
+ * Persisted coaching relationship lifecycle.
+ * Client onboarding progress is derived and is not stored here.
  */
-export const coachingRelationshipStatusSchema = z.enum([
-  "onboarding_pending",
-  "onboarding_submitted",
-  "coaching_ready",
-  "ended",
-]);
+export const coachingRelationshipStatusSchema = z.enum(["active", "ended"]);
 export type CoachingRelationshipStatus = z.infer<
   typeof coachingRelationshipStatusSchema
 >;
 
-/** User-visible onboarding status spanning invitation + relationship. */
+/**
+ * Derived client lifecycle spanning invitation, onboarding, configuration, and end.
+ * Clients must read this field rather than reconstructing it from raw rows.
+ */
 export const onboardingStatusSchema = z.enum([
   "invited",
   "onboarding_pending",
   "onboarding_submitted",
   "coaching_ready",
+  "active",
+  "ended",
 ]);
 export type OnboardingStatus = z.infer<typeof onboardingStatusSchema>;
 
@@ -39,6 +39,11 @@ export const createInvitationRequestSchema = z.object({
   /** WhatsApp number as entered by the trainer. Normalized to E.164 digits on the server. */
   recipientWhatsapp: z.string().trim().min(8).max(20).optional(),
   expiresInDays: z.number().int().min(1).max(30).optional(),
+  /**
+   * When omitted, the server runs form resolution once and stores that version.
+   * When set, the server pins the latest version of this template only.
+   */
+  onboardingFormTemplateId: uuidSchema.optional(),
 });
 export type CreateInvitationRequest = z.infer<typeof createInvitationRequestSchema>;
 
@@ -53,6 +58,7 @@ export const invitationSchema = z.object({
   expiresAt: isoDateTimeSchema,
   acceptedUserId: uuidSchema.nullable(),
   coachingRelationshipId: uuidSchema.nullable(),
+  onboardingFormTemplateVersionId: uuidSchema,
   onboardingStatus: onboardingStatusSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,

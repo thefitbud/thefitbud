@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CoachingRelationship,
-  IntakeDefinition,
-  IntakeSubmission,
+  OnboardingFormResponse,
+  OnboardingFormVersion,
 } from "@fitbud/contracts";
 import { StatusBadge } from "../components/StatusBadge";
 import { apiClient } from "../lib/api";
@@ -16,8 +16,8 @@ export function OnboardingReviewPage() {
   const [relationship, setRelationship] = useState<CoachingRelationship | null>(
     null,
   );
-  const [intake, setIntake] = useState<IntakeSubmission | null>(null);
-  const [definition, setDefinition] = useState<IntakeDefinition | null>(null);
+  const [intake, setIntake] = useState<OnboardingFormResponse | null>(null);
+  const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [intakeMissing, setIntakeMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
@@ -31,13 +31,13 @@ export function OnboardingReviewPage() {
     try {
       const [rel, def] = await Promise.all([
         apiClient.getRelationship(relationshipId),
-        apiClient.getCurrentIntakeDefinition(),
+        apiClient.getCurrentOnboardingForm(relationshipId),
       ]);
       setRelationship(rel);
       setDefinition(def);
 
       try {
-        const submission = await apiClient.getIntake(relationshipId);
+        const submission = await apiClient.getOnboardingResponse(relationshipId);
         setIntake(submission);
       } catch (err) {
         if (err instanceof ApiClientError && err.status === 404) {
@@ -114,8 +114,11 @@ export function OnboardingReviewPage() {
         <p className="form-error" role="alert">
           {error}
         </p>
-        <Link to="/clients" className="button-secondary">
-          Back to Clients
+        <Link
+          to={`/clients/${relationshipId}/overview`}
+          className="button-secondary"
+        >
+          Back to workspace
         </Link>
       </div>
     );

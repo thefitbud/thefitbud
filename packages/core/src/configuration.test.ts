@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canActivateConfiguration,
+  canCreateConfigurationVersion,
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
@@ -8,10 +9,24 @@ import {
 } from "./configuration.js";
 
 describe("coaching configuration transitions", () => {
-  it("gates editing to coaching-ready relationships", () => {
+  it("gates editing to reviewed or active clients", () => {
     expect(canEditCoachingConfiguration("coaching_ready")).toBe(true);
+    expect(canEditCoachingConfiguration("active")).toBe(true);
     expect(canEditCoachingConfiguration("onboarding_submitted")).toBe(false);
     expect(canEditCoachingConfiguration("onboarding_pending")).toBe(false);
+    expect(canEditCoachingConfiguration("ended")).toBe(false);
+  });
+
+  it("opens a new version only when an active row has no open draft", () => {
+    expect(
+      canCreateConfigurationVersion({ hasActive: true, hasOpen: false }),
+    ).toBe(true);
+    expect(
+      canCreateConfigurationVersion({ hasActive: true, hasOpen: true }),
+    ).toBe(false);
+    expect(
+      canCreateConfigurationVersion({ hasActive: false, hasOpen: false }),
+    ).toBe(false);
   });
 
   it("allows draft saves until activation", () => {
@@ -19,6 +34,7 @@ describe("coaching configuration transitions", () => {
     expect(canSaveConfigurationDraft("draft")).toBe(true);
     expect(canSaveConfigurationDraft("configured")).toBe(true);
     expect(canSaveConfigurationDraft("active")).toBe(false);
+    expect(canSaveConfigurationDraft("superseded")).toBe(false);
   });
 
   it("gates configure and activate transitions", () => {

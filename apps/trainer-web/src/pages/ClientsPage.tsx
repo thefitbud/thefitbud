@@ -17,6 +17,8 @@ const STATUS_FILTERS = [
   "onboarding_pending",
   "onboarding_submitted",
   "coaching_ready",
+  "active",
+  "ended",
 ] as const;
 
 type ClientStatusFilter = (typeof STATUS_FILTERS)[number];
@@ -402,9 +404,17 @@ function ClientRow({ row }: { row: ClientDirectoryRow }) {
               href={messageHref}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Message ${row.name} on WhatsApp`}
+              aria-label={
+                row.onboardingStatus === "invited" ||
+                row.onboardingStatus === "onboarding_pending"
+                  ? `Remind ${row.name} on WhatsApp`
+                  : `Message ${row.name} on WhatsApp`
+              }
             >
-              Message
+              {row.onboardingStatus === "invited" ||
+              row.onboardingStatus === "onboarding_pending"
+                ? "Remind"
+                : "Message"}
             </a>
           ) : null}
           {href ? (

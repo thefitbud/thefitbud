@@ -22,8 +22,14 @@ import {
 } from "../auth/identity";
 import { verifyFirebaseIdToken } from "../auth/firebase";
 import {
+  deriveOnboardingStatusForRelationships,
+  onboardingStatusForRelationship,
+  relationshipForInvitation,
+  relationshipIdByInvitation,
+} from "../domain/client-status";
+import { versionIdForNewInvitation } from "../domain/onboarding-forms";
+import {
   mapInvitation,
-  mapInvitationWithRelationshipStatus,
   mapRelationship,
   normalizeEmail,
 } from "../domain/mappers";
@@ -105,6 +111,7 @@ invitationRoutes.post(
         recipientDisplayName: parsed.data.recipientDisplayName ?? null,
         recipientWhatsappE164,
         expiresInDays: parsed.data.expiresInDays ?? DEFAULT_INVITE_DAYS,
+        onboardingFormTemplateId: parsed.data.onboardingFormTemplateId ?? null,
       }),
     );
 
@@ -126,6 +133,28 @@ invitationRoutes.post(
       return c.json(JSON.parse(existing.responseBody), existing.responseStatus as 200);
     }
 
+    const pinned = await versionIdForNewInvitation(
+      db,
+      actor.userId,
+      parsed.data.onboardingFormTemplateId,
+    );
+    if (!pinned.ok) {
+      if (pinned.code === "TEMPLATE_NOT_FOUND") {
+        return fail(
+          c,
+          404,
+          "TEMPLATE_NOT_FOUND",
+          "Onboarding form template not found.",
+        );
+      }
+      return fail(
+        c,
+        500,
+        "ONBOARDING_FORM_MISSING",
+        "No onboarding form is available.",
+      );
+    }
+
     const token = createSessionToken();
     const tokenHash = await sha256Hex(token);
     const timestamp = nowIso();
@@ -145,7 +174,7 @@ invitationRoutes.post(
       status: "pending",
       expiresAt,
       acceptedUserId: null,
-      coachingRelationshipId: null,
+      onboardingFormTemplateVersionId: pinned.versionId,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -219,7 +248,27 @@ invitationRoutes.get(
       .limit(limit + 1);
 
     const page = buildPage(rows, limit, (item) => item.createdAt);
-    const items = page.items.map((row) => mapInvitation(row));
+    const linked = await relationshipIdByInvitation(
+      db,
+      page.items.map((row) => row.id),
+    );
+    const linkedRows = [...linked.values()];
+    const statuses = await deriveOnboardingStatusForRelationships(db, linkedRows);
+    const items = page.items.map((row) => {
+      const relationship = linked.get(row.id);
+      const onboardingStatus = relationship
+        ? statuses.get(relationship.id)
+        : undefined;
+      return mapInvitation(
+        row,
+        relationship && onboardingStatus
+          ? {
+              coachingRelationshipId: relationship.id,
+              onboardingStatus,
+            }
+          : null,
+      );
+    });
     return ok(
       c,
       invitationListResponseSchema.parse({
@@ -253,21 +302,23 @@ invitationRoutes.get(
       return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
     }
 
-    let relationshipStatus: (typeof coachingRelationships.$inferSelect)["status"] | null =
-      null;
-    if (row.coachingRelationshipId) {
-      const relationships = await db
-        .select({ status: coachingRelationships.status })
-        .from(coachingRelationships)
-        .where(eq(coachingRelationships.id, row.coachingRelationshipId))
-        .limit(1);
-      relationshipStatus = relationships[0]?.status ?? null;
-    }
+    const relationship = await relationshipForInvitation(db, row.id);
+    const onboardingStatus = relationship
+      ? await onboardingStatusForRelationship(db, relationship)
+      : null;
 
     return ok(
       c,
       invitationSchema.parse(
-        mapInvitationWithRelationshipStatus(row, relationshipStatus),
+        mapInvitation(
+          row,
+          relationship && onboardingStatus
+            ? {
+                coachingRelationshipId: relationship.id,
+                onboardingStatus,
+              }
+            : null,
+        ),
       ),
     );
   },
@@ -313,7 +364,11 @@ invitationRoutes.post("/accept", async (c) => {
   }
 
   const timestamp = nowIso();
-  if (invitation.status === "accepted" && invitation.coachingRelationshipId) {
+  const acceptedRelationship =
+    invitation.status === "accepted"
+      ? await relationshipForInvitation(db, invitation.id)
+      : null;
+  if (invitation.status === "accepted" && acceptedRelationship) {
     // Idempotent accept for the same trainee token holder.
     const { userId } = await findOrCreateUserFromFirebase(
       db,
@@ -328,23 +383,18 @@ invitationRoutes.post("/accept", async (c) => {
         "Invitation was already accepted by another user.",
       );
     }
-    const relationships = await db
-      .select()
-      .from(coachingRelationships)
-      .where(eq(coachingRelationships.id, invitation.coachingRelationshipId))
-      .limit(1);
-    const relationship = relationships[0];
-    if (!relationship) {
-      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
-    }
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      acceptedRelationship,
+    );
     return ok(
       c,
       acceptInvitationResponseSchema.parse({
-        invitation: mapInvitationWithRelationshipStatus(
-          invitation,
-          relationship.status,
-        ),
-        relationship: mapRelationship(relationship),
+        invitation: mapInvitation(invitation, {
+          coachingRelationshipId: acceptedRelationship.id,
+          onboardingStatus,
+        }),
+        relationship: mapRelationship(acceptedRelationship, onboardingStatus),
       }),
     );
   }
@@ -419,7 +469,7 @@ invitationRoutes.post("/accept", async (c) => {
       id: relationshipId,
       trainerUserId: invitation.trainerUserId,
       traineeUserId: userId,
-      status: "onboarding_pending",
+      status: "active",
       invitationId: invitation.id,
       startedAt: timestamp,
       endedAt: null,
@@ -439,7 +489,6 @@ invitationRoutes.post("/accept", async (c) => {
     .set({
       status: "accepted",
       acceptedUserId: userId,
-      coachingRelationshipId: relationship.id,
       updatedAt: timestamp,
     })
     .where(eq(clientInvitations.id, invitation.id));
@@ -460,14 +509,15 @@ invitationRoutes.post("/accept", async (c) => {
     requestedRole: "trainee",
   });
 
+  const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
   return ok(
     c,
     acceptInvitationResponseSchema.parse({
-      invitation: mapInvitationWithRelationshipStatus(
-        updatedInvitation,
-        relationship.status,
-      ),
-      relationship: mapRelationship(relationship),
+      invitation: mapInvitation(updatedInvitation, {
+        coachingRelationshipId: relationship.id,
+        onboardingStatus,
+      }),
+      relationship: mapRelationship(relationship, onboardingStatus),
     }),
   );
 });

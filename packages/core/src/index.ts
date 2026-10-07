@@ -6,20 +6,38 @@ export {
 
 export {
   canMarkCoachingReady,
-  canSaveIntakeDraft,
-  canSubmitIntake,
-  missingRequiredIntakeFields,
-  onboardingStatusForInvitation,
-  onboardingStatusForRelationship,
+  canSaveOnboardingDraft,
+  canSubmitOnboarding,
+  deriveClientOnboardingStatus,
+  isPastOnboardingReview,
+  canTrainerReadOnboardingTemplate,
+  latestOnboardingFormVersion,
+  missingRequiredOnboardingFields,
+  onboardingAnswerErrors,
+  parseOnboardingFormFields,
+  resolveOnboardingForm,
+  type ClientOnboardingFacts,
+  type OnboardingAnswerField,
+  type OnboardingFormCandidate,
+  type OnboardingTemplateVersionCandidate,
 } from "./onboarding.js";
 
 export {
   canActivateConfiguration,
+  canCreateConfigurationVersion,
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
   hasPrimaryGoal,
 } from "./configuration.js";
+
+export {
+  RENEWAL_UPCOMING_WINDOW_DAYS,
+  daysUntilLocalDate,
+  deriveRenewalState,
+  isSubscriptionRenewalReminderEligible,
+  subscriptionRenewalDedupeKey,
+} from "./subscription.js";
 
 export {
   canEditPlanVersion,

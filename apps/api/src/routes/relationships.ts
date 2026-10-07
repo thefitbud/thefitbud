@@ -6,6 +6,7 @@ import {
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
 import { coachingRelationships } from "../db/schema";
+import { deriveOnboardingStatusForRelationships } from "../domain/client-status";
 import { mapRelationship } from "../domain/mappers";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";
@@ -85,10 +86,13 @@ relationshipRoutes.get(
       .limit(limit + 1);
 
     const page = buildPage(rows, limit, (item) => item.createdAt);
+    const statuses = await deriveOnboardingStatusForRelationships(db, page.items);
     return ok(
       c,
       relationshipListResponseSchema.parse({
-        items: page.items.map(mapRelationship),
+        items: page.items.map((row) =>
+          mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending"),
+        ),
         nextCursor: page.nextCursor,
       }),
     );
@@ -118,7 +122,13 @@ relationshipRoutes.get(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
-    return ok(c, coachingRelationshipSchema.parse(mapRelationship(row)));
+    const statuses = await deriveOnboardingStatusForRelationships(db, [row]);
+    return ok(
+      c,
+      coachingRelationshipSchema.parse(
+        mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending"),
+      ),
+    );
   },
 );
 

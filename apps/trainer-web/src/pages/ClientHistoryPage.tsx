@@ -7,7 +7,8 @@ import { apiClient } from "../lib/api";
 type WorkspaceOutlet = { refreshEpoch?: number };
 
 const KIND_LABELS: Record<HistoryItemKind, string> = {
-  intake_submitted: "Onboarding",
+  onboarding_submitted: "Onboarding",
+  subscription_revision: "Subscription",
   onboarding_reviewed: "Onboarding",
   configuration_activated: "Configuration",
   plan_version: "Plan",

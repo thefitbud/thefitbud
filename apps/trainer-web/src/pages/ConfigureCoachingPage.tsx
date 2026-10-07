@@ -5,8 +5,8 @@ import type {
   CheckinCadence,
   CoachingConfiguration,
   CoachingRelationship,
-  IntakeDefinition,
-  IntakeSubmission,
+  OnboardingFormResponse,
+  OnboardingFormVersion,
   MealPhotoRequirement,
 } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
@@ -41,6 +41,8 @@ function configurationStatusLabel(
       return "Configured";
     case "active":
       return "Active";
+    case "superseded":
+      return "Superseded";
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -56,8 +58,8 @@ export function ConfigureCoachingPage() {
   const [configuration, setConfiguration] =
     useState<CoachingConfiguration | null>(null);
   const [form, setForm] = useState(DEFAULT_FORM);
-  const [intake, setIntake] = useState<IntakeSubmission | null>(null);
-  const [definition, setDefinition] = useState<IntakeDefinition | null>(null);
+  const [intake, setIntake] = useState<OnboardingFormResponse | null>(null);
+  const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,11 +96,11 @@ export function ConfigureCoachingPage() {
           (value) => ({ ok: true as const, value }),
           (err: unknown) => ({ ok: false as const, err }),
         ),
-        apiClient.getIntake(relationshipId).then(
+        apiClient.getOnboardingResponse(relationshipId).then(
           (value) => ({ ok: true as const, value }),
           (err: unknown) => ({ ok: false as const, err }),
         ),
-        apiClient.getCurrentIntakeDefinition().then(
+        apiClient.getCurrentOnboardingForm(relationshipId).then(
           (value) => ({ ok: true as const, value }),
           () => ({ ok: false as const }),
         ),
@@ -145,7 +147,7 @@ export function ConfigureCoachingPage() {
   }, [load]);
 
   const readOnly = configuration?.status === "active";
-  const expectedVersion = configuration?.version ?? 0;
+  const expectedVersion = configuration?.recordVersion ?? 0;
 
   async function saveDraft(event: FormEvent) {
     event.preventDefault();
@@ -198,7 +200,7 @@ export function ConfigureCoachingPage() {
     try {
       const updated = await apiClient.configureConfiguration(
         relationshipId,
-        { expectedVersion: configuration.version },
+        { expectedVersion: configuration.recordVersion },
         createIdempotencyKey(),
       );
       applyConfiguration(updated);
@@ -222,7 +224,7 @@ export function ConfigureCoachingPage() {
     try {
       const updated = await apiClient.activateConfiguration(
         relationshipId,
-        { expectedVersion: configuration.version },
+        { expectedVersion: configuration.recordVersion },
         createIdempotencyKey(),
       );
       applyConfiguration(updated);
@@ -252,8 +254,8 @@ export function ConfigureCoachingPage() {
         <p className="form-error" role="alert">
           {error}
         </p>
-        <Link to="/clients" className="button-secondary">
-          Back to Clients
+        <Link to={`/clients/${relationshipId}/overview`} className="button-secondary">
+          Back to workspace
         </Link>
       </div>
     );
@@ -291,10 +293,18 @@ export function ConfigureCoachingPage() {
             when the baseline is ready. This is separate from the plan.
           </p>
         </div>
-        <span className={`status-badge status-${statusKey}`}>
-          <span className="status-dot" aria-hidden="true" />
-          {configurationStatusLabel(statusKey)}
-        </span>
+        <div className="workspace-header-actions">
+          <Link
+            className="button-ghost"
+            to={`/clients/${relationship.id}/overview`}
+          >
+            Back to overview
+          </Link>
+          <span className={`status-badge status-${statusKey}`}>
+            <span className="status-dot" aria-hidden="true" />
+            {configurationStatusLabel(statusKey)}
+          </span>
+        </div>
       </div>
 
       {relationship.onboardingStatus !== "coaching_ready" ? (

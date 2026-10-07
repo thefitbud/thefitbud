@@ -1,48 +1,48 @@
-import type {
-  Checkin,
-  CheckinDraftAnswers,
-  CheckinReview,
-  CoachingConfiguration,
-  CoachingRelationship,
-  ExerciseExecution,
-  Invitation,
-  IntakeDefinition,
-  IntakeFieldDefinition,
-  IntakeSubmission,
-  MealAssignment,
-  MealCompliance,
-  MealPhotoIntent,
-  MealPrescription,
-  OnboardingReview,
-  OnboardingStatus,
-  Plan,
-  PlanContent,
-  PlanVersion,
-  PlanVersionSummary,
-  SetExecution,
-  TrainerNote,
-  WorkoutAssignment,
-  WorkoutDay,
-  WorkoutExecution,
-  WorkoutExecutionSummary,
-  Exception,
-  ExceptionAction,
-  Intervention,
-  ActiveExceptionSummary,
-  Measurement,
-  MediaAsset,
-  ProgressEntry,
-  PlanTemplate,
-  PlanTemplateSummary,
-  ExerciseLibraryItem,
-  FoodLibraryItem,
+import {
+  onboardingFormDefinitionSchema,
+  type Checkin,
+  type CheckinDraftAnswers,
+  type CheckinReview,
+  type CoachingConfiguration,
+  type CoachingRelationship,
+  type ExerciseExecution,
+  type Invitation,
+  type OnboardingFormResponse,
+  type OnboardingFormTemplateDetail,
+  type OnboardingFormVersion,
+  type MealAssignment,
+  type MealCompliance,
+  type MealPhotoIntent,
+  type MealPrescription,
+  type OnboardingReview,
+  type OnboardingStatus,
+  type Plan,
+  type PlanContent,
+  type PlanVersion,
+  type PlanVersionSummary,
+  type SetExecution,
+  type TrainerNote,
+  type WorkoutAssignment,
+  type WorkoutDay,
+  type WorkoutExecution,
+  type WorkoutExecutionSummary,
+  type Exception,
+  type ExceptionAction,
+  type Intervention,
+  type ActiveExceptionSummary,
+  type Measurement,
+  type MediaAsset,
+  type ProgressEntry,
+  type PlanTemplate,
+  type PlanTemplateSummary,
+  type ExerciseLibraryItem,
+  type FoodLibraryItem,
 } from "@fitbud/contracts";
 import {
   deriveCheckinStatus,
+  deriveClientOnboardingStatus,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
-  onboardingStatusForInvitation,
-  onboardingStatusForRelationship,
 } from "@fitbud/core";
 import type {
   checkinReviews,
@@ -52,8 +52,9 @@ import type {
   coachingConfigurations,
   coachingRelationships,
   exerciseExecutions,
-  intakeDefinitions,
-  intakeSubmissions,
+  onboardingFormResponses,
+  onboardingFormTemplates,
+  onboardingFormVersions,
   mealAssignments,
   mealCompliance,
   mediaAssets,
@@ -79,8 +80,9 @@ import type {
 
 type InvitationRow = typeof clientInvitations.$inferSelect;
 type RelationshipRow = typeof coachingRelationships.$inferSelect;
-type IntakeDefinitionRow = typeof intakeDefinitions.$inferSelect;
-type IntakeSubmissionRow = typeof intakeSubmissions.$inferSelect;
+type OnboardingFormTemplateRow = typeof onboardingFormTemplates.$inferSelect;
+type OnboardingFormVersionRow = typeof onboardingFormVersions.$inferSelect;
+type OnboardingFormResponseRow = typeof onboardingFormResponses.$inferSelect;
 type OnboardingReviewRow = typeof onboardingReviews.$inferSelect;
 type ConfigurationRow = typeof coachingConfigurations.$inferSelect;
 type WorkoutExpectationRow = typeof workoutExpectations.$inferSelect;
@@ -108,13 +110,26 @@ type MediaAssetRow = typeof mediaAssets.$inferSelect;
 type MeasurementRow = typeof measurements.$inferSelect;
 type ProgressEntryRow = typeof progressEntries.$inferSelect;
 
-export function mapInvitation(row: InvitationRow): Invitation {
+export function mapInvitation(
+  row: InvitationRow,
+  linked?: {
+    coachingRelationshipId: string;
+    onboardingStatus: OnboardingStatus;
+  } | null,
+): Invitation {
   const onboardingStatus: OnboardingStatus =
-    row.status === "pending"
-      ? (onboardingStatusForInvitation(row.status) ?? "invited")
-      : row.coachingRelationshipId
+    linked?.onboardingStatus ??
+    (row.status === "pending"
+      ? (deriveClientOnboardingStatus({
+          relationshipStatus: null,
+          invitationPending: true,
+          hasSubmittedResponse: false,
+          hasCoachingReadyReview: false,
+          hasActiveConfiguration: false,
+        }) ?? "invited")
+      : row.status === "accepted"
         ? "onboarding_pending"
-        : "invited";
+        : "invited");
 
   return {
     id: row.id,
@@ -125,36 +140,24 @@ export function mapInvitation(row: InvitationRow): Invitation {
     status: row.status,
     expiresAt: row.expiresAt,
     acceptedUserId: row.acceptedUserId,
-    coachingRelationshipId: row.coachingRelationshipId,
-    onboardingStatus:
-      row.status === "accepted" ? "onboarding_pending" : onboardingStatus,
+    coachingRelationshipId: linked?.coachingRelationshipId ?? null,
+    onboardingFormTemplateVersionId: row.onboardingFormTemplateVersionId,
+    onboardingStatus,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-export function mapInvitationWithRelationshipStatus(
-  row: InvitationRow,
-  relationshipStatus: RelationshipRow["status"] | null,
-): Invitation {
-  const base = mapInvitation(row);
-  if (relationshipStatus) {
-    const derived = onboardingStatusForRelationship(relationshipStatus);
-    if (derived) {
-      return { ...base, onboardingStatus: derived };
-    }
-  }
-  return base;
-}
-
-export function mapRelationship(row: RelationshipRow): CoachingRelationship {
-  const derived = onboardingStatusForRelationship(row.status);
+export function mapRelationship(
+  row: RelationshipRow,
+  onboardingStatus: OnboardingStatus,
+): CoachingRelationship {
   return {
     id: row.id,
     trainerUserId: row.trainerUserId,
     traineeUserId: row.traineeUserId,
     status: row.status,
-    onboardingStatus: derived ?? "onboarding_pending",
+    onboardingStatus,
     invitationId: row.invitationId,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
@@ -163,26 +166,52 @@ export function mapRelationship(row: RelationshipRow): CoachingRelationship {
   };
 }
 
-export function mapIntakeDefinition(row: IntakeDefinitionRow): IntakeDefinition {
-  const parsed = JSON.parse(row.schemaJson) as {
-    fields?: IntakeFieldDefinition[];
-  };
+export function mapOnboardingFormVersion(
+  row: OnboardingFormVersionRow,
+): OnboardingFormVersion {
+  const stored = JSON.parse(row.schemaJson) as { fields?: unknown };
+  const definition = onboardingFormDefinitionSchema.parse({
+    fields: stored.fields ?? [],
+  });
   return {
     id: row.id,
+    templateId: row.templateId,
     key: row.key,
     version: row.version,
     scope: row.scope,
-    fields: parsed.fields ?? [],
+    fields: definition.fields,
     createdAt: row.createdAt,
   };
 }
 
-export function mapIntakeSubmission(row: IntakeSubmissionRow): IntakeSubmission {
+export function mapOnboardingFormTemplateDetail(
+  template: OnboardingFormTemplateRow,
+  versions: OnboardingFormVersionRow[],
+): OnboardingFormTemplateDetail {
+  const ordered = [...versions].sort((left, right) => left.version - right.version);
+  const latest = ordered[ordered.length - 1]!;
+  return {
+    id: template.id,
+    ownership: template.ownership,
+    trainerUserId: template.trainerUserId,
+    name: template.name,
+    description: template.description,
+    latestVersionId: latest.id,
+    latestVersionNumber: latest.version,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
+    versions: ordered.map(mapOnboardingFormVersion),
+  };
+}
+
+export function mapOnboardingFormResponse(
+  row: OnboardingFormResponseRow,
+): OnboardingFormResponse {
   const answers = JSON.parse(row.answersJson) as Record<string, string>;
   return {
     id: row.id,
     coachingRelationshipId: row.coachingRelationshipId,
-    intakeDefinitionId: row.intakeDefinitionId,
+    onboardingFormVersionId: row.onboardingFormVersionId,
     traineeUserId: row.traineeUserId,
     status: row.status,
     answers,
@@ -197,7 +226,7 @@ export function mapOnboardingReview(row: OnboardingReviewRow): OnboardingReview 
   return {
     id: row.id,
     coachingRelationshipId: row.coachingRelationshipId,
-    intakeSubmissionId: row.intakeSubmissionId,
+    onboardingFormResponseId: row.onboardingFormResponseId,
     trainerUserId: row.trainerUserId,
     outcome: row.outcome,
     createdAt: row.createdAt,
@@ -216,7 +245,8 @@ export function mapCoachingConfiguration(input: {
     id: configuration.id,
     coachingRelationshipId: configuration.coachingRelationshipId,
     status: configuration.status,
-    version: configuration.version,
+    versionNumber: configuration.versionNumber,
+    recordVersion: configuration.recordVersion,
     primaryGoal: configuration.primaryGoal,
     notes: configuration.notes,
     workout: {
@@ -740,6 +770,7 @@ export function mapNotificationPreferences(row: {
   workoutReminder: boolean;
   mealReminder: boolean;
   checkinReminder: boolean;
+  subscriptionRenewalReminder: boolean;
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
   updatedAt: string;
@@ -751,6 +782,7 @@ export function mapNotificationPreferences(row: {
       workoutReminder: row.workoutReminder,
       mealReminder: row.mealReminder,
       checkinReminder: row.checkinReminder,
+      subscriptionRenewalReminder: row.subscriptionRenewalReminder,
     },
     quietHoursStart: row.quietHoursStart,
     quietHoursEnd: row.quietHoursEnd,
@@ -761,7 +793,11 @@ export function mapNotificationPreferences(row: {
 export function mapReminderRule(row: {
   id: string;
   coachingRelationshipId: string;
-  reminderType: "workout_reminder" | "meal_reminder" | "checkin_reminder";
+  reminderType:
+    | "workout_reminder"
+    | "meal_reminder"
+    | "checkin_reminder"
+    | "subscription_renewal_reminder";
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -780,8 +816,16 @@ export function mapNotification(row: {
   id: string;
   recipientUserId: string;
   coachingRelationshipId: string | null;
-  notificationType: "workout_reminder" | "meal_reminder" | "checkin_reminder";
-  domainEntityType: "workout_assignment" | "meal_assignment" | "checkin";
+  notificationType:
+    | "workout_reminder"
+    | "meal_reminder"
+    | "checkin_reminder"
+    | "subscription_renewal_reminder";
+  domainEntityType:
+    | "workout_assignment"
+    | "meal_assignment"
+    | "checkin"
+    | "coaching_relationship";
   domainEntityId: string;
   state:
     | "pending"
