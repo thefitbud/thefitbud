@@ -1,0 +1,23 @@
+{
+  "name": "thefitbud",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "affected": "turbo run lint typecheck test --filter=...[HEAD^1]",
+    "db:generate": "pnpm --filter @fitbud/api db:generate",
+    "db:migrate:local": "pnpm --filter @fitbud/api db:migrate:local",
+    "db:migrate": "pnpm --filter @fitbud/api db:migrate"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  }
+}
