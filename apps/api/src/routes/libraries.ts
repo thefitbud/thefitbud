@@ -4,11 +4,12 @@ import {
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, eq, gt, or } from "drizzle-orm";
+import { and, eq, gt, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   createExerciseLibraryItemRequestSchema,
   createFoodLibraryItemRequestSchema,
+  exerciseDifficultySchema,
   exerciseLibraryItemSchema,
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
@@ -37,6 +38,18 @@ export const libraryRoutes = new Hono<{
   Variables: Variables;
 }>();
 
+function likeContains(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+function nameContains(column: AnyColumn, q: string): SQL {
+  return sql`${column} like ${likeContains(q)} escape '\\'`;
+}
+
+function jsonListContains(column: AnyColumn, value: string): SQL {
+  return sql`exists (select 1 from json_each(${column}) where json_each.value = ${value})`;
+}
+
 libraryRoutes.get(
   "/exercises",
   operation({
@@ -47,6 +60,37 @@ libraryRoutes.get(
     parameters: [
       limitParameter({ defaultValue: 50, maximum: 10 }),
       cursorParameter(),
+      {
+        name: "q",
+        in: "query",
+        required: false,
+        description: "Case-insensitive exercise name search.",
+        schema: { type: "string" },
+      },
+      {
+        name: "muscleGroup",
+        in: "query",
+        required: false,
+        description: "Exact match against one stored muscle group.",
+        schema: { type: "string" },
+      },
+      {
+        name: "equipment",
+        in: "query",
+        required: false,
+        description: "Exact match against one stored equipment label.",
+        schema: { type: "string" },
+      },
+      {
+        name: "difficulty",
+        in: "query",
+        required: false,
+        description: "Exact difficulty: beginner, intermediate, or advanced.",
+        schema: {
+          type: "string",
+          enum: ["beginner", "intermediate", "advanced"],
+        },
+      },
     ],
     response: exerciseLibraryListResponseSchema,
   }),
@@ -66,6 +110,21 @@ libraryRoutes.get(
     );
     const cursorParam = c.req.query("cursor");
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+    const q = c.req.query("q")?.trim();
+    const muscleGroup = c.req.query("muscleGroup")?.trim();
+    const equipment = c.req.query("equipment")?.trim();
+    const difficultyParam = c.req.query("difficulty")?.trim();
+    const difficulty = difficultyParam
+      ? exerciseDifficultySchema.safeParse(difficultyParam)
+      : null;
+    if (difficulty && !difficulty.success) {
+      return fail(
+        c,
+        400,
+        "INVALID_REQUEST",
+        "Exercise difficulty must be beginner, intermediate, or advanced.",
+      );
+    }
     const db = createDb(c.env.DB);
 
     const ownershipFilter = or(
@@ -75,24 +134,33 @@ libraryRoutes.get(
         eq(exerciseLibraryItems.trainerUserId, actor.userId),
       ),
     );
+    const filters = [
+      ownershipFilter,
+      q ? nameContains(exerciseLibraryItems.name, q) : undefined,
+      muscleGroup
+        ? jsonListContains(exerciseLibraryItems.muscleGroupsJson, muscleGroup)
+        : undefined,
+      equipment
+        ? jsonListContains(exerciseLibraryItems.equipmentJson, equipment)
+        : undefined,
+      difficulty?.success
+        ? eq(exerciseLibraryItems.difficulty, difficulty.data)
+        : undefined,
+      cursor
+        ? or(
+            gt(exerciseLibraryItems.name, cursor.k),
+            and(
+              eq(exerciseLibraryItems.name, cursor.k),
+              gt(exerciseLibraryItems.id, cursor.id),
+            ),
+          )
+        : undefined,
+    ].filter((filter): filter is SQL => Boolean(filter));
 
     const rows = await db
       .select()
       .from(exerciseLibraryItems)
-      .where(
-        cursor
-          ? and(
-              ownershipFilter,
-              or(
-                gt(exerciseLibraryItems.name, cursor.k),
-                and(
-                  eq(exerciseLibraryItems.name, cursor.k),
-                  gt(exerciseLibraryItems.id, cursor.id),
-                ),
-              ),
-            )
-          : ownershipFilter,
-      )
+      .where(and(...filters))
       .orderBy(exerciseLibraryItems.name, exerciseLibraryItems.id)
       .limit(limit + 1);
 
@@ -148,6 +216,9 @@ libraryRoutes.post(
       instructions: parsed.data.instructions ?? null,
       defaultLoadLabel: parsed.data.defaultLoadLabel ?? null,
       defaultReps: parsed.data.defaultReps ?? null,
+      muscleGroupsJson: JSON.stringify(parsed.data.muscleGroups ?? []),
+      equipmentJson: JSON.stringify(parsed.data.equipment ?? []),
+      difficulty: parsed.data.difficulty ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -228,6 +299,9 @@ libraryRoutes.put(
         instructions: parsed.data.instructions ?? null,
         defaultLoadLabel: parsed.data.defaultLoadLabel ?? null,
         defaultReps: parsed.data.defaultReps ?? null,
+        muscleGroupsJson: JSON.stringify(parsed.data.muscleGroups ?? []),
+        equipmentJson: JSON.stringify(parsed.data.equipment ?? []),
+        difficulty: parsed.data.difficulty ?? null,
         updatedAt: nowIso(),
       })
       .where(eq(exerciseLibraryItems.id, itemId));
@@ -308,6 +382,13 @@ libraryRoutes.get(
     parameters: [
       limitParameter({ defaultValue: 50, maximum: 10 }),
       cursorParameter(),
+      {
+        name: "q",
+        in: "query",
+        required: false,
+        description: "Case-insensitive food name search.",
+        schema: { type: "string" },
+      },
     ],
     response: foodLibraryListResponseSchema,
   }),
@@ -327,6 +408,7 @@ libraryRoutes.get(
     );
     const cursorParam = c.req.query("cursor");
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+    const q = c.req.query("q")?.trim();
     const db = createDb(c.env.DB);
 
     const ownershipFilter = or(
@@ -336,24 +418,24 @@ libraryRoutes.get(
         eq(foodLibraryItems.trainerUserId, actor.userId),
       ),
     );
+    const filters = [
+      ownershipFilter,
+      q ? nameContains(foodLibraryItems.name, q) : undefined,
+      cursor
+        ? or(
+            gt(foodLibraryItems.name, cursor.k),
+            and(
+              eq(foodLibraryItems.name, cursor.k),
+              gt(foodLibraryItems.id, cursor.id),
+            ),
+          )
+        : undefined,
+    ].filter((filter): filter is SQL => Boolean(filter));
 
     const rows = await db
       .select()
       .from(foodLibraryItems)
-      .where(
-        cursor
-          ? and(
-              ownershipFilter,
-              or(
-                gt(foodLibraryItems.name, cursor.k),
-                and(
-                  eq(foodLibraryItems.name, cursor.k),
-                  gt(foodLibraryItems.id, cursor.id),
-                ),
-              ),
-            )
-          : ownershipFilter,
-      )
+      .where(and(...filters))
       .orderBy(foodLibraryItems.name, foodLibraryItems.id)
       .limit(limit + 1);
 
@@ -409,6 +491,11 @@ libraryRoutes.post(
       cuisineRegion: "indian",
       portionLabel: parsed.data.portionLabel,
       notes: parsed.data.notes ?? null,
+      description: parsed.data.description ?? null,
+      calories: parsed.data.calories ?? null,
+      proteinGrams: parsed.data.proteinGrams ?? null,
+      carbsGrams: parsed.data.carbsGrams ?? null,
+      fatGrams: parsed.data.fatGrams ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -488,6 +575,11 @@ libraryRoutes.put(
         name: parsed.data.name,
         portionLabel: parsed.data.portionLabel,
         notes: parsed.data.notes ?? null,
+        description: parsed.data.description ?? null,
+        calories: parsed.data.calories ?? null,
+        proteinGrams: parsed.data.proteinGrams ?? null,
+        carbsGrams: parsed.data.carbsGrams ?? null,
+        fatGrams: parsed.data.fatGrams ?? null,
         updatedAt: nowIso(),
       })
       .where(eq(foodLibraryItems.id, itemId));

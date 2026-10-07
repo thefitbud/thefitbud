@@ -28,6 +28,7 @@ import {
   exceptionDetailSchema,
   exceptionListResponseSchema,
   exceptionSchema,
+  clientDirectoryListResponseSchema,
   exerciseLibraryItemSchema,
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
@@ -48,6 +49,8 @@ import {
   interventionListResponseSchema,
   interventionSchema,
   meResponseSchema,
+  traineeProfileSchema,
+  updateTraineeProfileRequestSchema,
   planListResponseSchema,
   planTemplateListResponseSchema,
   planTemplateSchema,
@@ -162,6 +165,9 @@ import {
   type Exception,
   type ExceptionDetail,
   type ExceptionListResponse,
+  type AdherenceState,
+  type ClientDirectoryListResponse,
+  type ExerciseDifficulty,
   type ExerciseLibraryItem,
   type ExerciseLibraryListResponse,
   type FoodLibraryItem,
@@ -180,6 +186,7 @@ import {
   type CreateOnboardingFormTemplateRequest,
   type CreateOnboardingFormTemplateVersionRequest,
   type ForkOnboardingFormTemplateRequest,
+  type OnboardingStatus,
   type OnboardingFormResponse,
   type OnboardingFormTemplateDetail,
   type OnboardingFormTemplateListResponse,
@@ -231,6 +238,8 @@ import {
   type UpdateNotificationPreferencesRequest,
   type RealtimeEvent,
   type RealtimeSubscriptionTarget,
+  type TraineeProfile,
+  type UpdateTraineeProfileRequest,
   type TrainerCheckinInboxResponse,
   type TrainerNote,
   type TrainerNoteListResponse,
@@ -828,13 +837,63 @@ export class FitBudApiClient {
     });
   }
 
+  async listClients(query?: {
+    q?: string;
+    status?: OnboardingStatus[];
+    adherenceState?: AdherenceState[];
+    goal?: string[];
+    cursor?: string;
+    limit?: number;
+  }): Promise<ClientDirectoryListResponse> {
+    const params = new URLSearchParams();
+    if (query?.q) params.set("q", query.q);
+    for (const status of query?.status ?? []) params.append("status", status);
+    for (const state of query?.adherenceState ?? []) {
+      params.append("adherenceState", state);
+    }
+    for (const goal of query?.goal ?? []) params.append("goal", goal);
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request(
+      "GET",
+      `/clients${suffix}`,
+      clientDirectoryListResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async getTraineeProfile(): Promise<TraineeProfile> {
+    return this.request("GET", "/me/trainee-profile", traineeProfileSchema, {
+      auth: true,
+    });
+  }
+
+  async updateTraineeProfile(
+    body: UpdateTraineeProfileRequest,
+  ): Promise<TraineeProfile> {
+    const parsed = updateTraineeProfileRequestSchema.parse(body);
+    return this.request("PUT", "/me/trainee-profile", traineeProfileSchema, {
+      auth: true,
+      body: parsed,
+    });
+  }
+
   async listExerciseLibrary(query?: {
     cursor?: string;
     limit?: number;
+    q?: string;
+    muscleGroup?: string;
+    equipment?: string;
+    difficulty?: ExerciseDifficulty;
   }): Promise<ExerciseLibraryListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.q) params.set("q", query.q);
+    if (query?.muscleGroup) params.set("muscleGroup", query.muscleGroup);
+    if (query?.equipment) params.set("equipment", query.equipment);
+    if (query?.difficulty) params.set("difficulty", query.difficulty);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
@@ -881,10 +940,12 @@ export class FitBudApiClient {
   async listFoodLibrary(query?: {
     cursor?: string;
     limit?: number;
+    q?: string;
   }): Promise<FoodLibraryListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.q) params.set("q", query.q);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",

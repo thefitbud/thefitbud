@@ -19,7 +19,8 @@ import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
 
 const DEFAULT_FORM = {
-  primaryGoal: "",
+  goalShort: "",
+  goalDescription: "",
   notes: "",
   sessionsPerWeek: 3,
   completionWindowHours: 24,
@@ -87,7 +88,8 @@ export function ConfigureCoachingPage() {
   const applyConfiguration = useCallback((config: CoachingConfiguration) => {
     setConfiguration(config);
     setForm({
-      primaryGoal: config.primaryGoal ?? "",
+      goalShort: config.goalShort ?? "",
+      goalDescription: config.goalDescription ?? "",
       notes: config.notes ?? "",
       sessionsPerWeek: config.workout.sessionsPerWeek,
       completionWindowHours: config.workout.completionWindowHours,
@@ -160,10 +162,10 @@ export function ConfigureCoachingPage() {
         setConfiguration(null);
         const prefill = submittedIntake
           ? coachingPrefillFromIntake(submittedIntake.answers)
-          : { primaryGoal: "", notes: "" };
+          : { goalDescription: "", notes: "" };
         setForm({
           ...DEFAULT_FORM,
-          primaryGoal: prefill.primaryGoal,
+          goalDescription: prefill.goalDescription,
           notes: prefill.notes,
         });
       } else {
@@ -213,7 +215,8 @@ export function ConfigureCoachingPage() {
     try {
       const saved = await apiClient.saveConfigurationDraft(relationshipId, {
         expectedVersion,
-        primaryGoal: form.primaryGoal.trim() || null,
+        goalShort: form.goalShort.trim() || null,
+        goalDescription: form.goalDescription.trim() || null,
         notes: form.notes.trim() || null,
         workout: {
           sessionsPerWeek: form.sessionsPerWeek,
@@ -359,7 +362,7 @@ export function ConfigureCoachingPage() {
     relationship.onboardingStatus === "coaching_ready" && !readOnly;
   const canConfigure =
     configuration?.status === "draft" &&
-    Boolean(form.primaryGoal.trim()) &&
+    Boolean(form.goalShort.trim()) &&
     !acting;
   const canActivate = configuration?.status === "configured" && !acting;
   const intakeFields =
@@ -556,20 +559,35 @@ export function ConfigureCoachingPage() {
           <h2>Coaching intent</h2>
           <div className="plan-form">
             <label className="field">
-              <span>Primary goal</span>
+              <span>Short goal</span>
               <input
                 type="text"
-                name="primaryGoal"
-                maxLength={500}
-                value={form.primaryGoal}
+                name="goalShort"
+                maxLength={120}
+                value={form.goalShort}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    primaryGoal: event.target.value,
+                    goalShort: event.target.value,
                   }))
                 }
                 disabled={!canSave || acting}
                 required
+              />
+            </label>
+            <label className="field">
+              <span>Goal description (optional)</span>
+              <textarea
+                name="goalDescription"
+                maxLength={500}
+                value={form.goalDescription}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    goalDescription: event.target.value,
+                  }))
+                }
+                disabled={!canSave || acting}
               />
             </label>
 

@@ -38,6 +38,7 @@ export function copyPlanContent(
       scheduleHint: meal.scheduleHint,
       instructions: meal.instructions,
       photoRequired: meal.photoRequired,
+      items: meal.items.map((item) => ({ ...item })),
     })),
   };
 }
@@ -101,7 +102,13 @@ export function exercisePrescriptionFromLibrary(
 
 /** Copy a food library item into a draft meal prescription (no live link). */
 export function mealPrescriptionFromLibrary(
-  item: Pick<FoodLibraryItem, "name" | "portionLabel" | "notes">,
+  item: Pick<FoodLibraryItem, "name" | "portionLabel" | "notes"> &
+    Partial<
+      Pick<
+        FoodLibraryItem,
+        "id" | "calories" | "proteinGrams" | "carbsGrams" | "fatGrams"
+      >
+    >,
   order: number,
   newId: () => string,
 ): MealPrescription {
@@ -115,5 +122,16 @@ export function mealPrescriptionFromLibrary(
     scheduleHint: null,
     instructions: instructions.length > 0 ? instructions : null,
     photoRequired: false,
+    items: [
+      {
+        ...(item.id ? { sourceFoodLibraryItemId: item.id } : {}),
+        name: item.name,
+        portionLabel: item.portionLabel,
+        calories: item.calories ?? null,
+        proteinGrams: item.proteinGrams ?? null,
+        carbsGrams: item.carbsGrams ?? null,
+        fatGrams: item.fatGrams ?? null,
+      },
+    ],
   };
 }

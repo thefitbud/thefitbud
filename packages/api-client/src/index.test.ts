@@ -93,8 +93,14 @@ describe("FitBudApiClient", () => {
                 traineeDisplayName: "Asha",
                 onboardingStatus: "active",
                 effectivePlan: null,
-                primaryGoal: null,
+                goalShort: null,
                 renewalState: null,
+                adherenceState: "not_available",
+                traineeProfile: {
+                  displayName: "Asha",
+                  age: null,
+                  gender: null,
+                },
               },
               overview: {
                 openException: null,

@@ -142,6 +142,25 @@ describe("migration 0013 backfill", () => {
     ).toBe(1);
 
     sqlite.run(
+      `UPDATE coaching_configurations
+       SET primary_goal = 'Add 10 kg to the squat while holding body weight steady'`,
+    );
+    applySql(sqlite, "0011_templates_libraries.sql");
+    applySql(sqlite, "0015_iteration_a.sql");
+    expect(
+      scalar(sqlite, "SELECT goal_description FROM coaching_configurations"),
+    ).toBe("Add 10 kg to the squat while holding body weight steady");
+    expect(scalar(sqlite, "SELECT goal_short FROM coaching_configurations")).toBe(
+      null,
+    );
+    const goalColumns = sqlite.exec("PRAGMA table_info(coaching_configurations)")[0]!;
+    const goalNameIndex = goalColumns.columns.indexOf("name");
+    const goalNames = goalColumns.values.map((row) => row[goalNameIndex]);
+    expect(goalNames).not.toContain("primary_goal");
+    expect(goalNames).toContain("goal_description");
+    expect(goalNames).toContain("goal_short");
+
+    sqlite.run(
       `INSERT INTO onboarding_form_versions (id, key, version, scope, trainer_user_id, schema_json, created_at)
        VALUES ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'coach', 1, 'global', NULL, '{}', '2026-10-01T00:00:00.000Z')`,
     );
@@ -175,6 +194,8 @@ const APP_MIGRATIONS = [
   "0010_notifications.sql",
   "0013_domain_contracts.sql",
   "0014_onboarding_form_templates.sql",
+  "0011_templates_libraries.sql",
+  "0015_iteration_a.sql",
 ];
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
@@ -426,7 +447,7 @@ describe("onboarding resolution and subscription", () => {
         },
         body: JSON.stringify({
           expectedVersion: 0,
-          primaryGoal: "Strength",
+          goalShort: "Strength",
           workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
           nutrition: {
             mealsPerDay: 3,
@@ -515,7 +536,7 @@ describe("onboarding resolution and subscription", () => {
         },
         body: JSON.stringify({
           expectedVersion: active!.recordVersion,
-          primaryGoal: "Should fail",
+          goalShort: "Should fail",
           workout: { sessionsPerWeek: 9, completionWindowHours: 24 },
           nutrition: {
             mealsPerDay: 3,

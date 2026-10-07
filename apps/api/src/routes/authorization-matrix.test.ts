@@ -36,6 +36,7 @@ const MIGRATIONS = [
     "0013_domain_contracts.sql",
   "0014_onboarding_form_templates.sql",
   "0011_templates_libraries.sql",
+  "0015_iteration_a.sql",
 ] as const;
 
 const UNKNOWN_RELATIONSHIP = "00000000-0000-4000-8000-000000000099";
@@ -197,7 +198,7 @@ async function reachCoachingReady(suffix: string) {
       },
       body: JSON.stringify({
         expectedVersion: 0,
-        primaryGoal: "Adherence",
+        goalShort: "Adherence",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 2,

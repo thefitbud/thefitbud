@@ -33,6 +33,8 @@ const formTemplatesMigration = join(
   drizzleDir,
   "0014_onboarding_form_templates.sql",
 );
+const librariesMigration = join(drizzleDir, "0011_templates_libraries.sql");
+const iterationAMigration = join(drizzleDir, "0015_iteration_a.sql");
 const invitationWhatsappMigration = join(
   drizzleDir,
   "0012_invitation_whatsapp.sql",
@@ -50,6 +52,8 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   sqlite.exec(readFileSync(notificationsMigration, "utf8"));
   sqlite.exec(readFileSync(domainContractsMigration, "utf8"));
   sqlite.exec(readFileSync(formTemplatesMigration, "utf8"));
+  sqlite.exec(readFileSync(librariesMigration, "utf8"));
+  sqlite.exec(readFileSync(iterationAMigration, "utf8"));
   const db = drizzle(sqlite, { schema }) as unknown as Db;
   return {
     db,
@@ -630,7 +634,7 @@ describe("intake and onboarding", () => {
 });
 
 const SAMPLE_DRAFT = {
-  primaryGoal: "Build strength",
+  goalShort: "Build strength",
   notes: "Focus on compound lifts",
   workout: { sessionsPerWeek: 4, completionWindowHours: 24 },
   nutrition: {
@@ -809,7 +813,7 @@ describe("coaching configuration", () => {
         status: string;
         recordVersion: number;
         versionNumber: number;
-        primaryGoal: string;
+        goalShort: string;
         workout: { sessionsPerWeek: number };
         nutrition: { photoRequirement: string };
         tracking: { requireSessionRpe: boolean };
@@ -818,7 +822,7 @@ describe("coaching configuration", () => {
     expect(draftBody.data.status).toBe("draft");
     expect(draftBody.data.recordVersion).toBe(1);
     expect(draftBody.data.versionNumber).toBe(1);
-    expect(draftBody.data.primaryGoal).toBe("Build strength");
+    expect(draftBody.data.goalShort).toBe("Build strength");
     expect(draftBody.data.workout.sessionsPerWeek).toBe(4);
     expect(draftBody.data.nutrition.photoRequirement).toBe("selected_meals");
     expect(draftBody.data.tracking.requireSessionRpe).toBe(true);
@@ -873,10 +877,10 @@ describe("coaching configuration", () => {
     );
     expect(get.status).toBe(200);
     const getBody = (await get.json()) as {
-      data: { status: string; primaryGoal: string };
+      data: { status: string; goalShort: string };
     };
     expect(getBody.data.status).toBe("active");
-    expect(getBody.data.primaryGoal).toBe("Build strength");
+    expect(getBody.data.goalShort).toBe("Build strength");
 
     const editActive = await app.request(
       `/configurations/relationships/${owner.relationshipId}/draft`,
@@ -889,7 +893,7 @@ describe("coaching configuration", () => {
         body: JSON.stringify({
           expectedVersion: configuredBody.data.recordVersion + 1,
           ...SAMPLE_DRAFT,
-          primaryGoal: "Should fail",
+          goalShort: "Should fail",
         }),
       },
       testEnv(),
@@ -914,7 +918,7 @@ describe("coaching configuration", () => {
         body: JSON.stringify({
           expectedVersion: 0,
           ...SAMPLE_DRAFT,
-          primaryGoal: null,
+          goalShort: null,
         }),
       },
       testEnv(),

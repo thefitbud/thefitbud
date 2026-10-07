@@ -193,7 +193,8 @@ export const checkinReviewContextSchema = z.object({
   currentConfiguration: z
     .object({
       id: uuidSchema,
-      primaryGoal: z.string().nullable(),
+      goalShort: z.string().max(120).nullable(),
+      goalDescription: z.string().max(500).nullable(),
       checkinCadence: z.enum(["weekly", "biweekly", "monthly"]),
       dueWindowHours: z.number().int().positive(),
     })

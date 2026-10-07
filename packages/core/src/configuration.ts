@@ -40,7 +40,7 @@ export function canActivateConfiguration(
   return status === "configured";
 }
 
-/** Whether a primary goal string is acceptable for configure/activate. */
-export function hasPrimaryGoal(primaryGoal: string | null | undefined): boolean {
-  return typeof primaryGoal === "string" && primaryGoal.trim().length > 0;
+/** Whether a short goal is acceptable for configure/activate. */
+export function hasGoalShort(goalShort: string | null | undefined): boolean {
+  return typeof goalShort === "string" && goalShort.trim().length > 0;
 }

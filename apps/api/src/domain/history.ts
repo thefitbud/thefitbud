@@ -403,9 +403,11 @@ export async function assembleRelationshipHistory(
       kind: "configuration_activated",
       occurredAt: row.activatedAt,
       title: "Coaching configuration activated",
-      summary: row.primaryGoal
-        ? `Active expectations with goal: ${row.primaryGoal}.`
-        : "Active coaching expectations are in effect.",
+      summary: row.goalShort
+        ? `Active expectations with goal: ${row.goalShort}.`
+        : row.goalDescription
+          ? `Active expectations with goal: ${row.goalDescription}.`
+          : "Active coaching expectations are in effect.",
       sourceEntityType: "coaching_configuration",
       sourceEntityId: row.id,
       status: row.status,

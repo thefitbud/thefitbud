@@ -314,7 +314,7 @@ export function ClientWorkspaceLayout() {
                     <span>{workspaceLoading ? "Loading client…" : "Client workspace"}</span>
                   )}
                   {planTitle ? <span>{planTitle}</span> : null}
-                  {header?.primaryGoal ? <span>{header.primaryGoal}</span> : null}
+                  {header?.goalShort ? <span>{header.goalShort}</span> : null}
                   {header?.renewalState ? (
                     <span>{renewalLabel(header.renewalState)}</span>
                   ) : null}

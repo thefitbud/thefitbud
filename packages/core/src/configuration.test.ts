@@ -5,7 +5,7 @@ import {
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
-  hasPrimaryGoal,
+  hasGoalShort,
 } from "./configuration.js";
 
 describe("coaching configuration transitions", () => {
@@ -45,9 +45,9 @@ describe("coaching configuration transitions", () => {
     expect(canActivateConfiguration("active")).toBe(false);
   });
 
-  it("requires a non-empty primary goal", () => {
-    expect(hasPrimaryGoal("Build strength")).toBe(true);
-    expect(hasPrimaryGoal("  ")).toBe(false);
-    expect(hasPrimaryGoal(null)).toBe(false);
+  it("requires a non-empty short goal", () => {
+    expect(hasGoalShort("Build strength")).toBe(true);
+    expect(hasGoalShort("  ")).toBe(false);
+    expect(hasGoalShort(null)).toBe(false);
   });
 });

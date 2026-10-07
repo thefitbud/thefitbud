@@ -1,5 +1,7 @@
 import {
+  mealPrescriptionSchema,
   onboardingFormDefinitionSchema,
+  planContentSchema,
   type Checkin,
   type CheckinDraftAnswers,
   type CheckinReview,
@@ -247,7 +249,8 @@ export function mapCoachingConfiguration(input: {
     status: configuration.status,
     versionNumber: configuration.versionNumber,
     recordVersion: configuration.recordVersion,
-    primaryGoal: configuration.primaryGoal,
+    goalShort: configuration.goalShort,
+    goalDescription: configuration.goalDescription,
     notes: configuration.notes,
     workout: {
       sessionsPerWeek: workout.sessionsPerWeek,
@@ -284,8 +287,25 @@ export function mapPlan(row: PlanRow): Plan {
   };
 }
 
+function withMealItems(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const content = value as { mealPrescriptions?: unknown };
+  if (!Array.isArray(content.mealPrescriptions)) return value;
+  return {
+    ...content,
+    mealPrescriptions: content.mealPrescriptions.map((meal) => {
+      if (!meal || typeof meal !== "object") return meal;
+      const row = meal as { items?: unknown };
+      return {
+        ...row,
+        items: Array.isArray(row.items) ? row.items : [],
+      };
+    }),
+  };
+}
+
 export function parsePlanContentJson(contentJson: string): PlanContent {
-  return JSON.parse(contentJson) as PlanContent;
+  return planContentSchema.parse(withMealItems(JSON.parse(contentJson)));
 }
 
 export function mapPlanVersion(row: PlanVersionRow): PlanVersion {
@@ -348,9 +368,30 @@ export function mapPlanTemplateSummary(
   };
 }
 
+function parseLabelList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
+}
+
+const EXERCISE_DIFFICULTIES = new Set([
+  "beginner",
+  "intermediate",
+  "advanced",
+]);
+
 export function mapExerciseLibraryItem(
   row: ExerciseLibraryItemRow,
 ): ExerciseLibraryItem {
+  const difficulty =
+    row.difficulty && EXERCISE_DIFFICULTIES.has(row.difficulty)
+      ? row.difficulty
+      : null;
   return {
     id: row.id,
     ownership: row.ownership,
@@ -359,6 +400,9 @@ export function mapExerciseLibraryItem(
     instructions: row.instructions,
     defaultLoadLabel: row.defaultLoadLabel,
     defaultReps: row.defaultReps,
+    muscleGroups: parseLabelList(row.muscleGroupsJson),
+    equipment: parseLabelList(row.equipmentJson),
+    difficulty,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -373,6 +417,11 @@ export function mapFoodLibraryItem(row: FoodLibraryItemRow): FoodLibraryItem {
     cuisineRegion: row.cuisineRegion,
     portionLabel: row.portionLabel,
     notes: row.notes,
+    description: row.description,
+    calories: row.calories,
+    proteinGrams: row.proteinGrams,
+    carbsGrams: row.carbsGrams,
+    fatGrams: row.fatGrams,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -484,7 +533,11 @@ export function mapWorkoutAssignment(
 export function parseMealPrescriptionJson(
   mealPrescriptionJson: string,
 ): MealPrescription {
-  return JSON.parse(mealPrescriptionJson) as MealPrescription;
+  const parsed = JSON.parse(mealPrescriptionJson) as { items?: unknown };
+  return mealPrescriptionSchema.parse({
+    ...parsed,
+    items: Array.isArray(parsed.items) ? parsed.items : [],
+  });
 }
 
 export function parseMealPhotoIntentJson(

@@ -337,7 +337,11 @@ export function CheckinReviewPage() {
             )}
             {context.currentConfiguration ? (
               <p className="workspace-row-meta">
-                Goal: {context.currentConfiguration.primaryGoal ?? "—"} · Cadence{" "}
+                Goal:{" "}
+                {context.currentConfiguration.goalShort ??
+                  context.currentConfiguration.goalDescription ??
+                  "—"}{" "}
+                · Cadence{" "}
                 {context.currentConfiguration.checkinCadence} · Window{" "}
                 {context.currentConfiguration.dueWindowHours}h
               </p>

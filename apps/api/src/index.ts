@@ -34,6 +34,7 @@ import { workoutRoutes } from "./routes/workouts";
 import { realtimeRoutes } from "./routes/realtime";
 import { templateRoutes } from "./routes/templates";
 import { libraryRoutes } from "./routes/libraries";
+import { clientRoutes } from "./routes/clients";
 import { openApiRouteOptions, operation } from "./openapi/document";
 import type { Env, Variables } from "./types";
 
@@ -74,6 +75,7 @@ app.route("/configurations", configurationRoutes);
 app.route("/plans", planRoutes);
 app.route("/templates", templateRoutes);
 app.route("/libraries", libraryRoutes);
+app.route("/clients", clientRoutes);
 app.route("/workouts", workoutRoutes);
 app.route("/meals", mealRoutes);
 app.route("/checkins", checkinRoutes);

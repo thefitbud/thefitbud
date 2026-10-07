@@ -1,4 +1,11 @@
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import {
+  traineeProfileSchema,
+  updateTraineeProfileRequestSchema,
+} from "@fitbud/contracts";
+import { deriveAge, formatLocalDate } from "@fitbud/core";
+import { traineeProfiles } from "../db/schema";
 import {
   operation,
 } from "../openapi/document";
@@ -18,10 +25,12 @@ import {
   loadActorByUserId,
   revokeWebSession,
 } from "../auth/identity";
+import { nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
+  requireRole,
 } from "../middleware/auth";
 import type { Env, Variables } from "../types";
 
@@ -147,3 +156,110 @@ meRoutes.get("/",
 
   return ok(c, data);
 });
+
+meRoutes.get(
+  "/trainee-profile",
+  operation({
+    tag: "Auth",
+    summary: "Returns the authenticated trainee profile.",
+    description:
+      "Trainee-only. Date of birth and gender are stored on the trainee profile. Age is derived and is not stored.",
+    roles: ["trainee"],
+    response: traineeProfileSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select()
+      .from(traineeProfiles)
+      .where(eq(traineeProfiles.userId, actor.userId))
+      .limit(1);
+    if (!row) {
+      return fail(c, 404, "TRAINEE_PROFILE_NOT_FOUND", "Trainee profile not found.");
+    }
+    return ok(
+      c,
+      traineeProfileSchema.parse({
+        displayName: row.displayName,
+        dateOfBirth: row.dateOfBirth,
+        gender: row.gender,
+        updatedAt: row.updatedAt,
+      }),
+    );
+  },
+);
+
+meRoutes.put(
+  "/trainee-profile",
+  operation({
+    tag: "Auth",
+    summary: "Updates the authenticated trainee date of birth and gender.",
+    description:
+      "Trainee-only. Display name is unchanged. A future or invalid birth date is rejected.",
+    roles: ["trainee"],
+    body: updateTraineeProfileRequestSchema,
+    response: traineeProfileSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = updateTraineeProfileRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid trainee profile.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const today = formatLocalDate(new Date(), actor.timezone);
+    if (
+      parsed.data.dateOfBirth &&
+      deriveAge(parsed.data.dateOfBirth, today) === null
+    ) {
+      return fail(
+        c,
+        400,
+        "INVALID_REQUEST",
+        "Date of birth must be a real date on or before today.",
+      );
+    }
+    const db = createDb(c.env.DB);
+    const [existing] = await db
+      .select()
+      .from(traineeProfiles)
+      .where(eq(traineeProfiles.userId, actor.userId))
+      .limit(1);
+    if (!existing) {
+      return fail(c, 404, "TRAINEE_PROFILE_NOT_FOUND", "Trainee profile not found.");
+    }
+    const updatedAt = nowIso();
+    await db
+      .update(traineeProfiles)
+      .set({
+        dateOfBirth: parsed.data.dateOfBirth,
+        gender: parsed.data.gender,
+        updatedAt,
+      })
+      .where(eq(traineeProfiles.id, existing.id));
+    return ok(
+      c,
+      traineeProfileSchema.parse({
+        displayName: existing.displayName,
+        dateOfBirth: parsed.data.dateOfBirth,
+        gender: parsed.data.gender,
+        updatedAt,
+      }),
+    );
+  },
+);

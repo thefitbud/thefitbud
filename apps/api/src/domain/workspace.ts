@@ -22,12 +22,14 @@ import {
   type WorkspaceActivityType,
 } from "@fitbud/contracts";
 import {
+  deriveAge,
   deriveCheckinStatus,
   deriveMealAssignmentStatus,
   deriveRenewalState,
   deriveWorkoutAssignmentStatus,
   formatLocalDate,
 } from "@fitbud/core";
+import { deriveAdherenceForRelationships } from "./adherence";
 import type { Db } from "../db/client";
 import {
   checkinReviews,
@@ -596,7 +598,11 @@ export async function loadClientWorkspace(
     progress,
   ] = await Promise.all([
     db
-      .select({ displayName: traineeProfiles.displayName })
+      .select({
+        displayName: traineeProfiles.displayName,
+        dateOfBirth: traineeProfiles.dateOfBirth,
+        gender: traineeProfiles.gender,
+      })
       .from(traineeProfiles)
       .where(eq(traineeProfiles.userId, relationship.traineeUserId))
       .limit(1),
@@ -615,10 +621,16 @@ export async function loadClientWorkspace(
     loadProgressSummary(db, relationship.id),
   ]);
 
-  const displayName = profile[0]?.displayName;
-  if (!displayName) {
+  const trainee = profile[0];
+  const displayName = trainee?.displayName;
+  if (!displayName || !trainee) {
     throw new Error("Trainee profile is missing for this coaching relationship.");
   }
+  const today = await trainerToday(db, relationship.trainerUserId, nowIso);
+  const adherence = await deriveAdherenceForRelationships(db, {
+    today,
+    relationships: [{ id: relationship.id, onboardingStatus }],
+  });
 
   return clientWorkspaceSchema.parse({
     header: {
@@ -632,8 +644,14 @@ export async function loadClientWorkspace(
             effectiveFrom: effectivePlan.version?.effectiveFrom ?? null,
           }
         : null,
-      primaryGoal: configuration?.primaryGoal ?? null,
+      goalShort: configuration?.goalShort ?? null,
       renewalState: subscription?.renewalState ?? null,
+      adherenceState: adherence.get(relationship.id) ?? "not_available",
+      traineeProfile: {
+        displayName,
+        age: deriveAge(trainee.dateOfBirth, today),
+        gender: trainee.gender,
+      },
     },
     overview: {
       openException,

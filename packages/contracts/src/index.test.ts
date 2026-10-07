@@ -121,7 +121,7 @@ describe("contracts", () => {
     expect(
       saveConfigurationDraftRequestSchema.parse({
         expectedVersion: 0,
-        primaryGoal: "Strength",
+        goalShort: "Strength",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 3,
@@ -135,7 +135,7 @@ describe("contracts", () => {
           requireSessionRpe: false,
         },
       }),
-    ).toMatchObject({ expectedVersion: 0, primaryGoal: "Strength" });
+    ).toMatchObject({ expectedVersion: 0, goalShort: "Strength" });
   });
 
   it("validates coaching configuration response shape", () => {
@@ -146,7 +146,8 @@ describe("contracts", () => {
         status: "draft",
         versionNumber: 1,
         recordVersion: 1,
-        primaryGoal: "Strength",
+        goalShort: "Strength",
+        goalDescription: null,
         notes: null,
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
@@ -184,6 +185,22 @@ describe("contracts", () => {
     ).toMatchObject({
       workoutDays: [{ name: "Day A" }],
     });
+
+    expect(
+      planContentSchema.parse({
+        workoutDays: [],
+        mealPrescriptions: [
+          {
+            id: "44444444-4444-4444-8444-444444444444",
+            order: 1,
+            name: "Lunch",
+            scheduleHint: null,
+            instructions: null,
+            photoRequired: false,
+          },
+        ],
+      }).mealPrescriptions[0]?.items,
+    ).toEqual([]);
   });
 
   it("validates workout assignment with derived missed status", () => {
@@ -462,6 +479,9 @@ describe("contracts", () => {
         instructions: null,
         defaultLoadLabel: null,
         defaultReps: 8,
+        muscleGroups: ["quads"],
+        equipment: ["dumbbell"],
+        difficulty: "beginner",
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
@@ -476,6 +496,11 @@ describe("contracts", () => {
         cuisineRegion: "indian",
         portionLabel: "1 katori",
         notes: null,
+        description: null,
+        calories: 180,
+        proteinGrams: 9,
+        carbsGrams: 22,
+        fatGrams: 6,
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),

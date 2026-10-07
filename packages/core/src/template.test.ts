@@ -40,6 +40,17 @@ const sampleContent = {
       scheduleHint: "1pm",
       instructions: null,
       photoRequired: false,
+      items: [
+        {
+          sourceFoodLibraryItemId: "55555555-5555-4555-8555-555555555555",
+          name: "Dal",
+          portionLabel: "1 katori",
+          calories: 180,
+          proteinGrams: 9,
+          carbsGrams: 28,
+          fatGrams: 4,
+        },
+      ],
     },
   ],
 };
@@ -61,6 +72,12 @@ describe("copyPlanContent", () => {
     );
     expect(copied.mealPrescriptions[0]?.id).not.toBe(
       sampleContent.mealPrescriptions[0]!.id,
+    );
+    expect(copied.mealPrescriptions[0]?.items[0]?.sourceFoodLibraryItemId).toBe(
+      "55555555-5555-4555-8555-555555555555",
+    );
+    expect(copied.mealPrescriptions[0]?.items[0]).not.toBe(
+      sampleContent.mealPrescriptions[0]!.items[0],
     );
   });
 });
@@ -119,5 +136,35 @@ describe("library copy helpers", () => {
     );
     expect(meal.name).toBe("Dal rice");
     expect(meal.instructions).toContain("1 katori dal");
+    expect(meal.items[0]?.name).toBe("Dal rice");
+    expect(meal.items[0]?.sourceFoodLibraryItemId).toBeUndefined();
+  });
+
+  it("snapshots library macros without keeping a live link", () => {
+    const meal = mealPrescriptionFromLibrary(
+      {
+        id: "66666666-6666-4666-8666-666666666666",
+        name: "Dal rice",
+        portionLabel: "1 katori dal + 1 cup rice",
+        notes: null,
+        calories: 320,
+        proteinGrams: 12,
+        carbsGrams: 48,
+        fatGrams: 6,
+      },
+      1,
+      () => "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    );
+    expect(meal.items).toEqual([
+      {
+        sourceFoodLibraryItemId: "66666666-6666-4666-8666-666666666666",
+        name: "Dal rice",
+        portionLabel: "1 katori dal + 1 cup rice",
+        calories: 320,
+        proteinGrams: 12,
+        carbsGrams: 48,
+        fatGrams: 6,
+      },
+    ]);
   });
 });

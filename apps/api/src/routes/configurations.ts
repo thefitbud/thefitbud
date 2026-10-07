@@ -16,7 +16,7 @@ import {
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
-  hasPrimaryGoal,
+  hasGoalShort,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
@@ -395,10 +395,14 @@ configurationRoutes.put(
     }
 
     const timestamp = nowIso();
-    const primaryGoal =
-      parsed.data.primaryGoal === undefined
-        ? (existing?.configuration.primaryGoal ?? null)
-        : parsed.data.primaryGoal;
+    const goalShort =
+      parsed.data.goalShort === undefined
+        ? (existing?.configuration.goalShort ?? null)
+        : parsed.data.goalShort;
+    const goalDescription =
+      parsed.data.goalDescription === undefined
+        ? (existing?.configuration.goalDescription ?? null)
+        : parsed.data.goalDescription;
     const notes =
       parsed.data.notes === undefined
         ? (existing?.configuration.notes ?? null)
@@ -409,7 +413,8 @@ configurationRoutes.put(
         .update(coachingConfigurations)
         .set({
           status: "draft",
-          primaryGoal,
+          goalShort,
+          goalDescription,
           notes,
           configuredAt: null,
           recordVersion: existing.configuration.recordVersion + 1,
@@ -441,7 +446,8 @@ configurationRoutes.put(
       status: "draft",
       versionNumber: 1,
       recordVersion: 1,
-      primaryGoal,
+      goalShort,
+      goalDescription,
       notes,
       configuredAt: null,
       activatedAt: null,
@@ -622,12 +628,12 @@ configurationRoutes.post(
       );
     }
 
-    if (!hasPrimaryGoal(bundle.configuration.primaryGoal)) {
+    if (!hasGoalShort(bundle.configuration.goalShort)) {
       return fail(
         c,
         422,
         "CONFIGURATION_INCOMPLETE",
-        "Primary goal is required before configuration can be completed.",
+        "A short goal is required before configuration can be completed.",
       );
     }
 
@@ -814,12 +820,12 @@ configurationRoutes.post(
       );
     }
 
-    if (!hasPrimaryGoal(bundle.configuration.primaryGoal)) {
+    if (!hasGoalShort(bundle.configuration.goalShort)) {
       return fail(
         c,
         422,
         "CONFIGURATION_INCOMPLETE",
-        "Primary goal is required before activation.",
+        "A short goal is required before activation.",
       );
     }
 
@@ -1019,7 +1025,8 @@ configurationRoutes.post(
       status: "draft",
       versionNumber: nextVersionNumber,
       recordVersion: 1,
-      primaryGoal: source.configuration.primaryGoal,
+      goalShort: source.configuration.goalShort,
+      goalDescription: source.configuration.goalDescription,
       notes: source.configuration.notes,
       configuredAt: null,
       activatedAt: null,

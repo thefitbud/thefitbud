@@ -33,6 +33,8 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0010_notifications.sql",
     "0013_domain_contracts.sql",
     "0014_onboarding_form_templates.sql",
+    "0011_templates_libraries.sql",
+    "0015_iteration_a.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -228,7 +230,7 @@ async function reachActiveConfig(suffix: string, displayName: string) {
       },
       body: JSON.stringify({
         expectedVersion: 0,
-        primaryGoal: "Build strength",
+        goalShort: "Build strength",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 3,
@@ -279,8 +281,10 @@ type WorkspaceBody = {
     traineeDisplayName: string;
     onboardingStatus: string;
     effectivePlan: { id: string; title: string; effectiveFrom: string | null } | null;
-    primaryGoal: string | null;
+    goalShort: string | null;
     renewalState: string | null;
+    adherenceState: string;
+    traineeProfile: { displayName: string; age: number | null; gender: string | null };
   };
   overview: {
     openException: { id: string; type: string; status: string } | null;
@@ -290,7 +294,7 @@ type WorkspaceBody = {
   };
   plan: { plan: { id: string } | null; version: { id: string } | null };
   configuration: {
-    configuration: { primaryGoal: string | null } | null;
+    configuration: { goalShort: string | null } | null;
     subscription: { id: string; versionNumber: number; planName: string; renewalState: string } | null;
   };
   history: { relationshipId: string };
@@ -329,8 +333,15 @@ describe("client workspace", () => {
     expect(body.data.header.traineeDisplayName).toBe("Asha Menon");
     expect(body.data.header.onboardingStatus).toBe("onboarding_pending");
     expect(body.data.header.effectivePlan).toBeNull();
-    expect(body.data.header.primaryGoal).toBeNull();
+    expect(body.data.header.goalShort).toBeNull();
     expect(body.data.header.renewalState).toBeNull();
+    expect(body.data.header.adherenceState).toBe("not_available");
+    expect(body.data.header.traineeProfile).toEqual({
+      displayName: "Asha Menon",
+      age: null,
+      gender: null,
+    });
+    expect(body.data.header).not.toHaveProperty("dateOfBirth");
     expect(body.data.overview.openException).toBeNull();
     expect(body.data.overview.nextCheckin).toBeNull();
     expect(body.data.overview.recentActivity).toEqual([]);
@@ -401,14 +412,15 @@ describe("client workspace", () => {
     const beforeBody = (await beforeSubscription.json()) as { data: WorkspaceBody };
     expect(beforeBody.data.header.traineeDisplayName).toBe("Asha Menon");
     expect(beforeBody.data.header.onboardingStatus).toBe("active");
-    expect(beforeBody.data.header.primaryGoal).toBe("Build strength");
+    expect(beforeBody.data.header.goalShort).toBe("Build strength");
+    expect(beforeBody.data.header.adherenceState).toBe("no_recent_data");
     expect(beforeBody.data.header.effectivePlan).toMatchObject({
       id: createdBody.data.plan.id,
       title: "Foundation block",
     });
     expect(beforeBody.data.header.renewalState).toBeNull();
     expect(beforeBody.data.configuration.subscription).toBeNull();
-    expect(beforeBody.data.configuration.configuration?.primaryGoal).toBe(
+    expect(beforeBody.data.configuration.configuration?.goalShort).toBe(
       "Build strength",
     );
     expect(beforeBody.data.plan.version?.id).toBe(originalVersionId);

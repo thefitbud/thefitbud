@@ -28,7 +28,7 @@ export {
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
-  hasPrimaryGoal,
+  hasGoalShort,
 } from "./configuration.js";
 
 export {
@@ -161,3 +161,14 @@ export {
 } from "./realtime.js";
 
 export { normalizeWhatsappE164, whatsappHref } from "./whatsapp.js";
+
+export {
+  ADHERENCE_WINDOW_DAYS,
+  adherenceWindowStart,
+  deriveAdherenceState,
+  isQualifyingAdherenceObservation,
+  isWithinAdherenceWindow,
+  type AdherenceObservationKind,
+} from "./adherence.js";
+
+export { deriveAge } from "./profile.js";

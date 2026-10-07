@@ -33,6 +33,8 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0010_notifications.sql",
     "0013_domain_contracts.sql",
   "0014_onboarding_form_templates.sql",
+    "0011_templates_libraries.sql",
+    "0015_iteration_a.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -184,7 +186,7 @@ async function reachActiveConfig(suffix: string) {
       },
       body: JSON.stringify({
         expectedVersion: 0,
-        primaryGoal: "Adherence",
+        goalShort: "Adherence",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 2,

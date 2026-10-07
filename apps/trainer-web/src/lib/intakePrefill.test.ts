@@ -25,7 +25,7 @@ const definition: OnboardingFormVersion = {
 };
 
 describe("coachingPrefillFromIntake", () => {
-  it("maps goals to primary goal and supporting answers to notes", () => {
+  it("maps the long goals answer to the goal description and supporting answers to notes", () => {
     expect(
       coachingPrefillFromIntake({
         goals: " Lose fat ",
@@ -34,14 +34,14 @@ describe("coachingPrefillFromIntake", () => {
         relevant_history: "",
       }),
     ).toEqual({
-      primaryGoal: "Lose fat",
+      goalDescription: "Lose fat",
       notes: "Schedule:\nEvenings\n\nPreferences:\nVegetarian",
     });
   });
 
   it("returns empty strings when intake has no useful answers", () => {
     expect(coachingPrefillFromIntake({})).toEqual({
-      primaryGoal: "",
+      goalDescription: "",
       notes: "",
     });
   });

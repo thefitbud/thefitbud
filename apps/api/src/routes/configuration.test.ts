@@ -26,6 +26,8 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0010_notifications.sql",
     "0013_domain_contracts.sql",
   "0014_onboarding_form_templates.sql",
+    "0011_templates_libraries.sql",
+    "0015_iteration_a.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -173,7 +175,7 @@ async function reachCoachingReady(suffix: string) {
 
 const draftBody = {
   expectedVersion: 0,
-  primaryGoal: "Build strength",
+  goalShort: "Build strength",
   notes: "Focus on lower body recovery",
   workout: { sessionsPerWeek: 4, completionWindowHours: 24 },
   nutrition: {
@@ -311,7 +313,7 @@ describe("coaching configuration", () => {
         body: JSON.stringify({
           ...draftBody,
           expectedVersion: activated.data.recordVersion,
-          primaryGoal: "Should fail",
+          goalShort: "Should fail",
         }),
       },
       testEnv(),
@@ -319,6 +321,44 @@ describe("coaching configuration", () => {
     expect(locked.status).toBe(409);
     const lockedBody = (await locked.json()) as { error: { code: string } };
     expect(lockedBody.error.code).toBe("CONFIGURATION_NOT_EDITABLE");
+  });
+
+  it("rejects configure and activate until a short goal is saved", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("goal");
+    const saved = await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...draftBody,
+          goalShort: null,
+          goalDescription: "A longer description does not satisfy the short goal.",
+        }),
+      },
+      testEnv(),
+    );
+    expect(saved.status).toBe(201);
+    const draft = (await saved.json()) as { data: { recordVersion: number } };
+    const configure = await app.request(
+      `/configurations/relationships/${relationshipId}/configure`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "configure-missing-goal",
+        },
+        body: JSON.stringify({ expectedVersion: draft.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(configure.status).toBe(422);
+    const configureBody = (await configure.json()) as { error: { code: string } };
+    expect(configureBody.error.code).toBe("CONFIGURATION_INCOMPLETE");
   });
 
   it("isolates configuration across trainers", async () => {

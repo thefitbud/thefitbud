@@ -1174,7 +1174,8 @@ checkinRoutes.get(
         currentConfiguration: config
           ? {
               id: config.configuration.id,
-              primaryGoal: config.configuration.primaryGoal,
+              goalShort: config.configuration.goalShort,
+              goalDescription: config.configuration.goalDescription,
               checkinCadence: config.schedule.cadence,
               dueWindowHours: config.schedule.dueWindowHours,
             }

@@ -136,6 +136,7 @@ export {
   createPlanResponseSchema,
   effectivePlanResponseSchema,
   planListFilterSchema,
+  mealFoodItemSchema,
   mealPrescriptionSchema,
   planContentSchema,
   planCreationSourceSchema,
@@ -155,6 +156,7 @@ export {
   type CreatePlanResponse,
   type EffectivePlanResponse,
   type PlanListFilter,
+  type MealFoodItem,
   type MealPrescription,
   type Plan,
   type PlanContent,
@@ -178,6 +180,7 @@ export {
   createFoodLibraryItemRequestSchema,
   createPlanTemplateFromVersionRequestSchema,
   createPlanTemplateRequestSchema,
+  exerciseDifficultySchema,
   exerciseLibraryItemSchema,
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
@@ -196,6 +199,7 @@ export {
   type CreateFoodLibraryItemRequest,
   type CreatePlanTemplateFromVersionRequest,
   type CreatePlanTemplateRequest,
+  type ExerciseDifficulty,
   type ExerciseLibraryItem,
   type ExerciseLibraryListResponse,
   type FoodLibraryItem,
@@ -413,6 +417,27 @@ export {
 } from "./history.js";
 
 export {
+  adherenceStateSchema,
+  type AdherenceState,
+} from "./adherence.js";
+
+export {
+  traineeProfileSchema,
+  updateTraineeProfileRequestSchema,
+  type TraineeProfile,
+  type UpdateTraineeProfileRequest,
+} from "./profile.js";
+
+export {
+  clientDirectoryItemSchema,
+  clientDirectoryListResponseSchema,
+  clientDirectoryNextCheckinSchema,
+  type ClientDirectoryItem,
+  type ClientDirectoryListResponse,
+  type ClientDirectoryNextCheckin,
+} from "./directory.js";
+
+export {
   clientWorkspaceSchema,
   workspaceActivityItemSchema,
   workspaceActivityListResponseSchema,
@@ -422,6 +447,7 @@ export {
   workspaceEffectivePlanSummarySchema,
   workspaceHeaderSchema,
   workspaceOverviewSchema,
+  workspaceTraineeProfileSchema,
   type ClientWorkspace,
   type WorkspaceActivityItem,
   type WorkspaceActivityListResponse,
@@ -431,6 +457,7 @@ export {
   type WorkspaceEffectivePlanSummary,
   type WorkspaceHeader,
   type WorkspaceOverview,
+  type WorkspaceTraineeProfile,
 } from "./workspace.js";
 
 export {

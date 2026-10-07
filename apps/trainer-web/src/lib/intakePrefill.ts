@@ -1,10 +1,10 @@
 import type { OnboardingAnswers, OnboardingFormVersion } from "@fitbud/contracts";
 
 export function coachingPrefillFromIntake(answers: OnboardingAnswers): {
-  primaryGoal: string;
+  goalDescription: string;
   notes: string;
 } {
-  const primaryGoal = answers.goals?.trim() ?? "";
+  const goalDescription = answers.goals?.trim() ?? "";
   const sections: Array<[string, string | undefined]> = [
     ["Schedule", answers.schedule],
     ["Preferences", answers.preferences],
@@ -15,7 +15,7 @@ export function coachingPrefillFromIntake(answers: OnboardingAnswers): {
     .filter(([, value]) => value?.trim())
     .map(([label, value]) => `${label}:\n${value?.trim() ?? ""}`)
     .join("\n\n");
-  return { primaryGoal, notes };
+  return { goalDescription, notes };
 }
 
 export function intakeFieldPreview(

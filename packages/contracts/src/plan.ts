@@ -44,6 +44,20 @@ export const workoutDaySchema = z.object({
 });
 export type WorkoutDay = z.infer<typeof workoutDaySchema>;
 
+const nullableMacroGramsSchema = z.number().nonnegative().max(2000).nullable();
+
+/** Snapshot of one food inside a meal. Not a live library join. */
+export const mealFoodItemSchema = z.object({
+  sourceFoodLibraryItemId: uuidSchema.optional(),
+  name: z.string().trim().min(1).max(120),
+  portionLabel: z.string().trim().min(1).max(120),
+  calories: z.number().int().nonnegative().max(20000).nullable(),
+  proteinGrams: nullableMacroGramsSchema,
+  carbsGrams: nullableMacroGramsSchema,
+  fatGrams: nullableMacroGramsSchema,
+});
+export type MealFoodItem = z.infer<typeof mealFoodItemSchema>;
+
 export const mealPrescriptionSchema = z.object({
   id: uuidSchema,
   order: z.number().int().min(1).max(12),
@@ -51,6 +65,11 @@ export const mealPrescriptionSchema = z.object({
   scheduleHint: z.string().trim().max(120).nullable(),
   instructions: z.string().trim().max(2000).nullable(),
   photoRequired: z.boolean(),
+  items: z
+    .array(mealFoodItemSchema)
+    .max(30)
+    .optional()
+    .transform((items) => items ?? []),
 });
 export type MealPrescription = z.infer<typeof mealPrescriptionSchema>;
 

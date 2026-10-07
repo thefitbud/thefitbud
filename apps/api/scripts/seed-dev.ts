@@ -350,6 +350,7 @@ function buildMealPrescriptions(seed: string, meals: MealSpec[]): MealPrescripti
     scheduleHint: meal.scheduleHint,
     instructions: meal.instructions,
     photoRequired: meal.photoRequired ?? false,
+    items: [],
   }));
 }
 
@@ -642,7 +643,7 @@ type Stage =
 type AdherenceProfile = "strong" | "mixed" | "slipping" | "upcoming_only";
 
 type ConfigurationSpec = {
-  primaryGoal: string;
+  goalShort: string;
   notes: string;
   sessionsPerWeek: number;
   completionWindowHours: number;
@@ -713,7 +714,7 @@ const CONDITIONING_CONTENT: ContentSpec = { days: CONDITIONING_DAYS, meals: FAT_
 const LOW_IMPACT_CONTENT: ContentSpec = { days: LOW_IMPACT_DAYS, meals: RECOVERY_MEALS };
 
 const STRENGTH_CONFIG: ConfigurationSpec = {
-  primaryGoal: "Add 10 kg to the squat while holding body weight steady",
+  goalShort: "Add 10 kg to the squat while holding body weight steady",
   notes: "Trains at a commercial gym before work. Prefers barbell work.",
   sessionsPerWeek: 3,
   completionWindowHours: 24,
@@ -728,7 +729,7 @@ const STRENGTH_CONFIG: ConfigurationSpec = {
 };
 
 const FAT_LOSS_CONFIG: ConfigurationSpec = {
-  primaryGoal: "Lose 6 kg over 16 weeks without losing strength",
+  goalShort: "Lose 6 kg over 16 weeks without losing strength",
   notes: "Travels for work most weeks. Needs restaurant-friendly options.",
   sessionsPerWeek: 4,
   completionWindowHours: 24,
@@ -743,7 +744,7 @@ const FAT_LOSS_CONFIG: ConfigurationSpec = {
 };
 
 const RECOVERY_CONFIG: ConfigurationSpec = {
-  primaryGoal: "Return to full training after a lower back flare-up",
+  goalShort: "Return to full training after a lower back flare-up",
   notes: "Cleared by physiotherapy for low impact loading only.",
   sessionsPerWeek: 2,
   completionWindowHours: 36,
@@ -1445,7 +1446,7 @@ async function ensureConfiguration(
       actor: trainer,
       body: {
         expectedVersion: 0,
-        primaryGoal: config.primaryGoal,
+        goalShort: config.goalShort,
         notes: config.notes,
         workout: {
           sessionsPerWeek: config.sessionsPerWeek,

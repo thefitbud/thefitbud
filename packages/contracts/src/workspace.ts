@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { adherenceStateSchema } from "./adherence.js";
 import { checkinSchema, checkinStatusSchema } from "./checkin.js";
 import { coachingConfigurationSchema } from "./configuration.js";
 import { activeExceptionSummarySchema } from "./exception.js";
@@ -87,13 +88,24 @@ export type WorkspaceEffectivePlanSummary = z.infer<
   typeof workspaceEffectivePlanSummarySchema
 >;
 
+export const workspaceTraineeProfileSchema = z.object({
+  displayName: z.string().min(1).max(120),
+  age: z.number().int().nonnegative().nullable(),
+  gender: z.string().max(64).nullable(),
+});
+export type WorkspaceTraineeProfile = z.infer<
+  typeof workspaceTraineeProfileSchema
+>;
+
 export const workspaceHeaderSchema = z.object({
   relationshipId: uuidSchema,
   traineeDisplayName: z.string().min(1).max(120),
   onboardingStatus: onboardingStatusSchema,
   effectivePlan: workspaceEffectivePlanSummarySchema.nullable(),
-  primaryGoal: z.string().max(500).nullable(),
+  goalShort: z.string().max(120).nullable(),
   renewalState: renewalStateSchema.nullable(),
+  adherenceState: adherenceStateSchema,
+  traineeProfile: workspaceTraineeProfileSchema,
 });
 export type WorkspaceHeader = z.infer<typeof workspaceHeaderSchema>;
 

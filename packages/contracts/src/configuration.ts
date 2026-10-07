@@ -49,6 +49,18 @@ export const trackingRequirementsSchema = z.object({
 });
 export type TrackingRequirements = z.infer<typeof trackingRequirementsSchema>;
 
+const optionalTrimmedText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((value) => {
+      if (typeof value !== "string") return value;
+      return value.length === 0 ? null : value;
+    });
+
 export const coachingConfigurationSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
@@ -56,7 +68,8 @@ export const coachingConfigurationSchema = z.object({
   versionNumber: z.number().int().positive(),
   /** Optimistic concurrency token. Request expectedVersion means this field. */
   recordVersion: z.number().int().nonnegative(),
-  primaryGoal: z.string().max(500).nullable(),
+  goalShort: z.string().max(120).nullable(),
+  goalDescription: z.string().max(500).nullable(),
   notes: z.string().max(2000).nullable(),
   workout: workoutExpectationsSchema,
   nutrition: nutritionExpectationsSchema,
@@ -71,7 +84,8 @@ export type CoachingConfiguration = z.infer<typeof coachingConfigurationSchema>;
 
 export const saveConfigurationDraftRequestSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
-  primaryGoal: z.string().trim().max(500).nullable().optional(),
+  goalShort: optionalTrimmedText(120),
+  goalDescription: optionalTrimmedText(500),
   notes: z.string().trim().max(2000).nullable().optional(),
   workout: workoutExpectationsSchema,
   nutrition: nutritionExpectationsSchema,
