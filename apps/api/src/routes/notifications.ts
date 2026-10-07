@@ -1,3 +1,8 @@
+import { z } from "zod";
+import {
+  operation,
+  limitParameter,
+} from "../openapi/document";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -102,6 +107,14 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
 
 notificationRoutes.post(
   "/device-tokens",
+  operation({
+    tag: "Notifications",
+    summary: "Notifications operation for POST /notifications/device-tokens.",
+    description: "Notifications operation for POST /notifications/device-tokens.",
+    roles: ["trainer", "trainee"],
+    body: registerDeviceTokenRequestSchema,
+    response: registerDeviceTokenResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -191,6 +204,14 @@ notificationRoutes.post(
 
 notificationRoutes.delete(
   "/device-tokens",
+  operation({
+    tag: "Notifications",
+    summary: "Notifications operation for DELETE /notifications/device-tokens.",
+    description: "Notifications operation for DELETE /notifications/device-tokens.",
+    roles: ["trainer", "trainee"],
+    body: removeDeviceTokenRequestSchema,
+    response: z.object({ revoked: z.number().int().nonnegative() }),
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -242,6 +263,13 @@ notificationRoutes.delete(
 
 notificationRoutes.get(
   "/preferences",
+  operation({
+    tag: "Notifications",
+    summary: "Notifications operation for GET /notifications/preferences.",
+    description: "Notifications operation for GET /notifications/preferences.",
+    roles: ["trainer", "trainee"],
+    response: notificationPreferencesSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -261,6 +289,14 @@ notificationRoutes.get(
 
 notificationRoutes.put(
   "/preferences",
+  operation({
+    tag: "Notifications",
+    summary: "Notifications operation for PUT /notifications/preferences.",
+    description: "Notifications operation for PUT /notifications/preferences.",
+    roles: ["trainer", "trainee"],
+    body: updateNotificationPreferencesRequestSchema,
+    response: notificationPreferencesSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -322,6 +358,16 @@ notificationRoutes.put(
 
 notificationRoutes.get(
   "/",
+  operation({
+    tag: "Notifications",
+    summary: "Lists recent notifications for the caller",
+    description: "Lists recent notifications for the caller. nextCursor is always null.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      limitParameter({ defaultValue: 20, maximum: 1 }),
+    ],
+    response: notificationListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -353,6 +399,13 @@ notificationRoutes.get(
  */
 notificationRoutes.post(
   "/reminders/evaluate",
+  operation({
+    tag: "Notifications",
+    summary: "Evaluates due reminders and enqueues delivery",
+    description: "Evaluates due reminders and enqueues delivery. The handler rejects the call unless AUTH_MODE is test. Scheduled evaluation is not an HTTP route.",
+    roles: ["trainer", "trainee"],
+    response: evaluateRemindersResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -378,6 +431,13 @@ notificationRoutes.post(
 
 notificationRoutes.post(
   "/:notificationId/read",
+  operation({
+    tag: "Notifications",
+    summary: "Notifications operation for POST /notifications/:notificationId/read.",
+    description: "Notifications operation for POST /notifications/:notificationId/read.",
+    roles: ["trainer", "trainee"],
+    response: notificationSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -401,6 +461,13 @@ notificationRoutes.post(
 
 notificationRoutes.get(
   "/relationships/:relationshipId/reminder-rules",
+  operation({
+    tag: "Notifications",
+    summary: "Notifications operation for GET /notifications/relationships/:relationshipId/reminder-rules.",
+    description: "Notifications operation for GET /notifications/relationships/:relationshipId/reminder-rules.",
+    roles: ["trainer", "trainee"],
+    response: reminderRulesResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -434,6 +501,14 @@ notificationRoutes.get(
 
 notificationRoutes.put(
   "/relationships/:relationshipId/reminder-rules",
+  operation({
+    tag: "Notifications",
+    summary: "Notifications operation for PUT /notifications/relationships/:relationshipId/reminder-rules.",
+    description: "Notifications operation for PUT /notifications/relationships/:relationshipId/reminder-rules.",
+    roles: ["trainer", "trainee"],
+    body: updateReminderRulesRequestSchema,
+    response: reminderRulesResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),

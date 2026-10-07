@@ -32,8 +32,10 @@ import {
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
+  clientWorkspaceSchema,
   healthResponseSchema,
   historyListResponseSchema,
+  workspaceActivityListResponseSchema,
   createOnboardingFormTemplateRequestSchema,
   createOnboardingFormTemplateVersionRequestSchema,
   forkOnboardingFormTemplateRequestSchema,
@@ -168,7 +170,12 @@ import {
   type GenerateMealAssignmentsResponse,
   type GenerateWorkoutAssignmentsRequest,
   type GenerateWorkoutAssignmentsResponse,
+  type ClientWorkspace,
+  type HistoryItemKind,
   type HistoryListResponse,
+  type PlanVersionStatus,
+  type WorkspaceActivityListResponse,
+  type WorkspaceActivityType,
   type HealthResponse,
   type CreateOnboardingFormTemplateRequest,
   type CreateOnboardingFormTemplateVersionRequest,
@@ -617,11 +624,20 @@ export class FitBudApiClient {
 
   async listPlans(
     relationshipId: string,
-    query?: { cursor?: string; limit?: number },
+    query?: {
+      cursor?: string;
+      limit?: number;
+      versionStatus?: PlanVersionStatus;
+      effectiveFrom?: string;
+      effectiveTo?: string;
+    },
   ): Promise<PlanListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.versionStatus) params.set("versionStatus", query.versionStatus);
+    if (query?.effectiveFrom) params.set("effectiveFrom", query.effectiveFrom);
+    if (query?.effectiveTo) params.set("effectiveTo", query.effectiveTo);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
@@ -1399,6 +1415,41 @@ export class FitBudApiClient {
     );
   }
 
+  async getClientWorkspace(relationshipId: string): Promise<ClientWorkspace> {
+    return this.request(
+      "GET",
+      `/workspaces/relationships/${relationshipId}`,
+      clientWorkspaceSchema,
+      { auth: true },
+    );
+  }
+
+  async listWorkspaceActivity(
+    relationshipId: string,
+    query: {
+      type: WorkspaceActivityType;
+      state?: string;
+      occurredFrom?: string;
+      occurredTo?: string;
+      cursor?: string;
+      limit?: number;
+    },
+  ): Promise<WorkspaceActivityListResponse> {
+    const params = new URLSearchParams();
+    params.set("type", query.type);
+    if (query.state) params.set("state", query.state);
+    if (query.occurredFrom) params.set("occurredFrom", query.occurredFrom);
+    if (query.occurredTo) params.set("occurredTo", query.occurredTo);
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    return this.request(
+      "GET",
+      `/workspaces/relationships/${relationshipId}/activity?${params.toString()}`,
+      workspaceActivityListResponseSchema,
+      { auth: true },
+    );
+  }
+
   async getProgressSummary(relationshipId: string): Promise<ProgressSummary> {
     return this.request(
       "GET",
@@ -1410,11 +1461,20 @@ export class FitBudApiClient {
 
   async listHistory(
     relationshipId: string,
-    query?: { cursor?: string; limit?: number },
+    query?: {
+      cursor?: string;
+      limit?: number;
+      kind?: HistoryItemKind;
+      occurredFrom?: string;
+      occurredTo?: string;
+    },
   ): Promise<HistoryListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit != null) params.set("limit", String(query.limit));
+    if (query?.kind) params.set("kind", query.kind);
+    if (query?.occurredFrom) params.set("occurredFrom", query.occurredFrom);
+    if (query?.occurredTo) params.set("occurredTo", query.occurredTo);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",

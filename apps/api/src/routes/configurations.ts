@@ -1,3 +1,6 @@
+import {
+  operation,
+} from "../openapi/document";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -240,6 +243,13 @@ async function upsertExpectationChildren(
 
 configurationRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "Configurations",
+    summary: "Configurations operation for GET /configurations/relationships/:relationshipId.",
+    description: "Configurations operation for GET /configurations/relationships/:relationshipId.",
+    roles: ["trainer", "trainee"],
+    response: coachingConfigurationSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -297,6 +307,15 @@ configurationRoutes.get(
 
 configurationRoutes.put(
   "/relationships/:relationshipId/draft",
+  operation({
+    tag: "Configurations",
+    summary: "Configurations operation for PUT /configurations/relationships/:relationshipId/draft.",
+    description: "Configurations operation for PUT /configurations/relationships/:relationshipId/draft.",
+    roles: ["trainer"],
+    body: saveConfigurationDraftRequestSchema,
+    successStatus: [200, 201],
+    response: coachingConfigurationSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -445,6 +464,15 @@ configurationRoutes.put(
 
 configurationRoutes.post(
   "/relationships/:relationshipId/configure",
+  operation({
+    tag: "Configurations",
+    summary: "Configurations operation for POST /configurations/relationships/:relationshipId/configure.",
+    description: "Configurations operation for POST /configurations/relationships/:relationshipId/configure.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: configureConfigurationRequestSchema,
+    response: coachingConfigurationSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -637,6 +665,15 @@ configurationRoutes.post(
 
 configurationRoutes.post(
   "/relationships/:relationshipId/activate",
+  operation({
+    tag: "Configurations",
+    summary: "Configurations operation for POST /configurations/relationships/:relationshipId/activate.",
+    description: "Configurations operation for POST /configurations/relationships/:relationshipId/activate.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: activateConfigurationRequestSchema,
+    response: coachingConfigurationSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -834,6 +871,16 @@ configurationRoutes.post(
 
 configurationRoutes.post(
   "/relationships/:relationshipId/versions",
+  operation({
+    tag: "Configurations",
+    summary: "Configurations operation for POST /configurations/relationships/:relationshipId/versions.",
+    description: "Configurations operation for POST /configurations/relationships/:relationshipId/versions.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: activateConfigurationRequestSchema,
+    successStatus: [201],
+    response: coachingConfigurationSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

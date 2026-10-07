@@ -1,3 +1,6 @@
+import {
+  operation,
+} from "../openapi/document";
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
 import {
@@ -87,6 +90,13 @@ async function loadReadyOwnedMedia(
 
 progressRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "Progress",
+    summary: "Progress operation for GET /progress/relationships/:relationshipId.",
+    description: "Progress operation for GET /progress/relationships/:relationshipId.",
+    roles: ["trainer", "trainee"],
+    response: progressSummarySchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -145,6 +155,13 @@ progressRoutes.get(
 
 progressRoutes.get(
   "/relationships/:relationshipId/measurements",
+  operation({
+    tag: "Progress",
+    summary: "Progress operation for GET /progress/relationships/:relationshipId/measurements.",
+    description: "Progress operation for GET /progress/relationships/:relationshipId/measurements.",
+    roles: ["trainer", "trainee"],
+    response: measurementListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -183,6 +200,15 @@ progressRoutes.get(
 
 progressRoutes.post(
   "/relationships/:relationshipId/measurements",
+  operation({
+    tag: "Progress",
+    summary: "Progress operation for POST /progress/relationships/:relationshipId/measurements.",
+    description: "Progress operation for POST /progress/relationships/:relationshipId/measurements.",
+    roles: ["trainer", "trainee"],
+    idempotency: true,
+    body: createMeasurementRequestSchema,
+    response: measurementSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -357,6 +383,13 @@ progressRoutes.post(
 
 progressRoutes.get(
   "/relationships/:relationshipId/entries",
+  operation({
+    tag: "Progress",
+    summary: "Progress operation for GET /progress/relationships/:relationshipId/entries.",
+    description: "Progress operation for GET /progress/relationships/:relationshipId/entries.",
+    roles: ["trainer", "trainee"],
+    response: progressEntryListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -395,6 +428,15 @@ progressRoutes.get(
 
 progressRoutes.post(
   "/relationships/:relationshipId/entries",
+  operation({
+    tag: "Progress",
+    summary: "Progress operation for POST /progress/relationships/:relationshipId/entries.",
+    description: "Progress operation for POST /progress/relationships/:relationshipId/entries.",
+    roles: ["trainer", "trainee"],
+    idempotency: true,
+    body: createProgressEntryRequestSchema,
+    response: progressEntrySchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),

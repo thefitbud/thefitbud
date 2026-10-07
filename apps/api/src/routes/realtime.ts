@@ -1,3 +1,7 @@
+import {
+  operation,
+  realtimeAccessParameters,
+} from "../openapi/document";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -6,6 +10,7 @@ import {
   realtimeSubscriptionTargetSchema,
   relationshipRealtimeChannel,
   relationshipRealtimePath,
+  realtimeEventSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
 import { coachingRelationships } from "../db/schema";
@@ -117,6 +122,15 @@ function subscriptionTarget(relationshipId: string) {
  */
 realtimeRoutes.get(
   "/relationships/:relationshipId/connection",
+  operation({
+    tag: "Realtime",
+    summary: "Returns the realtime subscription target for a relationship",
+    description: "Returns the realtime subscription target for a relationship. REST and sync stay authoritative when the socket is unavailable.",
+    parameters: [
+      ...realtimeAccessParameters(),
+    ],
+    response: realtimeSubscriptionTargetSchema,
+  }),
   optionalAuthMiddleware,
   async (c) => {
     const actor = (await resolveRealtimeActor(c)) ?? c.get("actor");
@@ -147,6 +161,15 @@ realtimeRoutes.get(
  */
 realtimeRoutes.get(
   "/relationships/:relationshipId/ws",
+  operation({
+    tag: "Realtime",
+    summary: "Upgrades to a WebSocket for relationship change hints",
+    description: "Upgrades to a WebSocket for relationship change hints. A request that is not an upgrade returns 426. Socket messages match realtimeEventSchema and are not an HTTP body.",
+    parameters: [
+      ...realtimeAccessParameters(),
+    ],
+    websocketMessage: realtimeEventSchema,
+  }),
   optionalAuthMiddleware,
   async (c) => {
     const actor = (await resolveRealtimeActor(c)) ?? c.get("actor");

@@ -311,6 +311,11 @@ describe("authorization matrix", () => {
       { domain: "exceptions", path: `/exceptions/relationships/${id}` },
       { domain: "progress", path: `/progress/relationships/${id}` },
       { domain: "history", path: `/history/relationships/${id}` },
+      { domain: "workspaces", path: `/workspaces/relationships/${id}` },
+      {
+        domain: "workspaces",
+        path: `/workspaces/relationships/${id}/activity?type=checkin`,
+      },
       {
         domain: "realtime",
         path: `/realtime/relationships/${id}/connection`,
@@ -392,6 +397,14 @@ describe("authorization matrix", () => {
       { domain: "exceptions", path: "/exceptions/attention" },
       { domain: "checkins", path: "/checkins/inbox" },
       { domain: "history", path: `/history/relationships/${owned.relationshipId}` },
+      {
+        domain: "workspaces",
+        path: `/workspaces/relationships/${owned.relationshipId}`,
+      },
+      {
+        domain: "workspaces",
+        path: `/workspaces/relationships/${owned.relationshipId}/activity?type=workout`,
+      },
     ];
 
     for (const spec of cases) {

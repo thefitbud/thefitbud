@@ -135,6 +135,7 @@ export {
   createPlanRequestSchema,
   createPlanResponseSchema,
   effectivePlanResponseSchema,
+  planListFilterSchema,
   mealPrescriptionSchema,
   planContentSchema,
   planCreationSourceSchema,
@@ -153,6 +154,7 @@ export {
   type CreatePlanRequest,
   type CreatePlanResponse,
   type EffectivePlanResponse,
+  type PlanListFilter,
   type MealPrescription,
   type Plan,
   type PlanContent,
@@ -402,11 +404,34 @@ export {
 export {
   historyItemKindSchema,
   historyItemSchema,
+  historyListFilterSchema,
   historyListResponseSchema,
   type HistoryItem,
   type HistoryItemKind,
+  type HistoryListFilter,
   type HistoryListResponse,
 } from "./history.js";
+
+export {
+  clientWorkspaceSchema,
+  workspaceActivityItemSchema,
+  workspaceActivityListResponseSchema,
+  workspaceActivityQuerySchema,
+  workspaceActivityTypeSchema,
+  workspaceConfigurationSectionSchema,
+  workspaceEffectivePlanSummarySchema,
+  workspaceHeaderSchema,
+  workspaceOverviewSchema,
+  type ClientWorkspace,
+  type WorkspaceActivityItem,
+  type WorkspaceActivityListResponse,
+  type WorkspaceActivityQuery,
+  type WorkspaceActivityType,
+  type WorkspaceConfigurationSection,
+  type WorkspaceEffectivePlanSummary,
+  type WorkspaceHeader,
+  type WorkspaceOverview,
+} from "./workspace.js";
 
 export {
   SYNC_OPERATION_ENTITY,

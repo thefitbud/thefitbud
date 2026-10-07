@@ -39,3 +39,11 @@ export type HistoryItem = z.infer<typeof historyItemSchema>;
 
 export const historyListResponseSchema = cursorPageSchema(historyItemSchema);
 export type HistoryListResponse = z.infer<typeof historyListResponseSchema>;
+
+/** Optional filters for GET /history/relationships/:id. Applied in each source query before its row cap. */
+export const historyListFilterSchema = z.object({
+  kind: historyItemKindSchema.optional(),
+  occurredFrom: isoDateTimeSchema.optional(),
+  occurredTo: isoDateTimeSchema.optional(),
+});
+export type HistoryListFilter = z.infer<typeof historyListFilterSchema>;

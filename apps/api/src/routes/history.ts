@@ -1,6 +1,15 @@
+import {
+  operation,
+  cursorParameter,
+  historyFilterParameters,
+  limitParameter,
+} from "../openapi/document";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { historyListResponseSchema } from "@fitbud/contracts";
+import {
+  historyListFilterSchema,
+  historyListResponseSchema,
+} from "@fitbud/contracts";
 import { createDb } from "../db/client";
 import { coachingRelationships } from "../db/schema";
 import { assembleRelationshipHistory } from "../domain/history";
@@ -42,6 +51,19 @@ async function loadOwnedRelationship(
  */
 historyRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "History",
+    summary: "Returns readable coaching history for a trainer-owned relationship",
+    description:
+      "Returns readable coaching history for a trainer-owned relationship. The default page size is 30. Optional kind, occurredFrom, and occurredTo filters are applied in each source query before that source's row cap. Omitted filters keep the unfiltered history.",
+    roles: ["trainer"],
+    parameters: [
+      ...historyFilterParameters(),
+      limitParameter({ defaultValue: 30, maximum: 1 }),
+      cursorParameter(),
+    ],
+    response: historyListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -71,9 +93,30 @@ historyRoutes.get(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
 
+    const filterParsed = historyListFilterSchema.safeParse({
+      kind: c.req.query("kind") || undefined,
+      occurredFrom: c.req.query("occurredFrom") || undefined,
+      occurredTo: c.req.query("occurredTo") || undefined,
+    });
+    if (!filterParsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid history filter.", {
+        issues: filterParsed.error.issues,
+      });
+    }
+    const filter = {
+      kind: filterParsed.data.kind,
+      occurredFrom: filterParsed.data.occurredFrom
+        ? new Date(filterParsed.data.occurredFrom).toISOString()
+        : undefined,
+      occurredTo: filterParsed.data.occurredTo
+        ? new Date(filterParsed.data.occurredTo).toISOString()
+        : undefined,
+    };
+
     const page = await assembleRelationshipHistory(db, relationship.id, {
       limit,
       cursor: decoded,
+      filter,
     });
 
     return ok(c, historyListResponseSchema.parse(page));

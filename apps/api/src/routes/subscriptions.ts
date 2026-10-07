@@ -1,3 +1,6 @@
+import {
+  operation,
+} from "../openapi/document";
 import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -75,6 +78,13 @@ function presentSubscription(
 
 subscriptionRoutes.get(
   "/:relationshipId/subscription",
+  operation({
+    tag: "Subscriptions",
+    summary: "Subscriptions operation for GET /relationships/:relationshipId/subscription.",
+    description: "Subscriptions operation for GET /relationships/:relationshipId/subscription.",
+    roles: ["trainer"],
+    response: subscriptionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -111,6 +121,15 @@ subscriptionRoutes.get(
 
 subscriptionRoutes.put(
   "/:relationshipId/subscription",
+  operation({
+    tag: "Subscriptions",
+    summary: "Saves a new subscription version for a trainer-owned relationship",
+    description: "Saves a new subscription version for a trainer-owned relationship. Amounts and invoices are not collected.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: saveSubscriptionRequestSchema,
+    response: subscriptionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -240,6 +259,13 @@ export const subscriptionAttentionRoutes = new Hono<{
 
 subscriptionAttentionRoutes.get(
   "/attention",
+  operation({
+    tag: "Subscriptions",
+    summary: "Lists trainer-owned subscriptions that need renewal attention.",
+    description: "Lists trainer-owned subscriptions that need renewal attention.",
+    roles: ["trainer"],
+    response: subscriptionAttentionResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

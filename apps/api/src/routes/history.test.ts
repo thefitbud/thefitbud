@@ -1,4 +1,5 @@
 import initSqlJs from "sql.js";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/sql-js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -235,10 +236,12 @@ async function reachActiveConfig(suffix: string) {
 
 describe("history view", () => {
   let closeDb: () => void;
+  let db: Db;
 
   beforeEach(async () => {
     const memory = await createMemoryDb();
     closeDb = memory.close;
+    db = memory.db;
     setTestDbOverride(memory.db);
   });
 
@@ -366,5 +369,118 @@ describe("history view", () => {
     // No fabricated analytics/risk kinds.
     expect(kinds.has("risk_score")).toBe(false);
     expect(kinds.has("ai_recommendation")).toBe(false);
+
+    const notes = await app.request(
+      `/history/relationships/${relationshipId}?kind=trainer_note`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(notes.status).toBe(200);
+    const notesBody = (await notes.json()) as {
+      data: { items: Array<{ kind: string }> };
+    };
+    expect(notesBody.data.items.length).toBeGreaterThan(0);
+    expect(notesBody.data.items.every((item) => item.kind === "trainer_note")).toBe(
+      true,
+    );
+
+    const empty = await app.request(
+      `/history/relationships/${relationshipId}?kind=measurement&occurredFrom=1990-01-01T00:00:00.000Z&occurredTo=1990-01-02T00:00:00.000Z`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(empty.status).toBe(200);
+    const emptyBody = (await empty.json()) as {
+      data: { items: unknown[]; nextCursor: string | null };
+    };
+    expect(emptyBody.data.items).toEqual([]);
+    expect(emptyBody.data.nextCursor).toBeNull();
+
+    const invalid = await app.request(
+      `/history/relationships/${relationshipId}?kind=risk_score`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(invalid.status).toBe(400);
+  });
+
+  it("applies a date filter before the per-source cap", async () => {
+    const { trainerCookie, relationshipId } = await reachActiveConfig("cap");
+    const relationship = (
+      await db
+        .select()
+        .from(schema.coachingRelationships)
+        .where(eq(schema.coachingRelationships.id, relationshipId))
+        .limit(1)
+    )[0]!;
+
+    const oldIds = [
+      "11111111-1111-4111-8111-111111111101",
+      "11111111-1111-4111-8111-111111111102",
+      "11111111-1111-4111-8111-111111111103",
+    ];
+    for (const [index, id] of oldIds.entries()) {
+      await db.insert(schema.measurements).values({
+        id,
+        coachingRelationshipId: relationshipId,
+        traineeUserId: relationship.traineeUserId,
+        type: "body_weight_kg",
+        value: 70 + index,
+        unit: "kg",
+        observedAt: `2020-01-0${index + 1}T00:00:00.000Z`,
+        source: "trainee_entry",
+        checkinId: null,
+        mediaAssetId: null,
+        recordVersion: 0,
+        createdAt: `2020-01-0${index + 1}T00:00:00.000Z`,
+        updatedAt: `2020-01-0${index + 1}T00:00:00.000Z`,
+      });
+    }
+    for (let index = 0; index < 100; index += 1) {
+      const observedAt = new Date(Date.UTC(2026, 5, 1, 0, index)).toISOString();
+      await db.insert(schema.measurements).values({
+        id: crypto.randomUUID(),
+        coachingRelationshipId: relationshipId,
+        traineeUserId: relationship.traineeUserId,
+        type: "body_weight_kg",
+        value: 80,
+        unit: "kg",
+        observedAt,
+        source: "trainee_entry",
+        checkinId: null,
+        mediaAssetId: null,
+        recordVersion: 0,
+        createdAt: observedAt,
+        updatedAt: observedAt,
+      });
+    }
+
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    for (let page = 0; page < 5; page += 1) {
+      const params = new URLSearchParams({
+        kind: "measurement",
+        occurredFrom: "2020-01-01T00:00:00.000Z",
+        occurredTo: "2020-01-03T23:59:59.000Z",
+        limit: "1",
+      });
+      if (cursor) params.set("cursor", cursor);
+      const response = await app.request(
+        `/history/relationships/${relationshipId}?${params.toString()}`,
+        { headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        data: { items: Array<{ id: string; kind: string }>; nextCursor: string | null };
+      };
+      expect(body.data.items).toHaveLength(1);
+      expect(body.data.items[0]?.kind).toBe("measurement");
+      seen.add(body.data.items[0]!.id);
+      cursor = body.data.nextCursor;
+      if (!cursor) break;
+    }
+    expect(cursor).toBeNull();
+    expect([...seen].sort()).toEqual([...oldIds].sort());
   });
 });

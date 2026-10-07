@@ -64,6 +64,11 @@ Realtime	Durable Objects and WebSockets for selected updates
 Data fetching	TanStack Query
 
 
+API documentation
+The running API serves its generated contract:
+- GET /docs is the interactive Scalar reference.
+- GET /openapi.json is the OpenAPI document.
+Both are public and same-origin. Try-it-out calls the API directly and does not add credentials. Protected operations still require a session cookie or bearer token.
 Authoritative documentation
 The project maintains six focused Confluence pages:
 1. FitBud Project Details - product purpose, users, MVP scope, non-goals, and success measures.

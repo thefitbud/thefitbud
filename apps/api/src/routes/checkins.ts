@@ -1,3 +1,7 @@
+import {
+  operation,
+  dateWindowParameters,
+} from "../openapi/document";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -258,6 +262,15 @@ async function resolveScheduleLocalDate(
 
 checkinRoutes.post(
   "/relationships/:relationshipId/schedule",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for POST /checkins/relationships/:relationshipId/schedule.",
+    description: "Checkins operation for POST /checkins/relationships/:relationshipId/schedule.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: scheduleCheckinRequestSchema,
+    response: scheduleCheckinResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -357,6 +370,15 @@ checkinRoutes.post(
 
 checkinRoutes.post(
   "/relationships/:relationshipId/schedule-next",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for POST /checkins/relationships/:relationshipId/schedule-next.",
+    description: "Checkins operation for POST /checkins/relationships/:relationshipId/schedule-next.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: scheduleNextCheckinRequestSchema,
+    response: scheduleCheckinResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -464,6 +486,14 @@ checkinRoutes.post(
 
 checkinRoutes.post(
   "/relationships/:relationshipId/ensure-due",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for POST /checkins/relationships/:relationshipId/ensure-due.",
+    description: "Checkins operation for POST /checkins/relationships/:relationshipId/ensure-due.",
+    roles: ["trainer", "trainee"],
+    idempotency: true,
+    response: scheduleCheckinResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -620,6 +650,16 @@ checkinRoutes.post(
 
 checkinRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for GET /checkins/relationships/:relationshipId.",
+    description: "Checkins operation for GET /checkins/relationships/:relationshipId.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      ...dateWindowParameters(),
+    ],
+    response: checkinListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -683,6 +723,13 @@ checkinRoutes.get(
 
 checkinRoutes.get(
   "/relationships/:relationshipId/notes",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for GET /checkins/relationships/:relationshipId/notes.",
+    description: "Checkins operation for GET /checkins/relationships/:relationshipId/notes.",
+    roles: ["trainer"],
+    response: trainerNoteListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -720,6 +767,15 @@ checkinRoutes.get(
 
 checkinRoutes.post(
   "/relationships/:relationshipId/notes",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for POST /checkins/relationships/:relationshipId/notes.",
+    description: "Checkins operation for POST /checkins/relationships/:relationshipId/notes.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createTrainerNoteRequestSchema,
+    response: trainerNoteSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -832,6 +888,13 @@ checkinRoutes.post(
 
 checkinRoutes.get(
   "/inbox",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for GET /checkins/inbox.",
+    description: "Checkins operation for GET /checkins/inbox.",
+    roles: ["trainer"],
+    response: trainerCheckinInboxResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -880,6 +943,13 @@ checkinRoutes.get(
 
 checkinRoutes.get(
   "/:checkinId",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for GET /checkins/:checkinId.",
+    description: "Checkins operation for GET /checkins/:checkinId.",
+    roles: ["trainer", "trainee"],
+    response: checkinSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -913,6 +983,13 @@ checkinRoutes.get(
 
 checkinRoutes.get(
   "/:checkinId/review-context",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for GET /checkins/:checkinId/review-context.",
+    description: "Checkins operation for GET /checkins/:checkinId/review-context.",
+    roles: ["trainer"],
+    response: checkinReviewContextSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -1109,6 +1186,14 @@ checkinRoutes.get(
 
 checkinRoutes.put(
   "/:checkinId/draft",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for PUT /checkins/:checkinId/draft.",
+    description: "Checkins operation for PUT /checkins/:checkinId/draft.",
+    roles: ["trainee"],
+    body: saveCheckinDraftRequestSchema,
+    response: checkinSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -1183,6 +1268,15 @@ checkinRoutes.put(
 
 checkinRoutes.post(
   "/:checkinId/submit",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for POST /checkins/:checkinId/submit.",
+    description: "Checkins operation for POST /checkins/:checkinId/submit.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: submitCheckinRequestSchema,
+    response: checkinSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -1346,6 +1440,15 @@ checkinRoutes.post(
 
 checkinRoutes.post(
   "/:checkinId/review",
+  operation({
+    tag: "Checkins",
+    summary: "Checkins operation for POST /checkins/:checkinId/review.",
+    description: "Checkins operation for POST /checkins/:checkinId/review.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: recordCheckinReviewRequestSchema,
+    response: checkinSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

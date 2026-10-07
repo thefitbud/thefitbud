@@ -1,5 +1,14 @@
-import { and, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
-import type { HistoryItem } from "@fitbud/contracts";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  ne,
+  sql,
+  type SQL,
+} from "drizzle-orm";
+import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
 import {
   compareHistoryItemsNewestFirst,
   isHistoryItemAfterCursor,
@@ -31,8 +40,29 @@ type Db = ReturnType<typeof createDb>;
 
 const SOURCE_FETCH_LIMIT = 100;
 
+export type HistoryReadFilter = {
+  kind?: HistoryItemKind;
+  occurredFrom?: string;
+  occurredTo?: string;
+};
+
 function humanize(value: string): string {
   return value.replace(/_/g, " ");
+}
+
+/** Date bounds applied inside each source query, before that source's row cap. */
+function occurredBounds(
+  expression: SQL,
+  filter: HistoryReadFilter | undefined,
+): SQL[] {
+  const bounds: SQL[] = [];
+  if (filter?.occurredFrom) {
+    bounds.push(sql`${expression} >= ${filter.occurredFrom}`);
+  }
+  if (filter?.occurredTo) {
+    bounds.push(sql`${expression} <= ${filter.occurredTo}`);
+  }
+  return bounds;
 }
 
 /**
@@ -46,9 +76,19 @@ export async function assembleRelationshipHistory(
   options: {
     limit: number;
     cursor: { k: string; id: string } | null;
+    filter?: HistoryReadFilter;
   },
 ): Promise<{ items: HistoryItem[]; nextCursor: string | null }> {
   const items: HistoryItem[] = [];
+  const filter = options.filter;
+
+  function loadSource<T>(
+    kind: HistoryItemKind,
+    load: () => Promise<T[]>,
+  ): Promise<T[]> {
+    if (filter?.kind && filter.kind !== kind) return Promise.resolve([]);
+    return load();
+  }
 
   const [
     onboardingRows,
@@ -67,161 +107,253 @@ export async function assembleRelationshipHistory(
     noteRows,
     interventionRows,
   ] = await Promise.all([
-    db
-      .select()
-      .from(onboardingFormResponses)
-      .where(
-        and(
-          eq(onboardingFormResponses.coachingRelationshipId, relationshipId),
-          eq(onboardingFormResponses.status, "submitted"),
-        ),
-      )
-      .orderBy(desc(onboardingFormResponses.submittedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(subscriptionVersions)
-      .where(eq(subscriptionVersions.coachingRelationshipId, relationshipId))
-      .orderBy(desc(subscriptionVersions.createdAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(onboardingReviews)
-      .where(eq(onboardingReviews.coachingRelationshipId, relationshipId))
-      .orderBy(desc(onboardingReviews.createdAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(coachingConfigurations)
-      .where(
-        and(
-          eq(coachingConfigurations.coachingRelationshipId, relationshipId),
-          isNotNull(coachingConfigurations.activatedAt),
-        ),
-      )
-      .orderBy(desc(coachingConfigurations.activatedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select({
-        version: planVersions,
-        planTitle: plans.title,
-      })
-      .from(planVersions)
-      .innerJoin(plans, eq(planVersions.planId, plans.id))
-      .where(
-        and(
-          eq(plans.coachingRelationshipId, relationshipId),
-          inArray(planVersions.status, [
-            "published",
-            "scheduled",
-            "effective",
-            "superseded",
-          ]),
-        ),
-      )
-      .orderBy(desc(planVersions.updatedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select({
-        execution: workoutExecutions,
-        workoutDayName: workoutAssignments.workoutDayName,
-        localDate: workoutAssignments.localDate,
-      })
-      .from(workoutExecutions)
-      .innerJoin(
-        workoutAssignments,
-        eq(workoutExecutions.assignmentId, workoutAssignments.id),
-      )
-      .where(
-        and(
-          eq(workoutExecutions.coachingRelationshipId, relationshipId),
-          inArray(workoutExecutions.status, [
-            "completed",
-            "modified",
-            "skipped",
-          ]),
-        ),
-      )
-      .orderBy(desc(workoutExecutions.completedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select({
-        compliance: mealCompliance,
-        mealName: mealAssignments.mealName,
-        localDate: mealAssignments.localDate,
-      })
-      .from(mealCompliance)
-      .innerJoin(
-        mealAssignments,
-        eq(mealCompliance.assignmentId, mealAssignments.id),
-      )
-      .where(eq(mealCompliance.coachingRelationshipId, relationshipId))
-      .orderBy(desc(mealCompliance.loggedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(checkins)
-      .where(
-        and(
-          eq(checkins.coachingRelationshipId, relationshipId),
-          eq(checkins.recordStatus, "submitted"),
-        ),
-      )
-      .orderBy(desc(checkins.submittedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(checkinReviews)
-      .where(eq(checkinReviews.coachingRelationshipId, relationshipId))
-      .orderBy(desc(checkinReviews.createdAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(measurements)
-      .where(eq(measurements.coachingRelationshipId, relationshipId))
-      .orderBy(desc(measurements.observedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(progressEntries)
-      .where(eq(progressEntries.coachingRelationshipId, relationshipId))
-      .orderBy(desc(progressEntries.observedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(mediaAssets)
-      .where(
-        and(
-          eq(mediaAssets.coachingRelationshipId, relationshipId),
-          eq(mediaAssets.status, "ready"),
-          eq(mediaAssets.mediaType, "progress_photo"),
-        ),
-      )
-      .orderBy(desc(mediaAssets.uploadedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(exceptions)
-      .where(eq(exceptions.coachingRelationshipId, relationshipId))
-      .orderBy(desc(exceptions.detectedAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(trainerNotes)
-      .where(eq(trainerNotes.coachingRelationshipId, relationshipId))
-      .orderBy(desc(trainerNotes.createdAt))
-      .limit(SOURCE_FETCH_LIMIT),
-    db
-      .select()
-      .from(interventions)
-      .where(
-        and(
-          eq(interventions.coachingRelationshipId, relationshipId),
-          ne(interventions.kind, "note"),
-        ),
-      )
-      .orderBy(desc(interventions.createdAt))
-      .limit(SOURCE_FETCH_LIMIT),
+    loadSource("onboarding_submitted", () =>
+      db
+        .select()
+        .from(onboardingFormResponses)
+        .where(
+          and(
+            eq(onboardingFormResponses.coachingRelationshipId, relationshipId),
+            eq(onboardingFormResponses.status, "submitted"),
+            ...occurredBounds(
+              sql`${onboardingFormResponses.submittedAt}`,
+              filter,
+            ),
+          ),
+        )
+        .orderBy(desc(onboardingFormResponses.submittedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("subscription_revision", () =>
+      db
+        .select()
+        .from(subscriptionVersions)
+        .where(
+          and(
+            eq(subscriptionVersions.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${subscriptionVersions.createdAt}`, filter),
+          ),
+        )
+        .orderBy(desc(subscriptionVersions.createdAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("onboarding_reviewed", () =>
+      db
+        .select()
+        .from(onboardingReviews)
+        .where(
+          and(
+            eq(onboardingReviews.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${onboardingReviews.createdAt}`, filter),
+          ),
+        )
+        .orderBy(desc(onboardingReviews.createdAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("configuration_activated", () =>
+      db
+        .select()
+        .from(coachingConfigurations)
+        .where(
+          and(
+            eq(coachingConfigurations.coachingRelationshipId, relationshipId),
+            isNotNull(coachingConfigurations.activatedAt),
+            ...occurredBounds(
+              sql`${coachingConfigurations.activatedAt}`,
+              filter,
+            ),
+          ),
+        )
+        .orderBy(desc(coachingConfigurations.activatedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("plan_version", () =>
+      db
+        .select({
+          version: planVersions,
+          planTitle: plans.title,
+        })
+        .from(planVersions)
+        .innerJoin(plans, eq(planVersions.planId, plans.id))
+        .where(
+          and(
+            eq(plans.coachingRelationshipId, relationshipId),
+            inArray(planVersions.status, [
+              "published",
+              "scheduled",
+              "effective",
+              "superseded",
+            ]),
+            ...occurredBounds(
+              sql`coalesce(${planVersions.publishedAt}, ${planVersions.effectiveFrom}, ${planVersions.updatedAt})`,
+              filter,
+            ),
+          ),
+        )
+        .orderBy(desc(planVersions.updatedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("workout_execution", () =>
+      db
+        .select({
+          execution: workoutExecutions,
+          workoutDayName: workoutAssignments.workoutDayName,
+          localDate: workoutAssignments.localDate,
+        })
+        .from(workoutExecutions)
+        .innerJoin(
+          workoutAssignments,
+          eq(workoutExecutions.assignmentId, workoutAssignments.id),
+        )
+        .where(
+          and(
+            eq(workoutExecutions.coachingRelationshipId, relationshipId),
+            inArray(workoutExecutions.status, [
+              "completed",
+              "modified",
+              "skipped",
+            ]),
+            ...occurredBounds(
+              sql`coalesce(${workoutExecutions.completedAt}, ${workoutExecutions.startedAt})`,
+              filter,
+            ),
+          ),
+        )
+        .orderBy(desc(workoutExecutions.completedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("meal_compliance", () =>
+      db
+        .select({
+          compliance: mealCompliance,
+          mealName: mealAssignments.mealName,
+          localDate: mealAssignments.localDate,
+        })
+        .from(mealCompliance)
+        .innerJoin(
+          mealAssignments,
+          eq(mealCompliance.assignmentId, mealAssignments.id),
+        )
+        .where(
+          and(
+            eq(mealCompliance.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${mealCompliance.loggedAt}`, filter),
+          ),
+        )
+        .orderBy(desc(mealCompliance.loggedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("checkin_submitted", () =>
+      db
+        .select()
+        .from(checkins)
+        .where(
+          and(
+            eq(checkins.coachingRelationshipId, relationshipId),
+            eq(checkins.recordStatus, "submitted"),
+            ...occurredBounds(sql`${checkins.submittedAt}`, filter),
+          ),
+        )
+        .orderBy(desc(checkins.submittedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("checkin_reviewed", () =>
+      db
+        .select()
+        .from(checkinReviews)
+        .where(
+          and(
+            eq(checkinReviews.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${checkinReviews.createdAt}`, filter),
+          ),
+        )
+        .orderBy(desc(checkinReviews.createdAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("measurement", () =>
+      db
+        .select()
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${measurements.observedAt}`, filter),
+          ),
+        )
+        .orderBy(desc(measurements.observedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("progress_entry", () =>
+      db
+        .select()
+        .from(progressEntries)
+        .where(
+          and(
+            eq(progressEntries.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${progressEntries.observedAt}`, filter),
+          ),
+        )
+        .orderBy(desc(progressEntries.observedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("progress_photo", () =>
+      db
+        .select()
+        .from(mediaAssets)
+        .where(
+          and(
+            eq(mediaAssets.coachingRelationshipId, relationshipId),
+            eq(mediaAssets.status, "ready"),
+            eq(mediaAssets.mediaType, "progress_photo"),
+            ...occurredBounds(
+              sql`coalesce(${mediaAssets.uploadedAt}, ${mediaAssets.createdAt})`,
+              filter,
+            ),
+          ),
+        )
+        .orderBy(desc(mediaAssets.uploadedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("exception", () =>
+      db
+        .select()
+        .from(exceptions)
+        .where(
+          and(
+            eq(exceptions.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${exceptions.detectedAt}`, filter),
+          ),
+        )
+        .orderBy(desc(exceptions.detectedAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("trainer_note", () =>
+      db
+        .select()
+        .from(trainerNotes)
+        .where(
+          and(
+            eq(trainerNotes.coachingRelationshipId, relationshipId),
+            ...occurredBounds(sql`${trainerNotes.createdAt}`, filter),
+          ),
+        )
+        .orderBy(desc(trainerNotes.createdAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
+    loadSource("intervention", () =>
+      db
+        .select()
+        .from(interventions)
+        .where(
+          and(
+            eq(interventions.coachingRelationshipId, relationshipId),
+            ne(interventions.kind, "note"),
+            ...occurredBounds(sql`${interventions.createdAt}`, filter),
+          ),
+        )
+        .orderBy(desc(interventions.createdAt))
+        .limit(SOURCE_FETCH_LIMIT),
+    ),
   ]);
 
   for (const row of onboardingRows) {

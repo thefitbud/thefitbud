@@ -1,3 +1,8 @@
+import {
+  operation,
+  limitParameter,
+  exceptionStatusParameter,
+} from "../openapi/document";
 import { Hono } from "hono";
 import { desc, eq } from "drizzle-orm";
 import {
@@ -85,6 +90,16 @@ function requireIdempotencyKey(c: {
 /** Trainer attention feed across owned relationships. */
 exceptionRoutes.get(
   "/attention",
+  operation({
+    tag: "Exceptions",
+    summary: "Exceptions operation for GET /exceptions/attention.",
+    description: "Exceptions operation for GET /exceptions/attention.",
+    roles: ["trainer"],
+    parameters: [
+      limitParameter({ defaultValue: 20, maximum: 1 }),
+    ],
+    response: attentionFeedResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -130,6 +145,14 @@ exceptionRoutes.get(
 
 exceptionRoutes.post(
   "/relationships/:relationshipId/evaluate",
+  operation({
+    tag: "Exceptions",
+    summary: "Evaluates derived exceptions for a trainer-owned relationship",
+    description: "Evaluates derived exceptions for a trainer-owned relationship. FitBud does not decide the coaching response.",
+    roles: ["trainer"],
+    idempotency: true,
+    response: evaluateExceptionsResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -214,6 +237,16 @@ exceptionRoutes.post(
 
 exceptionRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "Exceptions",
+    summary: "Lists exceptions for a relationship",
+    description: "Lists exceptions for a relationship. Omitting status returns detected and active exceptions.",
+    roles: ["trainer"],
+    parameters: [
+      exceptionStatusParameter(),
+    ],
+    response: exceptionListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -260,6 +293,13 @@ exceptionRoutes.get(
 
 exceptionRoutes.get(
   "/relationships/:relationshipId/interventions",
+  operation({
+    tag: "Exceptions",
+    summary: "Exceptions operation for GET /exceptions/relationships/:relationshipId/interventions.",
+    description: "Exceptions operation for GET /exceptions/relationships/:relationshipId/interventions.",
+    roles: ["trainer"],
+    response: interventionListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -298,6 +338,15 @@ exceptionRoutes.get(
 
 exceptionRoutes.post(
   "/relationships/:relationshipId/interventions",
+  operation({
+    tag: "Exceptions",
+    summary: "Exceptions operation for POST /exceptions/relationships/:relationshipId/interventions.",
+    description: "Exceptions operation for POST /exceptions/relationships/:relationshipId/interventions.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createInterventionRequestSchema,
+    response: interventionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -401,6 +450,13 @@ exceptionRoutes.post(
 
 exceptionRoutes.get(
   "/:exceptionId",
+  operation({
+    tag: "Exceptions",
+    summary: "Exceptions operation for GET /exceptions/:exceptionId.",
+    description: "Exceptions operation for GET /exceptions/:exceptionId.",
+    roles: ["trainer"],
+    response: exceptionDetailSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -448,6 +504,15 @@ exceptionRoutes.get(
 
 exceptionRoutes.post(
   "/:exceptionId/acknowledge",
+  operation({
+    tag: "Exceptions",
+    summary: "Exceptions operation for POST /exceptions/:exceptionId/acknowledge.",
+    description: "Exceptions operation for POST /exceptions/:exceptionId/acknowledge.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: acknowledgeExceptionRequestSchema,
+    response: exceptionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -594,6 +659,15 @@ exceptionRoutes.post(
 
 exceptionRoutes.post(
   "/:exceptionId/resolve",
+  operation({
+    tag: "Exceptions",
+    summary: "Exceptions operation for POST /exceptions/:exceptionId/resolve.",
+    description: "Exceptions operation for POST /exceptions/:exceptionId/resolve.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: resolveExceptionRequestSchema,
+    response: exceptionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

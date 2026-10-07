@@ -1,3 +1,7 @@
+import {
+  operation,
+  relationshipIdQueryParameter,
+} from "../openapi/document";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -80,6 +84,15 @@ async function currentFormForRelationship(
 
 onboardingRoutes.get(
   "/forms/current",
+  operation({
+    tag: "Onboarding",
+    summary: "Resolves the onboarding form for the caller, pinning the definition already used when a response exists.",
+    description: "Resolves the onboarding form for the caller, pinning the definition already used when a response exists.",
+    parameters: [
+      relationshipIdQueryParameter(),
+    ],
+    response: onboardingFormVersionSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   async (c) => {
@@ -145,6 +158,13 @@ onboardingRoutes.get(
 
 onboardingRoutes.get(
   "/relationships/:relationshipId",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for GET /onboarding/relationships/:relationshipId.",
+    description: "Onboarding operation for GET /onboarding/relationships/:relationshipId.",
+    roles: ["trainer", "trainee"],
+    response: onboardingFormResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer", "trainee"),
@@ -185,6 +205,14 @@ onboardingRoutes.get(
 
 onboardingRoutes.put(
   "/relationships/:relationshipId/draft",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for PUT /onboarding/relationships/:relationshipId/draft.",
+    description: "Onboarding operation for PUT /onboarding/relationships/:relationshipId/draft.",
+    roles: ["trainee"],
+    body: saveOnboardingDraftRequestSchema,
+    response: onboardingFormResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -328,6 +356,15 @@ onboardingRoutes.put(
 
 onboardingRoutes.post(
   "/relationships/:relationshipId/submit",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for POST /onboarding/relationships/:relationshipId/submit.",
+    description: "Onboarding operation for POST /onboarding/relationships/:relationshipId/submit.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: submitOnboardingRequestSchema,
+    response: onboardingFormResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
@@ -531,6 +568,15 @@ onboardingRoutes.post(
 
 onboardingRoutes.post(
   "/relationships/:relationshipId/review",
+  operation({
+    tag: "Onboarding",
+    summary: "Onboarding operation for POST /onboarding/relationships/:relationshipId/review.",
+    description: "Onboarding operation for POST /onboarding/relationships/:relationshipId/review.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createOnboardingReviewRequestSchema,
+    response: createOnboardingReviewResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),

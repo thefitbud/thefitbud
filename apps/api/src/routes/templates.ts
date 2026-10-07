@@ -1,3 +1,9 @@
+import { z } from "zod";
+import {
+  operation,
+  cursorParameter,
+  limitParameter,
+} from "../openapi/document";
 import { and, desc, eq, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
@@ -47,6 +53,17 @@ export const templateRoutes = new Hono<{
 
 templateRoutes.get(
   "/",
+  operation({
+    tag: "Templates",
+    summary: "Templates operation for GET /templates.",
+    description: "Templates operation for GET /templates.",
+    roles: ["trainer"],
+    parameters: [
+      limitParameter({ defaultValue: 20, maximum: 10 }),
+      cursorParameter(),
+    ],
+    response: planTemplateListResponseSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -96,6 +113,16 @@ templateRoutes.get(
 
 templateRoutes.post(
   "/",
+  operation({
+    tag: "Templates",
+    summary: "Templates operation for POST /templates.",
+    description: "Templates operation for POST /templates.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createPlanTemplateRequestSchema,
+    successStatus: [201],
+    response: planTemplateSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -210,6 +237,16 @@ templateRoutes.post(
 
 templateRoutes.post(
   "/from-plan-version",
+  operation({
+    tag: "Templates",
+    summary: "Templates operation for POST /templates/from-plan-version.",
+    description: "Templates operation for POST /templates/from-plan-version.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: createPlanTemplateFromVersionRequestSchema,
+    successStatus: [201],
+    response: planTemplateSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -347,6 +384,13 @@ templateRoutes.post(
 
 templateRoutes.get(
   "/:templateId",
+  operation({
+    tag: "Templates",
+    summary: "Templates operation for GET /templates/:templateId.",
+    description: "Templates operation for GET /templates/:templateId.",
+    roles: ["trainer"],
+    response: planTemplateSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -373,6 +417,14 @@ templateRoutes.get(
 
 templateRoutes.put(
   "/:templateId",
+  operation({
+    tag: "Templates",
+    summary: "Templates operation for PUT /templates/:templateId.",
+    description: "Templates operation for PUT /templates/:templateId.",
+    roles: ["trainer"],
+    body: updatePlanTemplateRequestSchema,
+    response: planTemplateSchema,
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
@@ -470,6 +522,13 @@ templateRoutes.put(
 
 templateRoutes.delete(
   "/:templateId",
+  operation({
+    tag: "Templates",
+    summary: "Templates operation for DELETE /templates/:templateId.",
+    description: "Templates operation for DELETE /templates/:templateId.",
+    roles: ["trainer"],
+    response: z.object({ deleted: z.literal(true) }),
+  }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainer"),
