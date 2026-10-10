@@ -1,10 +1,9 @@
-import { z } from "zod";
 import {
   operation,
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, eq, gt, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   createExerciseLibraryItemRequestSchema,
@@ -14,11 +13,16 @@ import {
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
+  scaleDecimal,
   updateExerciseLibraryItemRequestSchema,
   updateFoodLibraryItemRequestSchema,
 } from "@fitbud/contracts";
-import { createDb } from "../db/client";
-import { exerciseLibraryItems, foodLibraryItems } from "../db/schema";
+import { createDb, type Db } from "../db/client";
+import {
+  exerciseLibraryItems,
+  foodLibraryItems,
+  foodLibraryServings,
+} from "../db/schema";
 import {
   mapExerciseLibraryItem,
   mapFoodLibraryItem,
@@ -50,12 +54,53 @@ function jsonListContains(column: AnyColumn, value: string): SQL {
   return sql`exists (select 1 from json_each(${column}) where json_each.value = ${value})`;
 }
 
+function scaledOrNull(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  return scaleDecimal(value);
+}
+
+async function servingsByFoodId(db: Db, foodIds: string[]) {
+  const grouped = new Map<string, (typeof foodLibraryServings.$inferSelect)[]>();
+  if (foodIds.length === 0) return grouped;
+  const rows = await db
+    .select()
+    .from(foodLibraryServings)
+    .where(inArray(foodLibraryServings.foodLibraryItemId, foodIds))
+    .orderBy(asc(foodLibraryServings.label), asc(foodLibraryServings.id));
+  for (const row of rows) {
+    const current = grouped.get(row.foodLibraryItemId) ?? [];
+    current.push(row);
+    grouped.set(row.foodLibraryItemId, current);
+  }
+  return grouped;
+}
+
+async function insertServings(
+  db: Db,
+  foodId: string,
+  servings: { label: string; unit: string; conversion: number }[],
+  now: string,
+) {
+  for (const serving of servings) {
+    await db.insert(foodLibraryServings).values({
+      id: createId(),
+      foodLibraryItemId: foodId,
+      label: serving.label,
+      unit: serving.unit,
+      conversionScaled: scaleDecimal(serving.conversion),
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 libraryRoutes.get(
   "/exercises",
   operation({
     tag: "Libraries",
     summary: "Libraries operation for GET /libraries/exercises.",
-    description: "Libraries operation for GET /libraries/exercises.",
+    description:
+      "Active global and trainer-owned exercises. muscleGroup matches a primary or secondary muscle. Archived rows are omitted.",
     roles: ["trainer"],
     parameters: [
       limitParameter({ defaultValue: 50, maximum: 10 }),
@@ -71,7 +116,21 @@ libraryRoutes.get(
         name: "muscleGroup",
         in: "query",
         required: false,
-        description: "Exact match against one stored muscle group.",
+        description: "Exact match against a primary or secondary muscle group.",
+        schema: { type: "string" },
+      },
+      {
+        name: "primaryMuscle",
+        in: "query",
+        required: false,
+        description: "Exact match against a primary muscle group.",
+        schema: { type: "string" },
+      },
+      {
+        name: "secondaryMuscle",
+        in: "query",
+        required: false,
+        description: "Exact match against a secondary muscle group.",
         schema: { type: "string" },
       },
       {
@@ -112,6 +171,8 @@ libraryRoutes.get(
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
     const q = c.req.query("q")?.trim();
     const muscleGroup = c.req.query("muscleGroup")?.trim();
+    const primaryMuscle = c.req.query("primaryMuscle")?.trim();
+    const secondaryMuscle = c.req.query("secondaryMuscle")?.trim();
     const equipment = c.req.query("equipment")?.trim();
     const difficultyParam = c.req.query("difficulty")?.trim();
     const difficulty = difficultyParam
@@ -126,6 +187,15 @@ libraryRoutes.get(
       );
     }
     const db = createDb(c.env.DB);
+    const eitherMuscle = muscleGroup
+      ? or(
+          jsonListContains(exerciseLibraryItems.primaryMusclesJson, muscleGroup),
+          jsonListContains(
+            exerciseLibraryItems.secondaryMusclesJson,
+            muscleGroup,
+          ),
+        )
+      : undefined;
 
     const ownershipFilter = or(
       eq(exerciseLibraryItems.ownership, "global"),
@@ -136,9 +206,17 @@ libraryRoutes.get(
     );
     const filters = [
       ownershipFilter,
+      eq(exerciseLibraryItems.status, "active"),
       q ? nameContains(exerciseLibraryItems.name, q) : undefined,
-      muscleGroup
-        ? jsonListContains(exerciseLibraryItems.muscleGroupsJson, muscleGroup)
+      eitherMuscle,
+      primaryMuscle
+        ? jsonListContains(exerciseLibraryItems.primaryMusclesJson, primaryMuscle)
+        : undefined,
+      secondaryMuscle
+        ? jsonListContains(
+            exerciseLibraryItems.secondaryMusclesJson,
+            secondaryMuscle,
+          )
         : undefined,
       equipment
         ? jsonListContains(exerciseLibraryItems.equipmentJson, equipment)
@@ -178,7 +256,8 @@ libraryRoutes.post(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for POST /libraries/exercises.",
-    description: "Libraries operation for POST /libraries/exercises.",
+    description:
+      "Creates an independent trainer-owned exercise. Prescription targets are not stored.",
     roles: ["trainer"],
     body: createExerciseLibraryItemRequestSchema,
     successStatus: [201],
@@ -214,11 +293,11 @@ libraryRoutes.post(
       trainerUserId: actor.userId,
       name: parsed.data.name,
       instructions: parsed.data.instructions ?? null,
-      defaultLoadLabel: parsed.data.defaultLoadLabel ?? null,
-      defaultReps: parsed.data.defaultReps ?? null,
-      muscleGroupsJson: JSON.stringify(parsed.data.muscleGroups ?? []),
+      primaryMusclesJson: JSON.stringify(parsed.data.primaryMuscles ?? []),
+      secondaryMusclesJson: JSON.stringify(parsed.data.secondaryMuscles ?? []),
       equipmentJson: JSON.stringify(parsed.data.equipment ?? []),
       difficulty: parsed.data.difficulty ?? null,
+      status: "active",
       createdAt: now,
       updatedAt: now,
     });
@@ -245,7 +324,7 @@ libraryRoutes.put(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for PUT /libraries/exercises/:itemId.",
-    description: "Libraries operation for PUT /libraries/exercises/:itemId.",
+    description: "Updates a trainer-owned exercise. Global rows stay immutable.",
     roles: ["trainer"],
     body: updateExerciseLibraryItemRequestSchema,
     response: exerciseLibraryItemSchema,
@@ -297,9 +376,8 @@ libraryRoutes.put(
       .set({
         name: parsed.data.name,
         instructions: parsed.data.instructions ?? null,
-        defaultLoadLabel: parsed.data.defaultLoadLabel ?? null,
-        defaultReps: parsed.data.defaultReps ?? null,
-        muscleGroupsJson: JSON.stringify(parsed.data.muscleGroups ?? []),
+        primaryMusclesJson: JSON.stringify(parsed.data.primaryMuscles ?? []),
+        secondaryMusclesJson: JSON.stringify(parsed.data.secondaryMuscles ?? []),
         equipmentJson: JSON.stringify(parsed.data.equipment ?? []),
         difficulty: parsed.data.difficulty ?? null,
         updatedAt: nowIso(),
@@ -331,9 +409,10 @@ libraryRoutes.delete(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for DELETE /libraries/exercises/:itemId.",
-    description: "Libraries operation for DELETE /libraries/exercises/:itemId.",
+    description:
+      "Archives a trainer-owned exercise. Existing plan and template snapshots stay.",
     roles: ["trainer"],
-    response: z.object({ deleted: z.literal(true) }),
+    response: exerciseLibraryItemSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -366,9 +445,23 @@ libraryRoutes.delete(
     }
 
     await db
-      .delete(exerciseLibraryItems)
+      .update(exerciseLibraryItems)
+      .set({ status: "archived", updatedAt: nowIso() })
       .where(eq(exerciseLibraryItems.id, itemId));
-    return ok(c, { deleted: true });
+    const [updated] = await db
+      .select()
+      .from(exerciseLibraryItems)
+      .where(eq(exerciseLibraryItems.id, itemId))
+      .limit(1);
+    if (!updated) {
+      return fail(
+        c,
+        500,
+        "EXERCISE_LIBRARY_PERSIST_FAILED",
+        "Exercise library item could not be loaded.",
+      );
+    }
+    return ok(c, exerciseLibraryItemSchema.parse(mapExerciseLibraryItem(updated)));
   },
 );
 
@@ -377,7 +470,8 @@ libraryRoutes.get(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for GET /libraries/foods.",
-    description: "Libraries operation for GET /libraries/foods.",
+    description:
+      "Active global and trainer-owned foods with their servings. Archived rows are omitted.",
     roles: ["trainer"],
     parameters: [
       limitParameter({ defaultValue: 50, maximum: 10 }),
@@ -420,6 +514,7 @@ libraryRoutes.get(
     );
     const filters = [
       ownershipFilter,
+      eq(foodLibraryItems.status, "active"),
       q ? nameContains(foodLibraryItems.name, q) : undefined,
       cursor
         ? or(
@@ -438,9 +533,13 @@ libraryRoutes.get(
       .where(and(...filters))
       .orderBy(foodLibraryItems.name, foodLibraryItems.id)
       .limit(limit + 1);
+    const servings = await servingsByFoodId(
+      db,
+      rows.map((row) => row.id),
+    );
 
     const page = buildPage(
-      rows.map((row) => mapFoodLibraryItem(row)),
+      rows.map((row) => mapFoodLibraryItem(row, servings.get(row.id) ?? [])),
       limit,
       (item) => item.name,
     );
@@ -453,7 +552,8 @@ libraryRoutes.post(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for POST /libraries/foods.",
-    description: "Libraries operation for POST /libraries/foods.",
+    description:
+      "Creates a trainer-owned food with a classification, canonical basis, and at least one serving.",
     roles: ["trainer"],
     body: createFoodLibraryItemRequestSchema,
     successStatus: [201],
@@ -489,16 +589,19 @@ libraryRoutes.post(
       trainerUserId: actor.userId,
       name: parsed.data.name,
       cuisineRegion: "indian",
-      portionLabel: parsed.data.portionLabel,
+      classification: parsed.data.classification,
+      nutritionBasis: parsed.data.basis,
+      energyKcalScaled: scaledOrNull(parsed.data.energyKcal),
+      proteinScaled: scaledOrNull(parsed.data.proteinGrams),
+      carbsScaled: scaledOrNull(parsed.data.carbsGrams),
+      fatScaled: scaledOrNull(parsed.data.fatGrams),
       notes: parsed.data.notes ?? null,
       description: parsed.data.description ?? null,
-      calories: parsed.data.calories ?? null,
-      proteinGrams: parsed.data.proteinGrams ?? null,
-      carbsGrams: parsed.data.carbsGrams ?? null,
-      fatGrams: parsed.data.fatGrams ?? null,
+      status: "active",
       createdAt: now,
       updatedAt: now,
     });
+    await insertServings(db, id, parsed.data.servings, now);
 
     const [row] = await db
       .select()
@@ -513,7 +616,12 @@ libraryRoutes.post(
         "Food library item could not be loaded.",
       );
     }
-    return ok(c, foodLibraryItemSchema.parse(mapFoodLibraryItem(row)), 201);
+    const servings = await servingsByFoodId(db, [id]);
+    return ok(
+      c,
+      foodLibraryItemSchema.parse(mapFoodLibraryItem(row, servings.get(id) ?? [])),
+      201,
+    );
   },
 );
 
@@ -522,7 +630,8 @@ libraryRoutes.put(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for PUT /libraries/foods/:itemId.",
-    description: "Libraries operation for PUT /libraries/foods/:itemId.",
+    description:
+      "Replaces a trainer-owned food definition. Saved plan snapshots are not rewritten.",
     roles: ["trainer"],
     body: updateFoodLibraryItemRequestSchema,
     response: foodLibraryItemSchema,
@@ -569,20 +678,26 @@ libraryRoutes.put(
       );
     }
 
+    const now = nowIso();
     await db
       .update(foodLibraryItems)
       .set({
         name: parsed.data.name,
-        portionLabel: parsed.data.portionLabel,
+        classification: parsed.data.classification,
+        nutritionBasis: parsed.data.basis,
+        energyKcalScaled: scaledOrNull(parsed.data.energyKcal),
+        proteinScaled: scaledOrNull(parsed.data.proteinGrams),
+        carbsScaled: scaledOrNull(parsed.data.carbsGrams),
+        fatScaled: scaledOrNull(parsed.data.fatGrams),
         notes: parsed.data.notes ?? null,
         description: parsed.data.description ?? null,
-        calories: parsed.data.calories ?? null,
-        proteinGrams: parsed.data.proteinGrams ?? null,
-        carbsGrams: parsed.data.carbsGrams ?? null,
-        fatGrams: parsed.data.fatGrams ?? null,
-        updatedAt: nowIso(),
+        updatedAt: now,
       })
       .where(eq(foodLibraryItems.id, itemId));
+    await db
+      .delete(foodLibraryServings)
+      .where(eq(foodLibraryServings.foodLibraryItemId, itemId));
+    await insertServings(db, itemId, parsed.data.servings, now);
 
     const [updated] = await db
       .select()
@@ -597,7 +712,13 @@ libraryRoutes.put(
         "Food library item could not be loaded.",
       );
     }
-    return ok(c, foodLibraryItemSchema.parse(mapFoodLibraryItem(updated)));
+    const servings = await servingsByFoodId(db, [itemId]);
+    return ok(
+      c,
+      foodLibraryItemSchema.parse(
+        mapFoodLibraryItem(updated, servings.get(itemId) ?? []),
+      ),
+    );
   },
 );
 
@@ -606,9 +727,10 @@ libraryRoutes.delete(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for DELETE /libraries/foods/:itemId.",
-    description: "Libraries operation for DELETE /libraries/foods/:itemId.",
+    description:
+      "Archives a trainer-owned food. Existing plan and template snapshots stay.",
     roles: ["trainer"],
-    response: z.object({ deleted: z.literal(true) }),
+    response: foodLibraryItemSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -640,7 +762,29 @@ libraryRoutes.delete(
       );
     }
 
-    await db.delete(foodLibraryItems).where(eq(foodLibraryItems.id, itemId));
-    return ok(c, { deleted: true });
+    await db
+      .update(foodLibraryItems)
+      .set({ status: "archived", updatedAt: nowIso() })
+      .where(eq(foodLibraryItems.id, itemId));
+    const [updated] = await db
+      .select()
+      .from(foodLibraryItems)
+      .where(eq(foodLibraryItems.id, itemId))
+      .limit(1);
+    if (!updated) {
+      return fail(
+        c,
+        500,
+        "FOOD_LIBRARY_PERSIST_FAILED",
+        "Food library item could not be loaded.",
+      );
+    }
+    const servings = await servingsByFoodId(db, [itemId]);
+    return ok(
+      c,
+      foodLibraryItemSchema.parse(
+        mapFoodLibraryItem(updated, servings.get(itemId) ?? []),
+      ),
+    );
   },
 );

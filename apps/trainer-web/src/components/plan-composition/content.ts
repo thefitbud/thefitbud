@@ -1,4 +1,5 @@
 import {
+  NUTRIENT_SCALE,
   planContentSchema,
   type ExerciseLibraryItem,
   type FoodLibraryItem,
@@ -11,7 +12,10 @@ import {
   type WorkoutExercise,
   type WorkoutSetTarget,
 } from "@fitbud/contracts";
-import { exercisePrescriptionFromLibrary } from "@fitbud/core";
+import {
+  exercisePrescriptionFromLibrary,
+  foodSnapshotFromLibrary,
+} from "@fitbud/core";
 
 /** Schema ceilings for one plan or template draft. */
 export const PLAN_COMPOSITION_LIMITS = {
@@ -77,6 +81,10 @@ export function createWorkoutExercise(order: number): WorkoutExercise {
     order,
     name: "",
     instructions: null,
+    primaryMuscles: [],
+    secondaryMuscles: [],
+    equipment: [],
+    difficulty: null,
     setTargets: [createSetTarget(1)],
   };
 }
@@ -105,12 +113,20 @@ export function createMeal(order: number): MealPrescription {
 
 export function createFoodItem(): MealFoodItem {
   return {
+    snapshotKind: "legacy",
     name: "",
-    portionLabel: "",
-    calories: null,
-    proteinGrams: null,
-    carbsGrams: null,
-    fatGrams: null,
+    classification: null,
+    basis: null,
+    canonical: null,
+    serving: { label: "", unit: "portion", conversionScaled: null },
+    quantityScaled: NUTRIENT_SCALE,
+    calculated: {
+      energyKcalScaled: null,
+      proteinScaled: null,
+      carbsScaled: null,
+      fatScaled: null,
+      partial: true,
+    },
   };
 }
 
@@ -154,7 +170,7 @@ export function planContentError(content: PlanContent): string | null {
   if (!issue) return "Plan content is incomplete.";
   const field = String(issue.path[issue.path.length - 1] ?? "");
   if (field === "name") return "Each day, exercise, meal, and food item needs a name.";
-  if (field === "portionLabel") return "Each food item needs a portion.";
+  if (field === "label") return "Each food item needs a portion.";
   return issue.message;
 }
 
@@ -421,26 +437,21 @@ export function updateFoodItem(
   content: PlanContent,
   mealId: string,
   index: number,
-  patch: Partial<MealFoodItem>,
+  next: MealFoodItem,
 ): PlanContent {
   return mapMeal(content, mealId, (meal) => ({
     ...meal,
     items: (meal.items ?? []).map((item, itemIndex) =>
-      itemIndex === index ? { ...item, ...patch } : item,
+      itemIndex === index ? next : item,
     ),
   }));
 }
 
-type LibraryExerciseSource = Pick<
-  ExerciseLibraryItem,
-  "name" | "instructions" | "defaultLoadLabel" | "defaultReps"
->;
-
-/** Copy library name, instructions, and defaults into the selected day. */
+/** Copy library identity into the selected day. Sets are entered on the draft. */
 export function addExerciseFromLibrary(
   content: PlanContent,
   dayId: string,
-  source: LibraryExerciseSource,
+  source: ExerciseLibraryItem,
 ): PlanContent {
   return mapDay(content, dayId, (day) => {
     const exercises = sortedByOrder(day.exercises);
@@ -457,40 +468,21 @@ export function addExerciseFromLibrary(
   });
 }
 
-type LibraryFoodSource = Pick<
-  FoodLibraryItem,
-  | "id"
-  | "name"
-  | "portionLabel"
-  | "calories"
-  | "proteinGrams"
-  | "carbsGrams"
-  | "fatGrams"
->;
-
-/** Copy food snapshot fields, including the library id, into the selected meal. */
+/** Copy a calculated food snapshot into the selected meal. */
 export function addFoodItemFromLibrary(
   content: PlanContent,
   mealId: string,
-  source: LibraryFoodSource,
+  source: FoodLibraryItem,
+  servingId: string,
+  quantityScaled: number = NUTRIENT_SCALE,
 ): PlanContent {
+  const snapshot = foodSnapshotFromLibrary(source, servingId, quantityScaled);
   return mapMeal(content, mealId, (meal) => {
     const items = meal.items ?? [];
     if (items.length >= PLAN_COMPOSITION_LIMITS.itemsPerMeal) return meal;
     return {
       ...meal,
-      items: [
-        ...items,
-        {
-          sourceFoodLibraryItemId: source.id,
-          name: source.name,
-          portionLabel: source.portionLabel,
-          calories: source.calories,
-          proteinGrams: source.proteinGrams,
-          carbsGrams: source.carbsGrams,
-          fatGrams: source.fatGrams,
-        },
-      ],
+      items: [...items, snapshot],
     };
   });
 }

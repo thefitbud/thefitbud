@@ -28,6 +28,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   "0014_onboarding_form_templates.sql",
     "0011_templates_libraries.sql",
     "0015_iteration_a.sql",
+    "0016_food_exercise_libraries.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -473,12 +474,22 @@ describe("templates and libraries", () => {
         body: JSON.stringify({
           name: "Cable face pull",
           instructions: "Pull toward the face.",
-          defaultReps: 12,
+          primaryMuscles: ["rear delts"],
+          secondaryMuscles: ["upper back"],
         }),
       },
       testEnv(),
     );
     expect(addExercise.status).toBe(201);
+    const added = (await addExercise.json()) as {
+      data: Record<string, unknown>;
+    };
+    expect(added.data.ownership).toBe("trainer");
+    expect(added.data.primaryMuscles).toEqual(["rear delts"]);
+    expect(added.data.secondaryMuscles).toEqual(["upper back"]);
+    expect(added.data).not.toHaveProperty("defaultReps");
+    expect(added.data).not.toHaveProperty("defaultLoadLabel");
+    expect(added.data).not.toHaveProperty("parentExerciseId");
 
     const listed = await app.request(
       "/libraries/exercises",
@@ -520,5 +531,254 @@ describe("templates and libraries", () => {
       testEnv(),
     );
     expect(del.status).toBe(404);
+  });
+
+  it("archives a trainer exercise and refuses a new prescription", async () => {
+    const trainer = await createTrainerSession("archive@example.com");
+    const created = await app.request(
+      "/libraries/exercises",
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Paused press",
+          instructions: "Pause at the chest.",
+          primaryMuscles: ["chest"],
+          secondaryMuscles: ["triceps"],
+        }),
+      },
+      testEnv(),
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as { data: { id: string } };
+
+    const template = await app.request(
+      "/templates",
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "archive-template",
+        },
+        body: JSON.stringify({
+          title: "Press day",
+          templateType: "workout",
+          content: {
+            workoutDays: [
+              {
+                id: "12121212-1212-4121-8121-121212121212",
+                order: 1,
+                name: "Day A",
+                exercises: [
+                  {
+                    id: "13131313-1313-4131-8131-131313131313",
+                    order: 1,
+                    sourceExerciseLibraryItemId: createdBody.data.id,
+                    name: "placeholder",
+                    instructions: null,
+                    setTargets: [
+                      {
+                        id: "14141414-1414-4141-8141-141414141414",
+                        order: 1,
+                        reps: 8,
+                        loadLabel: "RPE 7",
+                        rpe: 7,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+            mealPrescriptions: [],
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(template.status).toBe(201);
+    const templateBody = (await template.json()) as {
+      data: { id: string };
+    };
+
+    const archived = await app.request(
+      `/libraries/exercises/${createdBody.data.id}`,
+      { method: "DELETE", headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    expect(archived.status).toBe(200);
+    const archivedBody = (await archived.json()) as {
+      data: { status: string };
+    };
+    expect(archivedBody.data.status).toBe("archived");
+
+    const saved = await app.request(
+      `/templates/${templateBody.data.id}`,
+      { headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    expect(saved.status).toBe(200);
+    const savedBody = (await saved.json()) as {
+      data: {
+        content: {
+          workoutDays: Array<{
+            exercises: Array<{
+              name: string;
+              sourceExerciseLibraryItemId?: string;
+              setTargets: Array<{ reps: number | null }>;
+            }>;
+          }>;
+        };
+      };
+    };
+    expect(savedBody.data.content.workoutDays[0]?.exercises[0]).toMatchObject({
+      name: "Paused press",
+      sourceExerciseLibraryItemId: createdBody.data.id,
+      primaryMuscles: ["chest"],
+      setTargets: [expect.objectContaining({ reps: 8, loadLabel: "RPE 7" })],
+    });
+
+    const listed = await app.request(
+      "/libraries/exercises",
+      { headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    const listedBody = (await listed.json()) as {
+      data: { items: Array<{ id: string }> };
+    };
+    expect(
+      listedBody.data.items.some((item) => item.id === createdBody.data.id),
+    ).toBe(false);
+
+    const rejected = await app.request(
+      "/templates",
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "archive-template-again",
+        },
+        body: JSON.stringify({
+          title: "Press day again",
+          templateType: "workout",
+          content: {
+            workoutDays: [
+              {
+                id: "15151515-1515-4151-8151-151515151515",
+                order: 1,
+                name: "Day B",
+                exercises: [
+                  {
+                    id: "16161616-1616-4161-8161-161616161616",
+                    order: 1,
+                    sourceExerciseLibraryItemId: createdBody.data.id,
+                    name: "Paused press",
+                    instructions: null,
+                    setTargets: [],
+                  },
+                ],
+              },
+            ],
+            mealPrescriptions: [],
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(rejected.status).toBe(409);
+    const rejectedBody = (await rejected.json()) as { error: { code: string } };
+    expect(rejectedBody.error.code).toBe("LIBRARY_ITEM_ARCHIVED");
+  });
+});
+
+describe("food library migration 0016", () => {
+  it("clears portion calories and keeps trainer servings without a conversion", async () => {
+    const SQL = await initSqlJs();
+    const sqlite = new SQL.Database();
+    for (const file of [
+      "0000_identity.sql",
+      "0001_relationship_onboarding.sql",
+      "0012_invitation_whatsapp.sql",
+      "0002_coaching_configuration.sql",
+      "0003_plans.sql",
+      "0009_sync.sql",
+      "0010_notifications.sql",
+      "0013_domain_contracts.sql",
+      "0014_onboarding_form_templates.sql",
+      "0011_templates_libraries.sql",
+      "0015_iteration_a.sql",
+    ]) {
+      sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
+    }
+    sqlite.run(
+      `INSERT INTO food_library_items (
+         id, ownership, trainer_user_id, name, cuisine_region, portion_label,
+         notes, created_at, updated_at, description, calories, protein_grams,
+         carbs_grams, fat_grams
+       ) VALUES (
+         'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01', 'trainer', NULL, 'Home dal',
+         'indian', '1 katori', NULL, '2026-01-01T00:00:00.000Z',
+         '2026-01-01T00:00:00.000Z', NULL, 999, 10, 20, 5
+       )`,
+    );
+    sqlite.exec(readFileSync(join(drizzleDir, "0016_food_exercise_libraries.sql"), "utf8"));
+
+    const foodColumns = sqlite.exec("PRAGMA table_info(food_library_items)")[0]!;
+    const foodNameIndex = foodColumns.columns.indexOf("name");
+    const foodNames = foodColumns.values.map((row) => row[foodNameIndex]);
+    expect(foodNames).not.toContain("calories");
+    expect(foodNames).not.toContain("portion_label");
+    expect(foodNames).toContain("cuisine_region");
+    expect(foodNames).toContain("classification");
+
+    const exerciseColumns = sqlite.exec(
+      "PRAGMA table_info(exercise_library_items)",
+    )[0]!;
+    const exerciseNameIndex = exerciseColumns.columns.indexOf("name");
+    const exerciseNames = exerciseColumns.values.map(
+      (row) => row[exerciseNameIndex],
+    );
+    expect(exerciseNames).not.toContain("default_reps");
+    expect(exerciseNames).not.toContain("default_load_label");
+    expect(exerciseNames).not.toContain("parent_exercise_id");
+    expect(exerciseNames).toContain("primary_muscles_json");
+    expect(exerciseNames).toContain("secondary_muscles_json");
+
+    const trainerFood = sqlite.exec(
+      `SELECT classification, nutrition_basis, energy_kcal_scaled
+       FROM food_library_items
+       WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01'`,
+    )[0]!;
+    expect(trainerFood.values[0]).toEqual([null, null, null]);
+    const trainerServing = sqlite.exec(
+      `SELECT label, unit, conversion_scaled
+       FROM food_library_servings
+       WHERE food_library_item_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01'`,
+    )[0]!;
+    expect(trainerServing.values).toEqual([["1 katori", "portion", null]]);
+
+    const roti = sqlite.exec(
+      `SELECT classification, nutrition_basis, energy_kcal_scaled, fat_grams_scaled
+       FROM food_library_items
+       WHERE id = 'f1000001-0000-4000-8000-000000000001'`,
+    )[0]!;
+    expect(roti.values[0]).toEqual([
+      "prepared_food",
+      "per_100_g",
+      297000000,
+      7500000,
+    ]);
+    const rotiServings = sqlite.exec(
+      `SELECT conversion_scaled
+       FROM food_library_servings
+       WHERE food_library_item_id = 'f1000001-0000-4000-8000-000000000001'
+       ORDER BY conversion_scaled`,
+    )[0]!;
+    expect(rotiServings.values).toEqual([[35000000], [100000000]]);
+    sqlite.close();
   });
 });

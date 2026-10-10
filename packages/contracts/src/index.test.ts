@@ -24,8 +24,12 @@ import {
   realtimeEventSchema,
   SAFE_REALTIME_EVENT_KEYS,
   planTemplateSchema,
+  createExerciseLibraryItemRequestSchema,
+  createFoodLibraryItemRequestSchema,
   exerciseLibraryItemSchema,
   foodLibraryItemSchema,
+  mealFoodItemSchema,
+  NUTRIENT_SCALE,
   applyPlanTemplateRequestSchema,
   workspaceActivityQuerySchema,
   planListFilterSchema,
@@ -477,15 +481,24 @@ describe("contracts", () => {
         trainerUserId: null,
         name: "Goblet squat",
         instructions: null,
-        defaultLoadLabel: null,
-        defaultReps: 8,
-        muscleGroups: ["quads"],
+        primaryMuscles: ["quads"],
+        secondaryMuscles: ["glutes"],
         equipment: ["dumbbell"],
         difficulty: "beginner",
+        status: "active",
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
-    ).toMatchObject({ ownership: "global" });
+    ).toMatchObject({ ownership: "global", primaryMuscles: ["quads"] });
+    expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultReps");
+    expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultLoadLabel");
+    expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("parentExerciseId");
+    expect(
+      createExerciseLibraryItemRequestSchema.parse({
+        name: "Cable face pull",
+        defaultReps: 12,
+      }),
+    ).not.toHaveProperty("defaultReps");
 
     expect(
       foodLibraryItemSchema.parse({
@@ -494,17 +507,27 @@ describe("contracts", () => {
         trainerUserId: null,
         name: "Dal tadka",
         cuisineRegion: "indian",
-        portionLabel: "1 katori",
+        classification: "prepared_food",
+        basis: "per_100_g",
+        energyKcalScaled: 140 * NUTRIENT_SCALE,
+        proteinScaled: 8 * NUTRIENT_SCALE,
+        carbsScaled: 18 * NUTRIENT_SCALE,
+        fatScaled: 4 * NUTRIENT_SCALE,
+        servings: [
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            label: "1 katori",
+            unit: "katori",
+            conversionScaled: 180 * NUTRIENT_SCALE,
+          },
+        ],
         notes: null,
         description: null,
-        calories: 180,
-        proteinGrams: 9,
-        carbsGrams: 22,
-        fatGrams: 6,
+        status: "active",
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
-    ).toMatchObject({ cuisineRegion: "indian" });
+    ).toMatchObject({ cuisineRegion: "indian", basis: "per_100_g" });
 
     expect(
       applyPlanTemplateRequestSchema.parse({
@@ -513,6 +536,62 @@ describe("contracts", () => {
     ).toMatchObject({
       templateId: "11111111-1111-4111-8111-111111111111",
     });
+  });
+
+  it("rejects a food without classification or basis and reads legacy snapshots", () => {
+    expect(
+      createFoodLibraryItemRequestSchema.safeParse({
+        name: "Dal tadka",
+        basis: "per_100_g",
+        servings: [{ label: "1 katori", unit: "katori", conversion: 180 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      createFoodLibraryItemRequestSchema.safeParse({
+        name: "Dal tadka",
+        classification: "prepared_food",
+        servings: [{ label: "1 katori", unit: "katori", conversion: 180 }],
+      }).success,
+    ).toBe(false);
+
+    const legacy = mealFoodItemSchema.parse({
+      name: "Dal",
+      portionLabel: "1 katori",
+      calories: 180,
+      proteinGrams: 9,
+      carbsGrams: 28,
+      fatGrams: 0,
+      sourceFoodLibraryItemId: "55555555-5555-4555-8555-555555555555",
+    });
+    expect(legacy).toMatchObject({
+      snapshotKind: "legacy",
+      quantityScaled: NUTRIENT_SCALE,
+      basis: null,
+      classification: null,
+      canonical: null,
+      serving: { label: "1 katori", conversionScaled: null },
+      calculated: {
+        energyKcalScaled: 180 * NUTRIENT_SCALE,
+        proteinScaled: 9 * NUTRIENT_SCALE,
+        fatScaled: 0,
+        partial: false,
+      },
+    });
+
+    const partial = mealFoodItemSchema.parse({
+      name: "Dal",
+      portionLabel: "1 katori",
+      calories: 180,
+      proteinGrams: null,
+      carbsGrams: 28,
+      fatGrams: 0,
+    });
+    expect(partial.snapshotKind === "legacy" && partial.calculated.proteinScaled).toBe(
+      null,
+    );
+    expect(partial.snapshotKind === "legacy" && partial.calculated.partial).toBe(
+      true,
+    );
   });
 
   it("rejects an activity state that does not belong to the type", () => {

@@ -36,6 +36,7 @@ const APP_MIGRATIONS = [
   "0014_onboarding_form_templates.sql",
   "0011_templates_libraries.sql",
   "0015_iteration_a.sql",
+  "0016_food_exercise_libraries.sql",
 ];
 
 function applySql(sqlite: Database, file: string) {

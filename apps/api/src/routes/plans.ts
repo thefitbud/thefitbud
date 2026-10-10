@@ -29,6 +29,7 @@ import {
   isPastOnboardingReview,
 } from "@fitbud/core";
 import { onboardingStatusForRelationship } from "../domain/client-status";
+import { prepareWritablePlanContent } from "../domain/library-snapshots";
 import { createDb } from "../db/client";
 import {
   coachingRelationships,
@@ -548,6 +549,15 @@ planRoutes.post(
       );
     }
 
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
     const now = nowIso();
     const planId = createId();
     const versionId = createId();
@@ -564,7 +574,7 @@ planRoutes.post(
       versionNumber: 1,
       status: "draft",
       recordVersion: 1,
-      contentJson: JSON.stringify(parsed.data.content),
+      contentJson: JSON.stringify(prepared.content),
       creationSource: "blank",
       publishedAt: null,
       effectiveFrom: null,
@@ -1024,6 +1034,16 @@ planRoutes.put(
       );
     }
 
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+      parsePlanContentJson(version.contentJson),
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
     const now = nowIso();
     if (parsed.data.title) {
       await db
@@ -1035,7 +1055,7 @@ planRoutes.put(
     await db
       .update(planVersions)
       .set({
-        contentJson: JSON.stringify(parsed.data.content),
+        contentJson: JSON.stringify(prepared.content),
         recordVersion: version.recordVersion + 1,
         updatedAt: now,
       })

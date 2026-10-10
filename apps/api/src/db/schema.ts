@@ -1306,7 +1306,10 @@ export const planTemplates = sqliteTable(
   ],
 );
 
-/** Global curated or trainer-owned exercise copy-sources for drafts. */
+/**
+ * Exercise identity and coaching metadata. Prescription targets live on the
+ * plan or template snapshot, not on this row.
+ */
 export const exerciseLibraryItems = sqliteTable(
   "exercise_library_items",
   {
@@ -1317,23 +1320,31 @@ export const exerciseLibraryItems = sqliteTable(
     trainerUserId: text("trainer_user_id").references(() => users.id),
     name: text("name").notNull(),
     instructions: text("instructions"),
-    defaultLoadLabel: text("default_load_label"),
-    defaultReps: integer("default_reps"),
-    muscleGroupsJson: text("muscle_groups_json").notNull().default("[]"),
+    primaryMusclesJson: text("primary_muscles_json").notNull().default("[]"),
+    secondaryMusclesJson: text("secondary_muscles_json").notNull().default("[]"),
     equipmentJson: text("equipment_json").notNull().default("[]"),
     difficulty: text("difficulty", {
       enum: ["beginner", "intermediate", "advanced"],
     }),
+    status: text("status", {
+      enum: ["active", "archived"],
+    })
+      .notNull()
+      .default("active"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
     index("exercise_library_ownership_idx").on(table.ownership),
     index("exercise_library_trainer_idx").on(table.trainerUserId),
+    index("exercise_library_status_idx").on(table.status),
   ],
 );
 
-/** Curated Indian food (and trainer-owned) copy-sources for meal drafts. */
+/**
+ * Food identity. Canonical nutrients are scaled integers on an explicit basis.
+ * Servings are separate rows. Plan snapshots do not join back to this table.
+ */
 export const foodLibraryItems = sqliteTable(
   "food_library_items",
   {
@@ -1346,13 +1357,28 @@ export const foodLibraryItems = sqliteTable(
     cuisineRegion: text("cuisine_region", {
       enum: ["indian"],
     }).notNull(),
-    portionLabel: text("portion_label").notNull(),
+    classification: text("classification", {
+      enum: [
+        "raw_ingredient",
+        "generic_food",
+        "prepared_food",
+        "branded_product",
+      ],
+    }),
+    nutritionBasis: text("nutrition_basis", {
+      enum: ["per_100_g", "per_100_ml"],
+    }),
+    energyKcalScaled: integer("energy_kcal_scaled"),
+    proteinScaled: integer("protein_grams_scaled"),
+    carbsScaled: integer("carbs_grams_scaled"),
+    fatScaled: integer("fat_grams_scaled"),
     notes: text("notes"),
     description: text("description"),
-    calories: integer("calories"),
-    proteinGrams: real("protein_grams"),
-    carbsGrams: real("carbs_grams"),
-    fatGrams: real("fat_grams"),
+    status: text("status", {
+      enum: ["active", "archived"],
+    })
+      .notNull()
+      .default("active"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1360,5 +1386,25 @@ export const foodLibraryItems = sqliteTable(
     index("food_library_ownership_idx").on(table.ownership),
     index("food_library_cuisine_idx").on(table.cuisineRegion),
     index("food_library_trainer_idx").on(table.trainerUserId),
+    index("food_library_status_idx").on(table.status),
+  ],
+);
+
+/** Food-specific household or measured servings. Conversion is not universal. */
+export const foodLibraryServings = sqliteTable(
+  "food_library_servings",
+  {
+    id: text("id").primaryKey(),
+    foodLibraryItemId: text("food_library_item_id")
+      .notNull()
+      .references(() => foodLibraryItems.id),
+    label: text("label").notNull(),
+    unit: text("unit").notNull(),
+    conversionScaled: integer("conversion_scaled"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("food_library_servings_food_idx").on(table.foodLibraryItemId),
   ],
 );

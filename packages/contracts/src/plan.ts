@@ -1,5 +1,14 @@
 import { z } from "zod";
 import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
+import {
+  NUTRIENT_SCALE,
+  calculatedNutrientsSchema,
+  exerciseDifficultySchema,
+  foodClassificationSchema,
+  legacyPortionToSnapshot,
+  nutrientVectorSchema,
+  nutritionBasisSchema,
+} from "./nutrition.js";
 
 export const planVersionStatusSchema = z.enum([
   "draft",
@@ -27,12 +36,19 @@ export const workoutSetTargetSchema = z.object({
 });
 export type WorkoutSetTarget = z.infer<typeof workoutSetTargetSchema>;
 
+const exerciseLabelSchema = z.string().trim().min(1).max(80);
+
 export const workoutExerciseSchema = z.object({
   id: uuidSchema,
   order: z.number().int().min(1).max(100),
   name: z.string().trim().min(1).max(120),
   instructions: z.string().trim().max(2000).nullable(),
+  primaryMuscles: z.array(exerciseLabelSchema).max(12).optional().default([]),
+  secondaryMuscles: z.array(exerciseLabelSchema).max(12).optional().default([]),
+  equipment: z.array(exerciseLabelSchema).max(12).optional().default([]),
+  difficulty: exerciseDifficultySchema.nullable().optional().default(null),
   setTargets: z.array(workoutSetTargetSchema).max(30),
+  sourceExerciseLibraryItemId: uuidSchema.optional(),
 });
 export type WorkoutExercise = z.infer<typeof workoutExerciseSchema>;
 
@@ -44,18 +60,67 @@ export const workoutDaySchema = z.object({
 });
 export type WorkoutDay = z.infer<typeof workoutDaySchema>;
 
-const nullableMacroGramsSchema = z.number().nonnegative().max(2000).nullable();
+const foodServingSnapshotSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  unit: z.string().trim().min(1).max(40),
+  conversionScaled: z
+    .number()
+    .int()
+    .positive()
+    .max(NUTRIENT_SCALE * 5000)
+    .nullable(),
+});
 
-/** Snapshot of one food inside a meal. Not a live library join. */
-export const mealFoodItemSchema = z.object({
+/** New prescription snapshot. Nutrients are calculated from its own canonical copy. */
+export const calculatedFoodSnapshotSchema = z.object({
+  snapshotKind: z.literal("calculated"),
+  name: z.string().trim().min(1).max(120),
+  classification: foodClassificationSchema,
+  basis: nutritionBasisSchema,
+  canonical: nutrientVectorSchema,
+  serving: foodServingSnapshotSchema.extend({
+    conversionScaled: z.number().int().positive().max(NUTRIENT_SCALE * 5000),
+  }),
+  quantityScaled: z.number().int().positive().max(NUTRIENT_SCALE * 100),
+  calculated: calculatedNutrientsSchema,
+  sourceFoodLibraryItemId: uuidSchema.optional(),
+  sourceServingId: uuidSchema.optional(),
+});
+
+/**
+ * Already-calculated historical snapshot. Quantity is exactly 1 and there is
+ * no basis to recalculate from.
+ */
+export const legacyFoodSnapshotSchema = z.object({
+  snapshotKind: z.literal("legacy"),
+  name: z.string().trim().min(1).max(120),
+  classification: z.null(),
+  basis: z.null(),
+  canonical: z.null(),
+  serving: foodServingSnapshotSchema.extend({
+    conversionScaled: z.null(),
+  }),
+  quantityScaled: z.literal(NUTRIENT_SCALE),
+  calculated: calculatedNutrientsSchema,
+  sourceFoodLibraryItemId: uuidSchema.optional(),
+});
+
+const legacyPortionFoodSchema = z.object({
   sourceFoodLibraryItemId: uuidSchema.optional(),
   name: z.string().trim().min(1).max(120),
   portionLabel: z.string().trim().min(1).max(120),
   calories: z.number().int().nonnegative().max(20000).nullable(),
-  proteinGrams: nullableMacroGramsSchema,
-  carbsGrams: nullableMacroGramsSchema,
-  fatGrams: nullableMacroGramsSchema,
+  proteinGrams: z.number().nonnegative().max(2000).nullable(),
+  carbsGrams: z.number().nonnegative().max(2000).nullable(),
+  fatGrams: z.number().nonnegative().max(2000).nullable(),
 });
+
+/** Snapshot of one food inside a meal. Not a live library join. */
+export const mealFoodItemSchema = z.union([
+  calculatedFoodSnapshotSchema,
+  legacyFoodSnapshotSchema,
+  legacyPortionFoodSchema.transform((item) => legacyPortionToSnapshot(item)),
+]);
 export type MealFoodItem = z.infer<typeof mealFoodItemSchema>;
 
 export const mealPrescriptionSchema = z.object({

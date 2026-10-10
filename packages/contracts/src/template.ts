@@ -1,9 +1,18 @@
 import { z } from "zod";
 import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
 import {
+  decimalNutrientSchema,
+  exerciseDifficultySchema,
+  foodClassificationSchema,
+  libraryItemStatusSchema,
+  nutritionBasisSchema,
+} from "./nutrition.js";
+import {
   createPlanResponseSchema,
   planContentSchema,
 } from "./plan.js";
+
+export { exerciseDifficultySchema } from "./nutrition.js";
 
 export const planTemplateTypeSchema = z.enum([
   "workout",
@@ -85,11 +94,6 @@ export type ApplyPlanTemplateResponse = z.infer<
   typeof applyPlanTemplateResponseSchema
 >;
 
-export const exerciseDifficultySchema = z.enum([
-  "beginner",
-  "intermediate",
-  "advanced",
-]);
 export type ExerciseDifficulty = z.infer<typeof exerciseDifficultySchema>;
 
 const libraryLabelSchema = z.string().trim().min(1).max(80);
@@ -100,11 +104,11 @@ export const exerciseLibraryItemSchema = z.object({
   trainerUserId: uuidSchema.nullable(),
   name: z.string().min(1).max(120),
   instructions: z.string().max(2000).nullable(),
-  defaultLoadLabel: z.string().max(80).nullable(),
-  defaultReps: z.number().int().min(1).max(100).nullable(),
-  muscleGroups: z.array(libraryLabelSchema).max(12),
+  primaryMuscles: z.array(libraryLabelSchema).max(12),
+  secondaryMuscles: z.array(libraryLabelSchema).max(12),
   equipment: z.array(libraryLabelSchema).max(12),
   difficulty: exerciseDifficultySchema.nullable(),
+  status: libraryItemStatusSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -120,9 +124,8 @@ export type ExerciseLibraryListResponse = z.infer<
 export const createExerciseLibraryItemRequestSchema = z.object({
   name: z.string().trim().min(1).max(120),
   instructions: z.string().trim().max(2000).nullable().optional(),
-  defaultLoadLabel: z.string().trim().max(80).nullable().optional(),
-  defaultReps: z.number().int().min(1).max(100).nullable().optional(),
-  muscleGroups: z.array(libraryLabelSchema).max(12).optional(),
+  primaryMuscles: z.array(libraryLabelSchema).max(12).optional(),
+  secondaryMuscles: z.array(libraryLabelSchema).max(12).optional(),
   equipment: z.array(libraryLabelSchema).max(12).optional(),
   difficulty: exerciseDifficultySchema.nullable().optional(),
 });
@@ -136,7 +139,13 @@ export type UpdateExerciseLibraryItemRequest = z.infer<
   typeof updateExerciseLibraryItemRequestSchema
 >;
 
-const nullableFoodGramsSchema = z.number().nonnegative().max(2000).nullable();
+export const foodLibraryServingSchema = z.object({
+  id: uuidSchema,
+  label: z.string().min(1).max(120),
+  unit: z.string().min(1).max(40),
+  conversionScaled: z.number().int().positive().nullable(),
+});
+export type FoodLibraryServing = z.infer<typeof foodLibraryServingSchema>;
 
 export const foodLibraryItemSchema = z.object({
   id: uuidSchema,
@@ -144,13 +153,16 @@ export const foodLibraryItemSchema = z.object({
   trainerUserId: uuidSchema.nullable(),
   name: z.string().min(1).max(120),
   cuisineRegion: z.literal("indian"),
-  portionLabel: z.string().min(1).max(120),
+  classification: foodClassificationSchema.nullable(),
+  basis: nutritionBasisSchema.nullable(),
+  energyKcalScaled: z.number().int().nonnegative().nullable(),
+  proteinScaled: z.number().int().nonnegative().nullable(),
+  carbsScaled: z.number().int().nonnegative().nullable(),
+  fatScaled: z.number().int().nonnegative().nullable(),
+  servings: z.array(foodLibraryServingSchema).max(12),
   notes: z.string().max(2000).nullable(),
   description: z.string().max(2000).nullable(),
-  calories: z.number().int().nonnegative().max(20000).nullable(),
-  proteinGrams: nullableFoodGramsSchema,
-  carbsGrams: nullableFoodGramsSchema,
-  fatGrams: nullableFoodGramsSchema,
+  status: libraryItemStatusSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -163,15 +175,24 @@ export type FoodLibraryListResponse = z.infer<
   typeof foodLibraryListResponseSchema
 >;
 
+export const createFoodLibraryServingRequestSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  unit: z.string().trim().min(1).max(40),
+  /** Grams or millilitres represented by one serving of this food. */
+  conversion: decimalNutrientSchema(5000),
+});
+
 export const createFoodLibraryItemRequestSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  portionLabel: z.string().trim().min(1).max(120),
+  classification: foodClassificationSchema,
+  basis: nutritionBasisSchema,
   notes: z.string().trim().max(2000).nullable().optional(),
   description: z.string().trim().max(2000).nullable().optional(),
-  calories: z.number().int().nonnegative().max(20000).nullable().optional(),
-  proteinGrams: z.number().nonnegative().max(2000).nullable().optional(),
-  carbsGrams: z.number().nonnegative().max(2000).nullable().optional(),
-  fatGrams: z.number().nonnegative().max(2000).nullable().optional(),
+  energyKcal: decimalNutrientSchema(2000).nullable().optional(),
+  proteinGrams: decimalNutrientSchema(100).nullable().optional(),
+  carbsGrams: decimalNutrientSchema(100).nullable().optional(),
+  fatGrams: decimalNutrientSchema(100).nullable().optional(),
+  servings: z.array(createFoodLibraryServingRequestSchema).min(1).max(12),
 });
 export type CreateFoodLibraryItemRequest = z.infer<
   typeof createFoodLibraryItemRequestSchema

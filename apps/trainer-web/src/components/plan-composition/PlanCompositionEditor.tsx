@@ -1,12 +1,21 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type {
-  MealFoodItem,
-  MealPrescription,
-  PlanContent,
-  WorkoutDay,
-  WorkoutExercise,
-  WorkoutSetTarget,
+import {
+  NUTRIENT_SCALE,
+  legacyPortionToSnapshot,
+  scaleDecimal,
+  type MealFoodItem,
+  type MealPrescription,
+  type PlanContent,
+  type WorkoutDay,
+  type WorkoutExercise,
+  type WorkoutSetTarget,
 } from "@fitbud/contracts";
+import {
+  aggregateNutrients,
+  displayNutrients,
+  formatScaledQuantity,
+  materializeFoodSnapshot,
+} from "@fitbud/core";
 import {
   PLAN_COMPOSITION_LIMITS,
   addExercise,
@@ -55,13 +64,20 @@ function blankToNull(value: string): string | null {
 }
 
 function macroText(item: MealFoodItem): string {
+  const shown = displayNutrients(aggregateNutrients([item.calculated]));
   const parts = [
-    item.calories != null ? `${item.calories} kcal` : null,
-    item.proteinGrams != null ? `P ${item.proteinGrams} g` : null,
-    item.carbsGrams != null ? `C ${item.carbsGrams} g` : null,
-    item.fatGrams != null ? `F ${item.fatGrams} g` : null,
-  ].filter((part): part is string => Boolean(part));
+    shown.energyKcal != null ? `${shown.energyKcal} kcal` : "energy unknown",
+    shown.proteinGrams != null ? `P ${shown.proteinGrams} g` : "protein unknown",
+    shown.carbsGrams != null ? `C ${shown.carbsGrams} g` : "carbs unknown",
+    shown.fatGrams != null ? `F ${shown.fatGrams} g` : "fat unknown",
+  ];
+  if (shown.partial) parts.push("partial");
   return parts.join(" · ");
+}
+
+function foodPortionText(item: MealFoodItem): string {
+  if (item.snapshotKind === "legacy") return item.serving.label;
+  return `${formatScaledQuantity(item.quantityScaled)} × ${item.serving.label}`;
 }
 
 function setText(target: WorkoutSetTarget): string {
@@ -191,7 +207,7 @@ function MealReadOnly({ meal }: { meal: MealPrescription }) {
           {items.map((item, index) => (
             <li key={`${meal.id}:${index}`}>
               <p className="plan-comp-name">
-                {item.name} · {item.portionLabel}
+                {item.name} · {foodPortionText(item)}
               </p>
               {macroText(item) ? <p className="muted">{macroText(item)}</p> : null}
               {item.sourceFoodLibraryItemId ? (
@@ -765,6 +781,7 @@ function MealFields({
         />
         <span>Photo required</span>
       </label>
+      {items.length > 0 ? <MealTotal items={items} /> : null}
       {items.map((item, index) => (
         <FoodFields
           key={`${meal.id}:${index}`}
@@ -789,6 +806,35 @@ function MealFields({
   );
 }
 
+function MealTotal({ items }: { items: MealFoodItem[] }) {
+  const shown = displayNutrients(
+    aggregateNutrients(items.map((item) => item.calculated)),
+  );
+  return (
+    <p className="muted">
+      {shown.partial
+        ? "Meal nutrition is partial. Unknown nutrients are left unknown."
+        : "Meal total"}
+      {": "}
+      {macroText({
+        snapshotKind: "legacy",
+        name: "total",
+        classification: null,
+        basis: null,
+        canonical: null,
+        serving: { label: "total", unit: "portion", conversionScaled: null },
+        quantityScaled: NUTRIENT_SCALE,
+        calculated: aggregateNutrients(items.map((item) => item.calculated)),
+      })}
+    </p>
+  );
+}
+
+function scaledToNumber(value: number | null): number | null {
+  if (value == null) return null;
+  return value / NUTRIENT_SCALE;
+}
+
 function FoodFields({
   content,
   mealId,
@@ -806,8 +852,44 @@ function FoodFields({
   allowDuplicate: boolean;
   onChange: EditorChange;
 }) {
-  function patch(next: Partial<MealFoodItem>) {
+  function replace(next: MealFoodItem) {
     onChange(updateFoodItem(content, mealId, index, next));
+  }
+
+  function patchLegacy(next: {
+    name?: string;
+    portionLabel?: string;
+    calories?: number | null;
+    proteinGrams?: number | null;
+    carbsGrams?: number | null;
+    fatGrams?: number | null;
+  }) {
+    if (item.snapshotKind !== "legacy") return;
+    replace(
+      legacyPortionToSnapshot({
+        name: next.name ?? item.name,
+        portionLabel: next.portionLabel ?? item.serving.label,
+        calories:
+          next.calories === undefined
+            ? scaledToNumber(item.calculated.energyKcalScaled)
+            : next.calories,
+        proteinGrams:
+          next.proteinGrams === undefined
+            ? scaledToNumber(item.calculated.proteinScaled)
+            : next.proteinGrams,
+        carbsGrams:
+          next.carbsGrams === undefined
+            ? scaledToNumber(item.calculated.carbsScaled)
+            : next.carbsGrams,
+        fatGrams:
+          next.fatGrams === undefined
+            ? scaledToNumber(item.calculated.fatScaled)
+            : next.fatGrams,
+        ...(item.sourceFoodLibraryItemId
+          ? { sourceFoodLibraryItemId: item.sourceFoodLibraryItemId }
+          : {}),
+      }),
+    );
   }
 
   return (
@@ -855,77 +937,113 @@ function FoodFields({
           Library snapshot {item.sourceFoodLibraryItemId}
         </p>
       ) : null}
-      <div className="plan-comp-food-grid">
-        <label className="field">
-          <span>Name</span>
-          <input
-            value={item.name}
-            maxLength={120}
-            aria-invalid={item.name.trim() === ""}
-            onChange={(event) => patch({ name: event.target.value })}
-            required
-          />
-        </label>
-        <label className="field">
-          <span>Portion</span>
-          <input
-            value={item.portionLabel}
-            maxLength={120}
-            aria-invalid={item.portionLabel.trim() === ""}
-            onChange={(event) => patch({ portionLabel: event.target.value })}
-            required
-          />
-        </label>
-        <label className="field">
-          <span>Calories</span>
-          <input
-            type="number"
-            min={0}
-            max={20000}
-            value={item.calories ?? ""}
-            onChange={(event) => patch({ calories: optionalInt(event.target.value) })}
-          />
-        </label>
-        <label className="field">
-          <span>Protein (g)</span>
-          <input
-            type="number"
-            min={0}
-            max={2000}
-            step="0.1"
-            value={item.proteinGrams ?? ""}
-            onChange={(event) =>
-              patch({ proteinGrams: optionalNumber(event.target.value) })
-            }
-          />
-        </label>
-        <label className="field">
-          <span>Carbs (g)</span>
-          <input
-            type="number"
-            min={0}
-            max={2000}
-            step="0.1"
-            value={item.carbsGrams ?? ""}
-            onChange={(event) =>
-              patch({ carbsGrams: optionalNumber(event.target.value) })
-            }
-          />
-        </label>
-        <label className="field">
-          <span>Fat (g)</span>
-          <input
-            type="number"
-            min={0}
-            max={2000}
-            step="0.1"
-            value={item.fatGrams ?? ""}
-            onChange={(event) =>
-              patch({ fatGrams: optionalNumber(event.target.value) })
-            }
-          />
-        </label>
-      </div>
+      {item.snapshotKind === "calculated" ? (
+        <div className="plan-comp-food-grid">
+          <p className="plan-comp-name">{item.name}</p>
+          <p className="muted">
+            {item.serving.label} ({item.serving.unit}) ·{" "}
+            {item.basis === "per_100_g" ? "per 100 g" : "per 100 ml"}
+          </p>
+          <label className="field">
+            <span>Quantity</span>
+            <input
+              type="number"
+              min={0.001}
+              step="0.5"
+              value={formatScaledQuantity(item.quantityScaled)}
+              onChange={(event) => {
+                const parsed = Number(event.target.value);
+                if (!Number.isFinite(parsed) || parsed <= 0) return;
+                try {
+                  replace(
+                    materializeFoodSnapshot({
+                      ...item,
+                      quantityScaled: scaleDecimal(parsed),
+                    }),
+                  );
+                } catch {
+                  // Keep the previous quantity until the entry is a valid decimal.
+                }
+              }}
+            />
+          </label>
+          <p className="muted">{macroText(item)}</p>
+        </div>
+      ) : (
+        <div className="plan-comp-food-grid">
+          <label className="field">
+            <span>Name</span>
+            <input
+              value={item.name}
+              maxLength={120}
+              aria-invalid={item.name.trim() === ""}
+              onChange={(event) => patchLegacy({ name: event.target.value })}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Portion</span>
+            <input
+              value={item.serving.label}
+              maxLength={120}
+              aria-invalid={item.serving.label.trim() === ""}
+              onChange={(event) => patchLegacy({ portionLabel: event.target.value })}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Calories</span>
+            <input
+              type="number"
+              min={0}
+              max={20000}
+              value={scaledToNumber(item.calculated.energyKcalScaled) ?? ""}
+              onChange={(event) =>
+                patchLegacy({ calories: optionalInt(event.target.value) })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Protein (g)</span>
+            <input
+              type="number"
+              min={0}
+              max={2000}
+              step="0.1"
+              value={scaledToNumber(item.calculated.proteinScaled) ?? ""}
+              onChange={(event) =>
+                patchLegacy({ proteinGrams: optionalNumber(event.target.value) })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Carbs (g)</span>
+            <input
+              type="number"
+              min={0}
+              max={2000}
+              step="0.1"
+              value={scaledToNumber(item.calculated.carbsScaled) ?? ""}
+              onChange={(event) =>
+                patchLegacy({ carbsGrams: optionalNumber(event.target.value) })
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Fat (g)</span>
+            <input
+              type="number"
+              min={0}
+              max={2000}
+              step="0.1"
+              value={scaledToNumber(item.calculated.fatScaled) ?? ""}
+              onChange={(event) =>
+                patchLegacy({ fatGrams: optionalNumber(event.target.value) })
+              }
+            />
+          </label>
+        </div>
+      )}
     </article>
   );
 }

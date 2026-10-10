@@ -334,7 +334,7 @@ export function PlanTemplateFamily({
               ? (meal) => (
                   <FoodSearchPane
                     meal={meal}
-                    onAdd={(item) => {
+                    onAdd={(item, servingId) => {
                       if (!meal) return;
                       setDraft((current) =>
                         current
@@ -344,6 +344,7 @@ export function PlanTemplateFamily({
                                 current.content,
                                 meal.id,
                                 item,
+                                servingId,
                               ),
                             }
                           : current,

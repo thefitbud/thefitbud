@@ -19,6 +19,11 @@ const sampleContent = {
           order: 1,
           name: "Squat",
           instructions: "Depth",
+          primaryMuscles: ["quads"],
+          secondaryMuscles: ["glutes"],
+          equipment: ["barbell"],
+          difficulty: "intermediate" as const,
+          sourceExerciseLibraryItemId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           setTargets: [
             {
               id: "33333333-3333-4333-8333-333333333333",
@@ -42,13 +47,25 @@ const sampleContent = {
       photoRequired: false,
       items: [
         {
+          snapshotKind: "legacy" as const,
           sourceFoodLibraryItemId: "55555555-5555-4555-8555-555555555555",
           name: "Dal",
-          portionLabel: "1 katori",
-          calories: 180,
-          proteinGrams: 9,
-          carbsGrams: 28,
-          fatGrams: 4,
+          classification: null,
+          basis: null,
+          canonical: null,
+          serving: {
+            label: "1 katori",
+            unit: "portion",
+            conversionScaled: null,
+          },
+          quantityScaled: 1_000_000,
+          calculated: {
+            energyKcalScaled: 180_000_000,
+            proteinScaled: 9_000_000,
+            carbsScaled: 28_000_000,
+            fatScaled: 4_000_000,
+            partial: false,
+          },
         },
       ],
     },
@@ -70,6 +87,10 @@ describe("copyPlanContent", () => {
     expect(copied.workoutDays[0]?.exercises[0]?.setTargets[0]?.id).not.toBe(
       sampleContent.workoutDays[0]!.exercises[0]!.setTargets[0]!.id,
     );
+    expect(copied.workoutDays[0]?.exercises[0]?.sourceExerciseLibraryItemId).toBe(
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    );
+    expect(copied.workoutDays[0]?.exercises[0]?.primaryMuscles).toEqual(["quads"]);
     expect(copied.mealPrescriptions[0]?.id).not.toBe(
       sampleContent.mealPrescriptions[0]!.id,
     );
@@ -109,62 +130,93 @@ describe("inferPlanTemplateType", () => {
 });
 
 describe("library copy helpers", () => {
-  it("builds an exercise prescription from a library item", () => {
+  const libraryFood = {
+    id: "66666666-6666-4666-8666-666666666666",
+    ownership: "global" as const,
+    trainerUserId: null,
+    name: "Dal rice",
+    cuisineRegion: "indian" as const,
+    classification: "prepared_food" as const,
+    basis: "per_100_g" as const,
+    energyKcalScaled: 160_000_000,
+    proteinScaled: 6_000_000,
+    carbsScaled: 24_000_000,
+    fatScaled: 3_000_000,
+    servings: [
+      {
+        id: "77777777-7777-4777-8777-777777777777",
+        label: "1 katori",
+        unit: "katori",
+        conversionScaled: 200_000_000,
+      },
+    ],
+    notes: "Light ghee ok",
+    description: null,
+    status: "active" as const,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  it("copies exercise identity and leaves set targets for the template", () => {
     const exercise = exercisePrescriptionFromLibrary(
       {
+        id: "88888888-8888-4888-8888-888888888888",
         name: "Bench Press",
         instructions: "Touch chest",
-        defaultLoadLabel: "RPE 7",
-        defaultReps: 5,
+        primaryMuscles: ["chest"],
+        secondaryMuscles: ["triceps"],
+        equipment: ["barbell"],
+        difficulty: "intermediate",
+        status: "active",
       },
       2,
       () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      [{ order: 1, reps: 5, loadLabel: "RPE 7", rpe: 7 }],
     );
     expect(exercise.name).toBe("Bench Press");
+    expect(exercise.sourceExerciseLibraryItemId).toBe(
+      "88888888-8888-4888-8888-888888888888",
+    );
+    expect(exercise.primaryMuscles).toEqual(["chest"]);
     expect(exercise.setTargets[0]?.reps).toBe(5);
+    expect(exercise.setTargets[0]?.loadLabel).toBe("RPE 7");
+    expect(exercise).not.toHaveProperty("defaultReps");
+    expect(exercise).not.toHaveProperty("defaultLoadLabel");
   });
 
-  it("builds a meal prescription from a food library item", () => {
-    const meal = mealPrescriptionFromLibrary(
+  it("does not invent reps when the template has not entered a set", () => {
+    const exercise = exercisePrescriptionFromLibrary(
       {
-        name: "Dal rice",
-        portionLabel: "1 katori dal + 1 cup rice",
-        notes: "Light ghee ok",
+        id: "88888888-8888-4888-8888-888888888888",
+        name: "Bench Press",
+        instructions: null,
+        primaryMuscles: [],
+        secondaryMuscles: [],
+        equipment: [],
+        difficulty: null,
+        status: "active",
       },
       1,
+      () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    );
+    expect(exercise.setTargets).toEqual([]);
+  });
+
+  it("builds a calculated meal snapshot from a food library item", () => {
+    const meal = mealPrescriptionFromLibrary(
+      libraryFood,
+      1,
       () => "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "77777777-7777-4777-8777-777777777777",
     );
     expect(meal.name).toBe("Dal rice");
-    expect(meal.instructions).toContain("1 katori dal");
-    expect(meal.items[0]?.name).toBe("Dal rice");
-    expect(meal.items[0]?.sourceFoodLibraryItemId).toBeUndefined();
-  });
-
-  it("snapshots library macros without keeping a live link", () => {
-    const meal = mealPrescriptionFromLibrary(
-      {
-        id: "66666666-6666-4666-8666-666666666666",
-        name: "Dal rice",
-        portionLabel: "1 katori dal + 1 cup rice",
-        notes: null,
-        calories: 320,
-        proteinGrams: 12,
-        carbsGrams: 48,
-        fatGrams: 6,
-      },
-      1,
-      () => "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    );
-    expect(meal.items).toEqual([
-      {
-        sourceFoodLibraryItemId: "66666666-6666-4666-8666-666666666666",
-        name: "Dal rice",
-        portionLabel: "1 katori dal + 1 cup rice",
-        calories: 320,
-        proteinGrams: 12,
-        carbsGrams: 48,
-        fatGrams: 6,
-      },
-    ]);
+    expect(meal.instructions).toContain("1 katori");
+    expect(meal.items[0]).toMatchObject({
+      snapshotKind: "calculated",
+      sourceFoodLibraryItemId: "66666666-6666-4666-8666-666666666666",
+      sourceServingId: "77777777-7777-4777-8777-777777777777",
+      quantityScaled: 1_000_000,
+      calculated: { energyKcalScaled: 320_000_000, partial: false },
+    });
   });
 });

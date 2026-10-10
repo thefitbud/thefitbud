@@ -24,6 +24,7 @@ import {
   planTemplates,
   planVersions,
 } from "../db/schema";
+import { prepareWritablePlanContent } from "../domain/library-snapshots";
 import {
   mapPlanTemplate,
   mapPlanTemplateSummary,
@@ -190,11 +191,20 @@ templateRoutes.post(
       );
     }
 
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
     const now = nowIso();
     const id = createId();
     // Store a copied snapshot so later edits to the request payload cannot
     // mutate the persisted template through shared object references.
-    const content = copyPlanContent(parsed.data.content, createId);
+    const content = copyPlanContent(prepared.content, createId);
     await db.insert(planTemplates).values({
       id,
       trainerUserId: actor.userId,
@@ -490,7 +500,17 @@ templateRoutes.put(
       );
     }
 
-    const content = copyPlanContent(parsed.data.content, createId);
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+      parsePlanContentJson(row.contentJson),
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
+    const content = copyPlanContent(prepared.content, createId);
     const now = nowIso();
     await db
       .update(planTemplates)

@@ -37,6 +37,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0014_onboarding_form_templates.sql",
     "0011_templates_libraries.sql",
     "0015_iteration_a.sql",
+    "0016_food_exercise_libraries.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -553,7 +554,8 @@ describe("iteration A directory, profile, and libraries", () => {
         },
         body: JSON.stringify({
           name: "Dumbbell bench press",
-          muscleGroups: ["chest"],
+          primaryMuscles: ["chest"],
+          secondaryMuscles: ["triceps"],
           equipment: ["dumbbell"],
           difficulty: "beginner",
         }),
@@ -571,7 +573,8 @@ describe("iteration A directory, profile, and libraries", () => {
         },
         body: JSON.stringify({
           name: "Barbell row",
-          muscleGroups: ["back"],
+          primaryMuscles: ["upper back"],
+          secondaryMuscles: ["biceps"],
           equipment: ["barbell"],
           difficulty: "advanced",
         }),
@@ -603,18 +606,32 @@ describe("iteration A directory, profile, and libraries", () => {
         },
         body: JSON.stringify({
           name: "Dal tadka",
-          portionLabel: "1 katori",
+          classification: "prepared_food",
+          basis: "per_100_g",
           description: "Home style",
-          calories: 180,
+          energyKcal: 180,
           proteinGrams: 9,
           carbsGrams: 22,
           fatGrams: 6,
+          servings: [
+            { label: "1 katori", unit: "katori", conversion: 180 },
+            { label: "100 g", unit: "g", conversion: 100 },
+          ],
         }),
       },
       testEnv(),
     );
     expect(food.status).toBe(201);
-    const foodBody = (await food.json()) as { data: { id: string } };
+    const foodBody = (await food.json()) as {
+      data: {
+        id: string;
+        servings: Array<{ id: string; label: string }>;
+      };
+    };
+    const hundredGram = foodBody.data.servings.find(
+      (serving) => serving.label === "100 g",
+    );
+    expect(hundredGram).toBeTruthy();
     const found = await app.request(
       "/libraries/foods?q=tadka",
       { headers: { Cookie: trainer.cookie } },
@@ -658,13 +675,31 @@ describe("iteration A directory, profile, and libraries", () => {
                 photoRequired: false,
                 items: [
                   {
+                    snapshotKind: "calculated",
                     sourceFoodLibraryItemId: foodBody.data.id,
+                    sourceServingId: hundredGram!.id,
                     name: "Dal tadka",
-                    portionLabel: "1 katori",
-                    calories: 180,
-                    proteinGrams: 9,
-                    carbsGrams: 22,
-                    fatGrams: 6,
+                    classification: "prepared_food",
+                    basis: "per_100_g",
+                    canonical: {
+                      energyKcalScaled: 1,
+                      proteinScaled: 1,
+                      carbsScaled: 1,
+                      fatScaled: 1,
+                    },
+                    serving: {
+                      label: "100 g",
+                      unit: "g",
+                      conversionScaled: 100_000_000,
+                    },
+                    quantityScaled: 1_000_000,
+                    calculated: {
+                      energyKcalScaled: 1,
+                      proteinScaled: 1,
+                      carbsScaled: 1,
+                      fatScaled: 1,
+                      partial: false,
+                    },
                   },
                 ],
               },
@@ -688,11 +723,16 @@ describe("iteration A directory, profile, and libraries", () => {
         },
         body: JSON.stringify({
           name: "Dal tadka",
-          portionLabel: "1 katori",
-          calories: 999,
+          classification: "prepared_food",
+          basis: "per_100_g",
+          energyKcal: 999,
           proteinGrams: 1,
           carbsGrams: 1,
           fatGrams: 1,
+          servings: [
+            { label: "1 katori", unit: "katori", conversion: 180 },
+            { label: "100 g", unit: "g", conversion: 100 },
+          ],
         }),
       },
       testEnv(),
@@ -726,7 +766,10 @@ describe("iteration A directory, profile, and libraries", () => {
         version: {
           content: {
             mealPrescriptions: Array<{
-              items: Array<{ sourceFoodLibraryItemId?: string; calories: number }>;
+              items: Array<{
+                sourceFoodLibraryItemId?: string;
+                calculated: { energyKcalScaled: number };
+              }>;
             }>;
           };
         };
@@ -734,10 +777,19 @@ describe("iteration A directory, profile, and libraries", () => {
     };
     expect(beforeEditBody.data.version.content.mealPrescriptions[0]?.items).toEqual([
       expect.objectContaining({
+        snapshotKind: "calculated",
         sourceFoodLibraryItemId: foodBody.data.id,
-        calories: 180,
+        sourceServingId: hundredGram!.id,
+        calculated: expect.objectContaining({
+          energyKcalScaled: 180_000_000,
+          proteinScaled: 9_000_000,
+        }),
       }),
     ]);
+    expect(
+      beforeEditBody.data.version.content.mealPrescriptions[0]?.items[0]
+        ?.calculated.energyKcalScaled,
+    ).not.toBe(999_000_000);
 
     await db
       .update(planVersions)

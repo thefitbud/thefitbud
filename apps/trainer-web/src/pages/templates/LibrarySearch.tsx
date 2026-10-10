@@ -68,8 +68,8 @@ export function ExerciseSearchPane({
     <div className="templates-library-pane">
       <h4>Exercise library</h4>
       <p className="muted">
-        Add copies the name, instructions, and default set into the selected
-        day. The draft keeps a snapshot, not a live link.
+        Add copies the name, instructions, and muscles into the selected day.
+        Set targets are entered on the draft. The draft keeps a snapshot, not a live link.
       </p>
       <label className="field">
         <span>Name</span>
@@ -143,8 +143,9 @@ export function ExerciseSearchPane({
               <p className="muted">
                 {item.ownership === "global" ? "Global" : "Yours"}
                 {item.difficulty ? ` · ${difficultyLabel(item.difficulty)}` : ""}
-                {item.defaultReps != null ? ` · ${item.defaultReps} reps` : ""}
-                {item.defaultLoadLabel ? ` · ${item.defaultLoadLabel}` : ""}
+                {item.primaryMuscles.length > 0
+                  ? ` · ${item.primaryMuscles.join(", ")}`
+                  : ""}
               </p>
               <button
                 type="button"
@@ -177,7 +178,7 @@ export function FoodSearchPane({
   onAdd,
 }: {
   meal: MealPrescription | null;
-  onAdd: (item: FoodLibraryItem) => void;
+  onAdd: (item: FoodLibraryItem, servingId: string) => void;
 }) {
   const [q, setQ] = useState("");
   const nameQuery = useDebounced(q);
@@ -195,8 +196,8 @@ export function FoodSearchPane({
     <div className="templates-library-pane">
       <h4>Food library</h4>
       <p className="muted">
-        Add copies the name, portion, and macros into the selected meal,
-        including the library id on the snapshot.
+        Add copies a serving and quantity into the selected meal. Nutrition is
+        calculated from the food's canonical basis and stored on the snapshot.
       </p>
       <label className="field">
         <span>Name</span>
@@ -234,18 +235,32 @@ export function FoodSearchPane({
             <li key={item.id}>
               <p className="templates-name">{item.name}</p>
               <p className="muted">
-                {item.portionLabel}
-                {item.calories != null ? ` · ${item.calories} kcal` : ""}
+                {item.classification?.replaceAll("_", " ") ?? "Needs classification"}
+                {item.basis === "per_100_g"
+                  ? " · per 100 g"
+                  : item.basis === "per_100_ml"
+                    ? " · per 100 ml"
+                    : ""}
                 {item.ownership === "global" ? " · Global" : " · Yours"}
               </p>
-              <button
-                type="button"
-                className="button-secondary"
-                disabled={!meal || atLimit}
-                onClick={() => onAdd(item)}
-              >
-                Add to meal
-              </button>
+              {item.servings.filter((serving) => serving.conversionScaled != null)
+                .length === 0 ? (
+                <p className="muted">Add a serving conversion before prescribing this food.</p>
+              ) : (
+                item.servings
+                  .filter((serving) => serving.conversionScaled != null)
+                  .map((serving) => (
+                    <button
+                      key={serving.id}
+                      type="button"
+                      className="button-secondary"
+                      disabled={!meal || atLimit}
+                      onClick={() => onAdd(item, serving.id)}
+                    >
+                      Add {serving.label}
+                    </button>
+                  ))
+              )}
             </li>
           ))}
         </ul>

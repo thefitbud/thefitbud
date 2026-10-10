@@ -174,6 +174,24 @@ export {
 } from "./plan.js";
 
 export {
+  NUTRIENT_SCALE,
+  calculatedNutrientsSchema,
+  decimalNutrientSchema,
+  foodClassificationSchema,
+  legacyPortionToSnapshot,
+  libraryItemStatusSchema,
+  nutrientVectorSchema,
+  nutritionBasisSchema,
+  scaleDecimal,
+  type CalculatedNutrients,
+  type FoodClassification,
+  type LegacyPortionFood,
+  type LibraryItemStatus,
+  type NutrientVector,
+  type NutritionBasis,
+} from "./nutrition.js";
+
+export {
   applyPlanTemplateRequestSchema,
   applyPlanTemplateResponseSchema,
   createExerciseLibraryItemRequestSchema,
@@ -185,6 +203,7 @@ export {
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
+  foodLibraryServingSchema,
   libraryOwnershipSchema,
   planTemplateListResponseSchema,
   planTemplateSchema,
@@ -204,6 +223,7 @@ export {
   type ExerciseLibraryListResponse,
   type FoodLibraryItem,
   type FoodLibraryListResponse,
+  type FoodLibraryServing,
   type LibraryOwnership,
   type PlanTemplate,
   type PlanTemplateListResponse,

@@ -39,6 +39,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   "0014_onboarding_form_templates.sql",
     "0011_templates_libraries.sql",
     "0015_iteration_a.sql",
+    "0016_food_exercise_libraries.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }

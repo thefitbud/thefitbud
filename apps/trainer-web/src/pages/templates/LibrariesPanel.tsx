@@ -2,8 +2,11 @@ import { useState, type FormEvent } from "react";
 import type {
   ExerciseDifficulty,
   ExerciseLibraryItem,
+  FoodClassification,
   FoodLibraryItem,
+  NutritionBasis,
 } from "@fitbud/contracts";
+import { NUTRIENT_SCALE, scaleDecimal } from "@fitbud/contracts";
 import { apiClient } from "../../lib/api";
 import { errorText } from "./shared";
 import { useCursorPage, useDebounced } from "./useCursorPage";
@@ -105,9 +108,8 @@ type ExerciseForm = {
   id: string | null;
   name: string;
   instructions: string;
-  defaultLoadLabel: string;
-  defaultReps: string;
-  muscleGroups: string[];
+  primaryMuscles: string[];
+  secondaryMuscles: string[];
   equipment: string[];
   difficulty: ExerciseDifficulty | "";
 };
@@ -117,9 +119,8 @@ function emptyExerciseForm(): ExerciseForm {
     id: null,
     name: "",
     instructions: "",
-    defaultLoadLabel: "",
-    defaultReps: "",
-    muscleGroups: [],
+    primaryMuscles: [],
+    secondaryMuscles: [],
     equipment: [],
     difficulty: "",
   };
@@ -130,35 +131,80 @@ function exerciseFormFrom(item: ExerciseLibraryItem): ExerciseForm {
     id: item.id,
     name: item.name,
     instructions: item.instructions ?? "",
-    defaultLoadLabel: item.defaultLoadLabel ?? "",
-    defaultReps: item.defaultReps != null ? String(item.defaultReps) : "",
-    muscleGroups: [...item.muscleGroups],
+    primaryMuscles: [...item.primaryMuscles],
+    secondaryMuscles: [...item.secondaryMuscles],
     equipment: [...item.equipment],
     difficulty: item.difficulty ?? "",
   };
 }
 
+const FOOD_CLASSIFICATIONS: FoodClassification[] = [
+  "raw_ingredient",
+  "generic_food",
+  "prepared_food",
+  "branded_product",
+];
+
+function classificationLabel(value: FoodClassification): string {
+  switch (value) {
+    case "raw_ingredient":
+      return "Raw ingredient";
+    case "generic_food":
+      return "Generic food";
+    case "prepared_food":
+      return "Prepared food";
+    case "branded_product":
+      return "Branded product";
+    default: {
+      const _exhaustive: never = value;
+      return _exhaustive;
+    }
+  }
+}
+
+type ServingForm = {
+  label: string;
+  unit: string;
+  conversion: string;
+};
+
 type FoodForm = {
   id: string | null;
   name: string;
-  portionLabel: string;
-  calories: string;
+  classification: FoodClassification | "";
+  basis: NutritionBasis | "";
+  energyKcal: string;
   proteinGrams: string;
   carbsGrams: string;
   fatGrams: string;
+  servings: ServingForm[];
   description: string;
   notes: string;
 };
+
+function emptyServing(): ServingForm {
+  return { label: "", unit: "", conversion: "" };
+}
+
+function scaledField(value: number | null): string {
+  if (value == null) return "";
+  const whole = Math.trunc(value / NUTRIENT_SCALE);
+  const fraction = value % NUTRIENT_SCALE;
+  if (fraction === 0) return String(whole);
+  return `${whole}.${String(fraction).padStart(6, "0").replace(/0+$/, "")}`;
+}
 
 function emptyFoodForm(): FoodForm {
   return {
     id: null,
     name: "",
-    portionLabel: "",
-    calories: "",
+    classification: "",
+    basis: "",
+    energyKcal: "",
     proteinGrams: "",
     carbsGrams: "",
     fatGrams: "",
+    servings: [emptyServing()],
     description: "",
     notes: "",
   };
@@ -168,30 +214,39 @@ function foodFormFrom(item: FoodLibraryItem): FoodForm {
   return {
     id: item.id,
     name: item.name,
-    portionLabel: item.portionLabel,
-    calories: item.calories != null ? String(item.calories) : "",
-    proteinGrams: item.proteinGrams != null ? String(item.proteinGrams) : "",
-    carbsGrams: item.carbsGrams != null ? String(item.carbsGrams) : "",
-    fatGrams: item.fatGrams != null ? String(item.fatGrams) : "",
+    classification: item.classification ?? "",
+    basis: item.basis ?? "",
+    energyKcal: scaledField(item.energyKcalScaled),
+    proteinGrams: scaledField(item.proteinScaled),
+    carbsGrams: scaledField(item.carbsScaled),
+    fatGrams: scaledField(item.fatScaled),
+    servings:
+      item.servings.length > 0
+        ? item.servings.map((serving) => ({
+            label: serving.label,
+            unit: serving.unit,
+            conversion: scaledField(serving.conversionScaled),
+          }))
+        : [emptyServing()],
     description: item.description ?? "",
     notes: item.notes ?? "",
   };
 }
 
-function optionalInt(value: string, label: string, max: number): number | null | string {
+function optionalDecimal(
+  value: string,
+  label: string,
+  max: number,
+): number | null | string {
   if (value.trim() === "") return null;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > max) {
-    return `${label} must be a whole number from 0 to ${max}.`;
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
+    return `${label} must be from 0 to ${max}. Leave it blank when it is unknown.`;
   }
-  return parsed;
-}
-
-function optionalGrams(value: string, label: string): number | null | string {
-  if (value.trim() === "") return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 2000) {
-    return `${label} must be from 0 to 2000.`;
+  try {
+    scaleDecimal(parsed);
+  } catch (error) {
+    return error instanceof Error ? error.message : `${label} is not a valid number.`;
   }
   return parsed;
 }
@@ -257,26 +312,14 @@ function ExerciseLibrary() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!form) return;
-    const reps = optionalInt(form.defaultReps, "Default reps", 100);
-    if (typeof reps === "string") {
-      setError(reps === "Default reps must be a whole number from 0 to 100."
-        ? "Default reps must be a whole number from 1 to 100, or blank."
-        : reps);
-      return;
-    }
-    if (reps === 0) {
-      setError("Default reps must be a whole number from 1 to 100, or blank.");
-      return;
-    }
     setActing(true);
     setError(null);
     setMessage(null);
     const body = {
       name: form.name.trim(),
       instructions: nullableText(form.instructions),
-      defaultLoadLabel: nullableText(form.defaultLoadLabel),
-      defaultReps: reps,
-      muscleGroups: form.muscleGroups,
+      primaryMuscles: form.primaryMuscles,
+      secondaryMuscles: form.secondaryMuscles,
       equipment: form.equipment,
       difficulty: form.difficulty === "" ? null : form.difficulty,
     };
@@ -306,7 +349,7 @@ function ExerciseLibrary() {
       await apiClient.deleteExerciseLibraryItem(form.id);
       setForm(null);
       setPendingDelete(false);
-      setMessage("Exercise deleted.");
+      setMessage("Exercise archived. Plans that already copied it stay unchanged.");
       page.reload();
     } catch (err) {
       setError(errorText(err, "Could not delete this exercise."));
@@ -321,8 +364,8 @@ function ExerciseLibrary() {
         <div>
           <h2 id="exercise-lib-heading">Exercise library</h2>
           <p className="muted">
-            Global rows are read-only. Create, update, and delete apply to
-            exercises you own.
+            Global rows are read-only. Create, update, and archive apply to
+            exercises you own. Reps and load belong on the plan, not here.
           </p>
         </div>
       </header>
@@ -387,7 +430,7 @@ function ExerciseLibrary() {
               <th scope="col">Name</th>
               <th scope="col">Ownership</th>
               <th scope="col">Difficulty</th>
-              <th scope="col">Defaults</th>
+              <th scope="col">Primary muscles</th>
               <th scope="col">
                 <span className="sr-only">Actions</span>
               </th>
@@ -412,9 +455,9 @@ function ExerciseLibrary() {
                   <td>
                     <span className="templates-name">{item.name}</span>
                     <span className="muted templates-sub">
-                      {item.muscleGroups.length > 0
-                        ? item.muscleGroups.join(", ")
-                        : "No muscle groups"}
+                      {item.secondaryMuscles.length > 0
+                        ? `Secondary: ${item.secondaryMuscles.join(", ")}`
+                        : "No secondary muscles"}
                       {item.equipment.length > 0
                         ? ` · ${item.equipment.join(", ")}`
                         : ""}
@@ -423,8 +466,9 @@ function ExerciseLibrary() {
                   <td>{ownershipLabel(item.ownership)}</td>
                   <td>{item.difficulty ? difficultyLabel(item.difficulty) : "—"}</td>
                   <td>
-                    {item.defaultReps != null ? `${item.defaultReps} reps` : "—"}
-                    {item.defaultLoadLabel ? ` · ${item.defaultLoadLabel}` : ""}
+                    {item.primaryMuscles.length > 0
+                      ? item.primaryMuscles.join(", ")
+                      : "—"}
                   </td>
                   <td>
                     <button
@@ -487,9 +531,16 @@ function ExerciseLibrary() {
               />
             </label>
             <LabelEntry
-              label="Muscle groups"
-              values={form.muscleGroups}
-              onChange={(muscleGroups) => setForm({ ...form, muscleGroups })}
+              label="Primary muscles"
+              values={form.primaryMuscles}
+              onChange={(primaryMuscles) => setForm({ ...form, primaryMuscles })}
+            />
+            <LabelEntry
+              label="Secondary muscles"
+              values={form.secondaryMuscles}
+              onChange={(secondaryMuscles) =>
+                setForm({ ...form, secondaryMuscles })
+              }
             />
             <LabelEntry
               label="Equipment"
@@ -529,30 +580,6 @@ function ExerciseLibrary() {
               />
             </label>
             <div className="field-row">
-              <label className="field">
-                <span>Default reps</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={form.defaultReps}
-                  onChange={(event) =>
-                    setForm({ ...form, defaultReps: event.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Default load</span>
-                <input
-                  value={form.defaultLoadLabel}
-                  maxLength={80}
-                  onChange={(event) =>
-                    setForm({ ...form, defaultLoadLabel: event.target.value })
-                  }
-                />
-              </label>
-            </div>
-            <div className="field-row">
               <button type="submit" className="button-primary" disabled={acting}>
                 {acting ? "Saving…" : form.id ? "Update exercise" : "Create exercise"}
               </button>
@@ -566,7 +593,7 @@ function ExerciseLibrary() {
                       void onDelete();
                     }}
                   >
-                    Confirm delete
+                    Confirm archive
                   </button>
                 ) : (
                   <button
@@ -574,7 +601,7 @@ function ExerciseLibrary() {
                     className="button-secondary"
                     onClick={() => setPendingDelete(true)}
                   >
-                    Delete
+                    Archive
                   </button>
                 )
               ) : null}
@@ -595,8 +622,12 @@ function ExerciseReadOnly({ item }: { item: ExerciseLibraryItem }) {
       <p className="muted">Global exercise. Read-only.</p>
       <dl className="templates-facts">
         <div>
-          <dt>Muscle groups</dt>
-          <dd>{item.muscleGroups.join(", ") || "—"}</dd>
+          <dt>Primary muscles</dt>
+          <dd>{item.primaryMuscles.join(", ") || "—"}</dd>
+        </div>
+        <div>
+          <dt>Secondary muscles</dt>
+          <dd>{item.secondaryMuscles.join(", ") || "—"}</dd>
         </div>
         <div>
           <dt>Equipment</dt>
@@ -605,14 +636,6 @@ function ExerciseReadOnly({ item }: { item: ExerciseLibraryItem }) {
         <div>
           <dt>Difficulty</dt>
           <dd>{item.difficulty ? difficultyLabel(item.difficulty) : "—"}</dd>
-        </div>
-        <div>
-          <dt>Default reps</dt>
-          <dd>{item.defaultReps ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>Default load</dt>
-          <dd>{item.defaultLoadLabel ?? "—"}</dd>
         </div>
         <div>
           <dt>Instructions</dt>
@@ -656,32 +679,60 @@ function FoodLibrary() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!form) return;
-    const calories = optionalInt(form.calories, "Calories", 20000);
-    const proteinGrams = optionalGrams(form.proteinGrams, "Protein");
-    const carbsGrams = optionalGrams(form.carbsGrams, "Carbs");
-    const fatGrams = optionalGrams(form.fatGrams, "Fat");
+    if (form.classification === "" || form.basis === "") {
+      setError("Choose a classification and a nutrition basis.");
+      return;
+    }
+    const energyKcal = optionalDecimal(form.energyKcal, "Energy", 2000);
+    const proteinGrams = optionalDecimal(form.proteinGrams, "Protein", 100);
+    const carbsGrams = optionalDecimal(form.carbsGrams, "Carbs", 100);
+    const fatGrams = optionalDecimal(form.fatGrams, "Fat", 100);
     if (
-      typeof calories === "string" ||
+      typeof energyKcal === "string" ||
       typeof proteinGrams === "string" ||
       typeof carbsGrams === "string" ||
       typeof fatGrams === "string"
     ) {
-      const problem = [calories, proteinGrams, carbsGrams, fatGrams].find(
+      const problem = [energyKcal, proteinGrams, carbsGrams, fatGrams].find(
         (value): value is string => typeof value === "string",
       );
       setError(problem ?? "Check the nutrition numbers.");
       return;
+    }
+    const servings: { label: string; unit: string; conversion: number }[] = [];
+    for (const serving of form.servings) {
+      const conversion = optionalDecimal(serving.conversion, "Serving amount", 5000);
+      if (typeof conversion === "string") {
+        setError(conversion);
+        return;
+      }
+      if (
+        serving.label.trim() === "" ||
+        serving.unit.trim() === "" ||
+        conversion == null ||
+        conversion <= 0
+      ) {
+        setError("Each serving needs a label, a unit, and a positive conversion.");
+        return;
+      }
+      servings.push({
+        label: serving.label.trim(),
+        unit: serving.unit.trim(),
+        conversion,
+      });
     }
     setActing(true);
     setError(null);
     setMessage(null);
     const body = {
       name: form.name.trim(),
-      portionLabel: form.portionLabel.trim(),
-      calories,
+      classification: form.classification,
+      basis: form.basis,
+      energyKcal,
       proteinGrams,
       carbsGrams,
       fatGrams,
+      servings,
       description: nullableText(form.description),
       notes: nullableText(form.notes),
     };
@@ -711,7 +762,7 @@ function FoodLibrary() {
       await apiClient.deleteFoodLibraryItem(form.id);
       setForm(null);
       setPendingDelete(false);
-      setMessage("Food deleted.");
+      setMessage("Food archived. Meal snapshots that already copied it stay unchanged.");
       page.reload();
     } catch (err) {
       setError(errorText(err, "Could not delete this food."));
@@ -726,8 +777,8 @@ function FoodLibrary() {
         <div>
           <h2 id="food-lib-heading">Food library</h2>
           <p className="muted">
-            Global rows are read-only. Foods store a name, portion, calories,
-            protein, carbs, fat, description, and notes.
+            Global rows are read-only. Nutrition is stored per 100 g or per 100 ml.
+            Servings convert to that basis. Blank nutrients stay unknown.
           </p>
         </div>
       </header>
@@ -756,8 +807,8 @@ function FoodLibrary() {
           <thead>
             <tr>
               <th scope="col">Name</th>
-              <th scope="col">Portion</th>
-              <th scope="col">Calories</th>
+              <th scope="col">Basis</th>
+              <th scope="col">Servings</th>
               <th scope="col">
                 <span className="sr-only">Actions</span>
               </th>
@@ -785,8 +836,14 @@ function FoodLibrary() {
                       {ownershipLabel(item.ownership)}
                     </span>
                   </td>
-                  <td>{item.portionLabel}</td>
-                  <td>{item.calories != null ? item.calories : "—"}</td>
+                  <td>
+                    {item.basis === "per_100_g"
+                      ? "per 100 g"
+                      : item.basis === "per_100_ml"
+                        ? "per 100 ml"
+                        : "—"}
+                  </td>
+                  <td>{item.servings.map((serving) => serving.label).join(", ") || "—"}</td>
                   <td>
                     <button
                       type="button"
@@ -846,26 +903,53 @@ function FoodLibrary() {
               />
             </label>
             <label className="field">
-              <span>Portion</span>
-              <input
-                value={form.portionLabel}
-                maxLength={120}
-                onChange={(event) =>
-                  setForm({ ...form, portionLabel: event.target.value })
-                }
+              <span>Classification</span>
+              <select
+                value={form.classification}
                 required
-              />
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    classification: event.target.value as FoodClassification | "",
+                  })
+                }
+              >
+                <option value="">Choose classification</option>
+                {FOOD_CLASSIFICATIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {classificationLabel(value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Nutrition basis</span>
+              <select
+                value={form.basis}
+                required
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    basis: event.target.value as NutritionBasis | "",
+                  })
+                }
+              >
+                <option value="">Choose basis</option>
+                <option value="per_100_g">Per 100 g</option>
+                <option value="per_100_ml">Per 100 ml</option>
+              </select>
             </label>
             <div className="field-row">
               <label className="field">
-                <span>Calories</span>
+                <span>Energy (kcal per basis)</span>
                 <input
                   type="number"
                   min={0}
-                  max={20000}
-                  value={form.calories}
+                  max={2000}
+                  step="0.1"
+                  value={form.energyKcal}
                   onChange={(event) =>
-                    setForm({ ...form, calories: event.target.value })
+                    setForm({ ...form, energyKcal: event.target.value })
                   }
                 />
               </label>
@@ -909,6 +993,87 @@ function FoodLibrary() {
                 />
               </label>
             </div>
+            <fieldset className="templates-options">
+              <legend>Servings</legend>
+              {form.servings.map((serving, index) => (
+                <div className="field-row" key={index}>
+                  <label className="field">
+                    <span>Label</span>
+                    <input
+                      value={serving.label}
+                      maxLength={120}
+                      onChange={(event) => {
+                        const servings = form.servings.slice();
+                        const current = servings[index];
+                        if (!current) return;
+                        servings[index] = { ...current, label: event.target.value };
+                        setForm({ ...form, servings });
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Unit</span>
+                    <input
+                      value={serving.unit}
+                      maxLength={40}
+                      onChange={(event) => {
+                        const servings = form.servings.slice();
+                        const current = servings[index];
+                        if (!current) return;
+                        servings[index] = { ...current, unit: event.target.value };
+                        setForm({ ...form, servings });
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{form.basis === "per_100_ml" ? "Millilitres" : "Grams"}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={serving.conversion}
+                      onChange={(event) => {
+                        const servings = form.servings.slice();
+                        const current = servings[index];
+                        if (!current) return;
+                        servings[index] = {
+                          ...current,
+                          conversion: event.target.value,
+                        };
+                        setForm({ ...form, servings });
+                      }}
+                      required
+                    />
+                  </label>
+                  {form.servings.length > 1 ? (
+                    <button
+                      type="button"
+                      className="button-ghost"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          servings: form.servings.filter((_, itemIndex) => itemIndex !== index),
+                        })
+                      }
+                    >
+                      Remove serving
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={form.servings.length >= 12}
+                onClick={() =>
+                  setForm({ ...form, servings: [...form.servings, emptyServing()] })
+                }
+              >
+                Add serving
+              </button>
+            </fieldset>
             <label className="field">
               <span>Description</span>
               <textarea
@@ -943,7 +1108,7 @@ function FoodLibrary() {
                       void onDelete();
                     }}
                   >
-                    Confirm delete
+                    Confirm archive
                   </button>
                 ) : (
                   <button
@@ -951,7 +1116,7 @@ function FoodLibrary() {
                     className="button-secondary"
                     onClick={() => setPendingDelete(true)}
                   >
-                    Delete
+                    Archive
                   </button>
                 )
               ) : null}
@@ -972,24 +1137,51 @@ function FoodReadOnly({ item }: { item: FoodLibraryItem }) {
       <p className="muted">Global food. Read-only.</p>
       <dl className="templates-facts">
         <div>
-          <dt>Portion</dt>
-          <dd>{item.portionLabel}</dd>
+          <dt>Classification</dt>
+          <dd>
+            {item.classification ? classificationLabel(item.classification) : "—"}
+          </dd>
         </div>
         <div>
-          <dt>Calories</dt>
-          <dd>{item.calories ?? "—"}</dd>
+          <dt>Basis</dt>
+          <dd>
+            {item.basis === "per_100_g"
+              ? "per 100 g"
+              : item.basis === "per_100_ml"
+                ? "per 100 ml"
+                : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt>Energy (kcal)</dt>
+          <dd>{scaledField(item.energyKcalScaled) || "Unknown"}</dd>
         </div>
         <div>
           <dt>Protein (g)</dt>
-          <dd>{item.proteinGrams ?? "—"}</dd>
+          <dd>{scaledField(item.proteinScaled) || "Unknown"}</dd>
         </div>
         <div>
           <dt>Carbs (g)</dt>
-          <dd>{item.carbsGrams ?? "—"}</dd>
+          <dd>{scaledField(item.carbsScaled) || "Unknown"}</dd>
         </div>
         <div>
           <dt>Fat (g)</dt>
-          <dd>{item.fatGrams ?? "—"}</dd>
+          <dd>{scaledField(item.fatScaled) || "Unknown"}</dd>
+        </div>
+        <div>
+          <dt>Servings</dt>
+          <dd>
+            {item.servings
+              .map(
+                (serving) =>
+                  `${serving.label} (${serving.unit}${
+                    serving.conversionScaled == null
+                      ? ", no conversion"
+                      : `, ${scaledField(serving.conversionScaled)}`
+                  })`,
+              )
+              .join("; ") || "—"}
+          </dd>
         </div>
         <div>
           <dt>Description</dt>

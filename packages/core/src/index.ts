@@ -57,6 +57,20 @@ export {
 } from "./template.js";
 
 export {
+  LibraryPrescriptionError,
+  aggregateNutrients,
+  calculateServingNutrients,
+  displayNutrients,
+  foodSnapshotFromLibrary,
+  formatScaledQuantity,
+  librarySourceIds,
+  materializeFoodSnapshot,
+  materializePlanContent,
+  scaleNutrient,
+  type DisplayNutrients,
+} from "./nutrition.js";
+
+export {
   checkinWindowForLocalDate,
   formatLocalDate,
   localDateTimeToUtcIso,

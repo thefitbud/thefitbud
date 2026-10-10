@@ -37,6 +37,7 @@ const MIGRATIONS = [
   "0014_onboarding_form_templates.sql",
   "0011_templates_libraries.sql",
   "0015_iteration_a.sql",
+  "0016_food_exercise_libraries.sql",
 ] as const;
 
 const UNKNOWN_RELATIONSHIP = "00000000-0000-4000-8000-000000000099";

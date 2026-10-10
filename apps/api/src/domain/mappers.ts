@@ -45,6 +45,7 @@ import {
   deriveClientOnboardingStatus,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
+  materializePlanContent,
 } from "@fitbud/core";
 import type {
   checkinReviews,
@@ -78,6 +79,7 @@ import type {
   planTemplates,
   exerciseLibraryItems,
   foodLibraryItems,
+  foodLibraryServings,
 } from "../db/schema";
 
 type InvitationRow = typeof clientInvitations.$inferSelect;
@@ -96,6 +98,7 @@ type PlanVersionRow = typeof planVersions.$inferSelect;
 type PlanTemplateRow = typeof planTemplates.$inferSelect;
 type ExerciseLibraryItemRow = typeof exerciseLibraryItems.$inferSelect;
 type FoodLibraryItemRow = typeof foodLibraryItems.$inferSelect;
+type FoodLibraryServingRow = typeof foodLibraryServings.$inferSelect;
 type WorkoutAssignmentRow = typeof workoutAssignments.$inferSelect;
 type WorkoutExecutionRow = typeof workoutExecutions.$inferSelect;
 type ExerciseExecutionRow = typeof exerciseExecutions.$inferSelect;
@@ -305,7 +308,9 @@ function withMealItems(value: unknown): unknown {
 }
 
 export function parsePlanContentJson(contentJson: string): PlanContent {
-  return planContentSchema.parse(withMealItems(JSON.parse(contentJson)));
+  return materializePlanContent(
+    planContentSchema.parse(withMealItems(JSON.parse(contentJson))),
+  );
 }
 
 export function mapPlanVersion(row: PlanVersionRow): PlanVersion {
@@ -398,30 +403,57 @@ export function mapExerciseLibraryItem(
     trainerUserId: row.trainerUserId,
     name: row.name,
     instructions: row.instructions,
-    defaultLoadLabel: row.defaultLoadLabel,
-    defaultReps: row.defaultReps,
-    muscleGroups: parseLabelList(row.muscleGroupsJson),
+    primaryMuscles: parseLabelList(row.primaryMusclesJson),
+    secondaryMuscles: parseLabelList(row.secondaryMusclesJson),
     equipment: parseLabelList(row.equipmentJson),
     difficulty,
+    status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-export function mapFoodLibraryItem(row: FoodLibraryItemRow): FoodLibraryItem {
+const FOOD_CLASSIFICATIONS = new Set([
+  "raw_ingredient",
+  "generic_food",
+  "prepared_food",
+  "branded_product",
+]);
+const NUTRITION_BASES = new Set(["per_100_g", "per_100_ml"]);
+
+export function mapFoodLibraryItem(
+  row: FoodLibraryItemRow,
+  servings: FoodLibraryServingRow[],
+): FoodLibraryItem {
+  const classification =
+    row.classification && FOOD_CLASSIFICATIONS.has(row.classification)
+      ? row.classification
+      : null;
+  const basis =
+    row.nutritionBasis && NUTRITION_BASES.has(row.nutritionBasis)
+      ? row.nutritionBasis
+      : null;
   return {
     id: row.id,
     ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     name: row.name,
     cuisineRegion: row.cuisineRegion,
-    portionLabel: row.portionLabel,
+    classification,
+    basis,
+    energyKcalScaled: row.energyKcalScaled,
+    proteinScaled: row.proteinScaled,
+    carbsScaled: row.carbsScaled,
+    fatScaled: row.fatScaled,
+    servings: servings.map((serving) => ({
+      id: serving.id,
+      label: serving.label,
+      unit: serving.unit,
+      conversionScaled: serving.conversionScaled,
+    })),
     notes: row.notes,
     description: row.description,
-    calories: row.calories,
-    proteinGrams: row.proteinGrams,
-    carbsGrams: row.carbsGrams,
-    fatGrams: row.fatGrams,
+    status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
