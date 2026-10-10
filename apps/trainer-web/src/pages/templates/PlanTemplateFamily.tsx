@@ -27,12 +27,14 @@ type Draft = {
   id: string | null;
   title: string;
   recordVersion: number | null;
+  ownership: "global" | "trainer" | null;
   content: PlanTemplate["content"];
 };
 
 export function summaryOf(template: PlanTemplate): PlanTemplateSummary {
   return {
     id: template.id,
+    ownership: template.ownership,
     trainerUserId: template.trainerUserId,
     title: template.title,
     templateType: template.templateType,
@@ -105,12 +107,14 @@ export function PlanTemplateFamily({
   )
     ? applyRelationshipId
     : (clients[0]?.relationshipId ?? "");
+  const readOnly = draft?.ownership === "global";
 
   function startCreate() {
     setDraft({
       id: null,
       title: "",
       recordVersion: null,
+      ownership: null,
       content: blankContentForTemplateType(templateType),
     });
     setConflict(false);
@@ -129,6 +133,7 @@ export function PlanTemplateFamily({
         id: template.id,
         title: template.title,
         recordVersion: template.recordVersion,
+        ownership: template.ownership,
         content: clonePlanContent(template.content),
       });
     } catch (err) {
@@ -140,7 +145,7 @@ export function PlanTemplateFamily({
 
   async function onSave(event: FormEvent) {
     event.preventDefault();
-    if (!draft) return;
+    if (!draft || draft.ownership === "global") return;
     const issue = planContentError(draft.content);
     if (issue) {
       setError(issue);
@@ -175,6 +180,7 @@ export function PlanTemplateFamily({
         id: saved.id,
         title: saved.title,
         recordVersion: saved.recordVersion,
+        ownership: saved.ownership,
         content: clonePlanContent(saved.content),
       });
       onSaved(saved);
@@ -199,6 +205,7 @@ export function PlanTemplateFamily({
         id: template.id,
         title: template.title,
         recordVersion: template.recordVersion,
+        ownership: template.ownership,
         content: clonePlanContent(template.content),
       });
       onSaved(template);
@@ -206,6 +213,35 @@ export function PlanTemplateFamily({
       setMessage("Reloaded the latest saved template.");
     } catch (err) {
       setError(errorText(err, "Could not reload this template."));
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function onFork() {
+    if (!draft?.id || draft.ownership !== "global") return;
+    setActing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const forked = await apiClient.forkPlanTemplate(
+        draft.id,
+        { title: draft.title.trim() || undefined },
+        createIdempotencyKey(),
+      );
+      setDraft({
+        id: forked.id,
+        title: forked.title,
+        recordVersion: forked.recordVersion,
+        ownership: forked.ownership,
+        content: clonePlanContent(forked.content),
+      });
+      onSaved(forked);
+      setMessage(
+        "Forked into your template. The global base is unchanged, and applying either copy does not link them.",
+      );
+    } catch (err) {
+      setError(errorText(err, "Could not fork this template."));
     } finally {
       setActing(false);
     }
@@ -257,10 +293,17 @@ export function PlanTemplateFamily({
         {message ? <p className="form-success">{message}</p> : null}
         <form className="templates-panel" onSubmit={(event) => void onSave(event)}>
           <div className="templates-panel-header">
-            <h2>{draft.id ? `Edit ${label.toLowerCase()} template` : `New ${label.toLowerCase()} template`}</h2>
+            <h2>
+              {readOnly
+                ? `Global ${label.toLowerCase()} base`
+                : draft.id
+                  ? `Edit ${label.toLowerCase()} template`
+                  : `New ${label.toLowerCase()} template`}
+            </h2>
             <p className="muted">
-              Saving sends the record version loaded with this template so a newer
-              edit is not overwritten.
+              {readOnly
+                ? "This base is read-only. Apply it as-is, or fork it into a template you can edit."
+                : "Saving sends the record version loaded with this template so a newer edit is not overwritten."}
             </p>
           </div>
           <label className="field">
@@ -268,6 +311,7 @@ export function PlanTemplateFamily({
             <input
               value={draft.title}
               maxLength={160}
+              disabled={readOnly}
               onChange={(event) => {
                 const title = event.target.value;
                 setDraft((current) => (current ? { ...current, title } : current));
@@ -275,13 +319,26 @@ export function PlanTemplateFamily({
               required
             />
           </label>
-          <button
-            type="submit"
-            className="button-primary"
-            disabled={acting || Boolean(contentIssue) || !typeMatches || !draft.title.trim()}
-          >
-            {acting ? "Saving…" : "Save template"}
-          </button>
+          {readOnly ? (
+            <button
+              type="button"
+              className="button-primary"
+              disabled={acting}
+              onClick={() => {
+                void onFork();
+              }}
+            >
+              {acting ? "Forking…" : "Fork into my template"}
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="button-primary"
+              disabled={acting || Boolean(contentIssue) || !typeMatches || !draft.title.trim()}
+            >
+              {acting ? "Saving…" : "Save template"}
+            </button>
+          )}
           {contentIssue ? <p className="form-error">{contentIssue}</p> : null}
           {!typeMatches ? <p className="form-error">{mismatchMessage(templateType)}</p> : null}
           {conflict ? (
@@ -301,9 +358,12 @@ export function PlanTemplateFamily({
           key={draft.id ?? `new-${templateType}`}
           content={draft.content}
           sections={sections}
-          allowDuplicate
-          onChange={(content) =>
-            setDraft((current) => (current ? { ...current, content } : current))
+          allowDuplicate={!readOnly}
+          onChange={
+            readOnly
+              ? undefined
+              : (content) =>
+                  setDraft((current) => (current ? { ...current, content } : current))
           }
           renderWorkoutLibrary={
             sections !== "nutrition"
@@ -454,7 +514,11 @@ export function PlanTemplateFamily({
                   </time>
                 </header>
                 <h3>{item.title}</h3>
-                <p className="muted">Copied into a client draft when applied. Not linked live.</p>
+                <p className="muted">
+                  {item.ownership === "global"
+                    ? "Global base. Apply it as-is, or fork it before editing."
+                    : "Your template. Copied into a client draft when applied. Not linked live."}
+                </p>
                 <div className="templates-item-actions">
                   <button
                     type="button"
@@ -463,7 +527,7 @@ export function PlanTemplateFamily({
                       void openTemplate(item.id);
                     }}
                   >
-                    Edit
+                    {item.ownership === "global" ? "View" : "Edit"}
                   </button>
                 </div>
               </article>

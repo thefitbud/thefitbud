@@ -576,6 +576,7 @@ planRoutes.post(
       recordVersion: 1,
       contentJson: JSON.stringify(prepared.content),
       creationSource: "blank",
+      sourceTemplateId: null,
       publishedAt: null,
       effectiveFrom: null,
       effectiveTo: null,
@@ -712,7 +713,11 @@ planRoutes.post(
       .where(eq(planTemplates.id, parsed.data.templateId))
       .limit(1);
     const template = templates[0];
-    if (!template || template.trainerUserId !== actor.userId) {
+    if (
+      !template ||
+      (template.ownership !== "global" &&
+        template.trainerUserId !== actor.userId)
+    ) {
       return fail(c, 404, "TEMPLATE_NOT_FOUND", "Template not found.");
     }
 
@@ -753,6 +758,7 @@ planRoutes.post(
         recordVersion: 1,
         contentJson: JSON.stringify(content),
         creationSource: "template",
+        sourceTemplateId: template.id,
         publishedAt: null,
         effectiveFrom: null,
         effectiveTo: null,
@@ -791,6 +797,7 @@ planRoutes.post(
           .set({
             contentJson: JSON.stringify(content),
             creationSource: "template",
+            sourceTemplateId: template.id,
             recordVersion: draft.recordVersion + 1,
             updatedAt: now,
           })
@@ -819,6 +826,7 @@ planRoutes.post(
           recordVersion: 1,
           contentJson: JSON.stringify(content),
           creationSource: "template",
+          sourceTemplateId: template.id,
           publishedAt: null,
           effectiveFrom: null,
           effectiveTo: null,
@@ -1483,6 +1491,7 @@ planRoutes.post(
       recordVersion: 1,
       contentJson: source.contentJson,
       creationSource: parsed.data.asAdjustment ? "adjustment" : "previous_version",
+      sourceTemplateId: source.sourceTemplateId,
       publishedAt: null,
       effectiveFrom: null,
       effectiveTo: null,

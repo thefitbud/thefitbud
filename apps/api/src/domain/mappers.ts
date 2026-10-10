@@ -322,6 +322,7 @@ export function mapPlanVersion(row: PlanVersionRow): PlanVersion {
     recordVersion: row.recordVersion,
     content: parsePlanContentJson(row.contentJson),
     creationSource: row.creationSource,
+    sourceTemplateId: row.sourceTemplateId,
     publishedAt: row.publishedAt,
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo,
@@ -338,6 +339,7 @@ export function mapPlanVersionSummary(row: PlanVersionRow): PlanVersionSummary {
     status: row.status,
     recordVersion: row.recordVersion,
     creationSource: row.creationSource,
+    sourceTemplateId: row.sourceTemplateId,
     publishedAt: row.publishedAt,
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo,
@@ -349,6 +351,7 @@ export function mapPlanVersionSummary(row: PlanVersionRow): PlanVersionSummary {
 export function mapPlanTemplate(row: PlanTemplateRow): PlanTemplate {
   return {
     id: row.id,
+    ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     title: row.title,
     templateType: row.templateType,
@@ -364,6 +367,7 @@ export function mapPlanTemplateSummary(
 ): PlanTemplateSummary {
   return {
     id: row.id,
+    ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     title: row.title,
     templateType: row.templateType,

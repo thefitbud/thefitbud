@@ -38,6 +38,7 @@ const iterationAMigration = join(drizzleDir, "0015_iteration_a.sql");
 const foodExerciseLibrariesMigration = join(
   drizzleDir,
   "0016_food_exercise_libraries.sql",
+  "0017_plan_template_ownership.sql",
 );
 const invitationWhatsappMigration = join(
   drizzleDir,

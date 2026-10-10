@@ -173,6 +173,8 @@ export const planVersionSchema = z.object({
   recordVersion: z.number().int().nonnegative(),
   content: planContentSchema,
   creationSource: planCreationSourceSchema,
+  /** Template the version was copied from. Provenance only; not a live join. */
+  sourceTemplateId: uuidSchema.nullable(),
   publishedAt: isoDateTimeSchema.nullable(),
   effectiveFrom: isoDateTimeSchema.nullable(),
   effectiveTo: isoDateTimeSchema.nullable(),

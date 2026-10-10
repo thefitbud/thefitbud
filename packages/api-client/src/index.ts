@@ -40,6 +40,7 @@ import {
   createOnboardingFormTemplateRequestSchema,
   createOnboardingFormTemplateVersionRequestSchema,
   forkOnboardingFormTemplateRequestSchema,
+  forkPlanTemplateRequestSchema,
   onboardingFormResponseSchema,
   onboardingFormTemplateDetailSchema,
   onboardingFormTemplateListResponseSchema,
@@ -186,6 +187,7 @@ import {
   type CreateOnboardingFormTemplateRequest,
   type CreateOnboardingFormTemplateVersionRequest,
   type ForkOnboardingFormTemplateRequest,
+  type ForkPlanTemplateRequest,
   type OnboardingStatus,
   type OnboardingFormResponse,
   type OnboardingFormTemplateDetail,
@@ -828,6 +830,20 @@ export class FitBudApiClient {
       `/templates/${templateId}`,
       planTemplateSchema,
       { auth: true, body: parsed },
+    );
+  }
+
+  async forkPlanTemplate(
+    templateId: string,
+    body: ForkPlanTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<PlanTemplate> {
+    const parsed = forkPlanTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/templates/${templateId}/fork`,
+      planTemplateSchema,
+      { auth: true, body: parsed, idempotencyKey },
     );
   }
 

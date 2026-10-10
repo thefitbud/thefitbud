@@ -24,9 +24,10 @@ export type PlanTemplateType = z.infer<typeof planTemplateTypeSchema>;
 export const libraryOwnershipSchema = z.enum(["global", "trainer"]);
 export type LibraryOwnership = z.infer<typeof libraryOwnershipSchema>;
 
-export const planTemplateSchema = z.object({
+const planTemplateObjectSchema = z.object({
   id: uuidSchema,
-  trainerUserId: uuidSchema,
+  ownership: libraryOwnershipSchema,
+  trainerUserId: uuidSchema.nullable(),
   title: z.string().min(1).max(160),
   templateType: planTemplateTypeSchema,
   content: planContentSchema,
@@ -34,11 +35,30 @@ export const planTemplateSchema = z.object({
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
+
+function refinePlanTemplateOwnership(
+  value: { ownership: "global" | "trainer"; trainerUserId: string | null },
+  ctx: z.RefinementCtx,
+) {
+  const trainerMissing = value.trainerUserId == null;
+  if (value.ownership === "global" ? !trainerMissing : trainerMissing) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "A global template has no trainer. A trainer template requires a trainer.",
+      path: ["trainerUserId"],
+    });
+  }
+}
+
+export const planTemplateSchema = planTemplateObjectSchema.superRefine(
+  refinePlanTemplateOwnership,
+);
 export type PlanTemplate = z.infer<typeof planTemplateSchema>;
 
-export const planTemplateSummarySchema = planTemplateSchema.omit({
-  content: true,
-});
+export const planTemplateSummarySchema = planTemplateObjectSchema
+  .omit({ content: true })
+  .superRefine(refinePlanTemplateOwnership);
 export type PlanTemplateSummary = z.infer<typeof planTemplateSummarySchema>;
 
 export const planTemplateListResponseSchema = cursorPageSchema(
@@ -73,6 +93,14 @@ export const updatePlanTemplateRequestSchema = z.object({
   templateType: planTemplateTypeSchema.optional(),
   content: planContentSchema,
 });
+
+/** Explicit copy of a global base into a new trainer-owned template. */
+export const forkPlanTemplateRequestSchema = z.object({
+  title: z.string().trim().min(1).max(160).optional(),
+});
+export type ForkPlanTemplateRequest = z.infer<
+  typeof forkPlanTemplateRequestSchema
+>;
 export type UpdatePlanTemplateRequest = z.infer<
   typeof updatePlanTemplateRequestSchema
 >;
