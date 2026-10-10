@@ -6,6 +6,7 @@ import type {
   OnboardingFormResponse,
   OnboardingFormVersion,
 } from "@fitbud/contracts";
+import { formatOnboardingAnswer } from "@fitbud/core";
 import { StatusBadge } from "../components/StatusBadge";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
@@ -67,7 +68,7 @@ export function OnboardingReviewPage() {
     return definition.fields.map((field) => ({
       id: field.id,
       label: field.label,
-      value: intake.answers[field.id]?.trim() || "—",
+      value: formatOnboardingAnswer(field, intake.answers[field.id]).trim() || "—",
     }));
   }, [definition, intake]);
 

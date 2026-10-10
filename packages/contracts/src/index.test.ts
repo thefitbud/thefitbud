@@ -3,6 +3,7 @@ import {
   coachingConfigurationSchema,
   createInvitationRequestSchema,
   healthResponseSchema,
+  onboardingAnswersSchema,
   onboardingFormDefinitionSchema,
   onboardingFormVersionSchema,
   meResponseSchema,
@@ -119,6 +120,83 @@ describe("contracts", () => {
         ],
       }),
     ).toThrow();
+    expect(
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          { id: "goal", type: "short_text", label: "Goal", required: true, maxLength: 80 },
+          { id: "history", type: "long_text", label: "History", required: false },
+          {
+            id: "focus",
+            type: "single_choice",
+            label: "Focus",
+            required: true,
+            options: [
+              { id: "strength", label: "Strength" },
+              { id: "endurance", label: "Endurance" },
+            ],
+          },
+          {
+            id: "equipment",
+            type: "multiple_choice",
+            label: "Equipment",
+            required: false,
+            options: [
+              { id: "dumbbells", label: "Dumbbells" },
+              { id: "bands", label: "Bands" },
+            ],
+          },
+          { id: "sessions", type: "number", label: "Sessions", required: true },
+          { id: "injuries", type: "yes_no", label: "Injuries", required: true },
+        ],
+      }).fields.map((field) => field.type),
+    ).toEqual([
+      "short_text",
+      "long_text",
+      "single_choice",
+      "multiple_choice",
+      "number",
+      "yes_no",
+    ]);
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          {
+            id: "focus",
+            type: "single_choice",
+            label: "Focus",
+            required: true,
+            options: ["Strength"],
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          {
+            id: "focus",
+            type: "single_choice",
+            label: "Focus",
+            required: true,
+            options: [
+              { id: "strength", label: "Strength" },
+              { id: "strength", label: "Power" },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(
+      onboardingAnswersSchema.parse({
+        goal: "Get stronger",
+        focus: "strength",
+        equipment: ["dumbbells", "bands"],
+        sessions: 4,
+        injuries: false,
+      }),
+    ).toMatchObject({ sessions: 4, injuries: false, equipment: ["dumbbells", "bands"] });
+    expect(() => onboardingAnswersSchema.parse({ goal: { text: "no" } })).toThrow();
+    expect(() => onboardingAnswersSchema.parse({ sessions: Number.NaN })).toThrow();
   });
 
   it("validates coaching configuration draft request", () => {

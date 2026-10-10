@@ -11,6 +11,8 @@ export {
   deriveClientOnboardingStatus,
   isPastOnboardingReview,
   canTrainerReadOnboardingTemplate,
+  formatOnboardingAnswer,
+  isBlankOnboardingAnswer,
   latestOnboardingFormVersion,
   missingRequiredOnboardingFields,
   onboardingAnswerErrors,
@@ -18,6 +20,7 @@ export {
   resolveOnboardingForm,
   type ClientOnboardingFacts,
   type OnboardingAnswerField,
+  type OnboardingAnswerValue,
   type OnboardingFormCandidate,
   type OnboardingTemplateVersionCandidate,
 } from "./onboarding.js";

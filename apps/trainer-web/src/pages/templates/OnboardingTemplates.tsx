@@ -1,124 +1,27 @@
 import { useState, type FormEvent } from "react";
 import type {
+  OnboardingAnswers,
   OnboardingFieldDefinition,
-  OnboardingFieldType,
   OnboardingFormTemplateDetail,
   OnboardingFormTemplateSummary,
 } from "@fitbud/contracts";
-import { parseOnboardingFormFields } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import { errorText, formatUpdated, matchesName } from "./shared";
 import { useCursorPage } from "./useCursorPage";
-
-const FIELD_TYPES: OnboardingFieldType[] = ["text", "textarea", "select"];
-
-type FieldDraft = {
-  id: string;
-  type: OnboardingFieldType;
-  label: string;
-  required: boolean;
-  helpText: string;
-  maxLength: string;
-  options: string[];
-};
-
-function blankField(): FieldDraft {
-  return {
-    id: crypto.randomUUID(),
-    type: "text",
-    label: "",
-    required: false,
-    helpText: "",
-    maxLength: "",
-    options: [""],
-  };
-}
-
-function draftsFromFields(fields: OnboardingFieldDefinition[]): FieldDraft[] {
-  return fields.map((field) => ({
-    id: field.id,
-    type: field.type,
-    label: field.label,
-    required: field.required,
-    helpText: field.helpText ?? "",
-    maxLength:
-      field.type !== "select" && field.maxLength != null
-        ? String(field.maxLength)
-        : "",
-    options: field.type === "select" ? [...field.options] : [""],
-  }));
-}
-
-function buildFields(
-  drafts: FieldDraft[],
-): { ok: true; fields: OnboardingFieldDefinition[] } | { ok: false; error: string } {
-  if (drafts.length === 0) {
-    return { ok: false, error: "Add at least one field." };
-  }
-  const fields: OnboardingFieldDefinition[] = [];
-  for (const draft of drafts) {
-    const label = draft.label.trim();
-    if (!label) return { ok: false, error: "Each field needs a label." };
-    const helpText = draft.helpText.trim();
-    const base = {
-      id: draft.id,
-      label,
-      required: draft.required,
-      ...(helpText ? { helpText } : {}),
-    };
-    if (draft.type === "select") {
-      const options = draft.options.map((option) => option.trim()).filter(Boolean);
-      if (options.length === 0) {
-        return { ok: false, error: `“${label}” needs at least one option.` };
-      }
-      fields.push({ ...base, type: "select", options });
-      continue;
-    }
-    const rawMax = draft.maxLength.trim();
-    if (rawMax === "") {
-      fields.push({ ...base, type: draft.type });
-      continue;
-    }
-    const maxLength = Number(rawMax);
-    if (!Number.isInteger(maxLength) || maxLength < 1 || maxLength > 10000) {
-      return {
-        ok: false,
-        error: `Max length for “${label}” must be a whole number from 1 to 10000.`,
-      };
-    }
-    fields.push({ ...base, type: draft.type, maxLength });
-  }
-  const parsed = parseOnboardingFormFields(fields);
-  if (!parsed.ok) {
-    return { ok: false, error: "This form definition is not valid." };
-  }
-  return { ok: true, fields: parsed.fields };
-}
-
-function canonicalFields(fields: OnboardingFieldDefinition[]): string {
-  return JSON.stringify(
-    fields.map((field) =>
-      field.type === "select"
-        ? {
-            id: field.id,
-            type: field.type,
-            label: field.label,
-            required: field.required,
-            helpText: field.helpText ?? null,
-            options: field.options,
-          }
-        : {
-            id: field.id,
-            type: field.type,
-            label: field.label,
-            required: field.required,
-            helpText: field.helpText ?? null,
-            maxLength: field.maxLength ?? null,
-          },
-    ),
-  );
-}
+import {
+  BUILDER_FIELD_TYPES,
+  blankField,
+  buildFields,
+  draftsFromFields,
+  duplicateFieldDraft,
+  fieldTypeLabel,
+  fieldsMatchLatest,
+  isChoiceType,
+  isTextType,
+  withFieldType,
+  type FieldDraft,
+} from "./onboardingBuilder";
 
 function sortedVersions(detail: OnboardingFormTemplateDetail) {
   return [...detail.versions].sort((left, right) => left.version - right.version);
@@ -140,19 +43,169 @@ function summaryFromDetail(
   };
 }
 
-function fieldTypeLabel(type: OnboardingFieldType): string {
-  switch (type) {
-    case "text":
-      return "Text";
-    case "textarea":
-      return "Text area";
-    case "select":
-      return "Select";
-    default: {
-      const _exhaustive: never = type;
-      return _exhaustive;
-    }
+function optionSummary(field: OnboardingFieldDefinition): string {
+  if (field.type === "select") return ` · ${field.options.join(", ")}`;
+  if (field.type === "single_choice" || field.type === "multiple_choice") {
+    return ` · ${field.options.map((option) => option.label).join(", ")}`;
   }
+  if (
+    field.type === "text" ||
+    field.type === "textarea" ||
+    field.type === "short_text" ||
+    field.type === "long_text"
+  ) {
+    return field.maxLength != null ? ` · max ${field.maxLength}` : "";
+  }
+  return "";
+}
+
+function choiceOptions(field: OnboardingFieldDefinition): Array<{ id: string; label: string }> {
+  if (field.type === "select") {
+    return field.options.map((option) => ({ id: option, label: option }));
+  }
+  if (field.type === "single_choice" || field.type === "multiple_choice") {
+    return field.options;
+  }
+  return [];
+}
+
+function TraineeFormPreview({ fields }: { fields: OnboardingFieldDefinition[] }) {
+  const [answers, setAnswers] = useState<OnboardingAnswers>({});
+
+  function setAnswer(fieldId: string, value: OnboardingAnswers[string] | undefined) {
+    setAnswers((current) => {
+      const next = { ...current };
+      if (value === undefined) delete next[fieldId];
+      else next[fieldId] = value;
+      return next;
+    });
+  }
+
+  return (
+    <div className="templates-preview" aria-label="Trainee form preview">
+      <h3>Trainee preview</h3>
+      <p className="muted">
+        This is the form a trainee would fill in. Answers here are not saved, and this
+        form does not branch or score.
+      </p>
+      {fields.map((field) => {
+        const label = `${field.label}${field.required ? " *" : ""}`;
+        if (
+          field.type === "text" ||
+          field.type === "textarea" ||
+          field.type === "short_text" ||
+          field.type === "long_text"
+        ) {
+          const stored = answers[field.id];
+          const value = typeof stored === "string" ? stored : "";
+          const multiline = field.type === "textarea" || field.type === "long_text";
+          return (
+            <label key={field.id} className="field">
+              <span>{label}</span>
+              {multiline ? (
+                <textarea
+                  value={value}
+                  maxLength={field.maxLength}
+                  rows={4}
+                  onChange={(event) => setAnswer(field.id, event.target.value)}
+                />
+              ) : (
+                <input
+                  value={value}
+                  maxLength={field.maxLength}
+                  onChange={(event) => setAnswer(field.id, event.target.value)}
+                />
+              )}
+              {field.helpText ? <span className="muted">{field.helpText}</span> : null}
+            </label>
+          );
+        }
+        if (field.type === "number") {
+          const value = answers[field.id];
+          return (
+            <label key={field.id} className="field">
+              <span>{label}</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={typeof value === "number" ? String(value) : ""}
+                onChange={(event) => {
+                  const raw = event.target.value.trim();
+                  if (raw === "") {
+                    setAnswer(field.id, undefined);
+                    return;
+                  }
+                  const parsed = Number(raw);
+                  setAnswer(field.id, Number.isFinite(parsed) ? parsed : undefined);
+                }}
+              />
+              {field.helpText ? <span className="muted">{field.helpText}</span> : null}
+            </label>
+          );
+        }
+        if (field.type === "yes_no") {
+          const value = answers[field.id];
+          return (
+            <fieldset key={field.id} className="templates-options">
+              <legend>{label}</legend>
+              {field.helpText ? <p className="muted">{field.helpText}</p> : null}
+              {([
+                ["Yes", true],
+                ["No", false],
+              ] as const).map(([caption, next]) => (
+                <label key={caption} className="templates-check">
+                  <input
+                    type="radio"
+                    name={`preview-${field.id}`}
+                    checked={value === next}
+                    onChange={() => setAnswer(field.id, next)}
+                  />
+                  <span>{caption}</span>
+                </label>
+              ))}
+            </fieldset>
+          );
+        }
+        const options = choiceOptions(field);
+        const multiple = field.type === "multiple_choice";
+        const selected = answers[field.id];
+        return (
+          <fieldset key={field.id} className="templates-options">
+            <legend>{label}</legend>
+            {field.helpText ? <p className="muted">{field.helpText}</p> : null}
+            {options.map((option) => {
+              const checked = multiple
+                ? Array.isArray(selected) && selected.includes(option.id)
+                : selected === option.id;
+              return (
+                <label key={option.id} className="templates-check">
+                  <input
+                    type={multiple ? "checkbox" : "radio"}
+                    name={`preview-${field.id}`}
+                    checked={checked}
+                    onChange={() => {
+                      if (!multiple) {
+                        setAnswer(field.id, option.id);
+                        return;
+                      }
+                      const current = Array.isArray(selected) ? selected : [];
+                      setAnswer(
+                        field.id,
+                        current.includes(option.id)
+                          ? current.filter((id) => id !== option.id)
+                          : [...current, option.id],
+                      );
+                    }}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              );
+            })}
+          </fieldset>
+        );
+      })}
+    </div>
+  );
 }
 
 function FieldEditor({
@@ -202,6 +255,17 @@ function FieldEditor({
               <button
                 type="button"
                 className="button-ghost"
+                onClick={() => {
+                  const next = drafts.slice();
+                  next.splice(index + 1, 0, duplicateFieldDraft(field));
+                  onChange(next);
+                }}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                className="button-ghost"
                 disabled={drafts.length === 1}
                 onClick={() => onChange(drafts.filter((item) => item.id !== field.id))}
               >
@@ -222,13 +286,19 @@ function FieldEditor({
             <span>Type</span>
             <select
               value={field.type}
-              onChange={(event) =>
-                update(field.id, {
-                  type: event.target.value as OnboardingFieldType,
-                })
-              }
+              onChange={(event) => {
+                const type = BUILDER_FIELD_TYPES.find(
+                  (item) => item === event.target.value,
+                );
+                if (!type) return;
+                onChange(
+                  drafts.map((item) =>
+                    item.id === field.id ? withFieldType(item, type) : item,
+                  ),
+                );
+              }}
             >
-              {FIELD_TYPES.map((type) => (
+              {BUILDER_FIELD_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {fieldTypeLabel(type)}
                 </option>
@@ -251,21 +321,25 @@ function FieldEditor({
               onChange={(event) => update(field.id, { helpText: event.target.value })}
             />
           </label>
-          {field.type === "select" ? (
+          {isChoiceType(field.type) ? (
             <fieldset className="templates-options">
               <legend>Options</legend>
-              {field.options.map((option, optionIndex) => (
-                <div key={`${field.id}:${optionIndex}`} className="templates-option-row">
+              {field.options.map((option) => (
+                <div key={option.id} className="templates-option-row">
                   <label className="field">
-                    <span className="sr-only">Option {optionIndex + 1}</span>
+                    <span className="sr-only">Option label</span>
                     <input
-                      value={option}
+                      value={option.label}
                       maxLength={200}
-                      onChange={(event) => {
-                        const options = field.options.slice();
-                        options[optionIndex] = event.target.value;
-                        update(field.id, { options });
-                      }}
+                      onChange={(event) =>
+                        update(field.id, {
+                          options: field.options.map((item) =>
+                            item.id === option.id
+                              ? { ...item, label: event.target.value }
+                              : item,
+                          ),
+                        })
+                      }
                     />
                   </label>
                   <button
@@ -274,9 +348,7 @@ function FieldEditor({
                     disabled={field.options.length === 1}
                     onClick={() =>
                       update(field.id, {
-                        options: field.options.filter(
-                          (_, current) => current !== optionIndex,
-                        ),
+                        options: field.options.filter((item) => item.id !== option.id),
                       })
                     }
                   >
@@ -288,12 +360,19 @@ function FieldEditor({
                 type="button"
                 className="button-secondary"
                 disabled={field.options.length >= 50}
-                onClick={() => update(field.id, { options: [...field.options, ""] })}
+                onClick={() =>
+                  update(field.id, {
+                    options: [
+                      ...field.options,
+                      { id: crypto.randomUUID(), label: "" },
+                    ],
+                  })
+                }
               >
                 Add option
               </button>
             </fieldset>
-          ) : (
+          ) : isTextType(field.type) ? (
             <label className="field">
               <span>Max length</span>
               <input
@@ -304,7 +383,7 @@ function FieldEditor({
                 onChange={(event) => update(field.id, { maxLength: event.target.value })}
               />
             </label>
-          )}
+          ) : null}
         </article>
       ))}
       <button
@@ -339,11 +418,7 @@ function VersionList({ detail }: { detail: OnboardingFormTemplateDetail }) {
                   {" "}
                   · {fieldTypeLabel(field.type)} ·{" "}
                   {field.required ? "Required" : "Optional"}
-                  {field.type === "select"
-                    ? ` · ${field.options.join(", ")}`
-                    : field.maxLength != null
-                      ? ` · max ${field.maxLength}`
-                      : ""}
+                  {optionSummary(field)}
                 </span>
                 {field.helpText ? <p className="muted">{field.helpText}</p> : null}
               </li>
@@ -368,6 +443,7 @@ export function OnboardingTemplates() {
   const [fields, setFields] = useState<FieldDraft[]>([blankField()]);
   const [opening, setOpening] = useState(false);
   const [acting, setActing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -378,10 +454,7 @@ export function OnboardingTemplates() {
 
   const visible = page.items.filter((item) => matchesName(item.name, query));
   const built = buildFields(fields);
-  const unchanged =
-    built.ok &&
-    latestFields != null &&
-    canonicalFields(built.fields) === canonicalFields(latestFields);
+  const unchanged = fieldsMatchLatest(fields, latestFields);
 
   function applyDetail(next: OnboardingFormTemplateDetail) {
     setDetail(next);
@@ -618,7 +691,8 @@ export function OnboardingTemplates() {
             <h2>New trainer template</h2>
             <p className="muted">
               This creates a trainer-owned template and its first immutable version.
-              Field types are text, text area, and select.
+              Questions can be short text, long text, single choice, multiple choice,
+              number, or yes/no. Saving does not add branching or scoring.
             </p>
           </div>
           <label className="field">
@@ -639,6 +713,22 @@ export function OnboardingTemplates() {
             />
           </label>
           <FieldEditor drafts={fields} onChange={setFields} />
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => setShowPreview((current) => !current)}
+          >
+            {showPreview ? "Hide trainee preview" : "Preview trainee form"}
+          </button>
+          {showPreview ? (
+            built.ok ? (
+              <TraineeFormPreview fields={built.fields} />
+            ) : (
+              <p className="form-error" role="alert">
+                {built.error}
+              </p>
+            )
+          ) : null}
           <button type="submit" className="button-primary" disabled={acting}>
             {acting ? "Saving…" : "Create template"}
           </button>
@@ -657,6 +747,22 @@ export function OnboardingTemplates() {
           </div>
           {detail.description ? <p>{detail.description}</p> : null}
           <VersionList detail={detail} />
+          {detail.ownership === "global" ? (
+            <>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setShowPreview((current) => !current)}
+              >
+                {showPreview ? "Hide trainee preview" : "Preview trainee form"}
+              </button>
+              {showPreview ? (
+                <TraineeFormPreview
+                  fields={sortedVersions(detail).at(-1)?.fields ?? []}
+                />
+              ) : null}
+            </>
+          ) : null}
           {detail.ownership === "global" ? (
             <form className="templates-form" onSubmit={(event) => void onFork(event)}>
               <label className="field">
@@ -680,6 +786,22 @@ export function OnboardingTemplates() {
                 older versions or invitations that already pinned one.
               </p>
               <FieldEditor drafts={fields} onChange={setFields} />
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setShowPreview((current) => !current)}
+              >
+                {showPreview ? "Hide trainee preview" : "Preview trainee form"}
+              </button>
+              {showPreview ? (
+                built.ok ? (
+                  <TraineeFormPreview fields={built.fields} />
+                ) : (
+                  <p className="form-error" role="alert">
+                    {built.error}
+                  </p>
+                )
+              ) : null}
               {unchanged ? (
                 <p className="muted">Change the fields to append a version.</p>
               ) : null}

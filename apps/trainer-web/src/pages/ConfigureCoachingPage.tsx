@@ -12,6 +12,7 @@ import type {
   Subscription,
 } from "@fitbud/contracts";
 import { paymentFrequencySchema } from "@fitbud/contracts";
+import { formatOnboardingAnswer } from "@fitbud/core";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { coachingPrefillFromIntake } from "../lib/intakePrefill";
@@ -370,7 +371,7 @@ export function ConfigureCoachingPage() {
       ? definition.fields.map((field) => ({
           id: field.id,
           label: field.label,
-          value: intake.answers[field.id]?.trim() || "—",
+          value: formatOnboardingAnswer(field, intake.answers[field.id]).trim() || "—",
         }))
       : [];
 

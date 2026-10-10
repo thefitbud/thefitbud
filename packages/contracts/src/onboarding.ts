@@ -12,18 +12,59 @@ const onboardingFieldBaseSchema = z.object({
   helpText: z.string().min(1).max(500).optional(),
 });
 
+const textLimitSchema = {
+  maxLength: z.number().int().min(1).max(10000).optional(),
+};
+
+/** Stable option identity. The id is not the display label. */
+export const onboardingChoiceOptionSchema = z.object({
+  id: z.string().min(1).max(200),
+  label: z.string().min(1).max(200),
+});
+export type OnboardingChoiceOption = z.infer<typeof onboardingChoiceOptionSchema>;
+
+const choiceOptionsSchema = z.array(onboardingChoiceOptionSchema).min(1).max(50);
+
+/**
+ * Immutable field definition.
+ * `text`, `textarea`, and `select` remain valid for versions already stored.
+ * A legacy select option's id is its label string.
+ * New versions use the six typed fields below.
+ */
 export const onboardingFieldDefinitionSchema = z.discriminatedUnion("type", [
   onboardingFieldBaseSchema.extend({
     type: z.literal("text"),
-    maxLength: z.number().int().min(1).max(10000).optional(),
+    ...textLimitSchema,
   }),
   onboardingFieldBaseSchema.extend({
     type: z.literal("textarea"),
-    maxLength: z.number().int().min(1).max(10000).optional(),
+    ...textLimitSchema,
   }),
   onboardingFieldBaseSchema.extend({
     type: z.literal("select"),
     options: z.array(z.string().min(1).max(200)).min(1).max(50),
+  }),
+  onboardingFieldBaseSchema.extend({
+    type: z.literal("short_text"),
+    ...textLimitSchema,
+  }),
+  onboardingFieldBaseSchema.extend({
+    type: z.literal("long_text"),
+    ...textLimitSchema,
+  }),
+  onboardingFieldBaseSchema.extend({
+    type: z.literal("single_choice"),
+    options: choiceOptionsSchema,
+  }),
+  onboardingFieldBaseSchema.extend({
+    type: z.literal("multiple_choice"),
+    options: choiceOptionsSchema,
+  }),
+  onboardingFieldBaseSchema.extend({
+    type: z.literal("number"),
+  }),
+  onboardingFieldBaseSchema.extend({
+    type: z.literal("yes_no"),
   }),
 ]);
 export type OnboardingFieldDefinition = z.infer<
@@ -31,9 +72,53 @@ export type OnboardingFieldDefinition = z.infer<
 >;
 export type OnboardingFieldType = OnboardingFieldDefinition["type"];
 
+function refineOnboardingFields(
+  fields: OnboardingFieldDefinition[],
+  ctx: z.RefinementCtx,
+) {
+  const fieldIds = new Set<string>();
+  fields.forEach((field, index) => {
+    if (fieldIds.has(field.id)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Field ids must be unique.",
+        path: [index, "id"],
+      });
+    }
+    fieldIds.add(field.id);
+    if (
+      field.type !== "select" &&
+      field.type !== "single_choice" &&
+      field.type !== "multiple_choice"
+    ) {
+      return;
+    }
+    const optionIds =
+      field.type === "select"
+        ? field.options
+        : field.options.map((option) => option.id);
+    const seen = new Set<string>();
+    optionIds.forEach((optionId, optionIndex) => {
+      if (seen.has(optionId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Option ids must be unique.",
+          path: [index, "options", optionIndex],
+        });
+      }
+      seen.add(optionId);
+    });
+  });
+}
+
+const onboardingFieldListSchema = z
+  .array(onboardingFieldDefinitionSchema)
+  .min(1)
+  .superRefine(refineOnboardingFields);
+
 /** Immutable field list stored on an onboarding form version. Order is significant. */
 export const onboardingFormDefinitionSchema = z.object({
-  fields: z.array(onboardingFieldDefinitionSchema).min(1),
+  fields: onboardingFieldListSchema,
 });
 export type OnboardingFormDefinition = z.infer<typeof onboardingFormDefinitionSchema>;
 
@@ -43,7 +128,7 @@ export const onboardingFormVersionSchema = z.object({
   key: z.string().min(1),
   version: z.number().int().positive(),
   scope: z.enum(["global", "trainer"]),
-  fields: z.array(onboardingFieldDefinitionSchema).min(1),
+  fields: onboardingFieldListSchema,
   createdAt: isoDateTimeSchema,
 });
 export type OnboardingFormVersion = z.infer<typeof onboardingFormVersionSchema>;
@@ -87,7 +172,7 @@ export type OnboardingFormTemplateDetail = z.infer<
 export const createOnboardingFormTemplateRequestSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(500).optional(),
-  fields: z.array(onboardingFieldDefinitionSchema).min(1),
+  fields: onboardingFieldListSchema,
 });
 export type CreateOnboardingFormTemplateRequest = z.infer<
   typeof createOnboardingFormTemplateRequestSchema
@@ -102,7 +187,7 @@ export type ForkOnboardingFormTemplateRequest = z.infer<
 >;
 
 export const createOnboardingFormTemplateVersionRequestSchema = z.object({
-  fields: z.array(onboardingFieldDefinitionSchema).min(1),
+  fields: onboardingFieldListSchema,
 });
 export type CreateOnboardingFormTemplateVersionRequest = z.infer<
   typeof createOnboardingFormTemplateVersionRequestSchema
@@ -113,7 +198,22 @@ export type OnboardingFormResponseStatus = z.infer<
   typeof onboardingFormResponseStatusSchema
 >;
 
-export const onboardingAnswersSchema = z.record(z.string().max(10000));
+/**
+ * One answer matching a pinned field: text, one option id, option ids,
+ * a finite number, or a yes/no boolean.
+ */
+export const onboardingAnswerValueSchema = z.union([
+  z.string().max(10000),
+  z.array(z.string().min(1).max(200)).max(50),
+  z.number().finite(),
+  z.boolean(),
+]);
+export type OnboardingAnswerValue = z.infer<typeof onboardingAnswerValueSchema>;
+
+export const onboardingAnswersSchema = z.record(
+  z.string(),
+  onboardingAnswerValueSchema,
+);
 export type OnboardingAnswers = z.infer<typeof onboardingAnswersSchema>;
 
 export const onboardingFormResponseSchema = z.object({
