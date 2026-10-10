@@ -29,6 +29,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0011_templates_libraries.sql",
     "0015_iteration_a.sql",
     "0016_food_exercise_libraries.sql",
+    "0017_plan_template_ownership.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -265,9 +266,15 @@ describe("templates and libraries", () => {
     );
     expect(otherList.status).toBe(200);
     const otherBody = (await otherList.json()) as {
-      data: { items: unknown[] };
+      data: { items: Array<{ id: string; ownership: string }> };
     };
-    expect(otherBody.data.items).toHaveLength(0);
+    expect(otherBody.data.items.some((item) => item.id === templateId)).toBe(
+      false,
+    );
+    expect(otherBody.data.items.every((item) => item.ownership === "global")).toBe(
+      true,
+    );
+    expect(otherBody.data.items.length).toBeGreaterThanOrEqual(3);
 
     const otherGet = await app.request(
       `/templates/${templateId}`,
@@ -427,6 +434,371 @@ describe("templates and libraries", () => {
     };
     expect(secondBody.data.updatedExistingDraft).toBe(true);
     expect(secondBody.data.version.recordVersion).toBe(2);
+  });
+
+  it("rejects a stale template record version without creating another template", async () => {
+    const trainer = await createTrainerSession("stale-tmpl@example.com");
+    const created = await app.request(
+      "/templates",
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "tmpl-stale-create",
+        },
+        body: JSON.stringify({
+          title: "In-place block",
+          templateType: "workout",
+          content: workoutContent(),
+        }),
+      },
+      testEnv(),
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    expect(createdBody.data.recordVersion).toBe(1);
+
+    const stale = await app.request(
+      `/templates/${createdBody.data.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: 0,
+          title: "Stale rename",
+          content: workoutContent(),
+        }),
+      },
+      testEnv(),
+    );
+    expect(stale.status).toBe(409);
+    const staleBody = (await stale.json()) as { error: { code: string } };
+    expect(staleBody.error.code).toBe("TEMPLATE_VERSION_CONFLICT");
+
+    const loaded = await app.request(
+      `/templates/${createdBody.data.id}`,
+      { headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    const loadedBody = (await loaded.json()) as {
+      data: { id: string; title: string; recordVersion: number };
+    };
+    expect(loadedBody.data.id).toBe(createdBody.data.id);
+    expect(loadedBody.data.title).toBe("In-place block");
+    expect(loadedBody.data.recordVersion).toBe(1);
+  });
+
+  it("keeps global bases read-only, forks explicitly, and stores provenance only", async () => {
+    const ctx = await reachCoachingReady("global-base");
+    const other = await createTrainerSession("global-other@example.com");
+    const bases = {
+      workout: "a1000001-0000-4000-8000-000000000001",
+      nutrition: "a1000001-0000-4000-8000-000000000002",
+      combined: "a1000001-0000-4000-8000-000000000003",
+    };
+
+    const listed = await app.request(
+      "/templates",
+      { headers: { Cookie: ctx.trainerCookie } },
+      testEnv(),
+    );
+    const listedBody = (await listed.json()) as {
+      data: {
+        items: Array<{
+          id: string;
+          ownership: string;
+          trainerUserId: string | null;
+          templateType: string;
+        }>;
+      };
+    };
+    for (const [templateType, id] of Object.entries(bases)) {
+      expect(listedBody.data.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id,
+            ownership: "global",
+            trainerUserId: null,
+            templateType,
+          }),
+        ]),
+      );
+      const detail = await app.request(
+        `/templates/${id}`,
+        { headers: { Cookie: ctx.trainerCookie } },
+        testEnv(),
+      );
+      expect(detail.status).toBe(200);
+    }
+
+    const globalTemplate = await app.request(
+      `/templates/${bases.combined}`,
+      { headers: { Cookie: other.cookie } },
+      testEnv(),
+    );
+    expect(globalTemplate.status).toBe(200);
+    const globalBody = (await globalTemplate.json()) as {
+      data: {
+        recordVersion: number;
+        content: {
+          workoutDays: Array<{ id: string }>;
+          mealPrescriptions: Array<{
+            id: string;
+            items: Array<{ snapshotKind: string; name: string }>;
+          }>;
+        };
+      };
+    };
+    expect(globalBody.data.recordVersion).toBe(1);
+    expect(globalBody.data.content.mealPrescriptions[0]!.items[0]).toMatchObject({
+      snapshotKind: "calculated",
+      name: "Roti / Chapati",
+    });
+    const sourceDayId = globalBody.data.content.workoutDays[0]!.id;
+
+    const edited = await app.request(
+      `/templates/${bases.workout}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: 1,
+          title: "Hacked base",
+          content: workoutContent(),
+        }),
+      },
+      testEnv(),
+    );
+    expect(edited.status).toBe(403);
+    expect(((await edited.json()) as { error: { code: string } }).error.code).toBe(
+      "GLOBAL_TEMPLATE_IMMUTABLE",
+    );
+
+    const removed = await app.request(
+      `/templates/${bases.nutrition}`,
+      { method: "DELETE", headers: { Cookie: ctx.trainerCookie } },
+      testEnv(),
+    );
+    expect(removed.status).toBe(403);
+    expect(((await removed.json()) as { error: { code: string } }).error.code).toBe(
+      "GLOBAL_TEMPLATE_IMMUTABLE",
+    );
+
+    const beforeFork = await app.request(
+      "/templates?limit=50",
+      { headers: { Cookie: ctx.trainerCookie } },
+      testEnv(),
+    );
+    const beforeForkBody = (await beforeFork.json()) as {
+      data: { items: Array<{ id: string; ownership: string }> };
+    };
+    const trainerCountBefore = beforeForkBody.data.items.filter(
+      (item) => item.ownership === "trainer",
+    ).length;
+
+    const applied = await app.request(
+      `/plans/relationships/${ctx.relationshipId}/from-template`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "apply-global-combined",
+        },
+        body: JSON.stringify({ templateId: bases.combined }),
+      },
+      testEnv(),
+    );
+    expect(applied.status).toBe(201);
+    const appliedBody = (await applied.json()) as {
+      data: {
+        plan: { id: string };
+        version: {
+          id: string;
+          sourceTemplateId: string | null;
+          recordVersion: number;
+          content: { workoutDays: Array<{ id: string; name: string }> };
+        };
+      };
+    };
+    expect(appliedBody.data.version.sourceTemplateId).toBe(bases.combined);
+    expect(appliedBody.data.version.content.workoutDays[0]!.id).not.toBe(
+      sourceDayId,
+    );
+    expect(appliedBody.data.version.content.workoutDays[0]!.name).toBe("Full body");
+
+    const afterApply = await app.request(
+      "/templates?limit=50",
+      { headers: { Cookie: ctx.trainerCookie } },
+      testEnv(),
+    );
+    const afterApplyBody = (await afterApply.json()) as {
+      data: { items: Array<{ id: string; ownership: string }> };
+    };
+    expect(
+      afterApplyBody.data.items.filter((item) => item.ownership === "trainer"),
+    ).toHaveLength(trainerCountBefore);
+    expect(
+      afterApplyBody.data.items.some((item) => item.id === bases.combined),
+    ).toBe(true);
+
+    const forked = await app.request(
+      `/templates/${bases.combined}/fork`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "fork-combined",
+        },
+        body: JSON.stringify({ title: "My combined base" }),
+      },
+      testEnv(),
+    );
+    expect(forked.status).toBe(201);
+    const forkedBody = (await forked.json()) as {
+      data: {
+        id: string;
+        ownership: string;
+        trainerUserId: string | null;
+        recordVersion: number;
+        title: string;
+        content: { workoutDays: Array<{ id: string }> };
+      };
+    };
+    expect(forkedBody.data.id).not.toBe(bases.combined);
+    expect(forkedBody.data.ownership).toBe("trainer");
+    expect(forkedBody.data.trainerUserId).not.toBeNull();
+    expect(forkedBody.data.recordVersion).toBe(1);
+    expect(forkedBody.data.title).toBe("My combined base");
+    expect(forkedBody.data.content.workoutDays[0]!.id).not.toBe(sourceDayId);
+
+    const sourceAfterFork = await app.request(
+      `/templates/${bases.combined}`,
+      { headers: { Cookie: other.cookie } },
+      testEnv(),
+    );
+    const sourceAfterForkBody = (await sourceAfterFork.json()) as {
+      data: { title: string; recordVersion: number; content: { workoutDays: Array<{ id: string }> } };
+    };
+    expect(sourceAfterForkBody.data.title).toBe("Base training and meals");
+    expect(sourceAfterForkBody.data.recordVersion).toBe(1);
+    expect(sourceAfterForkBody.data.content.workoutDays[0]!.id).toBe(sourceDayId);
+
+    const ownForkRejected = await app.request(
+      `/templates/${forkedBody.data.id}/fork`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "fork-owned",
+        },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(ownForkRejected.status).toBe(409);
+    expect(
+      ((await ownForkRejected.json()) as { error: { code: string } }).error.code,
+    ).toBe("TEMPLATE_NOT_FORKABLE");
+
+    const renamedFork = await app.request(
+      `/templates/${forkedBody.data.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: 1,
+          title: "My renamed combined base",
+          content: {
+            ...workoutContent(),
+            mealPrescriptions: [
+              {
+                id: "15151515-1515-4151-8151-151515151515",
+                order: 1,
+                name: "Lunch",
+                scheduleHint: null,
+                instructions: null,
+                photoRequired: false,
+                items: [],
+              },
+            ],
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(renamedFork.status).toBe(200);
+
+    const sourceAfterEdit = await app.request(
+      `/templates/${bases.combined}`,
+      { headers: { Cookie: ctx.trainerCookie } },
+      testEnv(),
+    );
+    const sourceAfterEditBody = (await sourceAfterEdit.json()) as {
+      data: { title: string; recordVersion: number };
+    };
+    expect(sourceAfterEditBody.data.title).toBe("Base training and meals");
+    expect(sourceAfterEditBody.data.recordVersion).toBe(1);
+
+    const draftEdit = await app.request(
+      `/plans/${appliedBody.data.plan.id}/versions/${appliedBody.data.version.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: appliedBody.data.version.recordVersion,
+          content: {
+            workoutDays: [
+              {
+                id: "16161616-1616-4161-8161-161616161616",
+                order: 1,
+                name: "Edited day",
+                exercises: [],
+              },
+            ],
+            mealPrescriptions: [
+              {
+                id: "17171717-1717-4171-8171-171717171717",
+                order: 1,
+                name: "Edited meal",
+                scheduleHint: null,
+                instructions: null,
+                photoRequired: false,
+                items: [],
+              },
+            ],
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(draftEdit.status).toBe(200);
+    const draftEditBody = (await draftEdit.json()) as {
+      data: {
+        sourceTemplateId: string | null;
+        content: { workoutDays: Array<{ name: string }> };
+      };
+    };
+    expect(draftEditBody.data.sourceTemplateId).toBe(bases.combined);
+    expect(draftEditBody.data.content.workoutDays[0]!.name).toBe("Edited day");
+    expect(sourceAfterEditBody.data.recordVersion).toBe(1);
   });
 
   it("lists seeded global exercise and Indian food libraries", async () => {
@@ -779,6 +1151,92 @@ describe("food library migration 0016", () => {
        ORDER BY conversion_scaled`,
     )[0]!;
     expect(rotiServings.values).toEqual([[35000000], [100000000]]);
+    sqlite.close();
+  });
+});
+
+describe("plan template migration 0017", () => {
+  it("keeps trainer templates, seeds global bases, and stores nullable provenance", async () => {
+    const SQL = await initSqlJs();
+    const sqlite = new SQL.Database();
+    for (const file of [
+      "0000_identity.sql",
+      "0001_relationship_onboarding.sql",
+      "0012_invitation_whatsapp.sql",
+      "0002_coaching_configuration.sql",
+      "0003_plans.sql",
+      "0009_sync.sql",
+      "0010_notifications.sql",
+      "0013_domain_contracts.sql",
+      "0014_onboarding_form_templates.sql",
+      "0011_templates_libraries.sql",
+      "0015_iteration_a.sql",
+      "0016_food_exercise_libraries.sql",
+    ]) {
+      sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
+    }
+    sqlite.run(
+      `INSERT INTO users (id, firebase_uid, created_at, updated_at)
+       VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'trainer-migration', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')`,
+    );
+    sqlite.run(
+      `INSERT INTO plan_templates (
+         id, trainer_user_id, title, template_type, content_json, record_version, created_at, updated_at
+       ) VALUES (
+         'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+         'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+         'Existing block',
+         'workout',
+         '{}',
+         4,
+         '2026-02-01T00:00:00.000Z',
+         '2026-02-01T00:00:00.000Z'
+       )`,
+    );
+    sqlite.exec(readFileSync(join(drizzleDir, "0017_plan_template_ownership.sql"), "utf8"));
+
+    const existing = sqlite.exec(
+      `SELECT ownership, trainer_user_id, record_version
+       FROM plan_templates
+       WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'`,
+    )[0]!;
+    expect(existing.values[0]).toEqual([
+      "trainer",
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      4,
+    ]);
+
+    const globals = sqlite.exec(
+      `SELECT template_type
+       FROM plan_templates
+       WHERE ownership = 'global' AND trainer_user_id IS NULL
+       ORDER BY template_type`,
+    )[0]!;
+    expect(globals.values).toEqual([["combined"], ["nutrition"], ["workout"]]);
+
+    expect(() =>
+      sqlite.run(
+        `INSERT INTO plan_templates (
+           id, ownership, trainer_user_id, title, template_type, content_json, record_version, created_at, updated_at
+         ) VALUES (
+           'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+           'global',
+           'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+           'Invalid',
+           'workout',
+           '{}',
+           1,
+           '2026-01-01T00:00:00.000Z',
+           '2026-01-01T00:00:00.000Z'
+         )`,
+      ),
+    ).toThrow();
+
+    const versionColumns = sqlite.exec("PRAGMA table_info(plan_versions)")[0]!;
+    const nameIndex = versionColumns.columns.indexOf("name");
+    expect(versionColumns.values.map((row) => row[nameIndex])).toContain(
+      "source_template_id",
+    );
     sqlite.close();
   });
 });

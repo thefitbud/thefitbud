@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   real,
@@ -478,6 +479,8 @@ export const planVersions = sqliteTable(
     })
       .notNull()
       .default("blank"),
+    /** Provenance only. Not a live join back to plan_templates. */
+    sourceTemplateId: text("source_template_id"),
     publishedAt: text("published_at"),
     effectiveFrom: text("effective_from"),
     effectiveTo: text("effective_to"),
@@ -1278,16 +1281,18 @@ export const scheduledJobs = sqliteTable(
 );
 
 /**
- * Trainer-owned reusable plan structures. Copying into a client plan
- * creates/updates a draft snapshot; it never aliases live client state.
+ * Reusable plan structures. Global rows are read-only bases with no trainer.
+ * Copying into a client plan stores provenance on the plan version and never
+ * aliases live client state. Trainer rows stay editable in place.
  */
 export const planTemplates = sqliteTable(
   "plan_templates",
   {
     id: text("id").primaryKey(),
-    trainerUserId: text("trainer_user_id")
-      .notNull()
-      .references(() => users.id),
+    ownership: text("ownership", {
+      enum: ["global", "trainer"],
+    }).notNull(),
+    trainerUserId: text("trainer_user_id").references(() => users.id),
     title: text("title").notNull(),
     templateType: text("template_type", {
       enum: ["workout", "nutrition", "combined"],
@@ -1298,10 +1303,18 @@ export const planTemplates = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
+    index("plan_templates_ownership_idx").on(
+      table.ownership,
+      table.trainerUserId,
+    ),
     index("plan_templates_trainer_idx").on(table.trainerUserId),
     index("plan_templates_trainer_updated_idx").on(
       table.trainerUserId,
       table.updatedAt,
+    ),
+    check(
+      "plan_templates_ownership_chk",
+      sql`(${table.ownership} = 'global' AND ${table.trainerUserId} IS NULL) OR (${table.ownership} = 'trainer' AND ${table.trainerUserId} IS NOT NULL)`,
     ),
   ],
 );

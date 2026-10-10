@@ -434,7 +434,8 @@ export function ClientPlanPage() {
                   >
                     {templates.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.title} ({item.templateType})
+                        {item.title} ({item.templateType}
+                        {item.ownership === "global" ? ", global" : ""})
                       </option>
                     ))}
                   </select>
@@ -620,7 +621,8 @@ export function ClientPlanPage() {
                   >
                     {templates.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.title} ({item.templateType})
+                        {item.title} ({item.templateType}
+                        {item.ownership === "global" ? ", global" : ""})
                       </option>
                     ))}
                   </select>
@@ -655,7 +657,8 @@ export function ClientPlanPage() {
                   >
                     {templates.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.title} ({item.templateType})
+                        {item.title} ({item.templateType}
+                        {item.ownership === "global" ? ", global" : ""})
                       </option>
                     ))}
                   </select>

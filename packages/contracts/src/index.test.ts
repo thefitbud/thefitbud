@@ -532,6 +532,7 @@ describe("contracts", () => {
     expect(
       planTemplateSchema.parse({
         id: "11111111-1111-4111-8111-111111111111",
+        ownership: "trainer",
         trainerUserId: "22222222-2222-4222-8222-222222222222",
         title: "Beginner strength",
         templateType: "workout",
@@ -550,7 +551,53 @@ describe("contracts", () => {
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
-    ).toMatchObject({ templateType: "workout" });
+    ).toMatchObject({ templateType: "workout", ownership: "trainer" });
+    expect(
+      planTemplateSchema.parse({
+        id: "11111111-1111-4111-8111-111111111111",
+        ownership: "global",
+        trainerUserId: null,
+        title: "Base full-body workout",
+        templateType: "workout",
+        content: {
+          workoutDays: [
+            {
+              id: "33333333-3333-4333-8333-333333333333",
+              order: 1,
+              name: "Day A",
+              exercises: [],
+            },
+          ],
+          mealPrescriptions: [],
+        },
+        recordVersion: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        updatedAt: "2026-09-26T00:00:00.000Z",
+      }),
+    ).toMatchObject({ ownership: "global", trainerUserId: null });
+    expect(() =>
+      planTemplateSchema.parse({
+        id: "11111111-1111-4111-8111-111111111111",
+        ownership: "global",
+        trainerUserId: "22222222-2222-4222-8222-222222222222",
+        title: "Base full-body workout",
+        templateType: "workout",
+        content: {
+          workoutDays: [
+            {
+              id: "33333333-3333-4333-8333-333333333333",
+              order: 1,
+              name: "Day A",
+              exercises: [],
+            },
+          ],
+          mealPrescriptions: [],
+        },
+        recordVersion: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        updatedAt: "2026-09-26T00:00:00.000Z",
+      }),
+    ).toThrow();
 
     expect(
       exerciseLibraryItemSchema.parse({
