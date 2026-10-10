@@ -41,6 +41,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0017_plan_template_ownership.sql",
 
     "0018_assignment_schedule_status.sql",
+    "0019_checkin_form_templates.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -388,6 +389,7 @@ describe("iteration A directory, profile, and libraries", () => {
       recordStatus: "submitted",
       recordVersion: 1,
       definitionVersion: 1,
+      checkinFormVersionId: "c1000001-0000-4000-8000-000000000011",
       submittedAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,

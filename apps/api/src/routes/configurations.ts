@@ -7,8 +7,8 @@ import {
   activateConfigurationRequestSchema,
   coachingConfigurationSchema,
   configureConfigurationRequestSchema,
+  copyConfigurationDraftRequestSchema,
   saveConfigurationDraftRequestSchema,
-  type SaveConfigurationDraftRequest,
 } from "@fitbud/contracts";
 import {
   canActivateConfiguration,
@@ -17,6 +17,7 @@ import {
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
   hasGoalShort,
+  resolveConfigurationDraftExpectations,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
@@ -45,6 +46,7 @@ import type { ActorContext, Env, Variables } from "../types";
 const CONFIGURE_OPERATION = "configuration.configure";
 const ACTIVATE_OPERATION = "configuration.activate";
 const NEW_VERSION_OPERATION = "configuration.new_version";
+const COPY_DRAFT_OPERATION = "configuration.copy_draft";
 
 export const configurationRoutes = new Hono<{
   Bindings: Env;
@@ -147,7 +149,7 @@ async function upsertExpectationChildren(
   input: {
     configurationId: string;
     relationshipId: string;
-    payload: SaveConfigurationDraftRequest;
+    payload: ReturnType<typeof resolveConfigurationDraftExpectations>;
     timestamp: string;
     existing: Awaited<ReturnType<typeof loadConfigurationBundle>>;
   },
@@ -394,6 +396,35 @@ configurationRoutes.put(
       );
     }
 
+    const expectations = resolveConfigurationDraftExpectations({
+      workout: parsed.data.workout,
+      nutrition: parsed.data.nutrition,
+      checkin: parsed.data.checkin,
+      tracking: parsed.data.tracking,
+      existing: existing
+        ? {
+            workout: {
+              sessionsPerWeek: existing.workout.sessionsPerWeek,
+              completionWindowHours: existing.workout.completionWindowHours,
+            },
+            nutrition: {
+              mealsPerDay: existing.nutrition.mealsPerDay,
+              confirmationWindowHours: existing.nutrition.confirmationWindowHours,
+              photoRequirement: existing.nutrition.photoRequirement,
+            },
+            checkin: {
+              cadence: existing.checkin.cadence,
+              dueWindowHours: existing.checkin.dueWindowHours,
+            },
+            tracking: {
+              requireBodyWeight: existing.tracking.requireBodyWeight,
+              requireProgressPhotos: existing.tracking.requireProgressPhotos,
+              requireSessionRpe: existing.tracking.requireSessionRpe,
+            },
+          }
+        : null,
+    });
+
     const timestamp = nowIso();
     const goalShort =
       parsed.data.goalShort === undefined
@@ -430,7 +461,7 @@ configurationRoutes.put(
       await upsertExpectationChildren(db, {
         configurationId: existing.configuration.id,
         relationshipId,
-        payload: parsed.data,
+        payload: expectations,
         timestamp,
         existing,
       });
@@ -458,7 +489,7 @@ configurationRoutes.put(
     await upsertExpectationChildren(db, {
       configurationId,
       relationshipId,
-      payload: parsed.data,
+      payload: expectations,
       timestamp,
       existing: null,
     });
@@ -1079,6 +1110,246 @@ configurationRoutes.post(
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
       operation: NEW_VERSION_OPERATION,
+      idempotencyKey,
+      requestFingerprint: fingerprint,
+      responseStatus: 201,
+      responseBody,
+      expiresAt: addDaysIso(7),
+    });
+    return ok(c, data, 201);
+  },
+);
+
+function pickCopySource<T extends { status: string; versionNumber: number }>(
+  rows: T[],
+): T | null {
+  const active = rows.find((row) => row.status === "active");
+  if (active) return active;
+  const open = rows.find(
+    (row) => row.status === "draft" || row.status === "configured",
+  );
+  if (open) return open;
+  return (
+    [...rows].sort((left, right) => right.versionNumber - left.versionNumber)[0] ??
+    null
+  );
+}
+
+configurationRoutes.post(
+  "/relationships/:relationshipId/copy",
+  operation({
+    tag: "Configurations",
+    summary: "Copy another client's configuration into a new draft.",
+    description:
+      "Copies settings from a relationship the same trainer owns into a new draft on this relationship. The source row is not shared or mutated. There is no configuration preset catalogue.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: copyConfigurationDraftRequestSchema,
+    successStatus: [201],
+    response: coachingConfigurationSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const body = await c.req.json().catch(() => null);
+    const parsed = copyConfigurationDraftRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid configuration copy request.", {
+        issues: parsed.error.issues,
+      });
+    }
+
+    const idempotencyKey = c.req.header("idempotency-key")?.trim();
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required to copy coaching configuration.",
+      );
+    }
+
+    const relationshipId = c.req.param("relationshipId");
+    const sourceRelationshipId = parsed.data.sourceRelationshipId;
+    const fingerprint = await sha256Hex(
+      JSON.stringify({ relationshipId, sourceRelationshipId }),
+    );
+    const db = createDb(c.env.DB);
+    const existingIdempotency = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: COPY_DRAFT_OPERATION,
+      idempotencyKey,
+    });
+    if (existingIdempotency) {
+      if (existingIdempotency.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request payload.",
+        );
+      }
+      return c.json(
+        JSON.parse(existingIdempotency.responseBody),
+        existingIdempotency.responseStatus as 201,
+      );
+    }
+
+    if (sourceRelationshipId === relationshipId) {
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_COPY_SAME_RELATIONSHIP",
+        "Choose a different client to copy configuration settings from.",
+      );
+    }
+
+    const target = await loadRelationshipForTrainer(db, relationshipId, actor);
+    if (target.kind !== "ok") {
+      return fail(
+        c,
+        404,
+        "RELATIONSHIP_NOT_FOUND",
+        "Coaching relationship not found.",
+      );
+    }
+    const sourceOwnership = await loadRelationshipForTrainer(
+      db,
+      sourceRelationshipId,
+      actor,
+    );
+    if (sourceOwnership.kind !== "ok") {
+      return fail(
+        c,
+        404,
+        "RELATIONSHIP_NOT_FOUND",
+        "Coaching relationship not found.",
+      );
+    }
+
+    const onboardingStatus = await onboardingStatusForRelationship(
+      db,
+      target.relationship,
+    );
+    if (!canEditCoachingConfiguration(onboardingStatus)) {
+      return fail(
+        c,
+        409,
+        "RELATIONSHIP_NOT_READY",
+        "Configuration requires a coaching-ready or active client.",
+        { onboardingStatus },
+      );
+    }
+
+    const targetRows = await listConfigurations(db, relationshipId);
+    const open = targetRows.find(
+      (row) => row.status === "draft" || row.status === "configured",
+    );
+    if (open) {
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_OPEN_VERSION_EXISTS",
+        "Finish the open configuration version before copying into a new draft.",
+      );
+    }
+
+    const sourceRows = await listConfigurations(db, sourceRelationshipId);
+    const sourceRow = pickCopySource(sourceRows);
+    if (!sourceRow) {
+      return fail(
+        c,
+        404,
+        "CONFIGURATION_NOT_FOUND",
+        "Coaching configuration not found.",
+      );
+    }
+    const source = await loadConfigurationBundle(
+      db,
+      sourceRelationshipId,
+      sourceRow.id,
+    );
+    if (!source) {
+      return fail(
+        c,
+        404,
+        "CONFIGURATION_NOT_FOUND",
+        "Coaching configuration not found.",
+      );
+    }
+
+    const timestamp = nowIso();
+    const configurationId = createId();
+    const nextVersionNumber =
+      targetRows.length === 0
+        ? 1
+        : Math.max(...targetRows.map((row) => row.versionNumber)) + 1;
+    await db.insert(coachingConfigurations).values({
+      id: configurationId,
+      coachingRelationshipId: relationshipId,
+      status: "draft",
+      versionNumber: nextVersionNumber,
+      recordVersion: 1,
+      goalShort: source.configuration.goalShort,
+      goalDescription: source.configuration.goalDescription,
+      notes: source.configuration.notes,
+      configuredAt: null,
+      activatedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(workoutExpectations).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      sessionsPerWeek: source.workout.sessionsPerWeek,
+      completionWindowHours: source.workout.completionWindowHours,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(nutritionExpectations).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      mealsPerDay: source.nutrition.mealsPerDay,
+      confirmationWindowHours: source.nutrition.confirmationWindowHours,
+      photoRequirement: source.nutrition.photoRequirement,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(checkinSchedules).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      coachingRelationshipId: relationshipId,
+      cadence: source.checkin.cadence,
+      dueWindowHours: source.checkin.dueWindowHours,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(trackingRequirements).values({
+      id: createId(),
+      coachingConfigurationId: configurationId,
+      requireBodyWeight: source.tracking.requireBodyWeight,
+      requireProgressPhotos: source.tracking.requireProgressPhotos,
+      requireSessionRpe: source.tracking.requireSessionRpe,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    const created = await loadConfigurationBundle(
+      db,
+      relationshipId,
+      configurationId,
+    );
+    const data = parseMappedConfiguration(created!);
+    const responseBody = { data };
+    await saveIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: COPY_DRAFT_OPERATION,
       idempotencyKey,
       requestFingerprint: fingerprint,
       responseStatus: 201,

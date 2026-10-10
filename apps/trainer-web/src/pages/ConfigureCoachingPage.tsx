@@ -13,7 +13,12 @@ import type {
   Subscription,
 } from "@fitbud/contracts";
 import { paymentFrequencySchema } from "@fitbud/contracts";
-import { consistencyFingerprint, formatOnboardingAnswer, planConsistencyWarnings } from "@fitbud/core";
+import {
+  COACHING_CONFIGURATION_DEFAULTS,
+  consistencyFingerprint,
+  formatOnboardingAnswer,
+  planConsistencyWarnings,
+} from "@fitbud/core";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
@@ -25,16 +30,20 @@ const DEFAULT_FORM = {
   goalShort: "",
   goalDescription: "",
   notes: "",
-  sessionsPerWeek: 3,
-  completionWindowHours: 24,
-  mealsPerDay: 3,
-  confirmationWindowHours: 6,
-  photoRequirement: "none" as MealPhotoRequirement,
-  cadence: "weekly" as CheckinCadence,
-  dueWindowHours: 48,
-  requireBodyWeight: false,
-  requireProgressPhotos: false,
-  requireSessionRpe: false,
+  sessionsPerWeek: COACHING_CONFIGURATION_DEFAULTS.workout.sessionsPerWeek,
+  completionWindowHours:
+    COACHING_CONFIGURATION_DEFAULTS.workout.completionWindowHours,
+  mealsPerDay: COACHING_CONFIGURATION_DEFAULTS.nutrition.mealsPerDay,
+  confirmationWindowHours:
+    COACHING_CONFIGURATION_DEFAULTS.nutrition.confirmationWindowHours,
+  photoRequirement: COACHING_CONFIGURATION_DEFAULTS.nutrition
+    .photoRequirement as MealPhotoRequirement,
+  cadence: COACHING_CONFIGURATION_DEFAULTS.checkin.cadence as CheckinCadence,
+  dueWindowHours: COACHING_CONFIGURATION_DEFAULTS.checkin.dueWindowHours,
+  requireBodyWeight: COACHING_CONFIGURATION_DEFAULTS.tracking.requireBodyWeight,
+  requireProgressPhotos:
+    COACHING_CONFIGURATION_DEFAULTS.tracking.requireProgressPhotos,
+  requireSessionRpe: COACHING_CONFIGURATION_DEFAULTS.tracking.requireSessionRpe,
 };
 
 const EMPTY_SUBSCRIPTION = {

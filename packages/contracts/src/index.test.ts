@@ -352,6 +352,7 @@ describe("contracts", () => {
         recordStatus: "draft",
         recordVersion: 0,
         definitionVersion: 1,
+        checkinFormVersionId: "c1000001-0000-4000-8000-000000000011",
         answers: null,
         submittedAt: null,
         status: "overdue",

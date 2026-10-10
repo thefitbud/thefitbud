@@ -26,12 +26,14 @@ export {
 } from "./onboarding.js";
 
 export {
+  COACHING_CONFIGURATION_DEFAULTS,
   canActivateConfiguration,
   canCreateConfigurationVersion,
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
   hasGoalShort,
+  resolveConfigurationDraftExpectations,
 } from "./configuration.js";
 
 export {
@@ -82,14 +84,21 @@ export {
 } from "./timezone.js";
 
 export {
+  GLOBAL_CHECKIN_FORM_FIELDS,
+  GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
   MVP_CHECKIN_DEFINITION_VERSION,
   canRecordCheckinReview,
   canSaveCheckinDraft,
   canSubmitCheckin,
+  canTrainerReadCheckinFormTemplate,
   daysForCheckinCadence,
   deriveCheckinStatus,
+  latestCheckinFormVersion,
+  linkedMeasurementsForCheckin,
   missingRequiredCheckinAnswers,
   nextCheckinLocalDate,
+  parseCheckinFormFields,
 } from "./checkin.js";
 
 export {

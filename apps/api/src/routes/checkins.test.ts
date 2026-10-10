@@ -5,7 +5,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatLocalDate } from "@fitbud/core";
+import {
+  GLOBAL_CHECKIN_FORM_FIELDS,
+  GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
+  formatLocalDate,
+} from "@fitbud/core";
 import { app } from "../index.js";
 import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
@@ -39,6 +44,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0017_plan_template_ownership.sql",
 
     "0018_assignment_schedule_status.sql",
+    "0019_checkin_form_templates.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -348,8 +354,20 @@ describe("check-in loop", () => {
     );
     expect(scheduled.status).toBe(200);
     const scheduledBody = (await scheduled.json()) as {
-      data: { checkin: { id: string; status: string; recordVersion: number } };
+      data: {
+        checkin: {
+          id: string;
+          status: string;
+          recordVersion: number;
+          checkinFormVersionId: string;
+          definitionVersion: number;
+        };
+      };
     };
+    expect(scheduledBody.data.checkin.checkinFormVersionId).toBe(
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
+    );
+    expect(scheduledBody.data.checkin.definitionVersion).toBe(1);
     expect(["due", "scheduled", "overdue"]).toContain(
       scheduledBody.data.checkin.status,
     );
@@ -418,6 +436,29 @@ describe("check-in loop", () => {
     );
     expect(duplicate.status).toBe(422);
 
+    const [relationship] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    const photoId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+    await db.insert(schema.mediaAssets).values({
+      id: photoId,
+      coachingRelationshipId: relationshipId,
+      uploaderUserId: relationship!.traineeUserId,
+      mediaType: "checkin_photo",
+      status: "ready",
+      objectKey: `tests/${photoId}`,
+      contentType: "image/jpeg",
+      byteSize: 128,
+      originalFilename: "check-in.jpg",
+      domainEntityType: "checkin",
+      domainEntityId: scheduledBody.data.checkin.id,
+      recordVersion: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      uploadedAt: new Date().toISOString(),
+    });
+
     const context = await app.request(
       `/checkins/${scheduledBody.data.checkin.id}/review-context`,
       { headers: { Cookie: trainerCookie } },
@@ -426,15 +467,60 @@ describe("check-in loop", () => {
     expect(context.status).toBe(200);
     const contextBody = (await context.json()) as {
       data: {
-        checkin: { status: string };
+        checkin: {
+          status: string;
+          checkinFormVersionId: string;
+          answers: { wellbeing: string; bodyWeightKg: number };
+        };
+        pinnedForm: {
+          id: string;
+          fields: Array<{ id: string; type: string; measurementType?: string }>;
+        };
+        photos: Array<{ id: string; mediaType: string }>;
         activeExceptions: unknown[];
         measurements: Array<{ type: string }>;
         previousNotes: unknown[];
+        currentPlan: unknown;
+        currentConfiguration: { checkinCadence: string } | null;
+        recentWorkoutAdherence: { pending: number };
+        recentMealCompliance: { pending: number };
       };
     };
     expect(contextBody.data.checkin.status).toBe("submitted");
+    expect(contextBody.data.checkin.answers.wellbeing).toBe("Strong week");
+    expect(contextBody.data.checkin.checkinFormVersionId).toBe(
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
+    );
+    expect(contextBody.data.pinnedForm.id).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID);
+    expect(contextBody.data.pinnedForm.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "body_weight",
+          type: "measurement",
+          measurementType: "body_weight_kg",
+        }),
+      ]),
+    );
     expect(contextBody.data.activeExceptions).toEqual([]);
     expect(contextBody.data.measurements[0]?.type).toBe("body_weight_kg");
+    expect(contextBody.data.photos).toEqual([
+      expect.objectContaining({ id: photoId, mediaType: "checkin_photo" }),
+    ]);
+    expect(contextBody.data.currentConfiguration?.checkinCadence).toBe("weekly");
+    expect(contextBody.data.recentWorkoutAdherence).toBeTruthy();
+    expect(contextBody.data.recentMealCompliance).toBeTruthy();
+
+    const traineeContext = await app.request(
+      `/checkins/${scheduledBody.data.checkin.id}/review-context`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    expect(traineeContext.status).toBe(403);
 
     const note = await app.request(
       `/checkins/relationships/${relationshipId}/notes`,
@@ -579,5 +665,216 @@ describe("check-in loop", () => {
       data: { items: unknown[] };
     };
     expect(otherBody.data.items).toEqual([]);
+  });
+
+  it("pins a forked form version without changing the global base", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("forms");
+
+    const globalBefore = await app.request(
+      `/checkins/form-templates/${GLOBAL_CHECKIN_FORM_TEMPLATE_ID}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(globalBefore.status).toBe(200);
+    const globalBeforeBody = (await globalBefore.json()) as {
+      data: { versions: Array<{ id: string; fields: unknown[] }> };
+    };
+    expect(globalBeforeBody.data.versions[0]?.id).toBe(
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
+    );
+    expect(globalBeforeBody.data.versions[0]?.fields).toEqual(
+      GLOBAL_CHECKIN_FORM_FIELDS,
+    );
+
+    const immutable = await app.request(
+      `/checkins/form-templates/${GLOBAL_CHECKIN_FORM_TEMPLATE_ID}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "global-version",
+        },
+        body: JSON.stringify({ fields: GLOBAL_CHECKIN_FORM_FIELDS }),
+      },
+      testEnv(),
+    );
+    expect(immutable.status).toBe(403);
+
+    const fork = await app.request(
+      `/checkins/form-templates/${GLOBAL_CHECKIN_FORM_TEMPLATE_ID}/fork`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "fork-checkin-form",
+        },
+        body: JSON.stringify({ name: "Studio weekly check-in" }),
+      },
+      testEnv(),
+    );
+    expect(fork.status).toBe(201);
+    const forkBody = (await fork.json()) as {
+      data: { id: string; ownership: string; versions: Array<{ id: string }> };
+    };
+    expect(forkBody.data.ownership).toBe("trainer");
+    expect(forkBody.data.id).not.toBe(GLOBAL_CHECKIN_FORM_TEMPLATE_ID);
+    const forkVersionId = forkBody.data.versions[0]!.id;
+
+    const customized = await app.request(
+      `/checkins/form-templates/${forkBody.data.id}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "fork-version-2",
+        },
+        body: JSON.stringify({
+          fields: [
+            ...GLOBAL_CHECKIN_FORM_FIELDS,
+            {
+              id: "waist",
+              label: "Waist",
+              type: "measurement",
+              measurementType: "waist_cm",
+              required: false,
+            },
+          ],
+        }),
+      },
+      testEnv(),
+    );
+    expect(customized.status).toBe(201);
+    const customizedBody = (await customized.json()) as {
+      data: { versions: Array<{ id: string; version: number }> };
+    };
+    const pinnedVersionId = customizedBody.data.versions.find(
+      (version) => version.version === 2,
+    )!.id;
+
+    const globalAfter = await app.request(
+      `/checkins/form-templates/${GLOBAL_CHECKIN_FORM_TEMPLATE_ID}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const globalAfterBody = (await globalAfter.json()) as {
+      data: { versions: Array<{ id: string; fields: unknown[] }> };
+    };
+    expect(globalAfterBody.data.versions).toHaveLength(1);
+    expect(globalAfterBody.data.versions[0]?.fields).toEqual(
+      GLOBAL_CHECKIN_FORM_FIELDS,
+    );
+
+    const scheduled = await app.request(
+      `/checkins/relationships/${relationshipId}/schedule`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "schedule-fork",
+        },
+        body: JSON.stringify({
+          localDate: today,
+          checkinFormVersionId: pinnedVersionId,
+        }),
+      },
+      testEnv(),
+    );
+    expect(scheduled.status).toBe(200);
+    const scheduledBody = (await scheduled.json()) as {
+      data: { checkin: { id: string; checkinFormVersionId: string } };
+    };
+    expect(scheduledBody.data.checkin.checkinFormVersionId).toBe(
+      pinnedVersionId,
+    );
+    expect(scheduledBody.data.checkin.checkinFormVersionId).not.toBe(
+      forkVersionId,
+    );
+
+    const submitted = await app.request(
+      `/checkins/${scheduledBody.data.checkin.id}/submit`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "submit-fork",
+        },
+        body: JSON.stringify({
+          expectedVersion: 0,
+          answers: {
+            wellbeing: "Steady",
+            bodyWeightKg: 70.2,
+            fieldAnswers: { waist: 81 },
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(submitted.status).toBe(200);
+    const submittedBody = (await submitted.json()) as {
+      data: { answers: { wellbeing: string; bodyWeightKg: number } };
+    };
+    expect(submittedBody.data.answers.wellbeing).toBe("Steady");
+    expect(submittedBody.data.answers.bodyWeightKg).toBe(70.2);
+
+    const standalone = await app.request(
+      `/progress/relationships/${relationshipId}/measurements`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "standalone-hip",
+        },
+        body: JSON.stringify({ type: "hip_cm", value: 96, unit: "cm" }),
+      },
+      testEnv(),
+    );
+    expect(standalone.status).toBe(200);
+    const standaloneBody = (await standalone.json()) as {
+      data: { type: string; checkinId: string | null; source: string };
+    };
+    expect(standaloneBody.data.checkinId).toBeNull();
+    expect(standaloneBody.data.source).toBe("trainee_entry");
+
+    const stored = await db
+      .select()
+      .from(schema.measurements)
+      .where(eq(schema.measurements.coachingRelationshipId, relationshipId));
+    expect(stored.map((row) => row.type).sort()).toEqual([
+      "body_weight_kg",
+      "hip_cm",
+      "waist_cm",
+    ]);
+    expect(
+      stored.find((row) => row.type === "body_weight_kg")?.checkinId,
+    ).toBe(scheduledBody.data.checkin.id);
+    expect(stored.find((row) => row.type === "hip_cm")?.checkinId).toBeNull();
+
+    const next = await app.request(
+      `/checkins/relationships/${relationshipId}/schedule-next`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "schedule-next-pin",
+        },
+        body: JSON.stringify({ fromCheckinId: scheduledBody.data.checkin.id }),
+      },
+      testEnv(),
+    );
+    expect(next.status).toBe(200);
+    const nextBody = (await next.json()) as {
+      data: { checkin: { checkinFormVersionId: string } };
+    };
+    expect(nextBody.data.checkin.checkinFormVersionId).toBe(pinnedVersionId);
   });
 });
