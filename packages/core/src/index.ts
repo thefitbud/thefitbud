@@ -140,16 +140,28 @@ export {
 } from "./meal.js";
 
 export {
+  ADHERENCE_EXCEPTION_SEVERITIES,
+  ADHERENCE_OPEN_EXCEPTION_STATUSES,
   MVP_EXCEPTION_RULE_VERSION,
   canAcknowledgeException,
   canActivateException,
   canResolveException,
+  exceptionCountsTowardNeedsAttention,
   exceptionKey,
   filterNewExceptionCandidates,
   isOpenExceptionStatus,
+  mealActivitySeverity,
+  mealAdherenceCandidate,
+  mealDeviationCandidate,
+  mealLoggedLaterCandidate,
   missedWorkoutCandidate,
   overdueCheckinCandidate,
   overdueMealCandidate,
+  skippedMealCandidate,
+  skippedWorkoutCandidate,
+  workoutActivitySeverity,
+  workoutAdherenceCandidate,
+  type ActivitySeverity,
   type ExceptionCandidate,
 } from "./exception.js";
 

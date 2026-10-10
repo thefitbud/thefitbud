@@ -7,9 +7,17 @@ import { createIdempotencyKey } from "../lib/idempotency";
 
 const EXCEPTION_TYPE_LABEL: Record<ExceptionType, string> = {
   missed_workout: "Missed workout",
+  skipped_workout: "Skipped workout",
   overdue_meal: "Meal gap",
+  skipped_meal: "Skipped meal",
+  meal_deviation: "Meal deviation",
+  meal_logged_later: "Logged later",
   overdue_checkin: "Check-in",
 };
+
+function severityLabel(severity: "critical" | "attention"): string {
+  return severity === "critical" ? "Critical" : "Attention";
+}
 
 function statusLabel(status: string): string {
   return status
@@ -161,12 +169,17 @@ export function ExceptionDetailPage() {
               <span className={`status-pill status-${detail.status}`}>
                 {statusLabel(detail.status)}
               </span>
+              <span className="category-pill">{severityLabel(detail.severity)}</span>
               <span className={`category-pill type-${detail.type}`}>
                 {EXCEPTION_TYPE_LABEL[detail.type]}
               </span>
             </div>
             <h2 className="exception-name">{detail.summary}</h2>
             <dl className="detail-list">
+              <div>
+                <dt>Severity</dt>
+                <dd>{severityLabel(detail.severity)}</dd>
+              </div>
               <div>
                 <dt>Rule</dt>
                 <dd>{detail.ruleVersion}</dd>

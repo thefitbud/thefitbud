@@ -18,9 +18,17 @@ const ACTIONABLE_CHECKIN_STATUSES = new Set(["due", "overdue", "submitted"]);
 
 const EXCEPTION_TYPE_LABEL: Record<ExceptionType, string> = {
   missed_workout: "Missed workout",
+  skipped_workout: "Skipped workout",
   overdue_meal: "Meal gap",
+  skipped_meal: "Skipped meal",
+  meal_deviation: "Meal deviation",
+  meal_logged_later: "Logged later",
   overdue_checkin: "Check-in",
 };
+
+function severityLabel(severity: "critical" | "attention"): string {
+  return severity === "critical" ? "Critical" : "Attention";
+}
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
@@ -512,6 +520,7 @@ function AttentionCard({
             <span className={`status-pill status-${item.exception.status}`}>
               {statusLabel(item.exception.status)}
             </span>
+            <span className="category-pill">{severityLabel(item.exception.severity)}</span>
           </div>
           <span className="exception-type-meta">
             <span className={`category-pill type-${type}`}>{EXCEPTION_TYPE_LABEL[type]}</span>

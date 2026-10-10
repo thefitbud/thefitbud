@@ -838,7 +838,18 @@ export const exceptions = sqliteTable(
       .notNull()
       .references(() => coachingRelationships.id),
     type: text("type", {
-      enum: ["missed_workout", "overdue_meal", "overdue_checkin"],
+      enum: [
+        "missed_workout",
+        "skipped_workout",
+        "overdue_meal",
+        "skipped_meal",
+        "meal_deviation",
+        "meal_logged_later",
+        "overdue_checkin",
+      ],
+    }).notNull(),
+    severity: text("severity", {
+      enum: ["critical", "attention"],
     }).notNull(),
     status: text("status", {
       enum: ["detected", "active", "acknowledged", "resolved"],

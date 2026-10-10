@@ -41,6 +41,7 @@ const MIGRATIONS = [
   "0017_plan_template_ownership.sql",
 
   "0018_assignment_schedule_status.sql",
+  "0020_exception_severity.sql",
 ] as const;
 
 const UNKNOWN_RELATIONSHIP = "00000000-0000-4000-8000-000000000099";
