@@ -87,7 +87,11 @@ INSERT INTO `checkin_form_versions` (
 	'2026-01-01T00:00:00.000Z'
 );
 
-ALTER TABLE `checkins` ADD COLUMN `checkin_form_version_id` text NOT NULL DEFAULT 'c1000001-0000-4000-8000-000000000011' REFERENCES `checkin_form_versions`(`id`);
+-- D1 rejects ADD COLUMN that combines REFERENCES with a non-NULL default, and it
+-- keeps foreign keys enabled, so checkins cannot be rebuilt while reviews and
+-- notes still reference it. Existing rows pin the global form version via the
+-- default. Application writes always store a real checkin_form_versions id.
+ALTER TABLE `checkins` ADD COLUMN `checkin_form_version_id` text NOT NULL DEFAULT 'c1000001-0000-4000-8000-000000000011';
 CREATE INDEX `checkins_form_version_idx` ON `checkins` (`checkin_form_version_id`);
 
 COMMIT;
