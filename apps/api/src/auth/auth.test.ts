@@ -38,6 +38,9 @@ const iterationAMigration = join(drizzleDir, "0015_iteration_a.sql");
 const foodExerciseLibrariesMigration = join(
   drizzleDir,
   "0016_food_exercise_libraries.sql",
+);
+const planTemplateOwnershipMigration = join(
+  drizzleDir,
   "0017_plan_template_ownership.sql",
 );
 const invitationWhatsappMigration = join(
@@ -60,6 +63,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   sqlite.exec(readFileSync(librariesMigration, "utf8"));
   sqlite.exec(readFileSync(iterationAMigration, "utf8"));
   sqlite.exec(readFileSync(foodExerciseLibrariesMigration, "utf8"));
+  sqlite.exec(readFileSync(planTemplateOwnershipMigration, "utf8"));
   const db = drizzle(sqlite, { schema }) as unknown as Db;
   return {
     db,

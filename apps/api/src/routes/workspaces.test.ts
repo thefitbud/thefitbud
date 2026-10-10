@@ -94,6 +94,7 @@ function sampleContent() {
         id: "11111111-1111-4111-8111-111111111111",
         order: 1,
         name: "Day A",
+        weekday: 1,
         exercises: [
           {
             id: "22222222-2222-4222-8222-222222222222",
@@ -112,6 +113,52 @@ function sampleContent() {
           },
         ],
       },
+      {
+        id: "11111111-1111-4111-8111-111111111112",
+        order: 2,
+        name: "Day B",
+        weekday: 3,
+        exercises: [
+          {
+            id: "22222222-2222-4222-8222-222222222223",
+            order: 1,
+            name: "Bench press",
+            instructions: "Pause at the chest",
+            setTargets: [
+              {
+                id: "33333333-3333-4333-8333-333333333334",
+                order: 1,
+                reps: 5,
+                loadLabel: "RPE 7",
+                rpe: 7,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "11111111-1111-4111-8111-111111111113",
+        order: 3,
+        name: "Day C",
+        weekday: 5,
+        exercises: [
+          {
+            id: "22222222-2222-4222-8222-222222222224",
+            order: 1,
+            name: "Row",
+            instructions: "Pull to the lower chest",
+            setTargets: [
+              {
+                id: "33333333-3333-4333-8333-333333333335",
+                order: 1,
+                reps: 5,
+                loadLabel: "RPE 7",
+                rpe: 7,
+              },
+            ],
+          },
+        ],
+      },
     ],
     mealPrescriptions: [
       {
@@ -119,6 +166,7 @@ function sampleContent() {
         order: 1,
         name: "Lunch",
         scheduleHint: "12:30",
+        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
         instructions: "Dal and rice",
         photoRequired: false,
       },
