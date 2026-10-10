@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   planVersionStatusSchema,
+  type AssignmentWindowMode,
+  type DietAdjustmentScope,
   type PlanContent,
   type PlanTemplateSummary,
   type PlanVersion,
   type PlanVersionStatus,
   type PlanWithVersions,
 } from "@fitbud/contracts";
+import { consistencyFingerprint, planConsistencyWarnings } from "@fitbud/core";
+import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
 import {
   PlanCompositionEditor,
   clonePlanContent,
@@ -53,10 +57,17 @@ function versionStatusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
-function localDateUtc(offsetDays = 0): string {
-  const date = new Date();
-  date.setUTCDate(date.getUTCDate() + offsetDays);
-  return date.toISOString().slice(0, 10);
+function warningsFor(
+  content: PlanContent,
+  sessionsPerWeek: number,
+  mealsPerDay: number,
+) {
+  return planConsistencyWarnings({
+    sessionsPerWeek,
+    mealsPerDay,
+    workoutDays: content.workoutDays,
+    mealPrescriptions: content.mealPrescriptions,
+  });
 }
 
 function sessionFromVersion(
@@ -101,6 +112,14 @@ export function ClientPlanPage() {
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [assignmentWindow, setAssignmentWindow] =
+    useState<AssignmentWindowMode>("next_7_days");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [dietScope, setDietScope] = useState<DietAdjustmentScope>("today_onward");
+  const [acknowledgedFingerprint, setAcknowledgedFingerprint] = useState<string | null>(
+    null,
+  );
 
   const loadTemplates = useCallback(async () => {
     setError(null);
@@ -277,6 +296,10 @@ export function ClientPlanPage() {
 
   async function onPublish() {
     if (focus.kind !== "editor") return;
+    if (assignmentWindow === "custom" && (!customFrom || !customTo || customFrom > customTo)) {
+      setError("Choose a custom range with a start date on or before the end date.");
+      return;
+    }
     setActing(true);
     setError(null);
     setMessage(null);
@@ -294,6 +317,7 @@ export function ClientPlanPage() {
         {
           expectedRecordVersion: saved.recordVersion,
           mode: "immediate",
+          dietScope,
         },
         createIdempotencyKey(),
       );
@@ -316,10 +340,14 @@ export function ClientPlanPage() {
               : "The adjustment was published, and the intervention was not recorded.";
         }
       }
+      const generateBody =
+        assignmentWindow === "custom"
+          ? { window: "custom" as const, fromDate: customFrom, toDate: customTo }
+          : { window: assignmentWindow };
       try {
         await apiClient.generateWorkoutAssignments(
           relationshipId,
-          { fromDate: localDateUtc(0), toDate: localDateUtc(13) },
+          generateBody,
           createIdempotencyKey(),
         );
       } catch (err) {
@@ -328,6 +356,21 @@ export function ClientPlanPage() {
             err instanceof ApiClientError
               ? err.message
               : "Workout assignments were not generated.";
+          assignmentNote = [assignmentNote, generateNote].filter(Boolean).join(" ");
+        }
+      }
+      try {
+        await apiClient.generateMealAssignments(
+          relationshipId,
+          { ...generateBody, dietScope },
+          createIdempotencyKey(),
+        );
+      } catch (err) {
+        if (!(err instanceof ApiClientError && err.code === "NO_MEAL_PRESCRIPTIONS")) {
+          const generateNote =
+            err instanceof ApiClientError
+              ? err.message
+              : "Meal assignments were not generated.";
           assignmentNote = [assignmentNote, generateNote].filter(Boolean).join(" ");
         }
       }
@@ -351,6 +394,45 @@ export function ClientPlanPage() {
     }
   }
 
+  async function onAcknowledgeDifference() {
+    if (focus.kind !== "editor" || !configuration) return;
+    setActing(true);
+    setError(null);
+    try {
+      const saved =
+        isDirty(focus.draft) || focus.draft.versionId == null
+          ? await persistDraft(focus.draft)
+          : focus.draft;
+      if (!saved.planId || !saved.versionId) {
+        throw new Error("Save the draft before acknowledging the difference.");
+      }
+      setFocus({ kind: "editor", draft: saved });
+      const warnings = warningsFor(
+        saved.content,
+        configuration.workout.sessionsPerWeek,
+        configuration.nutrition.mealsPerDay,
+      );
+      const fingerprint = consistencyFingerprint(warnings);
+      const result = await apiClient.acknowledgePlanConsistency(
+        saved.planId,
+        saved.versionId,
+        { fingerprint },
+      );
+      setAcknowledgedFingerprint(result.fingerprint);
+      setMessage("The difference is acknowledged. Assignments and exceptions are unchanged.");
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not acknowledge the difference.",
+      );
+    } finally {
+      setActing(false);
+    }
+  }
+
   const viewed =
     focus.kind === "version"
       ? focus
@@ -363,6 +445,37 @@ export function ClientPlanPage() {
         : null;
   const editor = focus.kind === "editor" ? focus.draft : null;
   const contentIssue = editor ? planContentError(editor.content) : null;
+  const comparedContent = editor?.content ?? viewed?.version.content ?? null;
+  const consistencyWarnings = useMemo(() => {
+    if (!comparedContent || !configuration) return [];
+    return warningsFor(
+      comparedContent,
+      configuration.workout.sessionsPerWeek,
+      configuration.nutrition.mealsPerDay,
+    );
+  }, [comparedContent, configuration]);
+  const consistencyFingerprintValue = consistencyFingerprint(consistencyWarnings);
+  const planPath = `/clients/${relationshipId}/plan`;
+  const configurePath = `/clients/${relationshipId}/configure`;
+  const consistencyPlanId = editor?.planId ?? viewed?.version.planId ?? null;
+  const consistencyVersionId = editor?.versionId ?? viewed?.version.id ?? null;
+
+  useEffect(() => {
+    if (!consistencyPlanId || !consistencyVersionId) return;
+    let cancelled = false;
+    void apiClient
+      .getPlanConsistency(consistencyPlanId, consistencyVersionId)
+      .then((result) => {
+        if (cancelled) return;
+        setAcknowledgedFingerprint(result.acknowledged ? result.fingerprint : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAcknowledgedFingerprint(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [consistencyPlanId, consistencyVersionId]);
 
   return (
     <div className="plan-page">
@@ -462,6 +575,68 @@ export function ClientPlanPage() {
               {contentIssue}
             </p>
           ) : null}
+          <PlanConsistencyNotice
+            warnings={consistencyWarnings}
+            acknowledged={acknowledgedFingerprint === consistencyFingerprintValue}
+            acting={acting}
+            onAcknowledge={() => {
+              void onAcknowledgeDifference();
+            }}
+            planTo={planPath}
+            configureTo={configurePath}
+            showPlanLink={false}
+            showConfigureLink
+          />
+          <fieldset className="plan-assignment-window">
+            <legend>Assignment window</legend>
+            <label className="field">
+              <span>When to place sessions</span>
+              <select
+                value={assignmentWindow}
+                onChange={(event) =>
+                  setAssignmentWindow(event.target.value as AssignmentWindowMode)
+                }
+              >
+                <option value="next_7_days">Next 7 days</option>
+                <option value="next_calendar_week">Next calendar week</option>
+                <option value="custom">Custom dates</option>
+              </select>
+            </label>
+            {assignmentWindow === "custom" ? (
+              <div className="plan-assignment-window">
+                <label className="field">
+                  <span>From</span>
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(event) => setCustomFrom(event.target.value)}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>To</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(event) => setCustomTo(event.target.value)}
+                    required
+                  />
+                </label>
+              </div>
+            ) : null}
+            <label className="field">
+              <span>Diet adjustment</span>
+              <select
+                value={dietScope}
+                onChange={(event) =>
+                  setDietScope(event.target.value as DietAdjustmentScope)
+                }
+              >
+                <option value="today_onward">Today onward</option>
+                <option value="today_only">Today only</option>
+              </select>
+            </label>
+          </fieldset>
           <div className="plan-composer-actions">
             <button
               type="button"
@@ -541,6 +716,14 @@ export function ClientPlanPage() {
             </p>
           </section>
           <section className="plan-card">
+            <PlanConsistencyNotice
+              warnings={consistencyWarnings}
+              acknowledged={acknowledgedFingerprint === consistencyFingerprintValue}
+              planTo={planPath}
+              configureTo={configurePath}
+              showPlanLink={false}
+              showConfigureLink
+            />
             <PlanCompositionEditor content={viewed.version.content} />
           </section>
           {focus.kind === "effective" ? (

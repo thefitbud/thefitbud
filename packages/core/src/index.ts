@@ -107,10 +107,29 @@ export {
   isOpenWorkoutExecution,
   isQualifyingWorkoutExecution,
   resolveCompletedWorkoutStatus,
-  sessionWeekdaysForFrequency,
   setCompletionIsModified,
   weekdayFromLocalDate,
 } from "./workout.js";
+
+export {
+  clipInclusiveLocalRange,
+  consistencyFingerprint,
+  localDatesInRange,
+  mealsOnDates,
+  nextCalendarWeekRange,
+  nextSevenDayRange,
+  planConsistencyWarnings,
+  resolveAssignmentWindow,
+  supersedeFromLocalDate,
+  workoutScheduleSignature,
+  workoutSchedulesMatch,
+  workoutSessionsOnDates,
+  type AssignmentWindowMode,
+  type ConsistencyWarning,
+  type ConsistencyWarningCode,
+  type DietAdjustmentScope,
+  type LocalDateRange,
+} from "./schedule.js";
 
 export {
   canRecordMealCompliance,

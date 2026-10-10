@@ -52,10 +52,15 @@ export const workoutExerciseSchema = z.object({
 });
 export type WorkoutExercise = z.infer<typeof workoutExerciseSchema>;
 
+/** 0 = Sunday … 6 = Saturday. Omitted on legacy content that has no calendar. */
+export const weekdaySchema = z.number().int().min(0).max(6);
+export type Weekday = z.infer<typeof weekdaySchema>;
+
 export const workoutDaySchema = z.object({
   id: uuidSchema,
   order: z.number().int().min(1).max(14),
   name: z.string().trim().min(1).max(120),
+  weekday: weekdaySchema.nullable().optional(),
   exercises: z.array(workoutExerciseSchema).max(40),
 });
 export type WorkoutDay = z.infer<typeof workoutDaySchema>;
@@ -123,10 +128,47 @@ export const mealFoodItemSchema = z.union([
 ]);
 export type MealFoodItem = z.infer<typeof mealFoodItemSchema>;
 
+export const mealTypeSchema = z.enum([
+  "breakfast",
+  "lunch",
+  "snack",
+  "dinner",
+  "other",
+]);
+export type MealType = z.infer<typeof mealTypeSchema>;
+
+/** Trainee-local clock time. Not a generation window. */
+export const localTimeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:mm");
+
+export const assignmentWindowModeSchema = z.enum([
+  "next_7_days",
+  "next_calendar_week",
+  "custom",
+]);
+export type AssignmentWindowMode = z.infer<typeof assignmentWindowModeSchema>;
+
+export const dietAdjustmentScopeSchema = z.enum(["today_onward", "today_only"]);
+export type DietAdjustmentScope = z.infer<typeof dietAdjustmentScopeSchema>;
+
+export const assignmentScheduleStatusSchema = z.enum([
+  "scheduled",
+  "superseded",
+]);
+export type AssignmentScheduleStatus = z.infer<
+  typeof assignmentScheduleStatusSchema
+>;
+
 export const mealPrescriptionSchema = z.object({
   id: uuidSchema,
   order: z.number().int().min(1).max(12),
+  /** Custom label, separate from meal type. */
   name: z.string().trim().min(1).max(120),
+  mealType: mealTypeSchema.nullable().optional(),
+  applicableWeekdays: z.array(weekdaySchema).max(7).optional(),
+  localTime: localTimeSchema.nullable().optional(),
+  /** Legacy display text. Ignored when placing assignments. */
   scheduleHint: z.string().trim().max(120).nullable(),
   instructions: z.string().trim().max(2000).nullable(),
   photoRequired: z.boolean(),
@@ -220,6 +262,8 @@ export const publishPlanRequestSchema = z.object({
   expectedRecordVersion: z.number().int().nonnegative(),
   mode: z.enum(["immediate", "scheduled"]),
   effectiveFrom: isoDateTimeSchema.optional(),
+  /** Meal reconciliation scope. Defaults to today onward. Does not set plan expiry. */
+  dietScope: dietAdjustmentScopeSchema.optional(),
 });
 export type PublishPlanRequest = z.infer<typeof publishPlanRequestSchema>;
 
@@ -245,3 +289,34 @@ export const planListFilterSchema = z.object({
   effectiveTo: isoDateTimeSchema.optional(),
 });
 export type PlanListFilter = z.infer<typeof planListFilterSchema>;
+
+export const consistencyWarningCodeSchema = z.enum([
+  "workout_weekdays",
+  "workout_sessions",
+  "meal_weekdays",
+  "meal_slots",
+]);
+
+export const consistencyWarningSchema = z.object({
+  code: consistencyWarningCodeSchema,
+  message: z.string().min(1).max(500),
+  expected: z.number().int().nonnegative(),
+  actual: z.number().int().nonnegative(),
+});
+export type ConsistencyWarning = z.infer<typeof consistencyWarningSchema>;
+
+export const planConsistencyResponseSchema = z.object({
+  fingerprint: z.string(),
+  acknowledged: z.boolean(),
+  warnings: z.array(consistencyWarningSchema),
+});
+export type PlanConsistencyResponse = z.infer<
+  typeof planConsistencyResponseSchema
+>;
+
+export const acknowledgePlanConsistencyRequestSchema = z.object({
+  fingerprint: z.string().min(1).max(500),
+});
+export type AcknowledgePlanConsistencyRequest = z.infer<
+  typeof acknowledgePlanConsistencyRequestSchema
+>;

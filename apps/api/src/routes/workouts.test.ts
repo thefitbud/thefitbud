@@ -13,7 +13,8 @@ import {
   type Db,
 } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
-import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
+import { addDaysToLocalDate, formatLocalDate, weekdayFromLocalDate } from "@fitbud/core";
+import { handleScheduledReplenishment } from "../jobs/replenishment.js";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 
@@ -29,6 +30,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0002_coaching_configuration.sql",
     "0003_plans.sql",
     "0004_workouts.sql",
+    "0005_meals.sql",
     "0009_sync.sql",
     "0010_notifications.sql",
     "0013_domain_contracts.sql",
@@ -37,6 +39,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
     "0015_iteration_a.sql",
     "0016_food_exercise_libraries.sql",
     "0017_plan_template_ownership.sql",
+    "0018_assignment_schedule_status.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -93,6 +96,7 @@ function sampleContent() {
         id: "11111111-1111-4111-8111-111111111111",
         order: 1,
         name: "Day A",
+        weekday: 1,
         exercises: [
           {
             id: "22222222-2222-4222-8222-222222222222",
@@ -329,6 +333,8 @@ async function reachEffectivePlan(suffix: string, requireSessionRpe = false) {
     trainerCookie: trainer.cookie,
     traineeToken,
     relationshipId,
+    planId: planBody.data.plan.id,
+    versionId: planBody.data.version.id,
     today,
     toDate,
   };
@@ -748,5 +754,286 @@ describe("workout assignment and execution", () => {
     expect(again.status).toBe(200);
     const againBody = (await again.json()) as { data: { status: string } };
     expect(againBody.data.status).toBe("missed");
+  });
+
+  it("places sessions only on stored weekdays and does not move the plan interval", async () => {
+    const { trainerCookie, relationshipId, planId, versionId, today, toDate } =
+      await reachEffectivePlan("weekdays");
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const items = (
+      (await listed.json()) as {
+        data: { items: Array<{ localDate: string; planVersionId: string }> };
+      }
+    ).data.items;
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((item) => weekdayFromLocalDate(item.localDate) === 1)).toBe(
+      true,
+    );
+    expect(items.every((item) => item.planVersionId === versionId)).toBe(true);
+
+    const before = await app.request(
+      `/plans/${planId}/versions/${versionId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const beforeBody = (await before.json()) as {
+      data: { effectiveFrom: string | null; effectiveTo: string | null };
+    };
+    const replay = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments/generate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "gen-wo-weekdays-replay",
+        },
+        body: JSON.stringify({ window: "next_7_days" }),
+      },
+      testEnv(),
+    );
+    expect(replay.status).toBe(200);
+    expect(((await replay.json()) as { data: { created: number } }).data.created).toBe(0);
+    const after = await app.request(
+      `/plans/${planId}/versions/${versionId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const afterBody = (await after.json()) as {
+      data: { effectiveFrom: string | null; effectiveTo: string | null };
+    };
+    expect(afterBody.data.effectiveFrom).toBe(beforeBody.data.effectiveFrom);
+    expect(afterBody.data.effectiveTo).toBe(beforeBody.data.effectiveTo);
+  });
+
+  it("rejects generation after the relationship ends and replenishes only active relationships", async () => {
+    const { trainerCookie, relationshipId, today } = await reachEffectivePlan("ended-gen");
+    const db = getTestDbOverride();
+    expect(db).toBeTruthy();
+    const horizonEnd = addDaysToLocalDate(today, 6);
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${horizonEnd}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const monday = (
+      (await listed.json()) as { data: { items: Array<{ id: string; localDate: string }> } }
+    ).data.items.find((item) => weekdayFromLocalDate(item.localDate) === 1);
+    expect(monday).toBeTruthy();
+    await db!.delete(schema.workoutAssignments).where(eq(schema.workoutAssignments.id, monday!.id));
+    await handleScheduledReplenishment(testEnv());
+    const restored = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${horizonEnd}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const restoredItems = (
+      (await restored.json()) as { data: { items: Array<{ localDate: string }> } }
+    ).data.items;
+    expect(restoredItems.some((item) => item.localDate === monday!.localDate)).toBe(true);
+
+    const now = new Date().toISOString();
+    await db!
+      .update(schema.coachingRelationships)
+      .set({ status: "ended", endedAt: now, updatedAt: now })
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    const generated = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments/generate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "gen-wo-ended",
+        },
+        body: JSON.stringify({ window: "next_7_days" }),
+      },
+      testEnv(),
+    );
+    expect(generated.status).toBe(409);
+    expect(((await generated.json()) as { error: { code: string } }).error.code).toBe(
+      "RELATIONSHIP_ENDED",
+    );
+    const again = restoredItems.find((item) => item.localDate === monday!.localDate);
+    expect(again).toBeTruthy();
+    const currentListed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${horizonEnd}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const current = (
+      (await currentListed.json()) as {
+        data: { items: Array<{ id: string; localDate: string }> };
+      }
+    ).data.items.find((item) => item.localDate === monday!.localDate);
+    await db!.delete(schema.workoutAssignments).where(eq(schema.workoutAssignments.id, current!.id));
+    await handleScheduledReplenishment(testEnv());
+    const afterEnd = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${horizonEnd}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const afterItems = (
+      (await afterEnd.json()) as { data: { items: Array<{ localDate: string }> } }
+    ).data.items;
+    expect(afterItems.some((item) => item.localDate === monday!.localDate)).toBe(false);
+  });
+
+  it("keeps a started session on its plan version when a later workout plan is published", async () => {
+    const { trainerCookie, traineeToken, relationshipId, planId, versionId, today, toDate } =
+      await reachEffectivePlan("protect");
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const assignmentId = (
+      (await listed.json()) as { data: { items: Array<{ id: string }> } }
+    ).data.items[0]!.id;
+    const started = await app.request(
+      `/workouts/assignments/${assignmentId}/start`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Idempotency-Key": "start-protect",
+        },
+      },
+      testEnv(),
+    );
+    expect(started.status).toBe(200);
+
+    const draft = await app.request(
+      `/plans/${planId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "draft-protect",
+        },
+        body: JSON.stringify({ sourceVersionId: versionId, asAdjustment: true }),
+      },
+      testEnv(),
+    );
+    expect(draft.status).toBe(201);
+    const draftBody = (await draft.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const changed = sampleContent();
+    changed.workoutDays[0]!.exercises[0]!.name = "Front squat";
+    const saved = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: draftBody.data.recordVersion,
+          content: changed,
+        }),
+      },
+      testEnv(),
+    );
+    expect(saved.status).toBe(200);
+    const savedBody = (await saved.json()) as { data: { recordVersion: number } };
+    const published = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "publish-protect",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: savedBody.data.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(200);
+    const kept = await app.request(
+      `/workouts/assignments/${assignmentId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const keptBody = (await kept.json()) as {
+      data: { planVersionId: string; scheduleStatus: string };
+    };
+    expect(keptBody.data.planVersionId).toBe(versionId);
+    expect(keptBody.data.scheduleStatus).toBe("scheduled");
+  });
+
+  it("warns when weekday sessions disagree with sessions per week and accepts an acknowledgement", async () => {
+    const { trainerCookie, planId, versionId } = await reachEffectivePlan("warn");
+    const consistency = await app.request(
+      `/plans/${planId}/versions/${versionId}/consistency`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(consistency.status).toBe(200);
+    const body = (await consistency.json()) as {
+      data: {
+        fingerprint: string;
+        acknowledged: boolean;
+        warnings: Array<{ code: string; message: string }>;
+      };
+    };
+    expect(body.data.acknowledged).toBe(false);
+    const warning = body.data.warnings.find((item) => item.code === "workout_sessions");
+    expect(warning?.message).toContain(
+      "Adjust the plan, adjust the configuration, or acknowledge the difference.",
+    );
+    const acknowledged = await app.request(
+      `/plans/${planId}/versions/${versionId}/consistency-acknowledgement`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fingerprint: body.data.fingerprint }),
+      },
+      testEnv(),
+    );
+    expect(acknowledged.status).toBe(200);
+    expect(
+      ((await acknowledged.json()) as { data: { acknowledged: boolean } }).data.acknowledged,
+    ).toBe(true);
+    const mismatch = await app.request(
+      `/plans/${planId}/versions/${versionId}/consistency-acknowledgement`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fingerprint: "workout_sessions:3:9" }),
+      },
+      testEnv(),
+    );
+    expect(mismatch.status).toBe(409);
+    expect(((await mismatch.json()) as { error: { code: string } }).error.code).toBe(
+      "CONSISTENCY_FINGERPRINT_MISMATCH",
+    );
   });
 });

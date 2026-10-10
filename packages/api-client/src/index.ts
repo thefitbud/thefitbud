@@ -52,6 +52,8 @@ import {
   meResponseSchema,
   traineeProfileSchema,
   updateTraineeProfileRequestSchema,
+  acknowledgePlanConsistencyRequestSchema,
+  planConsistencyResponseSchema,
   planListResponseSchema,
   planTemplateListResponseSchema,
   planTemplateSchema,
@@ -205,6 +207,8 @@ import {
   type MeasurementListResponse,
   type MediaAsset,
   type MeResponse,
+  type AcknowledgePlanConsistencyRequest,
+  type PlanConsistencyResponse,
   type PlanListResponse,
   type PlanTemplate,
   type PlanTemplateListResponse,
@@ -739,6 +743,32 @@ export class FitBudApiClient {
       `/plans/${planId}/versions/${versionId}/publish`,
       planVersionSchema,
       { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async getPlanConsistency(
+    planId: string,
+    versionId: string,
+  ): Promise<PlanConsistencyResponse> {
+    return this.request(
+      "GET",
+      `/plans/${planId}/versions/${versionId}/consistency`,
+      planConsistencyResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async acknowledgePlanConsistency(
+    planId: string,
+    versionId: string,
+    body: AcknowledgePlanConsistencyRequest,
+  ): Promise<PlanConsistencyResponse> {
+    const parsed = acknowledgePlanConsistencyRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/plans/${planId}/versions/${versionId}/consistency-acknowledgement`,
+      planConsistencyResponseSchema,
+      { auth: true, body: parsed },
     );
   }
 

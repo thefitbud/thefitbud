@@ -7,12 +7,14 @@ import {
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
+  acknowledgePlanConsistencyRequestSchema,
   createPlanDraftFromVersionRequestSchema,
   createPlanRequestSchema,
   createPlanResponseSchema,
   applyPlanTemplateRequestSchema,
   applyPlanTemplateResponseSchema,
   effectivePlanResponseSchema,
+  planConsistencyResponseSchema,
   planContentSchema,
   planListFilterSchema,
   planListResponseSchema,
@@ -25,17 +27,27 @@ import {
   canEditPlanVersion,
   canPromoteScheduledPlanVersion,
   canPublishPlanVersion,
+  consistencyFingerprint,
   copyPlanContent,
   isPastOnboardingReview,
+  planConsistencyWarnings,
 } from "@fitbud/core";
 import { onboardingStatusForRelationship } from "../domain/client-status";
 import { prepareWritablePlanContent } from "../domain/library-snapshots";
+import {
+  loadAssignmentPolicy,
+  reconcilePublishedPlan,
+  saveAssignmentPolicy,
+} from "../domain/assignment-schedule";
 import { createDb } from "../db/client";
 import {
+  coachingConfigurations,
   coachingRelationships,
+  nutritionExpectations,
   plans,
   planTemplates,
   planVersions,
+  workoutExpectations,
 } from "../db/schema";
 import {
   mapPlan,
@@ -184,6 +196,7 @@ async function supersedeEffectiveVersions(
     .where(
       and(eq(planVersions.planId, planId), eq(planVersions.status, "effective")),
     );
+  const superseded = [];
   for (const row of effectiveRows) {
     if (exceptVersionId && row.id === exceptVersionId) continue;
     await db
@@ -194,7 +207,9 @@ async function supersedeEffectiveVersions(
         updatedAt: now,
       })
       .where(eq(planVersions.id, row.id));
+    superseded.push(row);
   }
+  return superseded;
 }
 
 export async function promoteDueScheduledVersions(
@@ -225,7 +240,14 @@ export async function promoteDueScheduledVersions(
     ) {
       continue;
     }
-    await supersedeEffectiveVersions(db, row.plan.id, now);
+    const relationships = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1);
+    const relationship = relationships[0];
+    if (!relationship || relationship.status === "ended") continue;
+    const previous = await supersedeEffectiveVersions(db, row.plan.id, now);
     await db
       .update(planVersions)
       .set({
@@ -233,6 +255,22 @@ export async function promoteDueScheduledVersions(
         updatedAt: now,
       })
       .where(eq(planVersions.id, row.version.id));
+    const policy = await loadAssignmentPolicy(db, row.version.id);
+    const [updated] = await db
+      .select()
+      .from(planVersions)
+      .where(eq(planVersions.id, row.version.id))
+      .limit(1);
+    if (updated) {
+      await reconcilePublishedPlan(db, {
+        relationshipId,
+        traineeUserId: relationship.traineeUserId,
+        newVersion: updated,
+        previousVersions: previous,
+        dietScope: policy?.dietAdjustmentScope ?? "today_onward",
+        now,
+      });
+    }
     if (env) {
       queueRealtimeHint(env, {
         eventType: "effective_plan_changed",
@@ -1221,6 +1259,14 @@ planRoutes.post(
     if (!owned) {
       return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
     }
+    if (owned.relationship.status === "ended") {
+      return fail(
+        c,
+        409,
+        "RELATIONSHIP_ENDED",
+        "Ended relationships cannot publish plans.",
+      );
+    }
 
     const versions = await db
       .select()
@@ -1298,8 +1344,10 @@ planRoutes.post(
       }
     }
 
+    let previousVersions: Awaited<ReturnType<typeof supersedeEffectiveVersions>> =
+      [];
     if (nextStatus === "effective") {
-      await supersedeEffectiveVersions(db, planId, now);
+      previousVersions = await supersedeEffectiveVersions(db, planId, now);
     }
 
     await db
@@ -1335,6 +1383,28 @@ planRoutes.post(
         "PLAN_VERSION_PERSIST_FAILED",
         "Plan version could not be loaded.",
       );
+    }
+
+    const dietScope = parsed.data.dietScope ?? "today_onward";
+    if (nextStatus === "effective") {
+      await reconcilePublishedPlan(db, {
+        relationshipId: owned.relationship.id,
+        traineeUserId: owned.relationship.traineeUserId,
+        newVersion: updated,
+        previousVersions,
+        dietScope,
+        now,
+      });
+    } else {
+      const existingPolicy = await loadAssignmentPolicy(db, updated.id);
+      await saveAssignmentPolicy(db, {
+        planVersionId: updated.id,
+        dietAdjustmentScope: dietScope,
+        dietScopeLocalDate: null,
+        futureMealPlanVersionId: null,
+        consistencyAckFingerprint:
+          existingPolicy?.consistencyAckFingerprint ?? null,
+      });
     }
 
     const data = planVersionSchema.parse(mapPlanVersion(updated));
@@ -1528,3 +1598,183 @@ planRoutes.post(
     return ok(c, data, 201);
   },
 );
+
+async function loadPlanConsistency(
+  db: Db,
+  version: typeof planVersions.$inferSelect,
+  relationshipId: string,
+) {
+  const content = parsePlanContentJson(version.contentJson);
+  const configRows = await db
+    .select({
+      sessionsPerWeek: workoutExpectations.sessionsPerWeek,
+      mealsPerDay: nutritionExpectations.mealsPerDay,
+    })
+    .from(coachingConfigurations)
+    .innerJoin(
+      workoutExpectations,
+      eq(workoutExpectations.coachingConfigurationId, coachingConfigurations.id),
+    )
+    .innerJoin(
+      nutritionExpectations,
+      eq(
+        nutritionExpectations.coachingConfigurationId,
+        coachingConfigurations.id,
+      ),
+    )
+    .where(
+      and(
+        eq(coachingConfigurations.coachingRelationshipId, relationshipId),
+        eq(coachingConfigurations.status, "active"),
+      ),
+    )
+    .limit(1);
+  const config = configRows[0];
+  const warnings = config
+    ? planConsistencyWarnings({
+        sessionsPerWeek: config.sessionsPerWeek,
+        mealsPerDay: config.mealsPerDay,
+        workoutDays: content.workoutDays,
+        mealPrescriptions: content.mealPrescriptions,
+      })
+    : [];
+  const fingerprint = consistencyFingerprint(warnings);
+  const policy = await loadAssignmentPolicy(db, version.id);
+  return planConsistencyResponseSchema.parse({
+    fingerprint,
+    acknowledged:
+      fingerprint.length > 0 &&
+      policy?.consistencyAckFingerprint === fingerprint,
+    warnings,
+  });
+}
+
+planRoutes.get(
+  "/:planId/versions/:versionId/consistency",
+  operation({
+    tag: "Plans",
+    summary: "Compare plan content with active configuration expectations.",
+    description:
+      "Returns an actionable warning when weekday sessions or meal slots disagree with configuration. This is not an adherence exception.",
+    roles: ["trainer"],
+    response: planConsistencyResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, c.req.param("planId"), actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const versions = await db
+      .select()
+      .from(planVersions)
+      .where(
+        and(
+          eq(planVersions.id, c.req.param("versionId")),
+          eq(planVersions.planId, owned.plan.id),
+        ),
+      )
+      .limit(1);
+    const version = versions[0];
+    if (!version) {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
+    return ok(c, await loadPlanConsistency(db, version, owned.relationship.id));
+  },
+);
+
+planRoutes.post(
+  "/:planId/versions/:versionId/consistency-acknowledgement",
+  operation({
+    tag: "Plans",
+    summary: "Acknowledge a plan and configuration difference.",
+    description:
+      "Records that the trainer accepts the current difference. It does not change plan content, assignments, or exceptions.",
+    roles: ["trainer"],
+    body: acknowledgePlanConsistencyRequestSchema,
+    response: planConsistencyResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = acknowledgePlanConsistencyRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid acknowledgement.");
+    }
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, c.req.param("planId"), actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    if (owned.relationship.status === "ended") {
+      return fail(
+        c,
+        409,
+        "RELATIONSHIP_ENDED",
+        "Ended relationships cannot change plans.",
+      );
+    }
+    const versions = await db
+      .select()
+      .from(planVersions)
+      .where(
+        and(
+          eq(planVersions.id, c.req.param("versionId")),
+          eq(planVersions.planId, owned.plan.id),
+        ),
+      )
+      .limit(1);
+    const version = versions[0];
+    if (!version) {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
+    const current = await loadPlanConsistency(
+      db,
+      version,
+      owned.relationship.id,
+    );
+    if (current.warnings.length === 0) {
+      return fail(
+        c,
+        422,
+        "NO_CONSISTENCY_WARNING",
+        "There is no configuration difference to acknowledge.",
+      );
+    }
+    if (parsed.data.fingerprint !== current.fingerprint) {
+      return fail(
+        c,
+        409,
+        "CONSISTENCY_FINGERPRINT_MISMATCH",
+        "The plan or configuration changed. Review the warning again.",
+      );
+    }
+    const existing = await loadAssignmentPolicy(db, version.id);
+    await saveAssignmentPolicy(db, {
+      planVersionId: version.id,
+      dietAdjustmentScope: existing?.dietAdjustmentScope ?? null,
+      dietScopeLocalDate: existing?.dietScopeLocalDate ?? null,
+      futureMealPlanVersionId: existing?.futureMealPlanVersionId ?? null,
+      consistencyAckFingerprint: current.fingerprint,
+    });
+    return ok(
+      c,
+      await loadPlanConsistency(db, version, owned.relationship.id),
+    );
+  },
+);
+

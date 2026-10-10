@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
-import { mealPrescriptionSchema } from "./plan.js";
+import {
+  assignmentScheduleStatusSchema,
+  assignmentWindowModeSchema,
+  dietAdjustmentScopeSchema,
+  mealPrescriptionSchema,
+} from "./plan.js";
 import { localDateSchema } from "./workout.js";
 
 /** Persisted compliance outcome. Pending / Logged Later / Overdue are never stored. */
@@ -78,6 +83,9 @@ export const mealAssignmentSchema = z.object({
   photoRequired: z.boolean(),
   /** Derived for UI; Pending / Logged Later / Overdue are never client-written. */
   status: mealAssignmentStatusSchema,
+  scheduleStatus: assignmentScheduleStatusSchema.default("scheduled"),
+  supersededAt: isoDateTimeSchema.nullable().optional(),
+  supersededByPlanVersionId: uuidSchema.nullable().optional(),
   prescription: mealPrescriptionSchema,
   compliance: mealComplianceSchema.nullable(),
   createdAt: isoDateTimeSchema,
@@ -93,8 +101,10 @@ export type MealAssignmentListResponse = z.infer<
 >;
 
 export const generateMealAssignmentsRequestSchema = z.object({
-  fromDate: localDateSchema,
-  toDate: localDateSchema,
+  window: assignmentWindowModeSchema.optional(),
+  fromDate: localDateSchema.optional(),
+  toDate: localDateSchema.optional(),
+  dietScope: dietAdjustmentScopeSchema.optional(),
 });
 export type GenerateMealAssignmentsRequest = z.infer<
   typeof generateMealAssignmentsRequestSchema

@@ -198,6 +198,8 @@ const APP_MIGRATIONS = [
   "0015_iteration_a.sql",
   "0016_food_exercise_libraries.sql",
   "0017_plan_template_ownership.sql",
+
+  "0018_assignment_schedule_status.sql",
 ];
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {

@@ -124,5 +124,12 @@
     "when": 1728835200000,
     "tag": "0017_plan_template_ownership",
     "breakpoints": true
+  },
+  {
+    "idx": 18,
+    "version": "7",
+    "when": 1728921600000,
+    "tag": "0018_assignment_schedule_status",
+    "breakpoints": true
   }
 ]

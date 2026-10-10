@@ -194,6 +194,7 @@ async function listWorkoutActivity(
 ): Promise<WorkspaceActivityItem[]> {
   const conditions = [
     eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+    eq(workoutAssignments.scheduleStatus, "scheduled"),
   ];
   if (input.occurredFrom) {
     conditions.push(gte(workoutAssignments.localDate, input.occurredFrom));
@@ -250,6 +251,7 @@ async function listMealActivity(
 ): Promise<WorkspaceActivityItem[]> {
   const conditions = [
     eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+    eq(mealAssignments.scheduleStatus, "scheduled"),
   ];
   if (input.occurredFrom) {
     conditions.push(gte(mealAssignments.localDate, input.occurredFrom));

@@ -66,11 +66,15 @@ export function clonePlanContent(content: PlanContent): PlanContent {
   };
 }
 
-export function createWorkoutDay(order: number): WorkoutDay {
+export function createWorkoutDay(
+  order: number,
+  weekday: number | null = 1,
+): WorkoutDay {
   return {
     id: newId(),
     order,
     name: `Day ${order}`,
+    weekday,
     exercises: [],
   };
 }
@@ -99,11 +103,17 @@ export function createSetTarget(order: number): WorkoutSetTarget {
   };
 }
 
+const MEAL_TYPES = ["breakfast", "lunch", "snack", "dinner", "other"] as const;
+
 export function createMeal(order: number): MealPrescription {
+  const mealType = order <= 4 ? MEAL_TYPES[order - 1]! : "other";
   return {
     id: newId(),
     order,
     name: `Meal ${order}`,
+    mealType,
+    applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+    localTime: null,
     scheduleHint: null,
     instructions: null,
     photoRequired: false,
@@ -222,9 +232,19 @@ export function addWorkoutDay(content: PlanContent): PlanContent {
     ...content,
     workoutDays: withOrder([
       ...sortedByOrder(content.workoutDays),
-      createWorkoutDay(content.workoutDays.length + 1),
+      createWorkoutDay(
+        content.workoutDays.length + 1,
+        nextUnusedWeekday(content.workoutDays),
+      ),
     ]),
   };
+}
+
+function nextUnusedWeekday(days: ReadonlyArray<{ weekday?: number | null }>): number {
+  const used = new Set(
+    days.map((day) => day.weekday).filter((weekday) => weekday != null),
+  );
+  return [1, 2, 3, 4, 5, 6, 0].find((weekday) => !used.has(weekday)) ?? 1;
 }
 
 export function removeWorkoutDay(content: PlanContent, dayId: string): PlanContent {
@@ -391,11 +411,28 @@ export function moveMeal(
   return { ...content, mealPrescriptions: withOrder(moved) };
 }
 
+export function updateWorkoutDayWeekday(
+  content: PlanContent,
+  dayId: string,
+  weekday: number,
+): PlanContent {
+  return mapDay(content, dayId, (day) => ({ ...day, weekday }));
+}
+
 export function updateMeal(
   content: PlanContent,
   mealId: string,
   patch: Partial<
-    Pick<MealPrescription, "name" | "scheduleHint" | "instructions" | "photoRequired">
+    Pick<
+      MealPrescription,
+      | "name"
+      | "mealType"
+      | "applicableWeekdays"
+      | "localTime"
+      | "scheduleHint"
+      | "instructions"
+      | "photoRequired"
+    >
   >,
 ): PlanContent {
   return mapMeal(content, mealId, (meal) => ({ ...meal, ...patch }));
@@ -508,6 +545,7 @@ export function duplicateWorkoutDay(
     id: newId(),
     order: source.order,
     name: source.name,
+    weekday: nextUnusedWeekday(days),
     exercises: sortedByOrder(source.exercises).map(cloneExercise),
   };
   const next = days.slice();

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
-import { workoutDaySchema } from "./plan.js";
+import {
+  assignmentScheduleStatusSchema,
+  assignmentWindowModeSchema,
+  workoutDaySchema,
+} from "./plan.js";
 
 /** Calendar date in the trainee's timezone (YYYY-MM-DD). */
 export const localDateSchema = z
@@ -118,6 +122,9 @@ export const workoutAssignmentSchema = z.object({
   windowEndsAt: isoDateTimeSchema,
   /** Derived for UI; Missed is never client-written. */
   status: workoutAssignmentStatusSchema,
+  scheduleStatus: assignmentScheduleStatusSchema.default("scheduled"),
+  supersededAt: isoDateTimeSchema.nullable().optional(),
+  supersededByPlanVersionId: uuidSchema.nullable().optional(),
   workoutDay: workoutDaySchema,
   execution: workoutExecutionSummarySchema.nullable(),
   createdAt: isoDateTimeSchema,
@@ -133,8 +140,9 @@ export type WorkoutAssignmentListResponse = z.infer<
 >;
 
 export const generateWorkoutAssignmentsRequestSchema = z.object({
-  fromDate: localDateSchema,
-  toDate: localDateSchema,
+  window: assignmentWindowModeSchema.optional(),
+  fromDate: localDateSchema.optional(),
+  toDate: localDateSchema.optional(),
 });
 export type GenerateWorkoutAssignmentsRequest = z.infer<
   typeof generateWorkoutAssignmentsRequestSchema

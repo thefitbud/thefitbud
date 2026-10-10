@@ -641,6 +641,30 @@
   gap: 0.75rem;
 }
 
+.plan-consistency {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border, #c9c3b8);
+  background: var(--color-surface-muted, #f6f3ee);
+}
+
+.plan-consistency ul {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.plan-comp-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.plan-assignment-window {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0 1rem;
+}
+
 @media (min-width: 720px) {
   .plan-comp-food-grid {
     grid-template-columns: 1fr 1fr;

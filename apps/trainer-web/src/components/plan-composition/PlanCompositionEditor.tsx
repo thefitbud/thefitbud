@@ -42,9 +42,32 @@ import {
   updateMeal,
   updateSetTarget,
   updateWorkoutDayName,
+  updateWorkoutDayWeekday,
 } from "./content";
 
 export type PlanCompositionSections = "workout" | "nutrition" | "both";
+
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 0, label: "Sunday" },
+] as const;
+
+const MEAL_TYPE_OPTIONS = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "snack", label: "Snack" },
+  { value: "dinner", label: "Dinner" },
+  { value: "other", label: "Other" },
+] as const;
+
+function weekdayLabel(weekday: number | null | undefined): string {
+  return WEEKDAY_OPTIONS.find((option) => option.value === weekday)?.label ?? "No weekday";
+}
 
 type EditorChange = (content: PlanContent) => void;
 
@@ -140,6 +163,7 @@ function PlanCompositionReadOnly({ content }: { content: PlanContent }) {
                 <h4>
                   {day.order}. {day.name}
                 </h4>
+                <p className="muted">{weekdayLabel(day.weekday)}</p>
                 {day.exercises.length === 0 ? (
                   <p className="muted">No exercises on this day.</p>
                 ) : (
@@ -196,9 +220,17 @@ function MealReadOnly({ meal }: { meal: MealPrescription }) {
         {meal.order}. {meal.name}
       </h4>
       <p className="muted">
-        {meal.scheduleHint ?? "No schedule hint"}
+        {meal.mealType ?? "Meal"}
+        {meal.localTime ? ` · ${meal.localTime}` : ""}
+        {" · "}
+        {(meal.applicableWeekdays ?? []).length > 0
+          ? (meal.applicableWeekdays ?? []).map((weekday) => weekdayLabel(weekday)).join(", ")
+          : "No weekdays"}
         {meal.photoRequired ? " · photo required" : ""}
       </p>
+      {meal.scheduleHint ? (
+        <p className="muted">Legacy schedule note: {meal.scheduleHint}</p>
+      ) : null}
       {meal.instructions ? <p className="plan-cue">{meal.instructions}</p> : null}
       {items.length === 0 ? (
         <p className="muted">No food items on this meal.</p>
@@ -501,6 +533,27 @@ function DayFields({
   return (
     <div className="plan-comp-stack">
       <label className="field">
+        <span>Weekday</span>
+        <select
+          value={day.weekday ?? ""}
+          onChange={(event) =>
+            onChange(
+              updateWorkoutDayWeekday(content, day.id, Number(event.target.value)),
+            )
+          }
+          required
+        >
+          <option value="" disabled>
+            Choose a weekday
+          </option>
+          {WEEKDAY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
         <span>Day name</span>
         <input
           value={day.name}
@@ -741,7 +794,64 @@ function MealFields({
         />
       </label>
       <label className="field">
-        <span>Schedule hint</span>
+        <span>Meal type</span>
+        <select
+          value={meal.mealType ?? "other"}
+          onChange={(event) =>
+            onChange(
+              updateMeal(content, meal.id, {
+                mealType: event.target.value as MealPrescription["mealType"],
+              }),
+            )
+          }
+        >
+          {MEAL_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <fieldset className="field">
+        <legend>Applicable weekdays</legend>
+        <div className="plan-comp-weekdays">
+          {WEEKDAY_OPTIONS.map((option) => {
+            const selected = (meal.applicableWeekdays ?? []).includes(option.value);
+            return (
+              <label key={option.value} className="plan-comp-check">
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() => {
+                    const current = meal.applicableWeekdays ?? [];
+                    const applicableWeekdays = selected
+                      ? current.filter((weekday) => weekday !== option.value)
+                      : [...current, option.value].sort((left, right) => left - right);
+                    onChange(updateMeal(content, meal.id, { applicableWeekdays }));
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      <label className="field">
+        <span>Local time</span>
+        <input
+          type="time"
+          value={meal.localTime ?? ""}
+          onChange={(event) =>
+            onChange(
+              updateMeal(content, meal.id, {
+                localTime: blankToNull(event.target.value),
+              }),
+            )
+          }
+        />
+      </label>
+      <label className="field">
+        <span>Legacy schedule note</span>
         <input
           value={meal.scheduleHint ?? ""}
           maxLength={120}

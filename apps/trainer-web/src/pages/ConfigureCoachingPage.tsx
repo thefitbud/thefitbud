@@ -9,10 +9,12 @@ import type {
   OnboardingFormVersion,
   MealPhotoRequirement,
   PaymentFrequency,
+  PlanContent,
   Subscription,
 } from "@fitbud/contracts";
 import { paymentFrequencySchema } from "@fitbud/contracts";
-import { formatOnboardingAnswer } from "@fitbud/core";
+import { consistencyFingerprint, formatOnboardingAnswer, planConsistencyWarnings } from "@fitbud/core";
+import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { coachingPrefillFromIntake } from "../lib/intakePrefill";
@@ -85,6 +87,14 @@ export function ConfigureCoachingPage() {
     null,
   );
   const [savingSubscription, setSavingSubscription] = useState(false);
+  const [effectivePlan, setEffectivePlan] = useState<{
+    planId: string;
+    versionId: string;
+    content: PlanContent;
+  } | null>(null);
+  const [acknowledgedFingerprint, setAcknowledgedFingerprint] = useState<string | null>(
+    null,
+  );
 
   const applyConfiguration = useCallback((config: CoachingConfiguration) => {
     setConfiguration(config);
@@ -127,7 +137,7 @@ export function ConfigureCoachingPage() {
       const rel = await apiClient.getRelationship(relationshipId);
       setRelationship(rel);
 
-      const [configResult, intakeResult, definitionResult, subscriptionResult] =
+      const [configResult, intakeResult, definitionResult, subscriptionResult, planResult] =
         await Promise.all([
         apiClient.getCoachingConfiguration(relationshipId).then(
           (value) => ({ ok: true as const, value }),
@@ -145,6 +155,10 @@ export function ConfigureCoachingPage() {
           (value) => ({ ok: true as const, value }),
           (err: unknown) => ({ ok: false as const, err }),
         ),
+        apiClient.getEffectivePlan(relationshipId).then(
+          (value) => ({ ok: true as const, value }),
+          () => ({ ok: false as const }),
+        ),
       ]);
 
       const submittedIntake =
@@ -153,6 +167,15 @@ export function ConfigureCoachingPage() {
           : null;
       setIntake(submittedIntake);
       setDefinition(definitionResult.ok ? definitionResult.value : null);
+      setEffectivePlan(
+        planResult.ok && planResult.value.plan && planResult.value.version
+          ? {
+              planId: planResult.value.plan.id,
+              versionId: planResult.value.version.id,
+              content: planResult.value.version.content,
+            }
+          : null,
+      );
 
       if (configResult.ok) {
         applyConfiguration(configResult.value);
@@ -206,6 +229,63 @@ export function ConfigureCoachingPage() {
 
   const readOnly = configuration?.status === "active";
   const expectedVersion = configuration?.recordVersion ?? 0;
+  const configurationMatchesForm =
+    configuration != null &&
+    configuration.workout.sessionsPerWeek === form.sessionsPerWeek &&
+    configuration.nutrition.mealsPerDay === form.mealsPerDay;
+  const consistencyWarnings =
+    effectivePlan && configuration
+      ? planConsistencyWarnings({
+          sessionsPerWeek: form.sessionsPerWeek,
+          mealsPerDay: form.mealsPerDay,
+          workoutDays: effectivePlan.content.workoutDays,
+          mealPrescriptions: effectivePlan.content.mealPrescriptions,
+        })
+      : [];
+  const consistencyFingerprintValue = consistencyFingerprint(consistencyWarnings);
+
+  useEffect(() => {
+    if (!effectivePlan) return;
+    let cancelled = false;
+    void apiClient
+      .getPlanConsistency(effectivePlan.planId, effectivePlan.versionId)
+      .then((result) => {
+        if (cancelled) return;
+        setAcknowledgedFingerprint(result.acknowledged ? result.fingerprint : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAcknowledgedFingerprint(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectivePlan]);
+
+  async function onAcknowledgeDifference() {
+    if (!effectivePlan || !configurationMatchesForm || consistencyWarnings.length === 0) {
+      setError("Save the configuration before acknowledging this difference.");
+      return;
+    }
+    setActing(true);
+    setError(null);
+    try {
+      const result = await apiClient.acknowledgePlanConsistency(
+        effectivePlan.planId,
+        effectivePlan.versionId,
+        { fingerprint: consistencyFingerprintValue },
+      );
+      setAcknowledgedFingerprint(result.fingerprint);
+      setMessage("The difference is acknowledged. Assignments and exceptions are unchanged.");
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not acknowledge the difference.",
+      );
+    } finally {
+      setActing(false);
+    }
+  }
 
   async function saveDraft(event: FormEvent) {
     event.preventDefault();
@@ -608,6 +688,25 @@ export function ConfigureCoachingPage() {
           </div>
         </div>
 
+        <PlanConsistencyNotice
+          warnings={consistencyWarnings}
+          acknowledged={acknowledgedFingerprint === consistencyFingerprintValue}
+          acting={acting}
+          onAcknowledge={
+            configurationMatchesForm
+              ? () => {
+                  void onAcknowledgeDifference();
+                }
+              : undefined
+          }
+          planTo={`/clients/${relationshipId}/plan`}
+          configureTo={`/clients/${relationshipId}/configure`}
+          showPlanLink
+          showConfigureLink={false}
+        />
+        {consistencyWarnings.length > 0 && !configurationMatchesForm ? (
+          <p className="muted">Save the configuration before acknowledging this difference.</p>
+        ) : null}
         <fieldset className="plan-card field-group" disabled={!canSave || acting}>
           <legend>Workout expectations</legend>
           <label className="field">

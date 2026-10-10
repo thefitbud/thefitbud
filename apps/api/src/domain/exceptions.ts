@@ -47,7 +47,12 @@ async function collectCandidatesForRelationship(
       workoutExecutions,
       eq(workoutExecutions.assignmentId, workoutAssignments.id),
     )
-    .where(eq(workoutAssignments.coachingRelationshipId, relationshipId));
+    .where(
+      and(
+        eq(workoutAssignments.coachingRelationshipId, relationshipId),
+        eq(workoutAssignments.scheduleStatus, "scheduled"),
+      ),
+    );
 
   for (const row of workoutRows) {
     const status = deriveWorkoutAssignmentStatus({
@@ -76,7 +81,12 @@ async function collectCandidatesForRelationship(
       mealCompliance,
       eq(mealCompliance.assignmentId, mealAssignments.id),
     )
-    .where(eq(mealAssignments.coachingRelationshipId, relationshipId));
+    .where(
+      and(
+        eq(mealAssignments.coachingRelationshipId, relationshipId),
+        eq(mealAssignments.scheduleStatus, "scheduled"),
+      ),
+    );
 
   for (const row of mealRows) {
     const status = deriveMealAssignmentStatus({

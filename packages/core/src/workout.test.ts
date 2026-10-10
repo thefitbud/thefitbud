@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   deriveWorkoutAssignmentStatus,
   resolveCompletedWorkoutStatus,
-  sessionWeekdaysForFrequency,
   setCompletionIsModified,
+  weekdayFromLocalDate,
   workoutWindowForLocalDate,
 } from "./index.js";
 
@@ -83,7 +83,8 @@ describe("workout domain", () => {
     expect(window.windowEndsAt).toBe("2026-09-26T18:30:00.000Z");
   });
 
-  it("selects weekday patterns for sessions per week", () => {
-    expect(sessionWeekdaysForFrequency(3)).toEqual([1, 3, 5]);
+  it("reads weekday 0 as Sunday for a local date", () => {
+    expect(weekdayFromLocalDate("2026-10-11")).toBe(0);
+    expect(weekdayFromLocalDate("2026-10-12")).toBe(1);
   });
 });

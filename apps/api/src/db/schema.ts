@@ -500,6 +500,21 @@ export const planVersions = sqliteTable(
   ],
 );
 
+/** Diet-adjustment scope and consistency acknowledgement for one plan version. */
+export const planAssignmentPolicies = sqliteTable("plan_assignment_policies", {
+  planVersionId: text("plan_version_id")
+    .primaryKey()
+    .references(() => planVersions.id),
+  dietAdjustmentScope: text("diet_adjustment_scope", {
+    enum: ["today_onward", "today_only"],
+  }),
+  dietScopeLocalDate: text("diet_scope_local_date"),
+  futureMealPlanVersionId: text("future_meal_plan_version_id").references(
+    () => planVersions.id,
+  ),
+  consistencyAckFingerprint: text("consistency_ack_fingerprint"),
+});
+
 export const workoutAssignments = sqliteTable(
   "workout_assignments",
   {
@@ -519,6 +534,13 @@ export const workoutAssignments = sqliteTable(
     localDate: text("local_date").notNull(),
     windowStartsAt: text("window_starts_at").notNull(),
     windowEndsAt: text("window_ends_at").notNull(),
+    scheduleStatus: text("schedule_status", {
+      enum: ["scheduled", "superseded"],
+    })
+      .notNull()
+      .default("scheduled"),
+    supersededAt: text("superseded_at"),
+    supersededByPlanVersionId: text("superseded_by_plan_version_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -648,6 +670,13 @@ export const mealAssignments = sqliteTable(
     photoRequired: integer("photo_required", { mode: "boolean" })
       .notNull()
       .default(false),
+    scheduleStatus: text("schedule_status", {
+      enum: ["scheduled", "superseded"],
+    })
+      .notNull()
+      .default("scheduled"),
+    supersededAt: text("superseded_at"),
+    supersededByPlanVersionId: text("superseded_by_plan_version_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

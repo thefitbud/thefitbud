@@ -141,6 +141,7 @@ async function collectCandidates(
         .where(
           and(
             eq(workoutAssignments.coachingRelationshipId, relationship.id),
+            eq(workoutAssignments.scheduleStatus, "scheduled"),
             lte(workoutAssignments.windowStartsAt, now),
           ),
         )
@@ -182,6 +183,7 @@ async function collectCandidates(
         .where(
           and(
             eq(mealAssignments.coachingRelationshipId, relationship.id),
+            eq(mealAssignments.scheduleStatus, "scheduled"),
             lte(mealAssignments.windowStartsAt, now),
           ),
         )

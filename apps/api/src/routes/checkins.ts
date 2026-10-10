@@ -1032,6 +1032,7 @@ checkinRoutes.get(
       .where(
         and(
           eq(workoutAssignments.coachingRelationshipId, relationship.id),
+          eq(workoutAssignments.scheduleStatus, "scheduled"),
           gte(workoutAssignments.localDate, fromDate),
           lte(workoutAssignments.localDate, toDate),
         ),
@@ -1070,6 +1071,7 @@ checkinRoutes.get(
       .where(
         and(
           eq(mealAssignments.coachingRelationshipId, relationship.id),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
           gte(mealAssignments.localDate, fromDate),
           lte(mealAssignments.localDate, toDate),
         ),

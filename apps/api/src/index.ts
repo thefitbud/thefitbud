@@ -7,6 +7,7 @@ import {
   handleReminderQueueBatch,
   handleScheduledReminders,
 } from "./jobs/reminders";
+import { handleScheduledReplenishment } from "./jobs/replenishment";
 import { ok } from "./lib/envelope";
 import { writeStructuredLog } from "./lib/log";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -166,6 +167,7 @@ const worker = {
     env: Env,
   ): Promise<void> {
     await handleScheduledReminders(env, new Date(controller.scheduledTime));
+    await handleScheduledReplenishment(env, new Date(controller.scheduledTime));
   },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
     await handleReminderQueueBatch(batch, env);
