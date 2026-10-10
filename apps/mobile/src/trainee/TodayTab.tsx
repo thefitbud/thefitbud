@@ -14,6 +14,7 @@ import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { TodayCheckinCard } from "./CheckinScreen";
+import { scheduledAssignments } from "./scheduledAssignments";
 
 function localDateInTimezone(timeZone: string, instant = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -98,8 +99,12 @@ export function TodayTab({
           toDate: today,
         }),
       ]);
-      setWorkout(workouts.items.find((item) => item.localDate === today) ?? null);
-      setMeals(mealList.items);
+      setWorkout(
+        scheduledAssignments(workouts.items).find(
+          (item) => item.localDate === today,
+        ) ?? null,
+      );
+      setMeals(scheduledAssignments(mealList.items));
     } catch {
       setWorkout(null);
       setMeals([]);

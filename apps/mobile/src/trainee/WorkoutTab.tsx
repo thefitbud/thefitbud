@@ -15,6 +15,7 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
+import { scheduledAssignments } from "./scheduledAssignments";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
 
 function localDateInTimezone(timeZone: string, instant = new Date()): string {
@@ -90,7 +91,7 @@ export function WorkoutTab({
         fromDate: today,
         toDate: rangeEnd,
       });
-      setAssignments(listed.items);
+      setAssignments(scheduledAssignments(listed.items));
     } catch (err) {
       setError(
         err instanceof ApiClientError
