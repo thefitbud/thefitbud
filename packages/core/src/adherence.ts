@@ -45,7 +45,9 @@ export function isQualifyingAdherenceObservation(input: {
 }
 
 /**
- * Active clients: open adherence exception, then no qualifying activity, then on track.
+ * Active clients: unresolved Critical or Attention exception (detected, active,
+ * or acknowledged), then no qualifying activity in the trailing 14 civil days,
+ * then on track. Acknowledgement does not by itself make the client on track.
  * Every other derived status, including pending invitations and ended, is not available.
  */
 export function deriveAdherenceState(input: {

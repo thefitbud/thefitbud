@@ -219,6 +219,15 @@ exceptionRoutes.post(
         serverVersion: 0,
       });
     }
+    for (const item of result.resolvedExceptions) {
+      queueRealtimeHint(c.env, {
+        eventType: "exception_resolved",
+        entityType: "exception",
+        entityId: item.id,
+        coachingRelationshipId: relationship.id,
+        serverVersion: 0,
+      });
+    }
     const responseBody = {
       data: evaluateExceptionsResponseSchema.parse(result),
     };

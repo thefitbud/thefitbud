@@ -3,14 +3,12 @@ import {
   MVP_EXCEPTION_RULE_VERSION,
   canActivateException,
   deriveCheckinStatus,
-  deriveMealAssignmentStatus,
-  deriveWorkoutAssignmentStatus,
   exceptionKey,
   filterNewExceptionCandidates,
   isOpenExceptionStatus,
-  missedWorkoutCandidate,
+  mealAdherenceCandidate,
   overdueCheckinCandidate,
-  overdueMealCandidate,
+  workoutAdherenceCandidate,
   type ExceptionCandidate,
 } from "@fitbud/core";
 import { mapException } from "./mappers";
@@ -55,20 +53,14 @@ async function collectCandidatesForRelationship(
     );
 
   for (const row of workoutRows) {
-    const status = deriveWorkoutAssignmentStatus({
-      nowIso: now,
+    const candidate = workoutAdherenceCandidate({
+      assignmentId: row.assignment.id,
+      localDate: row.assignment.localDate,
       windowEndsAt: row.assignment.windowEndsAt,
+      nowIso: now,
       executionStatus: row.execution?.status ?? null,
     });
-    if (status === "missed") {
-      candidates.push(
-        missedWorkoutCandidate({
-          assignmentId: row.assignment.id,
-          localDate: row.assignment.localDate,
-          windowEndsAt: row.assignment.windowEndsAt,
-        }),
-      );
-    }
+    if (candidate) candidates.push(candidate);
   }
 
   const mealRows = await db
@@ -89,22 +81,17 @@ async function collectCandidatesForRelationship(
     );
 
   for (const row of mealRows) {
-    const status = deriveMealAssignmentStatus({
-      nowIso: now,
+    const candidate = mealAdherenceCandidate({
+      assignmentId: row.assignment.id,
+      localDate: row.assignment.localDate,
+      mealName: row.assignment.mealName,
       windowEndsAt: row.assignment.windowEndsAt,
+      nowIso: now,
       complianceOutcome: row.compliance?.outcome ?? null,
       loggedAt: row.compliance?.loggedAt ?? null,
+      deviationKind: row.compliance?.deviationKind ?? null,
     });
-    if (status === "overdue") {
-      candidates.push(
-        overdueMealCandidate({
-          assignmentId: row.assignment.id,
-          localDate: row.assignment.localDate,
-          mealName: row.assignment.mealName,
-          windowEndsAt: row.assignment.windowEndsAt,
-        }),
-      );
-    }
+    if (candidate) candidates.push(candidate);
   }
 
   const checkinRows = await db
@@ -140,8 +127,10 @@ async function collectCandidatesForRelationship(
 
 /**
  * Deterministic exception detection for one coaching relationship.
- * Creates Detected exceptions and promotes them to Active.
- * Does not rewrite workout, meal, or check-in source records.
+ * Creates Detected exceptions, promotes them to Active, and resolves an open
+ * exception only when its condition is gone. Acknowledged exceptions that are
+ * still true stay acknowledged. Does not rewrite workout, meal, or check-in
+ * source records.
  */
 export async function evaluateRelationshipExceptions(
   db: Db,
@@ -150,36 +139,61 @@ export async function evaluateRelationshipExceptions(
 ): Promise<{
   created: number;
   activated: number;
+  resolved: number;
   exceptions: ReturnType<typeof mapException>[];
+  resolvedExceptions: ReturnType<typeof mapException>[];
 }> {
-  const openRows = await db
+  const existingRows = await db
     .select()
     .from(exceptions)
     .where(eq(exceptions.coachingRelationshipId, relationshipId));
 
+  const candidates = await collectCandidatesForRelationship(
+    db,
+    relationshipId,
+    now,
+  );
+  const candidateKeys = new Set(candidates.map((candidate) => exceptionKey(candidate)));
+
+  const resolvedRows: ExceptionRow[] = [];
+  for (const row of existingRows) {
+    if (!isOpenExceptionStatus(row.status)) continue;
+    if (candidateKeys.has(exceptionKey(row))) continue;
+    await db
+      .update(exceptions)
+      .set({
+        status: "resolved",
+        resolvedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(exceptions.id, row.id));
+    resolvedRows.push({
+      ...row,
+      status: "resolved",
+      resolvedAt: now,
+      updatedAt: now,
+    });
+  }
+
   const openKeys = new Set(
-    openRows
-      .filter((row) => isOpenExceptionStatus(row.status))
-      .map((row) =>
-        exceptionKey({
-          type: row.type,
-          sourceEntityType: row.sourceEntityType,
-          sourceEntityId: row.sourceEntityId,
-        }),
-      ),
+    existingRows
+      .filter(
+        (row) =>
+          isOpenExceptionStatus(row.status) &&
+          candidateKeys.has(exceptionKey(row)),
+      )
+      .map((row) => exceptionKey(row)),
   );
 
-  const candidates = filterNewExceptionCandidates(
-    await collectCandidatesForRelationship(db, relationshipId, now),
-    openKeys,
-  );
+  const freshCandidates = filterNewExceptionCandidates(candidates, openKeys);
 
   const createdRows: ExceptionRow[] = [];
-  for (const candidate of candidates) {
+  for (const candidate of freshCandidates) {
     const row: ExceptionRow = {
       id: createId(),
       coachingRelationshipId: relationshipId,
       type: candidate.type,
+      severity: candidate.severity,
       status: "detected",
       ruleVersion: MVP_EXCEPTION_RULE_VERSION,
       sourceEntityType: candidate.sourceEntityType,
@@ -201,7 +215,11 @@ export async function evaluateRelationshipExceptions(
 
   const detectedRows = [
     ...createdRows,
-    ...openRows.filter((row) => canActivateException(row.status)),
+    ...existingRows.filter(
+      (row) =>
+        canActivateException(row.status) &&
+        candidateKeys.has(exceptionKey(row)),
+    ),
   ];
 
   let activated = 0;
@@ -228,6 +246,7 @@ export async function evaluateRelationshipExceptions(
   return {
     created: createdRows.length,
     activated,
+    resolved: resolvedRows.length,
     exceptions: [
       ...createdRows.map((row) =>
         mapException({
@@ -241,6 +260,7 @@ export async function evaluateRelationshipExceptions(
         .filter((row) => !createdRows.some((created) => created.id === row.id))
         .map(mapException),
     ],
+    resolvedExceptions: resolvedRows.map(mapException),
   };
 }
 

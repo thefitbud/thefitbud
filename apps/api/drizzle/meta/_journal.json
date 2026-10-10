@@ -138,5 +138,12 @@
     "when": 1729008000000,
     "tag": "0019_checkin_form_templates",
     "breakpoints": true
+  },
+  {
+    "idx": 20,
+    "version": "7",
+    "when": 1729094400000,
+    "tag": "0020_exception_severity",
+    "breakpoints": true
   }
 ]

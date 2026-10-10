@@ -767,6 +767,7 @@ export function mapException(row: ExceptionRow): Exception {
     id: row.id,
     coachingRelationshipId: row.coachingRelationshipId,
     type: row.type,
+    severity: row.severity,
     status: row.status,
     ruleVersion: row.ruleVersion,
     sourceEntityType: row.sourceEntityType,

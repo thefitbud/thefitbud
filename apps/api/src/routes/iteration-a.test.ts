@@ -42,6 +42,7 @@ async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
 
     "0018_assignment_schedule_status.sql",
     "0019_checkin_form_templates.sql",
+    "0020_exception_severity.sql",
   ]) {
     sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
   }
@@ -401,6 +402,7 @@ describe("iteration A directory, profile, and libraries", () => {
       id: "13131313-1313-4131-8131-131313131313",
       coachingRelationshipId: client.relationshipId,
       type: "missed_workout",
+      severity: "critical",
       status: "detected",
       ruleVersion: "1",
       sourceEntityType: "workout_assignment",
@@ -418,7 +420,14 @@ describe("iteration A directory, profile, and libraries", () => {
       .set({ status: "acknowledged", acknowledgedAt: timestamp })
       .where(eq(exceptions.id, "13131313-1313-4131-8131-131313131313"));
     const afterAck = await listClients(trainer.cookie, "?status=active");
-    expect(afterAck.body.data?.items[0]?.adherenceState).toBe("on_track");
+    expect(afterAck.body.data?.items[0]?.adherenceState).toBe("needs_attention");
+
+    await db
+      .update(exceptions)
+      .set({ status: "resolved", resolvedAt: timestamp })
+      .where(eq(exceptions.id, "13131313-1313-4131-8131-131313131313"));
+    const afterResolve = await listClients(trainer.cookie, "?status=active");
+    expect(afterResolve.body.data?.items[0]?.adherenceState).toBe("on_track");
   });
 
   it("does not publish a draft when the directory is read", async () => {

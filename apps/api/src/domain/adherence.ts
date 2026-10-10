@@ -1,6 +1,8 @@
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import type { AdherenceState, OnboardingStatus } from "@fitbud/contracts";
 import {
+  ADHERENCE_EXCEPTION_SEVERITIES,
+  ADHERENCE_OPEN_EXCEPTION_STATUSES,
   adherenceWindowStart,
   deriveAdherenceState,
   isQualifyingAdherenceObservation,
@@ -16,8 +18,9 @@ import {
 } from "../db/schema";
 
 /**
- * Open adherence exceptions are detected or active.
- * Acknowledged and resolved do not create needs_attention.
+ * Open adherence exceptions are detected, active, or acknowledged Critical
+ * or Attention rows. Acknowledgement does not by itself make the client on track.
+ * Resolved exceptions stay in history and do not create needs_attention.
  */
 export async function deriveAdherenceForRelationships(
   db: Db,
@@ -49,7 +52,8 @@ export async function deriveAdherenceForRelationships(
         .where(
           and(
             inArray(exceptions.coachingRelationshipId, activeIds),
-            inArray(exceptions.status, ["detected", "active"]),
+            inArray(exceptions.status, [...ADHERENCE_OPEN_EXCEPTION_STATUSES]),
+            inArray(exceptions.severity, [...ADHERENCE_EXCEPTION_SEVERITIES]),
           ),
         ),
       db
