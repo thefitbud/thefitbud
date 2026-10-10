@@ -983,6 +983,119 @@ describe("workout assignment and execution", () => {
     expect(keptBody.data.scheduleStatus).toBe("scheduled");
   });
 
+  it("omits a superseded assignment from the trainee current list and keeps it readable for the owning trainer", async () => {
+    const { trainerCookie, traineeToken, relationshipId, planId, versionId, today, toDate } =
+      await reachEffectivePlan("hide-superseded");
+    const before = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const beforeItems = (
+      (await before.json()) as { data: { items: Array<{ id: string }> } }
+    ).data.items;
+    expect(beforeItems.length).toBeGreaterThan(0);
+    const supersededId = beforeItems[0]!.id;
+
+    const draft = await app.request(
+      `/plans/${planId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "draft-hide-superseded",
+        },
+        body: JSON.stringify({ sourceVersionId: versionId, asAdjustment: true }),
+      },
+      testEnv(),
+    );
+    expect(draft.status).toBe(201);
+    const draftBody = (await draft.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const changed = sampleContent();
+    changed.workoutDays[0]!.exercises[0]!.name = "Front squat";
+    const saved = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: draftBody.data.recordVersion,
+          content: changed,
+        }),
+      },
+      testEnv(),
+    );
+    expect(saved.status).toBe(200);
+    const savedBody = (await saved.json()) as { data: { recordVersion: number } };
+    const published = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "publish-hide-superseded",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: savedBody.data.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(200);
+
+    const current = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const currentItems = (
+      (await current.json()) as {
+        data: { items: Array<{ id: string; scheduleStatus: string }> };
+      }
+    ).data.items;
+    expect(currentItems.some((item) => item.id === supersededId)).toBe(false);
+    expect(currentItems.every((item) => item.scheduleStatus === "scheduled")).toBe(true);
+
+    const history = await app.request(
+      `/workouts/assignments/${supersededId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(history.status).toBe(200);
+    const historyBody = (await history.json()) as {
+      data: { id: string; scheduleStatus: string; planVersionId: string };
+    };
+    expect(historyBody.data.id).toBe(supersededId);
+    expect(historyBody.data.planVersionId).toBe(versionId);
+    expect(historyBody.data.scheduleStatus).toBe("superseded");
+
+    const db = getTestDbOverride();
+    const retained = await db!
+      .select()
+      .from(schema.workoutAssignments)
+      .where(eq(schema.workoutAssignments.id, supersededId));
+    expect(retained).toHaveLength(1);
+    expect(retained[0]?.scheduleStatus).toBe("superseded");
+  });
+
   it("warns when weekday sessions disagree with sessions per week and accepts an acknowledgement", async () => {
     const { trainerCookie, planId, versionId } = await reachEffectivePlan("warn");
     const consistency = await app.request(

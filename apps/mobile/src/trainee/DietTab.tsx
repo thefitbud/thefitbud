@@ -18,6 +18,7 @@ import {
   minimalPngBytes,
 } from "../lib/minimalPng";
 import { MealDeviationScreen } from "./MealDeviationScreen";
+import { scheduledAssignments } from "./scheduledAssignments";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 
@@ -95,7 +96,7 @@ export function DietTab({
         fromDate: today,
         toDate: today,
       });
-      setAssignments(listed.items);
+      setAssignments(scheduledAssignments(listed.items));
     } catch (err) {
       setError(
         err instanceof ApiClientError
