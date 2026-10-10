@@ -2,7 +2,7 @@ import {
   operation,
   dateWindowParameters,
 } from "../openapi/document";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   checkinListResponseSchema,
@@ -22,23 +22,30 @@ import {
   type CheckinDraftAnswers,
 } from "@fitbud/contracts";
 import {
-  MVP_CHECKIN_DEFINITION_VERSION,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
   addDaysToLocalDate,
   canRecordCheckinReview,
   canSaveCheckinDraft,
   canSubmitCheckin,
+  canTrainerReadCheckinFormTemplate,
   checkinWindowForLocalDate,
+  defaultUnitForMeasurementType,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
   formatLocalDate,
+  linkedMeasurementsForCheckin,
   missingRequiredCheckinAnswers,
   nextCheckinLocalDate,
+  parseCheckinFormFields,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
+  checkinFormTemplates,
+  checkinFormVersions,
   checkinReviews,
   checkinSchedules,
   checkins,
+  mediaAssets,
   coachingConfigurations,
   coachingRelationships,
   interventions,
@@ -56,7 +63,13 @@ import {
   detectExceptionsForRelationship,
   listActiveExceptionsForRelationship,
 } from "../domain/exceptions";
-import { mapActiveExceptionSummary, mapCheckin, mapTrainerNote } from "../domain/mappers";
+import {
+  mapActiveExceptionSummary,
+  mapCheckin,
+  mapCheckinFormVersion,
+  mapMediaAsset,
+  mapTrainerNote,
+} from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
 import {
@@ -166,6 +179,84 @@ function serializeAnswers(
   return JSON.stringify(answers);
 }
 
+async function resolveCheckinFormPin(
+  db: Db,
+  input: {
+    trainerUserId: string | null;
+    requestedVersionId?: string;
+    fallbackVersionId?: string | null;
+  },
+): Promise<
+  | { ok: true; id: string; version: number }
+  | { ok: false; status: 404 | 500; code: string; message: string }
+> {
+  const versionId =
+    input.requestedVersionId ??
+    input.fallbackVersionId ??
+    GLOBAL_CHECKIN_FORM_VERSION_ID;
+  const rows = await db
+    .select()
+    .from(checkinFormVersions)
+    .where(eq(checkinFormVersions.id, versionId))
+    .limit(1);
+  const version = rows[0];
+  if (!version) {
+    return {
+      ok: false,
+      status: input.requestedVersionId ? 404 : 500,
+      code: input.requestedVersionId
+        ? "CHECKIN_FORM_NOT_FOUND"
+        : "CHECKIN_FORM_MISSING",
+      message: input.requestedVersionId
+        ? "Check-in form version not found."
+        : "Check-in form version is missing.",
+    };
+  }
+  if (input.requestedVersionId) {
+    if (!input.trainerUserId) {
+      return {
+        ok: false,
+        status: 404,
+        code: "CHECKIN_FORM_NOT_FOUND",
+        message: "Check-in form version not found.",
+      };
+    }
+    const templates = await db
+      .select()
+      .from(checkinFormTemplates)
+      .where(eq(checkinFormTemplates.id, version.templateId))
+      .limit(1);
+    const template = templates[0];
+    if (
+      !template ||
+      !canTrainerReadCheckinFormTemplate(template, input.trainerUserId)
+    ) {
+      return {
+        ok: false,
+        status: 404,
+        code: "CHECKIN_FORM_NOT_FOUND",
+        message: "Check-in form version not found.",
+      };
+    }
+  }
+  return { ok: true, id: version.id, version: version.version };
+}
+
+async function loadPinnedCheckinForm(db: Db, versionId: string) {
+  const rows = await db
+    .select()
+    .from(checkinFormVersions)
+    .where(eq(checkinFormVersions.id, versionId))
+    .limit(1);
+  const version = rows[0];
+  if (!version) return null;
+  const parsed = parseCheckinFormFields(
+    (JSON.parse(version.schemaJson) as { fields?: unknown }).fields,
+  );
+  if (!parsed.ok) return null;
+  return { version, fields: parsed.fields };
+}
+
 async function createCheckinForLocalDate(
   db: Db,
   input: {
@@ -174,6 +265,8 @@ async function createCheckinForLocalDate(
     localDate: string;
     timeZone: string;
     dueWindowHours: number;
+    formVersionId: string;
+    definitionVersion: number;
   },
 ): Promise<{
   row: typeof checkins.$inferSelect;
@@ -208,7 +301,8 @@ async function createCheckinForLocalDate(
     windowEndsAt: window.windowEndsAt,
     recordStatus: "draft" as const,
     recordVersion: 0,
-    definitionVersion: MVP_CHECKIN_DEFINITION_VERSION,
+    definitionVersion: input.definitionVersion,
+    checkinFormVersionId: input.formVersionId,
     answersJson: null,
     submittedAt: null,
     createdAt: now,
@@ -341,12 +435,21 @@ checkinRoutes.post(
     }
 
     const timezone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const formPin = await resolveCheckinFormPin(db, {
+      trainerUserId: actor.userId,
+      requestedVersionId: parsed.data.checkinFormVersionId,
+    });
+    if (!formPin.ok) {
+      return fail(c, formPin.status, formPin.code, formPin.message);
+    }
     const { row, created } = await createCheckinForLocalDate(db, {
       relationshipId: relationship.id,
       scheduleId: config.schedule.id,
       localDate: parsed.data.localDate,
       timeZone: timezone,
       dueWindowHours: config.schedule.dueWindowHours,
+      formVersionId: formPin.id,
+      definitionVersion: formPin.version,
     });
 
     const responseBody = {
@@ -457,12 +560,32 @@ checkinRoutes.post(
       traineeTimeZone: timezone,
     });
 
+    let fallbackVersionId: string | null = null;
+    if (parsed.data.fromCheckinId) {
+      const source = await db
+        .select({ formVersionId: checkins.checkinFormVersionId })
+        .from(checkins)
+        .where(eq(checkins.id, parsed.data.fromCheckinId))
+        .limit(1);
+      if (source[0]) fallbackVersionId = source[0].formVersionId;
+    }
+    const formPin = await resolveCheckinFormPin(db, {
+      trainerUserId: actor.userId,
+      requestedVersionId: parsed.data.checkinFormVersionId,
+      fallbackVersionId,
+    });
+    if (!formPin.ok) {
+      return fail(c, formPin.status, formPin.code, formPin.message);
+    }
+
     const { row, created } = await createCheckinForLocalDate(db, {
       relationshipId: relationship.id,
       scheduleId: config.schedule.id,
       localDate,
       timeZone: timezone,
       dueWindowHours: config.schedule.dueWindowHours,
+      formVersionId: formPin.id,
+      definitionVersion: formPin.version,
     });
 
     const responseBody = {
@@ -614,12 +737,22 @@ checkinRoutes.post(
         dueLocalDate = next;
       }
 
+      const formPin = await resolveCheckinFormPin(db, {
+        trainerUserId:
+          actor.selectedRole === "trainer" ? actor.userId : null,
+        fallbackVersionId: latest[0]?.checkinFormVersionId ?? null,
+      });
+      if (!formPin.ok) {
+        return fail(c, formPin.status, formPin.code, formPin.message);
+      }
       result = await createCheckinForLocalDate(db, {
         relationshipId: relationship.id,
         scheduleId: config.schedule.id,
         localDate: dueLocalDate,
         timeZone: timezone,
         dueWindowHours: config.schedule.dueWindowHours,
+        formVersionId: formPin.id,
+        definitionVersion: formPin.version,
       });
     }
 
@@ -1014,6 +1147,19 @@ checkinRoutes.get(
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
 
+    const pinned = await loadPinnedCheckinForm(
+      db,
+      loaded.checkin.checkinFormVersionId,
+    );
+    if (!pinned) {
+      return fail(
+        c,
+        500,
+        "CHECKIN_FORM_MISSING",
+        "Pinned check-in form version is missing.",
+      );
+    }
+
     const now = nowIso();
     const mappedCheckin = mapCheckin(loaded.checkin, loaded.review, now);
     const fromDate = addDaysToLocalDate(loaded.checkin.localDate, -14);
@@ -1141,24 +1287,53 @@ checkinRoutes.get(
     const measurementsForContext =
       measurementRows.length > 0
         ? measurementRows.map((row) => ({
+            id: row.id,
             type: row.type,
             value: String(row.value),
+            unit: row.unit,
             observedAt: row.observedAt,
+            mediaAssetId: row.mediaAssetId,
           }))
         : answers?.bodyWeightKg != null
           ? [
               {
                 type: "body_weight_kg",
                 value: String(answers.bodyWeightKg),
+                unit: "kg",
                 observedAt: mappedCheckin.submittedAt ?? mappedCheckin.updatedAt,
               },
             ]
           : [];
 
+    const photoRows = await db
+      .select()
+      .from(mediaAssets)
+      .where(
+        and(
+          eq(mediaAssets.coachingRelationshipId, relationship.id),
+          inArray(mediaAssets.mediaType, ["progress_photo", "checkin_photo"]),
+        ),
+      )
+      .orderBy(desc(mediaAssets.createdAt), desc(mediaAssets.id))
+      .limit(10);
+
     return ok(
       c,
       checkinReviewContextSchema.parse({
         checkin: mappedCheckin,
+        pinnedForm: mapCheckinFormVersion(pinned.version),
+        photos: photoRows.map((row) => {
+          const media = mapMediaAsset(row);
+          return {
+            id: media.id,
+            mediaType: media.mediaType,
+            status: media.status,
+            contentType: media.contentType,
+            createdAt: media.createdAt,
+            domainEntityType: media.domainEntityType,
+            domainEntityId: media.domainEntityId,
+          };
+        }),
         recentWorkoutAdherence,
         recentMealCompliance,
         activeExceptions: activeExceptionRows.map(mapActiveExceptionSummary),
@@ -1374,7 +1549,23 @@ checkinRoutes.post(
       );
     }
 
-    const missing = missingRequiredCheckinAnswers(parsed.data.answers);
+    const pinned = await loadPinnedCheckinForm(
+      db,
+      loaded.checkin.checkinFormVersionId,
+    );
+    if (!pinned) {
+      return fail(
+        c,
+        500,
+        "CHECKIN_FORM_MISSING",
+        "Pinned check-in form version is missing.",
+      );
+    }
+
+    const missing = missingRequiredCheckinAnswers(
+      parsed.data.answers,
+      pinned.fields,
+    );
     if (missing.length > 0) {
       return fail(
         c,
@@ -1397,14 +1588,18 @@ checkinRoutes.post(
       })
       .where(eq(checkins.id, loaded.checkin.id));
 
-    if (parsed.data.answers.bodyWeightKg != null) {
+    const linked = linkedMeasurementsForCheckin({
+      fields: pinned.fields,
+      answers: parsed.data.answers,
+    });
+    for (const measurement of linked) {
       await db.insert(measurements).values({
         id: createId(),
         coachingRelationshipId: relationship.id,
         traineeUserId: actor.userId,
-        type: "body_weight_kg",
-        value: parsed.data.answers.bodyWeightKg,
-        unit: "kg",
+        type: measurement.type,
+        value: measurement.value,
+        unit: defaultUnitForMeasurementType(measurement.type),
         observedAt: now,
         source: "checkin",
         checkinId: loaded.checkin.id,

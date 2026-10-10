@@ -5,6 +5,7 @@ import {
   activateConfigurationRequestSchema,
   coachingConfigurationSchema,
   configureConfigurationRequestSchema,
+  copyConfigurationDraftRequestSchema,
   createInvitationRequestSchema,
   createInvitationResponseSchema,
   createOnboardingReviewRequestSchema,
@@ -87,9 +88,14 @@ import {
   updatePlanDraftRequestSchema,
   completeSetRequestSchema,
   completeWorkoutRequestSchema,
+  checkinFormTemplateDetailSchema,
+  checkinFormTemplateListResponseSchema,
   checkinListResponseSchema,
   checkinReviewContextSchema,
   checkinSchema,
+  createCheckinFormTemplateRequestSchema,
+  createCheckinFormTemplateVersionRequestSchema,
+  forkCheckinFormTemplateRequestSchema,
   confirmMealRequestSchema,
   createTrainerNoteRequestSchema,
   createMeasurementRequestSchema,
@@ -139,7 +145,13 @@ import {
   type CompleteSetRequest,
   type CompleteWorkoutRequest,
   type ConfirmMealRequest,
+  type CheckinFormTemplateDetail,
+  type CheckinFormTemplateListResponse,
   type ConfigureConfigurationRequest,
+  type CopyConfigurationDraftRequest,
+  type CreateCheckinFormTemplateRequest,
+  type CreateCheckinFormTemplateVersionRequest,
+  type ForkCheckinFormTemplateRequest,
   type CreateInterventionRequest,
   type CreateInvitationRequest,
   type CreateInvitationResponse,
@@ -560,6 +572,20 @@ export class FitBudApiClient {
       `/configurations/relationships/${relationshipId}/draft`,
       coachingConfigurationSchema,
       { auth: true, body: parsed },
+    );
+  }
+
+  async copyConfigurationDraft(
+    relationshipId: string,
+    body: CopyConfigurationDraftRequest,
+    idempotencyKey: string,
+  ): Promise<CoachingConfiguration> {
+    const parsed = copyConfigurationDraftRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/configurations/relationships/${relationshipId}/copy`,
+      coachingConfigurationSchema,
+      { auth: true, body: parsed, idempotencyKey },
     );
   }
 
@@ -1384,6 +1410,74 @@ export class FitBudApiClient {
       `/checkins/${checkinId}/review-context`,
       checkinReviewContextSchema,
       { auth: true },
+    );
+  }
+
+  async listCheckinFormTemplates(query?: {
+    cursor?: string;
+    limit?: number;
+  }): Promise<CheckinFormTemplateListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request(
+      "GET",
+      `/checkins/form-templates${suffix}`,
+      checkinFormTemplateListResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async getCheckinFormTemplate(
+    templateId: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    return this.request(
+      "GET",
+      `/checkins/form-templates/${templateId}`,
+      checkinFormTemplateDetailSchema,
+      { auth: true },
+    );
+  }
+
+  async createCheckinFormTemplate(
+    body: CreateCheckinFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    const parsed = createCheckinFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      "/checkins/form-templates",
+      checkinFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async forkCheckinFormTemplate(
+    templateId: string,
+    body: ForkCheckinFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    const parsed = forkCheckinFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/checkins/form-templates/${templateId}/fork`,
+      checkinFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async createCheckinFormTemplateVersion(
+    templateId: string,
+    body: CreateCheckinFormTemplateVersionRequest,
+    idempotencyKey: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    const parsed = createCheckinFormTemplateVersionRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/checkins/form-templates/${templateId}/versions`,
+      checkinFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
     );
   }
 

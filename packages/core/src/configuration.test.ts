@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  COACHING_CONFIGURATION_DEFAULTS,
   canActivateConfiguration,
   canCreateConfigurationVersion,
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
   hasGoalShort,
+  resolveConfigurationDraftExpectations,
 } from "./configuration.js";
 
 describe("coaching configuration transitions", () => {
@@ -43,6 +45,39 @@ describe("coaching configuration transitions", () => {
     expect(canActivateConfiguration("configured")).toBe(true);
     expect(canActivateConfiguration("draft")).toBe(false);
     expect(canActivateConfiguration("active")).toBe(false);
+  });
+
+  it("fills a new draft from the trainer-web defaults", () => {
+    expect(COACHING_CONFIGURATION_DEFAULTS).toEqual({
+      workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
+      nutrition: {
+        mealsPerDay: 3,
+        confirmationWindowHours: 6,
+        photoRequirement: "none",
+      },
+      checkin: { cadence: "weekly", dueWindowHours: 48 },
+      tracking: {
+        requireBodyWeight: false,
+        requireProgressPhotos: false,
+        requireSessionRpe: false,
+      },
+    });
+    expect(resolveConfigurationDraftExpectations({})).toEqual(
+      COACHING_CONFIGURATION_DEFAULTS,
+    );
+    expect(
+      resolveConfigurationDraftExpectations({
+        workout: { sessionsPerWeek: 4, completionWindowHours: 12 },
+      }).workout.sessionsPerWeek,
+    ).toBe(4);
+    expect(
+      resolveConfigurationDraftExpectations({
+        existing: {
+          ...COACHING_CONFIGURATION_DEFAULTS,
+          workout: { sessionsPerWeek: 5, completionWindowHours: 24 },
+        },
+      }).workout.sessionsPerWeek,
+    ).toBe(5);
   });
 
   it("requires a non-empty short goal", () => {

@@ -1,8 +1,63 @@
 import type {
+  CheckinScheduleExpectations,
   CoachingConfigurationStatus,
+  NutritionExpectations,
   OnboardingStatus,
+  TrackingRequirements,
+  WorkoutExpectations,
 } from "@fitbud/contracts";
 import { isPastOnboardingReview } from "./onboarding.js";
+
+/**
+ * Defaults previously hardcoded on the trainer web configuration form.
+ * Applied when a draft is created and a section is omitted.
+ */
+export const COACHING_CONFIGURATION_DEFAULTS: {
+  workout: WorkoutExpectations;
+  nutrition: NutritionExpectations;
+  checkin: CheckinScheduleExpectations;
+  tracking: TrackingRequirements;
+} = {
+  workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
+  nutrition: {
+    mealsPerDay: 3,
+    confirmationWindowHours: 6,
+    photoRequirement: "none",
+  },
+  checkin: { cadence: "weekly", dueWindowHours: 48 },
+  tracking: {
+    requireBodyWeight: false,
+    requireProgressPhotos: false,
+    requireSessionRpe: false,
+  },
+};
+
+export function resolveConfigurationDraftExpectations(input: {
+  workout?: WorkoutExpectations;
+  nutrition?: NutritionExpectations;
+  checkin?: CheckinScheduleExpectations;
+  tracking?: TrackingRequirements;
+  existing?: {
+    workout: WorkoutExpectations;
+    nutrition: NutritionExpectations;
+    checkin: CheckinScheduleExpectations;
+    tracking: TrackingRequirements;
+  } | null;
+}): {
+  workout: WorkoutExpectations;
+  nutrition: NutritionExpectations;
+  checkin: CheckinScheduleExpectations;
+  tracking: TrackingRequirements;
+} {
+  const defaults = COACHING_CONFIGURATION_DEFAULTS;
+  const existing = input.existing ?? null;
+  return {
+    workout: input.workout ?? existing?.workout ?? { ...defaults.workout },
+    nutrition: input.nutrition ?? existing?.nutrition ?? { ...defaults.nutrition },
+    checkin: input.checkin ?? existing?.checkin ?? { ...defaults.checkin },
+    tracking: input.tracking ?? existing?.tracking ?? { ...defaults.tracking },
+  };
+}
 
 /** Configuration editing requires a reviewed client or an active configuration. */
 export function canEditCoachingConfiguration(

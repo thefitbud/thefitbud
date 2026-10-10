@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  GLOBAL_CHECKIN_FORM_FIELDS,
   canRecordCheckinReview,
   canSaveCheckinDraft,
   canSubmitCheckin,
   daysForCheckinCadence,
   deriveCheckinStatus,
+  linkedMeasurementsForCheckin,
   missingRequiredCheckinAnswers,
   nextCheckinLocalDate,
+  parseCheckinFormFields,
 } from "./checkin.js";
 
 describe("checkin core", () => {
@@ -102,5 +105,50 @@ describe("checkin core", () => {
     expect(missingRequiredCheckinAnswers({ wellbeing: "Good week" })).toEqual(
       [],
     );
+  });
+
+  it("keeps the seeded form's body-weight answer and links one measurement", () => {
+    expect(parseCheckinFormFields(GLOBAL_CHECKIN_FORM_FIELDS).ok).toBe(true);
+    const bodyWeight = GLOBAL_CHECKIN_FORM_FIELDS.find(
+      (field) => field.id === "body_weight",
+    );
+    expect(bodyWeight).toMatchObject({
+      type: "measurement",
+      measurementType: "body_weight_kg",
+    });
+    expect(
+      missingRequiredCheckinAnswers(
+        { wellbeing: "Good week" },
+        GLOBAL_CHECKIN_FORM_FIELDS,
+      ),
+    ).toEqual([]);
+    expect(
+      linkedMeasurementsForCheckin({
+        fields: GLOBAL_CHECKIN_FORM_FIELDS,
+        answers: { wellbeing: "Good week", bodyWeightKg: 72.5 },
+      }),
+    ).toEqual([{ type: "body_weight_kg", value: 72.5 }]);
+    expect(
+      linkedMeasurementsForCheckin({
+        fields: [
+          ...GLOBAL_CHECKIN_FORM_FIELDS,
+          {
+            id: "waist",
+            label: "Waist",
+            type: "measurement",
+            measurementType: "waist_cm",
+            required: false,
+          },
+        ],
+        answers: {
+          wellbeing: "Good week",
+          bodyWeightKg: 72.5,
+          fieldAnswers: { waist: 81 },
+        },
+      }),
+    ).toEqual([
+      { type: "body_weight_kg", value: 72.5 },
+      { type: "waist_cm", value: 81 },
+    ]);
   });
 });

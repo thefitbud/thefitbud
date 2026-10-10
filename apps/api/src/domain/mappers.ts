@@ -1,10 +1,13 @@
 import {
+  checkinFormDefinitionSchema,
   mealPrescriptionSchema,
   onboardingAnswersSchema,
   onboardingFormDefinitionSchema,
   planContentSchema,
   type Checkin,
   type CheckinDraftAnswers,
+  type CheckinFormTemplateDetail,
+  type CheckinFormVersion,
   type CheckinReview,
   type CoachingConfiguration,
   type CoachingRelationship,
@@ -49,6 +52,8 @@ import {
   materializePlanContent,
 } from "@fitbud/core";
 import type {
+  checkinFormTemplates,
+  checkinFormVersions,
   checkinReviews,
   checkinSchedules,
   checkins,
@@ -109,6 +114,8 @@ type MealComplianceRow = typeof mealCompliance.$inferSelect;
 type ExceptionRow = typeof exceptions.$inferSelect;
 type ExceptionActionRow = typeof exceptionActions.$inferSelect;
 type InterventionRow = typeof interventions.$inferSelect;
+type CheckinFormTemplateRow = typeof checkinFormTemplates.$inferSelect;
+type CheckinFormVersionRow = typeof checkinFormVersions.$inferSelect;
 type CheckinRow = typeof checkins.$inferSelect;
 type CheckinReviewRow = typeof checkinReviews.$inferSelect;
 type TrainerNoteRow = typeof trainerNotes.$inferSelect;
@@ -654,6 +661,44 @@ export function parseCheckinAnswersJson(
   return JSON.parse(answersJson) as CheckinDraftAnswers;
 }
 
+export function mapCheckinFormVersion(
+  row: CheckinFormVersionRow,
+): CheckinFormVersion {
+  const stored = JSON.parse(row.schemaJson) as { fields?: unknown };
+  const definition = checkinFormDefinitionSchema.parse({
+    fields: stored.fields ?? [],
+  });
+  return {
+    id: row.id,
+    templateId: row.templateId,
+    key: row.key,
+    version: row.version,
+    scope: row.scope,
+    fields: definition.fields,
+    createdAt: row.createdAt,
+  };
+}
+
+export function mapCheckinFormTemplateDetail(
+  template: CheckinFormTemplateRow,
+  versions: CheckinFormVersionRow[],
+): CheckinFormTemplateDetail {
+  const ordered = [...versions].sort((left, right) => left.version - right.version);
+  const latest = ordered[ordered.length - 1]!;
+  return {
+    id: template.id,
+    ownership: template.ownership,
+    trainerUserId: template.trainerUserId,
+    name: template.name,
+    description: template.description,
+    latestVersionId: latest.id,
+    latestVersionNumber: latest.version,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
+    versions: ordered.map(mapCheckinFormVersion),
+  };
+}
+
 export function mapCheckinReview(row: CheckinReviewRow): CheckinReview {
   return {
     id: row.id,
@@ -682,6 +727,7 @@ export function mapCheckin(
     recordStatus: row.recordStatus,
     recordVersion: row.recordVersion,
     definitionVersion: row.definitionVersion,
+    checkinFormVersionId: row.checkinFormVersionId,
     answers: parseCheckinAnswersJson(row.answersJson),
     submittedAt: row.submittedAt,
     status: deriveCheckinStatus({

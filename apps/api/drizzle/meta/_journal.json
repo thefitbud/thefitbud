@@ -131,5 +131,12 @@
     "when": 1728921600000,
     "tag": "0018_assignment_schedule_status",
     "breakpoints": true
+  },
+  {
+    "idx": 19,
+    "version": "7",
+    "when": 1729008000000,
+    "tag": "0019_checkin_form_templates",
+    "breakpoints": true
   }
 ]

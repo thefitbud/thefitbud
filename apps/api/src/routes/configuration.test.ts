@@ -388,4 +388,276 @@ describe("coaching configuration", () => {
     const forbiddenBody = (await forbidden.json()) as { error: { code: string } };
     expect(forbiddenBody.error.code).toBe("RELATIONSHIP_NOT_FOUND");
   });
+
+  it("creates a draft from core defaults and copies settings into a new draft", async () => {
+    const source = await reachCoachingReady("defaults");
+    const created = await app.request(
+      `/configurations/relationships/${source.relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedVersion: 0,
+          goalShort: "Build strength",
+        }),
+      },
+      testEnv(),
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as {
+      data: {
+        id: string;
+        workout: { sessionsPerWeek: number; completionWindowHours: number };
+        nutrition: {
+          mealsPerDay: number;
+          confirmationWindowHours: number;
+          photoRequirement: string;
+        };
+        checkin: { cadence: string; dueWindowHours: number };
+        tracking: {
+          requireBodyWeight: boolean;
+          requireProgressPhotos: boolean;
+          requireSessionRpe: boolean;
+        };
+      };
+    };
+    expect(createdBody.data.workout).toEqual({
+      sessionsPerWeek: 3,
+      completionWindowHours: 24,
+    });
+    expect(createdBody.data.nutrition).toEqual({
+      mealsPerDay: 3,
+      confirmationWindowHours: 6,
+      photoRequirement: "none",
+    });
+    expect(createdBody.data.checkin).toEqual({
+      cadence: "weekly",
+      dueWindowHours: 48,
+    });
+    expect(createdBody.data.tracking).toEqual({
+      requireBodyWeight: false,
+      requireProgressPhotos: false,
+      requireSessionRpe: false,
+    });
+
+    const configured = await app.request(
+      `/configurations/relationships/${source.relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...draftBody,
+          expectedVersion: 1,
+          goalShort: "Build strength",
+        }),
+      },
+      testEnv(),
+    );
+    expect(configured.status).toBe(200);
+    const saved = (await configured.json()) as { data: { recordVersion: number } };
+    const mark = await app.request(
+      `/configurations/relationships/${source.relationshipId}/configure`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "configure-copy-source",
+        },
+        body: JSON.stringify({ expectedVersion: saved.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(mark.status).toBe(200);
+    const marked = (await mark.json()) as { data: { recordVersion: number } };
+    const activate = await app.request(
+      `/configurations/relationships/${source.relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-copy-source",
+        },
+        body: JSON.stringify({ expectedVersion: marked.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(200);
+
+    const other = await reachCoachingReady("copy-other");
+    const unownedSource = await app.request(
+      `/configurations/relationships/${source.relationshipId}/copy`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "copy-unowned-source",
+        },
+        body: JSON.stringify({ sourceRelationshipId: other.relationshipId }),
+      },
+      testEnv(),
+    );
+    expect(unownedSource.status).toBe(404);
+
+    const createdInvite = await app.request(
+      "/invitations",
+      {
+        method: "POST",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "inv-copy-second",
+        },
+        body: JSON.stringify({
+          recipientEmail: "config-trainee-copy-second@example.com",
+        }),
+      },
+      testEnv(),
+    );
+    const createdInviteBody = (await createdInvite.json()) as {
+      data: { token: string };
+    };
+    const traineeToken = createTestIdToken(
+      "config-trainee-copy-second",
+      "config-trainee-copy-second@example.com",
+    );
+    const accept = await app.request(
+      "/invitations/accept",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token: createdInviteBody.data.token }),
+      },
+      testEnv(),
+    );
+    const acceptBody = (await accept.json()) as {
+      data: { relationship: { id: string } };
+    };
+    const second = acceptBody.data.relationship.id;
+    await app.request(
+      `/onboarding/relationships/${second}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedVersion: 0,
+          answers: {
+            goals: "Strength",
+            relevant_history: "None",
+            preferences: "Gym",
+            schedule: "Evenings",
+            limitations: "Knee",
+          },
+        }),
+      },
+      testEnv(),
+    );
+    const intake = await app.request(
+      `/onboarding/relationships/${second}/submit`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "submit-copy-second",
+        },
+        body: JSON.stringify({ expectedVersion: 1 }),
+      },
+      testEnv(),
+    );
+    expect(intake.status).toBe(200);
+    const review = await app.request(
+      `/onboarding/relationships/${second}/review`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "review-copy-second",
+        },
+        body: JSON.stringify({ outcome: "coaching_ready" }),
+      },
+      testEnv(),
+    );
+    expect(review.status).toBe(200);
+
+    const copied = await app.request(
+      `/configurations/relationships/${second}/copy`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "copy-settings",
+        },
+        body: JSON.stringify({ sourceRelationshipId: source.relationshipId }),
+      },
+      testEnv(),
+    );
+    expect(copied.status).toBe(201);
+    const copiedBody = (await copied.json()) as {
+      data: {
+        id: string;
+        status: string;
+        coachingRelationshipId: string;
+        workout: { sessionsPerWeek: number };
+      };
+    };
+    expect(copiedBody.data.id).not.toBe(createdBody.data.id);
+    expect(copiedBody.data.status).toBe("draft");
+    expect(copiedBody.data.coachingRelationshipId).toBe(second);
+    expect(copiedBody.data.workout.sessionsPerWeek).toBe(4);
+
+    const edited = await app.request(
+      `/configurations/relationships/${second}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: source.trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedVersion: 1,
+          workout: { sessionsPerWeek: 2, completionWindowHours: 24 },
+        }),
+      },
+      testEnv(),
+    );
+    expect(edited.status).toBe(200);
+
+    const sourceAfter = await app.request(
+      `/configurations/relationships/${source.relationshipId}`,
+      { headers: { Cookie: source.trainerCookie } },
+      testEnv(),
+    );
+    const sourceAfterBody = (await sourceAfter.json()) as {
+      data: { id: string; status: string; workout: { sessionsPerWeek: number } };
+    };
+    expect(sourceAfterBody.data.status).toBe("active");
+    expect(sourceAfterBody.data.id).not.toBe(copiedBody.data.id);
+    expect(sourceAfterBody.data.workout.sessionsPerWeek).toBe(4);
+
+    const presets = await app.request(
+      "/configurations/presets",
+      { headers: { Cookie: source.trainerCookie } },
+      testEnv(),
+    );
+    expect(presets.status).toBe(404);
+  });
 });

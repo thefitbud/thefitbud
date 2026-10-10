@@ -87,11 +87,19 @@ export const saveConfigurationDraftRequestSchema = z.object({
   goalShort: optionalTrimmedText(120),
   goalDescription: optionalTrimmedText(500),
   notes: z.string().trim().max(2000).nullable().optional(),
-  workout: workoutExpectationsSchema,
-  nutrition: nutritionExpectationsSchema,
-  checkin: checkinScheduleExpectationsSchema,
-  tracking: trackingRequirementsSchema,
+  /** Omitted sections use stored values, or the core defaults on a new draft. */
+  workout: workoutExpectationsSchema.optional(),
+  nutrition: nutritionExpectationsSchema.optional(),
+  checkin: checkinScheduleExpectationsSchema.optional(),
+  tracking: trackingRequirementsSchema.optional(),
 });
+
+export const copyConfigurationDraftRequestSchema = z.object({
+  sourceRelationshipId: uuidSchema,
+});
+export type CopyConfigurationDraftRequest = z.infer<
+  typeof copyConfigurationDraftRequestSchema
+>;
 export type SaveConfigurationDraftRequest = z.infer<
   typeof saveConfigurationDraftRequestSchema
 >;

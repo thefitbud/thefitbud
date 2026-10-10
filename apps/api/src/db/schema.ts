@@ -742,6 +742,56 @@ export const mealCompliance = sqliteTable(
   ],
 );
 
+/** Parent of immutable check-in form versions. Separate from onboarding forms. */
+export const checkinFormTemplates = sqliteTable(
+  "checkin_form_templates",
+  {
+    id: text("id").primaryKey(),
+    ownership: text("ownership", { enum: ["global", "trainer"] }).notNull(),
+    trainerUserId: text("trainer_user_id").references(() => users.id),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("checkin_form_templates_ownership_idx").on(
+      table.ownership,
+      table.trainerUserId,
+    ),
+  ],
+);
+
+export const checkinFormVersions = sqliteTable(
+  "checkin_form_versions",
+  {
+    id: text("id").primaryKey(),
+    templateId: text("template_id")
+      .notNull()
+      .references(() => checkinFormTemplates.id),
+    key: text("key").notNull(),
+    version: integer("version").notNull(),
+    scope: text("scope", { enum: ["global", "trainer"] })
+      .notNull()
+      .default("global"),
+    trainerUserId: text("trainer_user_id").references(() => users.id),
+    schemaJson: text("schema_json").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("checkin_form_versions_template_version_uidx").on(
+      table.templateId,
+      table.version,
+    ),
+    uniqueIndex("checkin_form_versions_global_key_version_uidx")
+      .on(table.key, table.version)
+      .where(sql`${table.scope} = 'global'`),
+    uniqueIndex("checkin_form_versions_trainer_key_version_uidx")
+      .on(table.trainerUserId, table.key, table.version)
+      .where(sql`${table.scope} = 'trainer'`),
+  ],
+);
+
 export const checkins = sqliteTable(
   "checkins",
   {
@@ -762,6 +812,9 @@ export const checkins = sqliteTable(
       .default("draft"),
     recordVersion: integer("record_version").notNull().default(0),
     definitionVersion: integer("definition_version").notNull().default(1),
+    checkinFormVersionId: text("checkin_form_version_id")
+      .notNull()
+      .references(() => checkinFormVersions.id),
     answersJson: text("answers_json"),
     submittedAt: text("submitted_at"),
     createdAt: text("created_at").notNull(),
@@ -772,6 +825,7 @@ export const checkins = sqliteTable(
       table.coachingRelationshipId,
       table.localDate,
     ),
+    index("checkins_form_version_idx").on(table.checkinFormVersionId),
     index("checkins_relationship_window_idx").on(
       table.coachingRelationshipId,
       table.windowEndsAt,
