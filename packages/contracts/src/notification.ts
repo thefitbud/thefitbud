@@ -58,18 +58,24 @@ export type RemoveDeviceTokenRequest = z.infer<
   typeof removeDeviceTokenRequestSchema
 >;
 
-export const notificationTypeSchema = z.enum([
+export const reminderTypeSchema = z.enum([
   "workout_reminder",
   "meal_reminder",
   "checkin_reminder",
   "subscription_renewal_reminder",
 ]);
+export type ReminderType = z.infer<typeof reminderTypeSchema>;
+
+export const notificationTypeSchema = z.enum([
+  ...reminderTypeSchema.options,
+  "daily_summary",
+  "activity_nudge",
+]);
 export type NotificationType = z.infer<typeof notificationTypeSchema>;
 
-export const notificationCategorySchema = notificationTypeSchema;
-export type NotificationCategory = NotificationType;
-export const reminderTypeSchema = notificationTypeSchema;
-export type ReminderType = NotificationType;
+/** Client preference categories. Nudges use the activity's reminder category. */
+export const notificationCategorySchema = reminderTypeSchema;
+export type NotificationCategory = ReminderType;
 
 export const notificationPreferencesSchema = z.object({
   userId: uuidSchema,
@@ -156,6 +162,7 @@ export const notificationStateSchema = z.enum([
   "read",
   "failed",
   "suppressed",
+  "deferred",
 ]);
 export type NotificationState = z.infer<typeof notificationStateSchema>;
 
@@ -248,13 +255,36 @@ export const reminderQueueMessageSchema = z.object({
 });
 export type ReminderQueueMessage = z.infer<typeof reminderQueueMessageSchema>;
 
+export const evaluateRemindersRequestSchema = z.object({
+  now: isoDateTimeSchema.optional(),
+});
+export type EvaluateRemindersRequest = z.infer<
+  typeof evaluateRemindersRequestSchema
+>;
+
 export const evaluateRemindersResponseSchema = z.object({
   evaluatedAt: isoDateTimeSchema,
   notificationsCreated: z.number().int().nonnegative(),
   notificationsDeduped: z.number().int().nonnegative(),
   deliveriesEnqueued: z.number().int().nonnegative(),
   suppressed: z.number().int().nonnegative(),
+  deferred: z.number().int().nonnegative(),
 });
 export type EvaluateRemindersResponse = z.infer<
   typeof evaluateRemindersResponseSchema
 >;
+
+export const nudgeActivityTypeSchema = z.enum(["workout", "meal", "checkin"]);
+export type NudgeActivityType = z.infer<typeof nudgeActivityTypeSchema>;
+
+export const nudgeActivityRequestSchema = z.object({
+  activityType: nudgeActivityTypeSchema,
+  activityId: uuidSchema,
+});
+export type NudgeActivityRequest = z.infer<typeof nudgeActivityRequestSchema>;
+
+export const nudgeActivityResponseSchema = z.object({
+  notification: notificationSchema,
+  deduped: z.boolean(),
+});
+export type NudgeActivityResponse = z.infer<typeof nudgeActivityResponseSchema>;

@@ -1287,6 +1287,8 @@ export const notifications = sqliteTable(
         "meal_reminder",
         "checkin_reminder",
         "subscription_renewal_reminder",
+        "daily_summary",
+        "activity_nudge",
       ],
     }).notNull(),
     domainEntityType: text("domain_entity_type", {
@@ -1299,7 +1301,15 @@ export const notifications = sqliteTable(
     }).notNull(),
     domainEntityId: text("domain_entity_id").notNull(),
     state: text("state", {
-      enum: ["pending", "queued", "delivered", "read", "failed", "suppressed"],
+      enum: [
+        "pending",
+        "queued",
+        "delivered",
+        "read",
+        "failed",
+        "suppressed",
+        "deferred",
+      ],
     }).notNull(),
     dedupeKey: text("dedupe_key").notNull(),
     createdAt: text("created_at").notNull(),

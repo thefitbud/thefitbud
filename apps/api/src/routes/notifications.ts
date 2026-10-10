@@ -6,10 +6,13 @@ import {
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
+  evaluateRemindersRequestSchema,
   evaluateRemindersResponseSchema,
   notificationListResponseSchema,
   notificationPreferencesSchema,
   notificationSchema,
+  nudgeActivityRequestSchema,
+  nudgeActivityResponseSchema,
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
   reminderRulesResponseSchema,
@@ -31,6 +34,7 @@ import {
   mapReminderRule,
 } from "../domain/mappers";
 import {
+  createActivityNudge,
   ensureDefaultReminderRules,
   evaluateAndEnqueueReminders,
   listRecentNotifications,
@@ -404,6 +408,7 @@ notificationRoutes.post(
     summary: "Evaluates due reminders and enqueues delivery",
     description: "Evaluates due reminders and enqueues delivery. The handler rejects the call unless AUTH_MODE is test. Scheduled evaluation is not an HTTP route.",
     roles: ["trainer", "trainee"],
+    body: evaluateRemindersRequestSchema,
     response: evaluateRemindersResponseSchema,
   }),
   optionalAuthMiddleware,
@@ -418,9 +423,18 @@ notificationRoutes.post(
         "Manual reminder evaluation is only available in test mode.",
       );
     }
+    const parsed = evaluateRemindersRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid reminder evaluation request.", {
+        issues: parsed.error.issues,
+      });
+    }
     const db = createDb(c.env.DB);
     const queue = reminderQueueFromEnv(c.env);
     const result = await evaluateAndEnqueueReminders(db, {
+      now: parsed.data.now,
       queue,
       pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
       deliverInline: !queue,
@@ -505,13 +519,13 @@ notificationRoutes.put(
     tag: "Notifications",
     summary: "Notifications operation for PUT /notifications/relationships/:relationshipId/reminder-rules.",
     description: "Notifications operation for PUT /notifications/relationships/:relationshipId/reminder-rules.",
-    roles: ["trainer", "trainee"],
+    roles: ["trainer"],
     body: updateReminderRulesRequestSchema,
     response: reminderRulesResponseSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
-  requireRole("trainer", "trainee"),
+  requireRole("trainer"),
   async (c) => {
     const actor = c.get("actor");
     if (!actor?.selectedRole) {
@@ -532,7 +546,7 @@ notificationRoutes.put(
       c.req.param("relationshipId"),
       actor,
     );
-    if (!relationship) {
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
 
@@ -558,6 +572,78 @@ notificationRoutes.put(
       c,
       reminderRulesResponseSchema.parse({
         items: rows.map(mapReminderRule),
+      }),
+    );
+  },
+);
+
+notificationRoutes.post(
+  "/relationships/:relationshipId/nudges",
+  operation({
+    tag: "Notifications",
+    summary: "Trainer nudge for one unresolved activity",
+    description:
+      "Sends one activity nudge. Distinct from automatic reminders. Respects client preferences and quiet hours, and does not change execution or adherence.",
+    roles: ["trainer"],
+    body: nudgeActivityRequestSchema,
+    response: nudgeActivityResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = nudgeActivityRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid nudge request.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const result = await createActivityNudge(db, {
+      relationshipId: relationship.id,
+      activityType: parsed.data.activityType,
+      activityId: parsed.data.activityId,
+      queue: reminderQueueFromEnv(c.env),
+      pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+      deliverInline: !c.env.REMINDER_QUEUE,
+    });
+    if (!result.ok) {
+      const status =
+        result.code === "NUDGE_RATE_LIMITED"
+          ? 429
+          : result.code === "ACTIVITY_NOT_FOUND" ||
+              result.code === "RELATIONSHIP_NOT_FOUND"
+            ? 404
+            : 409;
+      const message =
+        result.code === "RELATIONSHIP_ENDED"
+          ? "Ended relationships do not send nudges."
+          : result.code === "ACTIVITY_RESOLVED"
+            ? "This activity is already resolved."
+            : result.code === "NUDGE_RATE_LIMITED"
+              ? "At most three nudges can be sent for this client in an hour."
+              : "Activity not found.";
+      return fail(c, status, result.code, message);
+    }
+    return ok(
+      c,
+      nudgeActivityResponseSchema.parse({
+        notification: mapNotification(result.notification),
+        deduped: result.deduped,
       }),
     );
   },

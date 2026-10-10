@@ -74,6 +74,8 @@ import {
   syncPushRequestSchema,
   syncPushResponseSchema,
   evaluateRemindersResponseSchema,
+  nudgeActivityRequestSchema,
+  nudgeActivityResponseSchema,
   notificationListResponseSchema,
   notificationPreferencesSchema,
   registerDeviceTokenRequestSchema,
@@ -249,6 +251,8 @@ import {
   type SyncPushRequest,
   type SyncPushResponse,
   type EvaluateRemindersResponse,
+  type NudgeActivityRequest,
+  type NudgeActivityResponse,
   type NotificationListResponse,
   type NotificationPreferences,
   type RegisterDeviceTokenRequest,
@@ -1922,6 +1926,19 @@ export class FitBudApiClient {
       "/notifications/reminders/evaluate",
       evaluateRemindersResponseSchema,
       { auth: true },
+    );
+  }
+
+  async nudgeActivity(
+    relationshipId: string,
+    body: NudgeActivityRequest,
+  ): Promise<NudgeActivityResponse> {
+    const parsed = nudgeActivityRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/notifications/relationships/${relationshipId}/nudges`,
+      nudgeActivityResponseSchema,
+      { auth: true, body: parsed },
     );
   }
 

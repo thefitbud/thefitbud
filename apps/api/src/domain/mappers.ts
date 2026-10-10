@@ -963,7 +963,9 @@ export function mapNotification(row: {
     | "workout_reminder"
     | "meal_reminder"
     | "checkin_reminder"
-    | "subscription_renewal_reminder";
+    | "subscription_renewal_reminder"
+    | "daily_summary"
+    | "activity_nudge";
   domainEntityType:
     | "workout_assignment"
     | "meal_assignment"
@@ -976,7 +978,8 @@ export function mapNotification(row: {
     | "delivered"
     | "read"
     | "failed"
-    | "suppressed";
+    | "suppressed"
+    | "deferred";
   dedupeKey: string;
   createdAt: string;
   readAt: string | null;

@@ -2,21 +2,34 @@ import type {
   NotificationDomainEntityType,
   NotificationType,
   PushPayload,
+  ReminderType,
+  WorkoutExecutionStatus,
 } from "@fitbud/contracts";
 import {
   SAFE_PUSH_PAYLOAD_KEYS,
   pushPayloadSchema,
 } from "@fitbud/contracts";
 import { deriveCheckinStatus } from "./checkin.js";
-import { deriveMealAssignmentStatus } from "./meal.js";
-import {
-  deriveWorkoutAssignmentStatus,
-  isQualifyingWorkoutExecution,
-} from "./workout.js";
-import type { WorkoutExecutionStatus } from "@fitbud/contracts";
-import type { MealComplianceOutcome } from "@fitbud/contracts";
+import { addDaysToLocalDate, isQualifyingWorkoutExecution } from "./workout.js";
+import { formatLocalDate, localDateTimeToUtcIso } from "./timezone.js";
 
-export const DEFAULT_REMINDER_TYPES: readonly NotificationType[] = [
+/**
+ * System reminder clocks. Trainers enable or disable types.
+ * They do not set these times.
+ */
+export const MEAL_REMINDER_ADVANCE_MINUTES = 45;
+export const MEAL_REMINDER_FOLLOW_UP_MINUTES = [30, 60] as const;
+export const WORKOUT_REMINDER_LOCAL_TIMES = ["06:00", "18:00"] as const;
+export const DAILY_SUMMARY_LOCAL_TIME = "21:00";
+export const ACTIVITY_NUDGE_HOURLY_LIMIT = 3;
+
+export type MealReminderPhase = "advance" | "follow_up_30" | "follow_up_60";
+export type WorkoutReminderLocalTime =
+  (typeof WORKOUT_REMINDER_LOCAL_TIMES)[number];
+export type ReminderDeliveryDecision = "deliver" | "defer" | "suppress";
+export type NudgeActivityType = "workout" | "meal" | "checkin";
+
+export const DEFAULT_REMINDER_TYPES: readonly ReminderType[] = [
   "workout_reminder",
   "meal_reminder",
   "checkin_reminder",
@@ -31,8 +44,59 @@ export function reminderDedupeKey(input: {
   return `${input.type}:${input.domainEntityId}`;
 }
 
+export function mealReminderDedupeKey(
+  assignmentId: string,
+  phase: MealReminderPhase,
+): string {
+  return `meal_reminder:${assignmentId}:${phase}`;
+}
+
+export function workoutReminderDedupeKey(
+  assignmentId: string,
+  localTime: WorkoutReminderLocalTime,
+): string {
+  return `workout_reminder:${assignmentId}:${localTime}`;
+}
+
+export function dailySummaryDedupeKey(
+  relationshipId: string,
+  localDate: string,
+): string {
+  return `daily_summary:${relationshipId}:${localDate}`;
+}
+
+export function activityNudgeDedupeKey(
+  activityId: string,
+  traineeLocalDate: string,
+): string {
+  return `activity_nudge:${activityId}:${traineeLocalDate}`;
+}
+
+/** Deferred rows must not occupy the delivery dedupe key. */
+export function deferredReminderDedupeKey(deliveryDedupeKey: string): string {
+  return `deferred:${deliveryDedupeKey}`;
+}
+
+export function deliveryDedupeKeyFromDeferred(
+  deferredKey: string,
+): string | null {
+  const prefix = "deferred:";
+  if (!deferredKey.startsWith(prefix)) return null;
+  const logical = deferredKey.slice(prefix.length);
+  if (!logical || logical.startsWith("deferred:")) return null;
+  return logical;
+}
+
+export function localDateFromDailySummaryKey(dedupeKey: string): string | null {
+  const match = /^daily_summary:[0-9a-f-]{36}:(\d{4}-\d{2}-\d{2})$/i.exec(
+    dedupeKey,
+  );
+  return match?.[1] ?? null;
+}
+
 export function domainEntityTypeForReminder(
   type: NotificationType,
+  activityType?: NudgeActivityType,
 ): NotificationDomainEntityType {
   switch (type) {
     case "workout_reminder":
@@ -42,7 +106,10 @@ export function domainEntityTypeForReminder(
     case "checkin_reminder":
       return "checkin";
     case "subscription_renewal_reminder":
+    case "daily_summary":
       return "coaching_relationship";
+    case "activity_nudge":
+      return domainEntityTypeForActivity(activityType ?? "checkin");
     default: {
       const _exhaustive: never = type;
       return _exhaustive;
@@ -50,53 +117,225 @@ export function domainEntityTypeForReminder(
   }
 }
 
-/**
- * Workout reminder when the window has opened and there is no qualifying completion.
- * Missed after window end is still eligible once (deduped) so trainees get one nudge.
- */
-export function isWorkoutReminderEligible(input: {
-  nowIso: string;
-  windowStartsAt: string;
-  windowEndsAt: string;
-  executionStatus: WorkoutExecutionStatus | null;
-}): boolean {
-  if (input.nowIso < input.windowStartsAt) return false;
-  if (
-    input.executionStatus &&
-    isQualifyingWorkoutExecution(input.executionStatus)
-  ) {
-    return false;
+export function domainEntityTypeForActivity(
+  activityType: NudgeActivityType,
+): NotificationDomainEntityType {
+  switch (activityType) {
+    case "workout":
+      return "workout_assignment";
+    case "meal":
+      return "meal_assignment";
+    case "checkin":
+      return "checkin";
+    default: {
+      const _exhaustive: never = activityType;
+      return _exhaustive;
+    }
   }
-  const status = deriveWorkoutAssignmentStatus({
-    nowIso: input.nowIso,
-    windowEndsAt: input.windowEndsAt,
-    executionStatus: input.executionStatus,
-  });
+}
+
+export function reminderPreferenceForActivity(
+  activityType: NudgeActivityType,
+): ReminderType {
+  switch (activityType) {
+    case "workout":
+      return "workout_reminder";
+    case "meal":
+      return "meal_reminder";
+    case "checkin":
+      return "checkin_reminder";
+    default: {
+      const _exhaustive: never = activityType;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Preference category used at delivery time.
+ * Daily summary uses push enablement; the item mix was chosen when it was created.
+ */
+export function reminderPreferenceForNotification(input: {
+  notificationType: NotificationType;
+  domainEntityType: NotificationDomainEntityType;
+}): ReminderType | "daily_summary" | null {
+  switch (input.notificationType) {
+    case "workout_reminder":
+    case "meal_reminder":
+    case "checkin_reminder":
+    case "subscription_renewal_reminder":
+      return input.notificationType;
+    case "daily_summary":
+      return "daily_summary";
+    case "activity_nudge":
+      if (input.domainEntityType === "workout_assignment") {
+        return "workout_reminder";
+      }
+      if (input.domainEntityType === "meal_assignment") return "meal_reminder";
+      if (input.domainEntityType === "checkin") return "checkin_reminder";
+      return null;
+    default: {
+      const _exhaustive: never = input.notificationType;
+      return _exhaustive;
+    }
+  }
+}
+
+export function isWorkoutResolved(
+  executionStatus: WorkoutExecutionStatus | null,
+): boolean {
   return (
-    status === "assigned" ||
-    status === "in_progress" ||
-    status === "paused" ||
-    status === "missed"
+    executionStatus !== null && isQualifyingWorkoutExecution(executionStatus)
   );
 }
 
-/** Meal reminder when the confirmation window has opened and compliance is absent. */
-export function isMealReminderEligible(input: {
-  nowIso: string;
-  windowStartsAt: string;
-  windowEndsAt: string;
-  complianceOutcome: MealComplianceOutcome | null;
-  loggedAt: string | null;
+export function isActivityUnresolved(input: {
+  activityType: NudgeActivityType;
+  workoutExecutionStatus: WorkoutExecutionStatus | null;
+  mealLogged: boolean;
+  checkinRecordStatus: "draft" | "submitted" | null;
 }): boolean {
-  if (input.nowIso < input.windowStartsAt) return false;
-  if (input.complianceOutcome && input.loggedAt) return false;
-  const status = deriveMealAssignmentStatus({
-    nowIso: input.nowIso,
-    windowEndsAt: input.windowEndsAt,
-    complianceOutcome: input.complianceOutcome,
-    loggedAt: input.loggedAt,
+  switch (input.activityType) {
+    case "workout":
+      return !isWorkoutResolved(input.workoutExecutionStatus);
+    case "meal":
+      return !input.mealLogged;
+    case "checkin":
+      return input.checkinRecordStatus === "draft";
+    default: {
+      const _exhaustive: never = input.activityType;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Category-off is a final suppression. Quiet hours defer and leave the
+ * delivery dedupe key free so the same reminder can send later.
+ */
+export function reminderDeliveryDecision(input: {
+  categoryEnabled: boolean;
+  withinQuietHours: boolean;
+}): ReminderDeliveryDecision {
+  if (!input.categoryEnabled) return "suppress";
+  if (input.withinQuietHours) return "defer";
+  return "deliver";
+}
+
+export function addMinutesToLocalClock(input: {
+  localDate: string;
+  localTime: string;
+  deltaMinutes: number;
+}): { localDate: string; localTime: string } {
+  const [hour, minute] = input.localTime.split(":").map(Number);
+  if (
+    hour === undefined ||
+    minute === undefined ||
+    Number.isNaN(hour) ||
+    Number.isNaN(minute)
+  ) {
+    throw new Error("Invalid local time");
+  }
+  let total = hour * 60 + minute + input.deltaMinutes;
+  let dayOffset = 0;
+  while (total < 0) {
+    total += 24 * 60;
+    dayOffset -= 1;
+  }
+  while (total >= 24 * 60) {
+    total -= 24 * 60;
+    dayOffset += 1;
+  }
+  return {
+    localDate: addDaysToLocalDate(input.localDate, dayOffset),
+    localTime: `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`,
+  };
+}
+
+export function localClockToUtcIso(input: {
+  localDate: string;
+  localTime: string;
+  timeZone: string;
+}): string {
+  const [hour, minute] = input.localTime.split(":").map(Number);
+  return localDateTimeToUtcIso(
+    input.localDate,
+    input.timeZone,
+    hour ?? 0,
+    minute ?? 0,
+    0,
+  );
+}
+
+/**
+ * Timed meals: one advance before localTime, then follow-ups while unlogged.
+ * A meal with no localTime has no clock reminder. New slots stop at the
+ * confirmation window; a quiet-hours deferral can still be delivered later.
+ */
+export function dueMealReminderPhases(input: {
+  nowIso: string;
+  localDate: string;
+  timeZone: string;
+  localTime: string | null;
+  logged: boolean;
+  windowEndsAt: string;
+}): MealReminderPhase[] {
+  if (input.logged || !input.localTime) return [];
+  const mealClock = {
+    localDate: input.localDate,
+    localTime: input.localTime,
+  };
+  const phases: MealReminderPhase[] = [];
+  const advanceClock = addMinutesToLocalClock({
+    ...mealClock,
+    deltaMinutes: -MEAL_REMINDER_ADVANCE_MINUTES,
   });
-  return status === "pending" || status === "overdue";
+  const mealAt = localClockToUtcIso({
+    ...mealClock,
+    timeZone: input.timeZone,
+  });
+  const advanceAt = localClockToUtcIso({
+    ...advanceClock,
+    timeZone: input.timeZone,
+  });
+  if (input.nowIso >= advanceAt && input.nowIso < mealAt) {
+    phases.push("advance");
+  }
+  for (const minutes of MEAL_REMINDER_FOLLOW_UP_MINUTES) {
+    const clock = addMinutesToLocalClock({
+      ...mealClock,
+      deltaMinutes: minutes,
+    });
+    const at = localClockToUtcIso({ ...clock, timeZone: input.timeZone });
+    if (input.nowIso >= at && input.nowIso <= input.windowEndsAt) {
+      phases.push(minutes === 30 ? "follow_up_30" : "follow_up_60");
+    }
+  }
+  return phases;
+}
+
+/** Unlogged workout on its local date, at or after 06:00 and 18:00. */
+export function dueWorkoutReminderTimes(input: {
+  nowIso: string;
+  assignmentLocalDate: string;
+  timeZone: string;
+  resolved: boolean;
+}): WorkoutReminderLocalTime[] {
+  if (input.resolved) return [];
+  const today = formatLocalDate(new Date(input.nowIso), input.timeZone);
+  if (today !== input.assignmentLocalDate) return [];
+  const local = localTimeHhMm(input.nowIso, input.timeZone);
+  if (!local) return [];
+  return WORKOUT_REMINDER_LOCAL_TIMES.filter((slot) => local >= slot);
+}
+
+/** Final daily summary once the trainee-local clock reaches 21:00. */
+export function isDailySummaryClockDue(input: {
+  nowIso: string;
+  timeZone: string;
+}): boolean {
+  const local = localTimeHhMm(input.nowIso, input.timeZone);
+  return local !== null && local >= DAILY_SUMMARY_LOCAL_TIME;
 }
 
 /** Check-in reminder when due or overdue and not yet submitted. */
@@ -126,7 +365,7 @@ export function isCategoryEnabled(input: {
     checkinReminder: boolean;
     subscriptionRenewalReminder: boolean;
   };
-  type: NotificationType;
+  type: ReminderType;
 }): boolean {
   if (!input.pushEnabled) return false;
   switch (input.type) {
@@ -246,31 +485,27 @@ export function routeTargetFromPushPayload(payload: PushPayload): {
   domainEntityType: NotificationDomainEntityType;
   domainEntityId: string;
 } {
+  const target = {
+    domainEntityType: payload.domainEntityType,
+    domainEntityId: payload.domainEntityId,
+  };
   switch (payload.notificationType) {
     case "workout_reminder":
-      return {
-        tab: "workout",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
+      return { tab: "workout", ...target };
     case "meal_reminder":
-      return {
-        tab: "diet",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
+      return { tab: "diet", ...target };
     case "checkin_reminder":
-      return {
-        tab: "today",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
     case "subscription_renewal_reminder":
-      return {
-        tab: "today",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
+    case "daily_summary":
+      return { tab: "today", ...target };
+    case "activity_nudge":
+      if (payload.domainEntityType === "workout_assignment") {
+        return { tab: "workout", ...target };
+      }
+      if (payload.domainEntityType === "meal_assignment") {
+        return { tab: "diet", ...target };
+      }
+      return { tab: "today", ...target };
     default: {
       const _exhaustive: never = payload.notificationType;
       return _exhaustive;

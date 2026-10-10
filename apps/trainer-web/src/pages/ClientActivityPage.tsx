@@ -28,6 +28,21 @@ function typeLabel(type: WorkspaceActivityType): string {
   return "Check-in";
 }
 
+function isUnresolved(item: WorkspaceActivityItem): boolean {
+  if (item.type === "workout") {
+    return (
+      item.state === "assigned" ||
+      item.state === "in_progress" ||
+      item.state === "paused" ||
+      item.state === "missed"
+    );
+  }
+  if (item.type === "meal") {
+    return item.state === "pending" || item.state === "overdue";
+  }
+  return item.state === "scheduled" || item.state === "due" || item.state === "overdue";
+}
+
 function statesFor(type: WorkspaceActivityType): readonly string[] {
   if (type === "workout") return workoutAssignmentStatusSchema.options;
   if (type === "meal") return mealAssignmentStatusSchema.options;
@@ -77,6 +92,8 @@ export function ClientActivityPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [acting, setActing] = useState(false);
+  const [nudgingId, setNudgingId] = useState<string | null>(null);
+  const [nudgeNote, setNudgeNote] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
   const filterKey = `${relationshipId}|${activityType}|${state}|${occurredFrom}|${occurredTo}`;
@@ -138,6 +155,31 @@ export function ClientActivityPage() {
   function changeType(next: WorkspaceActivityType) {
     setActivityType(next);
     setState("");
+    setNudgeNote({});
+  }
+
+  async function nudge(item: WorkspaceActivityItem) {
+    if (!relationshipId) return;
+    setNudgingId(item.id);
+    setError(null);
+    try {
+      const result = await apiClient.nudgeActivity(relationshipId, {
+        activityType: item.type,
+        activityId: item.id,
+      });
+      const note = result.deduped
+        ? "Already nudged today."
+        : result.notification.state === "deferred"
+          ? "Nudge waits until quiet hours end."
+          : result.notification.state === "suppressed"
+            ? "Client notification settings suppressed this nudge."
+            : "Nudge sent.";
+      setNudgeNote((current) => ({ ...current, [item.id]: note }));
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Could not nudge.");
+    } finally {
+      setNudgingId(null);
+    }
   }
 
   async function generateAssignments() {
@@ -304,9 +346,28 @@ export function ClientActivityPage() {
                     workspaceReady={Boolean(workspace) && !workspaceLoading}
                   />
                 </div>
-                <span className={`status-pill status-${item.state}`}>
-                  {statusLabel(item.state)}
-                </span>
+                <div className="row-actions">
+                  {isUnresolved(item) ? (
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      disabled={nudgingId === item.id}
+                      onClick={() => {
+                        void nudge(item);
+                      }}
+                    >
+                      {nudgingId === item.id ? "Nudging…" : "Nudge"}
+                    </button>
+                  ) : null}
+                  {nudgeNote[item.id] ? (
+                    <p className="workspace-row-meta" role="status">
+                      {nudgeNote[item.id]}
+                    </p>
+                  ) : null}
+                  <span className={`status-pill status-${item.state}`}>
+                    {statusLabel(item.state)}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
