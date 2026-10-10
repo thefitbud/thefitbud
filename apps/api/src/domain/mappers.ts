@@ -1,5 +1,6 @@
 import {
   mealPrescriptionSchema,
+  onboardingAnswersSchema,
   onboardingFormDefinitionSchema,
   planContentSchema,
   type Checkin,
@@ -212,7 +213,7 @@ export function mapOnboardingFormTemplateDetail(
 export function mapOnboardingFormResponse(
   row: OnboardingFormResponseRow,
 ): OnboardingFormResponse {
-  const answers = JSON.parse(row.answersJson) as Record<string, string>;
+  const answers = onboardingAnswersSchema.parse(JSON.parse(row.answersJson));
   return {
     id: row.id,
     coachingRelationshipId: row.coachingRelationshipId,

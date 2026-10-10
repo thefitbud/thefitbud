@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import {
   createOnboardingReviewRequestSchema,
   createOnboardingReviewResponseSchema,
+  onboardingAnswersSchema,
   onboardingFormDefinitionSchema,
   onboardingFormResponseSchema,
   onboardingFormVersionSchema,
@@ -508,8 +509,25 @@ onboardingRoutes.post(
         "Pinned onboarding form definition is invalid.",
       );
     }
-    const answers = JSON.parse(response.answersJson) as Record<string, string>;
-    const answerErrors = onboardingAnswerErrors(definition.data.fields, answers);
+    const storedAnswers = onboardingAnswersSchema.safeParse(
+      JSON.parse(response.answersJson),
+    );
+    if (!storedAnswers.success) {
+      return fail(
+        c,
+        422,
+        "ONBOARDING_INCOMPLETE",
+        "Required onboarding fields are missing.",
+        {
+          missingFieldIds: [],
+          invalidFieldIds: definition.data.fields.map((field) => field.id),
+        },
+      );
+    }
+    const answerErrors = onboardingAnswerErrors(
+      definition.data.fields,
+      storedAnswers.data,
+    );
     if (
       answerErrors.missingFieldIds.length > 0 ||
       answerErrors.invalidFieldIds.length > 0

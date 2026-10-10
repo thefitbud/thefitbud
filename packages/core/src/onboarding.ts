@@ -1,5 +1,6 @@
 import {
   onboardingFormDefinitionSchema,
+  type OnboardingAnswers,
   type OnboardingFieldDefinition,
   type OnboardingStatus,
 } from "@fitbud/contracts";
@@ -88,20 +89,28 @@ export function resolveOnboardingForm<T extends OnboardingFormCandidate>(
   return pool.reduce((best, form) => (form.version > best.version ? form : best));
 }
 
+export type OnboardingAnswerValue = OnboardingAnswers[string];
+
+/** A required answer is blank when it is absent, whitespace, or an empty selection. */
+export function isBlankOnboardingAnswer(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === "string") return value.trim().length === 0;
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
+}
+
 /**
  * Validate required onboarding answers against field definitions.
  * Returns missing field ids (empty when valid).
+ * A numeric 0 and boolean false count as answers.
  */
 export function missingRequiredOnboardingFields(
   fields: ReadonlyArray<{ id: string; required: boolean }>,
-  answers: Record<string, string>,
+  answers: Readonly<Record<string, OnboardingAnswerValue | undefined>>,
 ): string[] {
   return fields
     .filter((field) => field.required)
-    .filter((field) => {
-      const value = answers[field.id];
-      return typeof value !== "string" || value.trim().length === 0;
-    })
+    .filter((field) => isBlankOnboardingAnswer(answers[field.id]))
     .map((field) => field.id);
 }
 
@@ -147,28 +156,96 @@ export function parseOnboardingFormFields(
   return { ok: true, fields: parsed.data.fields };
 }
 
-export type OnboardingAnswerField = {
-  id: string;
-  required: boolean;
-  type?: "text" | "textarea" | "select";
-  options?: readonly string[];
-};
+/** Field shape accepted by answer checks. Callers pass the pinned definition. */
+export type OnboardingAnswerField = OnboardingFieldDefinition;
 
-/** Required blanks and select answers that are not in the pinned options. */
-export function onboardingAnswerErrors(
-  fields: readonly OnboardingAnswerField[],
-  answers: Record<string, string>,
-): { missingFieldIds: string[]; invalidFieldIds: string[] } {
-  const missingFieldIds = missingRequiredOnboardingFields(fields, answers);
-  const invalidFieldIds = fields
-    .filter((field) => field.type === "select")
-    .filter((field) => {
-      const value = answers[field.id];
-      if (typeof value !== "string" || value.trim().length === 0) {
+function optionIds(field: OnboardingFieldDefinition): readonly string[] {
+  if (field.type === "select") return field.options;
+  if (field.type === "single_choice" || field.type === "multiple_choice") {
+    return field.options.map((option) => option.id);
+  }
+  return [];
+}
+
+function optionLabels(field: OnboardingFieldDefinition): ReadonlyMap<string, string> {
+  if (field.type === "select") {
+    return new Map(field.options.map((option) => [option, option]));
+  }
+  if (field.type === "single_choice" || field.type === "multiple_choice") {
+    return new Map(field.options.map((option) => [option.id, option.label]));
+  }
+  return new Map();
+}
+
+function answerMatchesField(
+  field: OnboardingFieldDefinition,
+  value: unknown,
+): boolean {
+  switch (field.type) {
+    case "text":
+    case "textarea":
+    case "short_text":
+    case "long_text":
+      return (
+        typeof value === "string" &&
+        (field.maxLength == null || value.length <= field.maxLength)
+      );
+    case "select":
+    case "single_choice":
+      return typeof value === "string" && optionIds(field).includes(value);
+    case "multiple_choice": {
+      if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
         return false;
       }
-      return !(field.options ?? []).includes(value);
-    })
+      const allowed = new Set(optionIds(field));
+      return (
+        new Set(value).size === value.length &&
+        value.every((item) => allowed.has(item))
+      );
+    }
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "yes_no":
+      return typeof value === "boolean";
+    default: {
+      const _exhaustive: never = field;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Required blanks and answers that do not match the pinned field type.
+ * Legacy select answers must equal an option string. That string is the option id.
+ */
+export function onboardingAnswerErrors(
+  fields: readonly OnboardingAnswerField[],
+  answers: Readonly<Record<string, OnboardingAnswerValue | undefined>>,
+): { missingFieldIds: string[]; invalidFieldIds: string[] } {
+  const missingFieldIds = missingRequiredOnboardingFields(fields, answers);
+  const missing = new Set(missingFieldIds);
+  const invalidFieldIds = fields
+    .filter((field) => !missing.has(field.id))
+    .filter((field) => !isBlankOnboardingAnswer(answers[field.id]))
+    .filter((field) => !answerMatchesField(field, answers[field.id]))
     .map((field) => field.id);
   return { missingFieldIds, invalidFieldIds };
+}
+
+/** Trainer-facing text for one stored answer. Option ids render as their labels. */
+export function formatOnboardingAnswer(
+  field: OnboardingFieldDefinition,
+  value: OnboardingAnswerValue | undefined,
+): string {
+  if (isBlankOnboardingAnswer(value) || value == null) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  if (Array.isArray(value)) {
+    const labels = optionLabels(field);
+    return value.map((id) => labels.get(id) ?? id).join(", ");
+  }
+  if (field.type === "single_choice" || field.type === "select") {
+    return optionLabels(field).get(value) ?? value;
+  }
+  return value;
 }

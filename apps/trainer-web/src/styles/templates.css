@@ -457,6 +457,20 @@
   padding-top: 1rem;
 }
 
+.templates-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: var(--pale-lavender, #edeaff);
+  border-radius: 12px;
+}
+
+.templates-preview h3 {
+  margin: 0;
+}
+
 .templates-options {
   margin: 0;
   padding: 0;

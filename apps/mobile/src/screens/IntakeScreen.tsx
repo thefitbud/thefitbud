@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   OnboardingAnswers,
   OnboardingFormResponse,
   OnboardingFormVersion,
 } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { useAuth, messageFromError } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
+import {
+  intakeControlForField,
+  parseNumberAnswer,
+  toggleSelectedOption,
+} from "./intakeFields";
 
 type Props = {
   relationshipId: string;
@@ -22,6 +27,7 @@ export function IntakeScreen({ relationshipId }: Props) {
   const { api, refreshSession, signOut } = useAuth();
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>({});
+  const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({});
   const [version, setVersion] = useState(0);
   const [status, setStatus] = useState<OnboardingFormResponse["status"] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,8 +69,13 @@ export function IntakeScreen({ relationshipId }: Props) {
     void load();
   }, [load]);
 
-  function updateAnswer(fieldId: string, value: string) {
-    setAnswers((current) => ({ ...current, [fieldId]: value }));
+  function updateAnswer(fieldId: string, value: OnboardingAnswers[string] | undefined) {
+    setAnswers((current) => {
+      const next = { ...current };
+      if (value === undefined) delete next[fieldId];
+      else next[fieldId] = value;
+      return next;
+    });
     setInfoMessage(null);
   }
 
@@ -161,17 +172,110 @@ export function IntakeScreen({ relationshipId }: Props) {
         </View>
       ) : null}
 
-      {definition.fields.map((field) => (
-        <Field
-          key={field.id}
-          label={`${field.label}${field.required ? " *" : ""}`}
-          value={answers[field.id] ?? ""}
-          onChangeText={(value) => updateAnswer(field.id, value)}
-          multiline={field.type === "textarea"}
-          editable={!readOnly}
-          maxLength={field.type === "select" ? undefined : field.maxLength}
-        />
-      ))}
+      {definition.fields.map((field) => {
+        const control = intakeControlForField(field);
+        const label = `${field.label}${field.required ? " *" : ""}`;
+        const stored = answers[field.id];
+        if (control.kind === "short_text" || control.kind === "long_text") {
+          return (
+            <Field
+              key={field.id}
+              label={label}
+              hint={field.helpText}
+              value={typeof stored === "string" ? stored : ""}
+              onChangeText={(value) => updateAnswer(field.id, value)}
+              multiline={control.kind === "long_text"}
+              editable={!readOnly}
+              maxLength={control.maxLength}
+            />
+          );
+        }
+        if (control.kind === "number") {
+          const draft =
+            numberDrafts[field.id] ??
+            (typeof stored === "number" ? String(stored) : "");
+          return (
+            <Field
+              key={field.id}
+              label={label}
+              hint={field.helpText}
+              value={draft}
+              keyboardType="decimal-pad"
+              editable={!readOnly}
+              onChangeText={(value) => {
+                setNumberDrafts((current) => ({ ...current, [field.id]: value }));
+                updateAnswer(field.id, parseNumberAnswer(value));
+              }}
+            />
+          );
+        }
+        if (control.kind === "yes_no") {
+          return (
+            <View key={field.id} style={styles.group}>
+              <Text style={styles.groupLabel}>{label}</Text>
+              {field.helpText ? <Text style={styles.hint}>{field.helpText}</Text> : null}
+              <View style={styles.choiceRow}>
+                {([
+                  ["Yes", true],
+                  ["No", false],
+                ] as const).map(([caption, next]) => {
+                  const selected = stored === next;
+                  return (
+                    <Pressable
+                      key={caption}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected, disabled: readOnly }}
+                      disabled={readOnly}
+                      onPress={() => updateAnswer(field.id, next)}
+                      style={[styles.choice, selected && styles.choiceSelected]}
+                    >
+                      <Text style={styles.choiceText}>
+                        {selected ? `${caption}, selected` : caption}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        }
+        const selectedIds = Array.isArray(stored) ? stored : [];
+        return (
+          <View key={field.id} style={styles.group}>
+            <Text style={styles.groupLabel}>{label}</Text>
+            {field.helpText ? <Text style={styles.hint}>{field.helpText}</Text> : null}
+            {control.options.map((option) => {
+              const selected =
+                control.kind === "multiple_choice"
+                  ? selectedIds.includes(option.id)
+                  : stored === option.id;
+              return (
+                <Pressable
+                  key={option.id}
+                  accessibilityRole={
+                    control.kind === "multiple_choice" ? "checkbox" : "radio"
+                  }
+                  accessibilityState={{ selected, disabled: readOnly }}
+                  disabled={readOnly}
+                  onPress={() => {
+                    if (control.kind === "multiple_choice") {
+                      const next = toggleSelectedOption(selectedIds, option.id);
+                      updateAnswer(field.id, next.length === 0 ? undefined : next);
+                      return;
+                    }
+                    updateAnswer(field.id, option.id);
+                  }}
+                  style={[styles.choice, selected && styles.choiceSelected]}
+                >
+                  <Text style={styles.choiceText}>
+                    {selected ? `${option.label}, selected` : option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        );
+      })}
 
       {!readOnly ? (
         <>
@@ -219,5 +323,43 @@ const styles = StyleSheet.create({
   },
   gap: {
     height: spacing.md,
+  },
+  group: {
+    marginBottom: spacing.lg,
+  },
+  groupLabel: {
+    color: colors.deepNavy,
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: spacing.sm,
+  },
+  hint: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
+  },
+  choiceRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  choice: {
+    minHeight: touchTargetMin,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.lightGrey,
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  choiceSelected: {
+    borderColor: colors.indigo,
+    backgroundColor: colors.paleLavender,
+  },
+  choiceText: {
+    color: colors.nearBlack,
+    fontSize: 16,
   },
 });
