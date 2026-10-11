@@ -78,32 +78,43 @@ The project maintains six focused Confluence pages:
 5. FitBud Conceptual API Contract - API behavior, authorization, sync, notifications, and realtime conventions.
 6. FitBud Conceptual Database Schema - entities, relationships, invariants, ownership, and sync metadata.
 The repository becomes authoritative for implemented contracts, schema, migrations, and commands. Agents.md contains the working rules for both agents and developers.
-Local development
-Requirements: Node.js 20 or newer and pnpm 9.15.4. From the repository root, install dependencies and apply the local API database migrations:
+## Local development
+
+### Install dependencies and prepare the API
+
+Requirements: Node.js 20 or newer and pnpm 9.15.4. From the repository root:
 
 ```sh
 pnpm install
+pnpm exec turbo run build --filter=@fitbud/api...
 pnpm db:migrate:local
 ```
 
-Run the complete application (API, trainer web, and mobile) together:
+### Run all applications
+
+Start the API, trainer web, and mobile app together:
 
 ```sh
 pnpm dev
 ```
 
-To run only one application, open a terminal at the repository root and use:
+### Run applications separately
+
+Run an individual application from the repository root:
 
 ```sh
-pnpm --filter @fitbud/api dev
-pnpm --filter @fitbud/trainer-web dev
-pnpm --filter @fitbud/mobile dev
+pnpm api
+pnpm web
+pnpm mobile
 ```
+
+### Local URLs and configuration
 
 The API listens at `http://127.0.0.1:8787` (interactive API docs: `/docs`), and trainer web listens at `http://localhost:5173`. The trainer web dev server proxies `/api` requests to the local API. Expo prints instructions for opening the mobile app in a simulator or development client; mobile needs the API running as well. By default, mobile targets the local API. To override that address, set `EXPO_PUBLIC_API_BASE_URL` as described in `.env.example`.
 
 The root `package.json` also defines workspace-wide build, lint, typecheck, test, affected-package validation, and API database scripts.
-Delivery rules
+
+## Delivery rules
 - Work in small vertical slices tied to one user outcome.
 - Update shared contracts before or with consumer changes.
 - Add migrations for every database change.
