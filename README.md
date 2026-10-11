@@ -110,7 +110,7 @@ pnpm mobile
 
 ### Local URLs and configuration
 
-The API listens at `http://127.0.0.1:8787` (interactive API docs: `/docs`). Trainer web starts at `http://localhost:5173`, or automatically tries the next available port if that port is busy; use the URL Vite prints in the terminal. The trainer web dev server proxies `/api` requests to the local API. Expo prints instructions for opening the mobile app in a simulator or development client; mobile needs the API running as well. By default, mobile targets the local API. To override that address, set `EXPO_PUBLIC_API_BASE_URL` as described in `.env.example`.
+The API listens at `http://127.0.0.1:8787` (interactive API docs: `/docs`). Before starting, trainer web asks the operating system for an available port, so it does not try `5173`; use the URL Vite prints in the terminal. The trainer web dev server proxies `/api` requests to the local API. Expo prints instructions for opening the mobile app in a simulator or development client; mobile needs the API running as well. By default, mobile targets the local API. To override that address, set `EXPO_PUBLIC_API_BASE_URL` as described in `.env.example`.
 
 The root `package.json` also defines workspace-wide build, lint, typecheck, test, affected-package validation, and API database scripts.
 
