@@ -159,7 +159,7 @@ Also off: SMS OTP, in-app chat, automated WhatsApp utility sends, manual timezon
 
 | ID | Gap |
 |----|-----|
-| TR-06 | Activity rings on trainer web not fully implemented |
+| TR-06 | Trainee Today rings show as a simple kcal line in the Expo web preview (native rings not yet checked on a real device) |
 | TR-11 / TR-12 | Live workout extras (timers, superset UX) partial |
 | TR-24 / TR-26 | Minor polish items in trainee flows |
 | TR-20 | No manual timezone edit in settings |
