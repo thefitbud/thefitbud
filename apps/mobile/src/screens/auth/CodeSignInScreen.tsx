@@ -44,7 +44,11 @@ export function CodeSignInScreen({
   }, [codeSent]);
 
   return (
-    <Screen title="Sign in with a code" subtitle="We'll send a 6-digit code to your email.">
+    <Screen
+      brandDisplay="mark"
+      title="Sign in with a code"
+      subtitle="We'll send a 6-digit code to your email."
+    >
       {error ? <ErrorBanner message={error} /> : null}
 
       <View style={styles.channelRow}>

@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import type { ReactNode } from "react";
 import { colors, spacing } from "@fitbud/ui-mobile";
+import { BrandMark } from "./BrandMark";
 
 type Props = {
   title: string;
@@ -16,6 +17,8 @@ type Props = {
   footer?: ReactNode;
   /** `app` matches the trainee design: no product stamp, canvas background. */
   chrome?: "page" | "app";
+  /** Auth screens use the Honest Week mark instead of the wordmark. */
+  brandDisplay?: "text" | "mark" | "none";
   /** When false, omit the in-screen title block (shell provides AppTopBar). */
   showHeader?: boolean;
   refreshing?: boolean;
@@ -28,6 +31,7 @@ export function Screen({
   children,
   footer,
   chrome = "page",
+  brandDisplay,
   showHeader = true,
   refreshing,
   onRefresh,
@@ -45,11 +49,20 @@ export function Screen({
       >
         {showHeader ? (
           <>
-            {chrome === "page" ? (
-              <Text style={styles.brand} accessibilityRole="header">
-                FitBud
-              </Text>
-            ) : null}
+            {chrome === "page"
+              ? (() => {
+                  const display = brandDisplay ?? "text";
+                  if (display === "none") return null;
+                  if (display === "mark") {
+                    return <BrandMark size={36} />;
+                  }
+                  return (
+                    <Text style={styles.brand} accessibilityRole="header">
+                      FitBud
+                    </Text>
+                  );
+                })()
+              : null}
             <Text
               style={[styles.title, chrome === "app" ? styles.titleApp : null]}
               accessibilityRole="header"

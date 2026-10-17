@@ -36,7 +36,7 @@ function testEnv(): Env {
 
 function addDays(isoDate: string, delta: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d + delta));
+  const dt = new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, (d ?? 1) + delta));
   return dt.toISOString().slice(0, 10);
 }
 

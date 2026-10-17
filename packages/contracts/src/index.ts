@@ -681,6 +681,7 @@ export {
   type ReminderRulesResponse,
   type ReminderType,
   type RemoveDeviceTokenRequest,
+  type TrainerCategories,
   type UpdateNotificationPreferencesRequest,
   type UpdateReminderRulesRequest,
 } from "./notification.js";

@@ -34,6 +34,7 @@ export function SignInScreen({
 
   return (
     <Screen
+      brandDisplay="mark"
       title={inviteTrainerName ? `Join ${inviteTrainerName}'s coaching` : "Sign in"}
       subtitle={inviteTrainerName ? tagline : "Progress, guided."}
     >

@@ -12,6 +12,7 @@ import {
   forkPlanTemplateRequestSchema,
   planTemplateListResponseSchema,
   planTemplateSchema,
+  planTemplateTypeSchema,
   updatePlanTemplateRequestSchema,
 } from "@fitbud/contracts";
 import {
@@ -93,7 +94,21 @@ templateRoutes.get(
     const db = createDb(c.env.DB);
 
     const scope = c.req.query("scope") ?? "all";
-    const templateType = c.req.query("templateType")?.trim();
+    const templateTypeRaw = c.req.query("templateType")?.trim();
+    const templateTypeParsed = templateTypeRaw
+      ? planTemplateTypeSchema.safeParse(templateTypeRaw)
+      : null;
+    if (templateTypeParsed && !templateTypeParsed.success) {
+      return fail(
+        c,
+        400,
+        "VALIDATION_ERROR",
+        "templateType must be a valid plan template type.",
+      );
+    }
+    const templateType = templateTypeParsed?.success
+      ? templateTypeParsed.data
+      : undefined;
     const q = c.req.query("q")?.trim().toLowerCase();
     const visibleToActor =
       scope === "bases"
@@ -109,7 +124,7 @@ templateRoutes.get(
       filters.push(eq(planTemplates.templateType, templateType));
     }
     if (q && q.length >= 1) {
-      filters.push(sql`lower(${planTemplates.name}) LIKE ${`%${q}%`}`);
+      filters.push(sql`lower(${planTemplates.title}) LIKE ${`%${q}%`}`);
     }
     const visibilityFilter = and(...filters);
     const rows = await db

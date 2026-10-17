@@ -35,7 +35,11 @@ export function ForgotPasswordScreen({
   const [password, setPassword] = useState("");
 
   return (
-    <Screen title="Reset password" subtitle="We'll email you a code to reset your password.">
+    <Screen
+      brandDisplay="mark"
+      title="Reset password"
+      subtitle="We'll email you a code to reset your password."
+    >
       {error ? <ErrorBanner message={error} /> : null}
 
       {step === "request" ? (
