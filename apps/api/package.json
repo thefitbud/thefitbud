@@ -14,8 +14,7 @@
     "db:migrate": "wrangler d1 migrations apply fitbud",
     "db:seed:library": "node scripts/library-seed.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "db:reset": "tsx scripts/db-reset.ts",
-    "setup:local": "tsx scripts/ensure-dev-vars.ts"
+    "db:reset": "tsx scripts/db-reset.ts"
   },
   "dependencies": {
     "@fitbud/contracts": "workspace:*",
