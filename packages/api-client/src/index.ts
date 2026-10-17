@@ -1,6 +1,11 @@
+import { z } from "zod";
 import {
   apiErrorBodySchema,
   acceptInvitationRequestSchema,
+  authOtpStartRequestSchema,
+  authOtpStartResponseSchema,
+  authOtpVerifyRequestSchema,
+  authOtpVerifyResponseSchema,
   acceptInvitationResponseSchema,
   activateConfigurationRequestSchema,
   coachingConfigurationSchema,
@@ -135,6 +140,10 @@ import {
   workoutAssignmentListResponseSchema,
   workoutAssignmentSchema,
   workoutExecutionSchema,
+  type AuthOtpStartRequest,
+  type AuthOtpStartResponse,
+  type AuthOtpVerifyRequest,
+  type AuthOtpVerifyResponse,
   type AcceptInvitationRequest,
   type AcceptInvitationResponse,
   type AcknowledgeExceptionRequest,
@@ -364,6 +373,20 @@ export class FitBudApiClient {
     await this.request("DELETE", "/auth/session", undefined, { auth: true });
   }
 
+  async startOtp(body: AuthOtpStartRequest): Promise<AuthOtpStartResponse> {
+    const parsed = authOtpStartRequestSchema.parse(body);
+    return this.request("POST", "/auth/otp/start", authOtpStartResponseSchema, {
+      body: parsed,
+    });
+  }
+
+  async verifyOtp(body: AuthOtpVerifyRequest): Promise<AuthOtpVerifyResponse> {
+    const parsed = authOtpVerifyRequestSchema.parse(body);
+    return this.request("POST", "/auth/otp/verify", authOtpVerifyResponseSchema, {
+      body: parsed,
+    });
+  }
+
   async createInvitation(
     body: CreateInvitationRequest,
     idempotencyKey: string,
@@ -398,6 +421,35 @@ export class FitBudApiClient {
       "GET",
       `/invitations/${invitationId}`,
       invitationSchema,
+      { auth: true },
+    );
+  }
+
+  async reissueInvitation(
+    invitationId: string,
+  ): Promise<CreateInvitationResponse> {
+    return this.request(
+      "POST",
+      `/invitations/${encodeURIComponent(invitationId)}/reissue`,
+      createInvitationResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async revokeInvitation(invitationId: string): Promise<Invitation> {
+    return this.request(
+      "POST",
+      `/invitations/${encodeURIComponent(invitationId)}/revoke`,
+      invitationSchema,
+      { auth: true },
+    );
+  }
+
+  async cancelReactivation(relationshipId: string): Promise<{ status: "cancelled" }> {
+    return this.request(
+      "POST",
+      `/relationships/${encodeURIComponent(relationshipId)}/reactivate/cancel`,
+      z.object({ status: z.literal("cancelled") }),
       { auth: true },
     );
   }
@@ -1444,10 +1496,12 @@ export class FitBudApiClient {
   async listCheckinFormTemplates(query?: {
     cursor?: string;
     limit?: number;
+    scope?: "all" | "bases" | "mine";
   }): Promise<CheckinFormTemplateListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.scope) params.set("scope", query.scope);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",

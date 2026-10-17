@@ -528,6 +528,43 @@ describe("contracts", () => {
     ).toMatchObject({ pushEnabled: true });
   });
 
+  it("requires trainerCategories on notification preferences (TW-29)", () => {
+    const prefs = notificationPreferencesSchema.parse({
+      userId: "11111111-1111-4111-8111-111111111111",
+      pushEnabled: true,
+      categories: {
+        workoutReminder: true,
+        mealReminder: true,
+        checkinReminder: true,
+        subscriptionRenewalReminder: true,
+        dailySummaryReminder: false,
+      },
+      channelPreference: "app",
+      whatsappOptIn: {
+        granted: false,
+        at: null,
+        source: null,
+        textVersion: null,
+      },
+      traineeTimezone: "UTC",
+      locale: "en",
+      trainerCategories: {
+        askCoach: false,
+        checkinSubmitted: true,
+        criticalDigest: true,
+        intakeSubmitted: false,
+        renewalsDue: true,
+        mealTimesChanged: true,
+        morningSummary: true,
+      },
+      quietHoursStart: "22:00",
+      quietHoursEnd: "07:00",
+      updatedAt: "2026-09-26T00:00:00.000Z",
+    });
+    expect(prefs.trainerCategories.morningSummary).toBe(true);
+    expect(prefs.trainerCategories.askCoach).toBe(false);
+  });
+
   it("validates realtime event envelope without sensitive fields", () => {
     const event = realtimeEventSchema.parse({
       eventId: "11111111-1111-4111-8111-111111111111",

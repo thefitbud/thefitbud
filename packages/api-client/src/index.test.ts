@@ -183,4 +183,87 @@ describe("FitBudApiClient", () => {
     expect(seen[2]).toContain("versionStatus=effective");
     expect(seen[3]).toContain("kind=subscription_revision");
   });
+
+  it("parses OTP start/verify envelopes", async () => {
+    const client = new FitBudApiClient({
+      baseUrl: "https://example.test",
+      fetch: async (input) => {
+        const path = String(input);
+        if (path.includes("/auth/otp/start")) {
+          return new Response(
+            JSON.stringify({
+              data: { sent: true, channels: ["email"] },
+            }),
+            { status: 202, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            data: { purpose: "invite", otpProof: "proof-token-abc" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    });
+
+    await expect(
+      client.startOtp({ identifier: "a@b.com", purpose: "login" }),
+    ).resolves.toEqual({ sent: true, channels: ["email"] });
+    await expect(
+      client.verifyOtp({
+        identifier: "a@b.com",
+        purpose: "invite",
+        code: "123456",
+      }),
+    ).resolves.toEqual({ purpose: "invite", otpProof: "proof-token-abc" });
+  });
+
+  it("parses notification preferences including trainerCategories", async () => {
+    const client = new FitBudApiClient({
+      baseUrl: "https://example.test",
+      getAccessToken: async () => "token",
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              userId: "11111111-1111-4111-8111-111111111111",
+              pushEnabled: true,
+              categories: {
+                workoutReminder: true,
+                mealReminder: true,
+                checkinReminder: true,
+                subscriptionRenewalReminder: true,
+                dailySummaryReminder: true,
+              },
+              channelPreference: "app",
+              whatsappOptIn: {
+                granted: false,
+                at: null,
+                source: null,
+                textVersion: null,
+              },
+              traineeTimezone: "Asia/Kolkata",
+              locale: null,
+              trainerCategories: {
+                askCoach: true,
+                checkinSubmitted: true,
+                criticalDigest: false,
+                intakeSubmitted: true,
+                renewalsDue: true,
+                mealTimesChanged: true,
+                morningSummary: false,
+              },
+              quietHoursStart: null,
+              quietHoursEnd: null,
+              updatedAt: "2026-09-26T00:00:00.000Z",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    });
+
+    await expect(client.getNotificationPreferences()).resolves.toMatchObject({
+      trainerCategories: { morningSummary: false, criticalDigest: false },
+    });
+  });
 });

@@ -215,7 +215,9 @@ describe("auth login routes", () => {
     );
     expect(unknown.status).toBe(202);
     const unknownBody = await unknown.json();
-    expect(unknownBody).toEqual({ sent: true, channels: ["email"] });
+    expect(unknownBody).toEqual({
+      data: { sent: true, channels: ["email"] },
+    });
 
     const known = await app.request(
       "/auth/otp/start",
@@ -231,7 +233,9 @@ describe("auth login routes", () => {
     );
     expect(known.status).toBe(202);
     const knownBody = await known.json();
-    expect(knownBody).toMatchObject({ sent: true, channels: ["email"] });
+    expect(knownBody).toMatchObject({
+      data: { sent: true, channels: ["email"] },
+    });
   });
 
   it("returns generic OTP invalid for a bad verify attempt", async () => {
@@ -323,6 +327,6 @@ describe("auth login routes", () => {
     );
     expect(response.status).toBe(202);
     const body = await response.json();
-    expect(body).toEqual({ sent: true, channels: ["email"] });
+    expect(body).toEqual({ data: { sent: true, channels: ["email"] } });
   });
 });
