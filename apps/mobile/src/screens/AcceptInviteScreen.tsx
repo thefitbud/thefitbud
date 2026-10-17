@@ -1,10 +1,18 @@
 import { useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
+import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth, messageFromError } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+
+const BULLETS = [
+  "Your plan, day by day",
+  "Log meals and workouts in a tap",
+  "Your coach sees your progress",
+];
 
 export function AcceptInviteScreen() {
   const { api, refreshSession, signOut, errorMessage, clearError } = useAuth();
@@ -28,7 +36,6 @@ export function AcceptInviteScreen() {
         displayName: displayName.trim() || undefined,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
-      // Reload /me + relationships so routing sees trainee role and intake state.
       await refreshSession();
     } catch (error) {
       if (error instanceof ApiClientError) {
@@ -45,10 +52,26 @@ export function AcceptInviteScreen() {
 
   return (
     <Screen
-      title="Accept invitation"
-      subtitle="Enter the invitation token your trainer shared. This links your account and starts onboarding."
+      title="Join your coach"
+      subtitle="Accept the invitation to start your FitBud coaching space."
     >
       {displayError ? <ErrorBanner message={displayError} /> : null}
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>You're invited to coaching</Text>
+        {BULLETS.map((line) => (
+          <Text key={line} style={styles.bullet}>
+            • {line}
+          </Text>
+        ))}
+      </View>
+
+      <Field
+        label="Your name"
+        value={displayName}
+        onChangeText={setDisplayName}
+        placeholder="How your coach should address you"
+      />
 
       <Field
         label="Invitation token"
@@ -56,22 +79,22 @@ export function AcceptInviteScreen() {
         onChangeText={setToken}
         autoCapitalize="none"
         autoCorrect={false}
-        placeholder="Paste token"
-      />
-      <Field
-        label="Display name (optional)"
-        value={displayName}
-        onChangeText={setDisplayName}
-        placeholder="Your name"
+        placeholder="Paste token from your coach"
       />
 
       <PrimaryButton
-        label="Accept invitation"
+        label="Join coaching"
         loading={loading}
         onPress={() => {
           void accept();
         }}
       />
+
+      <Text style={styles.helper}>
+        Open the invite link from WhatsApp when you have the app installed. If
+        the link expired, ask your coach for a new one.
+      </Text>
+
       <PrimaryButton
         label="Sign out"
         variant="ghost"
@@ -80,3 +103,29 @@ export function AcceptInviteScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+  },
+  cardTitle: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  bullet: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  helper: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: spacing.md,
+  },
+});

@@ -11,12 +11,12 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
-import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
 import { scheduledAssignments } from "./scheduledAssignments";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
+import { openActiveWorkout, workoutStartError } from "./workoutSession";
 
 function localDateInTimezone(timeZone: string, instant = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -60,8 +60,16 @@ function statusLabel(status: WorkoutAssignment["status"]): string {
 
 export function WorkoutTab({
   relationship,
+  selectedDate,
+  onOpenOverlay,
+  autoStartToday = false,
+  onAutoStartConsumed,
 }: {
   relationship: CoachingRelationship;
+  selectedDate?: string;
+  onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
+  autoStartToday?: boolean;
+  onAutoStartConsumed?: () => void;
 }) {
   const { api, me } = useAuth();
   const sync = useSyncEngine();
@@ -76,19 +84,15 @@ export function WorkoutTab({
 
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
-  const rangeEnd = useMemo(() => addDays(today, 7), [today]);
+  const focusDate = selectedDate ?? today;
+  const rangeEnd = useMemo(() => addDays(focusDate, 7), [focusDate]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await api.generateWorkoutAssignments(
-        relationship.id,
-        { fromDate: today, toDate: rangeEnd },
-        createIdempotencyKey(),
-      );
       const listed = await api.listWorkoutAssignments(relationship.id, {
-        fromDate: today,
+        fromDate: focusDate,
         toDate: rangeEnd,
       });
       setAssignments(scheduledAssignments(listed.items));
@@ -101,14 +105,49 @@ export function WorkoutTab({
     } finally {
       setLoading(false);
     }
-  }, [api, relationship.id, today, rangeEnd]);
+  }, [api, relationship.id, focusDate, rangeEnd]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const todayAssignment = assignments.find((item) => item.localDate === today);
-  const upcoming = assignments.filter((item) => item.localDate !== today);
+  useEffect(() => {
+    if (!autoStartToday || loading) return;
+    const todayAssignment = assignments.find(
+      (item) => item.localDate === focusDate,
+    );
+    if (!todayAssignment || focusDate !== today) {
+      onAutoStartConsumed?.();
+      return;
+    }
+    void (async () => {
+      setActingId(todayAssignment.id);
+      setError(null);
+      try {
+        const execution = await openActiveWorkout(api, sync, todayAssignment);
+        setActiveExecution(execution);
+      } catch (err) {
+        setError(workoutStartError(err));
+      } finally {
+        setActingId(null);
+        onAutoStartConsumed?.();
+      }
+    })();
+  }, [
+    autoStartToday,
+    loading,
+    assignments,
+    focusDate,
+    today,
+    api,
+    sync,
+    onAutoStartConsumed,
+  ]);
+
+  const todayAssignment = assignments.find(
+    (item) => item.localDate === focusDate,
+  );
+  const upcoming = assignments.filter((item) => item.localDate !== focusDate);
 
   if (summaryExecution) {
     return (
@@ -140,11 +179,7 @@ export function WorkoutTab({
   }
 
   return (
-    <Screen
-      chrome="app"
-      title="Workout"
-      subtitle={today}
-    >
+    <Screen chrome="app" title="Workout" showHeader={false}>
       {error ? <ErrorBanner message={error} /> : null}
       {loading ? (
         <Text style={styles.muted}>Loading assignments…</Text>
@@ -175,6 +210,18 @@ export function WorkoutTab({
                     </Text>
                   </View>
                 ))}
+                {onOpenOverlay ? (
+                  <PrimaryButton
+                    label="See workout overview"
+                    variant="secondary"
+                    onPress={() => {
+                      onOpenOverlay({
+                        screen: "workout_overview",
+                        assignmentId: todayAssignment.id,
+                      });
+                    }}
+                  />
+                ) : null}
                 {todayAssignment.status === "assigned" ||
                 todayAssignment.status === "missed" ? (
                   <PrimaryButton
@@ -185,27 +232,14 @@ export function WorkoutTab({
                         setActingId(todayAssignment.id);
                         setError(null);
                         try {
-                          await enqueueAndPush(sync, {
-                            recordId: todayAssignment.id,
-                            operation: "workout.start",
-                            payload: { assignmentId: todayAssignment.id },
-                          });
-                          const refreshed = await api.getWorkoutAssignment(
-                            todayAssignment.id,
-                          );
-                          if (!refreshed.execution) {
-                            throw new Error("Workout did not start.");
-                          }
-                          const execution = await api.getWorkoutExecution(
-                            refreshed.execution.id,
+                          const execution = await openActiveWorkout(
+                            api,
+                            sync,
+                            todayAssignment,
                           );
                           setActiveExecution(execution);
                         } catch (err) {
-                          setError(
-                            err instanceof ApiClientError
-                              ? err.message
-                              : "Could not start workout.",
-                          );
+                          setError(workoutStartError(err));
                         } finally {
                           setActingId(null);
                         }

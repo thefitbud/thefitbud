@@ -1,0 +1,667 @@
+import { useCallback, useEffect, useState } from "react";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ApiClientError } from "@fitbud/api-client";
+import type {
+  LoggedFoodItem,
+  MealAssignment,
+  MealDeviationKind,
+  TraineeFoodSearchResponse,
+} from "@fitbud/contracts";
+import { NUTRIENT_SCALE } from "@fitbud/contracts";
+
+type TraineeFoodSearchItem = TraineeFoodSearchResponse["items"][number];
+import { colors, spacing } from "@fitbud/ui-mobile";
+import { stage1Api } from "../lib/stage1Api";
+import { useAuth } from "../auth/AuthProvider";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { Field } from "../components/Field";
+import { PrimaryButton } from "../components/PrimaryButton";
+import { Screen } from "../components/Screen";
+import { MINIMAL_PNG_CONTENT_TYPE } from "../lib/minimalPng";
+import { enqueueAndPush } from "../sync/actions";
+import { useSyncEngine } from "../sync/SyncProvider";
+import { uploadMealPhoto } from "./mealActions";
+import { PORTION_MULTIPLIER_CHIPS } from "./food/servingPresetsV2";
+import { FoodServingChips } from "./food/FoodServingChips";
+import { fetchMeFoodRecent } from "../lib/meFoodsApi";
+import {
+  loggedRowsFromPlanned,
+  plannedSummaryLine,
+} from "../lib/plannedMealItems";
+
+const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
+
+const QUICK_OPTIONS: Array<{ kind: MealDeviationKind; label: string }> = [
+  { kind: "restaurant", label: "Ate out" },
+  { kind: "manual", label: "Type it in" },
+  { kind: "other", label: "Other" },
+];
+
+type Props = {
+  assignment: MealAssignment;
+  relationshipId: string;
+  variant?: "screen" | "sheet";
+  onDone: () => void;
+  onCancel: () => void;
+  onOpenFoodSearch?: () => void;
+  onAskCoach?: () => void;
+};
+
+type LoggedRow = LoggedFoodItem & { label: string; kcalPreview: number | null };
+
+export function SomethingDifferentSheet({
+  assignment,
+  relationshipId,
+  variant = "screen",
+  onDone,
+  onCancel,
+  onOpenFoodSearch,
+  onAskCoach,
+}: Props) {
+  const { api, accessToken } = useAuth();
+  const s1 = stage1Api(api);
+  const sync = useSyncEngine();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<TraineeFoodSearchItem[]>([]);
+  const [recentFoods, setRecentFoods] = useState<TraineeFoodSearchItem[]>([]);
+  const [logged, setLogged] = useState<LoggedRow[]>([]);
+  const [customName, setCustomName] = useState("");
+  const [customKcal, setCustomKcal] = useState("");
+  const [portionMode, setPortionMode] = useState(false);
+  const [portionMultiplier, setPortionMultiplier] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+
+  const plannedSummary = plannedSummaryLine(assignment);
+
+  useEffect(() => {
+    if (prefilled) return;
+    const fromPlan = loggedRowsFromPlanned(assignment);
+    if (fromPlan.length > 0) {
+      setLogged(fromPlan);
+      setPrefilled(true);
+    }
+  }, [assignment, prefilled]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    void (async () => {
+      try {
+        const page = await fetchMeFoodRecent(accessToken);
+        setRecentFoods(page.items.slice(0, 5));
+      } catch {
+        setRecentFoods([]);
+      }
+    })();
+  }, [accessToken]);
+
+  const search = useCallback(async () => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await s1.searchMeFoods({ q, limit: 20 });
+      setResults(page.items);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Search failed.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [query, s1]);
+
+  function addFood(
+    item: TraineeFoodSearchItem,
+    quantity = 1,
+    servingId?: string,
+  ) {
+    const kcalPreview =
+      item.energyKcalScaled != null
+        ? Math.round((item.energyKcalScaled / NUTRIENT_SCALE) * quantity)
+        : null;
+    setLogged((prev) => [
+      ...prev,
+      {
+        foodId: item.id,
+        servingId: servingId ?? item.defaultServingId ?? undefined,
+        quantity,
+        label: item.name,
+        kcalPreview,
+      },
+    ]);
+    setResults([]);
+    setQuery("");
+  }
+
+  function addCustom() {
+    const name = customName.trim();
+    if (!name) return;
+    const kcal = Number.parseInt(customKcal, 10);
+    setLogged((prev) => [
+      ...prev,
+      {
+        customFood: {
+          name,
+          kcal: Number.isFinite(kcal) ? kcal : 0,
+        },
+        label: name,
+        kcalPreview: Number.isFinite(kcal) ? kcal : null,
+      },
+    ]);
+    setCustomName("");
+    setCustomKcal("");
+  }
+
+  function updateQuantity(index: number, quantity: number) {
+    setLogged((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        return { ...row, quantity };
+      }),
+    );
+  }
+
+  async function savePortionAdjustment(multiplier: number) {
+    setSaving(true);
+    setError(null);
+    try {
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "meal.deviate",
+        payload: {
+          assignmentId: assignment.id,
+          body: {
+            deviationKind: "portion_adjustment",
+            notes: `Portion ×${multiplier}`,
+            photoIntent: null,
+            items: [],
+            portionMultiplier: multiplier,
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not save meal.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function repeatRecentFood(item: TraineeFoodSearchItem) {
+    addFood(item, 1, item.defaultServingId ?? undefined);
+    setSaving(true);
+    setError(null);
+    try {
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "meal.deviate",
+        payload: {
+          assignmentId: assignment.id,
+          body: {
+            deviationKind: "repeat_recent",
+            notes: `Same as recent: ${item.name}`,
+            photoIntent: null,
+            items: [
+              {
+                foodId: item.id,
+                servingId: item.defaultServingId ?? undefined,
+                quantity: 1,
+              },
+            ],
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not save meal.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveQuick(kind: MealDeviationKind, notes: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "meal.deviate",
+        payload: {
+          assignmentId: assignment.id,
+          body: {
+            deviationKind: kind,
+            notes,
+            photoIntent: null,
+            items: [],
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not save meal.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function save() {
+    if (logged.length === 0) {
+      setError("Add at least one food, or use Eaten as planned instead.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const mediaAssetId = assignment.photoRequired
+        ? await uploadMealPhoto(api, relationshipId, assignment)
+        : null;
+      const photoIntent = mediaAssetId
+        ? {
+            notedAt: new Date().toISOString(),
+            mediaAssetId,
+            contentType: MINIMAL_PNG_CONTENT_TYPE,
+            clientRef: `meal-photo-${assignment.id}`,
+          }
+        : null;
+      const items: LoggedFoodItem[] = logged.map((row) => {
+        if (row.customFood) {
+          return { customFood: row.customFood };
+        }
+        return {
+          foodId: row.foodId,
+          servingId: row.servingId,
+          quantity: row.quantity,
+        };
+      });
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "meal.deviate",
+        payload: {
+          assignmentId: assignment.id,
+          body: {
+            deviationKind: "logged_foods",
+            notes: null,
+            photoIntent,
+            items,
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not save meal.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const macroPreview = logged.reduce(
+    (sum, row) => sum + (row.kcalPreview ?? 0),
+    0,
+  );
+
+  const body = (
+    <>
+      <View style={styles.planned}>
+        <Text style={styles.plannedTitle}>You planned</Text>
+        <Text style={styles.plannedBody}>{plannedSummary}</Text>
+        <Text style={styles.plannedHint}>
+          Edit rows below or tap Log what I ate to search the library.
+        </Text>
+      </View>
+      <PrimaryButton
+        label="Log what I ate"
+        onPress={() => {
+          onOpenFoodSearch?.();
+        }}
+      />
+      <Text style={styles.sectionLabel}>Quick options</Text>
+      <View style={styles.quickRow}>
+        <Pressable
+          style={[
+            styles.quickChip,
+            portionMode ? styles.quickChipActive : null,
+          ]}
+          onPress={() => setPortionMode((open) => !open)}
+        >
+          <Text style={styles.quickChipText}>Portion change</Text>
+        </Pressable>
+        {QUICK_OPTIONS.map((option) => (
+          <Pressable
+            key={option.label}
+            style={styles.quickChip}
+            onPress={() => {
+              void saveQuick(option.kind, option.label);
+            }}
+          >
+            <Text style={styles.quickChipText}>{option.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {portionMode ? (
+        <View style={styles.portionBlock}>
+          <Text style={styles.plannedTitle}>How much of the plan?</Text>
+          <View style={styles.quickRow}>
+            {PORTION_MULTIPLIER_CHIPS.map((chip) => (
+              <Pressable
+                key={chip.label}
+                style={[
+                  styles.qtyChip,
+                  portionMultiplier === chip.multiplier
+                    ? styles.qtyChipActive
+                    : null,
+                ]}
+                onPress={() => setPortionMultiplier(chip.multiplier)}
+              >
+                <Text
+                  style={
+                    portionMultiplier === chip.multiplier
+                      ? styles.qtyChipTextActive
+                      : styles.qtyChipText
+                  }
+                >
+                  {chip.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <PrimaryButton
+            label="Save portion"
+            loading={saving}
+            onPress={() => void savePortionAdjustment(portionMultiplier)}
+          />
+        </View>
+      ) : null}
+      {recentFoods.length > 0 ? (
+        <View style={styles.recentBlock}>
+          <Text style={styles.sectionLabel}>Same as earlier</Text>
+          <View style={styles.quickRow}>
+            {recentFoods.map((item) => (
+              <Pressable
+                key={item.id}
+                style={styles.quickChip}
+                onPress={() => {
+                  void repeatRecentFood(item);
+                }}
+              >
+                <Text style={styles.quickChipText}>{item.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {assignment.prescription.instructions ? (
+        <Text style={styles.instructions}>
+          {assignment.prescription.instructions}
+        </Text>
+      ) : null}
+      {error ? <ErrorBanner message={error} /> : null}
+      <Field
+        label="Search foods"
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search library"
+        autoCapitalize="none"
+        onSubmitEditing={() => {
+          void search();
+        }}
+      />
+      <PrimaryButton
+        label="Search"
+        variant="secondary"
+        loading={loading}
+        onPress={() => void search()}
+      />
+      {results.length > 0 ? (
+        <FlatList
+          data={results}
+          keyExtractor={(item) => item.id}
+          style={styles.results}
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <Text style={styles.rowTitle}>{item.name}</Text>
+              {item.energyKcalScaled != null ? (
+                <Text style={styles.rowMeta}>
+                  {Math.round(item.energyKcalScaled / NUTRIENT_SCALE)} kcal /
+                  serving
+                </Text>
+              ) : null}
+              <FoodServingChips
+                api={api}
+                item={item}
+                onSelect={(food, quantity, servingId) =>
+                  addFood(food, quantity, servingId)
+                }
+              />
+            </View>
+          )}
+        />
+      ) : null}
+      <Field
+        label="Custom item"
+        value={customName}
+        onChangeText={setCustomName}
+        placeholder="Not in library?"
+      />
+      <Field
+        label="Custom kcal (optional)"
+        value={customKcal}
+        onChangeText={setCustomKcal}
+        placeholder="e.g. 420"
+        keyboardType="number-pad"
+      />
+      <PrimaryButton label="Add custom" variant="secondary" onPress={addCustom} />
+      {logged.length > 0 ? (
+        <View style={styles.logged}>
+          <Text style={styles.loggedTitle}>
+            Logged ({logged.length}) · ~{macroPreview} kcal
+          </Text>
+          {logged.map((item, index) => (
+            <View key={`${index}`} style={styles.loggedRow}>
+              <Text style={styles.loggedLine}>{item.label}</Text>
+              <View style={styles.qtyRow}>
+                {QUANTITY_CHIPS.map((qty) => (
+                  <Pressable
+                    key={qty}
+                    style={[
+                      styles.qtyChip,
+                      item.quantity === qty ? styles.qtyChipActive : null,
+                    ]}
+                    onPress={() => updateQuantity(index, qty)}
+                  >
+                    <Text
+                      style={
+                        item.quantity === qty
+                          ? styles.qtyChipTextActive
+                          : styles.qtyChipText
+                      }
+                    >
+                      {qty}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      <PrimaryButton label="Save meal" loading={saving} onPress={() => void save()} />
+      {onAskCoach ? (
+        <PrimaryButton
+          label="Ask coach about this meal"
+          variant="ghost"
+          onPress={onAskCoach}
+        />
+      ) : null}
+      <PrimaryButton label="Cancel" variant="ghost" onPress={onCancel} />
+    </>
+  );
+
+  if (variant === "sheet") {
+    return body;
+  }
+
+  return (
+    <Screen
+      title="What did you have instead?"
+      subtitle={`${assignment.mealName} · log what you actually ate`}
+    >
+      {body}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  quickRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  quickChip: {
+    backgroundColor: colors.white,
+    borderColor: colors.paleLavender,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  quickChipText: {
+    color: colors.deepNavy,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  quickChipActive: {
+    backgroundColor: colors.paleLavender,
+    borderColor: colors.indigo,
+  },
+  sectionLabel: {
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: spacing.sm,
+  },
+  portionBlock: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  recentBlock: {
+    gap: spacing.xs,
+  },
+  results: {
+    maxHeight: 160,
+    marginTop: spacing.sm,
+  },
+  planned: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 12,
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+  },
+  plannedTitle: {
+    color: colors.deepNavy,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  plannedBody: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  plannedHint: {
+    color: colors.midGrey,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  instructions: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  row: {
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+    padding: spacing.md,
+  },
+  servingRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  servingChip: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  servingChipText: {
+    color: colors.deepNavy,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  rowTitle: {
+    color: colors.deepNavy,
+    fontWeight: "600",
+  },
+  rowMeta: {
+    color: colors.midGrey,
+    fontSize: 12,
+  },
+  logged: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 12,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  loggedTitle: {
+    color: colors.deepNavy,
+    fontWeight: "600",
+  },
+  loggedRow: {
+    gap: spacing.xs,
+  },
+  loggedLine: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  qtyRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  qtyChip: {
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  qtyChipActive: {
+    backgroundColor: colors.indigo,
+  },
+  qtyChipText: {
+    color: colors.deepNavy,
+    fontSize: 13,
+  },
+  qtyChipTextActive: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+});

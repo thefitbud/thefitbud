@@ -8,12 +8,14 @@ import type {
   MealComplianceSummaryResponse,
   WorkoutAdherenceResponse,
 } from "@fitbud/contracts";
+import { formatTimeDiff } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { stage1Api } from "../lib/stage1Api";
 import { onboardingStatusLabel } from "./clients";
 import { statusLabel, typeLabel } from "./labels";
 import { openContextualWhatsApp } from "./whatsapp";
@@ -35,7 +37,7 @@ export function ClientStatusScreen({
   onOpenException,
   onOpenCheckin,
 }: Props) {
-  const { api, relationships } = useAuth();
+  const { api, relationships, me } = useAuth();
   const relationship = relationships.find((item) => item.id === relationshipId);
   const [plan, setPlan] = useState<EffectivePlanResponse | null>(null);
   const [exceptions, setExceptions] = useState<Exception[]>([]);
@@ -50,19 +52,41 @@ export function ClientStatusScreen({
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [recentActivity, setRecentActivity] = useState<
+    Array<{ id: string; summary: string; occurredAt: string }>
+  >([]);
+  const [traineeTimezone, setTraineeTimezone] = useState<string | null>(null);
+  const [timezoneDiff, setTimezoneDiff] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [effective, exceptionPage, checkinPage, adherence, compliance] =
-        await Promise.all([
-          api.getEffectivePlan(relationshipId),
-          api.listExceptions(relationshipId),
-          api.listCheckins(relationshipId),
-          api.getWorkoutAdherence(relationshipId),
-          api.getMealCompliance(relationshipId),
-        ]);
+      const s1 = stage1Api(api);
+      const [
+        workspace,
+        effective,
+        exceptionPage,
+        checkinPage,
+        adherence,
+        compliance,
+        feed,
+      ] = await Promise.all([
+        api.getClientWorkspace(relationshipId),
+        api.getEffectivePlan(relationshipId),
+        api.listExceptions(relationshipId),
+        api.listCheckins(relationshipId),
+        api.getWorkoutAdherence(relationshipId),
+        api.getMealCompliance(relationshipId),
+        s1.getActivityFeed({ limit: 5, rid: relationshipId }),
+      ]);
+      setTraineeTimezone(workspace.header.traineeTimezone);
+      setTimezoneDiff(
+        formatTimeDiff(
+          me?.timezone ?? "UTC",
+          workspace.header.traineeTimezone,
+        ),
+      );
       setPlan(effective);
       setExceptions(
         exceptionPage.items.filter(
@@ -75,6 +99,13 @@ export function ClientStatusScreen({
       setCheckins(checkinPage.items);
       setWorkouts(adherence);
       setMeals(compliance);
+      setRecentActivity(
+        feed.events.map((event) => ({
+          id: event.id,
+          summary: event.summary,
+          occurredAt: event.occurredAt,
+        })),
+      );
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -84,7 +115,7 @@ export function ClientStatusScreen({
     } finally {
       setLoading(false);
     }
-  }, [api, relationshipId]);
+  }, [api, me?.timezone, relationshipId]);
 
   useEffect(() => {
     void load();
@@ -150,6 +181,14 @@ export function ClientStatusScreen({
           <View style={styles.banner}>
             <Text style={styles.bannerTitle}>Current state</Text>
             <Text style={styles.body}>{statusText}</Text>
+            {traineeTimezone ? (
+              <View style={styles.tzBadge}>
+                <Text style={styles.tzBadgeText}>
+                  {traineeTimezone}
+                  {timezoneDiff ? ` · ${timezoneDiff}` : ""}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.banner}>
@@ -173,8 +212,14 @@ export function ClientStatusScreen({
               {workouts?.totals.missed ?? 0}
             </Text>
             <Text style={styles.body}>
-              Meals confirmed {meals?.totals.confirmed ?? 0} · overdue{" "}
+              Meals confirmed {meals?.totals.confirmed ?? 0} · modified{" "}
+              {meals?.totals.modified ?? 0} · overdue{" "}
               {meals?.totals.overdue ?? 0}
+            </Text>
+            <Text style={styles.muted}>
+              Weekly kcal detail matches trainer web when the client logs meals;
+              mobile shows counts until a client week read model is exposed for
+              coaches.
             </Text>
           </View>
 
@@ -208,6 +253,42 @@ export function ClientStatusScreen({
               </>
             ) : (
               <Text style={styles.muted}>No upcoming check-in.</Text>
+            )}
+          </View>
+
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>This week</Text>
+            <View style={styles.weekDots}>
+              {["M", "T", "W", "T", "F", "S", "S"].map((label, index) => (
+                <View key={`${label}-${index}`} style={styles.weekDot}>
+                  <Text style={styles.weekDotLabel}>{label}</Text>
+                  <View
+                    style={[
+                      styles.dot,
+                      (workouts?.totals.completed ?? 0) > index
+                        ? styles.dotDone
+                        : styles.dotOpen,
+                    ]}
+                  />
+                </View>
+              ))}
+            </View>
+            <Text style={styles.body}>
+              Today&apos;s meals: {meals?.totals.confirmed ?? 0} confirmed
+            </Text>
+          </View>
+
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>Recent activity</Text>
+            {recentActivity.length === 0 ? (
+              <Text style={styles.muted}>No recent logs.</Text>
+            ) : (
+              recentActivity.map((event) => (
+                <Text key={event.id} style={styles.body}>
+                  {event.summary} ·{" "}
+                  {new Date(event.occurredAt).toLocaleDateString("en-IN")}
+                </Text>
+              ))
             )}
           </View>
 
@@ -250,6 +331,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
+  tzBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  tzBadgeText: {
+    color: colors.indigo,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   body: {
     color: colors.nearBlack,
     fontSize: 14,
@@ -264,5 +358,29 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: 14,
     marginBottom: spacing.md,
+  },
+  weekDots: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  weekDot: {
+    alignItems: "center",
+    gap: 4,
+  },
+  weekDotLabel: {
+    color: colors.midGrey,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  dot: {
+    borderRadius: 6,
+    height: 12,
+    width: 12,
+  },
+  dotDone: {
+    backgroundColor: colors.indigo,
+  },
+  dotOpen: {
+    backgroundColor: colors.lightGrey,
   },
 });

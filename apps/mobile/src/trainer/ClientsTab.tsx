@@ -7,21 +7,42 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { SegmentedControl } from "../components/SegmentedControl";
+import { ActivityFeedScreen } from "./ActivityFeedScreen";
 import {
-  buildClientDirectoryRows,
+  clientListQueryForChip,
   filterClientRows,
+  mapDirectoryItemToRow,
   onboardingStatusLabel,
   type ClientDirectoryRow,
+  type ClientListFilter,
 } from "./clients";
+
+type Segment = "clients" | "activity";
+
+const FILTER_CHIPS: Array<{
+  id: ClientListFilter;
+  label: string;
+  icon: string;
+}> = [
+  { id: "all", label: "All", icon: "◎" },
+  { id: "needs_attention", label: "Needs attention", icon: "!" },
+  { id: "checkin_due", label: "Check-in due", icon: "✓" },
+  { id: "onboarding", label: "Onboarding", icon: "…" },
+  { id: "ended", label: "Ended", icon: "×" },
+];
 
 type Props = {
   onOpenClient: (row: ClientDirectoryRow) => void;
+  initialSegment?: Segment;
 };
 
-export function ClientsTab({ onOpenClient }: Props) {
+export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) {
   const { api, refreshSession } = useAuth();
+  const [segment, setSegment] = useState<Segment>(initialSegment);
   const [rows, setRows] = useState<ClientDirectoryRow[]>([]);
   const [query, setQuery] = useState("");
+  const [chip, setChip] = useState<ClientListFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,16 +50,10 @@ export function ClientsTab({ onOpenClient }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [invitations, relationships] = await Promise.all([
-        api.listInvitations({ limit: 50 }),
-        api.listRelationships({ limit: 50 }),
-      ]);
-      setRows(
-        buildClientDirectoryRows({
-          invitations: invitations.items,
-          relationships: relationships.items,
-        }),
+      const page = await api.listClients(
+        clientListQueryForChip(chip, query),
       );
+      setRows(page.items.map(mapDirectoryItemToRow));
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -48,98 +63,140 @@ export function ClientsTab({ onOpenClient }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, chip, query]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setSegment(initialSegment);
+  }, [initialSegment]);
+
   const filtered = useMemo(
-    () => filterClientRows(rows, query),
-    [rows, query],
+    () => filterClientRows(rows, "", chip),
+    [rows, chip],
   );
 
   return (
-    <Screen
-      title="Clients"
-      subtitle="Find a client and open status. Plan editing stays on trainer web."
-    >
-      {error ? <ErrorBanner message={error} /> : null}
-
-      <Field
-        label="Lookup"
-        value={query}
-        onChangeText={setQuery}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="Name, email, or status"
-        hint="Filters clients you own."
+    <Screen title="Clients" subtitle="Lookup and recent activity.">
+      <SegmentedControl
+        options={[
+          { id: "clients", label: "Clients" },
+          { id: "activity", label: "Activity" },
+        ]}
+        value={segment}
+        onChange={setSegment}
       />
 
-      <PrimaryButton
-        label="Refresh"
-        variant="secondary"
-        loading={loading}
-        onPress={() => {
-          void refreshSession();
-          void load();
-        }}
-      />
-
-      {loading && rows.length === 0 ? (
-        <Text style={styles.muted}>Loading clients…</Text>
-      ) : filtered.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>
-            {rows.length === 0 ? "No clients yet" : "No matches"}
-          </Text>
-          <Text style={styles.muted}>
-            {rows.length === 0
-              ? "Invite trainees from trainer web. Mobile is for quick lookup and review."
-              : "Try a different name, email, or status."}
-          </Text>
+      {segment === "activity" ? (
+        <View style={styles.activity}>
+          <ActivityFeedScreen />
         </View>
       ) : (
-        <View style={styles.list}>
-          {filtered.map((row) => {
-            const canOpen = Boolean(row.relationshipId);
-            return (
+        <>
+          {error ? <ErrorBanner message={error} /> : null}
+
+          <Field
+            label="Lookup"
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="Name, email, or status"
+            hint="Filters clients you own."
+          />
+
+          <View style={styles.chipRow}>
+            {FILTER_CHIPS.map((option) => (
               <Pressable
-                key={row.key}
+                key={option.id}
                 accessibilityRole="button"
-                accessibilityLabel={`${row.name}, ${onboardingStatusLabel(row.onboardingStatus)}`}
-                accessibilityHint={
-                  canOpen ? "Opens client status" : "Invitation still pending"
-                }
-                accessibilityState={{ disabled: !canOpen }}
-                disabled={!canOpen}
-                onPress={() => {
-                  if (canOpen) onOpenClient(row);
-                }}
-                style={[styles.card, !canOpen && styles.cardDisabled]}
+                style={[
+                  styles.filterChip,
+                  chip === option.id ? styles.filterChipActive : null,
+                ]}
+                onPress={() => setChip(option.id)}
               >
-                <Text style={styles.who}>{row.name}</Text>
-                <Text style={styles.meta}>
-                  {onboardingStatusLabel(row.onboardingStatus)}
+                <Text
+                  style={
+                    chip === option.id
+                      ? styles.filterChipTextActive
+                      : styles.filterChipText
+                  }
+                >
+                  {option.icon} {option.label}
                 </Text>
-                <Text style={styles.subtitle}>{row.subtitle}</Text>
-                {canOpen ? (
-                  <Text style={styles.action}>Open status</Text>
-                ) : (
-                  <Text style={styles.mutedInline}>
-                    Invitation pending — open status after accept
-                  </Text>
-                )}
               </Pressable>
-            );
-          })}
-        </View>
+            ))}
+          </View>
+
+          <PrimaryButton
+            label="Refresh"
+            variant="secondary"
+            loading={loading}
+            onPress={() => {
+              void refreshSession();
+              void load();
+            }}
+          />
+
+          {loading && rows.length === 0 ? (
+            <Text style={styles.muted}>Loading clients…</Text>
+          ) : filtered.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>
+                {rows.length === 0 ? "No clients yet" : "No matches"}
+              </Text>
+              <Text style={styles.muted}>
+                {rows.length === 0
+                  ? "Invite trainees from trainer web."
+                  : "Try a different name, email, or status."}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.list}>
+              {filtered.map((row) => {
+                const canOpen = Boolean(row.relationshipId);
+                return (
+                  <Pressable
+                    key={row.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${row.name}, ${onboardingStatusLabel(row.onboardingStatus)}`}
+                    accessibilityState={{ disabled: !canOpen }}
+                    disabled={!canOpen}
+                    onPress={() => {
+                      if (canOpen) onOpenClient(row);
+                    }}
+                    style={[styles.card, !canOpen && styles.cardDisabled]}
+                  >
+                    <Text style={styles.who}>{row.name}</Text>
+                    <Text style={styles.meta}>
+                      {onboardingStatusLabel(row.onboardingStatus)}
+                    </Text>
+                    <Text style={styles.subtitle}>{row.subtitle}</Text>
+                    {canOpen ? (
+                      <Text style={styles.action}>Open status</Text>
+                    ) : (
+                      <Text style={styles.mutedInline}>
+                        Invitation pending — open after accept
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  activity: {
+    marginTop: spacing.lg,
+  },
   muted: {
     color: colors.midGrey,
     fontSize: 14,
@@ -196,5 +253,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginTop: spacing.sm,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  filterChip: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  filterChipActive: {
+    backgroundColor: colors.paleLavender,
+    borderColor: colors.indigo,
+  },
+  filterChipText: {
+    color: colors.deepNavy,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  filterChipTextActive: {
+    color: colors.indigo,
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

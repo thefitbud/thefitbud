@@ -1,5 +1,15 @@
-import { useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useState } from "react";
+
+const DEFAULT_REST_SECONDS = 90;
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { WorkoutExecution } from "@fitbud/contracts";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
@@ -9,6 +19,18 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
+
+function exerciseComplete(execution: WorkoutExecution, exerciseIndex: number) {
+  const exercise = execution.exercises[exerciseIndex];
+  if (!exercise) return false;
+  return exercise.sets.every((set) => set.status !== "pending");
+}
+
+function firstPendingSetIndex(execution: WorkoutExecution, exerciseIndex: number) {
+  const exercise = execution.exercises[exerciseIndex];
+  if (!exercise) return -1;
+  return exercise.sets.findIndex((set) => set.status === "pending");
+}
 
 export function ActiveWorkoutScreen({
   execution,
@@ -25,42 +47,92 @@ export function ActiveWorkoutScreen({
   const sync = useSyncEngine();
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  const [exerciseIndex, setExerciseIndex] = useState(0);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [sessionRpe, setSessionRpe] = useState(
     execution.sessionRpe != null ? String(execution.sessionRpe) : "",
   );
+  const [repsInput, setRepsInput] = useState("");
+  const [loadInput, setLoadInput] = useState("");
+  const [restRemaining, setRestRemaining] = useState<number | null>(null);
 
-  const current = useMemo(() => {
-    for (const exercise of execution.exercises) {
-      for (const set of exercise.sets) {
-        if (set.status === "pending") {
-          return { exercise, set };
-        }
-      }
-    }
-    return null;
-  }, [execution]);
+  const exercise = execution.exercises[exerciseIndex] ?? null;
+  const setIndex = exercise ? firstPendingSetIndex(execution, exerciseIndex) : -1;
+  const currentSet =
+    exercise && setIndex >= 0 ? exercise.sets[setIndex] : null;
 
   const setsDone = execution.exercises.reduce(
-    (count, exercise) =>
-      count + exercise.sets.filter((set) => set.status !== "pending").length,
+    (count, ex) =>
+      count + ex.sets.filter((set) => set.status !== "pending").length,
     0,
   );
   const setsTotal = execution.exercises.reduce(
-    (count, exercise) => count + exercise.sets.length,
+    (count, ex) => count + ex.sets.length,
     0,
   );
+
+  const allSetsDone = setsDone === setsTotal;
+
+  useEffect(() => {
+    if (!currentSet) return;
+    setRepsInput(
+      currentSet.prescribedReps != null ? String(currentSet.prescribedReps) : "",
+    );
+    setLoadInput(currentSet.prescribedLoadLabel ?? "");
+  }, [currentSet?.id, currentSet?.prescribedLoadLabel, currentSet?.prescribedReps]);
+
+  useEffect(() => {
+    if (restRemaining == null || restRemaining <= 0) return;
+    const timer = setTimeout(() => {
+      setRestRemaining((value) => {
+        if (value == null || value <= 1) return null;
+        return value - 1;
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [restRemaining]);
+
+  const sessionTitle =
+    execution.exercises[0]?.name != null
+      ? "Workout"
+      : exercise?.name ?? "Workout";
+
+  function goToExercise(next: number) {
+    if (next < 0 || next >= execution.exercises.length) return;
+    setExerciseIndex(next);
+  }
 
   return (
     <Screen
       chrome="app"
-      title={current ? current.exercise.name : "Workout"}
+      title={exercise?.name ?? sessionTitle}
       subtitle={
         execution.status === "paused"
           ? "Paused — resume when you are ready."
-          : `Set ${setsDone + (current ? 1 : 0)} of ${setsTotal}`
+          : `Exercise ${exerciseIndex + 1} of ${execution.exercises.length} · Set ${setsDone + (currentSet ? 1 : 0)} of ${setsTotal}`
       }
     >
       {error ? <ErrorBanner message={error} /> : null}
+
+      <View style={styles.navRow}>
+        <PrimaryButton
+          label="‹ Prev"
+          variant="ghost"
+          disabled={exerciseIndex === 0}
+          onPress={() => goToExercise(exerciseIndex - 1)}
+        />
+        <PrimaryButton
+          label="Overview"
+          variant="secondary"
+          onPress={() => setOverviewOpen(true)}
+        />
+        <PrimaryButton
+          label="Next ›"
+          variant="ghost"
+          disabled={exerciseIndex >= execution.exercises.length - 1}
+          onPress={() => goToExercise(exerciseIndex + 1)}
+        />
+      </View>
 
       <View style={styles.progress}>
         <Text style={styles.progressLabel}>
@@ -69,20 +141,40 @@ export function ActiveWorkoutScreen({
         <Text style={styles.status}>{execution.status.replace(/_/g, " ")}</Text>
       </View>
 
-      {current ? (
+      {currentSet && exercise ? (
         <View style={styles.currentCard}>
           <Text style={styles.eyebrow}>Current set</Text>
           <Text style={styles.target}>
-            Set {current.set.order}
-            {current.set.prescribedReps != null
-              ? ` · ${current.set.prescribedReps} reps`
+            Set {currentSet.order}
+            {currentSet.prescribedReps != null
+              ? ` · ${currentSet.prescribedReps} reps`
               : ""}
-            {current.set.prescribedLoadLabel
-              ? ` · ${current.set.prescribedLoadLabel}`
+            {currentSet.prescribedLoadLabel
+              ? ` · ${currentSet.prescribedLoadLabel}`
               : ""}
           </Text>
+          <View style={styles.stepperRow}>
+            <Text style={styles.stepperLabel}>Reps</Text>
+            <TextInput
+              accessibilityLabel="Reps"
+              keyboardType="number-pad"
+              value={repsInput}
+              onChangeText={setRepsInput}
+              style={styles.input}
+            />
+          </View>
+          <View style={styles.stepperRow}>
+            <Text style={styles.stepperLabel}>Load</Text>
+            <TextInput
+              accessibilityLabel="Load"
+              value={loadInput}
+              onChangeText={setLoadInput}
+              placeholder="kg or label"
+              style={styles.input}
+            />
+          </View>
           <PrimaryButton
-            label="Done"
+            label="✓ Done"
             loading={acting}
             disabled={execution.status === "paused"}
             onPress={() => {
@@ -90,19 +182,34 @@ export function ActiveWorkoutScreen({
                 setActing(true);
                 setError(null);
                 try {
+                  const reps = repsInput.trim();
+                  const load = loadInput.trim();
                   await enqueueAndPush(sync, {
                     recordId: execution.id,
                     operation: "workout.complete_set",
                     expectedServerVersion: execution.recordVersion,
                     payload: {
                       executionId: execution.id,
-                      setExecutionId: current.set.id,
+                      setExecutionId: currentSet.id,
                       expectedVersion: execution.recordVersion,
-                      body: {},
+                      body: {
+                        executedReps:
+                          reps === "" ? null : Number.parseInt(reps, 10),
+                        executedLoadLabel: load === "" ? null : load,
+                      },
                     },
                   });
                   const next = await api.getWorkoutExecution(execution.id);
                   onChange(next);
+                  setRestRemaining(DEFAULT_REST_SECONDS);
+                  if (firstPendingSetIndex(next, exerciseIndex) < 0) {
+                    const nextEx = next.exercises.findIndex(
+                      (ex, idx) =>
+                        idx > exerciseIndex &&
+                        ex.sets.some((set) => set.status === "pending"),
+                    );
+                    if (nextEx >= 0) setExerciseIndex(nextEx);
+                  }
                 } catch (err) {
                   setError(
                     err instanceof ApiClientError
@@ -126,7 +233,7 @@ export function ActiveWorkoutScreen({
                 try {
                   const next = await api.skipWorkoutSet(
                     execution.id,
-                    current.set.id,
+                    currentSet.id,
                   );
                   onChange(next);
                 } catch (err) {
@@ -142,35 +249,65 @@ export function ActiveWorkoutScreen({
             }}
           />
         </View>
-      ) : (
+      ) : null}
+
+      {restRemaining != null && restRemaining > 0 ? (
+        <View style={styles.restCard}>
+          <Text style={styles.restTitle}>Rest</Text>
+          <Text style={styles.restTimer}>{restRemaining}s</Text>
+          <View style={styles.restActions}>
+            <PrimaryButton
+              label="−15 s"
+              variant="secondary"
+              onPress={() => {
+                setRestRemaining((value) =>
+                  Math.max(0, (value ?? 0) - 15),
+                );
+              }}
+            />
+            <PrimaryButton
+              label="+15 s"
+              variant="secondary"
+              onPress={() => {
+                setRestRemaining((value) => (value ?? 0) + 15);
+              }}
+            />
+            <PrimaryButton
+              label="Skip rest"
+              variant="ghost"
+              onPress={() => setRestRemaining(null)}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      {allSetsDone ? (
         <View style={styles.currentCard}>
           <Text style={styles.eyebrow}>Session wrap-up</Text>
           <Text style={styles.exerciseName}>All sets recorded</Text>
-          {execution.requireSessionRpe ? (
-            <>
-              <Text style={styles.target}>Session RPE (required)</Text>
-              <TextInput
-                accessibilityLabel="Session RPE"
-                keyboardType="decimal-pad"
-                value={sessionRpe}
-                onChangeText={setSessionRpe}
-                placeholder="1–10"
-                style={styles.input}
-              />
-            </>
-          ) : (
-            <Text style={styles.target}>Optional session RPE</Text>
-          )}
-          {!execution.requireSessionRpe ? (
-            <TextInput
-              accessibilityLabel="Session RPE"
-              keyboardType="decimal-pad"
-              value={sessionRpe}
-              onChangeText={setSessionRpe}
-              placeholder="1–10 (optional)"
-              style={styles.input}
-            />
-          ) : null}
+          <Text style={styles.target}>Session RPE</Text>
+          <View style={styles.rpeRow}>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
+              <Pressable
+                key={value}
+                style={[
+                  styles.rpeChip,
+                  sessionRpe === String(value) ? styles.rpeChipActive : null,
+                ]}
+                onPress={() => setSessionRpe(String(value))}
+              >
+                <Text
+                  style={
+                    sessionRpe === String(value)
+                      ? styles.rpeChipTextActive
+                      : styles.rpeChipText
+                  }
+                >
+                  {value}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <PrimaryButton
             label="Complete workout"
             loading={acting}
@@ -213,7 +350,11 @@ export function ActiveWorkoutScreen({
             }}
           />
         </View>
-      )}
+      ) : !currentSet ? (
+        <Text style={styles.muted}>
+          No pending sets on this exercise. Use Next or open the overview.
+        </Text>
+      ) : null}
 
       <View style={styles.actions}>
         {execution.status === "started" ? (
@@ -284,11 +425,54 @@ export function ActiveWorkoutScreen({
         ) : null}
         <PrimaryButton label="Exit" variant="ghost" onPress={onExit} />
       </View>
+
+      <Modal
+        visible={overviewOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setOverviewOpen(false)}
+      >
+        <Pressable
+          style={styles.sheetScrim}
+          onPress={() => setOverviewOpen(false)}
+        />
+        <View style={styles.sheet}>
+          <Text style={styles.sheetTitle}>Exercises</Text>
+          <ScrollView style={styles.sheetList}>
+            {execution.exercises.map((ex, idx) => (
+              <Pressable
+                key={ex.id}
+                style={styles.sheetRow}
+                onPress={() => {
+                  setExerciseIndex(idx);
+                  setOverviewOpen(false);
+                }}
+              >
+                <Text style={styles.sheetCheck}>
+                  {exerciseComplete(execution, idx) ? "✓" : "○"}
+                </Text>
+                <Text style={styles.sheetName}>{ex.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <PrimaryButton
+            label="Close"
+            variant="ghost"
+            onPress={() => setOverviewOpen(false)}
+          />
+        </View>
+      </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  navRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
   progress: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -324,17 +508,117 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
   },
+  stepperRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  stepperLabel: {
+    color: colors.midGrey,
+    fontSize: 14,
+    width: 48,
+  },
   input: {
     borderWidth: 1,
     borderColor: colors.lightGrey,
     borderRadius: 10,
+    flex: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: 16,
     color: colors.nearBlack,
     backgroundColor: colors.background,
   },
+  muted: {
+    color: colors.midGrey,
+    fontSize: 14,
+    marginBottom: spacing.lg,
+  },
+  restCard: {
+    alignItems: "center",
+    backgroundColor: colors.paleLavender,
+    borderRadius: radii.card,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+  },
+  restTitle: {
+    color: colors.deepNavy,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  restTimer: {
+    color: colors.indigo,
+    fontSize: 36,
+    fontWeight: "700",
+  },
+  restActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    justifyContent: "center",
+  },
+  rpeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  rpeChip: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 8,
+    minHeight: 40,
+    minWidth: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rpeChipActive: {
+    backgroundColor: colors.indigo,
+  },
+  rpeChipText: {
+    color: colors.deepNavy,
+    fontWeight: "600",
+  },
+  rpeChipTextActive: {
+    color: colors.white,
+    fontWeight: "700",
+  },
   actions: {
     gap: spacing.sm,
+  },
+  sheetScrim: {
+    backgroundColor: "rgba(0,0,0,0.35)",
+    flex: 1,
+  },
+  sheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "55%",
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  sheetTitle: {
+    color: colors.deepNavy,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  sheetList: {
+    maxHeight: 280,
+  },
+  sheetRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  sheetCheck: {
+    color: colors.indigo,
+    fontSize: 16,
+    width: 24,
+  },
+  sheetName: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

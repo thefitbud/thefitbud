@@ -1,4 +1,11 @@
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import type { ReactNode } from "react";
 import { colors, spacing } from "@fitbud/ui-mobile";
 
@@ -9,6 +16,10 @@ type Props = {
   footer?: ReactNode;
   /** `app` matches the trainee design: no product stamp, canvas background. */
   chrome?: "page" | "app";
+  /** When false, omit the in-screen title block (shell provides AppTopBar). */
+  showHeader?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 };
 
 export function Screen({
@@ -17,29 +28,41 @@ export function Screen({
   children,
   footer,
   chrome = "page",
+  showHeader = true,
+  refreshing,
+  onRefresh,
 }: Props) {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} />
+          ) : undefined
+        }
       >
-        {chrome === "page" ? (
-          <Text style={styles.brand} accessibilityRole="header">
-            FitBud
-          </Text>
-        ) : null}
-        <Text
-          style={[styles.title, chrome === "app" ? styles.titleApp : null]}
-          accessibilityRole="header"
-          accessibilityLabel={title}
-        >
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text style={styles.subtitle} accessibilityRole="text">
-            {subtitle}
-          </Text>
+        {showHeader ? (
+          <>
+            {chrome === "page" ? (
+              <Text style={styles.brand} accessibilityRole="header">
+                FitBud
+              </Text>
+            ) : null}
+            <Text
+              style={[styles.title, chrome === "app" ? styles.titleApp : null]}
+              accessibilityRole="header"
+              accessibilityLabel={title}
+            >
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text style={styles.subtitle} accessibilityRole="text">
+                {subtitle}
+              </Text>
+            ) : null}
+          </>
         ) : null}
         <View style={styles.body}>{children}</View>
       </ScrollView>

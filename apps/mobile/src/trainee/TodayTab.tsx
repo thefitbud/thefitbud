@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import type {
   Checkin,
   CoachingRelationship,
@@ -7,40 +7,33 @@ import type {
   MealAssignment,
   WorkoutAssignment,
 } from "@fitbud/contracts";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import {
+  NutritionRings,
+  WeeklyConsistency,
+  colors,
+  radii,
+  spacing,
+} from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
-import { createIdempotencyKey } from "../lib/idempotency";
+import {
+  addDays,
+  localDateInTimezone,
+  startOfWeekMonday,
+} from "../lib/dates";
+import { stage1Api } from "../lib/stage1Api";
+import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
+import { useSyncEngine } from "../sync/SyncProvider";
 import { TodayCheckinCard } from "./CheckinScreen";
+import { TraineeDateNavigator } from "./TraineeDateNavigator";
+import { confirmMealAssignment } from "./mealActions";
+import { canLogMealOnDate, mealKcalFromDayTotals } from "./mealHelpers";
+import { buildNutritionRings } from "./nutrition";
 import { scheduledAssignments } from "./scheduledAssignments";
-
-function localDateInTimezone(timeZone: string, instant = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
-}
-
-function addDays(localDate: string, days: number): string {
-  const [y, m, d] = localDate.split("-").map(Number);
-  const next = new Date(Date.UTC(y!, m! - 1, d! + days));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
-}
-
-function formatHeadingDate(timeZone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone,
-  }).format(new Date());
-}
+import { StepsCard } from "./steps/StepsCard";
+import { WebNutritionSummary } from "./web/WebTraineeChrome";
 
 function workoutTone(
   status: WorkoutAssignment["status"],
@@ -51,57 +44,88 @@ function workoutTone(
   return "neutral";
 }
 
+type CoachNote = Awaited<
+  ReturnType<ReturnType<typeof stage1Api>["listMeCoachNotes"]>
+>["items"][number];
+
 export function TodayTab({
   relationship,
   effectivePlan,
-  onOpenWorkout,
+  selectedDate,
+  onSelectDate,
+  onStartWorkout,
   onOpenDiet,
   onOpenCheckin,
   onRefreshPlan,
+  onOpenOverlay,
 }: {
   relationship: CoachingRelationship;
   effectivePlan: EffectivePlanResponse | null;
-  onOpenWorkout: () => void;
+  selectedDate: string;
+  onSelectDate: (localDate: string) => void;
+  onStartWorkout: () => void;
   onOpenDiet: () => void;
   onOpenCheckin: (checkin: Checkin) => void;
   onRefreshPlan: () => void;
+  onOpenOverlay: TraineeOverlayOpener;
 }) {
   const { api, me } = useAuth();
+  const sync = useSyncEngine();
+  const s1 = stage1Api(api);
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
+  const isToday = selectedDate === today;
+  const isFuture = selectedDate > today;
+
   const [workout, setWorkout] = useState<WorkoutAssignment | null>(null);
   const [meals, setMeals] = useState<MealAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [weekModel, setWeekModel] = useState<Awaited<
+    ReturnType<typeof s1.getMeWeek>
+  > | null>(null);
+  const [dayTotals, setDayTotals] = useState<Awaited<
+    ReturnType<typeof s1.getMeDay>
+  > | null>(null);
+  const [coachNotes, setCoachNotes] = useState<CoachNote[]>([]);
+  const [unresolvedExceptions, setUnresolvedExceptions] = useState(0);
+  const [mealActingId, setMealActingId] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const rangeEnd = addDays(today, 1);
-      await Promise.allSettled([
-        api.generateWorkoutAssignments(
-          relationship.id,
-          { fromDate: today, toDate: rangeEnd },
-          createIdempotencyKey(),
-        ),
-        api.generateMealAssignments(
-          relationship.id,
-          { fromDate: today, toDate: today },
-          createIdempotencyKey(),
-        ),
-      ]);
-      const [workouts, mealList] = await Promise.all([
-        api.listWorkoutAssignments(relationship.id, {
-          fromDate: today,
-          toDate: rangeEnd,
-        }),
-        api.listMealAssignments(relationship.id, {
-          fromDate: today,
-          toDate: today,
-        }),
-      ]);
+      const weekStart = startOfWeekMonday(selectedDate);
+      const nextDay = addDays(selectedDate, 1);
+      const [workouts, mealList, week, day, notes, exceptions] =
+        await Promise.all([
+          api.listWorkoutAssignments(relationship.id, {
+            fromDate: selectedDate,
+            toDate: nextDay,
+          }),
+          api.listMealAssignments(relationship.id, {
+            fromDate: selectedDate,
+            toDate: selectedDate,
+          }),
+          s1.getMeWeek(weekStart).catch(() => null),
+          s1.getMeDay(selectedDate).catch(() => null),
+          s1.listMeCoachNotes().catch(() => ({ items: [] as CoachNote[] })),
+          api.listExceptions(relationship.id).catch(() => ({ items: [] })),
+        ]);
+      setWeekModel(week);
+      setDayTotals(day);
+      setCoachNotes(notes.items.slice(0, 2));
+      setUnresolvedExceptions(
+        exceptions.items.filter(
+          (item) =>
+            item.status === "detected" ||
+            item.status === "active" ||
+            item.status === "acknowledged",
+        ).length,
+      );
       setWorkout(
         scheduledAssignments(workouts.items).find(
-          (item) => item.localDate === today,
+          (item) => item.localDate === selectedDate,
         ) ?? null,
       );
       setMeals(scheduledAssignments(mealList.items));
@@ -111,11 +135,37 @@ export function TodayTab({
     } finally {
       setLoading(false);
     }
-  }, [api, relationship.id, today]);
+  }, [api, relationship.id, selectedDate, s1]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshNonce]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    onRefreshPlan();
+    setRefreshNonce((value) => value + 1);
+    await load();
+    setRefreshing(false);
+  }, [load, onRefreshPlan]);
+
+  const rings = useMemo(
+    () => buildNutritionRings(meals, dayTotals?.totals ?? null),
+    [meals, dayTotals],
+  );
+
+  const nextMeal = meals.find(
+    (meal) => meal.status === "pending" || meal.status === "overdue",
+  );
+
+  const lateLoggableCount = meals.filter((meal) =>
+    canLogMealOnDate({
+      selectedDate,
+      today,
+      meal,
+      unresolvedExceptionCount: unresolvedExceptions,
+    }),
+  ).length;
 
   const loggedMeals = meals.filter(
     (meal) =>
@@ -125,78 +175,166 @@ export function TodayTab({
       meal.status === "skipped",
   ).length;
 
+  async function handleConfirmMeal(meal: MealAssignment) {
+    setMealActingId(meal.id);
+    try {
+      await confirmMealAssignment(api, sync, relationship.id, meal);
+      await load();
+    } finally {
+      setMealActingId(null);
+    }
+  }
+
+  const canLogNextMeal =
+    nextMeal &&
+    canLogMealOnDate({
+      selectedDate,
+      today,
+      meal: nextMeal,
+      unresolvedExceptionCount: unresolvedExceptions,
+    });
+
   return (
     <Screen
       chrome="app"
       title="Today"
-      subtitle={formatHeadingDate(timeZone)}
+      showHeader={false}
+      refreshing={refreshing}
+      onRefresh={() => {
+        void onRefresh();
+      }}
     >
       <View style={styles.stack}>
+        <TraineeDateNavigator
+          selectedDate={selectedDate}
+          onSelectDate={onSelectDate}
+        />
+
+        {!isToday && !isFuture && lateLoggableCount > 0 ? (
+          <Text style={styles.lateBanner}>
+            You can still log {lateLoggableCount} item
+            {lateLoggableCount === 1 ? "" : "s"} from this day.
+          </Text>
+        ) : null}
+
         <View style={styles.hero}>
-          <Text style={styles.kicker}>Next action</Text>
+          <Text style={styles.kicker}>Today's workout</Text>
           {loading ? (
-            <Text style={styles.body}>Loading today’s plan…</Text>
+            <Text style={styles.body}>Loading…</Text>
           ) : workout ? (
             <>
               <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
+              <Text style={styles.body}>
+                {workout.workoutDay.exercises.length} exercises
+              </Text>
               <StatusChip
                 label={workout.status.replace(/_/g, " ")}
                 tone={workoutTone(workout.status)}
               />
-              <Text style={styles.body}>
-                {workout.workoutDay.exercises.length} exercises from your
-                effective plan.
-              </Text>
               <PrimaryButton
                 label={
                   workout.status === "in_progress" || workout.status === "paused"
                     ? "Continue workout"
-                    : "Open workout"
+                    : "Start workout"
                 }
-                onPress={onOpenWorkout}
+                disabled={!isToday || isFuture}
+                onPress={onStartWorkout}
+              />
+              <PrimaryButton
+                label="See workout"
+                variant="secondary"
+                onPress={() =>
+                  onOpenOverlay({
+                    screen: "workout_overview",
+                    assignmentId: workout.id,
+                  })
+                }
               />
             </>
           ) : (
-            <>
-              <Text style={styles.heroTitle}>No workout today</Text>
-              <Text style={styles.body}>
-                When your trainer’s plan places a session on this day, it shows
-                up here.
-              </Text>
-            </>
+            <Text style={styles.heroTitle}>
+              {isToday ? "Rest day" : "Rest or no session"}
+            </Text>
           )}
         </View>
 
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Diet</Text>
-            <StatusChip
-              label={
-                meals.length === 0
-                  ? "None assigned"
-                  : `${loggedMeals} of ${meals.length} logged`
-              }
-              tone={
-                meals.length > 0 && loggedMeals === meals.length
-                  ? "positive"
-                  : "attention"
-              }
-            />
-          </View>
-          {meals.slice(0, 3).map((meal) => (
-            <Text key={meal.id} style={styles.mealLine}>
-              {meal.mealName}
-              {meal.prescription.scheduleHint
-                ? ` · ${meal.prescription.scheduleHint}`
-                : ""}
-            </Text>
-          ))}
+          <Text style={styles.cardTitle}>Nutrition</Text>
+          {Platform.OS === "web" ? (
+            <WebNutritionSummary data={rings} />
+          ) : (
+            <NutritionRings data={rings} />
+          )}
+          {nextMeal && canLogNextMeal ? (
+            <View style={styles.nextMeal}>
+              <Text style={styles.nextMealTitle}>
+                {nextMeal.mealName}
+                {mealKcalFromDayTotals(nextMeal, dayTotals?.totals.perMeal)
+                  ? ` · ${mealKcalFromDayTotals(nextMeal, dayTotals?.totals.perMeal)} kcal`
+                  : ""}
+              </Text>
+              <PrimaryButton
+                label="Eaten as planned"
+                loading={mealActingId === nextMeal.id}
+                onPress={() => {
+                  void handleConfirmMeal(nextMeal);
+                }}
+              />
+              <PrimaryButton
+                label="Something different"
+                variant="secondary"
+                onPress={() =>
+                  onOpenOverlay({
+                    screen: "something_different",
+                    assignmentId: nextMeal.id,
+                  })
+                }
+              />
+            </View>
+          ) : loggedMeals === meals.length && meals.length > 0 ? (
+            <Text style={styles.body}>All meals logged for this day.</Text>
+          ) : null}
           <PrimaryButton
-            label="Open today’s diet"
-            variant="secondary"
+            label="Open diet"
+            variant="ghost"
             onPress={onOpenDiet}
           />
         </View>
+
+        <StepsCard />
+
+        {weekModel ? (
+          <View style={styles.card}>
+            <WeeklyConsistency
+              workoutCompleted={weekModel.workouts.completed}
+              workoutAssigned={weekModel.workouts.assigned}
+              mealsLogged={weekModel.meals.logged}
+              mealsAssigned={weekModel.meals.assigned}
+              days={weekModel.days}
+              encouragement={
+                isToday ? "Yesterday got away from you? Today's a fresh start." : null
+              }
+            />
+          </View>
+        ) : null}
+
+        {coachNotes.length > 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>From your coach</Text>
+            {coachNotes.map((note) => (
+              <View key={note.id} style={styles.note}>
+                <Text style={styles.noteBody}>{note.body}</Text>
+                <Text style={styles.noteMeta}>
+                  {note.seenAt ? "Read" : "New"} ·{" "}
+                  {new Date(note.sharedAt ?? note.createdAt).toLocaleString(
+                    "en-IN",
+                    { dateStyle: "medium", timeStyle: "short" },
+                  )}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <TodayCheckinCard
           relationship={relationship}
@@ -209,20 +347,13 @@ export function TodayTab({
           </Text>
           <Text style={styles.body}>
             {effectivePlan?.version
-              ? `Version ${effectivePlan.version.versionNumber}${
-                  effectivePlan.version.effectiveFrom
-                    ? ` · effective ${effectivePlan.version.effectiveFrom.slice(0, 10)}`
-                    : ""
-                }`
-              : "No effective plan yet. It appears here when your trainer publishes one."}
+              ? "Your coach's published plan is active."
+              : "No effective plan yet."}
           </Text>
           <PrimaryButton
-            label="Refresh"
-            variant="ghost"
-            onPress={() => {
-              onRefreshPlan();
-              void load();
-            }}
+            label="View meal plan"
+            variant="secondary"
+            onPress={() => onOpenOverlay({ screen: "meal_plan" })}
           />
         </View>
       </View>
@@ -234,6 +365,14 @@ const styles = StyleSheet.create({
   stack: {
     gap: spacing.lg,
     paddingTop: spacing.md,
+  },
+  lateBanner: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: radii.card,
+    color: colors.deepNavy,
+    fontSize: 14,
+    fontWeight: "600",
+    padding: spacing.md,
   },
   hero: {
     backgroundColor: colors.white,
@@ -263,20 +402,33 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.xl,
   },
-  cardHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
   cardTitle: {
     color: colors.deepNavy,
     fontSize: 18,
     fontWeight: "700",
   },
-  mealLine: {
+  nextMeal: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  nextMealTitle: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  note: {
+    borderTopColor: colors.lightGrey,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+    paddingTop: spacing.sm,
+  },
+  noteBody: {
     color: colors.darkGrey,
     fontSize: 15,
     lineHeight: 22,
+  },
+  noteMeta: {
+    color: colors.midGrey,
+    fontSize: 12,
   },
 });

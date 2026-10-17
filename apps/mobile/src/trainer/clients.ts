@@ -1,4 +1,6 @@
 import type {
+  AdherenceState,
+  ClientDirectoryItem,
   CoachingRelationship,
   Invitation,
   OnboardingStatus,
@@ -111,13 +113,80 @@ export function buildClientDirectoryRows(input: {
   );
 }
 
+export type ClientListFilter =
+  | "all"
+  | "needs_attention"
+  | "checkin_due"
+  | "onboarding"
+  | "ended";
+
+export type ClientListApiQuery = {
+  q?: string;
+  status?: OnboardingStatus[];
+  adherenceState?: AdherenceState[];
+  limit?: number;
+};
+
+export function clientListQueryForChip(
+  chip: ClientListFilter,
+  query: string,
+): ClientListApiQuery {
+  const q = query.trim();
+  const base: ClientListApiQuery = { limit: 50, ...(q ? { q } : {}) };
+  switch (chip) {
+    case "needs_attention":
+      return { ...base, adherenceState: ["needs_attention"] };
+    case "onboarding":
+      return {
+        ...base,
+        status: ["invited", "onboarding_pending", "onboarding_submitted"],
+      };
+    case "ended":
+      return { ...base, status: ["ended"] };
+    case "checkin_due":
+      return { ...base, status: ["coaching_ready", "active"] };
+    default:
+      return base;
+  }
+}
+
+export function mapDirectoryItemToRow(
+  item: ClientDirectoryItem,
+): ClientDirectoryRow {
+  const relationshipId = item.relationshipId;
+  const invitationId = item.invitationId;
+  return {
+    key: relationshipId
+      ? `relationship:${relationshipId}`
+      : `invitation:${invitationId ?? item.traineeDisplayName}`,
+    kind: relationshipId ? "relationship" : "invitation",
+    name: item.traineeDisplayName,
+    subtitle: item.goalShort ?? onboardingStatusLabel(item.status),
+    onboardingStatus: item.status,
+    relationshipId,
+    invitationId,
+    traineeUserId: null,
+    updatedAt: item.updatedAt,
+  };
+}
+
 export function filterClientRows(
   rows: ClientDirectoryRow[],
   query: string,
+  chip: ClientListFilter = "all",
 ): ClientDirectoryRow[] {
+  let next = rows;
+  if (chip === "checkin_due") {
+    next = next.filter(
+      (row) =>
+        row.onboardingStatus === "coaching_ready" ||
+        row.onboardingStatus === "active",
+    );
+  }
+
   const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return rows;
-  return rows.filter(
+  if (!trimmed) return next;
+  return next.filter(
     (row) =>
       row.name.toLowerCase().includes(trimmed) ||
       row.subtitle.toLowerCase().includes(trimmed) ||

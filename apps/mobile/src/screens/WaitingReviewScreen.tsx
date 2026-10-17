@@ -5,25 +5,66 @@ import { useAuth } from "../auth/AuthProvider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 
+function checklistFor(relationship: CoachingRelationship) {
+  const status = relationship.onboardingStatus;
+  return [
+    { label: "Joined FitBud", done: true },
+    {
+      label: "Intake sent",
+      done:
+        status === "onboarding_submitted" ||
+        status === "coaching_ready" ||
+        status === "active",
+    },
+    {
+      label: "Coach reviews your answers",
+      done: status === "coaching_ready" || status === "active",
+    },
+    {
+      label: "Your plan is ready",
+      done: status === "active",
+    },
+  ];
+}
+
 export function WaitingReviewScreen({
   relationship,
 }: {
   relationship: CoachingRelationship;
 }) {
   const { refreshSession, signOut } = useAuth();
+  const steps = checklistFor(relationship);
 
   return (
     <Screen
-      title="Intake submitted"
-      subtitle="Your trainer will review your answers and mark you coaching-ready."
+      title="Waiting for your plan"
+      subtitle="Your coach is reviewing your intake. You can set up reminders while you wait."
     >
       <View style={styles.banner}>
-        <Text style={styles.bannerTitle}>Waiting for trainer review</Text>
+        <Text style={styles.bannerTitle}>Rahul is preparing your plan</Text>
         <Text style={styles.bannerBody}>
-          Status: {relationship.onboardingStatus.replace(/_/g, " ")}. Refresh
-          after your trainer completes onboarding review.
+          We'll notify you when your coaching plan is ready. Pull to refresh or
+          tap below to check status.
         </Text>
       </View>
+
+      <View style={styles.checklist}>
+        {steps.map((step) => (
+          <Text
+            key={step.label}
+            style={[styles.checkItem, step.done ? styles.checkDone : null]}
+          >
+            {step.done ? "✓" : "○"} {step.label}
+          </Text>
+        ))}
+      </View>
+
+      <Text style={styles.meanwhile}>Meanwhile</Text>
+      <Text style={styles.hint}>
+        • Set up reminders so logging is easy once your plan goes live{"\n"}
+        • Message your coach on WhatsApp if you have a quick question
+      </Text>
+
       <PrimaryButton
         label="Refresh status"
         onPress={() => {
@@ -37,7 +78,7 @@ export function WaitingReviewScreen({
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: colors.paleLavender,
     borderRadius: 12,
     padding: spacing.lg,
     marginBottom: spacing.lg,
@@ -45,12 +86,36 @@ const styles = StyleSheet.create({
   },
   bannerTitle: {
     color: colors.deepNavy,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
   bannerBody: {
     color: colors.midGrey,
     fontSize: 14,
     lineHeight: 20,
+  },
+  checklist: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  checkItem: {
+    color: colors.midGrey,
+    fontSize: 15,
+  },
+  checkDone: {
+    color: colors.deepNavy,
+    fontWeight: "600",
+  },
+  meanwhile: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: spacing.sm,
+  },
+  hint: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: spacing.lg,
   },
 });
