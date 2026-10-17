@@ -63,11 +63,7 @@ const BATCHES = [
   },
   {
     login: "trainee:lakshmi.foods@demo.fitbud.test",
-    screens: ["TR-07"],
-  },
-  {
-    login: "trainee:deepak.dubai@demo.fitbud.test",
-    screens: ["TR-08"],
+    screens: ["TR-07", "TR-08"],
   },
   {
     login: "trainee:kavya.ended@demo.fitbud.test",
@@ -184,12 +180,10 @@ async function main() {
       }
 
       if (id === "TR-08") {
-        const btn = page
-          .getByRole("button", { name: "Something different" })
-          .first();
-        await btn.waitFor({ state: "visible", timeout: 30_000 });
-        await btn.click();
-        await page.waitForTimeout(2000);
+        await page
+          .getByText("What did you have instead?")
+          .waitFor({ state: "visible", timeout: 45_000 });
+        await page.waitForTimeout(1200);
       }
 
       if (id === "TR-12") {

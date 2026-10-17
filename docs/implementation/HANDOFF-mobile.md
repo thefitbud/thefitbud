@@ -63,7 +63,9 @@ node scripts/capture-all-mobile-screens.mjs http://127.0.0.1:8081
 ```
 
 Output: `docs/implementation/screens/mobile/*.png` and `manifest.txt` (size + SHA-256).  
-**Missing:** `TR-08.png` — demo meal assignments hit client validation (`energyKcalScaled` too large) when opening Something different; capture blocked until seed/API alignment (see `GAPS-mobile.md`).
+**35 captures** (TR-01–TR-26 except none skipped, TM-01–TM-09). Script fails on duplicate hashes or sign-in/error chrome.
+
+**Meal assignments (dev):** `GET /meals/.../assignments` can return `LOCAL_DEV_ERROR` when seeded `energyKcalScaled` exceeds contract max. Mobile patches the client with a **`/me/day` fallback** (`lib/mealAssignmentFallback.ts`) so Diet / TR-08 work locally until the API seed is fixed (do not rely on this in production).
 
 ## Per-screen status vs guide
 
@@ -78,7 +80,7 @@ Legend: ✅ navigable, visually checked on web capture · ⚠️ partial / gaps 
 | TR-05 | ✅ | Reminder setup + `expo-notifications` + OEM sheet |
 | TR-06 | ⚠️ | Today: web uses simplified date/nutrition chrome; rings/week strip on native |
 | TR-07 | ✅ | Diet (`lakshmi.foods`) |
-| TR-08 | ❌ | No valid screenshot; serving picker + seed validation |
+| TR-08 | ⚠️ | “What did you have instead?” + serving presets; API fallback for assignments |
 | TR-09 | ✅ | Meal plan overlay |
 | TR-10 | ✅ | Workout overview |
 | TR-11 | ⚠️ | Active workout via capture harness (not device-verified) |

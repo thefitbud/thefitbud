@@ -8,6 +8,7 @@ import type {
 type CoachAskItemType = CreateCoachAskRequest["itemType"];
 import type { CoachingRelationship } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
+import { addDays, localDateInTimezone } from "../lib/dates";
 import { AssignedMealPlanScreen } from "../trainee/AssignedMealPlanScreen";
 import { AskCoachSheet } from "../trainee/ask/AskCoachSheet";
 import { DeepLinkUnavailableScreen } from "../trainee/DeepLinkUnavailableScreen";
@@ -73,29 +74,31 @@ export function TraineeOverlayHost({
   onOpen,
   onSignOut,
 }: Props) {
-  const { api } = useAuth();
+  const { api, me } = useAuth();
   const [mealAssignment, setMealAssignment] = useState<MealAssignment | null>(
     null,
   );
 
   const loadMealAssignment = useCallback(
     async (assignmentId: string) => {
+      const today = localDateInTimezone(me?.timezone ?? "UTC");
       try {
+        const listed = await api.listMealAssignments(relationship.id, {
+          fromDate: addDays(today, -14),
+          toDate: addDays(today, 7),
+        });
+        const match = listed.items.find((item) => item.id === assignmentId);
+        if (match) {
+          setMealAssignment(match);
+          return;
+        }
         const value = await api.getMealAssignment(assignmentId);
         setMealAssignment(value);
       } catch {
-        try {
-          const listed = await api.listMealAssignments(relationship.id, {
-            limit: 50,
-          });
-          const match = listed.items.find((item) => item.id === assignmentId);
-          setMealAssignment(match ?? null);
-        } catch {
-          setMealAssignment(null);
-        }
+        setMealAssignment(null);
       }
     },
-    [api, relationship.id],
+    [api, me?.timezone, relationship.id],
   );
 
   useEffect(() => {

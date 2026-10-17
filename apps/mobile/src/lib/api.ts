@@ -2,6 +2,7 @@ import { FitBudApiClient } from "@fitbud/api-client";
 import type { Role } from "@fitbud/contracts";
 import { NativeModules, Platform } from "react-native";
 import { apiBaseUrlForDevice, deviceApiHost, preferredDevServerHost } from "./apiBaseUrl";
+import { patchMealAssignmentClient } from "./mealAssignmentFallback";
 
 /** Local Wrangler default. Override with EXPO_PUBLIC_API_BASE_URL. */
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8787";
@@ -117,9 +118,10 @@ export type ApiSession = {
 };
 
 export function createMobileApiClient(session: ApiSession): FitBudApiClient {
-  return new FitBudApiClient({
+  const client = new FitBudApiClient({
     baseUrl: resolveApiBaseUrl(),
     getAccessToken: session.getAccessToken,
     getSelectedRole: session.getSelectedRole,
   });
+  return patchMealAssignmentClient(client);
 }

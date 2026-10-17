@@ -162,6 +162,8 @@ export async function navigateCaptureScreen(
       break;
     case "TR-08":
       traineeNav?.setTab("diet");
+      await wait(900);
+      await traineeNav?.openSomethingDifferent();
       break;
     case "TR-09":
       traineeNav?.openOverlay({ screen: "meal_plan" });

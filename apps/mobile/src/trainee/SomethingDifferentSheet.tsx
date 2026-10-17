@@ -23,6 +23,13 @@ import { uploadMealPhoto } from "./mealActions";
 
 const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
 
+const SERVING_PRESETS = [
+  { label: "½ serving", quantity: 0.5 },
+  { label: "1 serving", quantity: 1 },
+  { label: "1 katori", quantity: 1 },
+  { label: "2 roti", quantity: 2 },
+] as const;
+
 type Props = {
   assignment: MealAssignment;
   relationshipId: string;
@@ -173,9 +180,17 @@ export function SomethingDifferentSheet({
 
   return (
     <Screen
-      title="Something different"
+      title="What did you have instead?"
       subtitle={`${assignment.mealName} · log what you actually ate`}
     >
+      {assignment.prescription.instructions ? (
+        <View style={styles.planned}>
+          <Text style={styles.plannedTitle}>Planned</Text>
+          <Text style={styles.plannedBody}>
+            {assignment.prescription.instructions}
+          </Text>
+        </View>
+      ) : null}
       {error ? <ErrorBanner message={error} /> : null}
       <Field
         label="Search foods"
@@ -199,7 +214,7 @@ export function SomethingDifferentSheet({
           keyExtractor={(item) => item.id}
           style={styles.results}
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => addFood(item, 1)}>
+            <View style={styles.row}>
               <Text style={styles.rowTitle}>{item.name}</Text>
               {item.energyKcalScaled != null ? (
                 <Text style={styles.rowMeta}>
@@ -207,7 +222,18 @@ export function SomethingDifferentSheet({
                   serving
                 </Text>
               ) : null}
-            </Pressable>
+              <View style={styles.servingRow}>
+                {SERVING_PRESETS.map((preset) => (
+                  <Pressable
+                    key={preset.label}
+                    style={styles.servingChip}
+                    onPress={() => addFood(item, preset.quantity)}
+                  >
+                    <Text style={styles.servingChipText}>{preset.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
           )}
         />
       ) : null}
@@ -270,11 +296,46 @@ const styles = StyleSheet.create({
     maxHeight: 160,
     marginTop: spacing.sm,
   },
+  planned: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 12,
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+  },
+  plannedTitle: {
+    color: colors.deepNavy,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  plannedBody: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    lineHeight: 20,
+  },
   row: {
     backgroundColor: colors.white,
     borderRadius: 8,
+    gap: spacing.xs,
     marginBottom: spacing.xs,
     padding: spacing.md,
+  },
+  servingRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  servingChip: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  servingChipText: {
+    color: colors.deepNavy,
+    fontSize: 12,
+    fontWeight: "600",
   },
   rowTitle: {
     color: colors.deepNavy,

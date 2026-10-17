@@ -160,9 +160,11 @@ export function TraineeShell({
           fromDate: today,
           toDate: today,
         });
-        const meal = scheduledAssignments(listed.items).find(
-          (item) => item.status === "pending" || item.status === "overdue",
-        );
+        const scheduled = scheduledAssignments(listed.items);
+        const meal =
+          scheduled.find(
+            (item) => item.status === "pending" || item.status === "overdue",
+          ) ?? (isCaptureModeEnabled() ? scheduled[0] : undefined);
         if (meal) {
           openOverlay({
             screen: "something_different",
