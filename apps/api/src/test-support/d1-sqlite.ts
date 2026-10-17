@@ -81,6 +81,25 @@ function prepareBound(stmt: ReturnType<DatabaseSync["prepare"]>): BoundStatement
   return self;
 }
 
+export type D1QueryCounter = {
+  count: number;
+  reset: () => void;
+};
+
+export function wrapD1WithQueryCounter(
+  d1: D1Database,
+  counter: D1QueryCounter,
+): D1Database {
+  const prepare = d1.prepare.bind(d1);
+  return {
+    ...d1,
+    prepare(query: string) {
+      counter.count += 1;
+      return prepare(query);
+    },
+  } as D1Database;
+}
+
 export function createD1Database(sqlite: DatabaseSync): D1Database {
   return {
     prepare(query: string) {

@@ -577,6 +577,14 @@ invitationRoutes.post("/accept",
 
   const timestamp = nowIso();
 
+  if (invitation.status === "revoked") {
+    return fail(c, 410, "INVITATION_REVOKED", "Invitation has been revoked.");
+  }
+
+  if (invitation.status === "expired") {
+    return fail(c, 409, "INVITATION_EXPIRED", "Invitation has expired.");
+  }
+
   if (
     invitation.status === "pending" &&
     parsed.data.password &&

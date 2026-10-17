@@ -20,7 +20,8 @@
     "db:migrate": "pnpm --filter @fitbud/api db:migrate",
     "db:seed:library": "pnpm --filter @fitbud/api db:seed:library",
     "seed:demo": "pnpm --filter @fitbud/api seed:demo",
-    "db:reset": "pnpm --filter @fitbud/api db:reset"
+    "db:reset": "pnpm --filter @fitbud/api db:reset",
+    "setup:local": "pnpm --filter @fitbud/api exec tsx scripts/ensure-dev-vars.ts"
   },
   "devDependencies": {
     "turbo": "^2.5.4",

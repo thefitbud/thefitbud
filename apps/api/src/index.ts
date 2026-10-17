@@ -164,11 +164,14 @@ app.onError((err, c) => {
     requestId: c.get("requestId"),
     errorName: err.name,
   });
+  const isLocal = c.env.ENVIRONMENT === "local";
   return c.json(
     {
       error: {
-        code: "INTERNAL_ERROR",
-        message: "An unexpected server error occurred.",
+        code: isLocal ? "LOCAL_DEV_ERROR" : "INTERNAL_ERROR",
+        message: isLocal
+          ? `${err.name}: ${err.message}`
+          : "An unexpected server error occurred.",
         requestId: c.get("requestId") ?? "unknown",
       },
     },

@@ -27,6 +27,7 @@ function run(command: string, args: string[]) {
 console.log(`Removing ${allowed}`);
 rmSync(allowed, { recursive: true, force: true });
 
+run("pnpm", ["exec", "tsx", "scripts/ensure-dev-vars.ts"]);
 run("pnpm", ["db:migrate:local"]);
 run("pnpm", ["db:seed:library"]);
 run("pnpm", ["seed:demo"]);
