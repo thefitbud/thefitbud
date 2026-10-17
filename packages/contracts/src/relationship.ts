@@ -38,6 +38,7 @@ export const createInvitationRequestSchema = z.object({
   recipientDisplayName: z.string().trim().min(1).max(120).optional(),
   /** WhatsApp number as entered by the trainer. Normalized to E.164 digits on the server. */
   recipientWhatsapp: z.string().trim().min(8).max(20).optional(),
+  sendEmail: z.boolean().optional(),
   expiresInDays: z.number().int().min(1).max(30).optional(),
   /**
    * When omitted, the server runs form resolution once and stores that version.
@@ -68,6 +69,7 @@ export type Invitation = z.infer<typeof invitationSchema>;
 export const createInvitationResponseSchema = invitationSchema.extend({
   /** Raw token returned once on create. Never stored or logged. */
   token: z.string().min(1),
+  inviteUrl: z.string().url(),
 });
 export type CreateInvitationResponse = z.infer<
   typeof createInvitationResponseSchema
@@ -114,4 +116,24 @@ export const relationshipListResponseSchema = z.object({
 });
 export type RelationshipListResponse = z.infer<
   typeof relationshipListResponseSchema
+>;
+
+export const endRelationshipRequestSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+export type EndRelationshipRequest = z.infer<typeof endRelationshipRequestSchema>;
+
+export const reactivateRelationshipRequestSchema = z.object({
+  intakeUpdateRequested: z.boolean().optional(),
+});
+export type ReactivateRelationshipRequest = z.infer<
+  typeof reactivateRelationshipRequestSchema
+>;
+
+export const invitationPreviewResponseSchema = z.object({
+  trainerDisplayName: z.string().min(1),
+  status: invitationStatusSchema,
+});
+export type InvitationPreviewResponse = z.infer<
+  typeof invitationPreviewResponseSchema
 >;

@@ -7,12 +7,20 @@ import { and, desc, eq, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   coachingRelationshipSchema,
+  endRelationshipRequestSchema,
+  reactivateRelationshipRequestSchema,
   relationshipListResponseSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
 import { coachingRelationships } from "../db/schema";
 import { deriveOnboardingStatusForRelationships } from "../domain/client-status";
 import { mapRelationship } from "../domain/mappers";
+import {
+  confirmRelationshipReactivation,
+  endCoachingRelationship,
+  requestRelationshipReactivation,
+} from "../domain/relationship-lifecycle";
+import { reactivationRequests } from "../db/schema";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";
 import {
@@ -150,6 +158,177 @@ relationshipRoutes.get(
       c,
       coachingRelationshipSchema.parse(
         mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending"),
+      ),
+    );
+  },
+);
+
+relationshipRoutes.post(
+  "/:relationshipId/end",
+  operation({
+    tag: "Relationships",
+    summary: "End coaching relationship",
+    description: "Trainer ends an active coaching relationship.",
+    roles: ["trainer"],
+    body: endRelationshipRequestSchema,
+    response: coachingRelationshipSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = endRelationshipRequestSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid end request.");
+    }
+    const relationshipId = c.req.param("relationshipId");
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1);
+    if (!row || row.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
+    }
+    if (row.status === "ended") {
+      return fail(c, 409, "RELATIONSHIP_ALREADY_ENDED", "Relationship is already ended.");
+    }
+    await endCoachingRelationship(db, {
+      relationshipId,
+      endedByUserId: actor.userId,
+      reason: parsed.data.reason,
+    });
+    const [updated] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1);
+    const statuses = await deriveOnboardingStatusForRelationships(db, [updated!]);
+    return ok(
+      c,
+      coachingRelationshipSchema.parse(
+        mapRelationship(updated!, statuses.get(updated!.id) ?? "ended"),
+      ),
+    );
+  },
+);
+
+relationshipRoutes.post(
+  "/:relationshipId/reactivate",
+  operation({
+    tag: "Relationships",
+    summary: "Request relationship reactivation",
+    description: "Creates a pending reactivation request for an ended relationship.",
+    roles: ["trainer"],
+    body: reactivateRelationshipRequestSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const relationshipId = c.req.param("relationshipId");
+    const body = await c.req.json().catch(() => null);
+    const parsed = reactivateRelationshipRequestSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid reactivation request.");
+    }
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1);
+    if (!row || row.trainerUserId !== actor.userId || row.status !== "ended") {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
+    }
+    const pending = await db
+      .select()
+      .from(reactivationRequests)
+      .where(
+        and(
+          eq(reactivationRequests.relationshipId, relationshipId),
+          eq(reactivationRequests.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (pending[0]) {
+      return fail(c, 409, "REACTIVATION_PENDING", "A reactivation request is already pending.");
+    }
+    const requestId = await requestRelationshipReactivation(db, {
+      relationshipId,
+      trainerUserId: actor.userId,
+      intakeUpdateRequested: parsed.data.intakeUpdateRequested,
+    });
+    return ok(c, { requestId, status: "pending" as const });
+  },
+);
+
+relationshipRoutes.post(
+  "/:relationshipId/reactivate/confirm",
+  operation({
+    tag: "Relationships",
+    summary: "Confirm relationship reactivation",
+    description: "Trainee confirms reactivation on the same relationship id.",
+    roles: ["trainee"],
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const relationshipId = c.req.param("relationshipId");
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1);
+    if (!row || row.traineeUserId !== actor.userId || row.status !== "ended") {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
+    }
+    const [pending] = await db
+      .select()
+      .from(reactivationRequests)
+      .where(
+        and(
+          eq(reactivationRequests.relationshipId, relationshipId),
+          eq(reactivationRequests.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (!pending) {
+      return fail(c, 404, "REACTIVATION_NOT_FOUND", "No pending reactivation request.");
+    }
+    if (pending.expiresAt < new Date().toISOString()) {
+      return fail(c, 410, "REACTIVATION_EXPIRED", "Reactivation request expired.");
+    }
+    await confirmRelationshipReactivation(db, {
+      relationshipId,
+      requestId: pending.id,
+    });
+    const [updated] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1);
+    const statuses = await deriveOnboardingStatusForRelationships(db, [updated!]);
+    return ok(
+      c,
+      coachingRelationshipSchema.parse(
+        mapRelationship(updated!, statuses.get(updated!.id) ?? "active"),
       ),
     );
   },

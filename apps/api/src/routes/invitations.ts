@@ -11,6 +11,7 @@ import {
   createInvitationRequestSchema,
   createInvitationResponseSchema,
   invitationListResponseSchema,
+  invitationPreviewResponseSchema,
   invitationSchema,
 } from "@fitbud/contracts";
 import { normalizeWhatsappE164 } from "@fitbud/core";
@@ -38,6 +39,9 @@ import {
   mapRelationship,
   normalizeEmail,
 } from "../domain/mappers";
+import { inviteEmailBody, inviteEmailSubject } from "../emails/invite.js";
+import { sendSystemEmail } from "../lib/email.js";
+import { trainerProfiles } from "../db/schema";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import {
   addDaysIso,
@@ -199,9 +203,30 @@ invitationRoutes.post(
       .where(eq(clientInvitations.id, invitationId))
       .limit(1);
     const row = rows[0]!;
+    const appHost = c.env.APP_HOST ?? "localhost";
+    const inviteUrl = `https://${appHost}/i/${token}`;
+    const [trainerProfile] = await db
+      .select()
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, actor.userId))
+      .limit(1);
+    const trainerName = trainerProfile?.displayName ?? "Your coach";
+    if (parsed.data.sendEmail) {
+      await sendSystemEmail(c.env, db, {
+        to: recipientEmail,
+        template: "invite",
+        subject: inviteEmailSubject(trainerName),
+        text: inviteEmailBody(inviteUrl, trainerName),
+      });
+      await db
+        .update(clientInvitations)
+        .set({ emailSentAt: timestamp, updatedAt: timestamp })
+        .where(eq(clientInvitations.id, invitationId));
+    }
     const data = createInvitationResponseSchema.parse({
       ...mapInvitation(row),
       token,
+      inviteUrl,
     });
     const responseBody = { data };
 
@@ -301,6 +326,160 @@ invitationRoutes.get(
         nextCursor: page.nextCursor,
       }),
     );
+  },
+);
+
+invitationRoutes.get(
+  "/preview",
+  operation({
+    tag: "Invitations",
+    summary: "Public invitation preview",
+    description: "Returns trainer display name and invitation status for a token.",
+    security: "public",
+    response: invitationPreviewResponseSchema,
+  }),
+  async (c) => {
+    const token = c.req.query("token")?.trim();
+    if (!token) {
+      return fail(c, 400, "INVALID_REQUEST", "token query parameter is required.");
+    }
+    const db = createDb(c.env.DB);
+    const tokenHash = await sha256Hex(token);
+    const [invitation] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.tokenHash, tokenHash))
+      .limit(1);
+    if (!invitation) {
+      return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+    }
+    const timestamp = nowIso();
+    let status = invitation.status;
+    if (status === "pending" && invitation.expiresAt <= timestamp) {
+      status = "expired";
+    }
+    const [trainer] = await db
+      .select()
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, invitation.trainerUserId))
+      .limit(1);
+    return ok(
+      c,
+      invitationPreviewResponseSchema.parse({
+        trainerDisplayName: trainer?.displayName ?? "Coach",
+        status,
+      }),
+    );
+  },
+);
+
+invitationRoutes.post(
+  "/:invitationId/reissue",
+  operation({
+    tag: "Invitations",
+    summary: "Reissue invitation",
+    description: "Revokes the prior invite and returns a new token and URL.",
+    roles: ["trainer"],
+    response: createInvitationResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const invitationId = c.req.param("invitationId");
+    const db = createDb(c.env.DB);
+    const [existing] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, invitationId))
+      .limit(1);
+    if (!existing || existing.trainerUserId !== actor.userId) {
+      return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+    }
+    const timestamp = nowIso();
+    await db
+      .update(clientInvitations)
+      .set({ status: "revoked", revokedAt: timestamp, updatedAt: timestamp })
+      .where(eq(clientInvitations.id, invitationId));
+    const token = createSessionToken();
+    const tokenHash = await sha256Hex(token);
+    const newId = createId();
+    const expiresAt = addDaysIso(DEFAULT_INVITE_DAYS);
+    await db.insert(clientInvitations).values({
+      id: newId,
+      trainerUserId: actor.userId,
+      recipientEmail: existing.recipientEmail,
+      recipientDisplayName: existing.recipientDisplayName,
+      recipientWhatsappE164: existing.recipientWhatsappE164,
+      tokenHash,
+      status: "pending",
+      expiresAt,
+      acceptedUserId: null,
+      onboardingFormTemplateVersionId: existing.onboardingFormTemplateVersionId,
+      reissuedFromId: invitationId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const [row] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, newId))
+      .limit(1);
+    const appHost = c.env.APP_HOST ?? "localhost";
+    const inviteUrl = `https://${appHost}/i/${token}`;
+    return ok(
+      c,
+      createInvitationResponseSchema.parse({
+        ...mapInvitation(row!),
+        token,
+        inviteUrl,
+      }),
+    );
+  },
+);
+
+invitationRoutes.post(
+  "/:invitationId/revoke",
+  operation({
+    tag: "Invitations",
+    summary: "Revoke invitation",
+    description: "Marks a pending invitation as revoked.",
+    roles: ["trainer"],
+    response: invitationSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const invitationId = c.req.param("invitationId");
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, invitationId))
+      .limit(1);
+    if (!row || row.trainerUserId !== actor.userId) {
+      return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+    }
+    const timestamp = nowIso();
+    await db
+      .update(clientInvitations)
+      .set({ status: "revoked", revokedAt: timestamp, updatedAt: timestamp })
+      .where(eq(clientInvitations.id, invitationId));
+    const [updated] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, invitationId))
+      .limit(1);
+    return ok(c, invitationSchema.parse(mapInvitation(updated!)));
   },
 );
 

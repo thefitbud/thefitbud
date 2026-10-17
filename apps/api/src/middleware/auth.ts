@@ -39,10 +39,23 @@ export const optionalAuthMiddleware = createMiddleware<{
   }
 
   if (authHeader?.startsWith("Bearer ")) {
+    const authMode = c.env.AUTH_MODE === "firebase" ? "firebase" : "test";
+    if (
+      authMode === "test" &&
+      c.env.ENVIRONMENT !== "local" &&
+      process.env.VITEST !== "true"
+    ) {
+      return fail(
+        c,
+        503,
+        "AUTH_MODE_TEST_DISABLED",
+        "Test authentication is not enabled in this environment.",
+      );
+    }
     const token = authHeader.slice("Bearer ".length).trim();
     const identity = await verifyFirebaseIdToken(token, {
       projectId: c.env.FIREBASE_PROJECT_ID,
-      authMode: c.env.AUTH_MODE === "firebase" ? "firebase" : "test",
+      authMode,
     });
     if (identity) {
       const actor = await loadActorByFirebaseUid(db, identity.uid, requestedRole);

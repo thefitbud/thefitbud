@@ -5,6 +5,17 @@ export {
 } from "./config.js";
 
 export {
+  authLoginRequestSchema,
+  authOtpStartRequestSchema,
+  authOtpVerifyRequestSchema,
+  authPasswordResetRequestSchema,
+  authPasswordSetRequestSchema,
+  authTokenResponseSchema,
+  type AuthLoginRequest,
+  type AuthTokenResponse,
+} from "./auth.js";
+
+export {
   accountStateSchema,
   apiDataEnvelopeSchema,
   apiErrorBodySchema,
@@ -41,6 +52,12 @@ export {
   invitationStatusSchema,
   onboardingStatusSchema,
   relationshipListResponseSchema,
+  endRelationshipRequestSchema,
+  reactivateRelationshipRequestSchema,
+  invitationPreviewResponseSchema,
+  type EndRelationshipRequest,
+  type ReactivateRelationshipRequest,
+  type InvitationPreviewResponse,
   type AcceptInvitationRequest,
   type AcceptInvitationResponse,
   type CoachingRelationship,
@@ -493,9 +510,13 @@ export {
 
 export {
   traineeProfileSchema,
+  trainerProfileSchema,
   updateTraineeProfileRequestSchema,
+  updateTrainerProfileRequestSchema,
   type TraineeProfile,
+  type TrainerProfile,
   type UpdateTraineeProfileRequest,
+  type UpdateTrainerProfileRequest,
 } from "./profile.js";
 
 export {
