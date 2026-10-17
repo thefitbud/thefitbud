@@ -78,6 +78,45 @@ describe("FitBudApiClient", () => {
     expect(seenKey).toBe("idem-1");
   });
 
+  it("calls stage1 auth and attention group endpoints", async () => {
+    const seen: string[] = [];
+    const client = new FitBudApiClient({
+      baseUrl: "https://example.test",
+      getAccessToken: async () => "token",
+      fetch: async (input) => {
+        seen.push(String(input));
+        const path = String(input);
+        if (path.includes("/auth/login")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                token: "t",
+                tokenKind: "test_id_token",
+                userId: "00000000-0000-4000-8000-000000000001",
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return new Response(
+          JSON.stringify({ data: { groups: [] } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    });
+    await (client as FitBudApiClient & { login: (b: unknown) => Promise<unknown> }).login({
+      identifier: "coach@example.com",
+      password: "password-1",
+    });
+    await (
+      client as FitBudApiClient & {
+        getAttentionGroups: () => Promise<unknown>;
+      }
+    ).getAttentionGroups();
+    expect(seen[0]).toBe("https://example.test/auth/login");
+    expect(seen[1]).toContain("groupBy=relationship");
+  });
+
   it("sends workspace, activity, plan, and history filters", async () => {
     const seen: string[] = [];
     const client = new FitBudApiClient({

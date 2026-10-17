@@ -9,6 +9,7 @@ import {
   checkinReviewContextSchema,
   checkinSchema,
   createTrainerNoteRequestSchema,
+  patchTrainerNoteRequestSchema,
   localDateSchema,
   recordCheckinReviewRequestSchema,
   saveCheckinDraftRequestSchema,
@@ -74,6 +75,10 @@ import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
+  notifyTraineeNoteShared,
+  setTrainerNoteVisibility,
+} from "../domain/trainer-note-share.js";
+import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
 } from "../lib/idempotency";
@@ -104,6 +109,7 @@ const ENSURE_DUE_OPERATION = "checkin.ensure_due";
 const SUBMIT_OPERATION = "checkin.submit";
 const REVIEW_OPERATION = "checkin.review";
 const NOTE_OPERATION = "checkin.note.create";
+const NOTE_PATCH_OPERATION = "checkin.note.patch";
 
 export const checkinRoutes = new Hono<{
   Bindings: Env;
@@ -998,22 +1004,32 @@ checkinRoutes.post(
     }
 
     const now = nowIso();
+    const visibility =
+      parsed.data.checkinId != null ? "private" : (parsed.data.visibility ?? "private");
     const row = {
       id: createId(),
       coachingRelationshipId: relationship.id,
       trainerUserId: actor.userId,
       checkinId: parsed.data.checkinId ?? null,
       body: parsed.data.body,
-      visibility: "private" as const,
-      subjectType: null,
-      subjectId: null,
-      sharedAt: null,
+      visibility,
+      subjectType: parsed.data.subjectType ?? null,
+      subjectId: parsed.data.subjectId ?? null,
+      sharedAt: visibility === "client" ? now : null,
       unsharedAt: null,
       seenAt: null,
       createdAt: now,
       updatedAt: now,
     };
     await db.insert(trainerNotes).values(row);
+
+    if (visibility === "client" && !parsed.data.checkinId) {
+      await notifyTraineeNoteShared(db, {
+        noteId: row.id,
+        relationshipId: relationship.id,
+        traineeUserId: relationship.traineeUserId,
+      });
+    }
 
     await db.insert(interventions).values({
       id: createId(),
@@ -1034,6 +1050,122 @@ checkinRoutes.post(
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
       operation: NOTE_OPERATION,
+      idempotencyKey,
+      requestFingerprint: fingerprint,
+      responseStatus: 200,
+      responseBody,
+      expiresAt: addDaysIso(7),
+    });
+    return c.json(responseBody, 200);
+  },
+);
+
+checkinRoutes.patch(
+  "/relationships/:relationshipId/notes/:noteId",
+  operation({
+    tag: "Checkins",
+    summary: "Share or unshare a trainer note with the client",
+    description:
+      "Updates note visibility. Sharing sends a trainer_note_shared notification (not for check-in review notes).",
+    roles: ["trainer"],
+    idempotency: true,
+    body: patchTrainerNoteRequestSchema,
+    response: trainerNoteSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const idempotencyKey = requireIdempotencyKey(c);
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
+
+    const parsed = patchTrainerNoteRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid note patch request.", {
+        issues: parsed.error.issues,
+      });
+    }
+
+    const db = createDb(c.env.DB);
+    const fingerprint = await sha256Hex(JSON.stringify(parsed.data));
+    const existing = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: NOTE_PATCH_OPERATION,
+      idempotencyKey,
+    });
+    if (existing) {
+      if (existing.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request.",
+        );
+      }
+      return c.json(
+        JSON.parse(existing.responseBody),
+        existing.responseStatus as 200,
+      );
+    }
+
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const endedPatch = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedPatch) return endedPatch;
+
+    const noteId = c.req.param("noteId");
+    const noteRows = await db
+      .select()
+      .from(trainerNotes)
+      .where(
+        and(
+          eq(trainerNotes.id, noteId),
+          eq(trainerNotes.coachingRelationshipId, relationship.id),
+        ),
+      )
+      .limit(1);
+    const existingNote = noteRows[0];
+    if (!existingNote) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    const updated = await setTrainerNoteVisibility(db, {
+      noteId,
+      relationshipId: relationship.id,
+      trainerUserId: actor.userId,
+      visibility: parsed.data.visibility,
+      skipPush: Boolean(existingNote.checkinId),
+    });
+    if (!updated) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    const responseBody = {
+      data: trainerNoteSchema.parse(mapTrainerNote(updated)),
+    };
+    await saveIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: NOTE_PATCH_OPERATION,
       idempotencyKey,
       requestFingerprint: fingerprint,
       responseStatus: 200,

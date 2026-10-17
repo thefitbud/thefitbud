@@ -2062,7 +2062,7 @@ export class FitBudApiClient {
     };
   }
 
-  private async request<T>(
+  async request<T>(
     method: string,
     path: string,
     schema: { parse: (value: unknown) => T } | undefined,
@@ -2134,3 +2134,6 @@ export class FitBudApiClient {
     return schema.parse(envelope.data);
   }
 }
+
+import { installStage1ClientMethods } from "./stage1-augment.js";
+installStage1ClientMethods(FitBudApiClient);

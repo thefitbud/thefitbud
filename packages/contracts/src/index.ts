@@ -7,11 +7,17 @@ export {
 export {
   authLoginRequestSchema,
   authOtpStartRequestSchema,
+  authOtpStartResponseSchema,
   authOtpVerifyRequestSchema,
+  authOtpVerifyResponseSchema,
   authPasswordResetRequestSchema,
   authPasswordSetRequestSchema,
   authTokenResponseSchema,
   type AuthLoginRequest,
+  type AuthOtpStartRequest,
+  type AuthOtpVerifyRequest,
+  type AuthPasswordResetRequest,
+  type AuthPasswordSetRequest,
   type AuthTokenResponse,
 } from "./auth.js";
 
@@ -190,6 +196,8 @@ export {
   workoutDaySchema,
   workoutExerciseSchema,
   workoutSetTargetSchema,
+  type AssignPlanVersionRequest,
+  type AssignPlanVersionResponse,
   type AcknowledgePlanConsistencyRequest,
   type AssignmentScheduleStatus,
   type AssignmentWindowMode,
@@ -374,6 +382,8 @@ export {
   createCheckinFormTemplateRequestSchema,
   createCheckinFormTemplateVersionRequestSchema,
   createTrainerNoteRequestSchema,
+  patchTrainerNoteRequestSchema,
+  trainerNoteVisibilitySchema,
   forkCheckinFormTemplateRequestSchema,
   recordCheckinReviewRequestSchema,
   saveCheckinDraftRequestSchema,
@@ -406,6 +416,7 @@ export {
   type CreateCheckinFormTemplateRequest,
   type CreateCheckinFormTemplateVersionRequest,
   type CreateTrainerNoteRequest,
+  type PatchTrainerNoteRequest,
   type ForkCheckinFormTemplateRequest,
   type RecordCheckinReviewRequest,
   type SaveCheckinDraftRequest,
@@ -689,12 +700,14 @@ export {
 export {
   linkKindSchema,
   linkResolveResponseSchema,
+  type LinkKind,
   type LinkResolveResponse,
 } from "./links.js";
 
 export {
   mealTimesResponseSchema,
   updateMealTimesRequestSchema,
+  type UpdateMealTimesRequest,
 } from "./meal-times.js";
 
 export {
@@ -703,6 +716,7 @@ export {
 } from "./activity-feed.js";
 
 export {
+  meDayResponseSchema,
   weekReadModelSchema,
   weekDayStateSchema,
   attentionGroupsResponseSchema,
@@ -711,6 +725,7 @@ export {
   responsivenessResponseSchema,
   responsivenessLabelSchema,
   reengagementCandidatesResponseSchema,
+  type MeDayResponse,
   type WeekReadModel,
   type WeekDayState,
   type AttentionGroupsResponse,

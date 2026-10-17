@@ -22,4 +22,5 @@ export const linkResolveResponseSchema = z.object({
     .enum(["not_found", "not_yours", "ended", "superseded", "expired"])
     .optional(),
 });
+export type LinkKind = z.infer<typeof linkKindSchema>;
 export type LinkResolveResponse = z.infer<typeof linkResolveResponseSchema>;

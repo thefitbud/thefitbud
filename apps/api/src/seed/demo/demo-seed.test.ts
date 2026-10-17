@@ -128,13 +128,19 @@ describe("demo seed", () => {
     };
 
     const attention = await app.request(
-      "/exceptions/attention?groupBy=relationship",
+      "/exceptions/attention?groupBy=relationship&limit=50",
       { headers: rahulHeaders },
       testEnv(),
     );
     expect(attention.status).toBe(200);
     const attentionBody = (await attention.json()) as {
-      data: { groups?: Array<{ relationshipId: string }> };
+      data: {
+        groups?: Array<{
+          relationshipId: string;
+          traineeDisplayName: string;
+          items: Array<{ type: string; severity: string; status: string }>;
+        }>;
+      };
     };
     expect((attentionBody.data.groups ?? []).length).toBeGreaterThan(0);
 
@@ -219,6 +225,66 @@ describe("demo seed", () => {
       const persona = personaByEmail(account.email);
       expect(persona?.key).toBe(account.state);
     }
+
+    const rohanToken = await login("rohan.slipping@demo.fitbud.test");
+    const rohanClient = await app.request(
+      "/clients",
+      {
+        headers: {
+          Authorization: `Bearer ${rohanToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    expect(rohanClient.status).toBe(403);
+
+    const rohanRelRows = sqliteExec(
+      `SELECT cr.id FROM coaching_relationships cr
+       JOIN users u ON u.id = cr.trainee_user_id
+       JOIN user_identities ui ON ui.user_id = u.id
+       WHERE ui.email_norm = 'rohan.slipping@demo.fitbud.test'`,
+    );
+    const rohanRelId = String(rohanRelRows[0]?.values[0]?.[0] ?? "");
+    expect(rohanRelId.length).toBeGreaterThan(10);
+    const dbTypes = sqliteExec(
+      `SELECT DISTINCT type FROM exceptions WHERE coaching_relationship_id = '${rohanRelId.replace(/'/g, "''")}'`,
+    );
+    for (const expected of [
+      "missed_workout",
+      "skipped_workout",
+      "overdue_meal",
+      "skipped_meal",
+      "meal_deviation",
+      "overdue_checkin",
+    ]) {
+      expect(
+        dbTypes[0]?.values.some((row) => row[0] === expected),
+      ).toBe(true);
+    }
+
+    const relRows = sqliteExec(
+      `SELECT cr.id FROM coaching_relationships cr
+       JOIN users u ON u.id = cr.trainee_user_id
+       JOIN user_identities ui ON ui.user_id = u.id
+       WHERE ui.email_norm = 'farhan.paused@demo.fitbud.test'`,
+    );
+    const farhanRid = String(relRows[0]?.values[0]?.[0] ?? "");
+    const responsiveness = await app.request(
+      `/notifications/relationships/${farhanRid}/responsiveness?days=14`,
+      {
+        headers: {
+          Authorization: `Bearer ${rahulToken}`,
+          "x-fitbud-role": "trainer",
+        },
+      },
+      testEnv(),
+    );
+    expect(responsiveness.status).toBe(200);
+    const respBody = (await responsiveness.json()) as {
+      data: { label: string };
+    };
+    expect(respBody.data.label).toBe("reminders_paused");
   });
 
   it("does not reference wiped legacy library foods without seed_version", () => {

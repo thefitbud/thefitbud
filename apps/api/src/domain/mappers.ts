@@ -767,6 +767,11 @@ export function mapTrainerNote(row: TrainerNoteRow): TrainerNote {
     trainerUserId: row.trainerUserId,
     checkinId: row.checkinId,
     body: row.body,
+    visibility: row.visibility,
+    subjectType: row.subjectType,
+    subjectId: row.subjectId,
+    sharedAt: row.sharedAt,
+    seenAt: row.seenAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

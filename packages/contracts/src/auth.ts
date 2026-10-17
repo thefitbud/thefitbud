@@ -57,3 +57,11 @@ export const authPasswordSetRequestSchema = z.object({
 
 export type AuthLoginRequest = z.infer<typeof authLoginRequestSchema>;
 export type AuthTokenResponse = z.infer<typeof authTokenResponseSchema>;
+export type AuthOtpStartRequest = z.infer<typeof authOtpStartRequestSchema>;
+export type AuthOtpStartResponse = z.infer<typeof authOtpStartResponseSchema>;
+export type AuthOtpVerifyRequest = z.infer<typeof authOtpVerifyRequestSchema>;
+export type AuthOtpVerifyResponse = z.infer<typeof authOtpVerifyResponseSchema>;
+export type AuthPasswordResetRequest = z.infer<
+  typeof authPasswordResetRequestSchema
+>;
+export type AuthPasswordSetRequest = z.infer<typeof authPasswordSetRequestSchema>;

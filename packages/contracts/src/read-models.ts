@@ -12,6 +12,25 @@ export const weekDayStateSchema = z.enum([
 ]);
 export type WeekDayState = z.infer<typeof weekDayStateSchema>;
 
+export const meDayResponseSchema = z.object({
+  date: z.string(),
+  assignments: z.object({
+    workouts: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
+    meals: z.array(z.object({ id: z.string().uuid(), slotKey: z.string() })),
+  }),
+  logs: z.object({
+    workouts: z.number().int(),
+    meals: z.number().int(),
+  }),
+  totals: z.object({
+    kcalScaled: z.number().int(),
+    perMeal: z.array(
+      z.object({ slotKey: z.string(), kcalScaled: z.number().int() }),
+    ),
+  }),
+});
+export type MeDayResponse = z.infer<typeof meDayResponseSchema>;
+
 export const weekReadModelSchema = z.object({
   start: localDateSchema,
   workouts: z.object({

@@ -279,12 +279,20 @@ export type RecordCheckinReviewRequest = z.infer<
   typeof recordCheckinReviewRequestSchema
 >;
 
+export const trainerNoteVisibilitySchema = z.enum(["private", "client"]);
+export type TrainerNoteVisibility = z.infer<typeof trainerNoteVisibilitySchema>;
+
 export const trainerNoteSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
   trainerUserId: uuidSchema,
   checkinId: uuidSchema.nullable(),
   body: z.string().min(1).max(4000),
+  visibility: trainerNoteVisibilitySchema,
+  subjectType: z.string().nullable().optional(),
+  subjectId: uuidSchema.nullable().optional(),
+  sharedAt: isoDateTimeSchema.nullable(),
+  seenAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -292,10 +300,20 @@ export type TrainerNote = z.infer<typeof trainerNoteSchema>;
 
 export const createTrainerNoteRequestSchema = z.object({
   body: z.string().trim().min(1).max(4000),
+  visibility: trainerNoteVisibilitySchema.optional(),
+  subjectType: z.string().trim().max(64).nullable().optional(),
+  subjectId: uuidSchema.nullable().optional(),
   checkinId: uuidSchema.nullable().optional(),
 });
 export type CreateTrainerNoteRequest = z.infer<
   typeof createTrainerNoteRequestSchema
+>;
+
+export const patchTrainerNoteRequestSchema = z.object({
+  visibility: trainerNoteVisibilitySchema,
+});
+export type PatchTrainerNoteRequest = z.infer<
+  typeof patchTrainerNoteRequestSchema
 >;
 
 export const trainerNoteListResponseSchema = cursorPageSchema(trainerNoteSchema);

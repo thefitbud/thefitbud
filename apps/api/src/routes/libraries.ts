@@ -5,6 +5,7 @@ import {
 } from "../openapi/document";
 import { and, asc, eq, gt, inArray, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 import {
   createExerciseLibraryItemRequestSchema,
   createFoodLibraryItemRequestSchema,
@@ -19,10 +20,13 @@ import {
 } from "@fitbud/contracts";
 import { createDb, type Db } from "../db/client";
 import {
+  coachingRelationships,
   exerciseLibraryItems,
   foodLibraryItems,
   foodLibraryServings,
+  traineeCustomFoods,
 } from "../db/schema";
+import { resolveLibraryId } from "../domain/library-redirects.js";
 import {
   mapExerciseLibraryItem,
   mapFoodLibraryItem,
@@ -581,6 +585,135 @@ libraryRoutes.get(
       (item) => item.name,
     );
     return ok(c, foodLibraryListResponseSchema.parse(page));
+  },
+);
+
+const foodLibraryItemDetailSchema = foodLibraryItemSchema.extend({
+  redirectedFrom: z.string().uuid().optional(),
+});
+
+const customLoggedFoodSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      kcalScaled: z.number().int(),
+      servingLabel: z.string(),
+      createdAt: z.string(),
+    }),
+  ),
+});
+
+libraryRoutes.get(
+  "/foods/custom-logged",
+  operation({
+    tag: "Libraries",
+    summary: "Trainee custom foods for a relationship",
+    description: "Trainer-visible custom foods logged by the trainee.",
+    roles: ["trainer"],
+    parameters: [
+      {
+        name: "rid",
+        in: "query",
+        required: true,
+        description: "Coaching relationship id",
+        schema: { type: "string", format: "uuid" },
+      },
+    ],
+    response: customLoggedFoodSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const rid = c.req.query("rid")?.trim();
+    if (!rid) {
+      return fail(c, 400, "INVALID_REQUEST", "rid query parameter is required.");
+    }
+    const db = createDb(c.env.DB);
+    const rel = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, rid))
+      .limit(1);
+    if (!rel[0] || rel[0].trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const rows = await db
+      .select()
+      .from(traineeCustomFoods)
+      .where(eq(traineeCustomFoods.relationshipId, rid));
+    return ok(
+      c,
+      customLoggedFoodSchema.parse({
+        items: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          kcalScaled: row.kcalScaled,
+          servingLabel: row.servingLabel,
+          createdAt: row.createdAt,
+        })),
+      }),
+    );
+  },
+);
+
+libraryRoutes.get(
+  "/foods/:itemId",
+  operation({
+    tag: "Libraries",
+    summary: "Get one food library item",
+    description: "Resolves legacy ids through library_id_redirects.",
+    roles: ["trainer"],
+    response: foodLibraryItemDetailSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const itemId = c.req.param("itemId");
+    const db = createDb(c.env.DB);
+    const resolved = await resolveLibraryId(db, itemId);
+    const rows = await db
+      .select()
+      .from(foodLibraryItems)
+      .where(
+        and(
+          eq(foodLibraryItems.id, resolved.id),
+          eq(foodLibraryItems.status, "active"),
+          or(
+            eq(foodLibraryItems.ownership, "global"),
+            and(
+              eq(foodLibraryItems.ownership, "trainer"),
+              eq(foodLibraryItems.trainerUserId, actor.userId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+    const row = rows[0];
+    if (!row) {
+      return fail(c, 404, "FOOD_NOT_FOUND", "Food not found.");
+    }
+    const servings = await servingsByFoodId(db, [row.id]);
+    const item = mapFoodLibraryItem(row, servings.get(row.id) ?? []);
+    return ok(
+      c,
+      foodLibraryItemDetailSchema.parse({
+        ...item,
+        ...(resolved.redirectedFrom
+          ? { redirectedFrom: resolved.redirectedFrom }
+          : {}),
+      }),
+    );
   },
 );
 

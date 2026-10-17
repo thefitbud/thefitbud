@@ -18,3 +18,6 @@ export const mealTimeOverrideSchema = z.object({
 export const updateMealTimesRequestSchema = z.object({
   overrides: z.array(mealTimeOverrideSchema),
 });
+export type UpdateMealTimesRequest = z.infer<
+  typeof updateMealTimesRequestSchema
+>;
