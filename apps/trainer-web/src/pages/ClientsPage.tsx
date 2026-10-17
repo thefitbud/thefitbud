@@ -203,7 +203,7 @@ export function ClientsPage() {
   const filtersActive = hasClientDirectoryFilters(filters);
 
   return (
-    <section className="page clients-page">
+    <section className="page clients-page" data-testid="screen-TW-06">
       <header className="page-header">
         <div>
           <h1 className="roster-title">Client Roster</h1>

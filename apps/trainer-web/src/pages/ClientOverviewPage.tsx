@@ -37,7 +37,11 @@ export function ClientOverviewPage() {
   }, [relationshipId]);
 
   if (!workspace) {
-    return <p className="muted">Loading overview…</p>;
+    return (
+      <p className="muted" data-testid="screen-TW-09">
+        Loading overview…
+      </p>
+    );
   }
 
   const { header, overview, plan } = workspace;
@@ -48,7 +52,7 @@ export function ClientOverviewPage() {
 
   if (!coachingReady) {
     return (
-      <div className="overview-guided">
+      <div className="overview-guided" data-testid="screen-TW-09">
         <h2>Next step</h2>
         <p>
           {header.onboardingStatus === "onboarding_submitted"
@@ -66,7 +70,7 @@ export function ClientOverviewPage() {
   }
 
   return (
-    <div className="overview-grid">
+    <div className="overview-grid" data-testid="screen-TW-09">
       <div className="overview-main">
         {overview.openException ? (
           <section className="overview-card priority-card">

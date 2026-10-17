@@ -258,7 +258,7 @@ function nullableText(value: string): string | null {
 
 export function LibrariesPanel() {
   return (
-    <div className="templates-library-grid">
+    <div className="templates-library-grid" data-testid="screen-TW-26">
       <ExerciseLibrary />
       <FoodLibrary />
     </div>

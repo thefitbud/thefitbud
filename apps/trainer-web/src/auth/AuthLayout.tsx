@@ -4,9 +4,11 @@ import { useConfig } from "../lib/config";
 export function AuthLayout({
   title,
   children,
+  screenTestId,
 }: {
   title: string;
   children: ReactNode;
+  screenTestId?: string;
 }) {
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
@@ -27,7 +29,7 @@ export function AuthLayout({
         </div>
       </section>
       <section className="auth-form-panel">
-        <div className="auth-card">
+        <div className="auth-card" data-testid={screenTestId}>
           <header className="auth-card-head">
             <img src="/favicon-32.png" width={32} height={32} alt="FitBud" />
             <h1>{title}</h1>

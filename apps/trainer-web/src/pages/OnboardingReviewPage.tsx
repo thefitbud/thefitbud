@@ -134,7 +134,7 @@ export function OnboardingReviewPage() {
     relationship.onboardingStatus === "coaching_ready";
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page" data-testid="screen-TW-10">
       <div className="workspace-toolbar">
         <div>
           <p className="workspace-kicker">Onboarding</p>

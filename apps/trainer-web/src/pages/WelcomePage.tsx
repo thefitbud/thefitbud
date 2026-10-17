@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { PlanTemplateSummary } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
@@ -8,6 +8,9 @@ import { stage1Api } from "../lib/stage1-api";
 
 export function WelcomePage() {
   const { me, refreshMe } = useAuth();
+  const [params] = useSearchParams();
+  const capturePreview =
+    import.meta.env.DEV && params.get("capture") === "welcome";
   const [step, setStep] = useState(1);
   const [displayName, setDisplayName] = useState(
     me?.trainerProfile?.displayName ?? "",
@@ -28,7 +31,7 @@ export function WelcomePage() {
     });
   }, []);
 
-  if (me?.trainerProfile?.displayName) {
+  if (me?.trainerProfile?.displayName && !capturePreview) {
     return <Navigate to="/" replace />;
   }
 
@@ -54,7 +57,7 @@ export function WelcomePage() {
   }
 
   return (
-    <section className="page welcome-page">
+    <section className="page welcome-page" data-testid="screen-TW-02">
       <header className="page-header">
         <h1>Welcome to FitBud</h1>
         <p className="lede">Three quick steps before your first client.</p>

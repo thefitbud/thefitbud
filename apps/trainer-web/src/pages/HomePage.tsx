@@ -168,7 +168,7 @@ export function HomePage() {
     renewals.length === 0;
 
   return (
-    <div className="home-triage">
+    <div className="home-triage" data-testid="screen-TW-04">
       <header className="page-header">
         <div>
           <h1>Good to see you, {trainerFirst}</h1>
@@ -263,7 +263,7 @@ export function HomePage() {
       ) : null}
 
       {coachAsks.length > 0 ? (
-        <section aria-labelledby="asks-heading">
+        <section aria-labelledby="asks-heading" data-testid="screen-TW-32">
           <h2 id="asks-heading">Asked you on WhatsApp</h2>
           <ul className="attention-rows">
             {coachAsks.map((ask) => (
@@ -350,7 +350,7 @@ export function HomePage() {
 
       {drawerAskId ? (
         <div className="drawer-backdrop" onClick={closeDrawer}>
-          <aside className="drawer-panel" onClick={(e) => e.stopPropagation()}>
+          <aside className="drawer-panel" data-testid="screen-TW-32" onClick={(e) => e.stopPropagation()}>
             <p>Coach ask {drawerAskId}</p>
             <button type="button" onClick={() => void markAskAnswered(drawerAskId)}>
               Mark answered

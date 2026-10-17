@@ -27,7 +27,7 @@ export function WorkspaceModals({
   if (modal.type === "note") {
     return (
       <div className="drawer-backdrop" onClick={onClose}>
-        <aside className="drawer-panel" onClick={(e) => e.stopPropagation()}>
+        <aside className="drawer-panel" data-testid="screen-TW-34" onClick={(e) => e.stopPropagation()}>
           <header className="drawer-head">
             <h2>Add note for {traineeName}</h2>
             <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
@@ -47,7 +47,7 @@ export function WorkspaceModals({
   if (modal.type === "responsiveness") {
     return (
       <div className="drawer-backdrop" onClick={onClose}>
-        <aside className="drawer-panel" onClick={(e) => e.stopPropagation()}>
+        <aside className="drawer-panel" data-testid="screen-TW-31" onClick={(e) => e.stopPropagation()}>
           <header className="drawer-head">
             <h2>Reminders</h2>
             <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">

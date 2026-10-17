@@ -147,7 +147,7 @@ export function CheckinsPage() {
   };
 
   return (
-    <section className="page checkins-page">
+    <section className="page checkins-page" data-testid="screen-TW-22">
       <header className="page-header">
         <div>
           <h1 className="roster-title">

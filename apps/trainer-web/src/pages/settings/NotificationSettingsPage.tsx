@@ -76,7 +76,7 @@ export function NotificationSettingsPage() {
   if (loading) return <LoadingBlock />;
 
   return (
-    <div className="settings-panel stack-lg">
+    <div className="settings-panel stack-lg" data-testid="screen-TW-29">
       <h2>Trainer notifications</h2>
       <p className="muted">
         Choose which coaching events notify you in the app. Web bell is always on;

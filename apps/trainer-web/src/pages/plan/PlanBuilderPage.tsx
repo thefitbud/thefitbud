@@ -77,7 +77,10 @@ export function PlanBuilderPage() {
   const sections = tab === "nutrition" ? "nutrition" : tab === "workout" ? "workout" : "both";
 
   return (
-    <section className="page plan-builder-page">
+    <section
+      className="page plan-builder-page"
+      data-testid={tab === "nutrition" ? "screen-TW-14" : "screen-TW-13"}
+    >
       <header className="builder-topbar">
         <div>
           <Link to={`/clients/${relationshipId}/plan`}>← Back to plan</Link>

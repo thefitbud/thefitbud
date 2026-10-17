@@ -248,7 +248,7 @@ export function AddClientPage() {
   }
 
   return (
-    <section className="page narrow add-client-page">
+    <section className="page narrow add-client-page" data-testid="screen-TW-07">
       <header className="page-header">
         <div>
           <h1>Add Client</h1>

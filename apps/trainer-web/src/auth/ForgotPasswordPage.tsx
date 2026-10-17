@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "./AuthLayout";
 import { fetchDevMailCode } from "../lib/auth-flow";
+import { startOtp } from "../lib/otp-api";
 import { stage1Api } from "../lib/stage1-api";
 import { useOnline } from "../hooks/useOnline";
 
@@ -23,7 +24,7 @@ export function ForgotPasswordPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await stage1Api.startOtp({ identifier: identifier.trim(), purpose: "reset" });
+      await startOtp({ identifier: identifier.trim(), purpose: "reset" });
       setMessage("If an account exists, we've sent a code.");
       if (import.meta.env.DEV && identifier.includes("@")) {
         const devCode = await fetchDevMailCode(identifier.trim().toLowerCase());

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import type { PlanTemplate, PlanTemplateType } from "@fitbud/contracts";
 import { apiClient } from "../../lib/api";
 import { PlanTemplateFamily, summaryOf } from "./PlanTemplateFamily";
@@ -12,9 +12,16 @@ const TYPE_BY_SLUG: Record<string, PlanTemplateType> = {
   "full-plans": "combined",
 };
 
+function hubSlugFromPath(pathname: string): string {
+  const segment = pathname.split("/").filter(Boolean)[1];
+  return segment ?? "workouts";
+}
+
 export function PlanTemplateEditorPage() {
-  const { type = "workouts", templateId = "" } = useParams();
-  const templateType = TYPE_BY_SLUG[type] ?? "workout";
+  const { templateId = "" } = useParams();
+  const { pathname } = useLocation();
+  const hubSlug = hubSlugFromPath(pathname);
+  const templateType = TYPE_BY_SLUG[hubSlug] ?? "workout";
   const [template, setTemplate] = useState<PlanTemplate | null>(null);
   const [clients, setClients] = useState<ApplyClient[]>([]);
 
@@ -33,8 +40,19 @@ export function PlanTemplateEditorPage() {
   const summaries = template ? [summaryOf(template)] : [];
 
   return (
-    <section className="page templates-page plan-template-editor">
-      <Link to={`/templates/${type}`}>← {type.replace("-", " ")} templates</Link>
+    <section
+      className="page templates-page plan-template-editor"
+      data-testid={
+        templateType === "nutrition"
+          ? "screen-TW-14"
+          : templateType === "workout"
+            ? "screen-TW-13"
+            : "screen-TW-27"
+      }
+    >
+      <Link to={`/templates/${hubSlug}`}>
+        ← {hubSlug.replace("-", " ")} templates
+      </Link>
       <PlanTemplateFamily
         templateType={templateType}
         templates={summaries}

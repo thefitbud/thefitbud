@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }).format(new Date());
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-testid="screen-TW-03">
       <a className="skip-link" href="#main">
         Skip to content
       </a>

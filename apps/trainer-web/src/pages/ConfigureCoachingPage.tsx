@@ -465,7 +465,7 @@ export function ConfigureCoachingPage() {
       : [];
 
   return (
-    <div className="workspace-page plan-config-page">
+    <div className="workspace-page plan-config-page" data-testid="screen-TW-11">
       <div className="workspace-toolbar">
         <div>
           <p className="workspace-kicker">Client settings</p>

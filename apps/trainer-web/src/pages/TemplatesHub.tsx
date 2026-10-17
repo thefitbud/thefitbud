@@ -62,7 +62,7 @@ function TemplatesTabContent() {
   }
   if (type === "onboarding") {
     return (
-      <section className="page templates-page">
+      <section className="page templates-page" data-testid="screen-TW-24">
         <header className="page-header">
           <h1>Onboarding forms</h1>
           <p className="lede">Intake forms for new clients.</p>

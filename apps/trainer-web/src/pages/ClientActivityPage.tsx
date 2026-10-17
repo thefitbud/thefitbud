@@ -224,7 +224,7 @@ export function ClientActivityPage() {
   }
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page" data-testid="screen-TW-17">
       <div className="workspace-toolbar">
         <div>
           <p className="workspace-kicker">Execution</p>

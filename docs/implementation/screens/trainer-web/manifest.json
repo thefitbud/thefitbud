@@ -1,137 +1,202 @@
 {
-  "capturedAt": "2026-10-17T20:39:10.566Z",
-  "shots": [
-    [
-      "TW-02",
-      "/welcome"
-    ],
-    [
-      "TW-03",
-      "/"
-    ],
-    [
-      "TW-04",
-      "/"
-    ],
-    [
-      "TW-05",
-      "/"
-    ],
-    [
-      "TW-06",
-      "/clients"
-    ],
-    [
-      "TW-07",
-      "/clients/add"
-    ],
-    [
-      "TW-08",
-      "/clients"
-    ],
-    [
-      "TW-09",
-      "/clients"
-    ],
-    [
-      "TW-10",
-      "/"
-    ],
-    [
-      "TW-11",
-      "/"
-    ],
-    [
-      "TW-12",
-      "/"
-    ],
-    [
-      "TW-13",
-      "/templates/workouts"
-    ],
-    [
-      "TW-14",
-      "/templates/diets"
-    ],
-    [
-      "TW-15",
-      "/"
-    ],
-    [
-      "TW-16",
-      "/"
-    ],
-    [
-      "TW-17",
-      "/"
-    ],
-    [
-      "TW-18",
-      "/"
-    ],
-    [
-      "TW-19",
-      "/"
-    ],
-    [
-      "TW-20",
-      "/"
-    ],
-    [
-      "TW-21",
-      "/"
-    ],
-    [
-      "TW-22",
-      "/checkins"
-    ],
-    [
-      "TW-23",
-      "/templates/workouts"
-    ],
-    [
-      "TW-24",
-      "/templates/onboarding"
-    ],
-    [
-      "TW-25",
-      "/templates/checkins"
-    ],
-    [
-      "TW-26",
-      "/templates/libraries"
-    ],
-    [
-      "TW-27",
-      "/templates/workouts"
-    ],
-    [
-      "TW-28",
-      "/settings/profile"
-    ],
-    [
-      "TW-29",
-      "/settings/notifications"
-    ],
-    [
-      "TW-30",
-      "/"
-    ],
-    [
-      "TW-31",
-      "/"
-    ],
-    [
-      "TW-32",
-      "/"
-    ],
-    [
-      "TW-33",
-      "/not-a-real-route"
-    ],
-    [
-      "TW-34",
-      "/"
-    ]
+  "capturedAt": "2026-10-17T22:19:30.244Z",
+  "seed": {
+    "rohanRid": "c422296e-ed7b-4196-a2b4-647096af3002",
+    "activeRid": "6a68b615-c47c-4bfc-a7f8-550becf7878a",
+    "workspaceRid": "6a68b615-c47c-4bfc-a7f8-550becf7878a",
+    "kavyaRid": "b9f01670-8acc-45f6-adab-d7728bca88a6",
+    "snehaRid": "6a68b615-c47c-4bfc-a7f8-550becf7878a",
+    "meeraRid": "40248941-017c-48ea-b3df-7cc877c3533b",
+    "exceptionId": "3de674f0-01b5-48f9-9c45-3bbfb4756f06",
+    "inviteId": "06b54e81-016c-4220-a9a8-31195324669b",
+    "planEdit": {
+      "planId": "ebf326a2-1783-4792-8717-c82ab26ccf81",
+      "versionId": "c1ac8a6a-b055-4a9d-8faa-33f03a3d7c24",
+      "rid": "30e514e1-e3f4-4dac-ae4b-5f45e72c3df6"
+    },
+    "assignDraft": {
+      "planId": "ebf326a2-1783-4792-8717-c82ab26ccf81",
+      "versionId": "c1ac8a6a-b055-4a9d-8faa-33f03a3d7c24",
+      "rid": "30e514e1-e3f4-4dac-ae4b-5f45e72c3df6"
+    },
+    "planRid": "30e514e1-e3f4-4dac-ae4b-5f45e72c3df6",
+    "checkinId": "85cce5da-c7be-4131-85c1-1a9ee6a34bd9",
+    "checkinRid": "f2a64fdb-96ad-46f3-a95e-99151b4a25f1",
+    "templateId": "e1c7e062-9478-4378-949a-dfea84a7bfa8",
+    "dietTemplateId": "e1c7e062-9478-4378-949a-dfea84a7bfa8",
+    "combinedTemplateId": "e1c7e062-9478-4378-949a-dfea84a7bfa8",
+    "askId": "b532e1ca-7fea-4563-8d50-4468bc66f586"
+  },
+  "files": [
+    {
+      "id": "TW-01",
+      "bytes": 344161,
+      "sha256": "49b0eaa56a3640f42eb5c224430d956760148a2fa851706837312b0c147ad666"
+    },
+    {
+      "id": "TW-02",
+      "bytes": 60489,
+      "sha256": "9da3002c0bbeb6fd23a691279f29dc311b19e746ae3e14a0478ecb8857569c8f"
+    },
+    {
+      "id": "TW-03",
+      "bytes": 116147,
+      "sha256": "3107724c4d0e1d508ddc4e0343eb836058e006140869c01a4ba671c9caf4039d"
+    },
+    {
+      "id": "TW-04",
+      "bytes": 46222,
+      "sha256": "2f48e12083e680b9b53de13660caf4f5e53cdd309e1efaf1cfc5a54fd5d6f88f"
+    },
+    {
+      "id": "TW-05",
+      "bytes": 44056,
+      "sha256": "ee83bed40e345b72b2e5934960b1930f7056446625b85fe7513a9537481992ca"
+    },
+    {
+      "id": "TW-06",
+      "bytes": 61372,
+      "sha256": "cb2fb5247520c207f5bbfe3ef4fa4837c6146038e0506651d72ee94318d71e8d"
+    },
+    {
+      "id": "TW-07",
+      "bytes": 95544,
+      "sha256": "6ba4b613253c772ff3bfe707d1ee708c3efa5b252f348c5fa67b66d621ae5867"
+    },
+    {
+      "id": "TW-08",
+      "bytes": 53062,
+      "sha256": "870d6fe5bc78dfaa209e9593a0d64abf8d9ae2a085c4126d99f7bc842893caa0"
+    },
+    {
+      "id": "TW-09",
+      "bytes": 61727,
+      "sha256": "8ac8c4a641b5c4d0bfe4cfc1ee1f70ab633bdd90dfeea87df0a0a5c16ccc270a"
+    },
+    {
+      "id": "TW-10",
+      "bytes": 84565,
+      "sha256": "0f35230a02209110ce0bf76675b6906869cd0d23f3bf33c9003fb793d0766a4f"
+    },
+    {
+      "id": "TW-11",
+      "bytes": 206157,
+      "sha256": "d3b426713d194048b87e33c10b0317ad8bf18bb355f1ceca77bd032018bc92ca"
+    },
+    {
+      "id": "TW-12",
+      "bytes": 102104,
+      "sha256": "6160f38d9001a8448b26e6571ac7ee588e8a80d149058ea902c256bd1c9ef7c8"
+    },
+    {
+      "id": "TW-13",
+      "bytes": 93686,
+      "sha256": "91e361f66ce0db386ab2354af5ed2a5bd00c273f057c6c98c5c415c9f45d9dd1"
+    },
+    {
+      "id": "TW-14",
+      "bytes": 93175,
+      "sha256": "6a1b1d5bab0d5ffebe6706eae1cad7c93968a927852bd1d2b56a98844c411cac"
+    },
+    {
+      "id": "TW-15",
+      "bytes": 22186,
+      "sha256": "7cbed7ff3e69674f5de4923a709d0ca353f767d977fa9155beb8114c7b81ee0e"
+    },
+    {
+      "id": "TW-16",
+      "bytes": 134506,
+      "sha256": "b0db639f3ded4208bf645d27c4493879fcf1c3772b8e1eee6009fe2bcbf6f4fa"
+    },
+    {
+      "id": "TW-17",
+      "bytes": 115473,
+      "sha256": "dd2061ce0c11b1c84d7a36cd8539487fe10d1b41d905d76d04629640d4e6f2d5"
+    },
+    {
+      "id": "TW-18",
+      "bytes": 110821,
+      "sha256": "67270827c6ea1a3cf920cbdab5d6cb66a35f4bbf0f1eca6d4cff3f837b785800"
+    },
+    {
+      "id": "TW-19",
+      "bytes": 99219,
+      "sha256": "0d4d05974481d9c3ca0159bf61161950fc21925f057b79ac02cf9a43dfff96c1"
+    },
+    {
+      "id": "TW-20",
+      "bytes": 100688,
+      "sha256": "24eea3e37a88f80270ed0d4073c4a112edc517a82843f27e6e0065b1ca4261ec"
+    },
+    {
+      "id": "TW-21",
+      "bytes": 101522,
+      "sha256": "d6549a6f1eb77990b25ec4d432ea3c0832f8f9c43de7d26ecd795570c0c3b5b5"
+    },
+    {
+      "id": "TW-22",
+      "bytes": 52847,
+      "sha256": "5cc336ea9cdb90c9e2c6cdcb3870dcc67fda990d7a8ee0cbf937fdba1848e001"
+    },
+    {
+      "id": "TW-23",
+      "bytes": 61729,
+      "sha256": "73c4f3e4a5b1bd154fb207dfa08bfb5491876a45b1b92ad619ce4a0b5f15f548"
+    },
+    {
+      "id": "TW-24",
+      "bytes": 60536,
+      "sha256": "1df1d2848fab7d50fa3ba0c5998711ffae27795eb756dbf0f9233fc713d50aa0"
+    },
+    {
+      "id": "TW-25",
+      "bytes": 56387,
+      "sha256": "e36446a4151c11c697f15401b2b7703b6b4c625f0be6d4ce8418262b6a98ca59"
+    },
+    {
+      "id": "TW-26",
+      "bytes": 91138,
+      "sha256": "5680116cbfc0df8f7dae0974a92834123be103a2adbcfa2fe898d1be0c37624b"
+    },
+    {
+      "id": "TW-27",
+      "bytes": 93568,
+      "sha256": "374f405ab1ff410f43dfcc2cad2b9065f65d4f76ba20759b643a1752a4f9602a"
+    },
+    {
+      "id": "TW-28",
+      "bytes": 66575,
+      "sha256": "a52f1f969e0c78c6b17e1773bc5b8b8045e748a3f172f321f70c152c151c4282"
+    },
+    {
+      "id": "TW-29",
+      "bytes": 102458,
+      "sha256": "4405f7a8f2b33c4cd5e25434f620bd16556df491e469928a35a118c243248b9f"
+    },
+    {
+      "id": "TW-30",
+      "bytes": 66996,
+      "sha256": "9b5df96243df4d31f9c4e2c2d537dd41ef415ebe4585f993098c590aad87b713"
+    },
+    {
+      "id": "TW-31",
+      "bytes": 55896,
+      "sha256": "e4a8c9fe51adb0d6d3b77181826c3c4bfef4dea88f01003d815e7f87724a4883"
+    },
+    {
+      "id": "TW-32",
+      "bytes": 47035,
+      "sha256": "dcd84de61eeab3ff639b0206d377cbd30d98b2b69cd146e742eaaf3358ba3dfa"
+    },
+    {
+      "id": "TW-33",
+      "bytes": 15824,
+      "sha256": "e0b1ed58e99a706d23831e6f3641f86230aafcab18bb4f45fd7d6743634f53e2"
+    },
+    {
+      "id": "TW-34",
+      "bytes": 63985,
+      "sha256": "4d1d930e99c8cbf268017b82518f38318d079ec123e43f2f3dd34e72880f2310"
+    }
   ]
 }

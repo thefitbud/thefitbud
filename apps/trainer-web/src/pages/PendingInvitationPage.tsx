@@ -79,7 +79,7 @@ export function PendingInvitationPage() {
       : null;
 
   return (
-    <section className="page">
+    <section className="page" data-testid="screen-TW-08">
       <header className="page-header">
         <p className="eyebrow">
           <Link to="/clients">Clients</Link> / Invitation

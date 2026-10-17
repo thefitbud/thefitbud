@@ -51,7 +51,7 @@ export function SignInPage() {
   }
 
   return (
-    <AuthLayout title="Welcome back, coach">
+    <AuthLayout title="Welcome back, coach" screenTestId="screen-TW-01">
       {!online ? (
         <p className="offline-inline" role="status">
           You&apos;re offline. Connect to sign in.

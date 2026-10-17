@@ -128,6 +128,7 @@ export function ExceptionDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Exception review"
+        data-testid="screen-TW-05"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="drawer-head">

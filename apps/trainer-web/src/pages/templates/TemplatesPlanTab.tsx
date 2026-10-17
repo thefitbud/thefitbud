@@ -70,7 +70,7 @@ export function TemplatesPlanTab({
   const label = templateTypeLabel(templateType);
 
   return (
-    <section className="page templates-page">
+    <section className="page templates-page" data-testid="screen-TW-23">
       <header className="page-header templates-hero">
         <div>
           <h1>{label} templates</h1>

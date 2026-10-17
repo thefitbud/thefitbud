@@ -119,7 +119,7 @@ export function ClientProgressPage() {
   );
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page" data-testid="screen-TW-18">
       <section className="workspace-card">
         <p className="workspace-kicker">Stored series</p>
         <h2 className="workspace-card-title">Progress</h2>

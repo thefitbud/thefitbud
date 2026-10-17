@@ -134,7 +134,7 @@ export function ClientHistoryPage() {
   const filtersActive = Boolean(kind || occurredFrom || occurredTo);
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page" data-testid="screen-TW-21">
       {error ? (
         <p className="form-error" role="alert">
           {error}

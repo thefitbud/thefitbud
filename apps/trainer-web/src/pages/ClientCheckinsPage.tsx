@@ -102,7 +102,7 @@ export function ClientCheckinsPage() {
   }
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page" data-testid="screen-TW-19">
       {error ? (
         <p className="form-error" role="alert">
           {error}

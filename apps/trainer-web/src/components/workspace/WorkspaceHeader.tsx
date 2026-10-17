@@ -108,7 +108,7 @@ export function WorkspaceHeader({
   return (
     <header className="workspace-identity workspace-header-v2">
       {ended ? (
-        <p className="banner-neutral" role="status">
+        <p className="banner-neutral" role="status" data-testid="screen-TW-30">
           Coaching ended. This workspace is read-only except reactivation.
         </p>
       ) : null}

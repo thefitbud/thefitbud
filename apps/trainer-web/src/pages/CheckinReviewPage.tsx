@@ -175,7 +175,7 @@ export function CheckinReviewPage() {
   }
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page" data-testid="screen-TW-20">
       <div className="workspace-toolbar">
         <div>
           <p className="workspace-kicker">Check-in</p>

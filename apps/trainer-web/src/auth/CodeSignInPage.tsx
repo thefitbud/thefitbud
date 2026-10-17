@@ -4,6 +4,7 @@ import { AuthFlowError, useAuth } from "./AuthProvider";
 import { AuthLayout } from "./AuthLayout";
 import { useConfig, isWhatsAppOtpEnabled } from "../lib/config";
 import { fetchDevMailCode } from "../lib/auth-flow";
+import { startOtp } from "../lib/otp-api";
 import { stage1Api } from "../lib/stage1-api";
 import { useOnline } from "../hooks/useOnline";
 
@@ -42,7 +43,7 @@ export function CodeSignInPage() {
     setError(null);
     setMessage(null);
     try {
-      await stage1Api.startOtp({
+      await startOtp({
         identifier: identifier.trim(),
         purpose: "login",
       });

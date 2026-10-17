@@ -57,7 +57,7 @@ export function ProfileSettingsPage() {
   }
 
   return (
-    <div className="settings-panel stack-lg">
+    <div className="settings-panel stack-lg" data-testid="screen-TW-28">
       <form className="stack-form" onSubmit={saveProfile}>
         <h2>Coaching profile</h2>
         <label className="field">

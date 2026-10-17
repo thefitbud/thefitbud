@@ -88,7 +88,7 @@ export function AssignPlanModal({
 
   return (
     <div className="drawer-backdrop" role="presentation">
-      <dialog className="modal-card modal-wide" open>
+      <dialog className="modal-card modal-wide" open data-testid="screen-TW-16">
         <h2>Publish & schedule</h2>
         {traineeTimezone ? (
           <p className="muted">Dates use client time · {traineeTimezone}</p>

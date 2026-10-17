@@ -60,7 +60,7 @@ export function CheckinTemplatesPanel() {
   }
 
   return (
-    <section className="page templates-page">
+    <section className="page templates-page" data-testid="screen-TW-25">
       <header className="page-header">
         <h1>Check-in forms</h1>
         <p className="lede">

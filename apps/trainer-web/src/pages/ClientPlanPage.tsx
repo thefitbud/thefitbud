@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   planVersionStatusSchema,
@@ -13,6 +13,7 @@ import {
 } from "@fitbud/contracts";
 import { consistencyFingerprint, planConsistencyWarnings } from "@fitbud/core";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
+import { AssignPlanModal } from "../components/plan/AssignPlanModal";
 import {
   PlanCompositionEditor,
   clonePlanContent,
@@ -97,6 +98,7 @@ function isDirty(draft: DraftSession): boolean {
 
 export function ClientPlanPage() {
   const { relationshipId = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const {
     workspace,
     workspaceLoading,
@@ -120,6 +122,25 @@ export function ClientPlanPage() {
   const [acknowledgedFingerprint, setAcknowledgedFingerprint] = useState<string | null>(
     null,
   );
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<{
+    planId: string;
+    versionId: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("assign") !== "1" || !relationshipId) return;
+    void apiClient.listPlans(relationshipId, { limit: 20 }).then((res) => {
+      for (const row of res.items) {
+        const draft = row.versions.find((v) => v.status === "draft");
+        if (draft) {
+          setAssignTarget({ planId: row.plan.id, versionId: draft.id });
+          setShowAssignModal(true);
+          return;
+        }
+      }
+    });
+  }, [relationshipId, searchParams]);
 
   const loadTemplates = useCallback(async () => {
     setError(null);
@@ -478,7 +499,7 @@ export function ClientPlanPage() {
   }, [consistencyPlanId, consistencyVersionId]);
 
   return (
-    <div className="plan-page">
+    <div className="plan-page" data-testid="screen-TW-12">
       {error ? (
         <p className="form-error" role="alert">
           {error}
@@ -854,6 +875,18 @@ export function ClientPlanPage() {
           </form>
         </section>
       )}
+      {showAssignModal && assignTarget ? (
+        <AssignPlanModal
+          planId={assignTarget.planId}
+          versionId={assignTarget.versionId}
+          traineeTimezone={workspace?.header.traineeTimezone}
+          onClose={() => setShowAssignModal(false)}
+          onAssigned={() => {
+            setShowAssignModal(false);
+            reloadWorkspace();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -918,7 +951,7 @@ function PlanVersionList({
   const filtersActive = Boolean(versionStatus || effectiveFrom || effectiveTo);
 
   return (
-    <section className="plan-card plan-versions" aria-labelledby="plan-versions-heading">
+    <section className="plan-card plan-versions" aria-labelledby="plan-versions-heading" data-testid="screen-TW-15">
       <div className="plan-card-head">
         <div>
           <p className="plan-kicker">Versions</p>

@@ -29,7 +29,7 @@ export function EndedClientsSettingsPage() {
   }, []);
 
   return (
-    <div className="settings-panel">
+    <div className="settings-panel" data-testid="screen-TW-30">
       <h2>Ended clients</h2>
       <p className="muted">
         Coaching you ended stays read-only until you reactivate with the same client.
