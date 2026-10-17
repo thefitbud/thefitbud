@@ -23,3 +23,18 @@ export const updateTraineeProfileRequestSchema = z.object({
 export type UpdateTraineeProfileRequest = z.infer<
   typeof updateTraineeProfileRequestSchema
 >;
+
+export const trainerProfileSchema = z.object({
+  displayName: z.string().min(1).max(120),
+  whatsappE164: z.string().min(10).max(16).nullable(),
+});
+export type TrainerProfile = z.infer<typeof trainerProfileSchema>;
+
+export const updateTrainerProfileRequestSchema = z.object({
+  displayName: z.string().trim().min(1).max(120),
+  whatsappE164: z.string().trim().min(8).max(20).optional().nullable(),
+  timezone: z.string().min(1).max(64),
+});
+export type UpdateTrainerProfileRequest = z.infer<
+  typeof updateTrainerProfileRequestSchema
+>;

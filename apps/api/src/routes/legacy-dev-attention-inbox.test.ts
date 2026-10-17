@@ -1,40 +1,17 @@
-import initSqlJs from "sql.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 import { afterEach, describe, expect, it } from "vitest";
 import { GLOBAL_CHECKIN_FORM_VERSION_ID } from "@fitbud/core";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
-import { setTestDbOverride, type Db } from "../db/client.js";
+import { setTestDbOverride } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
-import { drizzle } from "drizzle-orm/sql-js";
+import { createMemoryDb } from "../test-support/memory-db.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
-
-const MIGRATIONS_THROUGH_0018 = [
-  "0000_identity.sql",
-  "0001_relationship_onboarding.sql",
-  "0012_invitation_whatsapp.sql",
-  "0002_coaching_configuration.sql",
-  "0003_plans.sql",
-  "0004_workouts.sql",
-  "0005_meals.sql",
-  "0006_checkins.sql",
-  "0007_exceptions.sql",
-  "0008_progress_media.sql",
-  "0009_sync.sql",
-  "0010_notifications.sql",
-  "0013_domain_contracts.sql",
-  "0014_onboarding_form_templates.sql",
-  "0011_templates_libraries.sql",
-  "0015_iteration_a.sql",
-  "0016_food_exercise_libraries.sql",
-  "0017_plan_template_ownership.sql",
-  "0018_assignment_schedule_status.sql",
-];
 
 const TRAINER_ID = "11111111-1111-4111-8111-111111111111";
 const TRAINEE_ID = "22222222-2222-4222-8222-222222222222";
@@ -102,12 +79,11 @@ describe("legacy dev rows after check-in form and exception severity migrations"
   });
 
   it("serves attention and check-in inbox for rows shaped like the local dev database", async () => {
-    const SQL = await initSqlJs();
-    const sqlite = new SQL.Database();
-    closeDb = () => sqlite.close();
-    for (const file of MIGRATIONS_THROUGH_0018) {
-      sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-    }
+    const handle = await createMemoryDb({
+      through: "0018_assignment_schedule_status.sql",
+    });
+    closeDb = handle.close;
+    const sqlite = handle.sqlite;
 
     const answers = JSON.stringify({
       wellbeing: "Energy is good and I am sleeping about seven hours.",
@@ -193,8 +169,7 @@ describe("legacy dev rows after check-in form and exception severity migrations"
       [MISSED_WORKOUT_EXCEPTION_ID, RELATIONSHIP_ID, WORKOUT_SOURCE_ID, mealDetails],
     );
 
-    sqlite.exec(readFileSync(join(drizzleDir, "0019_checkin_form_templates.sql"), "utf8"));
-    sqlite.exec(readFileSync(join(drizzleDir, "0020_exception_severity.sql"), "utf8"));
+    handle.applyMigrationsFrom("0019_checkin_form_templates.sql");
 
     const pinned = sqlite.exec(
       `SELECT checkin_form_version_id FROM checkins WHERE id = '${SUBMITTED_CHECKIN_ID}'`,
@@ -208,8 +183,7 @@ describe("legacy dev rows after check-in form and exception severity migrations"
       ["overdue_checkin", "attention"],
     ]);
 
-    const db = drizzle(sqlite, { schema }) as unknown as Db;
-    setTestDbOverride(db);
+    setTestDbOverride(handle.db);
 
     const token = createTestIdToken(`trainer-${TRAINER_EMAIL}`, TRAINER_EMAIL);
     const sessionResponse = await app.request(

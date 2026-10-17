@@ -27,6 +27,11 @@ import {
   mapExerciseLibraryItem,
   mapFoodLibraryItem,
 } from "../domain/mappers";
+import { buildFtsPrefixQuery, foodFtsMatchClause } from "../domain/library-search.js";
+import {
+  rebuildExerciseSearchFts,
+  rebuildFoodSearchFts,
+} from "../domain/library-fts.js";
 import { createId, nowIso } from "../lib/crypto";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";
@@ -301,6 +306,7 @@ libraryRoutes.post(
       createdAt: now,
       updatedAt: now,
     });
+    await rebuildExerciseSearchFts(db, id);
 
     const [row] = await db
       .select()
@@ -512,11 +518,12 @@ libraryRoutes.get(
         eq(foodLibraryItems.trainerUserId, actor.userId),
       ),
     );
+    const ftsQuery = q && q.length >= 2 ? buildFtsPrefixQuery(q) : null;
     const filters = [
       ownershipFilter,
       eq(foodLibraryItems.status, "active"),
-      q ? nameContains(foodLibraryItems.name, q) : undefined,
-      cursor
+      ftsQuery ? foodFtsMatchClause(ftsQuery) : q ? nameContains(foodLibraryItems.name, q) : undefined,
+      !ftsQuery && cursor
         ? or(
             gt(foodLibraryItems.name, cursor.k),
             and(
@@ -527,12 +534,42 @@ libraryRoutes.get(
         : undefined,
     ].filter((filter): filter is SQL => Boolean(filter));
 
-    const rows = await db
-      .select()
-      .from(foodLibraryItems)
-      .where(and(...filters))
-      .orderBy(foodLibraryItems.name, foodLibraryItems.id)
-      .limit(limit + 1);
+    let rows: (typeof foodLibraryItems.$inferSelect)[] = [];
+    if (ftsQuery) {
+      rows = await db
+        .select({ item: foodLibraryItems })
+        .from(foodLibraryItems)
+        .innerJoin(
+          sql`food_search_fts`,
+          sql`food_search_fts.food_id = ${foodLibraryItems.id}`,
+        )
+        .where(and(...filters))
+        .orderBy(sql`bm25(food_search_fts, 0, 10, 4, 1)`)
+        .limit(limit + 1)
+        .then((joined) => joined.map((row) => row.item));
+    }
+    if (!ftsQuery || rows.length === 0) {
+      const likeFilters = [
+        ownershipFilter,
+        eq(foodLibraryItems.status, "active"),
+        q ? nameContains(foodLibraryItems.name, q) : undefined,
+        cursor
+          ? or(
+              gt(foodLibraryItems.name, cursor.k),
+              and(
+                eq(foodLibraryItems.name, cursor.k),
+                gt(foodLibraryItems.id, cursor.id),
+              ),
+            )
+          : undefined,
+      ].filter((filter): filter is SQL => Boolean(filter));
+      rows = await db
+        .select()
+        .from(foodLibraryItems)
+        .where(and(...likeFilters))
+        .orderBy(foodLibraryItems.name, foodLibraryItems.id)
+        .limit(limit + 1);
+    }
     const servings = await servingsByFoodId(
       db,
       rows.map((row) => row.id),
@@ -602,6 +639,7 @@ libraryRoutes.post(
       updatedAt: now,
     });
     await insertServings(db, id, parsed.data.servings, now);
+    await rebuildFoodSearchFts(db, id);
 
     const [row] = await db
       .select()
@@ -694,6 +732,7 @@ libraryRoutes.put(
         updatedAt: now,
       })
       .where(eq(foodLibraryItems.id, itemId));
+    await rebuildFoodSearchFts(db, itemId);
     await db
       .delete(foodLibraryServings)
       .where(eq(foodLibraryServings.foodLibraryItemId, itemId));
@@ -766,6 +805,7 @@ libraryRoutes.delete(
       .update(foodLibraryItems)
       .set({ status: "archived", updatedAt: nowIso() })
       .where(eq(foodLibraryItems.id, itemId));
+    await rebuildFoodSearchFts(db, itemId);
     const [updated] = await db
       .select()
       .from(foodLibraryItems)

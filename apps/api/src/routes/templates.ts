@@ -92,10 +92,16 @@ templateRoutes.get(
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
     const db = createDb(c.env.DB);
 
-    const visibleToActor = or(
-      eq(planTemplates.ownership, "global"),
-      eq(planTemplates.trainerUserId, actor.userId),
-    );
+    const scope = c.req.query("scope") ?? "all";
+    const visibleToActor =
+      scope === "bases"
+        ? eq(planTemplates.ownership, "global")
+        : scope === "mine"
+          ? eq(planTemplates.trainerUserId, actor.userId)
+          : or(
+              eq(planTemplates.ownership, "global"),
+              eq(planTemplates.trainerUserId, actor.userId),
+            );
     const rows = await db
       .select()
       .from(planTemplates)

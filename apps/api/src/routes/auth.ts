@@ -5,7 +5,12 @@ import {
   updateTraineeProfileRequestSchema,
 } from "@fitbud/contracts";
 import { deriveAge, formatLocalDate } from "@fitbud/core";
-import { traineeProfiles } from "../db/schema";
+import {
+  traineeProfiles,
+  trainerProfiles,
+  userIdentities,
+  users,
+} from "../db/schema";
 import {
   operation,
 } from "../openapi/document";
@@ -15,7 +20,10 @@ import {
   createWebSessionRequestSchema,
   meResponseSchema,
   createWebSessionResponseSchema,
+  updateTrainerProfileRequestSchema,
+  trainerProfileSchema,
 } from "@fitbud/contracts";
+import { normalizeWhatsappE164 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import { verifyFirebaseIdToken } from "../auth/firebase";
 import {
@@ -34,7 +42,15 @@ import {
 } from "../middleware/auth";
 import type { Env, Variables } from "../types";
 
+import { authLoginRoutes } from "./auth-login.js";
+import { meFoodRoutes } from "./me-foods.js";
+import { meCoachNoteRoutes } from "./me-coach-notes.js";
+import { meDayRoutes } from "./me-day.js";
+import { meMealTimeRoutes } from "./me-meal-times.js";
+
 export const authRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+authRoutes.route("/", authLoginRoutes);
 
 authRoutes.post("/session", 
   operation({
@@ -129,6 +145,11 @@ authRoutes.delete("/session",
 
 export const meRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+meRoutes.route("/foods", meFoodRoutes);
+meRoutes.route("/coach-notes", meCoachNoteRoutes);
+meRoutes.route("/meal-times", meMealTimeRoutes);
+meRoutes.route("/", meDayRoutes);
+
 meRoutes.get("/", 
   operation({
     tag: "Auth",
@@ -142,20 +163,121 @@ meRoutes.get("/",
     return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
   }
 
+  const db = createDb(c.env.DB);
+  const [identity] = await db
+    .select()
+    .from(userIdentities)
+    .where(eq(userIdentities.userId, actor.userId))
+    .limit(1);
+  let trainerProfile: { displayName: string; whatsappE164: string | null } | null =
+    null;
+  if (actor.trainerProfileId) {
+    const [profile] = await db
+      .select()
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.id, actor.trainerProfileId))
+      .limit(1);
+    if (profile) {
+      trainerProfile = {
+        displayName: profile.displayName,
+        whatsappE164: profile.whatsappE164,
+      };
+    }
+  }
+
   const data = meResponseSchema.parse({
     userId: actor.userId,
     firebaseUid: actor.firebaseUid,
     accountState: actor.accountState,
     timezone: actor.timezone,
+    email: identity?.email ?? null,
     permittedRoles: actor.permittedRoles,
     selectedRole: actor.selectedRole,
     surface: actor.surface,
     trainerProfileId: actor.trainerProfileId,
     traineeProfileId: actor.traineeProfileId,
+    trainerProfile,
   });
 
   return ok(c, data);
 });
+
+function isValidIanaTimezone(zone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+meRoutes.put(
+  "/trainer-profile",
+  operation({
+    tag: "Auth",
+    summary: "Update trainer profile",
+    description: "Updates display name, WhatsApp, and timezone for the trainer.",
+    roles: ["trainer"],
+    body: updateTrainerProfileRequestSchema,
+    response: trainerProfileSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = updateTrainerProfileRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid trainer profile.", {
+        issues: parsed.error.issues,
+      });
+    }
+    if (!isValidIanaTimezone(parsed.data.timezone)) {
+      return fail(c, 400, "INVALID_TIMEZONE", "Timezone is not a valid IANA zone.");
+    }
+    let whatsappE164: string | null = null;
+    if (parsed.data.whatsappE164) {
+      const digits = normalizeWhatsappE164(parsed.data.whatsappE164);
+      if (!digits) {
+        return fail(c, 400, "INVALID_REQUEST", "WhatsApp number is not valid E.164.");
+      }
+      whatsappE164 = `+${digits}`;
+    }
+    const db = createDb(c.env.DB);
+    const [profile] = await db
+      .select()
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, actor.userId))
+      .limit(1);
+    if (!profile) {
+      return fail(c, 404, "TRAINER_PROFILE_NOT_FOUND", "Trainer profile not found.");
+    }
+    const updatedAt = nowIso();
+    await db
+      .update(trainerProfiles)
+      .set({
+        displayName: parsed.data.displayName,
+        whatsappE164,
+        updatedAt,
+      })
+      .where(eq(trainerProfiles.id, profile.id));
+    await db
+      .update(users)
+      .set({ timezone: parsed.data.timezone, updatedAt })
+      .where(eq(users.id, actor.userId));
+    return ok(
+      c,
+      trainerProfileSchema.parse({
+        displayName: parsed.data.displayName,
+        whatsappE164,
+      }),
+    );
+  },
+);
 
 meRoutes.get(
   "/trainee-profile",

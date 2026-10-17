@@ -1,4 +1,11 @@
 export {
+  DEFAULT_FEATURE_FLAGS,
+  FEATURE_FLAG_KEYS,
+  envFlagOverride,
+  type FeatureFlagKey,
+} from "./config.js";
+
+export {
   isRolePermittedOnSurface,
   resolveSelectedRole,
   rolesAllowedForSurface,
@@ -197,11 +204,19 @@ export {
 
 export {
   ACTIVITY_NUDGE_HOURLY_LIMIT,
-  DAILY_SUMMARY_LOCAL_TIME,
+  ACTIVITY_NUDGE_ITEM_COOLDOWN_HOURS,
+  DAILY_PUSH_CAP,
+  DAILY_SUMMARY_CAP_LOCAL_TIME,
+  DEFAULT_QUIET_HOURS_END,
+  DEFAULT_QUIET_HOURS_START,
   DEFAULT_REMINDER_TYPES,
-  MEAL_REMINDER_ADVANCE_MINUTES,
-  MEAL_REMINDER_FOLLOW_UP_MINUTES,
-  WORKOUT_REMINDER_LOCAL_TIMES,
+  HARD_STOP_LOCAL_TIME,
+  MEAL_REMINDER_AFTER_MINUTES,
+  MEAL_REMINDER_SNOOZE_MINUTES,
+  REMINDER_MERGE_WINDOW_MINUTES,
+  WORKOUT_FALLBACK_ANCHOR,
+  WORKOUT_REMINDER_OFFSET_MINUTES,
+  WORKOUT_REMINDER_SLOT,
   activityNudgeDedupeKey,
   addMinutesToLocalClock,
   buildSafePushPayload,
@@ -254,3 +269,8 @@ export {
 } from "./adherence.js";
 
 export { deriveAge } from "./profile.js";
+
+export { formatTimeDiff } from "./format.js";
+export { routeForLinkKind, type LinkKind } from "./links.js";
+export { canLog, type LogDecision } from "./late-logging.js";
+export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";

@@ -13,6 +13,8 @@ import {
   notificationSchema,
   nudgeActivityRequestSchema,
   nudgeActivityResponseSchema,
+  reengagementCandidatesResponseSchema,
+  responsivenessResponseSchema,
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
   reminderRulesResponseSchema,
@@ -43,6 +45,7 @@ import {
 } from "../domain/reminders";
 import { createId, nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -613,8 +616,15 @@ notificationRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const writableNudge = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableNudge.ok) return writableNudge.response;
     const result = await createActivityNudge(db, {
       relationshipId: relationship.id,
+      trainerUserId: actor.userId,
       activityType: parsed.data.activityType,
       activityId: parsed.data.activityId,
       queue: reminderQueueFromEnv(c.env),
@@ -623,7 +633,7 @@ notificationRoutes.post(
     });
     if (!result.ok) {
       const status =
-        result.code === "NUDGE_RATE_LIMITED"
+        result.code === "NUDGE_LIMIT" || result.code === "NUDGE_RATE_LIMITED"
           ? 429
           : result.code === "ACTIVITY_NOT_FOUND" ||
               result.code === "RELATIONSHIP_NOT_FOUND"
@@ -634,10 +644,13 @@ notificationRoutes.post(
           ? "Ended relationships do not send nudges."
           : result.code === "ACTIVITY_RESOLVED"
             ? "This activity is already resolved."
-            : result.code === "NUDGE_RATE_LIMITED"
-              ? "At most three nudges can be sent for this client in an hour."
+            : result.code === "NUDGE_LIMIT" ||
+                result.code === "NUDGE_RATE_LIMITED"
+              ? "Nudge limit reached for this client or activity."
               : "Activity not found.";
-      return fail(c, status, result.code, message);
+      return fail(c, status, result.code, message, {
+        retryAfter: "retryAfter" in result ? result.retryAfter : undefined,
+      });
     }
     return ok(
       c,
@@ -646,5 +659,78 @@ notificationRoutes.post(
         deduped: result.deduped,
       }),
     );
+  },
+);
+
+notificationRoutes.get(
+  "/relationships/:relationshipId/responsiveness",
+  operation({
+    tag: "Notifications",
+    summary: "Responsiveness label for one client",
+    description: "Returns a single responsiveness label and counts for the client.",
+    roles: ["trainer"],
+    response: responsivenessResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const days = Math.min(
+      Math.max(Number(c.req.query("days") ?? "14") || 14, 1),
+      90,
+    );
+    const { deriveResponsiveness } = await import("../domain/responsiveness.js");
+    const body = await deriveResponsiveness(db, {
+      relationshipId: relationship.id,
+      days,
+      nowIso: nowIso(),
+    });
+    return ok(c, responsivenessResponseSchema.parse(body));
+  },
+);
+
+notificationRoutes.get(
+  "/reengagement-candidates",
+  operation({
+    tag: "Notifications",
+    summary: "Clients eligible for trainer re-engagement via WhatsApp",
+    description: "Lists trainees with no recent logs and several unanswered reminders.",
+    roles: ["trainer"],
+    response: reengagementCandidatesResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const rels = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.trainerUserId, actor.userId));
+    const { deriveReengagementCandidates } = await import(
+      "../domain/responsiveness.js"
+    );
+    const items = await deriveReengagementCandidates(db, {
+      relationships: rels,
+      nowIso: nowIso(),
+    });
+    return ok(c, reengagementCandidatesResponseSchema.parse({ items }));
   },
 );

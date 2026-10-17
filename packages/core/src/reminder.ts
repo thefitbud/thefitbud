@@ -13,19 +13,23 @@ import { deriveCheckinStatus } from "./checkin.js";
 import { addDaysToLocalDate, isQualifyingWorkoutExecution } from "./workout.js";
 import { formatLocalDate, localDateTimeToUtcIso } from "./timezone.js";
 
-/**
- * System reminder clocks. Trainers enable or disable types.
- * They do not set these times.
- */
-export const MEAL_REMINDER_ADVANCE_MINUTES = 45;
-export const MEAL_REMINDER_FOLLOW_UP_MINUTES = [30, 60] as const;
-export const WORKOUT_REMINDER_LOCAL_TIMES = ["06:00", "18:00"] as const;
-export const DAILY_SUMMARY_LOCAL_TIME = "21:00";
+/** Reminder engine v2 (§3.6) — system clocks; trainers only enable categories. */
+export const WORKOUT_REMINDER_OFFSET_MINUTES = 75;
+export const WORKOUT_FALLBACK_ANCHOR = "18:00";
+export const MEAL_REMINDER_AFTER_MINUTES = 40;
+export const MEAL_REMINDER_SNOOZE_MINUTES = 30;
+export const DAILY_SUMMARY_CAP_LOCAL_TIME = "21:30";
+export const HARD_STOP_LOCAL_TIME = "22:00";
+export const DEFAULT_QUIET_HOURS_START = "22:00";
+export const DEFAULT_QUIET_HOURS_END = "07:00";
+export const DAILY_PUSH_CAP = 5;
+export const REMINDER_MERGE_WINDOW_MINUTES = 30;
 export const ACTIVITY_NUDGE_HOURLY_LIMIT = 3;
+export const ACTIVITY_NUDGE_ITEM_COOLDOWN_HOURS = 4;
 
-export type MealReminderPhase = "advance" | "follow_up_30" | "follow_up_60";
-export type WorkoutReminderLocalTime =
-  (typeof WORKOUT_REMINDER_LOCAL_TIMES)[number];
+export type MealReminderPhase = "after" | "snooze";
+export type WorkoutReminderLocalTime = "primary";
+export const WORKOUT_REMINDER_SLOT: WorkoutReminderLocalTime = "primary";
 export type ReminderDeliveryDecision = "deliver" | "defer" | "suppress";
 export type NudgeActivityType = "workout" | "meal" | "checkin";
 
@@ -110,10 +114,22 @@ export function domainEntityTypeForReminder(
       return "coaching_relationship";
     case "activity_nudge":
       return domainEntityTypeForActivity(activityType ?? "checkin");
-    default: {
-      const _exhaustive: never = type;
-      return _exhaustive;
-    }
+    case "checkin_reviewed":
+      return "checkin";
+    case "plan_published":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return "coaching_relationship";
   }
 }
 
@@ -174,10 +190,21 @@ export function reminderPreferenceForNotification(input: {
       if (input.domainEntityType === "meal_assignment") return "meal_reminder";
       if (input.domainEntityType === "checkin") return "checkin_reminder";
       return null;
-    default: {
-      const _exhaustive: never = input.notificationType;
-      return _exhaustive;
-    }
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return null;
   }
 }
 
@@ -268,9 +295,8 @@ export function localClockToUtcIso(input: {
 }
 
 /**
- * Timed meals: one advance before localTime, then follow-ups while unlogged.
- * A meal with no localTime has no clock reminder. New slots stop at the
- * confirmation window; a quiet-hours deferral can still be delivered later.
+ * Timed meals: one reminder MEAL_REMINDER_AFTER_MINUTES after the slot time.
+ * Meals without a local time have no clock reminder.
  */
 export function dueMealReminderPhases(input: {
   nowIso: string;
@@ -281,61 +307,66 @@ export function dueMealReminderPhases(input: {
   windowEndsAt: string;
 }): MealReminderPhase[] {
   if (input.logged || !input.localTime) return [];
-  const mealClock = {
+  const afterClock = addMinutesToLocalClock({
     localDate: input.localDate,
     localTime: input.localTime,
-  };
-  const phases: MealReminderPhase[] = [];
-  const advanceClock = addMinutesToLocalClock({
-    ...mealClock,
-    deltaMinutes: -MEAL_REMINDER_ADVANCE_MINUTES,
+    deltaMinutes: MEAL_REMINDER_AFTER_MINUTES,
   });
-  const mealAt = localClockToUtcIso({
-    ...mealClock,
+  const afterAt = localClockToUtcIso({
+    ...afterClock,
     timeZone: input.timeZone,
   });
-  const advanceAt = localClockToUtcIso({
-    ...advanceClock,
-    timeZone: input.timeZone,
-  });
-  if (input.nowIso >= advanceAt && input.nowIso < mealAt) {
-    phases.push("advance");
+  if (input.nowIso >= afterAt && input.nowIso <= input.windowEndsAt) {
+    return ["after"];
   }
-  for (const minutes of MEAL_REMINDER_FOLLOW_UP_MINUTES) {
-    const clock = addMinutesToLocalClock({
-      ...mealClock,
-      deltaMinutes: minutes,
-    });
-    const at = localClockToUtcIso({ ...clock, timeZone: input.timeZone });
-    if (input.nowIso >= at && input.nowIso <= input.windowEndsAt) {
-      phases.push(minutes === 30 ? "follow_up_30" : "follow_up_60");
-    }
-  }
-  return phases;
+  return [];
 }
 
-/** Unlogged workout on its local date, at or after 06:00 and 18:00. */
+/** Workout reminder WORKOUT_REMINDER_OFFSET_MINUTES before the anchor start time. */
 export function dueWorkoutReminderTimes(input: {
   nowIso: string;
   assignmentLocalDate: string;
   timeZone: string;
   resolved: boolean;
+  workoutStartLocalTime?: string | null;
 }): WorkoutReminderLocalTime[] {
   if (input.resolved) return [];
   const today = formatLocalDate(new Date(input.nowIso), input.timeZone);
   if (today !== input.assignmentLocalDate) return [];
-  const local = localTimeHhMm(input.nowIso, input.timeZone);
-  if (!local) return [];
-  return WORKOUT_REMINDER_LOCAL_TIMES.filter((slot) => local >= slot);
+  const anchor = input.workoutStartLocalTime ?? WORKOUT_FALLBACK_ANCHOR;
+  const reminderClock = addMinutesToLocalClock({
+    localDate: input.assignmentLocalDate,
+    localTime: anchor,
+    deltaMinutes: -WORKOUT_REMINDER_OFFSET_MINUTES,
+  });
+  const reminderAt = localClockToUtcIso({
+    ...reminderClock,
+    timeZone: input.timeZone,
+  });
+  if (input.nowIso >= reminderAt) {
+    return [WORKOUT_REMINDER_SLOT];
+  }
+  return [];
 }
 
-/** Final daily summary once the trainee-local clock reaches 21:00. */
+/** End-of-day summary at min(lastMeal+60, 21:30) trainee-local. */
 export function isDailySummaryClockDue(input: {
   nowIso: string;
   timeZone: string;
+  lastMealLocalTime?: string | null;
 }): boolean {
   const local = localTimeHhMm(input.nowIso, input.timeZone);
-  return local !== null && local >= DAILY_SUMMARY_LOCAL_TIME;
+  if (local === null) return false;
+  let target = DAILY_SUMMARY_CAP_LOCAL_TIME;
+  if (input.lastMealLocalTime) {
+    const plus60 = addMinutesToLocalClock({
+      localDate: formatLocalDate(new Date(input.nowIso), input.timeZone),
+      localTime: input.lastMealLocalTime,
+      deltaMinutes: 60,
+    }).localTime;
+    target = plus60 < DAILY_SUMMARY_CAP_LOCAL_TIME ? plus60 : DAILY_SUMMARY_CAP_LOCAL_TIME;
+  }
+  return local >= target;
 }
 
 /** Check-in reminder when due or overdue and not yet submitted. */
@@ -416,7 +447,7 @@ export function isWithinQuietHours(input: {
   const current = input.localTimeHhMm;
   const start = input.quietHoursStart;
   const end = input.quietHoursEnd;
-  if (start === end) return true;
+  if (start === end) return false;
   if (start < end) {
     return current >= start && current < end;
   }
@@ -506,9 +537,20 @@ export function routeTargetFromPushPayload(payload: PushPayload): {
         return { tab: "diet", ...target };
       }
       return { tab: "today", ...target };
-    default: {
-      const _exhaustive: never = payload.notificationType;
-      return _exhaustive;
-    }
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return { tab: "today", ...target };
   }
 }

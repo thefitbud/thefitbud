@@ -61,6 +61,11 @@ import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
 } from "../lib/idempotency";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
+import {
+  RelationshipEndedError,
+  assertRelationshipWritable,
+} from "../domain/relationship-lifecycle.js";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -287,13 +292,13 @@ workoutRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
-    if (relationship.status === "ended") {
-      return fail(
-        c,
-        409,
-        "RELATIONSHIP_ENDED",
-        "Ended relationships cannot generate assignments.",
-      );
+    const writable = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writable.ok) {
+      return writable.response;
     }
 
     const effective = await loadEffectivePlanVersion(db, relationship.id);
@@ -665,6 +670,12 @@ workoutRoutes.post(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
     }
+    const writableStart = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableStart.ok) return writableStart.response;
 
     const now = nowIso();
     const assignmentStatus = mapWorkoutAssignment(
@@ -830,21 +841,45 @@ async function requireTraineeOwnedOpenExecution(
   ) {
     return { errorStatus: "not_found" as const };
   }
+  try {
+    await assertRelationshipWritable(db, relationship.id);
+  } catch (error) {
+    if (error instanceof RelationshipEndedError) {
+      return { errorStatus: "ended" as const };
+    }
+    throw error;
+  }
   return { actor, db, bundle, relationship } as const;
 }
 
 function isOwnershipFailure(
-  loaded: { errorStatus?: "unauthenticated" | "not_found" },
-): loaded is { errorStatus: "unauthenticated" | "not_found" } {
-  return loaded.errorStatus === "unauthenticated" || loaded.errorStatus === "not_found";
+  loaded: {
+    errorStatus?: "unauthenticated" | "not_found" | "ended";
+  },
+): loaded is {
+  errorStatus: "unauthenticated" | "not_found" | "ended";
+} {
+  return (
+    loaded.errorStatus === "unauthenticated" ||
+    loaded.errorStatus === "not_found" ||
+    loaded.errorStatus === "ended"
+  );
 }
 
 function ownershipError(
   c: AppContext,
-  loaded: { errorStatus: "unauthenticated" | "not_found" },
+  loaded: { errorStatus: "unauthenticated" | "not_found" | "ended" },
 ) {
   if (loaded.errorStatus === "unauthenticated") {
     return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+  }
+  if (loaded.errorStatus === "ended") {
+    return fail(
+      c,
+      409,
+      "RELATIONSHIP_ENDED",
+      "Coaching relationship has ended.",
+    );
   }
   return fail(c, 404, "EXECUTION_NOT_FOUND", "Execution not found.");
 }
@@ -1354,6 +1389,12 @@ workoutRoutes.post(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
     }
+    const writableSkip = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableSkip.ok) return writableSkip.response;
 
     if (loaded.execution && isOpenWorkoutExecution(loaded.execution.status)) {
       if (!canSkipOpenWorkoutExecution(loaded.execution.status)) {

@@ -11,6 +11,7 @@ import {
   createInvitationRequestSchema,
   createInvitationResponseSchema,
   invitationListResponseSchema,
+  invitationPreviewResponseSchema,
   invitationSchema,
 } from "@fitbud/contracts";
 import { normalizeWhatsappE164 } from "@fitbud/core";
@@ -38,6 +39,15 @@ import {
   mapRelationship,
   normalizeEmail,
 } from "../domain/mappers";
+import { inviteEmailBody, inviteEmailSubject } from "../emails/invite.js";
+import { sendSystemEmail } from "../lib/email.js";
+import { trainerProfiles, userIdentities } from "../db/schema";
+import { verifyPurposeProof } from "../auth/proof.js";
+import { hashPassword } from "../auth/password.js";
+import { identifierHash } from "../auth/identifiers.js";
+import { mintAuthToken } from "../auth/custom-token.js";
+import { validatePasswordPlaintext } from "../auth/password.js";
+import { acceptInvitationWithTokenResponseSchema } from "@fitbud/contracts";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import {
   addDaysIso,
@@ -199,9 +209,30 @@ invitationRoutes.post(
       .where(eq(clientInvitations.id, invitationId))
       .limit(1);
     const row = rows[0]!;
+    const appHost = c.env.APP_HOST ?? "localhost";
+    const inviteUrl = `https://${appHost}/i/${token}`;
+    const [trainerProfile] = await db
+      .select()
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, actor.userId))
+      .limit(1);
+    const trainerName = trainerProfile?.displayName ?? "Your coach";
+    if (parsed.data.sendEmail) {
+      await sendSystemEmail(c.env, db, {
+        to: recipientEmail,
+        template: "invite",
+        subject: inviteEmailSubject(trainerName),
+        text: inviteEmailBody(inviteUrl, trainerName),
+      });
+      await db
+        .update(clientInvitations)
+        .set({ emailSentAt: timestamp, updatedAt: timestamp })
+        .where(eq(clientInvitations.id, invitationId));
+    }
     const data = createInvitationResponseSchema.parse({
       ...mapInvitation(row),
       token,
+      inviteUrl,
     });
     const responseBody = { data };
 
@@ -305,6 +336,160 @@ invitationRoutes.get(
 );
 
 invitationRoutes.get(
+  "/preview",
+  operation({
+    tag: "Invitations",
+    summary: "Public invitation preview",
+    description: "Returns trainer display name and invitation status for a token.",
+    security: "public",
+    response: invitationPreviewResponseSchema,
+  }),
+  async (c) => {
+    const token = c.req.query("token")?.trim();
+    if (!token) {
+      return fail(c, 400, "INVALID_REQUEST", "token query parameter is required.");
+    }
+    const db = createDb(c.env.DB);
+    const tokenHash = await sha256Hex(token);
+    const [invitation] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.tokenHash, tokenHash))
+      .limit(1);
+    if (!invitation) {
+      return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+    }
+    const timestamp = nowIso();
+    let status = invitation.status;
+    if (status === "pending" && invitation.expiresAt <= timestamp) {
+      status = "expired";
+    }
+    const [trainer] = await db
+      .select()
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, invitation.trainerUserId))
+      .limit(1);
+    return ok(
+      c,
+      invitationPreviewResponseSchema.parse({
+        trainerDisplayName: trainer?.displayName ?? "Coach",
+        status,
+      }),
+    );
+  },
+);
+
+invitationRoutes.post(
+  "/:invitationId/reissue",
+  operation({
+    tag: "Invitations",
+    summary: "Reissue invitation",
+    description: "Revokes the prior invite and returns a new token and URL.",
+    roles: ["trainer"],
+    response: createInvitationResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const invitationId = c.req.param("invitationId");
+    const db = createDb(c.env.DB);
+    const [existing] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, invitationId))
+      .limit(1);
+    if (!existing || existing.trainerUserId !== actor.userId) {
+      return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+    }
+    const timestamp = nowIso();
+    await db
+      .update(clientInvitations)
+      .set({ status: "revoked", revokedAt: timestamp, updatedAt: timestamp })
+      .where(eq(clientInvitations.id, invitationId));
+    const token = createSessionToken();
+    const tokenHash = await sha256Hex(token);
+    const newId = createId();
+    const expiresAt = addDaysIso(DEFAULT_INVITE_DAYS);
+    await db.insert(clientInvitations).values({
+      id: newId,
+      trainerUserId: actor.userId,
+      recipientEmail: existing.recipientEmail,
+      recipientDisplayName: existing.recipientDisplayName,
+      recipientWhatsappE164: existing.recipientWhatsappE164,
+      tokenHash,
+      status: "pending",
+      expiresAt,
+      acceptedUserId: null,
+      onboardingFormTemplateVersionId: existing.onboardingFormTemplateVersionId,
+      reissuedFromId: invitationId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const [row] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, newId))
+      .limit(1);
+    const appHost = c.env.APP_HOST ?? "localhost";
+    const inviteUrl = `https://${appHost}/i/${token}`;
+    return ok(
+      c,
+      createInvitationResponseSchema.parse({
+        ...mapInvitation(row!),
+        token,
+        inviteUrl,
+      }),
+    );
+  },
+);
+
+invitationRoutes.post(
+  "/:invitationId/revoke",
+  operation({
+    tag: "Invitations",
+    summary: "Revoke invitation",
+    description: "Marks a pending invitation as revoked.",
+    roles: ["trainer"],
+    response: invitationSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const invitationId = c.req.param("invitationId");
+    const db = createDb(c.env.DB);
+    const [row] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, invitationId))
+      .limit(1);
+    if (!row || row.trainerUserId !== actor.userId) {
+      return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+    }
+    const timestamp = nowIso();
+    await db
+      .update(clientInvitations)
+      .set({ status: "revoked", revokedAt: timestamp, updatedAt: timestamp })
+      .where(eq(clientInvitations.id, invitationId));
+    const [updated] = await db
+      .select()
+      .from(clientInvitations)
+      .where(eq(clientInvitations.id, invitationId))
+      .limit(1);
+    return ok(c, invitationSchema.parse(mapInvitation(updated!)));
+  },
+);
+
+invitationRoutes.get(
   "/:invitationId",
   operation({
     tag: "Invitations",
@@ -378,6 +563,125 @@ invitationRoutes.post("/accept",
     });
   }
 
+  const db = createDb(c.env.DB);
+  const tokenHash = await sha256Hex(parsed.data.token);
+  const invitations = await db
+    .select()
+    .from(clientInvitations)
+    .where(eq(clientInvitations.tokenHash, tokenHash))
+    .limit(1);
+  const invitation = invitations[0];
+  if (!invitation) {
+    return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+  }
+
+  const timestamp = nowIso();
+
+  if (
+    invitation.status === "pending" &&
+    parsed.data.password &&
+    parsed.data.otpProof
+  ) {
+    if (invitation.expiresAt <= timestamp) {
+      await db
+        .update(clientInvitations)
+        .set({ status: "expired", updatedAt: timestamp })
+        .where(eq(clientInvitations.id, invitation.id));
+      return fail(c, 409, "INVITATION_EXPIRED", "Invitation has expired.");
+    }
+    const violation = validatePasswordPlaintext(parsed.data.password);
+    if (violation) {
+      return fail(c, 400, violation, "Password does not meet requirements.");
+    }
+    const secret = c.env.MEDIA_SIGNING_SECRET ?? "fitbud-local-proof-secret";
+    const verified = await verifyPurposeProof(secret, parsed.data.otpProof, "invite");
+    if (!verified) {
+      return fail(c, 401, "OTP_PROOF_INVALID", "Invite verification failed.");
+    }
+    const emailHash = await identifierHash(invitation.recipientEmail.toLowerCase());
+    if (emailHash !== verified.identifierHash) {
+      return fail(c, 401, "OTP_PROOF_INVALID", "Invite verification failed.");
+    }
+    const firebaseUid = `invite-${invitation.id}`;
+    const identity = { uid: firebaseUid, email: invitation.recipientEmail };
+    const { userId } = await findOrCreateUserFromFirebase(
+      db,
+      identity,
+      parsed.data.timezone ?? "UTC",
+    );
+    const passwordHash = await hashPassword(parsed.data.password);
+    await db
+      .insert(userIdentities)
+      .values({
+        userId,
+        email: invitation.recipientEmail,
+        emailNorm: invitation.recipientEmail.toLowerCase(),
+        mobileE164: parsed.data.mobileE164 ?? null,
+        passwordHash,
+        passwordUpdatedAt: timestamp,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+      .onConflictDoUpdate({
+        target: userIdentities.userId,
+        set: {
+          passwordHash,
+          passwordUpdatedAt: timestamp,
+          updatedAt: timestamp,
+        },
+      });
+    const displayName =
+      parsed.data.displayName ?? invitation.recipientDisplayName ?? "Trainee";
+    await ensureRoleAndProfile(db, {
+      userId,
+      role: "trainee",
+      displayName,
+    });
+    const relationshipId = createId();
+    await db.insert(coachingRelationships).values({
+      id: relationshipId,
+      trainerUserId: invitation.trainerUserId,
+      traineeUserId: userId,
+      status: "active",
+      invitationId: invitation.id,
+      startedAt: timestamp,
+      endedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db
+      .update(clientInvitations)
+      .set({
+        status: "accepted",
+        acceptedUserId: userId,
+        updatedAt: timestamp,
+      })
+      .where(eq(clientInvitations.id, invitation.id));
+    const token = await mintAuthToken(c.env, {
+      firebaseUid,
+      email: invitation.recipientEmail,
+    });
+    if ("error" in token) {
+      return fail(c, 503, token.error, "Authentication provider is not configured.");
+    }
+    return ok(
+      c,
+      acceptInvitationWithTokenResponseSchema.parse({
+        token: token.token,
+        tokenKind: token.tokenKind,
+        userId,
+        relationshipId,
+      }),
+    );
+  }
+
+  const acceptedRelationship =
+    invitation.status === "accepted"
+      ? await relationshipForInvitation(db, invitation.id)
+      : null;
+
   const authHeader = c.req.header("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return fail(c, 401, "UNAUTHENTICATED", "Bearer token required to accept an invitation.");
@@ -392,25 +696,7 @@ invitationRoutes.post("/accept",
     return fail(c, 401, "INVALID_TOKEN", "Firebase identity token was rejected.");
   }
 
-  const db = createDb(c.env.DB);
-  const tokenHash = await sha256Hex(parsed.data.token);
-  const invitations = await db
-    .select()
-    .from(clientInvitations)
-    .where(eq(clientInvitations.tokenHash, tokenHash))
-    .limit(1);
-  const invitation = invitations[0];
-  if (!invitation) {
-    return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
-  }
-
-  const timestamp = nowIso();
-  const acceptedRelationship =
-    invitation.status === "accepted"
-      ? await relationshipForInvitation(db, invitation.id)
-      : null;
   if (invitation.status === "accepted" && acceptedRelationship) {
-    // Idempotent accept for the same trainee token holder.
     const { userId } = await findOrCreateUserFromFirebase(
       db,
       identity,

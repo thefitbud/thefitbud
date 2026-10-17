@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -48,6 +49,7 @@ export const trainerProfiles = sqliteTable(
       .notNull()
       .references(() => users.id),
     displayName: text("display_name").notNull(),
+    whatsappE164: text("whatsapp_e164"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -133,6 +135,9 @@ export const clientInvitations = sqliteTable(
     onboardingFormTemplateVersionId: text("onboarding_form_template_version_id")
       .notNull()
       .references(() => onboardingFormVersions.id),
+    reissuedFromId: text("reissued_from_id"),
+    revokedAt: text("revoked_at"),
+    emailSentAt: text("email_sent_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -167,6 +172,9 @@ export const coachingRelationships = sqliteTable(
     invitationId: text("invitation_id").references(() => clientInvitations.id),
     startedAt: text("started_at").notNull(),
     endedAt: text("ended_at"),
+    endedByUserId: text("ended_by_user_id").references(() => users.id),
+    endReason: text("end_reason"),
+    reactivatedAt: text("reactivated_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -586,6 +594,8 @@ export const workoutExecutions = sqliteTable(
     requireSessionRpe: integer("require_session_rpe", { mode: "boolean" })
       .notNull()
       .default(false),
+    loggedLate: integer("logged_late", { mode: "boolean" }).notNull().default(false),
+    clientLoggedAt: text("client_logged_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -724,6 +734,7 @@ export const mealCompliance = sqliteTable(
         "repeat_recent",
         "manual",
         "other",
+        "logged_foods",
       ],
     }),
     notes: text("notes"),
@@ -732,6 +743,16 @@ export const mealCompliance = sqliteTable(
       .default(false),
     photoIntentJson: text("photo_intent_json"),
     mediaAssetId: text("media_asset_id"),
+    itemsJson: text("items_json"),
+    kcalScaled: integer("kcal_scaled"),
+    proteinScaled: integer("protein_scaled"),
+    carbsScaled: integer("carbs_scaled"),
+    fatScaled: integer("fat_scaled"),
+    loggedLate: integer("logged_late", { mode: "boolean" }).notNull().default(false),
+    loggedAfterResolve: integer("logged_after_resolve", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    clientLoggedAt: text("client_logged_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -872,6 +893,14 @@ export const trainerNotes = sqliteTable(
       .references(() => users.id),
     checkinId: text("checkin_id").references(() => checkins.id),
     body: text("body").notNull(),
+    visibility: text("visibility", { enum: ["private", "client"] })
+      .notNull()
+      .default("private"),
+    subjectType: text("subject_type"),
+    subjectId: text("subject_id"),
+    sharedAt: text("shared_at"),
+    unsharedAt: text("unshared_at"),
+    seenAt: text("seen_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -919,6 +948,10 @@ export const exceptions = sqliteTable(
     activatedAt: text("activated_at"),
     acknowledgedAt: text("acknowledged_at"),
     resolvedAt: text("resolved_at"),
+    resolutionOutcome: text("resolution_outcome"),
+    resolutionNote: text("resolution_note"),
+    closedReason: text("closed_reason"),
+    sourceLoggedLateAt: text("source_logged_late_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1233,6 +1266,16 @@ export const notificationPreferences = sqliteTable(
       .default(true),
     quietHoursStart: text("quiet_hours_start"),
     quietHoursEnd: text("quiet_hours_end"),
+    channelPreference: text("channel_preference").notNull().default("app"),
+    whatsappOptInGranted: integer("whatsapp_opt_in_granted", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    whatsappOptInAt: text("whatsapp_opt_in_at"),
+    whatsappOptInSource: text("whatsapp_opt_in_source"),
+    whatsappOptInTextVersion: text("whatsapp_opt_in_text_version"),
+    preferredWorkoutTime: text("preferred_workout_time"),
+    locale: text("locale"),
+    trainerCategoriesJson: text("trainer_categories_json").notNull().default("[]"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1289,6 +1332,20 @@ export const notifications = sqliteTable(
         "subscription_renewal_reminder",
         "daily_summary",
         "activity_nudge",
+        "plan_published",
+        "checkin_reviewed",
+        "coach_answered",
+        "reminders_paused",
+        "relationship_ended",
+        "trainer_note_shared",
+        "reactivation_requested",
+        "trainer_ask_coach",
+        "trainer_checkin_submitted",
+        "trainer_intake_submitted",
+        "trainer_critical_digest",
+        "trainer_renewal",
+        "trainer_meal_times_changed",
+        "admin_whatsapp_budget",
       ],
     }).notNull(),
     domainEntityType: text("domain_entity_type", {
@@ -1314,6 +1371,11 @@ export const notifications = sqliteTable(
     dedupeKey: text("dedupe_key").notNull(),
     createdAt: text("created_at").notNull(),
     readAt: text("read_at"),
+    openedAt: text("opened_at"),
+    priority: integer("priority"),
+    mergeGroup: text("merge_group"),
+    payloadJson: text("payload_json"),
+    expiresAt: text("expires_at"),
   },
   (table) => [
     uniqueIndex("notifications_dedupe_key_uidx").on(table.dedupeKey),
@@ -1427,6 +1489,95 @@ export const planTemplates = sqliteTable(
  * Exercise identity and coaching metadata. Prescription targets live on the
  * plan or template snapshot, not on this row.
  */
+
+export const librarySources = sqliteTable("library_sources", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  url: text("url").notNull(),
+  licence: text("licence").notNull(),
+  licenceUrl: text("licence_url"),
+  attribution: text("attribution").notNull(),
+  checksumSha256: text("checksum_sha256"),
+  notes: text("notes"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const librarySeedVersions = sqliteTable("library_seed_versions", {
+  id: text("id").primaryKey(),
+  version: text("version").notNull().unique(),
+  contentSha256: text("content_sha256").notNull(),
+  foodCount: integer("food_count").notNull(),
+  exerciseCount: integer("exercise_count").notNull(),
+  templateCount: integer("template_count").notNull(),
+  appliedAt: text("applied_at").notNull(),
+  notes: text("notes"),
+});
+
+export const libraryIdRedirects = sqliteTable("library_id_redirects", {
+  oldId: text("old_id").primaryKey(),
+  entity: text("entity", {
+    enum: ["food", "exercise", "food_serving"],
+  }).notNull(),
+  newId: text("new_id").notNull(),
+  reason: text("reason").notNull(),
+  seedVersion: text("seed_version").notNull(),
+});
+
+export const nutrients = sqliteTable("nutrients", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  unit: text("unit", { enum: ["kcal", "g", "mg", "ug"] }).notNull(),
+  category: text("category").notNull(),
+  isCore: integer("is_core", { mode: "boolean" }).notNull().default(false),
+  usdaNutrientIds: text("usda_nutrient_ids"),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+export const servingUnits = sqliteTable("serving_units", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  kind: text("kind", {
+    enum: ["mass", "volume", "household", "count"],
+  }).notNull(),
+  typicalGramsScaled: integer("typical_grams_scaled"),
+  notes: text("notes"),
+});
+
+export const muscles = sqliteTable("muscles", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  region: text("region").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+export const equipment = sqliteTable("equipment", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  homeFriendly: integer("home_friendly", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+export const movementPatterns = sqliteTable("movement_patterns", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+export const exerciseCategories = sqliteTable("exercise_categories", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+export const loggingTypes = sqliteTable("logging_types", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  fieldsJson: text("fields_json").notNull(),
+});
+
 export const exerciseLibraryItems = sqliteTable(
   "exercise_library_items",
   {
@@ -1438,7 +1589,9 @@ export const exerciseLibraryItems = sqliteTable(
     name: text("name").notNull(),
     instructions: text("instructions"),
     primaryMusclesJson: text("primary_muscles_json").notNull().default("[]"),
-    secondaryMusclesJson: text("secondary_muscles_json").notNull().default("[]"),
+    secondaryMusclesJson: text("secondary_muscles_json")
+      .notNull()
+      .default("[]"),
     equipmentJson: text("equipment_json").notNull().default("[]"),
     difficulty: text("difficulty", {
       enum: ["beginner", "intermediate", "advanced"],
@@ -1448,6 +1601,24 @@ export const exerciseLibraryItems = sqliteTable(
     })
       .notNull()
       .default("active"),
+    slug: text("slug"),
+    categoryCode: text("category_code").references(() => exerciseCategories.code),
+    movementPatternCode: text("movement_pattern_code").references(
+      () => movementPatterns.code,
+    ),
+    loggingTypeCode: text("logging_type_code").references(
+      () => loggingTypes.code,
+    ),
+    setting: text("setting"),
+    mechanic: text("mechanic"),
+    force: text("force"),
+    laterality: text("laterality"),
+    safetyNote: text("safety_note"),
+    sourceId: text("source_id").references(() => librarySources.id),
+    sourceRef: text("source_ref"),
+    sourceName: text("source_name"),
+    reviewStatus: text("review_status"),
+    seedVersion: text("seed_version"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1455,6 +1626,13 @@ export const exerciseLibraryItems = sqliteTable(
     index("exercise_library_ownership_idx").on(table.ownership),
     index("exercise_library_trainer_idx").on(table.trainerUserId),
     index("exercise_library_status_idx").on(table.status),
+    uniqueIndex("exercise_library_global_slug_uidx")
+      .on(table.slug)
+      .where(sql`${table.ownership} = 'global'`),
+    index("exercise_library_pattern_idx").on(
+      table.movementPatternCode,
+      table.setting,
+    ),
   ],
 );
 
@@ -1472,7 +1650,7 @@ export const foodLibraryItems = sqliteTable(
     trainerUserId: text("trainer_user_id").references(() => users.id),
     name: text("name").notNull(),
     cuisineRegion: text("cuisine_region", {
-      enum: ["indian"],
+      enum: ["indian", "indian_pantry", "global"],
     }).notNull(),
     classification: text("classification", {
       enum: [
@@ -1496,6 +1674,29 @@ export const foodLibraryItems = sqliteTable(
     })
       .notNull()
       .default("active"),
+    slug: text("slug"),
+    foodType: text("food_type"),
+    foodGroup: text("food_group"),
+    dishCategory: text("dish_category"),
+    cuisine: text("cuisine", {
+      enum: ["indian", "indian_pantry", "global"],
+    }),
+    region: text("region"),
+    cookingState: text("cooking_state"),
+    cookingMethod: text("cooking_method"),
+    dietTagsJson: text("diet_tags_json").notNull().default("[]"),
+    mealTypesJson: text("meal_types_json").notNull().default("[]"),
+    carbsAvailableScaled: integer("carbs_available_grams_scaled"),
+    fibreScaled: integer("fibre_grams_scaled"),
+    sugarsScaled: integer("sugars_grams_scaled"),
+    satFatScaled: integer("sat_fat_grams_scaled"),
+    sodiumMgScaled: integer("sodium_mg_scaled"),
+    sourceId: text("source_id").references(() => librarySources.id),
+    sourceRef: text("source_ref"),
+    sourceName: text("source_name"),
+    defaultServingId: text("default_serving_id"),
+    reviewStatus: text("review_status"),
+    seedVersion: text("seed_version"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1504,6 +1705,11 @@ export const foodLibraryItems = sqliteTable(
     index("food_library_cuisine_idx").on(table.cuisineRegion),
     index("food_library_trainer_idx").on(table.trainerUserId),
     index("food_library_status_idx").on(table.status),
+    uniqueIndex("food_library_global_slug_uidx")
+      .on(table.slug)
+      .where(sql`${table.ownership} = 'global'`),
+    index("food_library_group_idx").on(table.foodGroup, table.dishCategory),
+    index("food_library_source_idx").on(table.sourceId, table.sourceRef),
   ],
 );
 
@@ -1518,6 +1724,12 @@ export const foodLibraryServings = sqliteTable(
     label: text("label").notNull(),
     unit: text("unit").notNull(),
     conversionScaled: integer("conversion_scaled"),
+    quantityScaled: integer("quantity_scaled").notNull().default(1_000_000),
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    provenance: text("provenance"),
+    plausible: integer("plausible", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    seedVersion: text("seed_version"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1525,3 +1737,400 @@ export const foodLibraryServings = sqliteTable(
     index("food_library_servings_food_idx").on(table.foodLibraryItemId),
   ],
 );
+
+export const foodLibraryNutrients = sqliteTable(
+  "food_library_nutrients",
+  {
+    foodLibraryItemId: text("food_library_item_id")
+      .notNull()
+      .references(() => foodLibraryItems.id, { onDelete: "cascade" }),
+    nutrientCode: text("nutrient_code")
+      .notNull()
+      .references(() => nutrients.code),
+    amountScaled: integer("amount_scaled").notNull(),
+    provenance: text("provenance").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.foodLibraryItemId, table.nutrientCode] }),
+  ],
+);
+
+export const foodLibraryAliases = sqliteTable(
+  "food_library_aliases",
+  {
+    id: text("id").primaryKey(),
+    foodLibraryItemId: text("food_library_item_id")
+      .notNull()
+      .references(() => foodLibraryItems.id, { onDelete: "cascade" }),
+    alias: text("alias").notNull(),
+    aliasNorm: text("alias_norm").notNull(),
+    lang: text("lang").notNull(),
+    provenance: text("provenance").notNull(),
+    confidence: text("confidence", {
+      enum: ["high", "medium", "low"],
+    }).notNull(),
+    seedVersion: text("seed_version"),
+  },
+  (table) => [
+    uniqueIndex("food_library_aliases_uidx").on(
+      table.foodLibraryItemId,
+      table.lang,
+      table.aliasNorm,
+    ),
+    index("food_library_aliases_norm_idx").on(table.aliasNorm),
+  ],
+);
+
+export const foodLibraryRecipeIngredients = sqliteTable(
+  "food_library_recipe_ingredients",
+  {
+    id: text("id").primaryKey(),
+    foodLibraryItemId: text("food_library_item_id")
+      .notNull()
+      .references(() => foodLibraryItems.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    ingredientName: text("ingredient_name").notNull(),
+    sourceIngredientName: text("source_ingredient_name"),
+    amountScaled: integer("amount_scaled"),
+    unit: text("unit"),
+    sourceFoodCode: text("source_food_code"),
+    ingredientFoodId: text("ingredient_food_id").references(
+      () => foodLibraryItems.id,
+    ),
+  },
+  (table) => [
+    uniqueIndex("food_library_recipe_ingredients_pos_uidx").on(
+      table.foodLibraryItemId,
+      table.position,
+    ),
+  ],
+);
+
+const exerciseLibraryItemFk = () =>
+  text("exercise_library_item_id")
+    .notNull()
+    .references(() => exerciseLibraryItems.id, { onDelete: "cascade" });
+
+export const exerciseLibraryMuscles = sqliteTable(
+  "exercise_library_muscles",
+  {
+    exerciseLibraryItemId: exerciseLibraryItemFk(),
+    muscleCode: text("muscle_code")
+      .notNull()
+      .references(() => muscles.code),
+    role: text("role", { enum: ["primary", "secondary"] }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.exerciseLibraryItemId, table.muscleCode] }),
+    index("exercise_library_muscles_muscle_idx").on(table.muscleCode, table.role),
+  ],
+);
+
+export const exerciseLibraryEquipment = sqliteTable(
+  "exercise_library_equipment",
+  {
+    exerciseLibraryItemId: exerciseLibraryItemFk(),
+    equipmentCode: text("equipment_code")
+      .notNull()
+      .references(() => equipment.code),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.exerciseLibraryItemId, table.equipmentCode],
+    }),
+  ],
+);
+
+export const exerciseLibraryAliases = sqliteTable(
+  "exercise_library_aliases",
+  {
+    id: text("id").primaryKey(),
+    exerciseLibraryItemId: exerciseLibraryItemFk(),
+    alias: text("alias").notNull(),
+    aliasNorm: text("alias_norm").notNull(),
+    lang: text("lang").notNull(),
+    provenance: text("provenance").notNull(),
+    confidence: text("confidence", {
+      enum: ["high", "medium", "low"],
+    }).notNull(),
+    seedVersion: text("seed_version"),
+  },
+  (table) => [
+    uniqueIndex("exercise_library_aliases_uidx").on(
+      table.exerciseLibraryItemId,
+      table.lang,
+      table.aliasNorm,
+    ),
+  ],
+);
+
+export const exerciseLibraryInstructions = sqliteTable(
+  "exercise_library_instructions",
+  {
+    id: text("id").primaryKey(),
+    exerciseLibraryItemId: exerciseLibraryItemFk(),
+    kind: text("kind", { enum: ["step", "cue", "mistake"] }).notNull(),
+    position: integer("position").notNull(),
+    text: text("text").notNull(),
+    lang: text("lang").notNull().default("en"),
+    provenance: text("provenance").notNull(),
+  },
+  (table) => [
+    uniqueIndex("exercise_library_instructions_uidx").on(
+      table.exerciseLibraryItemId,
+      table.kind,
+      table.lang,
+      table.position,
+    ),
+  ],
+);
+
+export const exerciseLibraryRelations = sqliteTable(
+  "exercise_library_relations",
+  {
+    exerciseLibraryItemId: exerciseLibraryItemFk(),
+    relatedExerciseId: text("related_exercise_id")
+      .notNull()
+      .references(() => exerciseLibraryItems.id, { onDelete: "cascade" }),
+    kind: text("kind", {
+      enum: [
+        "alternative",
+        "home_alternative",
+        "gym_alternative",
+        "progression",
+        "regression",
+      ],
+    }).notNull(),
+    method: text("method").notNull(),
+    confidence: text("confidence").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.exerciseLibraryItemId, table.relatedExerciseId, table.kind],
+    }),
+  ],
+);
+
+export const exerciseLibraryMedia = sqliteTable(
+  "exercise_library_media",
+  {
+    id: text("id").primaryKey(),
+    exerciseLibraryItemId: exerciseLibraryItemFk(),
+    kind: text("kind", { enum: ["illustration", "photo", "video"] }).notNull(),
+    frame: text("frame"),
+    storageKey: text("storage_key").notNull(),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => librarySources.id),
+    sourceRef: text("source_ref"),
+    licence: text("licence").notNull(),
+    attribution: text("attribution").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    index("exercise_library_media_ex_idx").on(
+      table.exerciseLibraryItemId,
+      table.sortOrder,
+    ),
+  ],
+);
+
+export const userIdentities = sqliteTable("user_identities", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  email: text("email"),
+  emailNorm: text("email_norm").unique(),
+  mobileE164: text("mobile_e164").unique(),
+  passwordHash: text("password_hash"),
+  passwordUpdatedAt: text("password_updated_at"),
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  lockedUntil: text("locked_until"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const authOtps = sqliteTable("auth_otps", {
+  id: text("id").primaryKey(),
+  identifierHash: text("identifier_hash").notNull(),
+  codeHash: text("code_hash").notNull(),
+  purpose: text("purpose", {
+    enum: ["login", "reset", "invite"],
+  }).notNull(),
+  expiresAt: text("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  channelsSent: text("channels_sent").notNull().default("[]"),
+  consumedAt: text("consumed_at"),
+  invalidatedAt: text("invalidated_at"),
+  createdAt: text("created_at").notNull(),
+  ipHash: text("ip_hash"),
+});
+
+export const authRateLimits = sqliteTable("auth_rate_limits", {
+  bucketKey: text("bucket_key").primaryKey(),
+  windowStart: text("window_start").notNull(),
+  count: integer("count").notNull().default(0),
+});
+
+export const featureFlags = sqliteTable("feature_flags", {
+  key: text("key").primaryKey(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
+export const devMailOutbox = sqliteTable("dev_mail_outbox", {
+  id: text("id").primaryKey(),
+  toAddress: text("to_address").notNull(),
+  template: text("template").notNull(),
+  subject: text("subject").notNull(),
+  textBody: text("text_body").notNull(),
+  htmlBody: text("html_body"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const reactivationRequests = sqliteTable("reactivation_requests", {
+  id: text("id").primaryKey(),
+  relationshipId: text("relationship_id")
+    .notNull()
+    .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+  trainerUserId: text("trainer_user_id")
+    .notNull()
+    .references(() => users.id),
+  status: text("status", {
+    enum: ["pending", "confirmed", "cancelled", "expired"],
+  }).notNull(),
+  intakeUpdateRequested: integer("intake_update_requested", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  resolvedAt: text("resolved_at"),
+});
+
+export const coachAsks = sqliteTable("coach_asks", {
+  id: text("id").primaryKey(),
+  relationshipId: text("relationship_id")
+    .notNull()
+    .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+  traineeUserId: text("trainee_user_id")
+    .notNull()
+    .references(() => users.id),
+  itemType: text("item_type", {
+    enum: [
+      "meal_assignment",
+      "workout_assignment",
+      "exercise_execution",
+      "checkin",
+      "plan_version",
+    ],
+  }).notNull(),
+  itemId: text("item_id").notNull(),
+  topic: text("topic").notNull(),
+  askedAt: text("asked_at").notNull(),
+  lastAskedAt: text("last_asked_at").notNull(),
+  askCount: integer("ask_count").notNull().default(1),
+  status: text("status", {
+    enum: ["open", "answered", "expired"],
+  }).notNull(),
+  answeredAt: text("answered_at"),
+  answeredBy: text("answered_by").references(() => users.id),
+  trainerNoteId: text("trainer_note_id").references(() => trainerNotes.id),
+});
+
+export const mealTimeOverrides = sqliteTable(
+  "meal_time_overrides",
+  {
+    relationshipId: text("relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+    slotKey: text("slot_key").notNull(),
+    dayPattern: text("day_pattern", {
+      enum: ["all", "weekdays", "weekends"],
+    }).notNull(),
+    time: text("time").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.relationshipId, table.slotKey, table.dayPattern],
+    }),
+  ],
+);
+
+export const traineeCustomFoods = sqliteTable("trainee_custom_foods", {
+  id: text("id").primaryKey(),
+  traineeUserId: text("trainee_user_id")
+    .notNull()
+    .references(() => users.id),
+  relationshipId: text("relationship_id")
+    .notNull()
+    .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  kcalScaled: integer("kcal_scaled").notNull(),
+  proteinScaled: integer("protein_scaled"),
+  carbsScaled: integer("carbs_scaled"),
+  fatScaled: integer("fat_scaled"),
+  servingLabel: text("serving_label").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const reminderStates = sqliteTable("reminder_states", {
+  traineeUserId: text("trainee_user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  consecutiveIgnores: integer("consecutive_ignores").notNull().default(0),
+  mode: text("mode").notNull().default("normal"),
+  pausedUntil: text("paused_until"),
+  lastEvaluatedAt: text("last_evaluated_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const whatsappTemplates = sqliteTable("whatsapp_templates", {
+  key: text("key").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  language: text("language").notNull().default("en"),
+  status: text("status").notNull(),
+  version: integer("version").notNull().default(1),
+  bodyJson: text("body_json").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const whatsappMessages = sqliteTable("whatsapp_messages", {
+  id: text("id").primaryKey(),
+  templateKey: text("template_key").notNull(),
+  toHash: text("to_hash").notNull(),
+  wamid: text("wamid"),
+  status: text("status").notNull(),
+  errorCode: text("error_code"),
+  relationshipId: text("relationship_id").references(() => coachingRelationships.id),
+  traineeUserId: text("trainee_user_id").references(() => users.id),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const whatsappLedger = sqliteTable("whatsapp_ledger", {
+  id: text("id").primaryKey(),
+  monthKey: text("month_key").notNull(),
+  templateKey: text("template_key").notNull(),
+  messageId: text("message_id").references(() => whatsappMessages.id),
+  estCostPaise: integer("est_cost_paise").notNull(),
+  costPaise: integer("cost_paise"),
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const whatsappWebhookEvents = sqliteTable("whatsapp_webhook_events", {
+  id: text("id").primaryKey(),
+  receivedAt: text("received_at").notNull(),
+  kind: text("kind").notNull(),
+});
+
+export const whatsappOptOuts = sqliteTable("whatsapp_opt_outs", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  at: text("at").notNull(),
+  source: text("source").notNull(),
+});

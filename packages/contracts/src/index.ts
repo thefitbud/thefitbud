@@ -1,4 +1,21 @@
 export {
+  configFlagsSchema,
+  configResponseSchema,
+  type ConfigResponse,
+} from "./config.js";
+
+export {
+  authLoginRequestSchema,
+  authOtpStartRequestSchema,
+  authOtpVerifyRequestSchema,
+  authPasswordResetRequestSchema,
+  authPasswordSetRequestSchema,
+  authTokenResponseSchema,
+  type AuthLoginRequest,
+  type AuthTokenResponse,
+} from "./auth.js";
+
+export {
   accountStateSchema,
   apiDataEnvelopeSchema,
   apiErrorBodySchema,
@@ -35,6 +52,14 @@ export {
   invitationStatusSchema,
   onboardingStatusSchema,
   relationshipListResponseSchema,
+  endRelationshipRequestSchema,
+  reactivateRelationshipRequestSchema,
+  invitationPreviewResponseSchema,
+  type EndRelationshipRequest,
+  type ReactivateRelationshipRequest,
+  type InvitationPreviewResponse,
+  acceptInvitationWithTokenResponseSchema,
+  type AcceptInvitationWithTokenResponse,
   type AcceptInvitationRequest,
   type AcceptInvitationResponse,
   type CoachingRelationship,
@@ -133,6 +158,9 @@ export {
 } from "./subscription.js";
 
 export {
+  assignPlanVersionRequestSchema,
+  assignPlanVersionResponseSchema,
+  planVersionDiffResponseSchema,
   acknowledgePlanConsistencyRequestSchema,
   assignmentScheduleStatusSchema,
   assignmentWindowModeSchema,
@@ -305,6 +333,7 @@ export {
   mealComplianceSummaryResponseSchema,
   mealDeviationKindSchema,
   mealPhotoIntentSchema,
+  loggedFoodItemSchema,
   skipMealRequestSchema,
   type ConfirmMealRequest,
   type DeviateMealRequest,
@@ -319,6 +348,7 @@ export {
   type MealComplianceSummaryResponse,
   type MealDeviationKind,
   type MealPhotoIntent,
+  type LoggedFoodItem,
   type SkipMealRequest,
 } from "./meal.js";
 
@@ -487,9 +517,13 @@ export {
 
 export {
   traineeProfileSchema,
+  trainerProfileSchema,
   updateTraineeProfileRequestSchema,
+  updateTrainerProfileRequestSchema,
   type TraineeProfile,
+  type TrainerProfile,
   type UpdateTraineeProfileRequest,
+  type UpdateTrainerProfileRequest,
 } from "./profile.js";
 
 export {
@@ -632,3 +666,56 @@ export {
   type UpdateNotificationPreferencesRequest,
   type UpdateReminderRulesRequest,
 } from "./notification.js";
+
+export {
+  traineeFoodSearchResponseSchema,
+  traineeFoodIndexResponseSchema,
+  type TraineeFoodSearchResponse,
+  type TraineeFoodIndexResponse,
+} from "./trainee-food.js";
+
+export {
+  coachAskSchema,
+  coachAskListResponseSchema,
+  createCoachAskRequestSchema,
+  answerCoachAskRequestSchema,
+  coachAskNoteRequestSchema,
+  type CoachAsk,
+  type CreateCoachAskRequest,
+  type AnswerCoachAskRequest,
+  type CoachAskNoteRequest,
+} from "./coach-ask.js";
+
+export {
+  linkKindSchema,
+  linkResolveResponseSchema,
+  type LinkResolveResponse,
+} from "./links.js";
+
+export {
+  mealTimesResponseSchema,
+  updateMealTimesRequestSchema,
+} from "./meal-times.js";
+
+export {
+  activityFeedResponseSchema,
+  activityFeedEventSchema,
+} from "./activity-feed.js";
+
+export {
+  weekReadModelSchema,
+  weekDayStateSchema,
+  attentionGroupsResponseSchema,
+  attentionGroupSchema,
+  clientFacetsSchema,
+  responsivenessResponseSchema,
+  responsivenessLabelSchema,
+  reengagementCandidatesResponseSchema,
+  type WeekReadModel,
+  type WeekDayState,
+  type AttentionGroupsResponse,
+  type ClientFacets,
+  type ResponsivenessResponse,
+  type ResponsivenessLabel,
+  type ReengagementCandidatesResponse,
+} from "./read-models.js";

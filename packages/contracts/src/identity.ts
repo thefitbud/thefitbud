@@ -47,11 +47,19 @@ export const meResponseSchema = z.object({
   firebaseUid: z.string().min(1),
   accountState: accountStateSchema,
   timezone: z.string().min(1),
+  email: z.string().email().nullable().optional(),
   permittedRoles: z.array(roleSchema).min(1),
   selectedRole: roleSchema.nullable(),
   surface: surfaceSchema,
   trainerProfileId: uuidSchema.nullable(),
   traineeProfileId: uuidSchema.nullable(),
+  trainerProfile: z
+    .object({
+      displayName: z.string().min(1),
+      whatsappE164: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 

@@ -106,6 +106,9 @@ export const workspaceHeaderSchema = z.object({
   renewalState: renewalStateSchema.nullable(),
   adherenceState: adherenceStateSchema,
   traineeProfile: workspaceTraineeProfileSchema,
+  traineeTimezone: z.string().min(1).max(64),
+  hasCustomMealTimes: z.boolean(),
+  trainerWhatsappE164: z.string().nullable(),
 });
 export type WorkspaceHeader = z.infer<typeof workspaceHeaderSchema>;
 

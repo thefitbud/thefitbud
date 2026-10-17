@@ -27,6 +27,7 @@ import {
 import { appendChangeLog } from "../domain/sync";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -272,6 +273,12 @@ progressRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const writableMeasurement = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableMeasurement.ok) return writableMeasurement.response;
 
     if (
       actor.selectedRole === "trainee" &&
@@ -500,6 +507,12 @@ progressRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const writableMeasurement = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableMeasurement.ok) return writableMeasurement.response;
 
     if (
       actor.selectedRole === "trainee" &&

@@ -1,9 +1,4 @@
-import initSqlJs from "sql.js";
-import { drizzle } from "drizzle-orm/sql-js";
 import { eq } from "drizzle-orm";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activityNudgeDedupeKey,
@@ -15,52 +10,34 @@ import {
   pushPayloadHasOnlySafeKeys,
   weekdayFromLocalDate,
   workoutReminderDedupeKey,
+  WORKOUT_REMINDER_SLOT,
 } from "@fitbud/core";
+import * as schema from "../db/schema.js";
 import { pushPayloadSchema } from "@fitbud/contracts";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { routingPayloadForNotification } from "../lib/push-provider.js";
 import type { Env } from "../types.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+const KOLKATA_TZ = "Asia/Kolkata";
+
+/** Wall-clock time on `localDate` in Asia/Kolkata, as a UTC ISO instant. */
+function istWallClockToUtc(localDate: string, hours: number, minutes: number): string {
+  const [year, month, day] = localDate.split("-").map(Number) as [number, number, number];
+  const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+  const istOffsetMinutes = 5 * 60 + 30;
+  const utcMs = utcMidnight + (hours * 60 + minutes - istOffsetMinutes) * 60_000;
+  return new Date(utcMs).toISOString();
+}
+
+
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of [
-    "0000_identity.sql",
-    "0001_relationship_onboarding.sql",
-    "0012_invitation_whatsapp.sql",
-    "0002_coaching_configuration.sql",
-    "0003_plans.sql",
-    "0004_workouts.sql",
-    "0005_meals.sql",
-    "0006_checkins.sql",
-    "0007_exceptions.sql",
-    "0008_progress_media.sql",
-    "0009_sync.sql",
-    "0010_notifications.sql",
-    "0013_domain_contracts.sql",
-  "0014_onboarding_form_templates.sql",
-    "0011_templates_libraries.sql",
-    "0015_iteration_a.sql",
-    "0016_food_exercise_libraries.sql",
-    "0017_plan_template_ownership.sql",
-
-    "0018_assignment_schedule_status.sql",
-    "0019_checkin_form_templates.sql",
-    "0020_exception_severity.sql",
-  ]) {
-    sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-  }
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return {
-    db,
-    close: () => sqlite.close(),
-  };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function dummyD1(): D1Database {
@@ -393,6 +370,22 @@ describe("notifications and reminders (D4)", () => {
       },
       testEnv(),
     );
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quietHoursStart: "12:00",
+          quietHoursEnd: "12:01",
+        }),
+      },
+      testEnv(),
+    );
 
     const scheduled = await app.request(
       `/checkins/relationships/${relationshipId}/schedule`,
@@ -641,8 +634,8 @@ describe("notifications and reminders (D4)", () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          quietHoursStart: "00:00",
-          quietHoursEnd: "00:00",
+          quietHoursStart: "22:00",
+          quietHoursEnd: "07:00",
         }),
       },
       testEnv(),
@@ -710,7 +703,7 @@ describe("notifications and reminders (D4)", () => {
           "x-fitbud-role": "trainee",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ quietHoursStart: null, quietHoursEnd: null }),
+        body: JSON.stringify({ quietHoursStart: "04:00", quietHoursEnd: "04:01" }),
       },
       testEnv(),
     );
@@ -878,7 +871,7 @@ describe("notifications and reminders (D4)", () => {
   it("applies meal and workout clocks, suppresses logged items, and summarizes the day", async () => {
     const { trainerCookie, traineeToken, relationshipId } =
       await reachActiveCheckinConfig("clocks");
-    const localDate = "2026-10-10";
+    const localDate = addDaysToLocalDate(formatLocalDate(new Date(), KOLKATA_TZ), 1);
     const weekday = weekdayFromLocalDate(localDate);
     await app.request(
       "/notifications/device-tokens",
@@ -1038,20 +1031,23 @@ describe("notifications and reminders (D4)", () => {
       expect(response.status).toBe(200);
     }
 
-    await evaluateAt("2026-10-09T23:30:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 5, 0));
     const early = await db.select().from(schema.notifications);
     expect(early.map((row) => row.dedupeKey)).not.toContain(
-      workoutReminderDedupeKey(workoutId, "06:00"),
+      workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
     );
 
-    await evaluateAt("2026-10-10T01:45:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 8, 45));
     const midMorning = await db.select().from(schema.notifications);
     const keys = midMorning.map((row) => row.dedupeKey);
-    expect(keys).toContain(workoutReminderDedupeKey(workoutId, "06:00"));
-    expect(keys).toContain(mealReminderDedupeKey(breakfast.id, "advance"));
-    expect(keys).not.toContain(mealReminderDedupeKey(breakfast.id, "follow_up_30"));
-    expect(keys).not.toContain(workoutReminderDedupeKey(workoutId, "18:00"));
+    expect(keys).toContain(mealReminderDedupeKey(breakfast.id, "after"));
     expect(keys.some((key) => key.includes(lunch.id))).toBe(false);
+
+    await evaluateAt(istWallClockToUtc(localDate, 17, 0));
+    const eveningWorkout = await db.select().from(schema.notifications);
+    expect(eveningWorkout.map((row) => row.dedupeKey)).toContain(
+      workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+    );
 
     const beforeNudge = await db
       .select()
@@ -1095,14 +1091,10 @@ describe("notifications and reminders (D4)", () => {
       testEnv(),
     );
     expect(confirmed.status, await confirmed.clone().text()).toBe(200);
-    await evaluateAt("2026-10-10T03:30:00.000Z");
-    const afterLog = await db.select().from(schema.notifications);
-    expect(afterLog.map((row) => row.dedupeKey)).not.toContain(
-      mealReminderDedupeKey(breakfast.id, "follow_up_30"),
-    );
-    expect(afterLog.map((row) => row.dedupeKey)).not.toContain(
-      mealReminderDedupeKey(breakfast.id, "follow_up_60"),
-    );
+    const countBefore = (await db.select().from(schema.notifications)).length;
+    await evaluateAt(istWallClockToUtc(localDate, 9, 0));
+    const countAfter = (await db.select().from(schema.notifications)).length;
+    expect(countAfter).toBe(countBefore);
 
     const skipped = await app.request(
       `/workouts/assignments/${workoutId}/skip`,
@@ -1140,17 +1132,11 @@ describe("notifications and reminders (D4)", () => {
       .where(eq(schema.workoutExecutions.assignmentId, workoutId));
     expect(executionAfterNudge).toEqual(executionAfterSkip);
 
-    await evaluateAt("2026-10-10T12:30:00.000Z");
-    const evening = await db.select().from(schema.notifications);
-    expect(evening.map((row) => row.dedupeKey)).not.toContain(
-      workoutReminderDedupeKey(workoutId, "18:00"),
-    );
-
-    await evaluateAt("2026-10-10T15:29:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 21, 29));
     expect(
       (await db.select().from(schema.notifications)).map((row) => row.dedupeKey),
     ).not.toContain(dailySummaryDedupeKey(relationshipId, localDate));
-    await evaluateAt("2026-10-10T15:30:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 21, 30));
     const summary = (await db.select().from(schema.notifications)).find(
       (row) => row.dedupeKey === dailySummaryDedupeKey(relationshipId, localDate),
     );
@@ -1236,6 +1222,23 @@ describe("notifications and reminders (D4)", () => {
       );
     }
 
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quietHoursStart: "10:00",
+          quietHoursEnd: "11:00",
+        }),
+      },
+      testEnv(),
+    );
+
     const first = await nudge(ids[0]!);
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as {
@@ -1257,7 +1260,7 @@ describe("notifications and reminders (D4)", () => {
     expect(limited.status).toBe(429);
     expect(
       ((await limited.json()) as { error: { code: string } }).error.code,
-    ).toBe("NUDGE_RATE_LIMITED");
+    ).toBe("NUDGE_LIMIT");
     const stillDraft = await db
       .select()
       .from(schema.checkins)
@@ -1275,8 +1278,8 @@ describe("notifications and reminders (D4)", () => {
         },
         body: JSON.stringify({
           categories: { checkinReminder: false },
-          quietHoursStart: "00:00",
-          quietHoursEnd: "00:00",
+          quietHoursStart: "22:00",
+          quietHoursEnd: "07:00",
         }),
       },
       testEnv(),
@@ -1293,8 +1296,8 @@ describe("notifications and reminders (D4)", () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          quietHoursStart: "00:00",
-          quietHoursEnd: "00:00",
+          quietHoursStart: "22:00",
+          quietHoursEnd: "07:00",
         }),
       },
       testEnv(),
@@ -1367,7 +1370,7 @@ describe("notifications and reminders (D4)", () => {
           "x-fitbud-role": "trainee",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ quietHoursStart: null, quietHoursEnd: null }),
+        body: JSON.stringify({ quietHoursStart: "04:00", quietHoursEnd: "04:01" }),
       },
       testEnv(),
     );

@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.23.0"
   },
   "scripts": {
     "dev": "turbo run dev --parallel",
@@ -18,7 +18,9 @@
     "db:generate": "pnpm --filter @fitbud/api db:generate",
     "db:migrate:local": "pnpm --filter @fitbud/api db:migrate:local",
     "db:migrate": "pnpm --filter @fitbud/api db:migrate",
-    "db:seed:dev": "pnpm --filter @fitbud/api db:seed:dev"
+    "db:seed:library": "pnpm --filter @fitbud/api db:seed:library",
+    "seed:demo": "pnpm --filter @fitbud/api seed:demo",
+    "db:reset": "pnpm --filter @fitbud/api db:reset"
   },
   "devDependencies": {
     "turbo": "^2.5.4",

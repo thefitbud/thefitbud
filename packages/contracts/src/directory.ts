@@ -3,6 +3,7 @@ import { adherenceStateSchema } from "./adherence.js";
 import { checkinStatusSchema } from "./checkin.js";
 import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { onboardingStatusSchema } from "./relationship.js";
+import { clientFacetsSchema } from "./read-models.js";
 import { workspaceEffectivePlanSummarySchema } from "./workspace.js";
 import { localDateSchema } from "./workout.js";
 
@@ -30,6 +31,7 @@ export type ClientDirectoryItem = z.infer<typeof clientDirectoryItemSchema>;
 
 export const clientDirectoryListResponseSchema = z.object({
   items: z.array(clientDirectoryItemSchema),
+  facets: clientFacetsSchema.optional(),
   nextCursor: z.string().nullable(),
 });
 export type ClientDirectoryListResponse = z.infer<

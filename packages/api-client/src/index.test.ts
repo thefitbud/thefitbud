@@ -63,6 +63,7 @@ describe("FitBudApiClient", () => {
               createdAt: "2026-09-26T00:00:00.000Z",
               updatedAt: "2026-09-26T00:00:00.000Z",
               token: "raw-token",
+              inviteUrl: "https://app.example.test/i/raw-token",
             },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -96,6 +97,9 @@ describe("FitBudApiClient", () => {
                 goalShort: null,
                 renewalState: null,
                 adherenceState: "not_available",
+                traineeTimezone: "Asia/Kolkata",
+                hasCustomMealTimes: false,
+                trainerWhatsappE164: null,
                 traineeProfile: {
                   displayName: "Asha",
                   age: null,

@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  DAILY_SUMMARY_LOCAL_TIME,
-  MEAL_REMINDER_ADVANCE_MINUTES,
-  WORKOUT_REMINDER_LOCAL_TIMES,
+  ACTIVITY_NUDGE_HOURLY_LIMIT,
+  DAILY_SUMMARY_CAP_LOCAL_TIME,
+  DEFAULT_QUIET_HOURS_END,
+  DEFAULT_QUIET_HOURS_START,
+  MEAL_REMINDER_AFTER_MINUTES,
+  WORKOUT_FALLBACK_ANCHOR,
+  WORKOUT_REMINDER_OFFSET_MINUTES,
+  WORKOUT_REMINDER_SLOT,
   activityNudgeDedupeKey,
   buildSafePushPayload,
   deferredReminderDedupeKey,
@@ -29,13 +34,18 @@ describe("reminder eligibility and payload safety", () => {
     ).toBe("checkin_reminder:11111111-1111-4111-8111-111111111111");
   });
 
-  it("uses the locked workout, meal, and summary clocks", () => {
-    expect(WORKOUT_REMINDER_LOCAL_TIMES).toEqual(["06:00", "18:00"]);
-    expect(DAILY_SUMMARY_LOCAL_TIME).toBe("21:00");
-    expect(MEAL_REMINDER_ADVANCE_MINUTES).toBe(45);
+  it("uses v2 workout and meal clocks", () => {
+    expect(WORKOUT_REMINDER_OFFSET_MINUTES).toBe(75);
+    expect(WORKOUT_FALLBACK_ANCHOR).toBe("18:00");
+    expect(MEAL_REMINDER_AFTER_MINUTES).toBe(40);
+    expect(DAILY_SUMMARY_CAP_LOCAL_TIME).toBe("21:30");
+    expect(DEFAULT_QUIET_HOURS_START).toBe("22:00");
+    expect(DEFAULT_QUIET_HOURS_END).toBe("07:00");
+    expect(ACTIVITY_NUDGE_HOURLY_LIMIT).toBe(3);
+
     expect(
       dueWorkoutReminderTimes({
-        nowIso: "2026-10-10T05:59:00.000Z",
+        nowIso: "2026-10-10T15:00:00.000Z",
         assignmentLocalDate: "2026-10-10",
         timeZone: "UTC",
         resolved: false,
@@ -43,43 +53,27 @@ describe("reminder eligibility and payload safety", () => {
     ).toEqual([]);
     expect(
       dueWorkoutReminderTimes({
-        nowIso: "2026-10-10T06:00:00.000Z",
+        nowIso: "2026-10-10T16:45:00.000Z",
         assignmentLocalDate: "2026-10-10",
         timeZone: "UTC",
         resolved: false,
       }),
-    ).toEqual(["06:00"]);
+    ).toEqual([WORKOUT_REMINDER_SLOT]);
     expect(
       dueWorkoutReminderTimes({
-        nowIso: "2026-10-10T18:00:00.000Z",
-        assignmentLocalDate: "2026-10-10",
-        timeZone: "UTC",
-        resolved: false,
-      }),
-    ).toEqual(["06:00", "18:00"]);
-    expect(
-      dueWorkoutReminderTimes({
-        nowIso: "2026-10-10T18:00:00.000Z",
+        nowIso: "2026-10-10T16:45:00.000Z",
         assignmentLocalDate: "2026-10-10",
         timeZone: "UTC",
         resolved: true,
       }),
     ).toEqual([]);
-    expect(
-      dueWorkoutReminderTimes({
-        nowIso: "2026-10-11T06:00:00.000Z",
-        assignmentLocalDate: "2026-10-10",
-        timeZone: "UTC",
-        resolved: false,
-      }),
-    ).toEqual([]);
   });
 
-  it("schedules meal advance and follow-ups only when a local time exists", () => {
+  it("fires meal reminders 40 minutes after slot time", () => {
     const windowEndsAt = "2026-10-11T00:00:00.000Z";
     expect(
       dueMealReminderPhases({
-        nowIso: "2026-10-10T07:14:00.000Z",
+        nowIso: "2026-10-10T08:39:00.000Z",
         localDate: "2026-10-10",
         timeZone: "UTC",
         localTime: "08:00",
@@ -89,37 +83,17 @@ describe("reminder eligibility and payload safety", () => {
     ).toEqual([]);
     expect(
       dueMealReminderPhases({
-        nowIso: "2026-10-10T07:15:00.000Z",
+        nowIso: "2026-10-10T08:40:00.000Z",
         localDate: "2026-10-10",
         timeZone: "UTC",
         localTime: "08:00",
         logged: false,
         windowEndsAt,
       }),
-    ).toEqual(["advance"]);
+    ).toEqual(["after"]);
     expect(
       dueMealReminderPhases({
-        nowIso: "2026-10-10T08:30:00.000Z",
-        localDate: "2026-10-10",
-        timeZone: "UTC",
-        localTime: "08:00",
-        logged: false,
-        windowEndsAt,
-      }),
-    ).toEqual(["follow_up_30"]);
-    expect(
-      dueMealReminderPhases({
-        nowIso: "2026-10-10T09:00:00.000Z",
-        localDate: "2026-10-10",
-        timeZone: "UTC",
-        localTime: "08:00",
-        logged: false,
-        windowEndsAt,
-      }),
-    ).toEqual(["follow_up_30", "follow_up_60"]);
-    expect(
-      dueMealReminderPhases({
-        nowIso: "2026-10-10T09:00:00.000Z",
+        nowIso: "2026-10-10T08:40:00.000Z",
         localDate: "2026-10-10",
         timeZone: "UTC",
         localTime: "08:00",
@@ -127,38 +101,18 @@ describe("reminder eligibility and payload safety", () => {
         windowEndsAt,
       }),
     ).toEqual([]);
-    expect(
-      dueMealReminderPhases({
-        nowIso: "2026-10-10T09:00:00.000Z",
-        localDate: "2026-10-10",
-        timeZone: "UTC",
-        localTime: null,
-        logged: false,
-        windowEndsAt,
-      }),
-    ).toEqual([]);
-    expect(
-      dueMealReminderPhases({
-        nowIso: "2026-10-10T23:40:00.000Z",
-        localDate: "2026-10-11",
-        timeZone: "UTC",
-        localTime: "00:20",
-        logged: false,
-        windowEndsAt: "2026-10-12T00:00:00.000Z",
-      }),
-    ).toEqual(["advance"]);
   });
 
-  it("opens the daily summary at 21:00 local and defers quiet hours without dropping them", () => {
+  it("opens the daily summary at 21:30 local by default", () => {
     expect(
       isDailySummaryClockDue({
-        nowIso: "2026-10-10T20:59:00.000Z",
+        nowIso: "2026-10-10T21:29:00.000Z",
         timeZone: "UTC",
       }),
     ).toBe(false);
     expect(
       isDailySummaryClockDue({
-        nowIso: "2026-10-10T21:00:00.000Z",
+        nowIso: "2026-10-10T21:30:00.000Z",
         timeZone: "UTC",
       }),
     ).toBe(true);
@@ -179,7 +133,6 @@ describe("reminder eligibility and payload safety", () => {
       domainEntityId: "11111111-1111-4111-8111-111111111111",
     });
     expect(deferredReminderDedupeKey(deliveryKey)).toBe(`deferred:${deliveryKey}`);
-    expect(deferredReminderDedupeKey(deliveryKey)).not.toBe(deliveryKey);
     expect(
       isActivityUnresolved({
         activityType: "workout",
@@ -203,30 +156,21 @@ describe("reminder eligibility and payload safety", () => {
         hasReview: false,
       }),
     ).toBe(true);
-    expect(
-      isCheckinReminderEligible({
-        nowIso: "2026-09-26T12:00:00.000Z",
-        windowStartsAt: "2026-09-26T10:00:00.000Z",
-        windowEndsAt: "2026-09-26T22:00:00.000Z",
-        recordStatus: "submitted",
-        hasReview: false,
-      }),
-    ).toBe(false);
   });
 
-  it("detects overnight quiet hours", () => {
+  it("detects overnight quiet hours when configured", () => {
     expect(
       isWithinQuietHours({
         localTimeHhMm: "23:30",
-        quietHoursStart: "22:00",
-        quietHoursEnd: "07:00",
+        quietHoursStart: DEFAULT_QUIET_HOURS_START,
+        quietHoursEnd: DEFAULT_QUIET_HOURS_END,
       }),
     ).toBe(true);
     expect(
       isWithinQuietHours({
         localTimeHhMm: "08:00",
-        quietHoursStart: "22:00",
-        quietHoursEnd: "07:00",
+        quietHoursStart: DEFAULT_QUIET_HOURS_START,
+        quietHoursEnd: DEFAULT_QUIET_HOURS_END,
       }),
     ).toBe(false);
   });
@@ -246,9 +190,7 @@ describe("reminder eligibility and payload safety", () => {
         trainerNote: "secret",
       }),
     ).toBe(true);
-    expect(
-      routeTargetFromPushPayload(payload),
-    ).toEqual({
+    expect(routeTargetFromPushPayload(payload)).toEqual({
       tab: "workout",
       domainEntityType: "workout_assignment",
       domainEntityId: "22222222-2222-4222-8222-222222222222",

@@ -8,6 +8,8 @@ import {
   handleScheduledReminders,
 } from "./jobs/reminders";
 import { handleScheduledReplenishment } from "./jobs/replenishment";
+import { runCoachAskMaintenance } from "./domain/coach-asks";
+import { createDb } from "./db/client";
 import { ok } from "./lib/envelope";
 import { writeStructuredLog } from "./lib/log";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -37,6 +39,12 @@ import { realtimeRoutes } from "./routes/realtime";
 import { templateRoutes } from "./routes/templates";
 import { libraryRoutes } from "./routes/libraries";
 import { clientRoutes } from "./routes/clients";
+import { configRoutes } from "./routes/config";
+import { devRoutes } from "./routes/dev";
+import { coachAskRoutes } from "./routes/coach-asks";
+import { activityFeedRoutes } from "./routes/activity-feed";
+import { linkRoutes } from "./routes/links";
+import { whatsappWebhookRoutes } from "./routes/webhooks-whatsapp";
 import { openApiRouteOptions, operation } from "./openapi/document";
 import type { Env, Variables } from "./types";
 
@@ -66,6 +74,8 @@ app.get(
     ),
 );
 
+app.route("/config", configRoutes);
+app.route("/dev", devRoutes);
 app.route("/auth", authRoutes);
 app.route("/me", meRoutes);
 app.route("/invitations", invitationRoutes);
@@ -90,6 +100,10 @@ app.route("/files", fileRoutes);
 app.route("/sync", syncRoutes);
 app.route("/notifications", notificationRoutes);
 app.route("/realtime", realtimeRoutes);
+app.route("/coach-asks", coachAskRoutes);
+app.route("/activity", activityFeedRoutes);
+app.route("/links", linkRoutes);
+app.route("/webhooks/whatsapp", whatsappWebhookRoutes);
 bindSyncApp(app);
 
 const openApiDocumentSchema = z
@@ -170,6 +184,7 @@ const worker = {
   ): Promise<void> {
     await handleScheduledReminders(env, new Date(controller.scheduledTime));
     await handleScheduledReplenishment(env, new Date(controller.scheduledTime));
+    await runCoachAskMaintenance(createDb(env.DB));
   },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
     await handleReminderQueueBatch(batch, env);

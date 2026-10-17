@@ -22,6 +22,9 @@ import {
   planWithVersionsSchema,
   publishPlanRequestSchema,
   updatePlanDraftRequestSchema,
+  assignPlanVersionRequestSchema,
+  assignPlanVersionResponseSchema,
+  planVersionDiffResponseSchema,
 } from "@fitbud/contracts";
 import {
   canEditPlanVersion,
@@ -39,6 +42,13 @@ import {
   reconcilePublishedPlan,
   saveAssignmentPolicy,
 } from "../domain/assignment-schedule";
+import {
+  assignPlanVersion,
+  computePlanVersionDiff,
+  stableAssignFingerprint,
+} from "../domain/plan-version-assign";
+import { storeInboxNotification } from "../domain/inbox-notify";
+import { requireWritableRelationship } from "../lib/relationship-write-guard";
 import { createDb } from "../db/client";
 import {
   coachingConfigurations,
@@ -76,6 +86,7 @@ const CREATE_PLAN_OPERATION = "plan.create";
 const PUBLISH_PLAN_OPERATION = "plan.publish";
 const CREATE_DRAFT_FROM_VERSION_OPERATION = "plan.draft_from_version";
 const APPLY_TEMPLATE_OPERATION = "plan.apply_template";
+const ASSIGN_PLAN_OPERATION = "plan.assign";
 
 export const planRoutes = new Hono<{
   Bindings: Env;
@@ -1259,14 +1270,12 @@ planRoutes.post(
     if (!owned) {
       return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
     }
-    if (owned.relationship.status === "ended") {
-      return fail(
-        c,
-        409,
-        "RELATIONSHIP_ENDED",
-        "Ended relationships cannot publish plans.",
-      );
-    }
+    const writablePublish = await requireWritableRelationship(
+      c,
+      db,
+      owned.relationship.id,
+    );
+    if (!writablePublish.ok) return writablePublish.response;
 
     const versions = await db
       .select()
@@ -1720,14 +1729,12 @@ planRoutes.post(
     if (!owned) {
       return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
     }
-    if (owned.relationship.status === "ended") {
-      return fail(
-        c,
-        409,
-        "RELATIONSHIP_ENDED",
-        "Ended relationships cannot change plans.",
-      );
-    }
+    const writablePlan = await requireWritableRelationship(
+      c,
+      db,
+      owned.relationship.id,
+    );
+    if (!writablePlan.ok) return writablePlan.response;
     const versions = await db
       .select()
       .from(planVersions)
@@ -1775,6 +1782,146 @@ planRoutes.post(
       c,
       await loadPlanConsistency(db, version, owned.relationship.id),
     );
+  },
+);
+
+planRoutes.post(
+  "/:planId/versions/:versionId/assign",
+  operation({
+    tag: "Plans",
+    summary: "Assign plan version",
+    description: "Publishes when needed and generates workout and meal assignments.",
+    roles: ["trainer"],
+    body: assignPlanVersionRequestSchema,
+    response: assignPlanVersionResponseSchema,
+    idempotency: true,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = c.req.header("Idempotency-Key")?.trim();
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = assignPlanVersionRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid assign request.");
+    }
+    if (parsed.data.window > 35) {
+      return fail(c, 400, "RANGE_TOO_LARGE", "Assignment window exceeds 35 days.");
+    }
+    const planId = c.req.param("planId");
+    const versionId = c.req.param("versionId");
+    const fingerprint = await sha256Hex(
+      stableAssignFingerprint(planId, versionId, parsed.data),
+    );
+    const db = createDb(c.env.DB);
+    const prior = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: ASSIGN_PLAN_OPERATION,
+      idempotencyKey,
+    });
+    if (prior) {
+      if (prior.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request payload.",
+        );
+      }
+      return c.json(JSON.parse(prior.responseBody), prior.responseStatus as 200);
+    }
+    const owned = await loadOwnedPlan(db, planId, actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const writable = await requireWritableRelationship(c, db, owned.relationship.id);
+    if (!writable.ok) {
+      return writable.response;
+    }
+    try {
+      const result = await assignPlanVersion(db, {
+        planId,
+        versionId,
+        relationshipId: owned.relationship.id,
+        traineeUserId: owned.relationship.traineeUserId,
+        request: parsed.data,
+        dryRun: parsed.data.dryRun ?? false,
+      });
+      if (parsed.data.notifyClient && !parsed.data.dryRun) {
+        await storeInboxNotification(db, {
+          recipientUserId: owned.relationship.traineeUserId,
+          relationshipId: owned.relationship.id,
+          notificationType: "plan_published",
+          domainEntityId: versionId,
+          dedupeKey: `plan-published:${versionId}`,
+        });
+      }
+      const data = assignPlanVersionResponseSchema.parse(result);
+      const responseBody = { data };
+      await saveIdempotencyRecord(db, {
+        actorUserId: actor.userId,
+        operation: ASSIGN_PLAN_OPERATION,
+        idempotencyKey,
+        requestFingerprint: fingerprint,
+        responseStatus: 200,
+        responseBody,
+        expiresAt: addDaysIso(7),
+      });
+      return ok(c, data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "GENERATION_FAILED";
+      if (message === "PLAN_VERSION_NOT_FOUND") {
+        return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+      }
+      return fail(c, 422, "GENERATION_FAILED", "Couldn't create this week's schedule · Retry");
+    }
+  },
+);
+
+planRoutes.get(
+  "/:planId/versions/:versionId/diff",
+  operation({
+    tag: "Plans",
+    summary: "Plan version diff",
+    description: "Structural diff against the previous published version.",
+    roles: ["trainer"],
+    response: planVersionDiffResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, c.req.param("planId"), actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    try {
+      const diff = await computePlanVersionDiff(db, {
+        planId: c.req.param("planId"),
+        versionId: c.req.param("versionId"),
+      });
+      return ok(c, planVersionDiffResponseSchema.parse(diff));
+    } catch {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
   },
 );
 

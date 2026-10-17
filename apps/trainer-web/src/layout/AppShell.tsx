@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="side-nav">
         <div className="brand-lockup">
           <span className="brand-glyph" aria-hidden="true">
-            <IconBolt />
+            <img src="/favicon-32.png" width={28} height={28} alt="" />
           </span>
           <span className="brand-copy">
             <span className="brand-mark">FitBud Coach</span>
@@ -191,14 +191,6 @@ function iconProps(): SVGProps<SVGSVGElement> {
     "aria-hidden": true,
     focusable: false,
   };
-}
-
-function IconBolt() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path fill="currentColor" d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
-    </svg>
-  );
 }
 
 function IconBell() {

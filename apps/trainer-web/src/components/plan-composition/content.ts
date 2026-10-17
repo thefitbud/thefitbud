@@ -75,6 +75,7 @@ export function createWorkoutDay(
     order,
     name: `Day ${order}`,
     weekday,
+    required: true,
     exercises: [],
   };
 }
@@ -117,6 +118,7 @@ export function createMeal(order: number): MealPrescription {
     scheduleHint: null,
     instructions: null,
     photoRequired: false,
+    required: true,
     items: [],
   };
 }
@@ -546,6 +548,7 @@ export function duplicateWorkoutDay(
     order: source.order,
     name: source.name,
     weekday: nextUnusedWeekday(days),
+    required: source.required ?? true,
     exercises: sortedByOrder(source.exercises).map(cloneExercise),
   };
   const next = days.slice();

@@ -32,6 +32,7 @@ import { onboardingStatusForRelationship } from "../domain/client-status";
 import { mapCoachingConfiguration } from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -358,6 +359,12 @@ configurationRoutes.put(
         "Coaching relationship not found.",
       );
     }
+    const writableConfig = await requireWritableRelationship(
+      c,
+      db,
+      ownership.relationship.id,
+    );
+    if (!writableConfig.ok) return writableConfig.response;
 
     const onboardingStatus = await onboardingStatusForRelationship(
       db,
@@ -587,6 +594,12 @@ configurationRoutes.post(
         "Coaching relationship not found.",
       );
     }
+    const writableConfig = await requireWritableRelationship(
+      c,
+      db,
+      ownership.relationship.id,
+    );
+    if (!writableConfig.ok) return writableConfig.response;
 
     const onboardingStatus = await onboardingStatusForRelationship(
       db,
@@ -788,6 +801,12 @@ configurationRoutes.post(
         "Coaching relationship not found.",
       );
     }
+    const writableConfig = await requireWritableRelationship(
+      c,
+      db,
+      ownership.relationship.id,
+    );
+    if (!writableConfig.ok) return writableConfig.response;
 
     const onboardingStatus = await onboardingStatusForRelationship(
       db,
@@ -986,6 +1005,12 @@ configurationRoutes.post(
         "Coaching relationship not found.",
       );
     }
+    const writableNewVersion = await requireWritableRelationship(
+      c,
+      db,
+      ownership.relationship.id,
+    );
+    if (!writableNewVersion.ok) return writableNewVersion.response;
 
     const onboardingStatus = await onboardingStatusForRelationship(
       db,
@@ -1219,6 +1244,12 @@ configurationRoutes.post(
         "Coaching relationship not found.",
       );
     }
+    const writableCopy = await requireWritableRelationship(
+      c,
+      db,
+      target.relationship.id,
+    );
+    if (!writableCopy.ok) return writableCopy.response;
     const sourceOwnership = await loadRelationshipForTrainer(
       db,
       sourceRelationshipId,

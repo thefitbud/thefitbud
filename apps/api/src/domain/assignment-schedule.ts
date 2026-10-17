@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import type {
   DietAdjustmentScope,
   PlanContent,
@@ -137,52 +137,7 @@ export async function loadAssignmentPolicy(
   };
 }
 
-async function workoutRowExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    workoutDayId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: workoutAssignments.id })
-    .from(workoutAssignments)
-    .where(
-      and(
-        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
-        eq(workoutAssignments.planVersionId, input.planVersionId),
-        eq(workoutAssignments.workoutDayId, input.workoutDayId),
-        eq(workoutAssignments.localDate, input.localDate),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
-}
-
-async function otherScheduledWorkoutExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: workoutAssignments.id })
-    .from(workoutAssignments)
-    .where(
-      and(
-        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
-        eq(workoutAssignments.localDate, input.localDate),
-        eq(workoutAssignments.scheduleStatus, "scheduled"),
-        ne(workoutAssignments.planVersionId, input.planVersionId),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
-}
+const WORKOUT_INSERT_CHUNK = 7;
 
 export async function insertWorkoutAssignments(
   db: Db,
@@ -197,28 +152,54 @@ export async function insertWorkoutAssignments(
     now: string;
   },
 ): Promise<WorkoutAssignmentRow[]> {
-  const created: WorkoutAssignmentRow[] = [];
+  if (input.dates.length === 0) {
+    return [];
+  }
+  const sortedDates = [...input.dates].sort();
+  const minDate = sortedDates[0]!;
+  const maxDate = sortedDates[sortedDates.length - 1]!;
+  const existing = await db
+    .select({
+      planVersionId: workoutAssignments.planVersionId,
+      workoutDayId: workoutAssignments.workoutDayId,
+      localDate: workoutAssignments.localDate,
+      scheduleStatus: workoutAssignments.scheduleStatus,
+    })
+    .from(workoutAssignments)
+    .where(
+      and(
+        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+        gte(workoutAssignments.localDate, minDate),
+        lte(workoutAssignments.localDate, maxDate),
+      ),
+    );
+  const sameVersionKeys = new Set(
+    existing
+      .filter((row) => row.planVersionId === input.planVersionId)
+      .map((row) => `${row.workoutDayId}:${row.localDate}`),
+  );
+  const blockedDates = new Set(
+    existing
+      .filter(
+        (row) =>
+          row.scheduleStatus === "scheduled" &&
+          row.planVersionId !== input.planVersionId,
+      )
+      .map((row) => row.localDate),
+  );
   const placed = workoutSessionsOnDates(input.content.workoutDays, input.dates);
+  const rows: WorkoutAssignmentRow[] = [];
   for (const placement of placed) {
-    const exists = await workoutRowExists(db, {
-      relationshipId: input.relationshipId,
-      planVersionId: input.planVersionId,
-      workoutDayId: placement.day.id,
-      localDate: placement.localDate,
-    });
-    if (exists) continue;
-    const blocked = await otherScheduledWorkoutExists(db, {
-      relationshipId: input.relationshipId,
-      planVersionId: input.planVersionId,
-      localDate: placement.localDate,
-    });
-    if (blocked) continue;
+    const key = `${placement.day.id}:${placement.localDate}`;
+    if (sameVersionKeys.has(key) || blockedDates.has(placement.localDate)) {
+      continue;
+    }
     const window = workoutWindowForLocalDate({
       localDate: placement.localDate,
       timeZone: input.timeZone,
       completionWindowHours: input.completionWindowHours,
     });
-    const row: WorkoutAssignmentRow = {
+    rows.push({
       id: createId(),
       coachingRelationshipId: input.relationshipId,
       planId: input.planId,
@@ -234,59 +215,19 @@ export async function insertWorkoutAssignments(
       supersededByPlanVersionId: null,
       createdAt: input.now,
       updatedAt: input.now,
-    };
-    await db.insert(workoutAssignments).values(row);
-    created.push(row);
+    });
   }
-  return created;
+  for (let i = 0; i < rows.length; i += WORKOUT_INSERT_CHUNK) {
+    const chunk = rows.slice(i, i + WORKOUT_INSERT_CHUNK);
+    await db
+      .insert(workoutAssignments)
+      .values(chunk)
+      .onConflictDoNothing();
+  }
+  return rows;
 }
 
-async function mealRowExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    mealPrescriptionId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: mealAssignments.id })
-    .from(mealAssignments)
-    .where(
-      and(
-        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
-        eq(mealAssignments.planVersionId, input.planVersionId),
-        eq(mealAssignments.mealPrescriptionId, input.mealPrescriptionId),
-        eq(mealAssignments.localDate, input.localDate),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
-}
-
-async function otherScheduledMealExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: mealAssignments.id })
-    .from(mealAssignments)
-    .where(
-      and(
-        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
-        eq(mealAssignments.localDate, input.localDate),
-        eq(mealAssignments.scheduleStatus, "scheduled"),
-        ne(mealAssignments.planVersionId, input.planVersionId),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
-}
+const MEAL_INSERT_CHUNK = 7;
 
 export async function insertMealAssignments(
   db: Db,
@@ -302,22 +243,48 @@ export async function insertMealAssignments(
     now: string;
   },
 ): Promise<MealAssignmentRow[]> {
-  const created: MealAssignmentRow[] = [];
+  if (input.dates.length === 0) {
+    return [];
+  }
+  const sortedDates = [...input.dates].sort();
+  const minDate = sortedDates[0]!;
+  const maxDate = sortedDates[sortedDates.length - 1]!;
+  const existing = await db
+    .select({
+      planVersionId: mealAssignments.planVersionId,
+      mealPrescriptionId: mealAssignments.mealPrescriptionId,
+      localDate: mealAssignments.localDate,
+      scheduleStatus: mealAssignments.scheduleStatus,
+    })
+    .from(mealAssignments)
+    .where(
+      and(
+        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+        gte(mealAssignments.localDate, minDate),
+        lte(mealAssignments.localDate, maxDate),
+      ),
+    );
+  const sameVersionKeys = new Set(
+    existing
+      .filter((row) => row.planVersionId === input.planVersionId)
+      .map((row) => `${row.mealPrescriptionId}:${row.localDate}`),
+  );
+  const blockedDates = new Set(
+    existing
+      .filter(
+        (row) =>
+          row.scheduleStatus === "scheduled" &&
+          row.planVersionId !== input.planVersionId,
+      )
+      .map((row) => row.localDate),
+  );
   const placed = mealsOnDates(input.content.mealPrescriptions, input.dates);
+  const rows: MealAssignmentRow[] = [];
   for (const placement of placed) {
-    const exists = await mealRowExists(db, {
-      relationshipId: input.relationshipId,
-      planVersionId: input.planVersionId,
-      mealPrescriptionId: placement.meal.id,
-      localDate: placement.localDate,
-    });
-    if (exists) continue;
-    const blocked = await otherScheduledMealExists(db, {
-      relationshipId: input.relationshipId,
-      planVersionId: input.planVersionId,
-      localDate: placement.localDate,
-    });
-    if (blocked) continue;
+    const key = `${placement.meal.id}:${placement.localDate}`;
+    if (sameVersionKeys.has(key) || blockedDates.has(placement.localDate)) {
+      continue;
+    }
     const window = mealWindowForLocalDate({
       localDate: placement.localDate,
       timeZone: input.timeZone,
@@ -327,7 +294,7 @@ export async function insertMealAssignments(
       photoRequirement: input.photoRequirement,
       prescriptionPhotoRequired: placement.meal.photoRequired,
     });
-    const row: MealAssignmentRow = {
+    rows.push({
       id: createId(),
       coachingRelationshipId: input.relationshipId,
       planId: input.planId,
@@ -344,11 +311,16 @@ export async function insertMealAssignments(
       supersededByPlanVersionId: null,
       createdAt: input.now,
       updatedAt: input.now,
-    };
-    await db.insert(mealAssignments).values(row);
-    created.push(row);
+    });
   }
-  return created;
+  for (let i = 0; i < rows.length; i += MEAL_INSERT_CHUNK) {
+    const chunk = rows.slice(i, i + MEAL_INSERT_CHUNK);
+    await db
+      .insert(mealAssignments)
+      .values(chunk)
+      .onConflictDoNothing();
+  }
+  return rows;
 }
 
 function dateInSupersedeRange(

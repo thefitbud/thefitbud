@@ -61,6 +61,7 @@ export const workoutDaySchema = z.object({
   order: z.number().int().min(1).max(14),
   name: z.string().trim().min(1).max(120),
   weekday: weekdaySchema.nullable().optional(),
+  required: z.boolean().optional().default(true),
   exercises: z.array(workoutExerciseSchema).max(40),
 });
 export type WorkoutDay = z.infer<typeof workoutDaySchema>;
@@ -168,6 +169,7 @@ export const mealPrescriptionSchema = z.object({
   mealType: mealTypeSchema.nullable().optional(),
   applicableWeekdays: z.array(weekdaySchema).max(7).optional(),
   localTime: localTimeSchema.nullable().optional(),
+  required: z.boolean().optional().default(true),
   /** Legacy display text. Ignored when placing assignments. */
   scheduleHint: z.string().trim().max(120).nullable(),
   instructions: z.string().trim().max(2000).nullable(),
@@ -319,4 +321,39 @@ export const acknowledgePlanConsistencyRequestSchema = z.object({
 });
 export type AcknowledgePlanConsistencyRequest = z.infer<
   typeof acknowledgePlanConsistencyRequestSchema
+>;
+
+export const assignPlanVersionRequestSchema = z.object({
+  window: z.number().int().min(1).max(35),
+  effectiveFrom: isoDateTimeSchema,
+  effectiveTo: isoDateTimeSchema.optional(),
+  dietChangeScope: z.enum(["today_onward", "today_only"]).optional(),
+  notifyClient: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+export type AssignPlanVersionRequest = z.infer<
+  typeof assignPlanVersionRequestSchema
+>;
+
+export const assignPlanVersionResponseSchema = z.object({
+  replaced: z.object({ workouts: z.number().int(), meals: z.number().int() }),
+  created: z.object({ workouts: z.number().int(), meals: z.number().int() }),
+  dates: z.array(z.string()),
+});
+export type AssignPlanVersionResponse = z.infer<
+  typeof assignPlanVersionResponseSchema
+>;
+
+export const planVersionDiffResponseSchema = z.object({
+  addedWorkoutDays: z.array(z.string()),
+  removedWorkoutDays: z.array(z.string()),
+  changedWorkoutDays: z.array(z.string()),
+  addedMeals: z.array(z.string()),
+  removedMeals: z.array(z.string()),
+  changedMeals: z.array(z.string()),
+  kcalDeltaPerMeal: z.record(z.number().int()),
+  kcalDeltaPerDay: z.record(z.number().int()),
+});
+export type PlanVersionDiffResponse = z.infer<
+  typeof planVersionDiffResponseSchema
 >;

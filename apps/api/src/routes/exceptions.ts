@@ -8,6 +8,7 @@ import { desc, eq } from "drizzle-orm";
 import {
   acknowledgeExceptionRequestSchema,
   attentionFeedResponseSchema,
+  attentionGroupsResponseSchema,
   createInterventionRequestSchema,
   evaluateExceptionsResponseSchema,
   exceptionDetailSchema,
@@ -127,6 +128,64 @@ exceptionRoutes.get(
     const nameByUserId = new Map(
       profileRows.map((row) => [row.userId, row.displayName]),
     );
+
+    if (c.req.query("groupBy") === "relationship") {
+      const grouped = new Map<
+        string,
+        {
+          relationshipId: string;
+          traineeDisplayName: string;
+          items: Array<{
+            id: string;
+            type: string;
+            severity: string;
+            status: string;
+            ageMinutes: number;
+            summary: string;
+          }>;
+        }
+      >();
+      for (const item of attention) {
+        const ex = mapException(item.exception);
+        const ageMinutes = Math.max(
+          0,
+          Math.floor((Date.parse(now) - Date.parse(ex.detectedAt)) / 60_000),
+        );
+        const bucket = grouped.get(item.coachingRelationshipId) ?? {
+          relationshipId: item.coachingRelationshipId,
+          traineeDisplayName:
+            nameByUserId.get(item.traineeUserId) ?? "Client",
+          items: [],
+        };
+        bucket.items.push({
+          id: ex.id,
+          type: ex.type,
+          severity: ex.severity,
+          status: ex.status,
+          ageMinutes,
+          summary: ex.summary,
+        });
+        grouped.set(item.coachingRelationshipId, bucket);
+      }
+      const groups = [...grouped.values()].map((group) => ({
+        ...group,
+        items: group.items.sort((a, b) => {
+          if (a.severity !== b.severity) {
+            return a.severity === "critical" ? -1 : 1;
+          }
+          return b.ageMinutes - a.ageMinutes;
+        }),
+      }));
+      groups.sort((a, b) => {
+        const aCrit = a.items.some((i) => i.severity === "critical") ? 1 : 0;
+        const bCrit = b.items.some((i) => i.severity === "critical") ? 1 : 0;
+        if (aCrit !== bCrit) return bCrit - aCrit;
+        const aAge = a.items[0]?.ageMinutes ?? 0;
+        const bAge = b.items[0]?.ageMinutes ?? 0;
+        return bAge - aAge;
+      });
+      return ok(c, attentionGroupsResponseSchema.parse({ groups }));
+    }
 
     return ok(
       c,

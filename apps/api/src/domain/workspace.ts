@@ -49,7 +49,9 @@ import {
   checkinSchedules,
   trackingRequirements,
   traineeProfiles,
+  trainerProfiles,
   users,
+  mealTimeOverrides,
   workoutAssignments,
   workoutExecutions,
   workoutExpectations,
@@ -590,6 +592,9 @@ export async function loadClientWorkspace(
 ) {
   const [
     profile,
+    traineeUser,
+    trainerProfile,
+    mealOverrides,
     onboardingStatus,
     configuration,
     effectivePlan,
@@ -608,6 +613,20 @@ export async function loadClientWorkspace(
       .from(traineeProfiles)
       .where(eq(traineeProfiles.userId, relationship.traineeUserId))
       .limit(1),
+    db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, relationship.traineeUserId))
+      .limit(1),
+    db
+      .select({ whatsappE164: trainerProfiles.whatsappE164 })
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, relationship.trainerUserId))
+      .limit(1),
+    db
+      .select({ id: mealTimeOverrides.slotKey })
+      .from(mealTimeOverrides)
+      .where(eq(mealTimeOverrides.relationshipId, relationship.id)),
     onboardingStatusForRelationship(db, relationship),
     loadActiveConfiguration(db, relationship.id),
     loadEffectivePlan(db, relationship.id),
@@ -654,6 +673,9 @@ export async function loadClientWorkspace(
         age: deriveAge(trainee.dateOfBirth, today),
         gender: trainee.gender,
       },
+      traineeTimezone: traineeUser[0]?.timezone ?? "UTC",
+      hasCustomMealTimes: mealOverrides.length > 0,
+      trainerWhatsappE164: trainerProfile[0]?.whatsappE164 ?? null,
     },
     overview: {
       openException,
