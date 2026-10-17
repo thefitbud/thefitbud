@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatLocalDate } from "@fitbud/core";
 import { app } from "../index.js";

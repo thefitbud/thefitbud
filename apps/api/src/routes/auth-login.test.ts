@@ -301,7 +301,7 @@ describe("auth login routes", () => {
           password: "whatever-12",
         }),
       },
-      testEnv({ ENVIRONMENT: "staging" }),
+      testEnv({ ENVIRONMENT: "production" }),
     );
     expect(response.status).toBe(503);
     const body = (await response.json()) as { error: { code: string } };

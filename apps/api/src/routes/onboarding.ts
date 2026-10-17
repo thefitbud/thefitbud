@@ -47,6 +47,7 @@ import {
   requireAuthMiddleware,
   requireRole,
 } from "../middleware/auth";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { canAccessRelationship } from "./relationships";
 import type { Env, Variables } from "../types";
 
@@ -243,6 +244,11 @@ onboardingRoutes.put(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
+    const writableDraft = await requireWritableRelationship(c, db, relationshipId);
+    if (!writableDraft.ok) {
+      return writableDraft.response;
+    }
+
     const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
     if (!canSaveOnboardingDraft(onboardingStatus)) {
       return fail(
@@ -430,6 +436,11 @@ onboardingRoutes.post(
     const relationship = relationships[0];
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
+    }
+
+    const writableSubmit = await requireWritableRelationship(c, db, relationshipId);
+    if (!writableSubmit.ok) {
+      return writableSubmit.response;
     }
 
     const responses = await db

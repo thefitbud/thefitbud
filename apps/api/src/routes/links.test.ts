@@ -90,13 +90,27 @@ async function reachCoachingReady(suffix: string) {
   };
 }
 
-function authHeaders(cookieOrToken: { cookie?: string; token?: string }, role: "trainer" | "trainee") {
-  if (cookieOrToken.cookie) {
+function authHeaders(
+  cookieOrToken: { cookie: string } | { token: string },
+  role: "trainer" | "trainee",
+): Record<string, string> {
+  if ("cookie" in cookieOrToken) {
     return { Cookie: cookieOrToken.cookie, "x-fitbud-role": role };
   }
   return {
     Authorization: `Bearer ${cookieOrToken.token}`,
     "x-fitbud-role": role,
+  };
+}
+
+async function linkResolveBody(response: Response) {
+  return (await response.json()) as {
+    data: {
+      available: boolean;
+      reason?: string;
+      role?: string;
+      route?: string;
+    };
   };
 }
 
@@ -126,7 +140,7 @@ describe("links resolve", () => {
       testEnv(),
     );
     expect(available.status).toBe(200);
-    expect((await available.json()).data).toMatchObject({
+    expect((await linkResolveBody(available)).data).toMatchObject({
       available: true,
       role: "trainer",
     });
@@ -136,7 +150,7 @@ describe("links resolve", () => {
       { headers: authHeaders({ cookie: otherTrainer.cookie }, "trainer") },
       testEnv(),
     );
-    expect((await notYours.json()).data).toMatchObject({
+    expect((await linkResolveBody(notYours)).data).toMatchObject({
       available: false,
       reason: "not_yours",
     });
@@ -152,7 +166,7 @@ describe("links resolve", () => {
       { headers: authHeaders({ cookie: ctx.trainerCookie }, "trainer") },
       testEnv(),
     );
-    expect((await ended.json()).data).toMatchObject({
+    expect((await linkResolveBody(ended)).data).toMatchObject({
       available: false,
       reason: "ended",
     });
@@ -187,7 +201,7 @@ describe("links resolve", () => {
       { headers: authHeaders({ token: ctx.traineeToken }, "trainee") },
       testEnv(),
     );
-    expect((await available.json()).data).toMatchObject({ available: true });
+    expect((await linkResolveBody(available)).data).toMatchObject({ available: true });
 
     const otherTrainer = await createTrainerSession("link-ask-other@example.com");
     const notYours = await app.request(
@@ -195,7 +209,7 @@ describe("links resolve", () => {
       { headers: authHeaders({ cookie: otherTrainer.cookie }, "trainer") },
       testEnv(),
     );
-    expect((await notYours.json()).data).toMatchObject({
+    expect((await linkResolveBody(notYours)).data).toMatchObject({
       available: false,
       reason: "not_yours",
     });
@@ -227,7 +241,7 @@ describe("links resolve", () => {
       { headers: authHeaders({ cookie: ctx.trainerCookie }, "trainer") },
       testEnv(),
     );
-    expect((await available.json()).data).toMatchObject({ available: true });
+    expect((await linkResolveBody(available)).data).toMatchObject({ available: true });
 
     const otherTrainer = await createTrainerSession("link-ex-other@example.com");
     const notYours = await app.request(
@@ -235,9 +249,105 @@ describe("links resolve", () => {
       { headers: authHeaders({ cookie: otherTrainer.cookie }, "trainer") },
       testEnv(),
     );
-    expect((await notYours.json()).data).toMatchObject({
+    expect((await linkResolveBody(notYours)).data).toMatchObject({
       available: false,
       reason: "not_yours",
     });
+  });
+
+  it("resolves reactivate links for ended relationships owned by the trainer", async () => {
+    const ctx = await reachCoachingReady("reactivate");
+    const endedAt = nowIso();
+    await db
+      .update(schema.coachingRelationships)
+      .set({ status: "ended", endedAt, updatedAt: endedAt })
+      .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+
+    const reactivate = await app.request(
+      `/links/resolve?kind=reactivate&id=${ctx.relationshipId}`,
+      { headers: authHeaders({ cookie: ctx.trainerCookie }, "trainer") },
+      testEnv(),
+    );
+    expect((await linkResolveBody(reactivate)).data).toMatchObject({
+      available: true,
+      role: "trainer",
+    });
+
+    const asClientKind = await app.request(
+      `/links/resolve?kind=client&id=${ctx.relationshipId}`,
+      { headers: authHeaders({ cookie: ctx.trainerCookie }, "trainer") },
+      testEnv(),
+    );
+    expect((await linkResolveBody(asClientKind)).data).toMatchObject({
+      available: false,
+      reason: "ended",
+    });
+  });
+
+  it("resolves plan and today links for the authenticated actor", async () => {
+    const ctx = await reachCoachingReady("static");
+    for (const kind of ["plan", "today"] as const) {
+      const response = await app.request(
+        `/links/resolve?kind=${kind}&id=${ctx.relationshipId}`,
+        { headers: authHeaders({ token: ctx.traineeToken }, "trainee") },
+        testEnv(),
+      );
+      const body = (await response.json()) as { data: { available: boolean; route: string } };
+      expect(body.data.available).toBe(true);
+      expect(body.data.route.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("resolves note links for client-visible notes", async () => {
+    const ctx = await reachCoachingReady("note");
+    const noteId = createId();
+    const now = nowIso();
+    await db.insert(schema.trainerNotes).values({
+      id: noteId,
+      coachingRelationshipId: ctx.relationshipId,
+      trainerUserId: (
+        await db
+          .select()
+          .from(schema.coachingRelationships)
+          .where(eq(schema.coachingRelationships.id, ctx.relationshipId))
+      )[0]!.trainerUserId,
+      visibility: "client",
+      body: "Hydrate",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const available = await app.request(
+      `/links/resolve?kind=note&id=${noteId}`,
+      { headers: authHeaders({ token: ctx.traineeToken }, "trainee") },
+      testEnv(),
+    );
+    expect((await linkResolveBody(available)).data).toMatchObject({ available: true });
+
+    const otherTrainer = await createTrainerSession("link-note-other@example.com");
+    const notYours = await app.request(
+      `/links/resolve?kind=note&id=${noteId}`,
+      { headers: authHeaders({ cookie: otherTrainer.cookie }, "trainer") },
+      testEnv(),
+    );
+    expect((await linkResolveBody(notYours)).data).toMatchObject({
+      available: false,
+      reason: "not_yours",
+    });
+  });
+
+  it("returns not_found for missing meal, workout, and checkin ids", async () => {
+    const ctx = await reachCoachingReady("entities");
+    for (const kind of ["meal", "workout", "checkin"] as const) {
+      const response = await app.request(
+        `/links/resolve?kind=${kind}&id=${createId()}`,
+        { headers: authHeaders({ cookie: ctx.trainerCookie }, "trainer") },
+        testEnv(),
+      );
+      expect((await linkResolveBody(response)).data).toMatchObject({
+        available: false,
+        reason: "not_found",
+      });
+    }
   });
 });

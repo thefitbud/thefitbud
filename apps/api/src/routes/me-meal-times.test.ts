@@ -80,6 +80,7 @@ async function reachActiveTrainee(suffix: string) {
     },
     testEnv(),
   );
+  expect(accept.status).toBe(200);
   return { traineeToken };
 }
 
