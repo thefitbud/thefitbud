@@ -41,7 +41,13 @@ import {
 } from "../domain/mappers";
 import { inviteEmailBody, inviteEmailSubject } from "../emails/invite.js";
 import { sendSystemEmail } from "../lib/email.js";
-import { trainerProfiles } from "../db/schema";
+import { trainerProfiles, userIdentities } from "../db/schema";
+import { verifyPurposeProof } from "../auth/proof.js";
+import { hashPassword } from "../auth/password.js";
+import { identifierHash } from "../auth/identifiers.js";
+import { mintAuthToken } from "../auth/custom-token.js";
+import { validatePasswordPlaintext } from "../auth/password.js";
+import { acceptInvitationWithTokenResponseSchema } from "@fitbud/contracts";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import {
   addDaysIso,
@@ -557,6 +563,125 @@ invitationRoutes.post("/accept",
     });
   }
 
+  const db = createDb(c.env.DB);
+  const tokenHash = await sha256Hex(parsed.data.token);
+  const invitations = await db
+    .select()
+    .from(clientInvitations)
+    .where(eq(clientInvitations.tokenHash, tokenHash))
+    .limit(1);
+  const invitation = invitations[0];
+  if (!invitation) {
+    return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
+  }
+
+  const timestamp = nowIso();
+
+  if (
+    invitation.status === "pending" &&
+    parsed.data.password &&
+    parsed.data.otpProof
+  ) {
+    if (invitation.expiresAt <= timestamp) {
+      await db
+        .update(clientInvitations)
+        .set({ status: "expired", updatedAt: timestamp })
+        .where(eq(clientInvitations.id, invitation.id));
+      return fail(c, 409, "INVITATION_EXPIRED", "Invitation has expired.");
+    }
+    const violation = validatePasswordPlaintext(parsed.data.password);
+    if (violation) {
+      return fail(c, 400, violation, "Password does not meet requirements.");
+    }
+    const secret = c.env.MEDIA_SIGNING_SECRET ?? "fitbud-local-proof-secret";
+    const verified = await verifyPurposeProof(secret, parsed.data.otpProof, "invite");
+    if (!verified) {
+      return fail(c, 401, "OTP_PROOF_INVALID", "Invite verification failed.");
+    }
+    const emailHash = await identifierHash(invitation.recipientEmail.toLowerCase());
+    if (emailHash !== verified.identifierHash) {
+      return fail(c, 401, "OTP_PROOF_INVALID", "Invite verification failed.");
+    }
+    const firebaseUid = `invite-${invitation.id}`;
+    const identity = { uid: firebaseUid, email: invitation.recipientEmail };
+    const { userId } = await findOrCreateUserFromFirebase(
+      db,
+      identity,
+      parsed.data.timezone ?? "UTC",
+    );
+    const passwordHash = await hashPassword(parsed.data.password);
+    await db
+      .insert(userIdentities)
+      .values({
+        userId,
+        email: invitation.recipientEmail,
+        emailNorm: invitation.recipientEmail.toLowerCase(),
+        mobileE164: parsed.data.mobileE164 ?? null,
+        passwordHash,
+        passwordUpdatedAt: timestamp,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+      .onConflictDoUpdate({
+        target: userIdentities.userId,
+        set: {
+          passwordHash,
+          passwordUpdatedAt: timestamp,
+          updatedAt: timestamp,
+        },
+      });
+    const displayName =
+      parsed.data.displayName ?? invitation.recipientDisplayName ?? "Trainee";
+    await ensureRoleAndProfile(db, {
+      userId,
+      role: "trainee",
+      displayName,
+    });
+    const relationshipId = createId();
+    await db.insert(coachingRelationships).values({
+      id: relationshipId,
+      trainerUserId: invitation.trainerUserId,
+      traineeUserId: userId,
+      status: "active",
+      invitationId: invitation.id,
+      startedAt: timestamp,
+      endedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db
+      .update(clientInvitations)
+      .set({
+        status: "accepted",
+        acceptedUserId: userId,
+        updatedAt: timestamp,
+      })
+      .where(eq(clientInvitations.id, invitation.id));
+    const token = await mintAuthToken(c.env, {
+      firebaseUid,
+      email: invitation.recipientEmail,
+    });
+    if ("error" in token) {
+      return fail(c, 503, token.error, "Authentication provider is not configured.");
+    }
+    return ok(
+      c,
+      acceptInvitationWithTokenResponseSchema.parse({
+        token: token.token,
+        tokenKind: token.tokenKind,
+        userId,
+        relationshipId,
+      }),
+    );
+  }
+
+  const acceptedRelationship =
+    invitation.status === "accepted"
+      ? await relationshipForInvitation(db, invitation.id)
+      : null;
+
   const authHeader = c.req.header("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return fail(c, 401, "UNAUTHENTICATED", "Bearer token required to accept an invitation.");
@@ -571,25 +696,7 @@ invitationRoutes.post("/accept",
     return fail(c, 401, "INVALID_TOKEN", "Firebase identity token was rejected.");
   }
 
-  const db = createDb(c.env.DB);
-  const tokenHash = await sha256Hex(parsed.data.token);
-  const invitations = await db
-    .select()
-    .from(clientInvitations)
-    .where(eq(clientInvitations.tokenHash, tokenHash))
-    .limit(1);
-  const invitation = invitations[0];
-  if (!invitation) {
-    return fail(c, 404, "INVITATION_NOT_FOUND", "Invitation not found.");
-  }
-
-  const timestamp = nowIso();
-  const acceptedRelationship =
-    invitation.status === "accepted"
-      ? await relationshipForInvitation(db, invitation.id)
-      : null;
   if (invitation.status === "accepted" && acceptedRelationship) {
-    // Idempotent accept for the same trainee token holder.
     const { userId } = await findOrCreateUserFromFirebase(
       db,
       identity,

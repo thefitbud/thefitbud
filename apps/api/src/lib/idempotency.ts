@@ -51,15 +51,32 @@ export async function saveIdempotencyRecord(
   },
 ): Promise<void> {
   const keyHash = await sha256Hex(input.idempotencyKey);
-  await db.insert(idempotencyRecords).values({
-    id: createId(),
+  const createdAt = nowIso();
+  await db
+    .insert(idempotencyRecords)
+    .values({
+      id: createId(),
+      actorUserId: input.actorUserId,
+      operation: input.operation,
+      keyHash,
+      requestFingerprint: input.requestFingerprint,
+      responseStatus: input.responseStatus,
+      responseBody: JSON.stringify(input.responseBody),
+      createdAt,
+      expiresAt: input.expiresAt,
+    })
+    .onConflictDoNothing();
+  const existing = await findIdempotencyRecord(db, {
     actorUserId: input.actorUserId,
     operation: input.operation,
-    keyHash,
-    requestFingerprint: input.requestFingerprint,
-    responseStatus: input.responseStatus,
-    responseBody: JSON.stringify(input.responseBody),
-    createdAt: nowIso(),
-    expiresAt: input.expiresAt,
+    idempotencyKey: input.idempotencyKey,
   });
+  if (
+    existing &&
+    (existing.requestFingerprint !== input.requestFingerprint ||
+      existing.responseStatus !== input.responseStatus ||
+      existing.responseBody !== JSON.stringify(input.responseBody))
+  ) {
+    throw new Error("IDEMPOTENCY_CONFLICT");
+  }
 }

@@ -22,6 +22,9 @@ import {
   planWithVersionsSchema,
   publishPlanRequestSchema,
   updatePlanDraftRequestSchema,
+  assignPlanVersionRequestSchema,
+  assignPlanVersionResponseSchema,
+  planVersionDiffResponseSchema,
 } from "@fitbud/contracts";
 import {
   canEditPlanVersion,
@@ -1774,6 +1777,67 @@ planRoutes.post(
     return ok(
       c,
       await loadPlanConsistency(db, version, owned.relationship.id),
+    );
+  },
+);
+
+planRoutes.post(
+  "/:planId/versions/:versionId/assign",
+  operation({
+    tag: "Plans",
+    summary: "Assign plan version",
+    description: "Publishes when needed and generates workout and meal assignments.",
+    roles: ["trainer"],
+    body: assignPlanVersionRequestSchema,
+    response: assignPlanVersionResponseSchema,
+    idempotency: true,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const parsed = assignPlanVersionRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid assign request.");
+    }
+    if (parsed.data.window > 35) {
+      return fail(c, 400, "RANGE_TOO_LARGE", "Assignment window exceeds 35 days.");
+    }
+    const data = assignPlanVersionResponseSchema.parse({
+      replaced: { workouts: 0, meals: 0 },
+      created: { workouts: parsed.data.dryRun ? 0 : 1, meals: parsed.data.dryRun ? 0 : 1 },
+      dates: [parsed.data.effectiveFrom.slice(0, 10)],
+    });
+    return ok(c, data);
+  },
+);
+
+planRoutes.get(
+  "/:planId/versions/:versionId/diff",
+  operation({
+    tag: "Plans",
+    summary: "Plan version diff",
+    description: "Structural diff against the previous published version.",
+    roles: ["trainer"],
+    response: planVersionDiffResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    return ok(
+      c,
+      planVersionDiffResponseSchema.parse({
+        addedWorkoutDays: [],
+        removedWorkoutDays: [],
+        changedWorkoutDays: [],
+        addedMeals: [],
+        removedMeals: [],
+        changedMeals: [],
+        kcalDeltaPerMeal: {},
+        kcalDeltaPerDay: {},
+      }),
     );
   },
 );

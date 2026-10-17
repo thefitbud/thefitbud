@@ -42,6 +42,12 @@ export type Env = {
   FLAG_STEPS_ENABLED?: string;
   LIBRARY_MEDIA_BASE_URL?: string;
   FIREBASE_SERVICE_ACCOUNT_JSON?: string;
+  WA_PHONE_NUMBER_ID?: string;
+  WA_ACCESS_TOKEN?: string;
+  WA_APP_SECRET?: string;
+  WA_WEBHOOK_VERIFY_TOKEN?: string;
+  WA_MONTHLY_BUDGET_INR?: string;
+  WA_HARD_CAP_INR?: string;
 };
 export type Variables = {
   requestId: string;

@@ -20,6 +20,7 @@ import {
   endCoachingRelationship,
   requestRelationshipReactivation,
 } from "../domain/relationship-lifecycle";
+import { storeInboxNotification } from "../domain/inbox-notify.js";
 import { reactivationRequests } from "../db/schema";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";
@@ -204,6 +205,13 @@ relationshipRoutes.post(
       endedByUserId: actor.userId,
       reason: parsed.data.reason,
     });
+    await storeInboxNotification(db, {
+      recipientUserId: row.traineeUserId,
+      relationshipId,
+      notificationType: "relationship_ended",
+      domainEntityId: relationshipId,
+      dedupeKey: `relationship-ended:${relationshipId}`,
+    });
     const [updated] = await db
       .select()
       .from(coachingRelationships)
@@ -268,6 +276,13 @@ relationshipRoutes.post(
       relationshipId,
       trainerUserId: actor.userId,
       intakeUpdateRequested: parsed.data.intakeUpdateRequested,
+    });
+    await storeInboxNotification(db, {
+      recipientUserId: row.traineeUserId,
+      relationshipId,
+      notificationType: "reactivation_requested",
+      domainEntityId: requestId,
+      dedupeKey: `reactivation-request:${requestId}`,
     });
     return ok(c, { requestId, status: "pending" as const });
   },

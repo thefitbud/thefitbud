@@ -145,15 +145,23 @@ checkinFormTemplateRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const conditions = [
-      or(
-        eq(checkinFormTemplates.ownership, "global"),
-        and(
-          eq(checkinFormTemplates.ownership, "trainer"),
-          eq(checkinFormTemplates.trainerUserId, actor.userId),
-        ),
-      )!,
-    ];
+    const scope = c.req.query("scope") ?? "all";
+    const visibility =
+      scope === "bases"
+        ? eq(checkinFormTemplates.ownership, "global")
+        : scope === "mine"
+          ? and(
+              eq(checkinFormTemplates.ownership, "trainer"),
+              eq(checkinFormTemplates.trainerUserId, actor.userId),
+            )
+          : or(
+              eq(checkinFormTemplates.ownership, "global"),
+              and(
+                eq(checkinFormTemplates.ownership, "trainer"),
+                eq(checkinFormTemplates.trainerUserId, actor.userId),
+              ),
+            )!;
+    const conditions = [visibility];
     if (decoded) {
       conditions.push(
         or(

@@ -32,6 +32,11 @@ import {
   exerciseFtsMatchClause,
   foodFtsMatchClause,
 } from "../domain/library-search.js";
+import {
+  rebuildExerciseSearchFts,
+  rebuildFoodSearchFts,
+} from "../domain/library-fts.js";
+import { resolveLibraryId } from "../domain/library-redirects.js";
 import { createId, nowIso } from "../lib/crypto";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";
@@ -306,6 +311,7 @@ libraryRoutes.post(
       createdAt: now,
       updatedAt: now,
     });
+    await rebuildExerciseSearchFts(db, id);
 
     const [row] = await db
       .select()
@@ -638,6 +644,7 @@ libraryRoutes.post(
       updatedAt: now,
     });
     await insertServings(db, id, parsed.data.servings, now);
+    await rebuildFoodSearchFts(db, id);
 
     const [row] = await db
       .select()
@@ -730,6 +737,7 @@ libraryRoutes.put(
         updatedAt: now,
       })
       .where(eq(foodLibraryItems.id, itemId));
+    await rebuildFoodSearchFts(db, itemId);
     await db
       .delete(foodLibraryServings)
       .where(eq(foodLibraryServings.foodLibraryItemId, itemId));
@@ -802,6 +810,7 @@ libraryRoutes.delete(
       .update(foodLibraryItems)
       .set({ status: "archived", updatedAt: nowIso() })
       .where(eq(foodLibraryItems.id, itemId));
+    await rebuildFoodSearchFts(db, itemId);
     const [updated] = await db
       .select()
       .from(foodLibraryItems)

@@ -13,6 +13,7 @@ import {
   foodLibraryServings,
 } from "../db/schema";
 import { mapExerciseLibraryItem, mapFoodLibraryItem } from "./mappers";
+import { resolveLibraryId } from "./library-redirects.js";
 
 export type LibrarySnapshotFailure = {
   status: 400 | 404 | 409;
@@ -48,21 +49,26 @@ export async function prepareWritablePlanContent(
 
   for (const meal of content.mealPrescriptions) {
     for (const item of meal.items) {
-      if (
-        item.sourceFoodLibraryItemId &&
-        !previousFoods.has(item.sourceFoodLibraryItemId)
-      ) {
-        newFoodIds.add(item.sourceFoodLibraryItemId);
+      if (item.sourceFoodLibraryItemId) {
+        const resolved = await resolveLibraryId(db, item.sourceFoodLibraryItemId);
+        item.sourceFoodLibraryItemId = resolved.id;
+        if (!previousFoods.has(resolved.id)) {
+          newFoodIds.add(resolved.id);
+        }
       }
     }
   }
   for (const day of content.workoutDays) {
     for (const exercise of day.exercises) {
-      if (
-        exercise.sourceExerciseLibraryItemId &&
-        !previousExercises.has(exercise.sourceExerciseLibraryItemId)
-      ) {
-        newExerciseIds.add(exercise.sourceExerciseLibraryItemId);
+      if (exercise.sourceExerciseLibraryItemId) {
+        const resolved = await resolveLibraryId(
+          db,
+          exercise.sourceExerciseLibraryItemId,
+        );
+        exercise.sourceExerciseLibraryItemId = resolved.id;
+        if (!previousExercises.has(resolved.id)) {
+          newExerciseIds.add(resolved.id);
+        }
       }
     }
   }

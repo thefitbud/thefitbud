@@ -43,6 +43,7 @@ import {
   type PlanTemplateSummary,
   type ExerciseLibraryItem,
   type FoodLibraryItem,
+  type NotificationType,
 } from "@fitbud/contracts";
 import {
   deriveCheckinStatus,
@@ -975,13 +976,7 @@ export function mapNotification(row: {
   id: string;
   recipientUserId: string;
   coachingRelationshipId: string | null;
-  notificationType:
-    | "workout_reminder"
-    | "meal_reminder"
-    | "checkin_reminder"
-    | "subscription_renewal_reminder"
-    | "daily_summary"
-    | "activity_nudge";
+  notificationType: NotificationType;
   domainEntityType:
     | "workout_assignment"
     | "meal_assignment"

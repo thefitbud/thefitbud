@@ -39,6 +39,10 @@ import { libraryRoutes } from "./routes/libraries";
 import { clientRoutes } from "./routes/clients";
 import { configRoutes } from "./routes/config";
 import { devRoutes } from "./routes/dev";
+import { coachAskRoutes } from "./routes/coach-asks";
+import { activityFeedRoutes } from "./routes/activity-feed";
+import { linkRoutes } from "./routes/links";
+import { whatsappWebhookRoutes } from "./routes/webhooks-whatsapp";
 import { openApiRouteOptions, operation } from "./openapi/document";
 import type { Env, Variables } from "./types";
 
@@ -94,6 +98,10 @@ app.route("/files", fileRoutes);
 app.route("/sync", syncRoutes);
 app.route("/notifications", notificationRoutes);
 app.route("/realtime", realtimeRoutes);
+app.route("/coach-asks", coachAskRoutes);
+app.route("/activity", activityFeedRoutes);
+app.route("/links", linkRoutes);
+app.route("/webhooks/whatsapp", whatsappWebhookRoutes);
 bindSyncApp(app);
 
 const openApiDocumentSchema = z

@@ -50,6 +50,7 @@ import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
 } from "../lib/idempotency";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { queueRealtimeHint } from "../realtime/emit";
 import {
   optionalAuthMiddleware,
@@ -252,13 +253,13 @@ mealRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
-    if (relationship.status === "ended") {
-      return fail(
-        c,
-        409,
-        "RELATIONSHIP_ENDED",
-        "Ended relationships cannot generate assignments.",
-      );
+    const writable = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writable.ok) {
+      return writable.response;
     }
 
     const effective = await loadEffectivePlanVersion(db, relationship.id);
