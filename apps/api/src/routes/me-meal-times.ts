@@ -8,6 +8,7 @@ import { createDb } from "../db/client.js";
 import { coachingRelationships, mealTimeOverrides } from "../db/schema.js";
 import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
+import { applyMealTimeOverrideUpdate } from "../domain/meal-times-update.js";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { operation } from "../openapi/document.js";
 import {
@@ -163,6 +164,11 @@ meMealTimeRoutes.put(
           set: { time: override.time, updatedAt: now },
         });
     }
+    await applyMealTimeOverrideUpdate(db, {
+      relationshipId: rel.id,
+      trainerUserId: rel.trainerUserId,
+      now,
+    });
     const overrides = await db
       .select()
       .from(mealTimeOverrides)

@@ -122,6 +122,31 @@ export async function requestRelationshipReactivation(
   return id;
 }
 
+export async function cancelRelationshipReactivation(
+  db: Db,
+  input: { relationshipId: string; trainerUserId: string },
+): Promise<boolean> {
+  const [relationship] = await db
+    .select()
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, input.relationshipId))
+    .limit(1);
+  if (!relationship || relationship.trainerUserId !== input.trainerUserId) {
+    return false;
+  }
+  const timestamp = nowIso();
+  await db
+    .update(reactivationRequests)
+    .set({ status: "cancelled", resolvedAt: timestamp })
+    .where(
+      and(
+        eq(reactivationRequests.relationshipId, input.relationshipId),
+        eq(reactivationRequests.status, "pending"),
+      ),
+    );
+  return true;
+}
+
 export async function confirmRelationshipReactivation(
   db: Db,
   input: { relationshipId: string; requestId: string },

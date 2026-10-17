@@ -36,6 +36,10 @@ import {
   mapReminderRule,
 } from "../domain/mappers";
 import {
+  parseTrainerCategoriesJson,
+  serializeTrainerCategories,
+} from "../domain/trainer-categories.js";
+import {
   createActivityNudge,
   ensureDefaultReminderRules,
   evaluateAndEnqueueReminders,
@@ -99,6 +103,7 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
     mealReminder: true,
     checkinReminder: true,
     subscriptionRenewalReminder: true,
+    trainerCategoriesJson: "[]",
     quietHoursStart: null,
     quietHoursEnd: null,
     createdAt: now,
@@ -324,6 +329,12 @@ notificationRoutes.put(
     const db = createDb(c.env.DB);
     const now = nowIso();
     const current = await ensurePreferences(db, actor.userId, now);
+    const nextTrainerCategories = parsed.data.trainerCategories
+      ? {
+          ...parseTrainerCategoriesJson(current.trainerCategoriesJson),
+          ...parsed.data.trainerCategories,
+        }
+      : parseTrainerCategoriesJson(current.trainerCategoriesJson);
     await db
       .update(notificationPreferences)
       .set({
@@ -337,6 +348,11 @@ notificationRoutes.put(
         subscriptionRenewalReminder:
           parsed.data.categories?.subscriptionRenewalReminder ??
           current.subscriptionRenewalReminder,
+        trainerCategoriesJson: serializeTrainerCategories(nextTrainerCategories),
+        preferredWorkoutTime:
+          parsed.data.preferredWorkoutTime === undefined
+            ? current.preferredWorkoutTime
+            : parsed.data.preferredWorkoutTime,
         quietHoursStart:
           parsed.data.quietHoursStart === undefined
             ? current.quietHoursStart

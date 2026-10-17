@@ -158,6 +158,27 @@ describe("reminder eligibility and payload safety", () => {
     ).toBe(true);
   });
 
+  it("schedules meal snooze after the primary after window", () => {
+    const phasesEarly = dueMealReminderPhases({
+      nowIso: "2026-10-10T03:10:00.000Z",
+      localDate: "2026-10-10",
+      timeZone: "Asia/Kolkata",
+      localTime: "08:00",
+      logged: false,
+      windowEndsAt: "2026-10-10T18:30:00.000Z",
+    });
+    expect(phasesEarly).toEqual(["after"]);
+    const phasesSnooze = dueMealReminderPhases({
+      nowIso: "2026-10-10T03:40:00.000Z",
+      localDate: "2026-10-10",
+      timeZone: "Asia/Kolkata",
+      localTime: "08:00",
+      logged: false,
+      windowEndsAt: "2026-10-10T18:30:00.000Z",
+    });
+    expect(phasesSnooze).toEqual(["snooze"]);
+  });
+
   it("detects overnight quiet hours when configured", () => {
     expect(
       isWithinQuietHours({
