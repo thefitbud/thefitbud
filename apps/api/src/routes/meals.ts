@@ -43,6 +43,10 @@ import {
   loadTraineeTimezone,
   resolveGenerationRange,
 } from "../domain/assignment-schedule";
+import {
+  assertMealLogAllowed,
+  buildLoggedFoodsCompliance,
+} from "../domain/compliance-logging.js";
 import { appendChangeLog } from "../domain/sync";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok, type AppContext } from "../lib/envelope";
@@ -587,10 +591,13 @@ async function recordCompliance(
       | "repeat_recent"
       | "manual"
       | "other"
+      | "logged_foods"
       | null;
     notes?: string | null;
     photoIntent?: MealPhotoIntent | null;
     requirePhotoWhenConfigured: boolean;
+    clientLoggedAt?: string;
+    loggedFoodItems?: import("@fitbud/contracts").LoggedFoodItem[];
   },
 ) {
   const actor = c.get("actor");
@@ -657,6 +664,29 @@ async function recordCompliance(
     return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
   }
 
+  const writable = await requireWritableRelationship(c, db, relationship.id);
+  if (!writable.ok) {
+    return writable.response;
+  }
+
+  const now = nowIso();
+  const timeZone = await loadTraineeTimezone(db, actor.userId);
+  const logGuard = await assertMealLogAllowed(db, {
+    assignmentId,
+    relationshipId: relationship.id,
+    relationshipEnded: relationship.status === "ended",
+    traineeUserId: actor.userId,
+    traineeTimezone: timeZone,
+    clientLoggedAt: input.clientLoggedAt,
+    nowIso: now,
+    alreadyLogged: Boolean(loaded.compliance),
+  });
+  if (!logGuard.ok) {
+    return fail(c, 409, logGuard.code, "This meal cannot be logged.", {
+      reason: logGuard.reason,
+    });
+  }
+
   if (!canRecordMealCompliance({ hasCompliance: Boolean(loaded.compliance) })) {
     return fail(
       c,
@@ -700,7 +730,25 @@ async function recordCompliance(
     }
   }
 
-  const now = nowIso();
+  let macroFields = {
+    itemsJson: null as string | null,
+    kcalScaled: null as number | null,
+    proteinScaled: null as number | null,
+    carbsScaled: null as number | null,
+    fatScaled: null as number | null,
+  };
+  if (
+    input.deviationKind === "logged_foods" &&
+    input.loggedFoodItems &&
+    input.loggedFoodItems.length > 0
+  ) {
+    macroFields = await buildLoggedFoodsCompliance(db, {
+      traineeUserId: actor.userId,
+      relationshipId: relationship.id,
+      items: input.loggedFoodItems,
+    });
+  }
+
   const row = {
     id: createId(),
     assignmentId: loaded.assignment.id,
@@ -715,14 +763,14 @@ async function recordCompliance(
     photoRequired: loaded.assignment.photoRequired,
     photoIntentJson: serializePhotoIntent(input.photoIntent),
     mediaAssetId: linkedMediaAssetId,
-    itemsJson: null,
-    kcalScaled: null,
-    proteinScaled: null,
-    carbsScaled: null,
-    fatScaled: null,
-    loggedLate: false,
-    loggedAfterResolve: false,
-    clientLoggedAt: null,
+    itemsJson: macroFields.itemsJson,
+    kcalScaled: macroFields.kcalScaled,
+    proteinScaled: macroFields.proteinScaled,
+    carbsScaled: macroFields.carbsScaled,
+    fatScaled: macroFields.fatScaled,
+    loggedLate: logGuard.loggedLate,
+    loggedAfterResolve: logGuard.loggedAfterResolve,
+    clientLoggedAt: input.clientLoggedAt ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -836,6 +884,8 @@ mealRoutes.post(
       notes: parsed.data.notes ?? null,
       photoIntent: parsed.data.photoIntent ?? null,
       requirePhotoWhenConfigured: true,
+      clientLoggedAt: parsed.data.clientLoggedAt,
+      loggedFoodItems: parsed.data.items,
     });
   },
 );

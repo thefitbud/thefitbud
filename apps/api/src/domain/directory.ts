@@ -5,7 +5,7 @@ import type {
   OnboardingStatus,
 } from "@fitbud/contracts";
 import { clientDirectoryListResponseSchema } from "@fitbud/contracts";
-import { formatLocalDate } from "@fitbud/core";
+import { deriveRenewalState, formatLocalDate } from "@fitbud/core";
 import type { Db } from "../db/client";
 import {
   checkinReviews,
@@ -34,6 +34,7 @@ export async function loadClientDirectory(
     status?: OnboardingStatus[];
     adherenceState?: AdherenceState[];
     goal?: string[];
+    renewal?: Array<"due" | "overdue" | "none">;
     cursor: { k: string; id: string } | null;
     limit: number;
   },
@@ -270,6 +271,18 @@ export async function loadClientDirectory(
     return left.id < right.id ? 1 : -1;
   });
 
+  const facets = {
+    status: {} as Record<string, number>,
+    adherence: {} as Record<string, number>,
+    renewal: {} as Record<string, number>,
+  };
+  for (const row of rows as DirectoryRow[]) {
+    facets.status[row.status] = (facets.status[row.status] ?? 0) + 1;
+    facets.adherence[row.adherenceState] =
+      (facets.adherence[row.adherenceState] ?? 0) + 1;
+    facets.renewal.none = (facets.renewal.none ?? 0) + 1;
+  }
+
   const page = buildPage(filtered, input.limit, (item) => item.updatedAt);
   return clientDirectoryListResponseSchema.parse({
     items: page.items.map((item) => ({
@@ -283,6 +296,7 @@ export async function loadClientDirectory(
       adherenceState: item.adherenceState,
       updatedAt: item.updatedAt,
     })),
+    facets,
     nextCursor: page.nextCursor,
   });
 }

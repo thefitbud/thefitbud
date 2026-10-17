@@ -118,6 +118,7 @@ export type AcknowledgeExceptionRequest = z.infer<
 
 export const resolveExceptionRequestSchema = z.object({
   note: z.string().trim().max(2000).nullable().optional(),
+  outcome: z.enum(["talked", "plan_adjusted", "no_action", "other"]).optional(),
   interventionKind: z
     .enum(["note", "resolve", "plan_adjustment", "schedule_checkin"])
     .optional(),

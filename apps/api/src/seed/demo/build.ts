@@ -128,11 +128,20 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
         role: account.role,
         displayName,
         timezone,
-        phone: account.role === "trainer" ? phone : phone,
+        phone,
         passwordHash: input.passwordHash,
         now,
       }),
     );
+    if (account.state === "dual_role" && account.role === "trainee") {
+      const userId = demoUuid("user", account.email);
+      parts.push(
+        `INSERT INTO user_roles (id, user_id, role, created_at) VALUES (${sqlQuote(demoUuid("role", account.email, "trainer"))}, ${sqlQuote(userId)}, 'trainer', ${sqlQuote(now)});`,
+      );
+      parts.push(
+        `INSERT INTO trainer_profiles (id, user_id, display_name, whatsapp_e164, created_at, updated_at) VALUES (${sqlQuote(demoUuid("profile-trainer", account.email))}, ${sqlQuote(userId)}, ${sqlQuote(displayName)}, ${sqlQuote(phone)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      );
+    }
   }
 
   parts.push(buildDemoHistorySql({ referenceDate: refDate, referenceInstant: now }));

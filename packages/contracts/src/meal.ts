@@ -27,6 +27,23 @@ export const mealAssignmentStatusSchema = z.enum([
 ]);
 export type MealAssignmentStatus = z.infer<typeof mealAssignmentStatusSchema>;
 
+export const loggedFoodItemSchema = z.object({
+  foodId: uuidSchema.optional(),
+  servingId: uuidSchema.optional(),
+  quantity: z.number().positive().max(100).optional(),
+  customFood: z
+    .object({
+      name: z.string().trim().min(1).max(120),
+      kcal: z.number().int().nonnegative().max(20000),
+      protein: z.number().nonnegative().max(2000).optional(),
+      carbs: z.number().nonnegative().max(2000).optional(),
+      fat: z.number().nonnegative().max(2000).optional(),
+      servingLabel: z.string().trim().max(120).optional(),
+    })
+    .optional(),
+});
+export type LoggedFoodItem = z.infer<typeof loggedFoodItemSchema>;
+
 export const mealDeviationKindSchema = z.enum([
   "portion_adjustment",
   "substitute",
@@ -34,6 +51,7 @@ export const mealDeviationKindSchema = z.enum([
   "repeat_recent",
   "manual",
   "other",
+  "logged_foods",
 ]);
 export type MealDeviationKind = z.infer<typeof mealDeviationKindSchema>;
 
@@ -127,6 +145,8 @@ export const deviateMealRequestSchema = z.object({
   deviationKind: mealDeviationKindSchema,
   notes: z.string().trim().max(500).nullable().optional(),
   photoIntent: mealPhotoIntentSchema.nullable().optional(),
+  items: z.array(loggedFoodItemSchema).max(20).optional(),
+  clientLoggedAt: isoDateTimeSchema.optional(),
 });
 export type DeviateMealRequest = z.infer<typeof deviateMealRequestSchema>;
 

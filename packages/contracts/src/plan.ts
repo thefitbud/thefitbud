@@ -61,6 +61,7 @@ export const workoutDaySchema = z.object({
   order: z.number().int().min(1).max(14),
   name: z.string().trim().min(1).max(120),
   weekday: weekdaySchema.nullable().optional(),
+  required: z.boolean().optional().default(true),
   exercises: z.array(workoutExerciseSchema).max(40),
 });
 export type WorkoutDay = z.infer<typeof workoutDaySchema>;
@@ -168,6 +169,7 @@ export const mealPrescriptionSchema = z.object({
   mealType: mealTypeSchema.nullable().optional(),
   applicableWeekdays: z.array(weekdaySchema).max(7).optional(),
   localTime: localTimeSchema.nullable().optional(),
+  required: z.boolean().optional().default(true),
   /** Legacy display text. Ignored when placing assignments. */
   scheduleHint: z.string().trim().max(120).nullable(),
   instructions: z.string().trim().max(2000).nullable(),

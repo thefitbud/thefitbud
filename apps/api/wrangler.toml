@@ -38,9 +38,9 @@ max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 3
 
-# Evaluate due reminders from authoritative schedules (~every 15 minutes UTC).
+# Evaluate due reminders from authoritative schedules (~every 5 minutes UTC).
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/5 * * * *"]
 
 # Selected realtime: one DO room per coaching relationship (plan/execution/
 # compliance/check-in/exception hints). REST/sync remain authoritative.

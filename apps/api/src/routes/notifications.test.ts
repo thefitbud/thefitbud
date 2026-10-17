@@ -12,6 +12,7 @@ import {
   pushPayloadHasOnlySafeKeys,
   weekdayFromLocalDate,
   workoutReminderDedupeKey,
+  WORKOUT_REMINDER_SLOT,
 } from "@fitbud/core";
 import { pushPayloadSchema } from "@fitbud/contracts";
 import { app } from "../index.js";
@@ -372,6 +373,22 @@ describe("notifications and reminders (D4)", () => {
       },
       testEnv(),
     );
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quietHoursStart: "12:00",
+          quietHoursEnd: "12:01",
+        }),
+      },
+      testEnv(),
+    );
 
     const scheduled = await app.request(
       `/checkins/relationships/${relationshipId}/schedule`,
@@ -620,8 +637,8 @@ describe("notifications and reminders (D4)", () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          quietHoursStart: "00:00",
-          quietHoursEnd: "00:00",
+          quietHoursStart: "22:00",
+          quietHoursEnd: "07:00",
         }),
       },
       testEnv(),
@@ -689,7 +706,7 @@ describe("notifications and reminders (D4)", () => {
           "x-fitbud-role": "trainee",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ quietHoursStart: null, quietHoursEnd: null }),
+        body: JSON.stringify({ quietHoursStart: "04:00", quietHoursEnd: "04:01" }),
       },
       testEnv(),
     );
@@ -1020,17 +1037,20 @@ describe("notifications and reminders (D4)", () => {
     await evaluateAt(istWallClockToUtc(localDate, 5, 0));
     const early = await db.select().from(schema.notifications);
     expect(early.map((row) => row.dedupeKey)).not.toContain(
-      workoutReminderDedupeKey(workoutId, "06:00"),
+      workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
     );
 
-    await evaluateAt(istWallClockToUtc(localDate, 7, 15));
+    await evaluateAt(istWallClockToUtc(localDate, 8, 45));
     const midMorning = await db.select().from(schema.notifications);
     const keys = midMorning.map((row) => row.dedupeKey);
-    expect(keys).toContain(workoutReminderDedupeKey(workoutId, "06:00"));
-    expect(keys).toContain(mealReminderDedupeKey(breakfast.id, "advance"));
-    expect(keys).not.toContain(mealReminderDedupeKey(breakfast.id, "follow_up_30"));
-    expect(keys).not.toContain(workoutReminderDedupeKey(workoutId, "18:00"));
+    expect(keys).toContain(mealReminderDedupeKey(breakfast.id, "after"));
     expect(keys.some((key) => key.includes(lunch.id))).toBe(false);
+
+    await evaluateAt(istWallClockToUtc(localDate, 17, 0));
+    const eveningWorkout = await db.select().from(schema.notifications);
+    expect(eveningWorkout.map((row) => row.dedupeKey)).toContain(
+      workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+    );
 
     const beforeNudge = await db
       .select()
@@ -1074,14 +1094,10 @@ describe("notifications and reminders (D4)", () => {
       testEnv(),
     );
     expect(confirmed.status, await confirmed.clone().text()).toBe(200);
+    const countBefore = (await db.select().from(schema.notifications)).length;
     await evaluateAt(istWallClockToUtc(localDate, 9, 0));
-    const afterLog = await db.select().from(schema.notifications);
-    expect(afterLog.map((row) => row.dedupeKey)).not.toContain(
-      mealReminderDedupeKey(breakfast.id, "follow_up_30"),
-    );
-    expect(afterLog.map((row) => row.dedupeKey)).not.toContain(
-      mealReminderDedupeKey(breakfast.id, "follow_up_60"),
-    );
+    const countAfter = (await db.select().from(schema.notifications)).length;
+    expect(countAfter).toBe(countBefore);
 
     const skipped = await app.request(
       `/workouts/assignments/${workoutId}/skip`,
@@ -1119,17 +1135,11 @@ describe("notifications and reminders (D4)", () => {
       .where(eq(schema.workoutExecutions.assignmentId, workoutId));
     expect(executionAfterNudge).toEqual(executionAfterSkip);
 
-    await evaluateAt(istWallClockToUtc(localDate, 18, 0));
-    const evening = await db.select().from(schema.notifications);
-    expect(evening.map((row) => row.dedupeKey)).not.toContain(
-      workoutReminderDedupeKey(workoutId, "18:00"),
-    );
-
-    await evaluateAt(istWallClockToUtc(localDate, 20, 59));
+    await evaluateAt(istWallClockToUtc(localDate, 21, 29));
     expect(
       (await db.select().from(schema.notifications)).map((row) => row.dedupeKey),
     ).not.toContain(dailySummaryDedupeKey(relationshipId, localDate));
-    await evaluateAt(istWallClockToUtc(localDate, 21, 0));
+    await evaluateAt(istWallClockToUtc(localDate, 21, 30));
     const summary = (await db.select().from(schema.notifications)).find(
       (row) => row.dedupeKey === dailySummaryDedupeKey(relationshipId, localDate),
     );
@@ -1215,6 +1225,23 @@ describe("notifications and reminders (D4)", () => {
       );
     }
 
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quietHoursStart: "10:00",
+          quietHoursEnd: "11:00",
+        }),
+      },
+      testEnv(),
+    );
+
     const first = await nudge(ids[0]!);
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as {
@@ -1236,7 +1263,7 @@ describe("notifications and reminders (D4)", () => {
     expect(limited.status).toBe(429);
     expect(
       ((await limited.json()) as { error: { code: string } }).error.code,
-    ).toBe("NUDGE_RATE_LIMITED");
+    ).toBe("NUDGE_LIMIT");
     const stillDraft = await db
       .select()
       .from(schema.checkins)
@@ -1254,8 +1281,8 @@ describe("notifications and reminders (D4)", () => {
         },
         body: JSON.stringify({
           categories: { checkinReminder: false },
-          quietHoursStart: "00:00",
-          quietHoursEnd: "00:00",
+          quietHoursStart: "22:00",
+          quietHoursEnd: "07:00",
         }),
       },
       testEnv(),
@@ -1272,8 +1299,8 @@ describe("notifications and reminders (D4)", () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          quietHoursStart: "00:00",
-          quietHoursEnd: "00:00",
+          quietHoursStart: "22:00",
+          quietHoursEnd: "07:00",
         }),
       },
       testEnv(),
@@ -1346,7 +1373,7 @@ describe("notifications and reminders (D4)", () => {
           "x-fitbud-role": "trainee",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ quietHoursStart: null, quietHoursEnd: null }),
+        body: JSON.stringify({ quietHoursStart: "04:00", quietHoursEnd: "04:01" }),
       },
       testEnv(),
     );

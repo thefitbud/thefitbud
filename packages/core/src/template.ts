@@ -41,6 +41,7 @@ export function copyPlanContent(
       order: day.order,
       name: day.name,
       weekday: day.weekday ?? null,
+      required: day.required ?? true,
       exercises: day.exercises.map((exercise) => ({
         id: newId(),
         order: exercise.order,
@@ -72,6 +73,7 @@ export function copyPlanContent(
       scheduleHint: meal.scheduleHint,
       instructions: meal.instructions,
       photoRequired: meal.photoRequired,
+      required: meal.required ?? true,
       items: meal.items.map((item) => copyFoodItem(item)),
     })),
   };
@@ -178,6 +180,7 @@ export function mealPrescriptionFromLibrary(
     scheduleHint: null,
     instructions: instructions.length > 0 ? instructions : null,
     photoRequired: false,
+    required: true,
     items: [snapshot],
   };
 }

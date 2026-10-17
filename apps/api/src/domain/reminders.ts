@@ -10,6 +10,8 @@ import type {
 import { mealPrescriptionSchema } from "@fitbud/contracts";
 import {
   ACTIVITY_NUDGE_HOURLY_LIMIT,
+  DEFAULT_QUIET_HOURS_END,
+  DEFAULT_QUIET_HOURS_START,
   DEFAULT_REMINDER_TYPES,
   activityNudgeDedupeKey,
   addDaysToLocalDate,
@@ -115,7 +117,8 @@ export type ActivityNudgeResult =
         | "RELATIONSHIP_ENDED"
         | "ACTIVITY_NOT_FOUND"
         | "ACTIVITY_RESOLVED"
-        | "NUDGE_RATE_LIMITED";
+        | "NUDGE_RATE_LIMITED"
+        | "NUDGE_LIMIT";
     };
 
 async function loadOrDefaultPreferences(db: Db, userId: string) {
@@ -623,8 +626,8 @@ async function persistReminder(
     categoryEnabled: categoryOk,
     withinQuietHours: isWithinQuietHours({
       localTimeHhMm: localTime,
-      quietHoursStart: prefs.quietHoursStart,
-      quietHoursEnd: prefs.quietHoursEnd,
+      quietHoursStart: prefs.quietHoursStart ?? DEFAULT_QUIET_HOURS_START,
+      quietHoursEnd: prefs.quietHoursEnd ?? DEFAULT_QUIET_HOURS_END,
     }),
   });
   const deferredKey = deferredReminderDedupeKey(candidate.dedupeKey);
@@ -1139,6 +1142,7 @@ export async function createActivityNudge(
   db: Db,
   input: {
     relationshipId: string;
+    trainerUserId: string;
     activityType: NudgeActivityType;
     activityId: string;
     now?: string;
@@ -1146,7 +1150,7 @@ export async function createActivityNudge(
     pushProviderMode: PushProviderMode;
     deliverInline: boolean;
   },
-): Promise<ActivityNudgeResult> {
+): Promise<ActivityNudgeResult & { retryAfter?: number }> {
   const now = input.now ?? nowIso();
   const relationships = await db
     .select()
@@ -1195,18 +1199,40 @@ export async function createActivityNudge(
   }
 
   const hourAgo = new Date(Date.parse(now) - 60 * 60 * 1000).toISOString();
-  const recent = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.coachingRelationshipId, relationship.id),
-        eq(notifications.notificationType, "activity_nudge"),
-        gte(notifications.createdAt, hourAgo),
+  const itemCooldownStart = new Date(
+    Date.parse(now) - 4 * 60 * 60 * 1000,
+  ).toISOString();
+  const [recentForTrainer, recentForItem] = await Promise.all([
+    db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .innerJoin(
+        coachingRelationships,
+        eq(notifications.coachingRelationshipId, coachingRelationships.id),
+      )
+      .where(
+        and(
+          eq(coachingRelationships.trainerUserId, input.trainerUserId),
+          eq(notifications.notificationType, "activity_nudge"),
+          gte(notifications.createdAt, hourAgo),
+        ),
       ),
-    );
-  if (recent.length >= ACTIVITY_NUDGE_HOURLY_LIMIT) {
-    return { ok: false, code: "NUDGE_RATE_LIMITED" };
+    db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.domainEntityId, input.activityId),
+          eq(notifications.notificationType, "activity_nudge"),
+          gte(notifications.createdAt, itemCooldownStart),
+        ),
+      ),
+  ]);
+  if (recentForTrainer.length >= ACTIVITY_NUDGE_HOURLY_LIMIT) {
+    return { ok: false, code: "NUDGE_LIMIT", retryAfter: 3600 };
+  }
+  if (recentForItem.length > 0) {
+    return { ok: false, code: "NUDGE_LIMIT", retryAfter: 14_400 };
   }
 
   const counters: ReminderCounters = {
@@ -1356,8 +1382,8 @@ export async function deliverReminderMessage(
     !notification.dedupeKey.startsWith("deferred:") &&
     isWithinQuietHours({
       localTimeHhMm: localTime,
-      quietHoursStart: prefs.quietHoursStart,
-      quietHoursEnd: prefs.quietHoursEnd,
+      quietHoursStart: prefs.quietHoursStart ?? DEFAULT_QUIET_HOURS_START,
+      quietHoursEnd: prefs.quietHoursEnd ?? DEFAULT_QUIET_HOURS_END,
     })
   ) {
     await db

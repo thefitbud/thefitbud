@@ -734,6 +734,7 @@ export const mealCompliance = sqliteTable(
         "repeat_recent",
         "manual",
         "other",
+        "logged_foods",
       ],
     }),
     notes: text("notes"),

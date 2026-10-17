@@ -2,9 +2,12 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   clientWorkspaceSchema,
+  weekReadModelSchema,
   workspaceActivityListResponseSchema,
   workspaceActivityQuerySchema,
 } from "@fitbud/contracts";
+import { loadTraineeTimezone } from "../domain/assignment-schedule.js";
+import { buildWeekReadModel } from "../domain/week-read-model.js";
 import { createDb } from "../db/client";
 import { coachingRelationships } from "../db/schema";
 import {
@@ -89,6 +92,46 @@ workspaceRoutes.get(
     await promoteDueScheduledVersions(db, relationship.id, now, c.env);
     const workspace = await loadClientWorkspace(db, relationship, now);
     return ok(c, workspace);
+  },
+);
+
+workspaceRoutes.get(
+  "/relationships/:relationshipId/week",
+  operation({
+    tag: "Workspaces",
+    summary: "Trainer week read model",
+    description: "Seven-day assignment and logging summary for one client.",
+    roles: ["trainer"],
+    response: weekReadModelSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadTrainerRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
+    }
+    const start =
+      c.req.query("start")?.trim() ??
+      new Date().toISOString().slice(0, 10);
+    const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const model = await buildWeekReadModel(db, {
+      relationshipId: relationship.id,
+      start,
+      timeZone,
+      nowIso: nowIso(),
+    });
+    return ok(c, weekReadModelSchema.parse(model));
   },
 );
 

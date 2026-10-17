@@ -333,6 +333,7 @@ export {
   mealComplianceSummaryResponseSchema,
   mealDeviationKindSchema,
   mealPhotoIntentSchema,
+  loggedFoodItemSchema,
   skipMealRequestSchema,
   type ConfirmMealRequest,
   type DeviateMealRequest,
@@ -347,6 +348,7 @@ export {
   type MealComplianceSummaryResponse,
   type MealDeviationKind,
   type MealPhotoIntent,
+  type LoggedFoodItem,
   type SkipMealRequest,
 } from "./meal.js";
 
@@ -699,3 +701,21 @@ export {
   activityFeedResponseSchema,
   activityFeedEventSchema,
 } from "./activity-feed.js";
+
+export {
+  weekReadModelSchema,
+  weekDayStateSchema,
+  attentionGroupsResponseSchema,
+  attentionGroupSchema,
+  clientFacetsSchema,
+  responsivenessResponseSchema,
+  responsivenessLabelSchema,
+  reengagementCandidatesResponseSchema,
+  type WeekReadModel,
+  type WeekDayState,
+  type AttentionGroupsResponse,
+  type ClientFacets,
+  type ResponsivenessResponse,
+  type ResponsivenessLabel,
+  type ReengagementCandidatesResponse,
+} from "./read-models.js";

@@ -97,6 +97,9 @@ describe("FitBudApiClient", () => {
                 goalShort: null,
                 renewalState: null,
                 adherenceState: "not_available",
+                traineeTimezone: "Asia/Kolkata",
+                hasCustomMealTimes: false,
+                trainerWhatsappE164: null,
                 traineeProfile: {
                   displayName: "Asha",
                   age: null,
