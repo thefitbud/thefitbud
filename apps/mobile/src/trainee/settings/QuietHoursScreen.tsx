@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import type { NotificationPreferences } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";

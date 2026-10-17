@@ -23,6 +23,7 @@
     "db:reset": "pnpm --filter @fitbud/api db:reset"
   },
   "devDependencies": {
+    "playwright": "^1.64.1",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3"
   }

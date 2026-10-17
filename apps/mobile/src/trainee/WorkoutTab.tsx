@@ -11,7 +11,6 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
-import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
@@ -173,6 +172,18 @@ export function WorkoutTab({
                     </Text>
                   </View>
                 ))}
+                {onOpenOverlay ? (
+                  <PrimaryButton
+                    label="See workout overview"
+                    variant="secondary"
+                    onPress={() => {
+                      onOpenOverlay({
+                        screen: "workout_overview",
+                        assignmentId: todayAssignment.id,
+                      });
+                    }}
+                  />
+                ) : null}
                 {todayAssignment.status === "assigned" ||
                 todayAssignment.status === "missed" ? (
                   <PrimaryButton

@@ -5,7 +5,7 @@ import {
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
 import { NotoSansDevanagari_400Regular } from "@expo-google-fonts/noto-sans-devanagari";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Platform, View } from "react-native";
 import type { ReactNode } from "react";
 import { colors } from "@fitbud/ui-mobile";
 
@@ -16,6 +16,10 @@ export function FontsProvider({ children }: { children: ReactNode }) {
     Inter_700Bold,
     NotoSansDevanagari_400Regular,
   });
+
+  if (Platform.OS === "web") {
+    return children;
+  }
 
   if (!loaded) {
     return (

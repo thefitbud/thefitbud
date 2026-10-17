@@ -7,10 +7,7 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../lib/support";
 import { SettingsRow } from "./settings/SettingsRow";
-import type {
-  TraineeOverlay,
-  TraineeOverlayOpener,
-} from "../navigation/TraineeOverlay";
+import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 
 type Props = {
   relationship: CoachingRelationship;

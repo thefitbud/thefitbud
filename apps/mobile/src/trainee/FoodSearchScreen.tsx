@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TraineeFoodSearchResponse } from "@fitbud/contracts";
 
