@@ -187,7 +187,9 @@ async function main() {
       }
 
       if (id === "TR-12") {
-        const finish = page.getByRole("button", { name: /Finish workout/i });
+        const finish = page.getByRole("button", {
+          name: /Complete workout|Finish workout/i,
+        });
         if (await finish.isVisible().catch(() => false)) {
           await finish.click();
           await page.waitForTimeout(2000);

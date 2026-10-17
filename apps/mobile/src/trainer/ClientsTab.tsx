@@ -14,9 +14,22 @@ import {
   filterClientRows,
   onboardingStatusLabel,
   type ClientDirectoryRow,
+  type ClientListFilter,
 } from "./clients";
 
 type Segment = "clients" | "activity";
+
+const FILTER_CHIPS: Array<{
+  id: ClientListFilter;
+  label: string;
+  icon: string;
+}> = [
+  { id: "all", label: "All", icon: "◎" },
+  { id: "needs_attention", label: "Needs attention", icon: "!" },
+  { id: "checkin_due", label: "Check-in due", icon: "✓" },
+  { id: "onboarding", label: "Onboarding", icon: "…" },
+  { id: "ended", label: "Ended", icon: "×" },
+];
 
 type Props = {
   onOpenClient: (row: ClientDirectoryRow) => void;
@@ -28,6 +41,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
   const [segment, setSegment] = useState<Segment>(initialSegment);
   const [rows, setRows] = useState<ClientDirectoryRow[]>([]);
   const [query, setQuery] = useState("");
+  const [chip, setChip] = useState<ClientListFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,8 +79,8 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
   }, [initialSegment]);
 
   const filtered = useMemo(
-    () => filterClientRows(rows, query),
-    [rows, query],
+    () => filterClientRows(rows, query, chip),
+    [rows, query, chip],
   );
 
   return (
@@ -97,6 +111,30 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
             placeholder="Name, email, or status"
             hint="Filters clients you own."
           />
+
+          <View style={styles.chipRow}>
+            {FILTER_CHIPS.map((option) => (
+              <Pressable
+                key={option.id}
+                accessibilityRole="button"
+                style={[
+                  styles.filterChip,
+                  chip === option.id ? styles.filterChipActive : null,
+                ]}
+                onPress={() => setChip(option.id)}
+              >
+                <Text
+                  style={
+                    chip === option.id
+                      ? styles.filterChipTextActive
+                      : styles.filterChipText
+                  }
+                >
+                  {option.icon} {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
           <PrimaryButton
             label="Refresh"
@@ -220,5 +258,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginTop: spacing.sm,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  filterChip: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  filterChipActive: {
+    backgroundColor: colors.paleLavender,
+    borderColor: colors.indigo,
+  },
+  filterChipText: {
+    color: colors.deepNavy,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  filterChipTextActive: {
+    color: colors.indigo,
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

@@ -14,6 +14,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { stage1Api } from "../lib/stage1Api";
 import { onboardingStatusLabel } from "./clients";
 import { statusLabel, typeLabel } from "./labels";
 import { openContextualWhatsApp } from "./whatsapp";
@@ -50,18 +51,23 @@ export function ClientStatusScreen({
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [recentActivity, setRecentActivity] = useState<
+    Array<{ id: string; summary: string; occurredAt: string }>
+  >([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [effective, exceptionPage, checkinPage, adherence, compliance] =
+      const s1 = stage1Api(api);
+      const [effective, exceptionPage, checkinPage, adherence, compliance, feed] =
         await Promise.all([
           api.getEffectivePlan(relationshipId),
           api.listExceptions(relationshipId),
           api.listCheckins(relationshipId),
           api.getWorkoutAdherence(relationshipId),
           api.getMealCompliance(relationshipId),
+          s1.getActivityFeed({ limit: 5, rid: relationshipId }),
         ]);
       setPlan(effective);
       setExceptions(
@@ -75,6 +81,13 @@ export function ClientStatusScreen({
       setCheckins(checkinPage.items);
       setWorkouts(adherence);
       setMeals(compliance);
+      setRecentActivity(
+        feed.events.map((event) => ({
+          id: event.id,
+          summary: event.summary,
+          occurredAt: event.occurredAt,
+        })),
+      );
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -217,6 +230,42 @@ export function ClientStatusScreen({
             )}
           </View>
 
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>This week</Text>
+            <View style={styles.weekDots}>
+              {["M", "T", "W", "T", "F", "S", "S"].map((label, index) => (
+                <View key={`${label}-${index}`} style={styles.weekDot}>
+                  <Text style={styles.weekDotLabel}>{label}</Text>
+                  <View
+                    style={[
+                      styles.dot,
+                      (workouts?.totals.completed ?? 0) > index
+                        ? styles.dotDone
+                        : styles.dotOpen,
+                    ]}
+                  />
+                </View>
+              ))}
+            </View>
+            <Text style={styles.body}>
+              Today&apos;s meals: {meals?.totals.confirmed ?? 0} confirmed
+            </Text>
+          </View>
+
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>Recent activity</Text>
+            {recentActivity.length === 0 ? (
+              <Text style={styles.muted}>No recent logs.</Text>
+            ) : (
+              recentActivity.map((event) => (
+                <Text key={event.id} style={styles.body}>
+                  {event.summary} ·{" "}
+                  {new Date(event.occurredAt).toLocaleDateString("en-IN")}
+                </Text>
+              ))
+            )}
+          </View>
+
           <PrimaryButton
             label="Ensure due check-in"
             variant="secondary"
@@ -270,5 +319,29 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: 14,
     marginBottom: spacing.md,
+  },
+  weekDots: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  weekDot: {
+    alignItems: "center",
+    gap: 4,
+  },
+  weekDotLabel: {
+    color: colors.midGrey,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  dot: {
+    borderRadius: 6,
+    height: 12,
+    width: 12,
+  },
+  dotDone: {
+    backgroundColor: colors.indigo,
+  },
+  dotOpen: {
+    backgroundColor: colors.lightGrey,
   },
 });

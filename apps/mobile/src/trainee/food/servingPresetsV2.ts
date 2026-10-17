@@ -1,10 +1,10 @@
 import type { TraineeFoodSearchResponse } from "@fitbud/contracts";
+import { servingsFromLibrarySeed } from "./foodServingSeed";
 
 export type ServingPresetV2 = {
   id: string;
   label: string;
   quantity: number;
-  /** Optional serving id when the library exposes one. */
   servingId?: string;
 };
 
@@ -53,16 +53,46 @@ const DEFAULT_PRESETS: Omit<ServingPresetV2, "id">[] = [
   { label: "2 servings", quantity: 2 },
 ];
 
-/**
- * Household serving presets (v2 library UX) until search returns per-food servings.
- */
-export function servingPresetsForFood(item: FoodItem): ServingPresetV2[] {
+/** TODO(fallback): remove when GET /me/foods/:id returns servings for every food. */
+function heuristicPresetsForFood(item: FoodItem): ServingPresetV2[] {
   const matched =
     NAME_PRESETS.find((row) => row.match.test(item.name))?.presets ??
     DEFAULT_PRESETS;
   return matched.map((preset, index) => ({
     ...preset,
-    id: `${item.id}-${index}`,
+    id: `${item.id}-heuristic-${index}`,
     servingId: item.defaultServingId ?? undefined,
   }));
 }
+
+/**
+ * Serving chips from the v2 library seed (synced with API food_library_servings).
+ * Name heuristics are used only when the food id is missing from the seed bundle.
+ */
+export function servingPresetsForFood(item: FoodItem): ServingPresetV2[] {
+  const library = servingsFromLibrarySeed(item.id);
+  if (library.length === 0) {
+    return heuristicPresetsForFood(item);
+  }
+  const defaultId = item.defaultServingId;
+  const ordered = defaultId
+    ? [
+        ...library.filter((s) => s.id === defaultId),
+        ...library.filter((s) => s.id !== defaultId),
+      ]
+    : library;
+  const capped = ordered.slice(0, 6);
+  return capped.map((serving, index) => ({
+    id: serving.id,
+    label: serving.label,
+    quantity: 1,
+    servingId: serving.id,
+  }));
+}
+
+export const PORTION_MULTIPLIER_CHIPS = [
+  { label: "½×", multiplier: 0.5 },
+  { label: "¾×", multiplier: 0.75 },
+  { label: "1¼×", multiplier: 1.25 },
+  { label: "1½×", multiplier: 1.5 },
+] as const;

@@ -54,7 +54,7 @@ Legend: ✅ matches guide closely on web capture · ⚠️ partial · ❌ blocke
 | TR-05 | ✅ | Reminders + OEM sheet | No streaks; utility copy only. |
 | TR-06 | ⚠️ | Today + week strip on web (`WebDateHeading`); rings as kcal line on web | vs `figma_trainee_01_today.jpg`: no Figma streak/%, no dense workout list; we show rest day + coach note + check-in (guide-compliant). |
 | TR-07 | ✅ | Diet + rings | vs `figma_trainee_05_today_diet.jpg`: no grocery/chat; meal cards simpler. |
-| TR-08 | ⚠️ | Bottom sheet over Diet; quick chips + v2 serving presets; search | vs guide: sheet not full Material height in capture; chips added in code (re-capture may show). |
+| TR-08 | ⚠️ | Portion chips (½×–1½×), repeat recent (`/me/foods/recent`), v2 serving chips from seed bundle + search | vs guide: planned-item prefill blocked on assignment API; sheet height still web-modal. |
 | TR-09 | ✅ | Meal plan read-only | vs `figma_trainee_07_assigned_diet_plan.jpg`: no banned chat/grocery. |
 | TR-10 | ✅ | Workout overview | vs `figma_trainee_03_active_workout` preamble only. |
 | TR-11 | ⚠️ | Active workout set logging | vs Figma: no live-activity / swipe exercise nav yet. |

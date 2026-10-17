@@ -18,6 +18,7 @@ import { SegmentedControl } from "../components/SegmentedControl";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { StatusChip } from "../components/StatusChip";
+import { SwipeActionRow } from "../components/SwipeActionRow";
 import {
   buildClientAttentionCards,
   formatAttentionAge,
@@ -151,7 +152,18 @@ export function AttentionTab({
         ) : (
           <View style={styles.list}>
             {clientCards.map((card) => (
-              <View key={card.relationshipId} style={styles.clientCard}>
+              <SwipeActionRow
+                key={card.relationshipId}
+                onMarkReviewed={() => {
+                  void acknowledgeItem(card.primary.id);
+                }}
+                onNudge={() => {
+                  void openContextualWhatsApp({
+                    draftText: `Hi — gentle nudge from FitBud: ${card.primary.summary}`,
+                  });
+                }}
+              >
+              <View style={styles.clientCard}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.who}>{card.traineeDisplayName}</Text>
                   <StatusChip
@@ -196,6 +208,7 @@ export function AttentionTab({
                   </Pressable>
                 </View>
               </View>
+              </SwipeActionRow>
             ))}
           </View>
         )

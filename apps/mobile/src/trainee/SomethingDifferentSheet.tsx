@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -21,13 +21,15 @@ import { MINIMAL_PNG_CONTENT_TYPE } from "../lib/minimalPng";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { uploadMealPhoto } from "./mealActions";
-import { servingPresetsForFood } from "./food/servingPresetsV2";
+import {
+  PORTION_MULTIPLIER_CHIPS,
+  servingPresetsForFood,
+} from "./food/servingPresetsV2";
+import { fetchMeFoodRecent } from "../lib/meFoodsApi";
 
 const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
 
 const QUICK_OPTIONS: Array<{ kind: MealDeviationKind; label: string }> = [
-  { kind: "portion_adjustment", label: "Smaller portion" },
-  { kind: "portion_adjustment", label: "Bigger portion" },
   { kind: "restaurant", label: "Ate out" },
   { kind: "manual", label: "Type it in" },
   { kind: "other", label: "Other" },
@@ -54,17 +56,32 @@ export function SomethingDifferentSheet({
   onOpenFoodSearch,
   onAskCoach,
 }: Props) {
-  const { api } = useAuth();
+  const { api, accessToken } = useAuth();
   const s1 = stage1Api(api);
   const sync = useSyncEngine();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TraineeFoodSearchItem[]>([]);
+  const [recentFoods, setRecentFoods] = useState<TraineeFoodSearchItem[]>([]);
   const [logged, setLogged] = useState<LoggedRow[]>([]);
   const [customName, setCustomName] = useState("");
   const [customKcal, setCustomKcal] = useState("");
+  const [portionMode, setPortionMode] = useState(false);
+  const [portionMultiplier, setPortionMultiplier] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    void (async () => {
+      try {
+        const page = await fetchMeFoodRecent(accessToken);
+        setRecentFoods(page.items.slice(0, 5));
+      } catch {
+        setRecentFoods([]);
+      }
+    })();
+  }, [accessToken]);
 
   const search = useCallback(async () => {
     const q = query.trim();
@@ -132,6 +149,68 @@ export function SomethingDifferentSheet({
         return { ...row, quantity };
       }),
     );
+  }
+
+  async function savePortionAdjustment(multiplier: number) {
+    setSaving(true);
+    setError(null);
+    try {
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "meal.deviate",
+        payload: {
+          assignmentId: assignment.id,
+          body: {
+            deviationKind: "portion_adjustment",
+            notes: `Portion ×${multiplier}`,
+            photoIntent: null,
+            items: [],
+            portionMultiplier: multiplier,
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not save meal.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function repeatRecentFood(item: TraineeFoodSearchItem) {
+    addFood(item, 1, item.defaultServingId ?? undefined);
+    setSaving(true);
+    setError(null);
+    try {
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "meal.deviate",
+        payload: {
+          assignmentId: assignment.id,
+          body: {
+            deviationKind: "repeat_recent",
+            notes: `Same as recent: ${item.name}`,
+            photoIntent: null,
+            items: [
+              {
+                foodId: item.id,
+                servingId: item.defaultServingId ?? undefined,
+                quantity: 1,
+              },
+            ],
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not save meal.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveQuick(kind: MealDeviationKind, notes: string) {
@@ -226,7 +305,17 @@ export function SomethingDifferentSheet({
           onOpenFoodSearch?.();
         }}
       />
+      <Text style={styles.sectionLabel}>Quick options</Text>
       <View style={styles.quickRow}>
+        <Pressable
+          style={[
+            styles.quickChip,
+            portionMode ? styles.quickChipActive : null,
+          ]}
+          onPress={() => setPortionMode((open) => !open)}
+        >
+          <Text style={styles.quickChipText}>Portion change</Text>
+        </Pressable>
         {QUICK_OPTIONS.map((option) => (
           <Pressable
             key={option.label}
@@ -239,6 +328,58 @@ export function SomethingDifferentSheet({
           </Pressable>
         ))}
       </View>
+      {portionMode ? (
+        <View style={styles.portionBlock}>
+          <Text style={styles.plannedTitle}>How much of the plan?</Text>
+          <View style={styles.quickRow}>
+            {PORTION_MULTIPLIER_CHIPS.map((chip) => (
+              <Pressable
+                key={chip.label}
+                style={[
+                  styles.qtyChip,
+                  portionMultiplier === chip.multiplier
+                    ? styles.qtyChipActive
+                    : null,
+                ]}
+                onPress={() => setPortionMultiplier(chip.multiplier)}
+              >
+                <Text
+                  style={
+                    portionMultiplier === chip.multiplier
+                      ? styles.qtyChipTextActive
+                      : styles.qtyChipText
+                  }
+                >
+                  {chip.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <PrimaryButton
+            label="Save portion"
+            loading={saving}
+            onPress={() => void savePortionAdjustment(portionMultiplier)}
+          />
+        </View>
+      ) : null}
+      {recentFoods.length > 0 ? (
+        <View style={styles.recentBlock}>
+          <Text style={styles.sectionLabel}>Same as earlier</Text>
+          <View style={styles.quickRow}>
+            {recentFoods.map((item) => (
+              <Pressable
+                key={item.id}
+                style={styles.quickChip}
+                onPress={() => {
+                  void repeatRecentFood(item);
+                }}
+              >
+                <Text style={styles.quickChipText}>{item.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
       {assignment.prescription.instructions ? (
         <View style={styles.planned}>
           <Text style={styles.plannedTitle}>Planned</Text>
@@ -387,6 +528,25 @@ const styles = StyleSheet.create({
     color: colors.deepNavy,
     fontSize: 13,
     fontWeight: "600",
+  },
+  quickChipActive: {
+    backgroundColor: colors.paleLavender,
+    borderColor: colors.indigo,
+  },
+  sectionLabel: {
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: spacing.sm,
+  },
+  portionBlock: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  recentBlock: {
+    gap: spacing.xs,
   },
   results: {
     maxHeight: 160,

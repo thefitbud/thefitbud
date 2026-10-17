@@ -65,6 +65,8 @@ export interface TraineeSyncStore {
     entry: Omit<OutboxEntry, "status" | "lastError" | "createdAt" | "updatedAt">,
   ): Promise<OutboxEntry>;
   listPendingOutbox(): Promise<OutboxEntry[]>;
+  /** All outbox rows for sync status UI (includes failed / conflicted). */
+  listOutbox(): Promise<OutboxEntry[]>;
   updateOutboxStatus(
     mutationId: string,
     status: OutboxMutationStatus,
@@ -133,6 +135,11 @@ export function createMemorySyncStore(): TraineeSyncStore {
       return [...outbox.values()]
         .filter((row) => row.status === "pending" || row.status === "in_flight")
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    },
+    async listOutbox() {
+      return [...outbox.values()].sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
     },
     async updateOutboxStatus(mutationId, status, lastError = null) {
       const existing = outbox.get(mutationId);

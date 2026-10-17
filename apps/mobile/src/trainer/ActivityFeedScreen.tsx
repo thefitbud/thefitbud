@@ -96,6 +96,17 @@ export function ActivityFeedScreen({ relationshipId }: Props) {
     [events, filter],
   );
 
+  const grouped = useMemo(() => {
+    const map = new Map<string, ActivityFeedEvent[]>();
+    for (const event of filtered) {
+      const day = event.occurredAt.slice(0, 10);
+      const bucket = map.get(day) ?? [];
+      bucket.push(event);
+      map.set(day, bucket);
+    }
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filtered]);
+
   if (loading && events.length === 0) {
     return <Text style={styles.muted}>Loading activity…</Text>;
   }
@@ -127,20 +138,57 @@ export function ActivityFeedScreen({ relationshipId }: Props) {
         </Text>
       ) : (
         <View style={styles.list}>
-          {filtered.map((event) => (
-            <Pressable key={event.id} style={styles.row}>
-              <Text style={styles.who}>
-                {event.traineeDisplayName ?? "Client"}
+          {grouped.map(([day, dayEvents]) => (
+            <View key={day} style={styles.group}>
+              <Text style={styles.groupTitle}>
+                {new Intl.DateTimeFormat("en-IN", {
+                  dateStyle: "full",
+                }).format(new Date(`${day}T12:00:00.000Z`))}
               </Text>
-              <Text style={styles.summary}>{event.summary}</Text>
-              <Text style={styles.meta}>
-                {formatWhen(event.occurredAt)}
-                {event.traineeLocalTime
-                  ? ` · ${event.traineeLocalTime} their time`
-                  : ""}
-                {event.kcal != null ? ` · ${event.kcal} kcal` : ""}
-              </Text>
-            </Pressable>
+              {dayEvents.map((event) => (
+                <View key={event.id} style={styles.row}>
+                  <Text style={styles.who}>
+                    {event.traineeDisplayName ?? "Client"}
+                  </Text>
+                  <Text style={styles.summary}>{event.summary}</Text>
+                  <Text style={styles.meta}>
+                    {formatWhen(event.occurredAt)}
+                    {event.traineeLocalTime
+                      ? ` · ${event.traineeLocalTime} their time`
+                      : ""}
+                    {event.kcal != null ? ` · ${event.kcal} kcal` : ""}
+                  </Text>
+                  <View style={styles.actions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      style={styles.actionBtn}
+                      onPress={() => {
+                        if (event.link) {
+                          void import("expo-linking").then((Linking) =>
+                            Linking.openURL(event.link!),
+                          );
+                        }
+                      }}
+                    >
+                      <Text style={styles.actionText}>Open</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      style={styles.actionBtnAlt}
+                      onPress={() => {
+                        void import("./whatsapp").then(({ openContextualWhatsApp }) =>
+                          openContextualWhatsApp({
+                            draftText: `Hi — saw your update: ${event.summary}`,
+                          }),
+                        );
+                      }}
+                    >
+                      <Text style={styles.actionTextAlt}>Nudge</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
           ))}
         </View>
       )}
@@ -169,8 +217,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   list: {
-    gap: spacing.md,
+    gap: spacing.lg,
     marginTop: spacing.md,
+  },
+  group: {
+    gap: spacing.sm,
+  },
+  groupTitle: {
+    color: colors.deepNavy,
+    fontSize: 14,
+    fontWeight: "700",
   },
   row: {
     backgroundColor: colors.white,
@@ -194,5 +250,34 @@ const styles = StyleSheet.create({
   meta: {
     color: colors.midGrey,
     fontSize: 12,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  actionBtn: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  actionBtnAlt: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  actionText: {
+    color: colors.indigo,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  actionTextAlt: {
+    color: colors.deepNavy,
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

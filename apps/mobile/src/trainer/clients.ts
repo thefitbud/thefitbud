@@ -111,13 +111,45 @@ export function buildClientDirectoryRows(input: {
   );
 }
 
+export type ClientListFilter =
+  | "all"
+  | "needs_attention"
+  | "checkin_due"
+  | "onboarding"
+  | "ended";
+
 export function filterClientRows(
   rows: ClientDirectoryRow[],
   query: string,
+  chip: ClientListFilter = "all",
 ): ClientDirectoryRow[] {
+  let next = rows;
+  if (chip === "onboarding") {
+    next = next.filter(
+      (row) =>
+        row.onboardingStatus === "onboarding_pending" ||
+        row.onboardingStatus === "onboarding_submitted" ||
+        row.onboardingStatus === "invited",
+    );
+  } else if (chip === "ended") {
+    next = next.filter((row) => row.onboardingStatus === "ended");
+  } else if (chip === "checkin_due") {
+    next = next.filter(
+      (row) =>
+        row.onboardingStatus === "coaching_ready" ||
+        row.onboardingStatus === "active",
+    );
+  } else if (chip === "needs_attention") {
+    next = next.filter(
+      (row) =>
+        row.onboardingStatus === "active" ||
+        row.onboardingStatus === "coaching_ready",
+    );
+  }
+
   const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return rows;
-  return rows.filter(
+  if (!trimmed) return next;
+  return next.filter(
     (row) =>
       row.name.toLowerCase().includes(trimmed) ||
       row.subtitle.toLowerCase().includes(trimmed) ||

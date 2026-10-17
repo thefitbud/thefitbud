@@ -1,33 +1,43 @@
 # FitBud mobile — implementation gaps
 
-Last updated: 2026-10-17 (branch `cursor/mobile-screens-a8e8`, pass 3).
+Last updated: 2026-10-17 (branch `cursor/mobile-screens-a8e8`, pass 4).
 
 ## Blocked on foundation (do not patch in mobile forever)
 
 - **Meal assignment list/detail API** returns `LOCAL_DEV_ERROR` when seeded `energyKcalScaled` exceeds contract max. Mobile uses `mealAssignmentFallback.ts` (`/me/day` synthesis) until `cursor/stage1-foundation-a3da` seed + mapper fix ships; then delete fallback and re-capture TR-07/TR-08.
+
+## API-NEW (logged in mobile; foundation owns implementation)
+
+| Gap | Screen | Notes |
+|-----|--------|--------|
+| `GET /me/foods/:foodId` (or search/index includes `servings[]`) | TR-08, TR-26 | Trainee cannot call `GET /libraries/foods/:id` (403). Mobile ships v2 servings from **`foodServingsSeed.json`** (extracted from API seed `02_foods.sql`) with **TODO name heuristics** when a food id is missing from the bundle. |
+| `GET /me/foods/recent` on `@fitbud/api-client` | TR-08 | Mobile uses `fetchMeFoodRecent()` raw fetch; augment client when contracts stabilize. |
+| Meal deviate `portionMultiplier` in contract | TR-08 | Sent in outbox payload for portion chips; server may ignore until API-CHG. |
 
 | Screen ID | File | Status | Gaps |
 |-----------|------|--------|------|
 | TR-05 | `trainee/setup/ReminderSetupScreen.tsx` | MVP | Multi-step flow with `expo-notifications`, OEM battery sheet, quiet hours + timezone copy. Does not persist API-NEW fields (`preferredWorkoutTime`, WhatsApp opt-in audit). |
 | TR-06 | `trainee/TodayTab.tsx` | MVP | Coach notes, pull-to-refresh, workout Start→active tab, nutrition + next meal confirm, late-log banner, weekly consistency. Steps hidden (`steps_enabled`). Hero priority not unit-tested in `@fitbud/core`. |
 | TR-07 | `trainee/DietTab.tsx` | MVP | Shared date navigator, kcal on cards, skip + undo snackbar (undo not synced), late logging via open exceptions heuristic, optional meals blocked on past days. |
-| TR-08 | `trainee/SomethingDifferentSheet.tsx` | MVP | Serving preset chips on search rows; full v2 multi-serving API still missing. Meal list uses `/me/day` fallback when assignment API validation fails on seed data. |
+| TR-08 | `trainee/SomethingDifferentSheet.tsx` | MVP | Portion chips, repeat recent (`/me/foods/recent`), v2 serving chips from seed bundle; planned-item prefill still blocked on assignment API. |
+| TR-11 | `trainee/ActiveWorkoutScreen.tsx` | MVP | Exercise prev/next, overview sheet, rep/load steppers, RPE chips; rest timer and offline-only set path still partial. |
 | TR-15 | `trainee/NotificationsScreen.tsx` | MVP | Mark read on open via raw `POST /notifications/:id/read`. Deep link routing from rows still minimal. |
 | TR-16 | `trainee/settings/ReminderSettingsScreen.tsx` | MVP | Four category toggles + coach nudges copy; daily summary uses `subscriptionRenewalReminder` key until API adds `dailySummary`. WhatsApp row "Coming soon" when `wa_automation` off. |
 | TR-17 | `trainee/settings/QuietHoursScreen.tsx` | MVP | Presets + free-text times; no native time picker or 24h preview bar. |
-| TR-19 | `trainee/settings/SyncStatusScreen.tsx` | MVP | Sync indicator states (syncing / problem) not wired to engine events. |
+| TR-19 | `trainee/settings/SyncStatusScreen.tsx` | MVP | Lists outbox queued/syncing/failed; synced rows drop off when acked (store design). |
 | TR-20 | `trainee/MoreScreen.tsx` | MVP | Profile rows stubbed to overlays; no in-app timezone edit. |
 | TR-21 | `trainee/WidgetTipsScreen.tsx` | Placeholder | No widget implementation. |
 | TR-22 | `trainee/EndedCoachingScreen.tsx` | MVP | Shown when `relationship.status === ended`. |
 | TR-24 | `trainee/settings/MealTimesScreen.tsx` | MVP | Uses `getMealTimes` / `updateMealTimes`. |
 | TR-25 | `trainee/settings/StepsSettingsScreen.tsx` | Partial | `steps_enabled` respected; no Health Connect/HealthKit (`StepsCard` always hidden). |
-| TR-26 | `trainee/FoodSearchScreen.tsx` | MVP | Standalone search; serving picker not wired. |
+| TR-26 | `trainee/FoodSearchScreen.tsx` | MVP | Standalone search; serving chips wired via shared `servingPresetsForFood`. |
 | TR-02 | `screens/AcceptInviteScreen.tsx` | MVP | Improved copy/checklist; still paste-token (no invite preview API). |
 | TR-04 | `screens/WaitingReviewScreen.tsx` | MVP | Checklist + meanwhile copy; no auto-refresh on focus. |
 | TM-07 | `trainer/MoreScreen.tsx` | MVP | OS notification permission + settings rows; no profile editor. |
-| TM-09 | `trainer/ActivityFeedScreen.tsx` | MVP | Filter chips + cursor "Load more"; no row actions or grouping. |
-| TM-01 | `trainer/AttentionTab.tsx` | MVP | Segments + Review cards; swipe actions not implemented. |
-| TM-03 | `trainer/ClientStatusScreen.tsx` | Partial | Adherence counts; coach week kcal read model not on API for mobile. |
+| TM-09 | `trainer/ActivityFeedScreen.tsx` | MVP | Day grouping + Open/Nudge row actions; no server-side grouping API. |
+| TM-01 | `trainer/AttentionTab.tsx` | MVP | Swipeable cards + accessibility buttons; no KPI tiles. |
+| TM-02 | `trainer/ClientsTab.tsx` | MVP | Filter chips with icons; attention chip is heuristic until client list API adds flags. |
+| TM-03 | `trainer/ClientStatusScreen.tsx` | Partial | Week dots + recent activity feed; coach week kcal read model not on API for mobile. |
 
 ## Server / client assumptions
 
