@@ -629,6 +629,9 @@ export {
   notificationDomainEntityTypeSchema,
   notificationListResponseSchema,
   notificationPreferencesSchema,
+  channelPreferenceSchema,
+  whatsappOptInSchema,
+  trainerCategoriesSchema,
   notificationSchema,
   notificationStateSchema,
   notificationTypeSchema,
@@ -660,6 +663,8 @@ export {
   type NotificationDomainEntityType,
   type NotificationListResponse,
   type NotificationPreferences,
+  type ChannelPreference,
+  type WhatsappOptIn,
   type NotificationRecord,
   type NotificationState,
   type NotificationType,
@@ -679,11 +684,20 @@ export {
 } from "./notification.js";
 
 export {
+  traineeFoodDetailSchema,
   traineeFoodSearchResponseSchema,
   traineeFoodIndexResponseSchema,
+  type TraineeFoodDetail,
   type TraineeFoodSearchResponse,
   type TraineeFoodIndexResponse,
 } from "./trainee-food.js";
+
+export {
+  stepsSettingsResponseSchema,
+  updateStepsSettingsRequestSchema,
+  type StepsSettingsResponse,
+  type UpdateStepsSettingsRequest,
+} from "./me-steps.js";
 
 export {
   coachAskSchema,

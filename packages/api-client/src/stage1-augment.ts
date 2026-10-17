@@ -12,12 +12,15 @@ import {
   authPasswordResetRequestSchema,
   authPasswordSetRequestSchema,
   authTokenResponseSchema,
+  checkinFormTemplateListResponseSchema,
   coachAskListResponseSchema,
   coachAskSchema,
   trainerProfileSchema,
   createCoachAskRequestSchema,
+  createInvitationResponseSchema,
   endRelationshipRequestSchema,
   invitationPreviewResponseSchema,
+  invitationSchema,
   linkKindSchema,
   linkResolveResponseSchema,
   mealTimesResponseSchema,
@@ -27,8 +30,10 @@ import {
   reactivateRelationshipRequestSchema,
   reengagementCandidatesResponseSchema,
   responsivenessResponseSchema,
+  traineeFoodDetailSchema,
   traineeFoodIndexResponseSchema,
   traineeFoodSearchResponseSchema,
+  notificationSchema,
   updateMealTimesRequestSchema,
   updateTrainerProfileRequestSchema,
   weekReadModelSchema,
@@ -345,6 +350,26 @@ proto.getMeFoodIndex = async function getMeFoodIndex(
   );
 };
 
+proto.getTraineeFood = async function getTraineeFood(foodId: string) {
+  return this.request(
+    "GET",
+    `/me/foods/${encodeURIComponent(foodId)}`,
+    traineeFoodDetailSchema,
+    { auth: true },
+  );
+};
+
+proto.markNotificationRead = async function markNotificationRead(
+  notificationId: string,
+) {
+  return this.request(
+    "POST",
+    `/notifications/${encodeURIComponent(notificationId)}/read`,
+    notificationSchema,
+    { auth: true },
+  );
+};
+
 proto.resolveLink = async function resolveLink(
   kind: LinkKind,
   id: string,
@@ -415,6 +440,51 @@ proto.listCustomLoggedFoods = async function listCustomLoggedFoods(
     "GET",
     `/libraries/foods/custom-logged?rid=${encodeURIComponent(relationshipId)}`,
     customLoggedSchema,
+    { auth: true },
+  );
+};
+
+proto.reissueInvitation = async function reissueInvitation(invitationId: string) {
+  return this.request(
+    "POST",
+    `/invitations/${encodeURIComponent(invitationId)}/reissue`,
+    createInvitationResponseSchema,
+    { auth: true },
+  );
+};
+
+proto.revokeInvitation = async function revokeInvitation(invitationId: string) {
+  return this.request(
+    "POST",
+    `/invitations/${encodeURIComponent(invitationId)}/revoke`,
+    invitationSchema,
+    { auth: true },
+  );
+};
+
+proto.cancelReactivation = async function cancelReactivation(
+  relationshipId: string,
+) {
+  return this.request(
+    "POST",
+    `/relationships/${encodeURIComponent(relationshipId)}/reactivate/cancel`,
+    z.object({ status: z.literal("cancelled") }),
+    { auth: true },
+  );
+};
+
+proto.listCheckinFormTemplates = async function listCheckinFormTemplates(
+  query?: { scope?: "all" | "bases" | "mine"; cursor?: string; limit?: number },
+) {
+  const params = new URLSearchParams();
+  if (query?.scope) params.set("scope", query.scope);
+  if (query?.cursor) params.set("cursor", query.cursor);
+  if (query?.limit !== undefined) params.set("limit", String(query.limit));
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return this.request(
+    "GET",
+    `/checkins/form-templates${suffix}`,
+    checkinFormTemplateListResponseSchema,
     { auth: true },
   );
 };

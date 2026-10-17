@@ -10,6 +10,7 @@ import type {
 import { mealPrescriptionSchema } from "@fitbud/contracts";
 import {
   ACTIVITY_NUDGE_HOURLY_LIMIT,
+  DAILY_PUSH_CAP,
   DEFAULT_QUIET_HOURS_END,
   DEFAULT_QUIET_HOURS_START,
   DEFAULT_REMINDER_TYPES,
@@ -23,7 +24,9 @@ import {
   dueMealReminderPhases,
   dueWorkoutReminderTimes,
   formatLocalDate,
+  localDateTimeToUtcIso,
   isActivityUnresolved,
+  isAtOrAfterHardStopLocal,
   isCategoryEnabled,
   isCheckinReminderEligible,
   isDailySummaryClockDue,
@@ -34,9 +37,11 @@ import {
   localTimeHhMm,
   mealReminderDedupeKey,
   reminderDeliveryDecision,
+  reminderDeliveryPriority,
   reminderDedupeKey,
   reminderPreferenceForActivity,
   reminderPreferenceForNotification,
+  shouldSkipReminderForBackoff,
   subscriptionRenewalDedupeKey,
   workoutReminderDedupeKey,
 } from "@fitbud/core";
@@ -47,10 +52,12 @@ import {
   deviceTokens,
   mealAssignments,
   mealCompliance,
+  mealTimeOverrides,
   notificationDeliveries,
   notificationPreferences,
   notifications,
   reminderRules,
+  reminderStates,
   scheduledJobs,
   subscriptionVersions,
   users,
@@ -136,6 +143,7 @@ async function loadOrDefaultPreferences(db: Db, userId: string) {
         mealReminder: row.mealReminder,
         checkinReminder: row.checkinReminder,
         subscriptionRenewalReminder: row.subscriptionRenewalReminder,
+        dailySummaryReminder: row.dailySummaryReminder,
       },
       quietHoursStart: row.quietHoursStart,
       quietHoursEnd: row.quietHoursEnd,
@@ -148,6 +156,7 @@ async function loadOrDefaultPreferences(db: Db, userId: string) {
       mealReminder: true,
       checkinReminder: true,
       subscriptionRenewalReminder: true,
+      dailySummaryReminder: true,
     },
     quietHoursStart: null as string | null,
     quietHoursEnd: null as string | null,
@@ -216,11 +225,87 @@ function readMealLocalTime(mealPrescriptionJson: string): string | null {
   }
 }
 
+function mealSlotKey(mealPrescriptionJson: string): string | null {
+  try {
+    const parsed = mealPrescriptionSchema.safeParse(
+      JSON.parse(mealPrescriptionJson),
+    );
+    if (!parsed.success) return null;
+    return parsed.data.mealType ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveMealLocalTime(
+  mealPrescriptionJson: string,
+  overrideBySlot: Map<string, string>,
+): string | null {
+  const slot = mealSlotKey(mealPrescriptionJson);
+  if (slot && overrideBySlot.has(slot)) {
+    return overrideBySlot.get(slot) ?? null;
+  }
+  return readMealLocalTime(mealPrescriptionJson);
+}
+
+function latestMealLocalTime(
+  assignments: Array<{ mealPrescriptionJson: string }>,
+  overrideBySlot: Map<string, string>,
+): string | null {
+  let latest: string | null = null;
+  for (const assignment of assignments) {
+    const localTime = resolveMealLocalTime(
+      assignment.mealPrescriptionJson,
+      overrideBySlot,
+    );
+    if (!localTime) continue;
+    if (!latest || localTime > latest) {
+      latest = localTime;
+    }
+  }
+  return latest;
+}
+
+const PUSH_REMINDER_TYPES = new Set<NotificationType>([
+  "workout_reminder",
+  "meal_reminder",
+  "checkin_reminder",
+  "daily_summary",
+  "subscription_renewal_reminder",
+  "activity_nudge",
+]);
+
+async function countTraineePushRemindersToday(
+  db: Db,
+  traineeUserId: string,
+  dayStartIso: string,
+): Promise<number> {
+  const rows = await db
+    .select({
+      notificationType: notifications.notificationType,
+      state: notifications.state,
+    })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.recipientUserId, traineeUserId),
+        gte(notifications.createdAt, dayStartIso),
+      ),
+    )
+    .limit(200);
+  return rows.filter(
+    (row) =>
+      PUSH_REMINDER_TYPES.has(row.notificationType as NotificationType) &&
+      row.state !== "suppressed" &&
+      row.state !== "deferred",
+  ).length;
+}
+
 function summaryCategoryAllowed(
   prefs: Awaited<ReturnType<typeof loadOrDefaultPreferences>>,
   remaining: RemainingLogs,
 ): boolean {
-  if (!prefs.pushEnabled) return false;
+  if (!prefs.pushEnabled || !prefs.categories.dailySummaryReminder) return false;
   if (remaining.workouts > 0 && prefs.categories.workoutReminder) return true;
   if (remaining.meals > 0 && prefs.categories.mealReminder) return true;
   if (remaining.checkins > 0 && prefs.categories.checkinReminder) return true;
@@ -329,8 +414,41 @@ async function collectCandidates(
     const timeZone = trainee[0]?.timezone ?? "UTC";
     const today = formatLocalDate(new Date(now), timeZone);
     const tomorrow = addDaysToLocalDate(today, 1);
+    const [prefRow] = await db
+      .select({
+        preferredWorkoutTime: notificationPreferences.preferredWorkoutTime,
+        quietHoursStart: notificationPreferences.quietHoursStart,
+      })
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, relationship.traineeUserId))
+      .limit(1);
+    const [reminderState] = await db
+      .select()
+      .from(reminderStates)
+      .where(eq(reminderStates.traineeUserId, relationship.traineeUserId))
+      .limit(1);
+    const backoffMode = reminderState?.mode ?? "normal";
+    const softIgnorerSkipTick =
+      backoffMode === "soft_ignorer" &&
+      (reminderState?.consecutiveIgnores ?? 0) % 2 === 1;
+    const skipBackoff = (preferenceType: ReminderType | null) =>
+      shouldSkipReminderForBackoff({
+        mode: backoffMode,
+        preferenceType,
+        pausedUntil: reminderState?.pausedUntil,
+        nowIso: now,
+        softIgnorerSkipTick,
+      });
+    const overrideRows = await db
+      .select()
+      .from(mealTimeOverrides)
+      .where(eq(mealTimeOverrides.relationshipId, relationship.id));
+    const overrideBySlot = new Map(
+      overrideRows.map((row) => [row.slotKey, row.time]),
+    );
+    const hardStop = isAtOrAfterHardStopLocal(now, timeZone);
 
-    if (enabled.has("workout_reminder")) {
+    if (enabled.has("workout_reminder") && !hardStop && !skipBackoff("workout_reminder")) {
       const assignments = await db
         .select()
         .from(workoutAssignments)
@@ -353,6 +471,8 @@ async function collectCandidates(
           assignmentLocalDate: assignment.localDate,
           timeZone,
           resolved: isWorkoutResolved(executions[0]?.status ?? null),
+          workoutStartLocalTime: prefRow?.preferredWorkoutTime ?? null,
+          quietHoursStart: prefRow?.quietHoursStart ?? null,
         });
         for (const slot of slots) {
           candidates.push({
@@ -369,7 +489,7 @@ async function collectCandidates(
       }
     }
 
-    if (enabled.has("meal_reminder")) {
+    if (enabled.has("meal_reminder") && !hardStop && !skipBackoff("meal_reminder")) {
       const assignments = await db
         .select()
         .from(mealAssignments)
@@ -394,7 +514,10 @@ async function collectCandidates(
           nowIso: now,
           localDate: assignment.localDate,
           timeZone,
-          localTime: readMealLocalTime(assignment.mealPrescriptionJson),
+          localTime: resolveMealLocalTime(
+            assignment.mealPrescriptionJson,
+            overrideBySlot,
+          ),
           logged: Boolean(complianceRows[0]),
           windowEndsAt: assignment.windowEndsAt,
         });
@@ -413,7 +536,7 @@ async function collectCandidates(
       }
     }
 
-    if (enabled.has("checkin_reminder")) {
+    if (enabled.has("checkin_reminder") && !skipBackoff("checkin_reminder")) {
       const rows = await db
         .select()
         .from(checkins)
@@ -494,7 +617,28 @@ async function collectCandidates(
       }
     }
 
-    if (isDailySummaryClockDue({ nowIso: now, timeZone })) {
+    const todaysMealAssignments = await db
+      .select({ mealPrescriptionJson: mealAssignments.mealPrescriptionJson })
+      .from(mealAssignments)
+      .where(
+        and(
+          eq(mealAssignments.coachingRelationshipId, relationship.id),
+          eq(mealAssignments.localDate, today),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
+        ),
+      )
+      .limit(20);
+    const lastMealLocalTime = latestMealLocalTime(
+      todaysMealAssignments,
+      overrideBySlot,
+    );
+    if (
+      isDailySummaryClockDue({
+        nowIso: now,
+        timeZone,
+        lastMealLocalTime,
+      })
+    ) {
       const remaining = await countRemainingLogs(
         db,
         relationship.id,
@@ -1114,8 +1258,42 @@ export async function evaluateAndEnqueueReminders(
   };
   const candidates = await collectCandidates(db, now);
   const candidateKeys = new Set(candidates.map((candidate) => candidate.dedupeKey));
-  for (const candidate of candidates) {
+  const sorted = [...candidates].sort(
+    (a, b) => reminderDeliveryPriority(a.type) - reminderDeliveryPriority(b.type),
+  );
+  const pushCountCache = new Map<string, number>();
+  for (const candidate of sorted) {
+    if (PUSH_REMINDER_TYPES.has(candidate.type)) {
+      let used = pushCountCache.get(candidate.recipientUserId);
+      if (used === undefined) {
+        const [userRow] = await db
+          .select({ timezone: users.timezone })
+          .from(users)
+          .where(eq(users.id, candidate.recipientUserId))
+          .limit(1);
+        const tz = userRow?.timezone ?? "UTC";
+        const localToday = formatLocalDate(new Date(now), tz);
+        const dayStart = localDateTimeToUtcIso(localToday, tz, 0, 0, 0);
+        used = await countTraineePushRemindersToday(
+          db,
+          candidate.recipientUserId,
+          dayStart,
+        );
+        pushCountCache.set(candidate.recipientUserId, used);
+      }
+      if (used >= DAILY_PUSH_CAP) {
+        continue;
+      }
+    }
+    const beforeDeliveries = counters.deliveriesEnqueued;
     await persistReminder(db, candidate, now, delivery, counters);
+    if (
+      PUSH_REMINDER_TYPES.has(candidate.type) &&
+      counters.deliveriesEnqueued > beforeDeliveries
+    ) {
+      const used = pushCountCache.get(candidate.recipientUserId) ?? 0;
+      pushCountCache.set(candidate.recipientUserId, used + 1);
+    }
   }
   await retryDeferredReminders(db, now, candidateKeys, delivery, counters);
   return {
@@ -1347,7 +1525,7 @@ export async function deliverReminderMessage(
   });
   const categoryOk =
     preference === "daily_summary"
-      ? prefs.pushEnabled
+      ? prefs.pushEnabled && prefs.categories.dailySummaryReminder
       : preference
         ? isCategoryEnabled({
             pushEnabled: prefs.pushEnabled,

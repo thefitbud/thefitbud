@@ -81,7 +81,15 @@ async function reachActiveTrainee(suffix: string) {
     testEnv(),
   );
   expect(accept.status).toBe(200);
-  return { traineeToken };
+  const acceptBody = (await accept.json()) as {
+    data: { relationship: { id: string; trainerUserId: string } };
+  };
+  return {
+    traineeToken,
+    trainerCookie: trainer.cookie,
+    relationshipId: acceptBody.data.relationship.id,
+    trainerUserId: acceptBody.data.relationship.trainerUserId,
+  };
 }
 
 describe("me meal times", () => {
@@ -174,5 +182,111 @@ describe("me meal times", () => {
     expect(response.status).toBe(404);
     const body = (await response.json()) as { error: { code: string } };
     expect(body.error.code).toBe("RELATIONSHIP_NOT_FOUND");
+  });
+
+  it("notifies the trainer once for two quick meal-time edits and reschedules assignments", async () => {
+    const ctx = await reachActiveTrainee("notify");
+    const today = new Date().toISOString().slice(0, 10);
+    const planId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+    const versionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2";
+    const assignmentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3";
+    const now = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: ctx.relationshipId,
+      title: "Meal times plan",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: now,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const prescription = {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      order: 1,
+      name: "Breakfast",
+      mealType: "breakfast",
+      applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      localTime: "08:00",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [],
+    };
+    await db.insert(schema.mealAssignments).values({
+      id: assignmentId,
+      coachingRelationshipId: ctx.relationshipId,
+      planId,
+      planVersionId: versionId,
+      mealPrescriptionId: prescription.id,
+      mealName: "Breakfast",
+      mealPrescriptionJson: JSON.stringify(prescription),
+      localDate: today,
+      windowStartsAt: now,
+      windowEndsAt: now,
+      photoRequired: false,
+      scheduleStatus: "scheduled",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const putHeaders = {
+      Authorization: `Bearer ${ctx.traineeToken}`,
+      "x-fitbud-role": "trainee",
+      "Content-Type": "application/json",
+    };
+    const first = await app.request(
+      "/me/meal-times",
+      {
+        method: "PUT",
+        headers: putHeaders,
+        body: JSON.stringify({
+          overrides: [{ slotKey: "breakfast", dayPattern: "all", time: "09:00" }],
+        }),
+      },
+      testEnv(),
+    );
+    expect(first.status).toBe(200);
+    const second = await app.request(
+      "/me/meal-times",
+      {
+        method: "PUT",
+        headers: putHeaders,
+        body: JSON.stringify({
+          overrides: [{ slotKey: "breakfast", dayPattern: "all", time: "09:15" }],
+        }),
+      },
+      testEnv(),
+    );
+    expect(second.status).toBe(200);
+
+    const trainerNotes = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.recipientUserId, ctx.trainerUserId));
+    const mealTimeAlerts = trainerNotes.filter(
+      (row) => row.notificationType === "trainer_meal_times_changed",
+    );
+    expect(mealTimeAlerts).toHaveLength(1);
+
+    const [assignment] = await db
+      .select()
+      .from(schema.mealAssignments)
+      .where(eq(schema.mealAssignments.id, assignmentId));
+    const updatedPrescription = JSON.parse(assignment!.mealPrescriptionJson) as {
+      localTime: string;
+    };
+    expect(updatedPrescription.localTime).toBe("09:15");
   });
 });

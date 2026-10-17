@@ -44,6 +44,7 @@ import type { Env, Variables } from "../types";
 
 import { authLoginRoutes } from "./auth-login.js";
 import { meFoodRoutes } from "./me-foods.js";
+import { meStepRoutes } from "./me-steps.js";
 import { meCoachNoteRoutes } from "./me-coach-notes.js";
 import { meDayRoutes } from "./me-day.js";
 import { meMealTimeRoutes } from "./me-meal-times.js";
@@ -146,6 +147,7 @@ authRoutes.delete("/session",
 export const meRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 meRoutes.route("/foods", meFoodRoutes);
+meRoutes.route("/steps", meStepRoutes);
 meRoutes.route("/coach-notes", meCoachNoteRoutes);
 meRoutes.route("/meal-times", meMealTimeRoutes);
 meRoutes.route("/", meDayRoutes);

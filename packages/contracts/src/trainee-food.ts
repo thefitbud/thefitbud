@@ -1,5 +1,22 @@
 import { z } from "zod";
+import { foodLibraryServingSchema } from "./template.js";
 import { cursorPageSchema, uuidSchema } from "./identity.js";
+
+export const traineeFoodServingSchema = foodLibraryServingSchema.extend({
+  isDefault: z.boolean(),
+});
+
+export const traineeFoodDetailSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  energyKcalScaled: z.number().int().nonnegative().nullable(),
+  proteinScaled: z.number().int().nonnegative().nullable(),
+  carbsScaled: z.number().int().nonnegative().nullable(),
+  fatScaled: z.number().int().nonnegative().nullable(),
+  defaultServingId: uuidSchema.nullable(),
+  servings: z.array(traineeFoodServingSchema).max(12),
+});
+export type TraineeFoodDetail = z.infer<typeof traineeFoodDetailSchema>;
 
 export const traineeFoodSearchItemSchema = z.object({
   id: uuidSchema,

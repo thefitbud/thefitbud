@@ -19,6 +19,7 @@ import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { routingPayloadForNotification } from "../lib/push-provider.js";
+import { nowIso } from "../lib/crypto.js";
 import type { Env } from "../types.js";
 
 const KOLKATA_TZ = "Asia/Kolkata";
@@ -29,6 +30,14 @@ function istWallClockToUtc(localDate: string, hours: number, minutes: number): s
   const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
   const istOffsetMinutes = 5 * 60 + 30;
   const utcMs = utcMidnight + (hours * 60 + minutes - istOffsetMinutes) * 60_000;
+  return new Date(utcMs).toISOString();
+}
+
+function dubaiWallClockToUtc(localDate: string, hours: number, minutes: number): string {
+  const [year, month, day] = localDate.split("-").map(Number) as [number, number, number];
+  const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+  const dubaiOffsetMinutes = 4 * 60;
+  const utcMs = utcMidnight + (hours * 60 + minutes - dubaiOffsetMinutes) * 60_000;
   return new Date(utcMs).toISOString();
 }
 
@@ -1043,7 +1052,12 @@ describe("notifications and reminders (D4)", () => {
     expect(keys).toContain(mealReminderDedupeKey(breakfast.id, "after"));
     expect(keys.some((key) => key.includes(lunch.id))).toBe(false);
 
-    await evaluateAt(istWallClockToUtc(localDate, 17, 0));
+    await evaluateAt(istWallClockToUtc(localDate, 19, 14));
+    const beforeWorkoutNudge = await db.select().from(schema.notifications);
+    expect(beforeWorkoutNudge.map((row) => row.dedupeKey)).not.toContain(
+      workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+    );
+    await evaluateAt(istWallClockToUtc(localDate, 19, 15));
     const eveningWorkout = await db.select().from(schema.notifications);
     expect(eveningWorkout.map((row) => row.dedupeKey)).toContain(
       workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
@@ -1133,9 +1147,10 @@ describe("notifications and reminders (D4)", () => {
     expect(executionAfterNudge).toEqual(executionAfterSkip);
 
     await evaluateAt(istWallClockToUtc(localDate, 21, 29));
-    expect(
-      (await db.select().from(schema.notifications)).map((row) => row.dedupeKey),
-    ).not.toContain(dailySummaryDedupeKey(relationshipId, localDate));
+    const summaryBeforeCap = (await db.select().from(schema.notifications)).find(
+      (row) => row.dedupeKey === dailySummaryDedupeKey(relationshipId, localDate),
+    );
+    expect(summaryBeforeCap?.notificationType).toBe("daily_summary");
     await evaluateAt(istWallClockToUtc(localDate, 21, 30));
     const summary = (await db.select().from(schema.notifications)).find(
       (row) => row.dedupeKey === dailySummaryDedupeKey(relationshipId, localDate),
@@ -1470,5 +1485,926 @@ describe("notifications and reminders (D4)", () => {
       .from(schema.checkins)
       .where(eq(schema.checkins.id, suppressedCheckinId));
     expect(suppressedCheckin[0]!.recordStatus).toBe("draft");
+  });
+});
+
+describe("§3.6 day-in-life reminder battery", () => {
+  let db: Db;
+  let close: () => void;
+
+  beforeEach(async () => {
+    const handle = await createMemoryDb();
+    db = handle.db;
+    close = handle.close;
+    setTestDbOverride(db);
+  });
+
+  afterEach(() => {
+    setTestDbOverride(null);
+    close();
+  });
+
+  it("skips meal reminders for self_logger backoff", async () => {
+    const { trainerCookie, relationshipId, today } =
+      await reachActiveCheckinConfig("selflog");
+    const [rel] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    await db.insert(schema.reminderStates).values({
+      traineeUserId: rel!.traineeUserId,
+      consecutiveIgnores: 0,
+      mode: "self_logger",
+      pausedUntil: null,
+      lastEvaluatedAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    const evaluate = await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 8, 45) }),
+      },
+      testEnv(),
+    );
+    expect(evaluate.status).toBe(200);
+    const rows = await db.select().from(schema.notifications);
+    expect(rows.some((row) => row.notificationType === "meal_reminder")).toBe(false);
+  });
+
+  it("uses meal override time for P-MEAL scheduling", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("override");
+    const planId = "cccccccc-cccc-4ccc-8ccc-ccccccccccc1";
+    const versionId = "cccccccc-cccc-4ccc-8ccc-ccccccccccc2";
+    const assignmentId = "cccccccc-cccc-4ccc-8ccc-ccccccccccc3";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Override plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    const lunchPrescription = {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      order: 1,
+      name: "Lunch",
+      mealType: "lunch",
+      applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      localTime: "12:00",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [],
+    };
+    await db.insert(schema.mealAssignments).values({
+      id: assignmentId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      mealPrescriptionId: lunchPrescription.id,
+      mealName: "Lunch",
+      mealPrescriptionJson: JSON.stringify(lunchPrescription),
+      localDate: today,
+      windowStartsAt: istWallClockToUtc(today, 0, 0),
+      windowEndsAt: istWallClockToUtc(today, 23, 0),
+      photoRequired: false,
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/notifications/device-tokens",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          platform: "ios",
+          token: "fcm-override-token-abcdefgh",
+          installationId: "install-override",
+        }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      "/me/meal-times",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          overrides: [{ slotKey: "lunch", dayPattern: "all", time: "14:30" }],
+        }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 15, 12) }),
+      },
+      testEnv(),
+    );
+    const mealReminders = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(mealReminders.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not deliver push reminders during default quiet hours at 22:00", async () => {
+    const { trainerCookie, today } = await reachActiveCheckinConfig("quiet22");
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 22, 0) }),
+      },
+      testEnv(),
+    );
+    const queued = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.state, "queued"));
+    expect(queued).toHaveLength(0);
+  });
+
+  it("respects custom quiet hours from 21:00 local", async () => {
+    const { trainerCookie, traineeToken, today } =
+      await reachActiveCheckinConfig("quiet21");
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quietHoursStart: "21:00",
+          quietHoursEnd: "06:00",
+        }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 21, 0) }),
+      },
+      testEnv(),
+    );
+    const queued = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.state, "queued"));
+    expect(queued).toHaveLength(0);
+  });
+
+  it("skips meal reminders when backoff mode is paused", async () => {
+    const { trainerCookie, relationshipId, today } =
+      await reachActiveCheckinConfig("paused");
+    const [rel] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    const pausedUntil = new Date(Date.now() + 7 * 86_400_000).toISOString();
+    await db.insert(schema.reminderStates).values({
+      traineeUserId: rel!.traineeUserId,
+      consecutiveIgnores: 5,
+      mode: "paused",
+      pausedUntil,
+      lastEvaluatedAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 8, 45) }),
+      },
+      testEnv(),
+    );
+    const mealRows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(mealRows).toHaveLength(0);
+  });
+
+  it("skips every other tick for soft_ignorer backoff", async () => {
+    const { trainerCookie, relationshipId, today } =
+      await reachActiveCheckinConfig("softign");
+    const [rel] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    await db.insert(schema.reminderStates).values({
+      traineeUserId: rel!.traineeUserId,
+      consecutiveIgnores: 1,
+      mode: "soft_ignorer",
+      pausedUntil: null,
+      lastEvaluatedAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 8, 45) }),
+      },
+      testEnv(),
+    );
+    const mealRows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(mealRows).toHaveLength(0);
+  });
+
+  it("schedules P-MEAL about 40 minutes after a 14:30 lunch override", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("lunch1510");
+    const planId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1";
+    const versionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2";
+    const assignmentId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee3";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Lunch plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    const lunchPrescription = {
+      id: "ffffffff-ffff-4fff-8fff-fffffffffff1",
+      order: 1,
+      name: "Lunch",
+      mealType: "lunch",
+      applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      localTime: "12:00",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [],
+    };
+    await db.insert(schema.mealAssignments).values({
+      id: assignmentId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      mealPrescriptionId: lunchPrescription.id,
+      mealName: "Lunch",
+      mealPrescriptionJson: JSON.stringify(lunchPrescription),
+      localDate: today,
+      windowStartsAt: istWallClockToUtc(today, 0, 0),
+      windowEndsAt: istWallClockToUtc(today, 23, 0),
+      photoRequired: false,
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/me/meal-times",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          overrides: [{ slotKey: "lunch", dayPattern: "all", time: "14:30" }],
+        }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 15, 9) }),
+      },
+      testEnv(),
+    );
+    let mealRows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(mealRows).toHaveLength(0);
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 15, 10) }),
+      },
+      testEnv(),
+    );
+    mealRows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(
+      mealRows.some(
+        (row) => row.dedupeKey === mealReminderDedupeKey(assignmentId, "after"),
+      ),
+    ).toBe(true);
+  });
+
+  it("fires meal snooze once after the primary after reminder", async () => {
+    const { trainerCookie, relationshipId, today } =
+      await reachActiveCheckinConfig("snooze");
+    const planId = "11111111-1111-4111-8111-111111111101";
+    const versionId = "11111111-1111-4111-8111-111111111102";
+    const assignmentId = "11111111-1111-4111-8111-111111111103";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Snooze plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    const breakfast = {
+      id: "11111111-1111-4111-8111-111111111104",
+      order: 1,
+      name: "Breakfast",
+      mealType: "breakfast",
+      applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      localTime: "08:00",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [],
+    };
+    await db.insert(schema.mealAssignments).values({
+      id: assignmentId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      mealPrescriptionId: breakfast.id,
+      mealName: "Breakfast",
+      mealPrescriptionJson: JSON.stringify(breakfast),
+      localDate: today,
+      windowStartsAt: istWallClockToUtc(today, 0, 0),
+      windowEndsAt: istWallClockToUtc(today, 23, 0),
+      photoRequired: false,
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 8, 40) }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 9, 10) }),
+      },
+      testEnv(),
+    );
+    const snoozeRows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(
+      snoozeRows.some(
+        (row) => row.dedupeKey === mealReminderDedupeKey(assignmentId, "snooze"),
+      ),
+    ).toBe(true);
+  });
+
+  it("uses preferred workout time 19:00 for the post-workout nudge at 20:15", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("wo1900");
+    await db
+      .delete(schema.workoutAssignments)
+      .where(eq(schema.workoutAssignments.coachingRelationshipId, relationshipId));
+    const prefPut = await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ preferredWorkoutTime: "19:00" }),
+      },
+      testEnv(),
+    );
+    expect(prefPut.status).toBe(200);
+    const planId = "55555555-5555-4555-8555-555555555501";
+    const versionId = "55555555-5555-4555-8555-555555555502";
+    const workoutId = "55555555-5555-4555-8555-555555555503";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Workout plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.workoutAssignments).values({
+      id: workoutId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      workoutDayId: "66666666-6666-4666-8666-666666666601",
+      workoutDayName: "Strength",
+      workoutDayJson: JSON.stringify({ name: "Strength", exercises: [] }),
+      localDate: today,
+      windowStartsAt: istWallClockToUtc(today, 0, 0),
+      windowEndsAt: istWallClockToUtc(today, 23, 0),
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 20, 14) }),
+      },
+      testEnv(),
+    );
+    let rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.domainEntityId, workoutId));
+    expect(
+      rows.some(
+        (row) =>
+          row.dedupeKey === workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+      ),
+    ).toBe(false);
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 20, 15) }),
+      },
+      testEnv(),
+    );
+    rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.domainEntityId, workoutId));
+    expect(
+      rows.some(
+        (row) =>
+          row.dedupeKey === workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+      ),
+    ).toBe(true);
+  });
+
+  it("clamps a 21:30 preferred workout nudge to 21:59 before quiet hours", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("clamp2130");
+    await db
+      .delete(schema.workoutAssignments)
+      .where(eq(schema.workoutAssignments.coachingRelationshipId, relationshipId));
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ preferredWorkoutTime: "21:30" }),
+      },
+      testEnv(),
+    );
+    const planId = "77777777-7777-4777-8777-777777777701";
+    const versionId = "77777777-7777-4777-8777-777777777702";
+    const workoutId = "77777777-7777-4777-8777-777777777703";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Clamp plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.workoutAssignments).values({
+      id: workoutId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      workoutDayId: "88888888-8888-4888-8888-888888888801",
+      workoutDayName: "Evening",
+      workoutDayJson: JSON.stringify({ name: "Evening", exercises: [] }),
+      localDate: today,
+      windowStartsAt: istWallClockToUtc(today, 0, 0),
+      windowEndsAt: istWallClockToUtc(today, 23, 0),
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 21, 58) }),
+      },
+      testEnv(),
+    );
+    let rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.domainEntityId, workoutId));
+    expect(
+      rows.some(
+        (row) =>
+          row.dedupeKey === workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+      ),
+    ).toBe(false);
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 21, 59) }),
+      },
+      testEnv(),
+    );
+    rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.domainEntityId, workoutId));
+    expect(
+      rows.some(
+        (row) =>
+          row.dedupeKey === workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+      ),
+    ).toBe(true);
+  });
+
+  it("fires meal reminders in Asia/Dubai local time", async () => {
+    const { trainerCookie, relationshipId, today } =
+      await reachActiveCheckinConfig("dubai");
+    const [rel] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    await db
+      .update(schema.users)
+      .set({ timezone: "Asia/Dubai" })
+      .where(eq(schema.users.id, rel!.traineeUserId));
+    const planId = "99999999-9999-4999-8999-999999999901";
+    const versionId = "99999999-9999-4999-8999-999999999902";
+    const assignmentId = "99999999-9999-4999-8999-999999999903";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Dubai plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    const lunch = {
+      id: "99999999-9999-4999-8999-999999999904",
+      order: 1,
+      name: "Lunch",
+      mealType: "lunch",
+      applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      localTime: "13:00",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [],
+    };
+    await db.insert(schema.mealAssignments).values({
+      id: assignmentId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      mealPrescriptionId: lunch.id,
+      mealName: "Lunch",
+      mealPrescriptionJson: JSON.stringify(lunch),
+      localDate: today,
+      windowStartsAt: dubaiWallClockToUtc(today, 0, 0),
+      windowEndsAt: dubaiWallClockToUtc(today, 23, 0),
+      photoRequired: false,
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: dubaiWallClockToUtc(today, 13, 39) }),
+      },
+      testEnv(),
+    );
+    const early = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(early).toHaveLength(0);
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: dubaiWallClockToUtc(today, 13, 40) }),
+      },
+      testEnv(),
+    );
+    const mealRows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(
+      mealRows.some(
+        (row) => row.dedupeKey === mealReminderDedupeKey(assignmentId, "after"),
+      ),
+    ).toBe(true);
+  });
+
+  it("caps queued push reminders at five for five meals plus workout and summary", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("cap5");
+    await app.request(
+      "/notifications/device-tokens",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          platform: "ios",
+          token: "fcm-cap5-token-abcdefgh",
+          installationId: "install-cap5",
+        }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ preferredWorkoutTime: "19:00" }),
+      },
+      testEnv(),
+    );
+    const planId = "22222222-2222-4222-8222-222222222201";
+    const versionId = "22222222-2222-4222-8222-222222222202";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Cap plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    const mealTimes = ["07:00", "10:00", "13:00", "16:00", "19:00"];
+    for (let i = 0; i < mealTimes.length; i += 1) {
+      const localTime = mealTimes[i]!;
+      const prescription = {
+        id: `33333333-3333-4333-8333-3333333333${String(i).padStart(2, "0")}`,
+        order: i + 1,
+        name: `Meal ${i + 1}`,
+        mealType: "snack",
+        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        localTime,
+        scheduleHint: null,
+        instructions: null,
+        photoRequired: false,
+        items: [],
+      };
+      await db.insert(schema.mealAssignments).values({
+        id: `44444444-4444-4444-8444-4444444444${String(i).padStart(2, "0")}`,
+        coachingRelationshipId: relationshipId,
+        planId,
+        planVersionId: versionId,
+        mealPrescriptionId: prescription.id,
+        mealName: prescription.name,
+        mealPrescriptionJson: JSON.stringify(prescription),
+        localDate: today,
+        windowStartsAt: istWallClockToUtc(today, 0, 0),
+        windowEndsAt: istWallClockToUtc(today, 23, 0),
+        photoRequired: false,
+        scheduleStatus: "scheduled",
+        createdAt: stamp,
+        updatedAt: stamp,
+      });
+    }
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 21, 0) }),
+      },
+      testEnv(),
+    );
+    const pushTypes = new Set([
+      "meal_reminder",
+      "workout_reminder",
+      "daily_summary",
+      "checkin_reminder",
+    ]);
+    const pushRows = (await db.select().from(schema.notifications)).filter(
+      (row) =>
+        pushTypes.has(row.notificationType) &&
+        row.state !== "suppressed" &&
+        row.state !== "deferred",
+    );
+    expect(pushRows.length).toBeLessThanOrEqual(5);
+    expect(pushRows.length).toBeGreaterThan(0);
+  });
+});
+
+describe("trainer notification preferences (TW-29)", () => {
+  let db: Db;
+  let close: () => void;
+
+  beforeEach(async () => {
+    const handle = await createMemoryDb();
+    db = handle.db;
+    close = handle.close;
+    setTestDbOverride(db);
+  });
+
+  afterEach(() => {
+    setTestDbOverride(null);
+    close();
+  });
+
+  it("round-trips trainerCategories on GET/PUT", async () => {
+    const trainer = await createTrainerSession("prefs-trainer@example.com");
+    const get = await app.request(
+      "/notifications/preferences",
+      { headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    expect(get.status).toBe(200);
+    const getBody = (await get.json()) as {
+      data: { trainerCategories: { morningSummary: boolean } };
+    };
+    expect(getBody.data.trainerCategories.morningSummary).toBe(false);
+
+    const put = await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          trainerCategories: { morningSummary: true, mealTimesChanged: false },
+        }),
+      },
+      testEnv(),
+    );
+    expect(put.status).toBe(200);
+    const putBody = (await put.json()) as {
+      data: {
+        trainerCategories: { morningSummary: boolean; mealTimesChanged: boolean };
+      };
+    };
+    expect(putBody.data.trainerCategories.morningSummary).toBe(true);
+    expect(putBody.data.trainerCategories.mealTimesChanged).toBe(false);
   });
 });

@@ -16,6 +16,7 @@ import { coachingRelationships } from "../db/schema";
 import { deriveOnboardingStatusForRelationships } from "../domain/client-status";
 import { mapRelationship } from "../domain/mappers";
 import {
+  cancelRelationshipReactivation,
   confirmRelationshipReactivation,
   endCoachingRelationship,
   requestRelationshipReactivation,
@@ -346,6 +347,35 @@ relationshipRoutes.post(
         mapRelationship(updated!, statuses.get(updated!.id) ?? "active"),
       ),
     );
+  },
+);
+
+relationshipRoutes.post(
+  "/:relationshipId/reactivate/cancel",
+  operation({
+    tag: "Relationships",
+    summary: "Cancel pending reactivation",
+    description: "Trainer cancels a pending reactivation request.",
+    roles: ["trainer"],
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const relationshipId = c.req.param("relationshipId");
+    const db = createDb(c.env.DB);
+    const cancelled = await cancelRelationshipReactivation(db, {
+      relationshipId,
+      trainerUserId: actor.userId,
+    });
+    if (!cancelled) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
+    }
+    return ok(c, { status: "cancelled" as const });
   },
 );
 

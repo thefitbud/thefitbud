@@ -4,7 +4,7 @@ import {
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   createPlanTemplateFromVersionRequestSchema,
@@ -93,6 +93,8 @@ templateRoutes.get(
     const db = createDb(c.env.DB);
 
     const scope = c.req.query("scope") ?? "all";
+    const templateType = c.req.query("templateType")?.trim();
+    const q = c.req.query("q")?.trim().toLowerCase();
     const visibleToActor =
       scope === "bases"
         ? eq(planTemplates.ownership, "global")
@@ -102,13 +104,21 @@ templateRoutes.get(
               eq(planTemplates.ownership, "global"),
               eq(planTemplates.trainerUserId, actor.userId),
             );
+    const filters = [visibleToActor];
+    if (templateType) {
+      filters.push(eq(planTemplates.templateType, templateType));
+    }
+    if (q && q.length >= 1) {
+      filters.push(sql`lower(${planTemplates.name}) LIKE ${`%${q}%`}`);
+    }
+    const visibilityFilter = and(...filters);
     const rows = await db
       .select()
       .from(planTemplates)
       .where(
         cursor
           ? and(
-              visibleToActor,
+              visibilityFilter,
               or(
                 lt(planTemplates.updatedAt, cursor.k),
                 and(
@@ -117,7 +127,7 @@ templateRoutes.get(
                 ),
               ),
             )
-          : visibleToActor,
+          : visibilityFilter,
       )
       .orderBy(desc(planTemplates.updatedAt), desc(planTemplates.id))
       .limit(limit + 1);

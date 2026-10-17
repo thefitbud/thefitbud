@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import {
+  traineeFoodDetailSchema,
   traineeFoodIndexResponseSchema,
   traineeFoodSearchResponseSchema,
 } from "@fitbud/contracts";
@@ -11,6 +12,7 @@ import {
   mealCompliance,
   traineeCustomFoods,
 } from "../db/schema.js";
+import { servingsByFoodId } from "../domain/library-servings.js";
 import { buildFtsPrefixQuery, foodFtsMatchClause } from "../domain/library-search.js";
 import { mapFoodLibraryItem } from "../domain/mappers.js";
 import { buildPage } from "../lib/cursor.js";
@@ -111,14 +113,24 @@ meFoodRoutes.get(
         .orderBy(foodLibraryItems.name)
         .limit(limit + 1);
     }
+    const servingsMap = await servingsByFoodId(
+      db,
+      rows.slice(0, limit).map((row) => row.id),
+    );
     const page = buildPage(
       rows.map((row) => {
-        const mapped = mapFoodLibraryItem(row, []);
+        const servings = servingsMap.get(row.id) ?? [];
+        const mapped = mapFoodLibraryItem(row, servings);
+        const defaultId =
+          row.defaultServingId ??
+          servings.find((s) => s.isDefault)?.id ??
+          servings[0]?.id ??
+          null;
         return {
           id: mapped.id,
           name: mapped.name,
           energyKcalScaled: mapped.energyKcalScaled ?? null,
-          defaultServingId: mapped.servings[0]?.id ?? null,
+          defaultServingId: defaultId,
         };
       }),
       limit,
@@ -238,7 +250,81 @@ meFoodRoutes.get(
           name: row.name,
           updatedAt: row.updatedAt,
           energyKcalScaled: row.energyKcalScaled,
-          defaultServingId: null,
+          defaultServingId: row.defaultServingId,
+        })),
+      }),
+    );
+  },
+);
+
+meFoodRoutes.get(
+  "/:foodId",
+  operation({
+    tag: "TraineeFoods",
+    summary: "Food detail with servings",
+    description:
+      "Read-only food detail for trainee substitution search (v2 serving presets).",
+    roles: ["trainee"],
+    response: traineeFoodDetailSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const foodId = c.req.param("foodId");
+    const db = createDb(c.env.DB);
+    const trainerId = await activeTrainerId(db, actor.userId);
+    const ownershipFilter = trainerId
+      ? or(
+          eq(foodLibraryItems.ownership, "global"),
+          and(
+            eq(foodLibraryItems.ownership, "trainer"),
+            eq(foodLibraryItems.trainerUserId, trainerId),
+          ),
+        )
+      : eq(foodLibraryItems.ownership, "global");
+    const [row] = await db
+      .select()
+      .from(foodLibraryItems)
+      .where(
+        and(
+          eq(foodLibraryItems.id, foodId),
+          ownershipFilter!,
+          eq(foodLibraryItems.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (!row) {
+      return fail(c, 404, "FOOD_NOT_FOUND", "Food not found.");
+    }
+    const servingsMap = await servingsByFoodId(db, [row.id]);
+    const servings = servingsMap.get(row.id) ?? [];
+    const mapped = mapFoodLibraryItem(row, servings);
+    const defaultServingId =
+      row.defaultServingId ??
+      servings.find((s) => s.isDefault)?.id ??
+      servings[0]?.id ??
+      null;
+    return ok(
+      c,
+      traineeFoodDetailSchema.parse({
+        id: mapped.id,
+        name: mapped.name,
+        energyKcalScaled: mapped.energyKcalScaled,
+        proteinScaled: mapped.proteinScaled,
+        carbsScaled: mapped.carbsScaled,
+        fatScaled: mapped.fatScaled,
+        defaultServingId,
+        servings: servings.map((serving) => ({
+          id: serving.id,
+          label: serving.label,
+          unit: serving.unit,
+          conversionScaled: serving.conversionScaled,
+          isDefault: serving.isDefault,
         })),
       }),
     );

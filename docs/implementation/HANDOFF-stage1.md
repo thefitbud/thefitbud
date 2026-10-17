@@ -25,8 +25,8 @@ Branch: `cursor/stage1-foundation-a3da` → merge into `feat/update-ui`.
 | T16 | ✅ | `canLog` table in `packages/core/src/late-logging.test.ts`; late/deviation behaviour in `meals.test.ts` / exceptions. Sync push defers to same domain handlers (no separate parity file). |
 | T17 | ✅ | Attention groups + week read model ≤10 queries — `read-models.test.ts`. |
 | T18 | ✅ | Coach asks merge/answer — `coach-asks.test.ts` + gate6/cron coverage elsewhere. |
-| T19 | ⚠️ | v2 engine + `notifications.test.ts` + `packages/core/src/reminder.test.ts`; full §3.6 “day in the life” matrix not all fixture-asserted in API tests. |
-| T20 | ⚠️ | `me-meal-times.test.ts` (bounds, gap, ended); trainer `trainer_meal_times_changed` merge + window recompute not fully asserted. |
+| T19 | ✅ | v2 engine: workout nudge **+75 min after** preferred (fallback 18:00), clamped before 22:00; meal +40 min + snooze; EOD `min(lastMeal+60, 21:30)`; tests incl. Dubai TZ + ignorer day-5 pause (`reminder-backoff.ts`). |
+| T20 | ✅ | `PUT /me/meal-times` → `trainer_meal_times_changed` (15 min merge), assignment `localTime` recompute (`meal-times-update.ts`); `me-meal-times.test.ts`. |
 | T21 | ✅ | All link kinds covered in `links.test.ts` (client/ask/exception/reactivate/plan/today/note + meal/workout/checkin not_found). |
 | T22 | ✅ | `whatsapp-cloud.test.ts`, `whatsapp-templates.lint.test.ts`, budget/webhook routes (no live Meta). |
 | T23 | ✅ | Template `scope` filters — `templates.test.ts` + `src/templates.test.ts`. |
@@ -128,22 +128,47 @@ Password (dev only): **`FitBud-demo-2026`**
 
 | Package | Tests |
 |---------|------:|
-| API | 175 |
-| core | 107 |
+| API | 191 |
+| core | 109 |
 | contracts | 21 |
 | api-client | 5 |
 | trainer-web | 16 |
 | mobile | 30 |
 | tokens | 6 |
 
-## 9. Known gaps (Stage 2 blockers to watch)
+## 9. Gaps resolved (trainer-web / mobile)
 
-- **T19/T20**: reminder “day in the life” fixtures and meal-time trainer-notification merge tests not fully exhaustive in API layer (core/unit coverage exists).
+| Gap (UI doc) | Api-client method / API |
+|--------------|-------------------------|
+| TW-23 `listPlanTemplates` filters | `listPlanTemplates({ scope, templateType, q })` → `GET /templates?...` |
+| TW-08 invitation lifecycle | `reissueInvitation(id)`, `revokeInvitation(id)` |
+| TW-08 reactivation cancel | `cancelReactivation(relationshipId)` → `POST /relationships/:rid/reactivate/cancel` |
+| TW-25 check-in templates tab | `listCheckinFormTemplates({ scope, cursor, limit })` → `GET /checkins/form-templates` |
+| TW-33 deep links | `resolveLink(kind, id)` → `GET /links/resolve` (already on client) |
+| TW-29 trainer categories | `GET/PUT /notifications/preferences` field `trainerCategories`; api-client uses `notificationPreferencesSchema` |
+| TW-09a `traineeTimezone` | `GET /workspaces/relationships/:rid` → `traineeTimezone` (no client change) |
+| TR-05 `preferredWorkoutTime` | `PUT /notifications/preferences` → wired in `domain/reminders.ts` workout anchor |
+
+### Mobile gaps (`GAPS-mobile.md`, backend)
+
+| Mobile gap | Resolution |
+|------------|------------|
+| TR-08 meal assignments `LOCAL_DEV_ERROR` | Demo seed `quantityScaled` → `NUTRIENT_SCALE` (1 serving); regression in `demo-seed.test.ts` |
+| TR-08 v2 serving presets | `GET /me/foods/:foodId` → `traineeFoodDetailSchema` with `servings[]` + `defaultServingId`; search/index use DB default serving |
+| TR-15 notification deep links | `notificationSchema.route` + `routing` payload; `notificationInboxRoute` in `@fitbud/core` |
+| TR-15 mark read typed client | `markNotificationRead(id)` on `@fitbud/api-client` |
+| TR-16 daily summary toggle | `categories.dailySummaryReminder` on `GET/PUT /notifications/preferences` |
+| TR-16–TR-20 settings §4 | `channelPreference`, `whatsappOptIn`, `traineeTimezone` (writes `users.timezone`), `locale` on preferences |
+| TR-24 meal times | `GET/PUT /me/meal-times` (existing) |
+| TR-25 steps | `GET/PUT /me/steps` stub; `403 FEATURE_DISABLED` when `steps_enabled=false` |
+| TR-26 food search | `GET /me/foods/search`, `GET /me/foods/:foodId`, `getTraineeFood` on api-client |
+
+## 10. Known gaps (Stage 2 blockers to watch)
 - **A10**: No R2 media unless `LIBRARY_MEDIA_BASE_URL`.
 - **Firebase** custom token not live-tested.
 - **WhatsApp** not tested against Meta.
 - **DO**: SQLite-backed DO migration note if deploying `RelationshipRealtimeRoom`.
 
-## 10. Old seed 500
+## 11. Old seed 500
 
 Per-row assignment generation exceeded D1 query limits; fixed with range SELECT + chunked `db.batch()` in `assignment-schedule.ts`.
