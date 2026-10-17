@@ -122,6 +122,13 @@ checkinFormTemplateRoutes.get(
     parameters: [
       limitParameter({ defaultValue: 20, maximum: 50 }),
       cursorParameter(),
+      {
+        name: "scope",
+        in: "query",
+        required: false,
+        description: "Filter templates: all, bases (global), or mine (trainer-owned).",
+        schema: { type: "string", enum: ["all", "bases", "mine"] },
+      },
     ],
     response: checkinFormTemplateListResponseSchema,
   }),
