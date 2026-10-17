@@ -1,37 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  CoachingRelationship,
-  MealAssignment,
-  MealDeviationKind,
-} from "@fitbud/contracts";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
+import { NutritionRings, colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
-import { createIdempotencyKey } from "../lib/idempotency";
+import { localDateInTimezone } from "../lib/dates";
+import { stage1Api } from "../lib/stage1Api";
 import {
   MINIMAL_PNG_CONTENT_TYPE,
   minimalPngBytes,
 } from "../lib/minimalPng";
-import { MealDeviationScreen } from "./MealDeviationScreen";
+import { createIdempotencyKey } from "../lib/idempotency";
+import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
+import { buildNutritionRings } from "./nutrition";
 import { scheduledAssignments } from "./scheduledAssignments";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
-
-function localDateInTimezone(timeZone: string, instant = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
-}
 
 function statusLabel(status: MealAssignment["status"]): string {
   switch (status) {
@@ -69,48 +57,60 @@ function canActOnMeal(status: MealAssignment["status"]): boolean {
 
 export function DietTab({
   relationship,
+  selectedDate,
+  onOpenOverlay,
 }: {
   relationship: CoachingRelationship;
+  selectedDate: string;
+  onOpenOverlay: TraineeOverlayOpener;
 }) {
   const { api, me } = useAuth();
+  const s1 = stage1Api(api);
   const sync = useSyncEngine();
   const [assignments, setAssignments] = useState<MealAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
-  const [deviating, setDeviating] = useState<MealAssignment | null>(null);
+  const [dayTotals, setDayTotals] = useState<Awaited<
+    ReturnType<typeof s1.getMeDay>
+  > | null>(null);
 
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
+  const canLog = selectedDate === today;
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await api.generateMealAssignments(
-        relationship.id,
-        { fromDate: today, toDate: today },
-        createIdempotencyKey(),
-      );
-      const listed = await api.listMealAssignments(relationship.id, {
-        fromDate: today,
-        toDate: today,
-      });
+      const [listed, day] = await Promise.all([
+        api.listMealAssignments(relationship.id, {
+          fromDate: selectedDate,
+          toDate: selectedDate,
+        }),
+        s1.getMeDay(selectedDate).catch(() => null),
+      ]);
       setAssignments(scheduledAssignments(listed.items));
+      setDayTotals(day);
     } catch (err) {
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not load today’s diet.",
+          : "Could not load diet for this day.",
       );
     } finally {
       setLoading(false);
     }
-  }, [api, relationship.id, today]);
+  }, [api, relationship.id, selectedDate, s1]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const rings = useMemo(
+    () => buildNutritionRings(assignments, dayTotals?.totals ?? null),
+    [assignments, dayTotals],
+  );
 
   async function uploadMealPhoto(assignment: MealAssignment): Promise<string> {
     const target = await api.createUploadTarget(
@@ -162,99 +162,21 @@ export function DietTab({
     }
   }
 
-  async function skipMeal(assignment: MealAssignment) {
-    setActingId(`skip-${assignment.id}`);
-    setError(null);
-    try {
-      await enqueueAndPush(sync, {
-        recordId: assignment.id,
-        operation: "meal.skip",
-        payload: {
-          assignmentId: assignment.id,
-          body: {},
-        },
-      });
-      await load();
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not skip meal.",
-      );
-    } finally {
-      setActingId(null);
-    }
-  }
-
-  async function submitDeviation(
-    assignment: MealAssignment,
-    input: { deviationKind: MealDeviationKind; notes: string | null },
-  ) {
-    setActingId(assignment.id);
-    setError(null);
-    try {
-      const photoIntent = assignment.photoRequired
-        ? {
-            notedAt: new Date().toISOString(),
-            mediaAssetId: await uploadMealPhoto(assignment),
-            contentType: MINIMAL_PNG_CONTENT_TYPE,
-            clientRef: `meal-photo-${assignment.id}`,
-          }
-        : null;
-      await enqueueAndPush(sync, {
-        recordId: assignment.id,
-        operation: "meal.deviate",
-        payload: {
-          assignmentId: assignment.id,
-          body: {
-            deviationKind: input.deviationKind,
-            notes: input.notes,
-            photoIntent,
-          },
-        },
-      });
-      setDeviating(null);
-      await load();
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not record deviation.",
-      );
-      throw err;
-    } finally {
-      setActingId(null);
-    }
-  }
-
-  if (deviating) {
-    return (
-      <MealDeviationScreen
-        assignment={deviating}
-        loading={actingId === deviating.id}
-        onCancel={() => setDeviating(null)}
-        onSubmit={async (input) => {
-          await submitDeviation(deviating, input);
-        }}
-      />
-    );
-  }
-
   return (
-    <Screen
-      chrome="app"
-      title="Today’s diet"
-      subtitle={`${today} · confirm what you ate, then move on.`}
-    >
+    <Screen chrome="app" title="Diet" showHeader={false}>
       {error ? <ErrorBanner message={error} /> : null}
+      <View style={styles.ringsWrap}>
+        <NutritionRings data={rings} compact />
+      </View>
       {loading ? (
-        <Text style={styles.muted}>Loading today’s meals…</Text>
+        <Text style={styles.muted}>Loading meals…</Text>
       ) : (
         <View style={styles.stack}>
           {assignments.length === 0 ? (
             <View style={styles.card}>
               <Text style={styles.rowTitle}>No meals assigned</Text>
               <Text style={styles.instructions}>
-                Meals appear here after your trainer publishes a nutrition plan
-                and coaching is active.
+                Meals appear when your trainer publishes a nutrition plan.
               </Text>
             </View>
           ) : (
@@ -272,42 +194,25 @@ export function DietTab({
                     {meal.prescription.scheduleHint}
                   </Text>
                 ) : null}
-                {meal.prescription.instructions ? (
-                  <Text style={styles.instructions}>
-                    {meal.prescription.instructions}
-                  </Text>
-                ) : null}
-                {meal.photoRequired ? (
-                  <Text style={styles.photoNote}>Photo required</Text>
-                ) : null}
-                {canActOnMeal(meal.status) ? (
+                {canActOnMeal(meal.status) && canLog ? (
                   <View style={styles.actions}>
                     <PrimaryButton
-                      label="Confirm eaten as planned"
+                      label="Eaten as planned"
                       loading={actingId === meal.id}
                       onPress={() => {
                         void confirmMeal(meal);
                       }}
                     />
-                    <View style={styles.secondaryRow}>
-                      <View style={styles.secondaryAction}>
-                        <PrimaryButton
-                          label="Quick modify"
-                          variant="secondary"
-                          onPress={() => setDeviating(meal)}
-                        />
-                      </View>
-                      <View style={styles.secondaryAction}>
-                        <PrimaryButton
-                          label="Skip"
-                          variant="ghost"
-                          loading={actingId === `skip-${meal.id}`}
-                          onPress={() => {
-                            void skipMeal(meal);
-                          }}
-                        />
-                      </View>
-                    </View>
+                    <PrimaryButton
+                      label="Something different"
+                      variant="secondary"
+                      onPress={() =>
+                        onOpenOverlay({
+                          screen: "something_different",
+                          assignmentId: meal.id,
+                        })
+                      }
+                    />
                   </View>
                 ) : null}
               </View>
@@ -320,9 +225,11 @@ export function DietTab({
 }
 
 const styles = StyleSheet.create({
+  ringsWrap: {
+    marginBottom: spacing.lg,
+  },
   stack: {
     gap: spacing.lg,
-    paddingTop: spacing.md,
   },
   muted: {
     color: colors.midGrey,
@@ -355,20 +262,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  photoNote: {
-    color: colors.indigo,
-    fontSize: 13,
-    fontWeight: "600",
-  },
   actions: {
     gap: spacing.sm,
     marginTop: spacing.sm,
-  },
-  secondaryRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  secondaryAction: {
-    flex: 1,
   },
 });

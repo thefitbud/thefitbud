@@ -1,23 +1,42 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import type { AttentionItem } from "@fitbud/contracts";
+import type {
+  AttentionGroupsResponse,
+  CoachAsk,
+  TrainerCheckinInboxItem,
+} from "@fitbud/contracts";
+
+type AttentionGroup = AttentionGroupsResponse["groups"][number];
 import { colors, spacing } from "@fitbud/ui-mobile";
+import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { SegmentedControl } from "../components/SegmentedControl";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { statusLabel, typeLabel } from "./labels";
 
+type Segment = "needs_you" | "asked" | "checkins";
+
 type Props = {
   onReviewException: (exceptionId: string) => void;
+  onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
   onOpenClients: () => void;
 };
 
-export function AttentionTab({ onReviewException, onOpenClients }: Props) {
+export function AttentionTab({
+  onReviewException,
+  onReviewCheckin,
+  onOpenClients,
+}: Props) {
   const { api, relationships, refreshSession } = useAuth();
-  const [items, setItems] = useState<AttentionItem[]>([]);
+  const s1 = stage1Api(api);
+  const [segment, setSegment] = useState<Segment>("needs_you");
+  const [groups, setGroups] = useState<AttentionGroup[]>([]);
+  const [asks, setAsks] = useState<CoachAsk[]>([]);
+  const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,18 +44,29 @@ export function AttentionTab({ onReviewException, onOpenClients }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const attention = await api.getAttentionFeed({ limit: 30 });
-      setItems(attention.items);
+      const [attentionGroups, coachAsks, inbox] = await Promise.all([
+        s1.getAttentionGroups(),
+        s1.listCoachAsks({ status: "open" }),
+        api.listTrainerCheckinInbox(),
+      ]);
+      setGroups(attentionGroups.groups);
+      setAsks(coachAsks.items);
+      setCheckins(
+        inbox.items.filter(
+          (item: TrainerCheckinInboxItem) =>
+            item.checkin.status === "submitted",
+        ),
+      );
     } catch (err) {
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not load attention feed.",
+          : "Could not load attention.",
       );
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, s1]);
 
   useEffect(() => {
     void load();
@@ -50,12 +80,24 @@ export function AttentionTab({ onReviewException, onOpenClients }: Props) {
     },
   );
 
+  const needsYouCount = useMemo(
+    () => groups.reduce((sum, group) => sum + group.items.length, 0),
+    [groups],
+  );
+
   return (
-    <Screen
-      title="Attention"
-      subtitle="Who needs you today — deterministic exceptions only."
-    >
+    <Screen title="Attention" subtitle="Who needs you, and why.">
       {error ? <ErrorBanner message={error} /> : null}
+
+      <SegmentedControl
+        options={[
+          { id: "needs_you", label: "Needs you" },
+          { id: "asked", label: "Asked" },
+          { id: "checkins", label: "Check-ins" },
+        ]}
+        value={segment}
+        onChange={setSegment}
+      />
 
       <PrimaryButton
         label="Refresh"
@@ -67,35 +109,71 @@ export function AttentionTab({ onReviewException, onOpenClients }: Props) {
       />
 
       {loading ? (
-        <Text style={styles.muted}>Loading attention…</Text>
-      ) : items.length === 0 ? (
-        <View style={styles.empty} accessibilityRole="summary">
-          <Text style={styles.emptyTitle}>No attention items</Text>
-          <Text style={styles.muted}>
-            FitBud surfaces meaningful exceptions from configured expectations.
-            Look up a client when you need context.
-          </Text>
-          <PrimaryButton label="Open clients" onPress={onOpenClients} />
-        </View>
+        <Text style={styles.muted}>Loading…</Text>
+      ) : segment === "needs_you" ? (
+        needsYouCount === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>You're all caught up</Text>
+            <Text style={styles.muted}>
+              Exceptions from your clients' plans show up here when something
+              needs a look.
+            </Text>
+            <PrimaryButton label="Open clients" onPress={onOpenClients} />
+          </View>
+        ) : (
+          <View style={styles.list}>
+            {groups.map((group) => (
+              <View key={group.relationshipId} style={styles.clientCard}>
+                <Text style={styles.who}>{group.traineeDisplayName}</Text>
+                {group.items.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    accessibilityRole="button"
+                    onPress={() => onReviewException(item.id)}
+                    style={styles.itemRow}
+                  >
+                    <Text style={styles.meta}>
+                      {statusLabel(item.status)} · {typeLabel(item.type)}
+                    </Text>
+                    <Text style={styles.summary}>{item.summary}</Text>
+                    <Text style={styles.action}>Review</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ))}
+          </View>
+        )
+      ) : segment === "asked" ? (
+        asks.length === 0 ? (
+          <Text style={styles.muted}>No open asks from clients.</Text>
+        ) : (
+          <View style={styles.list}>
+            {asks.map((ask) => (
+              <View key={ask.id} style={styles.card}>
+                <Text style={styles.who}>{ask.topic}</Text>
+                <Text style={styles.meta}>
+                  {ask.itemType.replace(/_/g, " ")} · asked{" "}
+                  {new Date(ask.lastAskedAt).toLocaleDateString("en-IN")}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )
+      ) : checkins.length === 0 ? (
+        <Text style={styles.muted}>No check-ins waiting for review.</Text>
       ) : (
         <View style={styles.list}>
-          {items.map((item) => (
+          {checkins.map((item) => (
             <Pressable
-              key={item.exception.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Review ${item.traineeDisplayName ?? "trainee"} exception`}
-              onPress={() => onReviewException(item.exception.id)}
+              key={item.checkin.id}
               style={styles.card}
+              onPress={() => onReviewCheckin(item)}
             >
-              <Text style={styles.who}>
-                {item.traineeDisplayName ?? "Trainee"}
+              <Text style={styles.who}>Client check-in</Text>
+              <Text style={styles.summary}>
+                {item.checkin.localDate} · {item.checkin.status}
               </Text>
-              <Text style={styles.meta}>
-                {statusLabel(item.exception.status)} ·{" "}
-                {typeLabel(item.exception.type)}
-              </Text>
-              <Text style={styles.summary}>{item.exception.summary}</Text>
-              <Text style={styles.action}>Review</Text>
+              <Text style={styles.action}>Review check-in</Text>
             </Pressable>
           ))}
         </View>
@@ -124,14 +202,28 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     gap: spacing.md,
   },
-  card: {
+  clientCard: {
     backgroundColor: colors.white,
-    borderWidth: 1,
     borderColor: colors.lightGrey,
     borderRadius: 14,
+    borderWidth: 1,
+    gap: spacing.sm,
     padding: spacing.lg,
+  },
+  card: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: 14,
+    borderWidth: 1,
     gap: spacing.sm,
     minHeight: 48,
+    padding: spacing.lg,
+  },
+  itemRow: {
+    borderTopColor: colors.lightGrey,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+    paddingTop: spacing.sm,
   },
   who: {
     color: colors.deepNavy,

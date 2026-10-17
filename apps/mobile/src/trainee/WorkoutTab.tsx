@@ -60,8 +60,12 @@ function statusLabel(status: WorkoutAssignment["status"]): string {
 
 export function WorkoutTab({
   relationship,
+  selectedDate,
+  onOpenOverlay,
 }: {
   relationship: CoachingRelationship;
+  selectedDate?: string;
+  onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
 }) {
   const { api, me } = useAuth();
   const sync = useSyncEngine();
@@ -76,19 +80,15 @@ export function WorkoutTab({
 
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
-  const rangeEnd = useMemo(() => addDays(today, 7), [today]);
+  const focusDate = selectedDate ?? today;
+  const rangeEnd = useMemo(() => addDays(focusDate, 7), [focusDate]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await api.generateWorkoutAssignments(
-        relationship.id,
-        { fromDate: today, toDate: rangeEnd },
-        createIdempotencyKey(),
-      );
       const listed = await api.listWorkoutAssignments(relationship.id, {
-        fromDate: today,
+        fromDate: focusDate,
         toDate: rangeEnd,
       });
       setAssignments(scheduledAssignments(listed.items));
@@ -101,14 +101,16 @@ export function WorkoutTab({
     } finally {
       setLoading(false);
     }
-  }, [api, relationship.id, today, rangeEnd]);
+  }, [api, relationship.id, focusDate, rangeEnd]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const todayAssignment = assignments.find((item) => item.localDate === today);
-  const upcoming = assignments.filter((item) => item.localDate !== today);
+  const todayAssignment = assignments.find(
+    (item) => item.localDate === focusDate,
+  );
+  const upcoming = assignments.filter((item) => item.localDate !== focusDate);
 
   if (summaryExecution) {
     return (
@@ -140,11 +142,7 @@ export function WorkoutTab({
   }
 
   return (
-    <Screen
-      chrome="app"
-      title="Workout"
-      subtitle={today}
-    >
+    <Screen chrome="app" title="Workout" showHeader={false}>
       {error ? <ErrorBanner message={error} /> : null}
       {loading ? (
         <Text style={styles.muted}>Loading assignments…</Text>

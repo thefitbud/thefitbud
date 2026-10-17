@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
 import { AttentionTab } from "./AttentionTab";
+import { TrainerMoreScreen } from "./MoreScreen";
 import { CheckinReviewScreen } from "./CheckinReviewScreen";
 import { CheckinsTab } from "./CheckinsTab";
 import {
@@ -36,14 +35,9 @@ const TABS: Array<{ id: TrainerTab; label: string }> = [
 ];
 
 export function TrainerShell() {
-  const { me, signOut, selectRole, relationships } = useAuth();
+  const { relationships } = useAuth();
   const [tab, setTab] = useState<TrainerTab>("attention");
   const [overlay, setOverlay] = useState<Overlay | null>(null);
-
-  const canSwitchToTrainee = useMemo(
-    () => Boolean(me?.permittedRoles.includes("trainee")),
-    [me],
-  );
 
   function openClientFromRow(row: ClientDirectoryRow) {
     if (!row.relationshipId) return;
@@ -127,6 +121,7 @@ export function TrainerShell() {
             onReviewException={(exceptionId) =>
               setOverlay({ kind: "exception", exceptionId })
             }
+            onReviewCheckin={openCheckin}
             onOpenClients={() => setTab("clients")}
           />
         ) : null}
@@ -139,34 +134,7 @@ export function TrainerShell() {
           <CheckinsTab onReviewCheckin={openCheckin} />
         ) : null}
 
-        {tab === "more" ? (
-          <Screen title="More" subtitle="Account and secondary actions.">
-            <View style={styles.banner}>
-              <Text style={styles.bannerTitle}>Selected role</Text>
-              <Text style={styles.bannerBody}>
-                Trainer · mobile · {me?.userId ?? "unknown"}
-              </Text>
-            </View>
-            <View style={styles.banner}>
-              <Text style={styles.bannerTitle}>Deep work</Text>
-              <Text style={styles.bannerBody}>
-                Plan builder, templates, and full client workspace remain on
-                trainer web. Mobile is for attention, lookup, check-ins, and
-                quick actions.
-              </Text>
-            </View>
-            {canSwitchToTrainee ? (
-              <PrimaryButton
-                label="Switch to trainee mode"
-                variant="secondary"
-                onPress={() => {
-                  void selectRole("trainee");
-                }}
-              />
-            ) : null}
-            <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
-          </Screen>
-        ) : null}
+        {tab === "more" ? <TrainerMoreScreen /> : null}
       </View>
 
       <View accessibilityRole="tablist" style={styles.tabBar}>
@@ -251,6 +219,6 @@ const styles = StyleSheet.create({
     width: 16,
     height: 3,
     borderRadius: 999,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.indigo,
   },
 });

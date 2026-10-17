@@ -6,6 +6,7 @@ import {
   error,
   ink,
   radii as tokenRadii,
+  rings as tokenRings,
   semantic,
   spacing as tokenSpacing,
   success,
@@ -43,3 +44,5 @@ export const radii = {
 export const spacing = tokenSpacing;
 
 export const touchTargetMin = 44;
+
+export const ringColors = tokenRings;

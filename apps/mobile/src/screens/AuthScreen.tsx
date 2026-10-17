@@ -1,112 +1,207 @@
-import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
-import { ErrorBanner } from "../components/ErrorBanner";
-import { Field } from "../components/Field";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
-import { resolveApiBaseUrl } from "../lib/api";
-import { createTestIdToken, isTestIdToken } from "../lib/testToken";
+import { stage1Api } from "../lib/stage1Api";
+import { CodeSignInScreen } from "./auth/CodeSignInScreen";
+import { ForgotPasswordScreen } from "./auth/ForgotPasswordScreen";
+import { SignInScreen } from "./auth/SignInScreen";
+
+type AuthMode = "password" | "code" | "forgot";
 
 export function AuthScreen() {
-  const { signInWithToken, errorMessage, clearError } = useAuth();
-  const [uid, setUid] = useState("");
-  const [email, setEmail] = useState("");
-  const [rawToken, setRawToken] = useState("");
+  const { api, signInWithToken, errorMessage, clearError } = useAuth();
+  const s1 = stage1Api(api);
+  const [mode, setMode] = useState<AuthMode>("password");
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [identifier, setIdentifier] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "set">("request");
+  const [otpProof, setOtpProof] = useState<string | null>(null);
 
-  async function continueWithIdentity() {
-    clearError();
-    setLocalError(null);
-    setLoading(true);
-    try {
-      let token = rawToken.trim();
-      if (!token) {
-        token = createTestIdToken(uid, email || undefined);
-      } else if (!isTestIdToken(token) && !token.includes(".")) {
-        // Treat a bare UID pasted into the token field as a test identity.
-        token = createTestIdToken(token);
-      }
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = setTimeout(() => setResendSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendSeconds]);
+
+  const displayError = localError ?? errorMessage;
+
+  const finishAuth = useCallback(
+    async (token: string) => {
+      clearError();
+      setLocalError(null);
       await signInWithToken(token);
-    } catch (error) {
-      setLocalError(
-        error instanceof Error ? error.message : "Could not build a test token.",
-      );
+    },
+    [clearError, signInWithToken],
+  );
+
+  async function signInPassword(id: string, password: string) {
+    if (!id || !password) {
+      setLocalError("Enter your mobile number or email and password.");
+      return;
+    }
+    setLoading(true);
+    setLocalError(null);
+    try {
+      const result = await s1.login({ identifier: id, password });
+      await finishAuth(result.token);
+    } catch {
+      setLocalError("That mobile number or email and password don't match.");
     } finally {
       setLoading(false);
     }
   }
 
-  const displayError = localError ?? errorMessage;
+  async function sendCode() {
+    if (!identifier.trim()) {
+      setLocalError("Enter your mobile number or email.");
+      return;
+    }
+    setLoading(true);
+    setLocalError(null);
+    try {
+      await s1.startOtp({ identifier: identifier.trim(), purpose: "login" });
+      setCodeSent(true);
+      setResendSeconds(60);
+    } catch {
+      setLocalError("Too many codes requested. Try again in 1 hour or use your password.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  return (
-    <Screen
-      title="Sign in"
-      subtitle="Local and test mode uses a bearer test token against the FitBud API. Production Firebase sign-in is not wired yet."
-    >
-      {displayError ? <ErrorBanner message={displayError} /> : null}
+  async function verifyCode(code: string) {
+    if (code.length !== 6) {
+      setLocalError("Enter the 6-digit code.");
+      return;
+    }
+    setLoading(true);
+    setLocalError(null);
+    try {
+      const result = await s1.verifyOtp({
+        identifier: identifier.trim(),
+        purpose: "login",
+        code,
+      });
+      await finishAuth(result.token);
+    } catch {
+      setLocalError("That code didn't work. Check the latest message or tap Resend.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      <View style={styles.meta}>
-        <Text style={styles.metaLabel}>API</Text>
-        <Text style={styles.metaValue}>{resolveApiBaseUrl()}</Text>
-      </View>
+  async function requestReset() {
+    setLoading(true);
+    setLocalError(null);
+    try {
+      await s1.startOtp({ identifier: identifier.trim(), purpose: "reset" });
+      setForgotStep("verify");
+      setResendSeconds(60);
+    } catch {
+      setLocalError("If an account exists, we've sent a code.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      <Field
-        label="Firebase UID"
-        value={uid}
-        onChangeText={setUid}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="trainee-local-1 or trainer-local-1"
-        hint="Used to build a test.<payload> bearer token."
-      />
-      <Field
-        label="Email (optional)"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-        placeholder="trainee@example.com"
-      />
-      <Field
-        label="Or paste test token"
-        value={rawToken}
-        onChangeText={setRawToken}
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder="test.eyJ1aWQiOi4uLn0"
-        hint="Leave blank to generate from UID and email."
-      />
+  async function verifyResetCode(code: string) {
+    setLoading(true);
+    try {
+      const result = await s1.verifyOtp({
+        identifier: identifier.trim(),
+        purpose: "reset",
+        code,
+      });
+      setOtpProof(result.otpProof ?? result.token);
+      setForgotStep("set");
+    } catch {
+      setLocalError("That code didn't work. Request a new code.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      <PrimaryButton
-        label="Continue"
+  async function setNewPassword(password: string) {
+    if (password.length < 8) {
+      setLocalError("Use at least 8 characters.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (otpProof) {
+        const login = await s1.resetPassword({
+          resetProof: otpProof,
+          newPassword: password,
+        });
+        await finishAuth(login.token);
+      }
+    } catch {
+      setLocalError("Could not update password. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (mode === "code") {
+    return (
+      <CodeSignInScreen
+        identifier={identifier}
         loading={loading}
-        onPress={() => {
-          void continueWithIdentity();
+        error={displayError}
+        onChangeIdentifier={setIdentifier}
+        onSendCode={sendCode}
+        onVerify={verifyCode}
+        onUsePassword={() => {
+          setMode("password");
+          setCodeSent(false);
+          clearError();
+          setLocalError(null);
+        }}
+        codeSent={codeSent}
+        resendSeconds={resendSeconds}
+      />
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <ForgotPasswordScreen
+        loading={loading}
+        error={displayError}
+        step={forgotStep}
+        identifier={identifier}
+        onChangeIdentifier={setIdentifier}
+        onRequestCode={requestReset}
+        onVerifyCode={verifyResetCode}
+        onSetPassword={setNewPassword}
+        onBack={() => {
+          setMode("password");
+          setForgotStep("request");
+          clearError();
+          setLocalError(null);
         }}
       />
-    </Screen>
+    );
+  }
+
+  return (
+    <SignInScreen
+      loading={loading}
+      error={displayError}
+      onSignIn={signInPassword}
+      onUseCode={() => {
+        setMode("code");
+        clearError();
+        setLocalError(null);
+      }}
+      onForgotPassword={() => {
+        setMode("forgot");
+        setForgotStep("request");
+        clearError();
+        setLocalError(null);
+      }}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  meta: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  metaLabel: {
-    color: colors.midGrey,
-    fontSize: 12,
-    fontWeight: "500",
-    marginBottom: spacing.xs,
-  },
-  metaValue: {
-    color: colors.deepNavy,
-    fontSize: 14,
-  },
-});

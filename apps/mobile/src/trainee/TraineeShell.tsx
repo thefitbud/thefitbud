@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import type {
@@ -7,12 +7,18 @@ import type {
   EffectivePlanResponse,
 } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
+import { AppTopBar } from "../components/AppTopBar";
+import { formatHeadingDate, localDateInTimezone } from "../lib/dates";
+import {
+  TraineeOverlayHost,
+  type TraineeOverlay,
+  type TraineeOverlayOpener,
+} from "../navigation/TraineeOverlay";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { CheckinScreen } from "./CheckinScreen";
 import { DietTab } from "./DietTab";
+import { MoreScreen } from "./MoreScreen";
 import { ProgressTab } from "./ProgressTab";
 import { TodayTab } from "./TodayTab";
 import { WorkoutTab } from "./WorkoutTab";
@@ -27,6 +33,14 @@ const TABS: Array<{ id: TraineeTab; label: string }> = [
   { id: "more", label: "More" },
 ];
 
+const TAB_TITLES: Record<TraineeTab, string> = {
+  today: "Today",
+  workout: "Workout",
+  diet: "Diet",
+  progress: "Progress",
+  more: "More",
+};
+
 export function TraineeShell({
   relationship,
 }: {
@@ -36,16 +50,25 @@ export function TraineeShell({
     me,
     signOut,
     refreshSession,
-    selectRole,
     api,
     pendingNotificationLink,
     clearPendingNotificationLink,
   } = useAuth();
   const sync = useSyncEngine();
+  const timeZone = me?.timezone ?? "UTC";
+  const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
+
   const [tab, setTab] = useState<TraineeTab>("today");
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
   const [effectivePlan, setEffectivePlan] =
     useState<EffectivePlanResponse | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  const openOverlay: TraineeOverlayOpener = useCallback((next) => {
+    setOverlay(next);
+  }, []);
 
   const loadEffectivePlan = useCallback(async () => {
     try {
@@ -75,16 +98,31 @@ export function TraineeShell({
     }
   }, [api, relationship.id, sync]);
 
+  const refreshUnread = useCallback(async () => {
+    try {
+      const page = await api.listNotifications();
+      setUnreadNotifications(
+        page.items.filter((item) => item.readAt == null).length,
+      );
+    } catch {
+      setUnreadNotifications(0);
+    }
+  }, [api]);
+
   useEffect(() => {
     void loadEffectivePlan();
-  }, [loadEffectivePlan]);
+    void refreshUnread();
+  }, [loadEffectivePlan, refreshUnread]);
 
-  // Selected realtime: events are hints — pull sync + refetch authoritative plan.
+  useEffect(() => {
+    setSelectedDate(today);
+  }, [today]);
+
   useRealtimeHints(api, relationship.id, () => {
     void loadEffectivePlan();
+    void refreshUnread();
   });
 
-  // Notification open → route to tab. Refetch authoritative state; do not trust payload as state.
   useEffect(() => {
     if (!pendingNotificationLink) return;
     setTab(pendingNotificationLink.tab);
@@ -99,7 +137,7 @@ export function TraineeShell({
           );
           if (match) setActiveCheckin(match);
         } catch {
-          // Refetch failure leaves the Today tab; payload is not used as state.
+          // ignore
         }
       })();
     }
@@ -113,6 +151,19 @@ export function TraineeShell({
     relationship.id,
   ]);
 
+  if (relationship.status === "ended" && overlay?.screen !== "past_coaching") {
+    return (
+      <TraineeOverlayHost
+        overlay={{ screen: "ended" }}
+        relationship={relationship}
+        effectivePlan={effectivePlan}
+        onClose={() => setOverlay({ screen: "past_coaching" })}
+        onOpen={openOverlay}
+        onSignOut={signOut}
+      />
+    );
+  }
+
   if (activeCheckin) {
     return (
       <CheckinScreen
@@ -123,13 +174,45 @@ export function TraineeShell({
     );
   }
 
+  if (overlay) {
+    return (
+      <TraineeOverlayHost
+        overlay={overlay}
+        relationship={relationship}
+        effectivePlan={effectivePlan}
+        onClose={() => setOverlay(null)}
+        onOpen={openOverlay}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  const subtitle =
+    tab === "today"
+      ? formatHeadingDate(timeZone, selectedDate)
+      : tab === "diet"
+        ? selectedDate
+        : undefined;
+
   return (
     <View style={styles.root}>
       <View style={styles.content}>
+        <View style={styles.topPad}>
+          <AppTopBar
+            title={TAB_TITLES[tab]}
+            subtitle={subtitle}
+            unreadNotifications={unreadNotifications}
+            onOpenNotifications={() => openOverlay({ screen: "notifications" })}
+            onOpenSync={() => openOverlay({ screen: "sync" })}
+          />
+        </View>
+
         {tab === "today" ? (
           <TodayTab
             relationship={relationship}
             effectivePlan={effectivePlan}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
             onOpenWorkout={() => setTab("workout")}
             onOpenDiet={() => setTab("diet")}
             onOpenCheckin={setActiveCheckin}
@@ -137,38 +220,30 @@ export function TraineeShell({
               void refreshSession();
               void loadEffectivePlan();
             }}
+            onOpenOverlay={openOverlay}
           />
         ) : null}
 
-        {tab === "workout" ? <WorkoutTab relationship={relationship} /> : null}
+        {tab === "workout" ? (
+          <WorkoutTab
+            relationship={relationship}
+            selectedDate={selectedDate}
+            onOpenOverlay={openOverlay}
+          />
+        ) : null}
 
-        {tab === "diet" ? <DietTab relationship={relationship} /> : null}
+        {tab === "diet" ? (
+          <DietTab
+            relationship={relationship}
+            selectedDate={selectedDate}
+            onOpenOverlay={openOverlay}
+          />
+        ) : null}
 
         {tab === "progress" ? <ProgressTab relationship={relationship} /> : null}
 
         {tab === "more" ? (
-          <Screen
-            chrome="app"
-            title="More"
-            subtitle="Account and secondary actions."
-          >
-            <View style={styles.banner}>
-              <Text style={styles.bannerTitle}>Selected role</Text>
-              <Text style={styles.bannerBody}>
-                Trainee · mobile · {me?.userId ?? "unknown"}
-              </Text>
-            </View>
-            {me?.permittedRoles.includes("trainer") ? (
-              <PrimaryButton
-                label="Switch to trainer mode"
-                variant="secondary"
-                onPress={() => {
-                  void selectRole("trainer");
-                }}
-              />
-            ) : null}
-            <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
-          </Screen>
+          <MoreScreen relationship={relationship} onOpenOverlay={openOverlay} />
         ) : null}
       </View>
 
@@ -209,22 +284,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  banner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-  },
-  bannerTitle: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  bannerBody: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
+  topPad: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
   },
   tabBar: {
     flexDirection: "row",
