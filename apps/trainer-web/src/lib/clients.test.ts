@@ -153,7 +153,7 @@ describe("client directory rows", () => {
     ).toBe(`/clients/${relationshipId}/overview`);
     expect(
       directoryWorkspaceHref({ relationshipId, status: "ended" }),
-    ).toBeNull();
+    ).toBe(`/clients/${relationshipId}/overview`);
   });
 
   it("labels adherence and check-in state in words", () => {

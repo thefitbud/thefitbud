@@ -1,382 +1,248 @@
-import { Link, useOutletContext, useParams } from "react-router-dom";
-import type { MeasurementType, RenewalState, WorkspaceActivityItem } from "@fitbud/contracts";
-import {
-  MEASUREMENT_SERIES,
-  MeasurementTrend,
-  measurementTypeLabel,
-} from "../components/MeasurementTrend";
+import { useEffect, useState } from "react";
+import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import type { TrainerNote, WeekReadModel } from "@fitbud/contracts";
+import { ExceptionDrawer } from "../components/ExceptionDrawer";
+import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel";
+import { MeasurementTrend } from "../components/MeasurementTrend";
+import { apiClient } from "../lib/api";
+import { formatIsoDateTime, formatLocalDate } from "../lib/format";
+import { stage1Api } from "../lib/stage1-api";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
-}
-
-function formatLocalDate(localDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return localDate;
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
-  );
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-function formatWhen(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
-
-function renewalLabel(state: RenewalState): string {
-  switch (state) {
-    case "current":
-      return "Renewal current";
-    case "upcoming":
-      return "Renewal upcoming";
-    case "due":
-      return "Renewal due";
-    case "expired":
-      return "Renewal expired";
-    default: {
-      const _exhaustive: never = state;
-      return _exhaustive;
-    }
-  }
-}
-
-function orderedMeasurementTypes(types: string[]): string[] {
-  const unique = [...new Set(types)];
-  const preferred = MEASUREMENT_SERIES.filter((type) => unique.includes(type));
-  const rest = unique.filter(
-    (type) => !MEASUREMENT_SERIES.includes(type as MeasurementType),
-  );
-  return [...preferred, ...rest];
-}
-
-function activityKind(item: WorkspaceActivityItem): string {
-  if (item.type === "workout") return "Workout";
-  if (item.type === "meal") return "Meal";
-  return "Check-in";
+function relativeTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const diff = Date.now() - date.getTime();
+  const hours = Math.floor(diff / 3_600_000);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
-  const { workspace, workspaceLoading, workspaceError } =
-    useOutletContext<WorkspaceOutletContext>();
+  const [params, setParams] = useSearchParams();
+  const drawerId = params.get("exception");
+  const { workspace, openWorkspaceModal } = useOutletContext<WorkspaceOutletContext>();
+  const [week, setWeek] = useState<WeekReadModel | null>(null);
+  const [notes, setNotes] = useState<TrainerNote[]>([]);
 
-  if (workspaceLoading && !workspace) {
-    return (
-      <div className="workspace-page workspace-overview" aria-busy="true">
-        <p className="muted">Loading overview…</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!relationshipId) return;
+    void stage1Api.getWorkspaceWeek(relationshipId).then(setWeek).catch(() => setWeek(null));
+    void apiClient
+      .listTrainerNotes(relationshipId)
+      .then((res) => setNotes(res.items.slice(0, 3)))
+      .catch(() => setNotes([]));
+  }, [relationshipId]);
 
   if (!workspace) {
+    return <p className="muted">Loading overview…</p>;
+  }
+
+  const { header, overview, plan } = workspace;
+  const version = plan.version;
+  const coachingReady =
+    header.onboardingStatus === "active" ||
+    header.onboardingStatus === "coaching_ready";
+
+  if (!coachingReady) {
     return (
-      <div className="workspace-page workspace-overview">
-        <p className="form-error" role="alert">
-          {workspaceError ?? "Could not load this client."}
+      <div className="overview-guided">
+        <h2>Next step</h2>
+        <p>
+          {header.onboardingStatus === "onboarding_submitted"
+            ? "Review intake answers, then configure coaching."
+            : "Waiting for the client to finish onboarding."}
         </p>
+        <Link
+          className="button-primary"
+          to={`/clients/${relationshipId}/onboarding`}
+        >
+          Open onboarding
+        </Link>
       </div>
     );
   }
 
-  const { header, overview, plan, configuration } = workspace;
-  const version = plan.version;
-  const hasEffectivePlan = Boolean(plan.plan && version);
-  const planHref = `/clients/${relationshipId}/plan`;
-  const onboardingStatus = header.onboardingStatus;
-  const configurationStatus = configuration.configuration?.status ?? null;
-  const needsOnboardingReview =
-    onboardingStatus === "onboarding_pending" ||
-    onboardingStatus === "onboarding_submitted";
-  const needsConfiguration =
-    onboardingStatus === "coaching_ready" && configurationStatus !== "active";
-  const needsPlan = onboardingStatus === "active" && !hasEffectivePlan;
-  const subscription = configuration.subscription;
-  const measurementTypes = orderedMeasurementTypes(
-    overview.progress.measurements.map((item) => item.type),
-  );
-  const recentEntries = [...overview.progress.entries]
-    .sort((left, right) => right.observedAt.localeCompare(left.observedAt))
-    .slice(0, 3);
-
   return (
-    <div className="workspace-page workspace-overview">
-      {needsOnboardingReview ? (
-        <p className="banner-info" role="status">
-          {onboardingStatus === "onboarding_submitted"
-            ? "This trainee submitted onboarding. Review the answers, then configure coaching."
-            : "Waiting for the trainee to finish the onboarding form."}{" "}
-          <Link to={`/clients/${relationshipId}/onboarding`}>
-            Open onboarding review
-          </Link>
-        </p>
-      ) : null}
-      {needsConfiguration ? (
-        <p className="banner-info" role="status">
-          Onboarding is complete. Configure coaching expectations before
-          publishing a plan.{" "}
-          <Link to={`/clients/${relationshipId}/configure`}>
-            Configure coaching
-          </Link>
-        </p>
-      ) : null}
-      {needsPlan ? (
-        <p className="banner-info" role="status">
-          Coaching is configured. Publish a plan so the trainee can start.{" "}
-          <Link to={planHref}>Open plan</Link>
-        </p>
-      ) : null}
-
-      <section className="workspace-card" aria-labelledby="overview-plan-heading">
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Plan</p>
-            <h2 id="overview-plan-heading" className="workspace-card-title">
-              Current program
-            </h2>
-          </div>
-          <Link className="button-primary" to={planHref}>
-            {hasEffectivePlan ? "Adjust plan" : "Open plan"}
-          </Link>
-        </div>
-        {hasEffectivePlan && plan.plan && version ? (
-          <dl className="workspace-facts">
-            <div>
-              <dt className="section-kicker">Title</dt>
-              <dd>{plan.plan.title}</dd>
-            </div>
-            <div>
-              <dt className="section-kicker">Version</dt>
-              <dd>{version.versionNumber}</dd>
-            </div>
-            <div>
-              <dt className="section-kicker">Effective</dt>
-              <dd>{version.effectiveFrom ?? "now"}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="workspace-empty" role="status">
-            No effective plan
-          </p>
-        )}
-      </section>
-
-      <section className="workspace-card" aria-labelledby="overview-renewal-heading">
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Subscription</p>
-            <h2 id="overview-renewal-heading" className="workspace-card-title">
-              Renewal
-            </h2>
-          </div>
-        </div>
-        {header.renewalState ? (
-          <dl className="workspace-facts">
-            <div>
-              <dt className="section-kicker">State</dt>
-              <dd>{renewalLabel(header.renewalState)}</dd>
-            </div>
-            {subscription ? (
-              <>
-                <div>
-                  <dt className="section-kicker">Plan</dt>
-                  <dd>{subscription.planName}</dd>
-                </div>
-                <div>
-                  <dt className="section-kicker">Frequency</dt>
-                  <dd>{statusLabel(subscription.paymentFrequency)}</dd>
-                </div>
-                <div>
-                  <dt className="section-kicker">Renews</dt>
-                  <dd>{formatLocalDate(subscription.renewsOn)}</dd>
-                </div>
-              </>
-            ) : null}
-          </dl>
-        ) : (
-          <p className="workspace-empty" role="status">
-            No subscription renewal
-          </p>
-        )}
-      </section>
-
-      <section
-        className="workspace-card"
-        aria-labelledby="overview-exceptions-heading"
-      >
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Attention</p>
-            <h2 id="overview-exceptions-heading" className="workspace-card-title">
-              Open exception
-            </h2>
-          </div>
-        </div>
+    <div className="overview-grid">
+      <div className="overview-main">
         {overview.openException ? (
-          <div className="workspace-row">
-            <div className="workspace-row-copy">
-              <p className="workspace-row-title">{overview.openException.summary}</p>
-              <p className="workspace-row-meta">
-                <span className="workspace-kind">
-                  {statusLabel(overview.openException.type)}
-                </span>
-                <span className={`status-pill status-${overview.openException.status}`}>
-                  {statusLabel(overview.openException.status)}
-                </span>
-              </p>
-            </div>
-            <Link
-              className="button-secondary"
-              to={`/exceptions/${overview.openException.id}`}
-            >
-              Open
-            </Link>
-          </div>
-        ) : (
-          <p className="workspace-empty" role="status">
-            No open exception
-          </p>
-        )}
-      </section>
-
-      <section className="workspace-card" aria-labelledby="overview-checkins-heading">
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Schedule</p>
-            <h2 id="overview-checkins-heading" className="workspace-card-title">
-              Next check-in
-            </h2>
-          </div>
-        </div>
-        {overview.nextCheckin ? (
-          <div className="workspace-row">
-            <div className="workspace-row-copy">
-              <p className="workspace-row-title">
-                {formatLocalDate(overview.nextCheckin.localDate)}
-              </p>
-              <p className="workspace-row-meta">
-                <span className={`status-pill status-${overview.nextCheckin.status}`}>
-                  {statusLabel(overview.nextCheckin.status)}
-                </span>
-                <span>
-                  Window ends {formatWhen(overview.nextCheckin.windowEndsAt)}
-                </span>
-              </p>
-            </div>
-            <Link
-              className="button-secondary"
-              to={`/clients/${relationshipId}/check-ins/${overview.nextCheckin.id}`}
+          <section className="overview-card priority-card">
+            <h2>Needs attention</h2>
+            <p>{overview.openException.summary}</p>
+            <span className="severity-chip is-attention">Needs review</span>
+            <button
+              type="button"
+              className="button-primary"
+              onClick={() =>
+                setParams({ exception: overview.openException!.id })
+              }
             >
               Review
-            </Link>
-          </div>
-        ) : (
-          <p className="workspace-empty" role="status">
-            No next check-in
-          </p>
-        )}
-      </section>
-
-      <section
-        className="workspace-card workspace-span"
-        aria-labelledby="overview-activity-heading"
-      >
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Recent</p>
-            <h2 id="overview-activity-heading" className="workspace-card-title">
-              Recent activity
-            </h2>
-          </div>
-          <Link className="button-secondary" to={`/clients/${relationshipId}/activity`}>
-            Open activity
-          </Link>
-        </div>
-        {overview.recentActivity.length === 0 ? (
-          <p className="workspace-empty" role="status">
-            No recent activity
-          </p>
-        ) : (
-          <ul className="workspace-list">
-            {overview.recentActivity.map((item) => (
-              <li key={`${item.type}:${item.id}`} className="workspace-row">
-                <div className="workspace-row-copy">
-                  <p className="workspace-row-title">{item.title}</p>
-                  <p className="workspace-row-meta">
-                    <span className="workspace-kind">{activityKind(item)}</span>
-                    <span>{formatLocalDate(item.localDate)}</span>
-                    <span className={`status-pill status-${item.state}`}>
-                      {statusLabel(item.state)}
-                    </span>
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="workspace-card workspace-span" aria-labelledby="overview-progress-heading">
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Progress</p>
-            <h2 id="overview-progress-heading" className="workspace-card-title">
-              Progress summary
-            </h2>
-          </div>
-          <Link className="button-secondary" to={`/clients/${relationshipId}/progress`}>
-            Open progress
-          </Link>
-        </div>
-        {measurementTypes.length === 0 ? (
-          <p className="workspace-empty" role="status">
-            No measurements in this summary
-          </p>
-        ) : (
-          <div className="measurement-series-list">
-            {measurementTypes.map((type) => (
-              <div key={type} className="measurement-series">
-                <h3>{measurementTypeLabel(type)}</h3>
-                <MeasurementTrend
-                  compact
-                  label={measurementTypeLabel(type)}
-                  points={overview.progress.measurements
-                    .filter((item) => item.type === type)
-                    .map((item) => ({
-                      id: item.id,
-                      value: item.value,
-                      unit: item.unit,
-                      observedAt: item.observedAt,
-                    }))}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        {recentEntries.length > 0 ? (
-          <ul className="workspace-list">
-            {recentEntries.map((item) => (
-              <li key={item.id} className="workspace-row">
-                <div className="workspace-row-copy">
-                  <p className="workspace-row-title">
-                    {item.title?.trim() || statusLabel(item.entryType)}
-                  </p>
-                  <p className="workspace-row-meta">
-                    <span>{formatWhen(item.observedAt)}</span>
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+            </button>
+          </section>
         ) : null}
-      </section>
+
+        <section className="overview-card">
+          <h2>This week</h2>
+          {week ? (
+            <>
+              <p>
+                {week.workouts.completed} of {week.workouts.assigned} workouts ·{" "}
+                {week.meals.logged} of {week.meals.assigned} meals
+                {overview.nextCheckin
+                  ? ` · Check-in ${formatLocalDate(overview.nextCheckin.localDate)}`
+                  : ""}
+              </p>
+              <div className="week-dots" aria-hidden="true">
+                {week.days.map((day) => (
+                  <span
+                    key={day.date}
+                    className={`week-dot is-${day.state}`}
+                    title={day.date}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="muted">Weekly consistency loads separately.</p>
+          )}
+        </section>
+
+        <section className="overview-card">
+          <div className="section-head-inline">
+            <h2>Recent activity</h2>
+            <Link to={`/clients/${relationshipId}/activity`}>View all activity</Link>
+          </div>
+          {overview.recentActivity.length === 0 ? (
+            <p className="muted">
+              No activity logged yet. Activity appears once {header.traineeDisplayName.split(" ")[0]} starts logging.
+            </p>
+          ) : (
+            <ul className="overview-activity-list">
+              {overview.recentActivity.slice(0, 5).map((item) => (
+                <li key={`${item.type}:${item.id}`}>
+                  <span className={`status-pill status-${item.state}`}>
+                    {item.state.replace(/_/g, " ")}
+                  </span>
+                  <span>{item.title}</span>
+                  <span className="muted">{relativeTime(item.occurredAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <aside className="overview-side">
+        {overview.nextCheckin ? (
+          <section className="overview-card">
+            <h2>Next check-in</h2>
+            <p>{formatLocalDate(overview.nextCheckin.localDate)}</p>
+            <Link to={`/clients/${relationshipId}/check-ins/${overview.nextCheckin.id}`}>
+              Open
+            </Link>
+          </section>
+        ) : null}
+
+        {plan.plan && version ? (
+          <section className="overview-card">
+            <h2>Plan</h2>
+            <p>{plan.plan.title}</p>
+            <p className="muted">
+              Effective since {formatLocalDate(version.effectiveFrom ?? "")} · v
+              {version.versionNumber}
+            </p>
+            <Link to={`/clients/${relationshipId}/plan`}>Open plan</Link>
+          </section>
+        ) : (
+          <section className="overview-card">
+            <h2>Plan</h2>
+            <p>No plan yet</p>
+            <Link className="button-primary" to={`/clients/${relationshipId}/plan`}>
+              Set up plan
+            </Link>
+          </section>
+        )}
+
+        <section className="overview-card">
+          <div className="section-head-inline">
+            <h2>Reminders</h2>
+            <button
+              type="button"
+              className="text-link"
+              onClick={() => openWorkspaceModal({ type: "responsiveness" })}
+            >
+              Details
+            </button>
+          </div>
+          <ResponsivenessPanel relationshipId={relationshipId} compact />
+        </section>
+
+        <section className="overview-card">
+          <h2>Progress</h2>
+          {overview.progress.measurements.length >= 2 ? (
+            <MeasurementTrend
+              compact
+              label="Weight"
+              points={overview.progress.measurements
+                .filter((m) => m.type === "body_weight_kg")
+                .map((m) => ({
+                  id: m.id,
+                  value: m.value,
+                  unit: m.unit,
+                  observedAt: m.observedAt,
+                }))}
+            />
+          ) : (
+            <p className="muted">No weigh-ins yet</p>
+          )}
+        </section>
+
+        {header.renewalState && header.renewalState !== "current" ? (
+          <section className="overview-card">
+            <h2>Renewal</h2>
+            <p>{header.renewalState}</p>
+          </section>
+        ) : null}
+
+        <section className="overview-card">
+          <div className="section-head-inline">
+            <h2>Coach notes</h2>
+            <button
+              type="button"
+              className="text-link"
+              onClick={() => openWorkspaceModal({ type: "note" })}
+            >
+              Add note
+            </button>
+          </div>
+          {notes.length === 0 ? (
+            <p className="muted">No notes yet</p>
+          ) : (
+            <ul className="notes-preview">
+              {notes.map((note) => (
+                <li key={note.id}>
+                  <p>{note.body}</p>
+                  <span className="note-badge">
+                    {note.visibility === "client" ? "Visible to client" : "Private"}
+                  </span>
+                  <time className="muted">{formatIsoDateTime(note.createdAt)}</time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </aside>
+
+      {drawerId ? (
+        <ExceptionDrawer
+          exceptionId={drawerId}
+          onClose={() => setParams({})}
+        />
+      ) : null}
     </div>
   );
 }

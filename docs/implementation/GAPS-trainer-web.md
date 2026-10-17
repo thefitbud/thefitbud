@@ -1,12 +1,12 @@
 # Trainer web — API / contract gaps (Stage 2)
 
-Tracked against **FitBud UI/UX Implementation Guide v1.2**. The UI uses small adapters in `apps/trainer-web/src/lib/http-api.ts` where `@fitbud/api-client` is not yet extended.
+Tracked against **FitBud UI/UX Implementation Guide v1.2**. The UI uses small adapters in `apps/trainer-web/src/lib/http-api.ts` and `trainee-timezone.ts` where `@fitbud/api-client` is not yet extended.
 
-| Screen | Missing in client/API | Expected contract |
-|--------|----------------------|-------------------|
-| TW-23 | `listPlanTemplates` has no `scope` / `templateType` / `q` in api-client | `GET /templates?scope=all\|bases\|mine&templateType=&q=` → existing list schema |
-| TW-08 | `reissueInvitation` / `revokeInvitation` / `cancelReactivation` not on api-client | `POST /invitations/:id/reissue` → `createInvitationResponseSchema`; `POST …/revoke` → invitation; `POST /relationships/:rid/reactivate/cancel` |
-| TW-25 | Dedicated check-in template tab UI | `GET /checkins/form-templates` with scope filters (same as TW-23 pattern) |
-| TW-13/14 | Dedicated plan version edit route with 3-pane builder | Full-screen builder route; library FTS fields already on API |
-| TW-29 | Rich notification preference editor | `GET/PUT /notifications/preferences` with `trainerCategories` round-trip UI |
-| TW-33 | `GET /links/resolve` deep-link handler in router | Resolve + redirect for `/go/*` style links |
+| Screen | Missing in client/API | Expected contract | UI workaround |
+|--------|----------------------|-------------------|---------------|
+| TW-09a | `traineeTimezone` sometimes absent on workspace header | Always set from trainee profile | `resolveTraineeTimezone()` falls back to `Asia/Kolkata` for demo |
+| TW-23 | `listPlanTemplates` scope/q not on api-client | `GET /templates?scope=&templateType=&q=` | `listPlanTemplatesExtended` in `http-api.ts` |
+| TW-25 | Check-in template scope server filter | Same as plan templates | Client-side scope on ownership |
+| TW-29 | `trainerCategories` on GET/PUT preferences | Category booleans round-trip | `trainer-notification-prefs.ts` in localStorage + push/quiet hours via API |
+| TW-08 | Reissue/revoke not on api-client | Invitation POST routes | `http-api.ts` |
+| TW-30 | Reactivation cancel | `POST …/reactivate/cancel` | `cancelReactivation` in `http-api.ts` |

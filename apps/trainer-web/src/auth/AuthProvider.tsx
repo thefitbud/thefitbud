@@ -19,7 +19,6 @@ import {
   clearSession,
   getStoredAccessToken,
   getStoredEmail,
-  storeSession,
 } from "../lib/session";
 import { createTestIdToken } from "../lib/test-token";
 

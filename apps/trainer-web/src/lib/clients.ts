@@ -69,7 +69,7 @@ export function primaryActionForStatus(status: OnboardingStatus): {
     case "active":
       return { label: "Open workspace", href: "overview" };
     case "ended":
-      return { label: "Ended", href: null };
+      return { label: "Reactivate", href: "overview" };
     default: {
       const _exhaustive: never = status;
       return _exhaustive;

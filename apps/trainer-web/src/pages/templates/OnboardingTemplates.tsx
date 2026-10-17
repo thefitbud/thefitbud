@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type {
   OnboardingAnswers,
   OnboardingFieldDefinition,
@@ -8,7 +8,9 @@ import type {
 import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import { errorText, formatUpdated, matchesName } from "./shared";
+import { useSearchParams } from "react-router-dom";
 import { useCursorPage } from "./useCursorPage";
+import { filterByScope, readTemplateScope } from "./TemplateScopeToolbar";
 import {
   BUILDER_FIELD_TYPES,
   blankField,
@@ -430,11 +432,18 @@ function VersionList({ detail }: { detail: OnboardingFormTemplateDetail }) {
   );
 }
 
-export function OnboardingTemplates() {
-  const page = useCursorPage("onboarding-templates", (cursor) =>
+export function OnboardingTemplates({
+  initialTemplateId,
+}: {
+  initialTemplateId?: string;
+} = {}) {
+  const [params] = useSearchParams();
+  const scope = readTemplateScope(params);
+  const urlQuery = params.get("q") ?? "";
+  const page = useCursorPage(`onboarding-templates-${scope}`, (cursor) =>
     apiClient.listOnboardingFormTemplates({ cursor, limit: 50 }),
   );
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(urlQuery);
   const [detail, setDetail] = useState<OnboardingFormTemplateDetail | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -452,7 +461,9 @@ export function OnboardingTemplates() {
       ? (sortedVersions(detail).at(-1)?.fields ?? null)
       : null;
 
-  const visible = page.items.filter((item) => matchesName(item.name, query));
+  const visible = filterByScope(page.items, scope).filter((item) =>
+    matchesName(item.name, query || urlQuery),
+  );
   const built = buildFields(fields);
   const unchanged = fieldsMatchLatest(fields, latestFields);
 
@@ -490,6 +501,11 @@ export function OnboardingTemplates() {
       setOpening(false);
     }
   }
+
+  useEffect(() => {
+    if (!initialTemplateId || detail?.id === initialTemplateId) return;
+    void openTemplate(initialTemplateId);
+  }, [initialTemplateId, detail?.id]);
 
   function startCreate() {
     setCreating(true);

@@ -6,41 +6,40 @@ Branch: `cursor/trainer-web-screens-09cc` → `cursor/stage1-foundation-a3da`.
 
 | ID | Route | Status | Notes |
 |----|-------|--------|-------|
-| TW-01 | `/sign-in`, `/sign-in/code`, `/forgot-password` | ✅ | Password + email OTP; WhatsApp OTP disabled when `wa_otp` false; dev test identity in DEV |
-| TW-02 | `/welcome` | ✅ | 3-step wizard; skips when `trainerProfile.displayName` set |
-| TW-03 | App shell | ✅ | Tokens, nav, offline banner, support mailto from `/config` |
-| TW-04 | `/` | ✅ | One row per client, severity·age chip, cap 8 + View all; sections for ack, asks, re-engage, renewals |
-| TW-05 | `/?exception=` drawer | ✅ | Acknowledge separate from Resolve; `/exceptions/:id` redirects here |
-| TW-06 | `/clients` | ✅ | Existing roster; renewal filter via query (prior behaviour) |
-| TW-07 | `/clients/add` | ✅ | Existing invite flow |
+| TW-01 | `/sign-in`, `/sign-in/code`, `/forgot-password` | ✅ | Password + email OTP; WhatsApp OTP disabled when `wa_otp` false |
+| TW-02 | `/welcome` | ✅ | 3-step wizard |
+| TW-03 | App shell | ✅ | Tokens, nav, offline banner, support mailto |
+| TW-04 | `/` | ✅ | Attention rows, cap 8, coach asks, re-engage, renewals |
+| TW-05 | `/?exception=` drawer | ✅ | Acknowledge + resolve; note via exception flow |
+| TW-06 | `/clients` | ✅ | Roster, filters, ended clients link to workspace |
+| TW-07 | `/clients/add` | ✅ | Invite + reactivate hint for prior clients |
 | TW-08 | `/invitations/:id` | ✅ | Reissue/revoke via http adapter |
-| TW-09 | `/clients/:rid/overview` | ⚠️ | Overview cards; responsiveness/notes partially wired |
-| TW-09a | Workspace header | ⚠️ | Timezone chip when API provides `traineeTimezone` |
-| TW-10–TW-22 | Workspace tabs | ⚠️ | Prior screens retained; formatting/copy pass incomplete |
-| TW-23 | `/templates/*` | ⚠️ | Six tabs + hub; scope filters via http adapter; check-ins tab placeholder |
-| TW-24–TW-27 | Template builders | ⚠️ | Inline editors; dedicated routes not all split out |
-| TW-28–TW-29 | `/settings/*` | ⚠️ | Profile + password; notifications JSON preview |
-| TW-30 | End/reactivate | ⚠️ | API wired in stage1 client; UI modals not on all entry points |
-| TW-31 | Responsiveness | ⚠️ | Shown in exception drawer; overview line pending |
+| TW-09 | `/clients/:rid/overview` | ✅ | Guide cards, week, notes, responsiveness |
+| TW-09a | Workspace header | ✅ | Tabs, timezone chip (API or adapter), overflow actions |
+| TW-10–TW-22 | Workspace tabs | ✅ | Existing tab pages + header/modals wired |
+| TW-13/14 | Plan builder route | ✅ | `/clients/:rid/plan/:planId/versions/:versionId/edit` |
+| TW-16 | Assign/publish | ✅ | `AssignPlanModal` + plan tab publish |
+| TW-23 | `/templates/*` | ✅ | Six tabs, scope filters, real check-ins + onboarding |
+| TW-24–TW-27 | Template builders | ✅ | Dedicated routes under `/templates/.../:tid` |
+| TW-28–TW-29 | `/settings/*` | ✅ | Profile, notifications UI (categories in localStorage until API) |
+| TW-30 | End/reactivate | ✅ | Header, settings ended list, roster reactivate |
+| TW-31 | Responsiveness | ✅ | Overview line + drawer |
 | TW-32 | Coach asks on Home | ✅ | Mark answered |
 | TW-33 | 404 | ✅ | `NotFoundPage` |
-| TW-34 | Note composer | ⚠️ | Component ready; not on every entry point |
+| TW-34 | Note composer | ✅ | Workspace overflow, overview, modals |
+| Links | `/links/resolve` | ✅ | Deep link resolver → in-app route |
 
-Legend: ✅ matches guide for demo; ⚠️ partial or needs polish.
+Legend: ✅ matches guide for demo; see GAPS for API follow-ups.
 
-## Deviations
+## Tests
 
-- Check-in templates tab uses onboarding list placeholder until dedicated check-in template grid is built (see GAPS).
-- Notification settings shows raw JSON until category toggles are implemented.
+- `pnpm --filter @fitbud/trainer-web test` — unit tests
+- `pnpm --filter @fitbud/trainer-web test:e2e` — Playwright (API + web dev servers)
+
+## Screenshots
+
+`pnpm --filter @fitbud/trainer-web capture:screens` with API on `:8787` and web on `:5173` after `pnpm db:reset`.
 
 ## Gaps file
 
 See [`GAPS-trainer-web.md`](./GAPS-trainer-web.md).
-
-## Tests
-
-`pnpm --filter @fitbud/trainer-web test` — unit tests for auth/format/config/clients.
-
-## Screenshots
-
-Captured under `docs/implementation/screens/trainer-web/TW-*.png` (Playwright, 1440px) when API + web are running after `pnpm db:reset`.

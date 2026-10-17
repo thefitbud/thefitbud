@@ -12,6 +12,8 @@ import { ClientCheckinsPage } from "./pages/ClientCheckinsPage";
 import { ClientHistoryPage } from "./pages/ClientHistoryPage";
 import { ClientOverviewPage } from "./pages/ClientOverviewPage";
 import { ClientPlanPage } from "./pages/ClientPlanPage";
+import { PlanBuilderPage } from "./pages/plan/PlanBuilderPage";
+import { GoResolverPage } from "./pages/GoResolverPage";
 import { ClientProgressPage } from "./pages/ClientProgressPage";
 import { ClientWorkspaceLayout } from "./pages/ClientWorkspaceLayout";
 import { ClientsPage } from "./pages/ClientsPage";
@@ -23,8 +25,10 @@ import { OnboardingReviewPage } from "./pages/OnboardingReviewPage";
 import { PendingInvitationPage } from "./pages/PendingInvitationPage";
 import { TemplatesHub } from "./pages/TemplatesHub";
 import { WelcomePage } from "./pages/WelcomePage";
+import { EndedClientsSettingsPage } from "./pages/settings/EndedClientsSettingsPage";
 import { NotificationSettingsPage } from "./pages/settings/NotificationSettingsPage";
 import { ProfileSettingsPage } from "./pages/settings/ProfileSettingsPage";
+import { SettingsHelpPage } from "./pages/settings/SettingsHelpPage";
 import { SettingsLayout } from "./pages/settings/SettingsLayout";
 
 export function App() {
@@ -39,6 +43,11 @@ export function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/exceptions/:exceptionId" element={<ExceptionDetailPage />} />
           <Route path="/checkins" element={<CheckinsPage />} />
+          <Route path="/links/resolve" element={<GoResolverPage />} />
+          <Route
+            path="/clients/:relationshipId/plan/:planId/versions/:versionId/edit"
+            element={<PlanBuilderPage />}
+          />
           <Route path="/templates/*" element={<TemplatesHub />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/add" element={<AddClientPage />} />
@@ -48,6 +57,8 @@ export function App() {
             <Route index element={<Navigate to="profile" replace />} />
             <Route path="profile" element={<ProfileSettingsPage />} />
             <Route path="notifications" element={<NotificationSettingsPage />} />
+            <Route path="ended" element={<EndedClientsSettingsPage />} />
+            <Route path="help" element={<SettingsHelpPage />} />
           </Route>
           <Route
             path="/clients/:relationshipId"

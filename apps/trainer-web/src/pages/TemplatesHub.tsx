@@ -1,7 +1,12 @@
 import { Navigate, NavLink, Route, Routes, useParams } from "react-router-dom";
-import { TemplatesPage } from "./TemplatesPage";
+import { TemplatesPlanTab } from "./templates/TemplatesPlanTab";
 import { LibrariesPanel } from "./templates/LibrariesPanel";
-import type { TemplateFamily } from "./templates/shared";
+import { CheckinTemplatesPanel } from "./templates/CheckinTemplatesPanel";
+import { OnboardingTemplates } from "./templates/OnboardingTemplates";
+import { OnboardingTemplateBuilderPage } from "./templates/OnboardingTemplateBuilderPage";
+import { CheckinTemplateBuilderPage } from "./templates/CheckinTemplateBuilderPage";
+import { PlanTemplateEditorPage } from "./templates/PlanTemplateEditorPage";
+import { TemplateScopeToolbar } from "./templates/TemplateScopeToolbar";
 
 const TABS = [
   { slug: "workouts", label: "Workouts" },
@@ -12,19 +17,17 @@ const TABS = [
   { slug: "libraries", label: "Libraries" },
 ] as const;
 
-const FAMILY_BY_SLUG: Record<string, TemplateFamily> = {
-  workouts: "workout",
-  diets: "nutrition",
-  "full-plans": "combined",
-  onboarding: "onboarding",
-};
-
 export function TemplatesHub() {
   return (
     <Routes>
       <Route index element={<Navigate to="workouts" replace />} />
+      <Route path="onboarding/:templateId" element={<OnboardingTemplateBuilderPage />} />
+      <Route path="checkins/:templateId" element={<CheckinTemplateBuilderPage />} />
+      <Route path="workouts/:templateId" element={<PlanTemplateEditorPage />} />
+      <Route path="diets/:templateId" element={<PlanTemplateEditorPage />} />
+      <Route path="full-plans/:templateId" element={<PlanTemplateEditorPage />} />
       <Route
-        path=":type/*"
+        path=":type"
         element={
           <>
             <nav className="templates-hub-tabs" aria-label="Template types">
@@ -35,7 +38,7 @@ export function TemplatesHub() {
                   className={({ isActive }) =>
                     isActive ? "hub-tab is-active" : "hub-tab"
                   }
-                  end={tab.slug !== "libraries"}
+                  end
                 >
                   {tab.label}
                 </NavLink>
@@ -55,16 +58,25 @@ function TemplatesTabContent() {
     return <LibrariesPanel />;
   }
   if (type === "checkins") {
+    return <CheckinTemplatesPanel />;
+  }
+  if (type === "onboarding") {
     return (
       <section className="page templates-page">
-        <p className="lede">
-          Manage check-in forms from the global Check-ins area or fork a FitBud
-          base below.
-        </p>
-        <TemplatesPage initialFamily="onboarding" />
+        <header className="page-header">
+          <h1>Onboarding forms</h1>
+          <p className="lede">Intake forms for new clients.</p>
+        </header>
+        <TemplateScopeToolbar />
+        <OnboardingTemplates />
       </section>
     );
   }
-  const family = FAMILY_BY_SLUG[type] ?? "workout";
-  return <TemplatesPage key={family} initialFamily={family} />;
+  const family =
+    type === "diets"
+      ? "nutrition"
+      : type === "full-plans"
+        ? "combined"
+        : "workout";
+  return <TemplatesPlanTab key={family} templateType={family} hubSlug={type} />;
 }

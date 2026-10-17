@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { PlanTemplate, PlanTemplateSummary, PlanTemplateType } from "@fitbud/contracts";
@@ -69,6 +69,7 @@ export function PlanTemplateFamily({
   onSaved,
   clients,
   clientError,
+  autoOpenTemplateId,
 }: {
   templateType: PlanTemplateType;
   templates: PlanTemplateSummary[];
@@ -79,6 +80,7 @@ export function PlanTemplateFamily({
   onSaved: (template: PlanTemplate) => void;
   clients: ApplyClient[];
   clientError: string | null;
+  autoOpenTemplateId?: string;
 }) {
   const label = templateTypeLabel(templateType);
   const [query, setQuery] = useState("");
@@ -108,6 +110,11 @@ export function PlanTemplateFamily({
     ? applyRelationshipId
     : (clients[0]?.relationshipId ?? "");
   const readOnly = draft?.ownership === "global";
+
+  useEffect(() => {
+    if (!autoOpenTemplateId || draft?.id === autoOpenTemplateId) return;
+    void openTemplate(autoOpenTemplateId);
+  }, [autoOpenTemplateId, draft?.id]);
 
   function startCreate() {
     setDraft({

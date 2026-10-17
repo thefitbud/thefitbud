@@ -1,179 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
-import { Link, NavLink, Outlet, useMatch, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, Outlet, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  AdherenceState,
-  Checkin,
-  CheckinStatus,
-  ClientWorkspace,
-  CoachingConfiguration,
-  OnboardingStatus,
-  RenewalState,
-  WorkspaceTraineeProfile,
-} from "@fitbud/contracts";
+import type { ClientWorkspace } from "@fitbud/contracts";
+import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader";
+import {
+  WorkspaceModals,
+  type WorkspaceModal,
+} from "../components/workspace/WorkspaceModals";
 import { apiClient } from "../lib/api";
-import { clientWhatsappHref } from "../lib/whatsapp";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import type { WorkspaceOutletContext } from "./workspaceContext";
-
-function shortRelationshipId(relationshipId: string): string {
-  return relationshipId.slice(0, 8);
-}
-
-function clientHeading(relationshipId: string): string {
-  const shortId = shortRelationshipId(relationshipId);
-  return shortId ? `Client ${shortId}` : "Client";
-}
-
-function initialsFromLabel(label: string): string {
-  const words = label
-    .trim()
-    .split(/\s+/)
-    .map((part) => part.replace(/[^A-Za-z0-9]/g, ""))
-    .filter(Boolean);
-  const first = words[0];
-  const second = words[1];
-  if (first && second) {
-    return `${first.charAt(0)}${second.charAt(0)}`.toUpperCase();
-  }
-  const compact = words[0] ?? label.replace(/[^A-Za-z0-9]/g, "");
-  return (compact.slice(0, 2) || "CL").toUpperCase();
-}
-
-/** Readable label for the derived onboarding status, including ended. */
-function clientStatusLabel(status: OnboardingStatus): string {
-  switch (status) {
-    case "invited":
-      return "Invited";
-    case "onboarding_pending":
-      return "Onboarding";
-    case "onboarding_submitted":
-      return "Onboarding submitted";
-    case "coaching_ready":
-      return "Coaching ready";
-    case "active":
-      return "Active";
-    case "ended":
-      return "Ended";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
-}
-
-function clientStatusClass(status: OnboardingStatus): string {
-  if (status === "active") return "workspace-client-status is-active";
-  if (status === "ended") return "workspace-client-status is-ended";
-  return "workspace-client-status is-onboarding";
-}
-
-function renewalLabel(state: RenewalState): string {
-  switch (state) {
-    case "current":
-      return "Renewal current";
-    case "upcoming":
-      return "Renewal upcoming";
-    case "due":
-      return "Renewal due";
-    case "expired":
-      return "Renewal expired";
-    default: {
-      const _exhaustive: never = state;
-      return _exhaustive;
-    }
-  }
-}
-
-/** Text label for the derived adherence state. Color never stands alone. */
-function adherenceLabel(state: AdherenceState): string {
-  switch (state) {
-    case "on_track":
-      return "On track";
-    case "needs_attention":
-      return "Needs attention";
-    case "no_recent_data":
-      return "No recent data";
-    case "not_available":
-      return "Not available";
-    default: {
-      const _exhaustive: never = state;
-      return _exhaustive;
-    }
-  }
-}
-
-function adherenceClass(state: AdherenceState): string {
-  return `workspace-adherence is-${state.replaceAll("_", "-")}`;
-}
-
-function checkinStatusLabel(status: CheckinStatus): string {
-  switch (status) {
-    case "scheduled":
-      return "Scheduled";
-    case "due":
-      return "Due";
-    case "submitted":
-      return "Submitted";
-    case "reviewed":
-      return "Reviewed";
-    case "overdue":
-      return "Overdue";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
-}
-
-function formatCheckinDate(localDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return localDate;
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
-  );
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-function nextCheckinLabel(checkin: Checkin): string {
-  return `Next check-in ${formatCheckinDate(checkin.localDate)} · ${checkinStatusLabel(checkin.status)}`;
-}
-
-/** Age and gender only. Omits the profile display name and any missing field. */
-function compactProfileLabel(profile: WorkspaceTraineeProfile): string | null {
-  const gender = profile.gender?.trim() || null;
-  if (profile.age != null && gender) return `${profile.age} · ${gender}`;
-  if (profile.age != null) return `Age ${profile.age}`;
-  return gender;
-}
-
-/** Coaching configuration, shown in the menu so it is not another status badge. */
-function coachingStatusLabel(
-  status: CoachingConfiguration["status"] | null,
-): string {
-  if (status === "active") return "Active";
-  if (status === "configured") return "Configured";
-  if (status === "draft") return "Configuring";
-  if (status === "superseded") return "Superseded";
-  return "Not configured";
-}
-
-function reviewableCheckin(checkin: Checkin | null): Checkin | null {
-  if (!checkin) return null;
-  if (
-    checkin.status === "due" ||
-    checkin.status === "overdue" ||
-    checkin.status === "submitted"
-  ) {
-    return checkin;
-  }
-  return null;
-}
 
 export function ClientWorkspaceLayout() {
   const { relationshipId = "" } = useParams();
@@ -181,35 +17,9 @@ export function ClientWorkspaceLayout() {
   const [workspace, setWorkspace] = useState<ClientWorkspace | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [whatsappE164, setWhatsappE164] = useState<string | null>(null);
-  const [loadedRelationshipId, setLoadedRelationshipId] = useState(relationshipId);
-  const menuRef = useRef<HTMLDetailsElement>(null);
-
-  if (loadedRelationshipId !== relationshipId) {
-    setLoadedRelationshipId(relationshipId);
-    setWorkspace(null);
-    setWorkspaceLoading(true);
-    setWorkspaceError(null);
-    setWhatsappE164(null);
-  }
-
-  const onOverviewIndex = useMatch({
-    path: "/clients/:relationshipId",
-    end: true,
-  });
-  const onOverviewPath = useMatch({
-    path: "/clients/:relationshipId/overview",
-    end: true,
-  });
-  const onConfigure = useMatch({
-    path: "/clients/:relationshipId/configure",
-    end: true,
-  });
-  const onOnboarding = useMatch({
-    path: "/clients/:relationshipId/onboarding",
-    end: true,
-  });
-  const overviewActive = Boolean(onOverviewIndex || onOverviewPath);
+  const [notFound, setNotFound] = useState(false);
+  const [submittedCheckins, setSubmittedCheckins] = useState(0);
+  const [modal, setModal] = useState<WorkspaceModal>(null);
 
   const reloadWorkspace = useCallback(() => {
     setRefreshEpoch((value) => value + 1);
@@ -221,37 +31,32 @@ export function ClientWorkspaceLayout() {
     if (!relationshipId) return;
     let cancelled = false;
     setWorkspace(null);
-    setWhatsappE164(null);
     setWorkspaceLoading(true);
     setWorkspaceError(null);
+    setNotFound(false);
 
     void (async () => {
       try {
-        const [nextWorkspace, relationship] = await Promise.all([
-          apiClient.getClientWorkspace(relationshipId),
-          apiClient.getRelationship(relationshipId),
-        ]);
+        const nextWorkspace = await apiClient.getClientWorkspace(relationshipId);
         if (cancelled) return;
         setWorkspace(nextWorkspace);
-
-        if (!relationship.invitationId) {
-          setWhatsappE164(null);
-          return;
-        }
-        try {
-          const invitation = await apiClient.getInvitation(
-            relationship.invitationId,
+        const inbox = await apiClient.listTrainerCheckinInbox();
+        if (!cancelled) {
+          setSubmittedCheckins(
+            inbox.items.filter(
+              (item) =>
+                item.coachingRelationshipId === relationshipId &&
+                item.checkin.status === "submitted",
+            ).length,
           );
-          if (!cancelled) {
-            setWhatsappE164(invitation.recipientWhatsappE164);
-          }
-        } catch {
-          if (!cancelled) setWhatsappE164(null);
         }
       } catch (err) {
-        if (!cancelled) {
-          setWorkspace(null);
-          setWhatsappE164(null);
+        if (cancelled) return;
+        setWorkspace(null);
+        if (err instanceof ApiClientError && err.status === 404) {
+          setNotFound(true);
+          setWorkspaceError(null);
+        } else {
           setWorkspaceError(
             err instanceof ApiClientError
               ? err.message
@@ -268,271 +73,65 @@ export function ClientWorkspaceLayout() {
     };
   }, [relationshipId, refreshEpoch]);
 
-  const header = workspace?.header ?? null;
-  const configurationStatus =
-    workspace?.configuration.configuration?.status ?? null;
-  const onboardingStatus = header?.onboardingStatus ?? null;
-  const reviewCheckin = reviewableCheckin(
-    workspace?.overview.nextCheckin ?? null,
-  );
-  const heading =
-    header?.traineeDisplayName ??
-    (workspaceLoading ? "Client" : clientHeading(relationshipId));
-  const initials = initialsFromLabel(heading);
-  const clientStatus = onboardingStatus
-    ? clientStatusLabel(onboardingStatus)
-    : null;
-  const coachingLabel = coachingStatusLabel(configurationStatus);
-  const needsReminder =
-    onboardingStatus === "invited" || onboardingStatus === "onboarding_pending";
-  const planTitle = header?.effectivePlan?.title ?? null;
-  const nextCheckin = workspace?.overview.nextCheckin ?? null;
-  const profileLabel = header ? compactProfileLabel(header.traineeProfile) : null;
-
-  const whatsappHrefValue = clientWhatsappHref({
-    phoneE164: whatsappE164,
-    name: heading,
-    onboardingStatus,
-  });
-  const messageLabel = needsReminder ? "Remind" : "Message";
-
-  const primaryAction = useMemo(() => {
-    if (!onboardingStatus) return null;
-    if (onboardingStatus === "onboarding_submitted") {
-      return {
-        label: "Review intake",
-        to: `/clients/${relationshipId}/onboarding`,
-      };
-    }
-    if (onboardingStatus === "onboarding_pending" && !whatsappE164) {
-      return {
-        label: "View onboarding",
-        to: `/clients/${relationshipId}/onboarding`,
-      };
-    }
-    if (
-      onboardingStatus === "coaching_ready" &&
-      configurationStatus !== "active" &&
-      !reviewCheckin
-    ) {
-      return {
-        label: "Continue setup",
-        to: `/clients/${relationshipId}/configure`,
-      };
-    }
-    if (reviewCheckin) {
-      return {
-        label: "Review check-in",
-        to: `/clients/${relationshipId}/check-ins/${reviewCheckin.id}`,
-      };
-    }
-    if (planTitle) {
-      return { label: "Adjust plan", to: `/clients/${relationshipId}/plan` };
-    }
-    if (onboardingStatus === "coaching_ready" || onboardingStatus === "active") {
-      return { label: "Open plan", to: `/clients/${relationshipId}/plan` };
-    }
-    return null;
-  }, [
-    configurationStatus,
-    onboardingStatus,
-    planTitle,
-    relationshipId,
-    reviewCheckin,
-    whatsappE164,
-  ]);
-
-  function closeMenu() {
-    if (menuRef.current) menuRef.current.open = false;
+  if (notFound) {
+    return (
+      <section className="page centered-status">
+        <h1>Client not found</h1>
+        <p className="lede">This coaching relationship doesn&apos;t exist or you don&apos;t have access.</p>
+        <Link className="button-primary" to="/clients">Back to clients</Link>
+      </section>
+    );
   }
 
-  const showPrimary =
-    primaryAction &&
-    !(onConfigure && primaryAction.to.endsWith("/configure")) &&
-    !(onOnboarding && primaryAction.to.endsWith("/onboarding"));
+  if (workspaceLoading && !workspace) {
+    return (
+      <section className="page workspace-shell" aria-busy="true">
+        <p className="muted">Loading client workspace…</p>
+      </section>
+    );
+  }
+
+  if (!workspace) {
+    return (
+      <section className="page workspace-shell">
+        <p className="form-error" role="alert">
+          {workspaceError ?? "Could not load this client."}
+        </p>
+        <button type="button" className="button-secondary" onClick={reloadWorkspace}>
+          Try again
+        </button>
+      </section>
+    );
+  }
 
   const outletContext: WorkspaceOutletContext = {
     workspace,
     workspaceLoading,
     workspaceError,
+    notFound,
     refreshEpoch,
     reloadWorkspace,
+    openWorkspaceModal: setModal,
+    relationshipId,
   };
 
   return (
     <section className="page workspace-shell">
-      <div className="workspace-frame">
-        <header className="workspace-identity">
-          <div className="workspace-identity-main">
-            <Link className="workspace-back" to="/clients">
-              <IconChevronLeft />
-              Clients
-            </Link>
-            <div className="workspace-identity-row">
-              <span className="avatar workspace-avatar" aria-hidden="true">
-                {initials}
-              </span>
-              <div className="workspace-identity-copy">
-                <div className="workspace-name-row">
-                  <h1 className="workspace-title">{heading}</h1>
-                </div>
-                <p className="workspace-meta">
-                  {header && onboardingStatus ? (
-                    <>
-                      {header.goalShort ? <span>{header.goalShort}</span> : null}
-                      {clientStatus ? (
-                        <span className={clientStatusClass(onboardingStatus)}>
-                          <span className="workspace-status-dot" aria-hidden="true" />
-                          {clientStatus}
-                        </span>
-                      ) : null}
-                      <span className={adherenceClass(header.adherenceState)}>
-                        {adherenceLabel(header.adherenceState)}
-                      </span>
-                      {planTitle ? <span>{planTitle}</span> : null}
-                      {nextCheckin ? (
-                        <span>{nextCheckinLabel(nextCheckin)}</span>
-                      ) : null}
-                      {profileLabel ? <span>{profileLabel}</span> : null}
-                      {header.renewalState ? (
-                        <span>{renewalLabel(header.renewalState)}</span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span>{workspaceLoading ? "Loading client…" : "Client workspace"}</span>
-                  )}
-                </p>
-                {workspaceError ? (
-                  <p className="form-error" role="alert">
-                    {workspaceError}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="workspace-header-actions">
-            {showPrimary && primaryAction ? (
-              <Link
-                to={primaryAction.to}
-                className={
-                  needsReminder && whatsappHrefValue
-                    ? "button-secondary"
-                    : "button-primary"
-                }
-              >
-                {primaryAction.label}
-              </Link>
-            ) : null}
-            {whatsappHrefValue ? (
-              <a
-                className={needsReminder ? "button-primary" : "button-secondary"}
-                href={whatsappHrefValue}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {messageLabel}
-              </a>
-            ) : (
-              <button
-                type="button"
-                className="button-secondary"
-                disabled
-                title="Add a WhatsApp number when inviting this client"
-              >
-                {messageLabel}
-              </button>
-            )}
-            <details className="workspace-menu" ref={menuRef}>
-              <summary className="workspace-icon-btn" aria-label="More client actions">
-                <IconMore />
-              </summary>
-              <div className="workspace-menu-panel">
-                {onConfigure ? (
-                  <Link to={`/clients/${relationshipId}/overview`} onClick={closeMenu}>
-                    Back to overview
-                  </Link>
-                ) : (
-                  <Link to={`/clients/${relationshipId}/configure`} onClick={closeMenu}>
-                    Client settings
-                  </Link>
-                )}
-                <p className="workspace-menu-status">
-                  <span>Coaching</span>
-                  {coachingLabel}
-                </p>
-              </div>
-            </details>
-          </div>
-        </header>
-
-        <nav className="workspace-tabs" aria-label="Client sections">
-          <Link
-            to={`/clients/${relationshipId}/overview`}
-            className={tabClass(overviewActive)}
-            aria-current={overviewActive ? "page" : undefined}
-          >
-            Overview
-          </Link>
-          <NavLink to={`/clients/${relationshipId}/plan`} className={navClass}>
-            Plan
-          </NavLink>
-          <NavLink to={`/clients/${relationshipId}/activity`} className={navClass}>
-            Activity
-          </NavLink>
-          <NavLink to={`/clients/${relationshipId}/progress`} className={navClass}>
-            Progress
-          </NavLink>
-          <NavLink to={`/clients/${relationshipId}/check-ins`} className={navClass}>
-            Check-ins
-          </NavLink>
-          <NavLink to={`/clients/${relationshipId}/history`} className={navClass}>
-            History
-          </NavLink>
-        </nav>
-      </div>
-
+      <Link className="workspace-back" to="/clients">← Clients</Link>
+      <WorkspaceHeader
+        workspace={workspace}
+        relationshipId={relationshipId}
+        submittedCheckinCount={submittedCheckins}
+        onOpenModal={setModal}
+      />
       <Outlet context={outletContext} />
+      <WorkspaceModals
+        relationshipId={relationshipId}
+        traineeName={workspace.header.traineeDisplayName}
+        modal={modal}
+        onClose={() => setModal(null)}
+        onChanged={reloadWorkspace}
+      />
     </section>
   );
-}
-
-function navClass({ isActive }: { isActive: boolean }): string {
-  return tabClass(isActive);
-}
-
-function tabClass(isActive: boolean): string {
-  return isActive ? "workspace-tab is-active" : "workspace-tab";
-}
-
-function IconChevronLeft() {
-  return (
-    <svg {...iconProps()}>
-      <path d="M15 6 9 12l6 6" />
-    </svg>
-  );
-}
-
-function IconMore() {
-  return (
-    <svg {...iconProps(18)}>
-      <circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function iconProps(size = 16): SVGProps<SVGSVGElement> {
-  return {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    "aria-hidden": true,
-    focusable: false,
-  };
 }
