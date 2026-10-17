@@ -14,8 +14,12 @@ import { addDaysToLocalDate, isQualifyingWorkoutExecution } from "./workout.js";
 import { formatLocalDate, localDateTimeToUtcIso } from "./timezone.js";
 
 /** Reminder engine v2 (§3.6) — system clocks; trainers only enable categories. */
-export const WORKOUT_REMINDER_OFFSET_MINUTES = 75;
+/** Minutes after preferred (or fallback) workout time to nudge if still unlogged (60–90; default 75). */
+export const WORKOUT_REMINDER_AFTER_MINUTES = 75;
+/** @deprecated Use WORKOUT_REMINDER_AFTER_MINUTES — offset is after the anchor, not before. */
+export const WORKOUT_REMINDER_OFFSET_MINUTES = WORKOUT_REMINDER_AFTER_MINUTES;
 export const WORKOUT_FALLBACK_ANCHOR = "18:00";
+/** Meal nudge fires in the 30–45 min window after mealtime (default 40). */
 export const MEAL_REMINDER_AFTER_MINUTES = 40;
 export const MEAL_REMINDER_SNOOZE_MINUTES = 30;
 export const DAILY_SUMMARY_CAP_LOCAL_TIME = "21:30";
@@ -256,6 +260,100 @@ export type ReminderBackoffMode =
   | "paused"
   | "push_failed";
 
+export const REMINDER_SOFT_IGNORER_THRESHOLD = 3;
+export const REMINDER_PAUSE_IGNORE_THRESHOLD = 5;
+export const REMINDER_PAUSE_DURATION_DAYS = 7;
+
+export function compareLocalTimeHhMm(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
+/** Latest same-day fire time before quiet hours / hard stop (21:59 with default 22:00 quiet start). */
+export function latestWorkoutReminderFireBeforeQuiet(
+  assignmentLocalDate: string,
+  quietHoursStart: string = DEFAULT_QUIET_HOURS_START,
+): { localDate: string; localTime: string } {
+  return addMinutesToLocalClock({
+    localDate: assignmentLocalDate,
+    localTime: quietHoursStart,
+    deltaMinutes: -1,
+  });
+}
+
+/**
+ * When to fire the post-workout "still unlogged" nudge: anchor + 75 min,
+ * clamped to the latest slot before quiet hours if that would cross 22:00.
+ */
+export function workoutReminderFireClock(input: {
+  assignmentLocalDate: string;
+  workoutAnchorLocalTime: string;
+  quietHoursStart?: string;
+}): { localDate: string; localTime: string } | null {
+  const quietStart = input.quietHoursStart ?? DEFAULT_QUIET_HOURS_START;
+  if (compareLocalTimeHhMm(input.workoutAnchorLocalTime, quietStart) >= 0) {
+    return null;
+  }
+  const scheduled = addMinutesToLocalClock({
+    localDate: input.assignmentLocalDate,
+    localTime: input.workoutAnchorLocalTime,
+    deltaMinutes: WORKOUT_REMINDER_AFTER_MINUTES,
+  });
+  const crossesQuiet =
+    compareLocalTimeHhMm(scheduled.localTime, quietStart) >= 0 ||
+    compareLocalTimeHhMm(scheduled.localTime, HARD_STOP_LOCAL_TIME) >= 0;
+  if (!crossesQuiet) {
+    return scheduled;
+  }
+  const latest = latestWorkoutReminderFireBeforeQuiet(
+    input.assignmentLocalDate,
+    quietStart,
+  );
+  if (
+    compareLocalTimeHhMm(latest.localTime, input.workoutAnchorLocalTime) <= 0
+  ) {
+    return null;
+  }
+  return latest;
+}
+
+export function nextReminderStateAfterIgnore(input: {
+  consecutiveIgnores: number;
+  mode: ReminderBackoffMode;
+  nowIso: string;
+}): {
+  mode: ReminderBackoffMode;
+  consecutiveIgnores: number;
+  pausedUntil: string | null;
+  emitRemindersPaused: boolean;
+} {
+  const consecutiveIgnores = input.consecutiveIgnores + 1;
+  if (consecutiveIgnores >= REMINDER_PAUSE_IGNORE_THRESHOLD) {
+    const pausedUntil = new Date(
+      Date.parse(input.nowIso) + REMINDER_PAUSE_DURATION_DAYS * 86_400_000,
+    ).toISOString();
+    return {
+      mode: "paused",
+      consecutiveIgnores,
+      pausedUntil,
+      emitRemindersPaused: true,
+    };
+  }
+  if (consecutiveIgnores >= REMINDER_SOFT_IGNORER_THRESHOLD) {
+    return {
+      mode: "soft_ignorer",
+      consecutiveIgnores,
+      pausedUntil: null,
+      emitRemindersPaused: false,
+    };
+  }
+  return {
+    mode: "normal",
+    consecutiveIgnores,
+    pausedUntil: null,
+    emitRemindersPaused: false,
+  };
+}
+
 /** Higher priority reminders are delivered first when the daily push cap applies. */
 export function reminderDeliveryPriority(type: NotificationType): number {
   switch (type) {
@@ -400,25 +498,27 @@ export function dueMealReminderPhases(input: {
   return ["after"];
 }
 
-/** Workout reminder WORKOUT_REMINDER_OFFSET_MINUTES before the anchor start time. */
+/** Post-workout nudge when still unlogged, WORKOUT_REMINDER_AFTER_MINUTES after anchor. */
 export function dueWorkoutReminderTimes(input: {
   nowIso: string;
   assignmentLocalDate: string;
   timeZone: string;
   resolved: boolean;
   workoutStartLocalTime?: string | null;
+  quietHoursStart?: string | null;
 }): WorkoutReminderLocalTime[] {
   if (input.resolved) return [];
   const today = formatLocalDate(new Date(input.nowIso), input.timeZone);
   if (today !== input.assignmentLocalDate) return [];
   const anchor = input.workoutStartLocalTime ?? WORKOUT_FALLBACK_ANCHOR;
-  const reminderClock = addMinutesToLocalClock({
-    localDate: input.assignmentLocalDate,
-    localTime: anchor,
-    deltaMinutes: -WORKOUT_REMINDER_OFFSET_MINUTES,
+  const fireClock = workoutReminderFireClock({
+    assignmentLocalDate: input.assignmentLocalDate,
+    workoutAnchorLocalTime: anchor,
+    quietHoursStart: input.quietHoursStart ?? undefined,
   });
+  if (!fireClock) return [];
   const reminderAt = localClockToUtcIso({
-    ...reminderClock,
+    ...fireClock,
     timeZone: input.timeZone,
   });
   if (input.nowIso >= reminderAt) {

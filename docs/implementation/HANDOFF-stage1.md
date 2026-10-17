@@ -25,7 +25,7 @@ Branch: `cursor/stage1-foundation-a3da` → merge into `feat/update-ui`.
 | T16 | ✅ | `canLog` table in `packages/core/src/late-logging.test.ts`; late/deviation behaviour in `meals.test.ts` / exceptions. Sync push defers to same domain handlers (no separate parity file). |
 | T17 | ✅ | Attention groups + week read model ≤10 queries — `read-models.test.ts`. |
 | T18 | ✅ | Coach asks merge/answer — `coach-asks.test.ts` + gate6/cron coverage elsewhere. |
-| T19 | ✅ | v2 engine + `reminder.test.ts` (snooze) + `notifications.test.ts` §3.6 battery (cap 5, 19:00 workout, snooze, soft ignorer, paused, quiet 21:00/22:00, lunch 15:10, self_logger). |
+| T19 | ✅ | v2 engine: workout nudge **+75 min after** preferred (fallback 18:00), clamped before 22:00; meal +40 min + snooze; EOD `min(lastMeal+60, 21:30)`; tests incl. Dubai TZ + ignorer day-5 pause (`reminder-backoff.ts`). |
 | T20 | ✅ | `PUT /me/meal-times` → `trainer_meal_times_changed` (15 min merge), assignment `localTime` recompute (`meal-times-update.ts`); `me-meal-times.test.ts`. |
 | T21 | ✅ | All link kinds covered in `links.test.ts` (client/ask/exception/reactivate/plan/today/note + meal/workout/checkin not_found). |
 | T22 | ✅ | `whatsapp-cloud.test.ts`, `whatsapp-templates.lint.test.ts`, budget/webhook routes (no live Meta). |
@@ -128,7 +128,7 @@ Password (dev only): **`FitBud-demo-2026`**
 
 | Package | Tests |
 |---------|------:|
-| API | 187 |
+| API | 190 |
 | core | 107 |
 | contracts | 21 |
 | api-client | 5 |
