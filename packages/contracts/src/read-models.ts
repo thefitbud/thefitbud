@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { adherenceStateSchema } from "./adherence.js";
 import { exceptionSeveritySchema, exceptionStatusSchema, exceptionTypeSchema } from "./exception.js";
 import { uuidSchema } from "./identity.js";
 import { localDateSchema } from "./workout.js";

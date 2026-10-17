@@ -10,7 +10,7 @@ import {
   traineeProfiles,
   workoutExecutions,
 } from "../db/schema.js";
-import { decodeCursor, buildPage } from "../lib/cursor.js";
+import { buildPage } from "../lib/cursor.js";
 import { fail, ok } from "../lib/envelope.js";
 import { operation } from "../openapi/document.js";
 import {

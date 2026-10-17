@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import type {
   DietAdjustmentScope,
   PlanContent,
@@ -137,53 +137,6 @@ export async function loadAssignmentPolicy(
   };
 }
 
-async function workoutRowExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    workoutDayId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: workoutAssignments.id })
-    .from(workoutAssignments)
-    .where(
-      and(
-        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
-        eq(workoutAssignments.planVersionId, input.planVersionId),
-        eq(workoutAssignments.workoutDayId, input.workoutDayId),
-        eq(workoutAssignments.localDate, input.localDate),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
-}
-
-async function otherScheduledWorkoutExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: workoutAssignments.id })
-    .from(workoutAssignments)
-    .where(
-      and(
-        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
-        eq(workoutAssignments.localDate, input.localDate),
-        eq(workoutAssignments.scheduleStatus, "scheduled"),
-        ne(workoutAssignments.planVersionId, input.planVersionId),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
-}
-
 const WORKOUT_INSERT_CHUNK = 7;
 
 export async function insertWorkoutAssignments(
@@ -272,53 +225,6 @@ export async function insertWorkoutAssignments(
       .onConflictDoNothing();
   }
   return rows;
-}
-
-async function mealRowExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    mealPrescriptionId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: mealAssignments.id })
-    .from(mealAssignments)
-    .where(
-      and(
-        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
-        eq(mealAssignments.planVersionId, input.planVersionId),
-        eq(mealAssignments.mealPrescriptionId, input.mealPrescriptionId),
-        eq(mealAssignments.localDate, input.localDate),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
-}
-
-async function otherScheduledMealExists(
-  db: Db,
-  input: {
-    relationshipId: string;
-    planVersionId: string;
-    localDate: string;
-  },
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: mealAssignments.id })
-    .from(mealAssignments)
-    .where(
-      and(
-        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
-        eq(mealAssignments.localDate, input.localDate),
-        eq(mealAssignments.scheduleStatus, "scheduled"),
-        ne(mealAssignments.planVersionId, input.planVersionId),
-      ),
-    )
-    .limit(1);
-  return Boolean(rows[0]);
 }
 
 const MEAL_INSERT_CHUNK = 7;

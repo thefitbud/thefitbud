@@ -1,19 +1,19 @@
-import initSqlJs, { type Database } from "sql.js";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/sql-js";
+import initSqlJs, { type Database } from "sql.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
+import * as schema from "../db/schema.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+
 const SEEDED_FORM_ID = "11111111-1111-4111-8111-111111111111";
 const DEFAULT_TEMPLATE_ID = "10111111-1111-4111-8111-111111111111";
 const TRAINER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

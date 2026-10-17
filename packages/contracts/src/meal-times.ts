@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { uuidSchema } from "./identity.js";
 
 export const mealTimeSlotSchema = z.object({
   slotKey: z.string(),

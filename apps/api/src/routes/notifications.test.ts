@@ -1,6 +1,4 @@
 import { eq } from "drizzle-orm";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activityNudgeDedupeKey,
@@ -14,16 +12,15 @@ import {
   workoutReminderDedupeKey,
   WORKOUT_REMINDER_SLOT,
 } from "@fitbud/core";
+import * as schema from "../db/schema.js";
 import { pushPayloadSchema } from "@fitbud/contracts";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { routingPayloadForNotification } from "../lib/push-provider.js";
 import type { Env } from "../types.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 const KOLKATA_TZ = "Asia/Kolkata";
 
 /** Wall-clock time on `localDate` in Asia/Kolkata, as a UTC ISO instant. */

@@ -322,7 +322,6 @@ export async function assignPlanVersion(
   const nutrition = await loadActiveNutrition(db, input.relationshipId);
   if (nutrition && content.mealPrescriptions.length > 0) {
     const policy = await loadAssignmentPolicy(db, version.id);
-    const today = formatLocalDate(new Date(now), timeZone);
     if (
       policy?.dietAdjustmentScope === "today_only" &&
       policy.dietScopeLocalDate &&

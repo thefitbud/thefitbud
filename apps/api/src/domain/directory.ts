@@ -5,7 +5,7 @@ import type {
   OnboardingStatus,
 } from "@fitbud/contracts";
 import { clientDirectoryListResponseSchema } from "@fitbud/contracts";
-import { deriveRenewalState, formatLocalDate } from "@fitbud/core";
+import { formatLocalDate } from "@fitbud/core";
 import type { Db } from "../db/client";
 import {
   checkinReviews,

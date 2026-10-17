@@ -1,15 +1,12 @@
 import { eq } from "drizzle-orm";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
+import * as schema from "../db/schema.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 
 
 import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";

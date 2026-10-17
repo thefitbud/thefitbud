@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import type { WeekDayState, WeekReadModel } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,

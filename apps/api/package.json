@@ -13,8 +13,8 @@
     "db:migrate:local": "wrangler d1 migrations apply fitbud --local --persist-to .wrangler/state",
     "db:migrate": "wrangler d1 migrations apply fitbud",
     "db:seed:library": "node scripts/library-seed.ts",
-    "seed:demo": "node scripts/seed-demo.ts",
-    "db:reset": "node scripts/db-reset.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "db:reset": "tsx scripts/db-reset.ts"
   },
   "dependencies": {
     "@fitbud/contracts": "workspace:*",
@@ -36,6 +36,7 @@
     "sql.js": "^1.13.0",
     "typescript": "catalog:",
     "typescript-eslint": "^8.29.1",
+    "tsx": "^4.19.4",
     "vitest": "catalog:",
     "wrangler": "^4.12.0"
   }

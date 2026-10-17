@@ -1,7 +1,4 @@
-// @ts-nocheck — integration test reads dynamic API envelopes; narrowed at assertions.
 import { eq } from "drizzle-orm";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   GLOBAL_CHECKIN_FORM_VERSION_ID,
@@ -9,14 +6,13 @@ import {
   formatLocalDate,
   weekdayFromLocalDate,
 } from "@fitbud/core";
-import { app } from "../index.js";
 import * as schema from "../db/schema.js";
+import { app } from "../index.js";
 import { getTestDbOverride, setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 
 
 import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
@@ -52,11 +48,6 @@ type ApiJsonBody = {
 /** Test helper: API payloads vary; callers narrow at the use site. */
 function responseData(body: ApiJsonBody): Record<string, unknown> {
   return body.data ?? {};
-}
-
-function responseItems(body: ApiJsonBody): Record<string, unknown>[] {
-  const items = responseData(body).items;
-  return Array.isArray(items) ? (items as Record<string, unknown>[]) : [];
 }
 
 async function readJson(

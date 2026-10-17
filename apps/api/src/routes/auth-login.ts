@@ -16,8 +16,6 @@ import {
 } from "../auth/identifiers.js";
 import { issuePurposeProof, verifyPurposeProof } from "../auth/proof.js";
 import { hashPassword, validatePasswordPlaintext, verifyPassword } from "../auth/password.js";
-import { createTestIdToken, verifyFirebaseIdToken } from "../auth/firebase.js";
-import { findOrCreateUserFromFirebase, loadActorByUserId } from "../auth/identity.js";
 import { getFlags } from "../config/flags.js";
 import { createDb } from "../db/client.js";
 import {

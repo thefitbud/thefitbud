@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { isoDateTimeSchema } from "./identity.js";
 
 export const authLoginRequestSchema = z.object({
   identifier: z.string().trim().min(3).max(120),

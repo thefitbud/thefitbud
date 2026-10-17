@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import {

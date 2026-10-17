@@ -27,16 +27,11 @@ import {
   mapExerciseLibraryItem,
   mapFoodLibraryItem,
 } from "../domain/mappers";
-import {
-  buildFtsPrefixQuery,
-  exerciseFtsMatchClause,
-  foodFtsMatchClause,
-} from "../domain/library-search.js";
+import { buildFtsPrefixQuery, foodFtsMatchClause } from "../domain/library-search.js";
 import {
   rebuildExerciseSearchFts,
   rebuildFoodSearchFts,
 } from "../domain/library-fts.js";
-import { resolveLibraryId } from "../domain/library-redirects.js";
 import { createId, nowIso } from "../lib/crypto";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";

@@ -1,26 +1,12 @@
 @import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap");
+@import "@fitbud/tokens/tokens.css";
 
 :root {
-  --deep-navy: #1a1248;
-  --indigo: #4527c6;
-  --coral: #ff587d;
-  --soft-coral: #ffb0c3;
-  --pale-lavender: #edeaff;
-  --near-black: #0f1115;
-  --dark-grey: #25262b;
-  --mid-grey: #5b616b;
-  --light-grey: #e6e8eb;
   --white: #ffffff;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --info: #3b82f6;
-  --page-bg: #f3f5fb;
-  --surface: #ffffff;
-  --border: #e7e9f2;
   --shadow: 0 8px 24px rgb(26 18 72 / 5%);
   --radius: 20px;
-  --font: "Satoshi", "Segoe UI", sans-serif;
+  --font: var(--font-family);
   color: var(--near-black);
   background: var(--page-bg);
   font-family: var(--font);

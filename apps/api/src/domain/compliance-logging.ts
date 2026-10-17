@@ -133,9 +133,9 @@ export async function buildLoggedFoodsCompliance(
         .from(foodLibraryItems)
         .where(eq(foodLibraryItems.id, foodId))
         .limit(1);
-      let servingId = item.servingId
+      const servingId = item.servingId
         ? (await resolveLibraryId(db, item.servingId)).id
-        : food?.defaultServingId;
+        : food?.defaultServingId ?? null;
       const [serving] = servingId
         ? await db
             .select()

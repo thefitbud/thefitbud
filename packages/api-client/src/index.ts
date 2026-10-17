@@ -35,6 +35,7 @@ import {
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
   clientWorkspaceSchema,
+  configResponseSchema,
   healthResponseSchema,
   historyListResponseSchema,
   workspaceActivityListResponseSchema,
@@ -311,6 +312,8 @@ export class FitBudApiClient {
   private readonly getIdempotencyKey?: ApiClientOptions["getIdempotencyKey"];
   private readonly getSelectedRole?: ApiClientOptions["getSelectedRole"];
   private readonly fetchImpl: typeof fetch;
+  private configCache: { fetchedAt: number; value: import("@fitbud/contracts").ConfigResponse } | null =
+    null;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -324,6 +327,21 @@ export class FitBudApiClient {
 
   async health(): Promise<HealthResponse> {
     return this.request("GET", "/health", healthResponseSchema);
+  }
+
+  /** Public feature flags; cached for 1 hour unless `force` is true. */
+  async getConfig(force = false): Promise<import("@fitbud/contracts").ConfigResponse> {
+    const ttlMs = 60 * 60 * 1000;
+    if (
+      !force &&
+      this.configCache &&
+      Date.now() - this.configCache.fetchedAt < ttlMs
+    ) {
+      return this.configCache.value;
+    }
+    const value = await this.request("GET", "/config", configResponseSchema);
+    this.configCache = { fetchedAt: Date.now(), value };
+    return value;
   }
 
   async me(): Promise<MeResponse> {
