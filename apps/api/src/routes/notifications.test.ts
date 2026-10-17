@@ -26,6 +26,16 @@ import { routingPayloadForNotification } from "../lib/push-provider.js";
 import type { Env } from "../types.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+const KOLKATA_TZ = "Asia/Kolkata";
+
+/** Wall-clock time on `localDate` in Asia/Kolkata, as a UTC ISO instant. */
+function istWallClockToUtc(localDate: string, hours: number, minutes: number): string {
+  const [year, month, day] = localDate.split("-").map(Number);
+  const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+  const istOffsetMinutes = 5 * 60 + 30;
+  const utcMs = utcMidnight + (hours * 60 + minutes - istOffsetMinutes) * 60_000;
+  return new Date(utcMs).toISOString();
+}
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   const SQL = await initSqlJs();
@@ -878,7 +888,7 @@ describe("notifications and reminders (D4)", () => {
   it("applies meal and workout clocks, suppresses logged items, and summarizes the day", async () => {
     const { trainerCookie, traineeToken, relationshipId } =
       await reachActiveCheckinConfig("clocks");
-    const localDate = "2026-10-10";
+    const localDate = addDaysToLocalDate(formatLocalDate(new Date(), KOLKATA_TZ), 1);
     const weekday = weekdayFromLocalDate(localDate);
     await app.request(
       "/notifications/device-tokens",
@@ -1038,13 +1048,13 @@ describe("notifications and reminders (D4)", () => {
       expect(response.status).toBe(200);
     }
 
-    await evaluateAt("2026-10-09T23:30:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 5, 0));
     const early = await db.select().from(schema.notifications);
     expect(early.map((row) => row.dedupeKey)).not.toContain(
       workoutReminderDedupeKey(workoutId, "06:00"),
     );
 
-    await evaluateAt("2026-10-10T01:45:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 7, 15));
     const midMorning = await db.select().from(schema.notifications);
     const keys = midMorning.map((row) => row.dedupeKey);
     expect(keys).toContain(workoutReminderDedupeKey(workoutId, "06:00"));
@@ -1095,7 +1105,7 @@ describe("notifications and reminders (D4)", () => {
       testEnv(),
     );
     expect(confirmed.status, await confirmed.clone().text()).toBe(200);
-    await evaluateAt("2026-10-10T03:30:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 9, 0));
     const afterLog = await db.select().from(schema.notifications);
     expect(afterLog.map((row) => row.dedupeKey)).not.toContain(
       mealReminderDedupeKey(breakfast.id, "follow_up_30"),
@@ -1140,17 +1150,17 @@ describe("notifications and reminders (D4)", () => {
       .where(eq(schema.workoutExecutions.assignmentId, workoutId));
     expect(executionAfterNudge).toEqual(executionAfterSkip);
 
-    await evaluateAt("2026-10-10T12:30:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 18, 0));
     const evening = await db.select().from(schema.notifications);
     expect(evening.map((row) => row.dedupeKey)).not.toContain(
       workoutReminderDedupeKey(workoutId, "18:00"),
     );
 
-    await evaluateAt("2026-10-10T15:29:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 20, 59));
     expect(
       (await db.select().from(schema.notifications)).map((row) => row.dedupeKey),
     ).not.toContain(dailySummaryDedupeKey(relationshipId, localDate));
-    await evaluateAt("2026-10-10T15:30:00.000Z");
+    await evaluateAt(istWallClockToUtc(localDate, 21, 0));
     const summary = (await db.select().from(schema.notifications)).find(
       (row) => row.dedupeKey === dailySummaryDedupeKey(relationshipId, localDate),
     );

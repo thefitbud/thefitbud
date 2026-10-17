@@ -70,11 +70,13 @@ function testEnv(): Env {
   };
 }
 
-async function readJson(response: Response): Promise<{ status: number; body: Record<string, any> }> {
+async function readJson(
+  response: Response,
+): Promise<{ status: number; body: Record<string, unknown> }> {
   const text = await response.text();
   return {
     status: response.status,
-    body: text.length > 0 ? (JSON.parse(text) as Record<string, any>) : {},
+    body: text.length > 0 ? (JSON.parse(text) as Record<string, unknown>) : {},
   };
 }
 
