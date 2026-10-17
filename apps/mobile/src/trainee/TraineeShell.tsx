@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import type {
   Checkin,
   CoachingRelationship,
   EffectivePlanResponse,
+  WorkoutExecution,
 } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
 import { AppTopBar } from "../components/AppTopBar";
-import { formatHeadingDate, localDateInTimezone } from "../lib/dates";
+import {
+  addDays,
+  formatHeadingDate,
+  localDateInTimezone,
+} from "../lib/dates";
 import {
   TraineeOverlayHost,
   type TraineeOverlay,
@@ -22,6 +27,14 @@ import { MoreScreen } from "./MoreScreen";
 import { ProgressTab } from "./ProgressTab";
 import { TodayTab } from "./TodayTab";
 import { WorkoutTab } from "./WorkoutTab";
+import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
+import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
+import { openActiveWorkout } from "./workoutSession";
+import {
+  isCaptureModeEnabled,
+  registerTraineeCaptureNav,
+} from "../dev/captureBridge";
+import { scheduledAssignments } from "./scheduledAssignments";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
 
@@ -66,6 +79,12 @@ export function TraineeShell({
   const [effectivePlan, setEffectivePlan] =
     useState<EffectivePlanResponse | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [captureWorkout, setCaptureWorkout] =
+    useState<WorkoutExecution | null>(null);
+  const [captureWorkoutSummary, setCaptureWorkoutSummary] =
+    useState<WorkoutExecution | null>(null);
+  const captureWorkoutRef = useRef<WorkoutExecution | null>(null);
+  captureWorkoutRef.current = captureWorkout;
 
   const openOverlay: TraineeOverlayOpener = useCallback((next) => {
     setOverlay(next);
@@ -125,6 +144,106 @@ export function TraineeShell({
   });
 
   useEffect(() => {
+    if (!isCaptureModeEnabled()) return;
+    registerTraineeCaptureNav({
+      setTab,
+      openOverlay,
+      openCheckin: setActiveCheckin,
+      signOut,
+      async startTodayWorkout() {
+        setWorkoutAutostart(true);
+        setTab("workout");
+        await new Promise((resolve) => setTimeout(resolve, 3500));
+      },
+      async openSomethingDifferent() {
+        const listed = await api.listMealAssignments(relationship.id, {
+          fromDate: today,
+          toDate: today,
+        });
+        const meal = scheduledAssignments(listed.items).find(
+          (item) => item.status === "pending" || item.status === "overdue",
+        );
+        if (meal) {
+          openOverlay({
+            screen: "something_different",
+            assignmentId: meal.id,
+          });
+        }
+      },
+      async openWorkoutOverview() {
+        const listed = await api.listWorkoutAssignments(relationship.id, {
+          fromDate: today,
+          toDate: today,
+        });
+        const workout = scheduledAssignments(listed.items)[0];
+        if (workout) {
+          openOverlay({
+            screen: "workout_overview",
+            assignmentId: workout.id,
+          });
+        }
+      },
+      async openTodayCheckin() {
+        const list = await api.listCheckins(relationship.id);
+        const due =
+          list.items.find((item) => item.status === "due") ??
+          list.items.find((item) => item.status === "scheduled") ??
+          list.items[0];
+        if (due) setActiveCheckin(due);
+      },
+      closeOverlay() {
+        setOverlay(null);
+        setActiveCheckin(null);
+      },
+      async ensureWorkoutDay() {
+        const from = addDays(today, -21);
+        const listed = await api.listWorkoutAssignments(relationship.id, {
+          fromDate: from,
+          toDate: today,
+        });
+        const workout = scheduledAssignments(listed.items).find(
+          (item) => item.workoutDay.exercises.length > 0,
+        );
+        if (workout?.localDate) {
+          setSelectedDate(workout.localDate);
+        }
+      },
+      async startCaptureWorkout() {
+        setCaptureWorkoutSummary(null);
+        setOverlay(null);
+        const from = addDays(today, -21);
+        const listed = await api.listWorkoutAssignments(relationship.id, {
+          fromDate: from,
+          toDate: today,
+        });
+        const assignment = scheduledAssignments(listed.items).find(
+          (item) => item.workoutDay.exercises.length > 0,
+        );
+        if (!assignment) return;
+        setSelectedDate(assignment.localDate);
+        const execution = await openActiveWorkout(api, sync, assignment);
+        setCaptureWorkout(execution);
+      },
+      showCaptureWorkoutSummary() {
+        setOverlay(null);
+        const stub = captureWorkoutRef.current;
+        if (!stub) return;
+        setCaptureWorkout(null);
+        setCaptureWorkoutSummary({
+          ...stub,
+          status: "completed",
+          completedAt: new Date().toISOString(),
+        });
+      },
+      clearCaptureWorkoutScreens() {
+        setCaptureWorkout(null);
+        setCaptureWorkoutSummary(null);
+      },
+    });
+    return () => registerTraineeCaptureNav(null);
+  }, [api, openOverlay, relationship.id, signOut, today]);
+
+  useEffect(() => {
     if (!pendingNotificationLink) return;
     setTab(pendingNotificationLink.tab);
     void refreshSession();
@@ -161,6 +280,29 @@ export function TraineeShell({
         onClose={() => setOverlay({ screen: "past_coaching" })}
         onOpen={openOverlay}
         onSignOut={signOut}
+      />
+    );
+  }
+
+  if (captureWorkoutSummary && isCaptureModeEnabled()) {
+    return (
+      <WorkoutSummaryScreen
+        execution={captureWorkoutSummary}
+        onDone={() => setCaptureWorkoutSummary(null)}
+      />
+    );
+  }
+
+  if (captureWorkout && isCaptureModeEnabled()) {
+    return (
+      <ActiveWorkoutScreen
+        execution={captureWorkout}
+        onChange={setCaptureWorkout}
+        onFinished={(execution) => {
+          setCaptureWorkout(null);
+          setCaptureWorkoutSummary(execution);
+        }}
+        onExit={() => setCaptureWorkout(null)}
       />
     );
   }

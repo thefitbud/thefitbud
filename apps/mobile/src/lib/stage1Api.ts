@@ -65,7 +65,12 @@ export type Stage1FitBudClient = FitBudApiClient & {
   getMeDay(date: string): Promise<MeDayResponse>;
   getMeWeek(start?: string): Promise<WeekReadModel>;
   getMealTimes(): Promise<MealTimesResponse>;
-  putMealTimes(body: UpdateMealTimesRequest): Promise<MealTimesResponse>;
+  updateMealTimes(body: UpdateMealTimesRequest): Promise<MealTimesResponse>;
+  getInvitationPreview(token: string): Promise<{
+    trainerDisplayName: string;
+    recipientEmail: string | null;
+    expiresAt: string;
+  }>;
   searchMeFoods(query: { q: string; limit?: number }): Promise<TraineeFoodSearchResponse>;
   resolveLink(kind: LinkKind, id: string): Promise<LinkResolveResponse>;
   listMeCoachNotes(since?: string): Promise<{

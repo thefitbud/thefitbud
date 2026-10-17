@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
 import { NutritionRings, colors, radii, spacing } from "@fitbud/ui-mobile";
@@ -21,6 +21,7 @@ import {
 } from "./mealHelpers";
 import { buildNutritionRings } from "./nutrition";
 import { scheduledAssignments } from "./scheduledAssignments";
+import { WebNutritionSummary } from "./web/WebTraineeChrome";
 
 function statusLabel(status: MealAssignment["status"]): string {
   switch (status) {
@@ -178,7 +179,11 @@ export function DietTab({
         </Text>
       </View>
       <View style={styles.ringsWrap}>
-        <NutritionRings data={rings} compact />
+        {Platform.OS === "web" ? (
+          <WebNutritionSummary data={rings} />
+        ) : (
+          <NutritionRings data={rings} compact />
+        )}
       </View>
       {loading ? (
         <Text style={styles.muted}>Loading meals…</Text>

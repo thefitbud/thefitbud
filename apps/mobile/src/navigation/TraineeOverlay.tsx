@@ -84,10 +84,18 @@ export function TraineeOverlayHost({
         const value = await api.getMealAssignment(assignmentId);
         setMealAssignment(value);
       } catch {
-        setMealAssignment(null);
+        try {
+          const listed = await api.listMealAssignments(relationship.id, {
+            limit: 50,
+          });
+          const match = listed.items.find((item) => item.id === assignmentId);
+          setMealAssignment(match ?? null);
+        } catch {
+          setMealAssignment(null);
+        }
       }
     },
-    [api],
+    [api, relationship.id],
   );
 
   useEffect(() => {

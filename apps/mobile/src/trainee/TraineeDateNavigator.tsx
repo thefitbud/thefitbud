@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { Platform, StyleSheet, Text } from "react-native";
 import type { WeekDayState } from "@fitbud/contracts";
 import {
   DateNavigator,
@@ -16,6 +16,7 @@ import {
   weekdayShort,
 } from "../lib/dates";
 import { stage1Api } from "../lib/stage1Api";
+import { WebDateHeading } from "./web/WebTraineeChrome";
 
 function mapWeekState(state: WeekDayState): DateNavigatorDay["state"] {
   switch (state) {
@@ -88,6 +89,26 @@ export function TraineeDateNavigator({
       ),
     }));
   }, [weekModel?.days, weekStart, timeZone, today]);
+
+  if (Platform.OS === "web") {
+    return (
+      <>
+        {showPreviewBanner && !isToday ? (
+          <Text style={styles.previewBanner}>
+            {isFuture
+              ? `Preview · ${formatHeadingDate(timeZone, selectedDate)}`
+              : `Viewing ${selectedDate} · read-only except late logging`}
+          </Text>
+        ) : null}
+        <WebDateHeading
+          timeZone={timeZone}
+          selectedDate={selectedDate}
+          onSelectDate={onSelectDate}
+          today={today}
+        />
+      </>
+    );
+  }
 
   return (
     <>

@@ -1,7 +1,6 @@
 import { Platform } from "react-native";
-import { fontFamily as tokenFontFamily } from "@fitbud/tokens";
-
-const webStack = tokenFontFamily;
+const webStack =
+  'Satoshi, "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif';
 
 export const fontFamily = Platform.select({
   web: webStack,

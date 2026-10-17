@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
@@ -14,6 +14,11 @@ import {
 import { ClientsTab } from "./ClientsTab";
 import { ClientStatusScreen } from "./ClientStatusScreen";
 import { ExceptionReviewScreen } from "./ExceptionReviewScreen";
+import {
+  isCaptureModeEnabled,
+  registerTrainerCaptureNav,
+} from "../dev/captureBridge";
+import { stage1Api } from "../lib/stage1Api";
 
 type TrainerTab = "attention" | "clients" | "checkins" | "more";
 
@@ -35,9 +40,13 @@ const TABS: Array<{ id: TrainerTab; label: string }> = [
 ];
 
 export function TrainerShell() {
-  const { relationships } = useAuth();
+  const { relationships, api, signOut } = useAuth();
+  const s1 = stage1Api(api);
   const [tab, setTab] = useState<TrainerTab>("attention");
   const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [clientsSegment, setClientsSegment] = useState<"clients" | "activity">(
+    "clients",
+  );
 
   function openClientFromRow(row: ClientDirectoryRow) {
     if (!row.relationshipId) return;
@@ -70,6 +79,48 @@ export function TrainerShell() {
       relationshipId: item.coachingRelationshipId,
     });
   }
+
+  useEffect(() => {
+    if (!isCaptureModeEnabled()) return;
+    registerTrainerCaptureNav({
+      setTab,
+      signOut,
+      clearOverlay() {
+        setOverlay(null);
+        setClientsSegment("clients");
+      },
+      openActivity() {
+        setTab("clients");
+        setClientsSegment("activity");
+      },
+      async openFirstClient() {
+        const page = await api.listRelationships({ limit: 20 });
+        const ready = page.items.find(
+          (item) =>
+            item.onboardingStatus === "coaching_ready" ||
+            item.onboardingStatus === "active",
+        );
+        if (ready) {
+          openClientById(ready.id);
+        }
+      },
+      async openFirstException() {
+        const groups = await s1.getAttentionGroups();
+        const first = groups.groups[0]?.items?.[0];
+        if (first?.id) {
+          setOverlay({ kind: "exception", exceptionId: first.id });
+        }
+      },
+      async openFirstCheckin() {
+        const inbox = await api.listTrainerCheckinInbox();
+        const item = inbox.items.find(
+          (row) => row.checkin.status === "submitted",
+        );
+        if (item) openCheckin(item);
+      },
+    });
+    return () => registerTrainerCaptureNav(null);
+  }, [api, s1, signOut]);
 
   if (overlay?.kind === "exception") {
     return (
@@ -127,7 +178,10 @@ export function TrainerShell() {
         ) : null}
 
         {tab === "clients" ? (
-          <ClientsTab onOpenClient={openClientFromRow} />
+          <ClientsTab
+            onOpenClient={openClientFromRow}
+            initialSegment={clientsSegment}
+          />
         ) : null}
 
         {tab === "checkins" ? (

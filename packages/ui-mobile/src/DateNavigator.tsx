@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing, touchTargetMin } from "./theme.js";
-import { fontFamilyBold, fontFamilyMedium, typeScale } from "./typography.js";
+import { typeScale } from "./typography.js";
 
 export type DateNavigatorDay = {
   localDate: string;
@@ -64,29 +64,35 @@ export function DateNavigator({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.strip}
       >
-        {days.map((day) => {
-          const selected = day.localDate === selectedDate;
-          return (
-            <Pressable
-              key={day.localDate}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}`}
-              onPress={() => onSelect(day.localDate)}
-              style={[styles.day, selected ? styles.daySelected : null]}
-            >
-              <Text style={[styles.weekday, selected ? styles.textSelected : null]}>
-                {day.weekdayLabel}
-              </Text>
-              <Text style={[styles.dayNum, selected ? styles.textSelected : null]}>
-                {day.dayLabel}
-              </Text>
-              <View
-                style={[styles.dot, { backgroundColor: dotColor(day.state) }]}
-              />
-            </Pressable>
-          );
-        })}
+        <View style={styles.stripRow}>
+          {days.map((day) => {
+            const selected = day.localDate === selectedDate;
+            return (
+              <Pressable
+                key={day.localDate}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}`}
+                onPress={() => onSelect(day.localDate)}
+                style={[styles.day, selected ? styles.daySelected : null]}
+              >
+                <Text
+                  style={[styles.weekday, selected ? styles.textSelected : null]}
+                >
+                  {String(day.weekdayLabel)}
+                </Text>
+                <Text
+                  style={[styles.dayNum, selected ? styles.textSelected : null]}
+                >
+                  {String(day.dayLabel)}
+                </Text>
+                <View
+                  style={[styles.dot, { backgroundColor: dotColor(day.state) }]}
+                />
+              </Pressable>
+            );
+          })}
+        </View>
       </ScrollView>
     </View>
   );
@@ -94,7 +100,10 @@ export function DateNavigator({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  stripRow: {
+    flexDirection: "row",
   },
   header: {
     flexDirection: "row",
@@ -109,21 +118,19 @@ const styles = StyleSheet.create({
   },
   todayPillText: {
     color: colors.indigo,
-    fontFamily: fontFamilyMedium,
     fontSize: typeScale.caption,
     fontWeight: "600",
   },
   strip: {
-    gap: spacing.sm,
     paddingVertical: spacing.xs,
   },
   day: {
     alignItems: "center",
     borderRadius: radii.control,
+    marginRight: spacing.sm,
     minWidth: 44,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    gap: 2,
   },
   daySelected: {
     backgroundColor: colors.white,
@@ -135,7 +142,6 @@ const styles = StyleSheet.create({
   },
   dayNum: {
     color: colors.deepNavy,
-    fontFamily: fontFamilyBold,
     fontSize: typeScale.body,
     fontWeight: "700",
   },

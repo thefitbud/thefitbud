@@ -162,6 +162,20 @@ describe("resolveAppRoute", () => {
         relationships: [relationship("active")],
       }).name,
     ).toBe("trainee_shell");
+
+    expect(
+      resolveAppRoute({
+        accessToken: "test.token",
+        bootstrapping: false,
+        me: meTrainee,
+        selectedRole: "trainee",
+        needsAccountLink: false,
+        relationships: [relationship("ended")],
+      }),
+    ).toEqual({
+      name: "trainee_shell",
+      relationship: relationship("ended"),
+    });
   });
 
   it("auto-selects the sole mobile role", () => {

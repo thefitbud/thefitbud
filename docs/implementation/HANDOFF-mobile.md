@@ -19,6 +19,10 @@ Demo password: **`FitBud-demo-2026`** (see `HANDOFF-stage1.md` for accounts).
 - Trainer smoke: `rahul.coach@demo.fitbud.test`
 - Dual role: `karan.dual@demo.fitbud.test`
 
+**Typography:** Satoshi + Noto Sans Devanagari via `@fitbud/tokens` / `FontsProvider` (native TTF + Fontshare/Google on web).
+
+**Expo web + API:** Web uses same-origin proxy `/__fitbud_api` (Metro) to avoid CORS; native still uses `EXPO_PUBLIC_API_BASE_URL` / LAN IP.
+
 ## Physical device against local API
 
 ### Android (Expo Go)
@@ -30,7 +34,9 @@ Demo password: **`FitBud-demo-2026`** (see `HANDOFF-stage1.md` for accounts).
 4. Ensure phone and laptop share Wi‑Fi; allow port **8787** through the host firewall if needed.
 5. Scan the QR code from the terminal (Expo Go). Sign in with demo email + password.
 
-**Tunnel (Wi‑Fi blocked):** `pnpm exec expo start --tunnel` for the bundle only; the API must still be reachable (VPN, tailscale, or deploy API to a reachable host).
+**Windows firewall:** Allow inbound TCP **8787** (Wrangler API) and **8081** (Metro) for Private networks, or temporarily allow `node.exe` / `workerd` when prompted.
+
+**Tunnel (Wi‑Fi blocked):** `pnpm exec expo start --tunnel` for the bundle only; the API must still be reachable (VPN, Tailscale, or deploy API to a reachable host).
 
 ### iOS (Expo Go)
 
@@ -47,74 +53,50 @@ pnpm typecheck && pnpm lint && pnpm test
 pnpm --filter @fitbud/mobile test
 ```
 
-Screenshots (390×844, requires API + Expo web):
+### Screenshots (390×844, Expo web)
 
 ```bash
 pnpm add -D playwright -w && pnpm exec playwright install chromium
-# API + expo web running
-node scripts/capture-mobile-screens.mjs http://127.0.0.1:8081
+# API running; restart API after db:reset
+cd apps/mobile && EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8787 EXPO_PUBLIC_SCREEN_CAPTURE=1 pnpm exec expo start --web --port 8081
+node scripts/capture-all-mobile-screens.mjs http://127.0.0.1:8081
 ```
 
-Output: `docs/implementation/screens/mobile/*.png`
+Output: `docs/implementation/screens/mobile/*.png` and `manifest.txt` (size + SHA-256).  
+**Missing:** `TR-08.png` — demo meal assignments hit client validation (`energyKcalScaled` too large) when opening Something different; capture blocked until seed/API alignment (see `GAPS-mobile.md`).
 
 ## Per-screen status vs guide
 
-Legend: ✅ navigable MVP aligned with guide · ⚠️ partial / gaps in `GAPS-mobile.md` · ❌ not implemented
+Legend: ✅ navigable, visually checked on web capture · ⚠️ partial / gaps · ❌ missing capture or major gap
 
-### Trainee (TR)
+| ID | Status | Notes |
+|----|--------|--------|
+| TR-01 | ✅ | Sign-in + OTP paths |
+| TR-02 | ✅ | Accept invite (test token / needs-account-link) |
+| TR-03 | ✅ | Intake (`vikram.onboarding`) |
+| TR-04 | ✅ | Waiting review (`sneha.review`) |
+| TR-05 | ✅ | Reminder setup + `expo-notifications` + OEM sheet |
+| TR-06 | ⚠️ | Today: web uses simplified date/nutrition chrome; rings/week strip on native |
+| TR-07 | ✅ | Diet (`lakshmi.foods`) |
+| TR-08 | ❌ | No valid screenshot; serving picker + seed validation |
+| TR-09 | ✅ | Meal plan overlay |
+| TR-10 | ✅ | Workout overview |
+| TR-11 | ⚠️ | Active workout via capture harness (not device-verified) |
+| TR-12 | ⚠️ | Summary via capture harness |
+| TR-13 | ✅ | Progress |
+| TR-14 | ✅ | Check-in |
+| TR-15 | ⚠️ | Notifications mark-read |
+| TR-16–TR-20 | ⚠️ | Settings rows per §4; see GAPS |
+| TR-21 | ✅ | Widget tips (copy) |
+| TR-22 | ✅ | Ended coaching (`kavya.ended`; route fix for `onboardingStatus: ended`) |
+| TR-23–TR-26 | ⚠️ | Deep link / meal times / steps / food search |
+| TM-01–TM-09 | ⚠️ | Trainer tabs + overlays; TM-06/09 need device pass |
+| TM-08 | ✅ | Role select (`karan.dual`) |
 
-| ID | Status | Primary component |
-|----|--------|-------------------|
-| TR-01 | ✅ | `screens/AuthScreen.tsx` + `screens/auth/*` (password + email OTP; WhatsApp disabled when `wa_otp` off) |
-| TR-02 | ⚠️ | `AcceptInviteScreen.tsx` (preview token path; not universal links) |
-| TR-03 | ✅ | `IntakeScreen.tsx` |
-| TR-04 | ⚠️ | `WaitingReviewScreen.tsx` (checklist / auto-refresh partial) |
-| TR-05 | ⚠️ | `trainee/setup/ReminderSetupScreen.tsx` |
-| TR-06 | ⚠️ | `TodayTab.tsx` (rings, week strip, workout card; coach notes / steps partial) |
-| TR-07 | ⚠️ | `DietTab.tsx` |
-| TR-08 | ⚠️ | `SomethingDifferentSheet.tsx` |
-| TR-09 | ⚠️ | `AssignedMealPlanScreen.tsx` |
-| TR-10 | ⚠️ | `WorkoutOverviewScreen.tsx` |
-| TR-11 | ✅ | `ActiveWorkoutScreen.tsx` |
-| TR-12 | ✅ | `WorkoutSummaryScreen.tsx` |
-| TR-13 | ✅ | `ProgressTab.tsx` |
-| TR-14 | ✅ | `CheckinScreen.tsx` |
-| TR-15 | ⚠️ | `NotificationsScreen.tsx` |
-| TR-16 | ⚠️ | `settings/ReminderSettingsScreen.tsx` |
-| TR-17 | ⚠️ | `settings/QuietHoursScreen.tsx` |
-| TR-18 | ⚠️ | `ask/AskCoachSheet.tsx` |
-| TR-19 | ⚠️ | `settings/SyncStatusScreen.tsx` + `SyncIndicator` |
-| TR-20 | ⚠️ | `MoreScreen.tsx` + settings overlays |
-| TR-21 | ⚠️ | `WidgetTipsScreen.tsx` (copy only) |
-| TR-22 | ⚠️ | `EndedCoachingScreen.tsx` |
-| TR-23 | ⚠️ | `DeepLinkUnavailableScreen.tsx` + `resolveLink` adapter |
-| TR-24 | ⚠️ | `settings/MealTimesScreen.tsx` |
-| TR-25 | ⚠️ | `settings/StepsSettingsScreen.tsx` (hidden when `steps_enabled` false) |
-| TR-26 | ⚠️ | `FoodSearchScreen.tsx` |
-
-Shell: `TraineeShell.tsx` · Overlays: `navigation/TraineeOverlay.tsx`
-
-### Trainer mobile (TM)
-
-| ID | Status | Primary component |
-|----|--------|-------------------|
-| TM-01 | ⚠️ | `AttentionTab.tsx` (cards + segments) |
-| TM-02 | ⚠️ | `ClientsTab.tsx` |
-| TM-03 | ⚠️ | `ClientStatusScreen.tsx` |
-| TM-04 | ⚠️ | `ExceptionReviewScreen.tsx` |
-| TM-05 | ⚠️ | `CheckinsTab.tsx` |
-| TM-06 | ⚠️ | `CheckinReviewScreen.tsx` |
-| TM-07 | ⚠️ | `trainer/MoreScreen.tsx` |
-| TM-08 | ✅ | `RoleSelectScreen.tsx` |
-| TM-09 | ⚠️ | `ActivityFeedScreen.tsx` (Clients → Activity) |
-
-Tab indicator: **indigo** (`TrainerShell.tsx`).
+Detailed gaps: [`GAPS-mobile.md`](./GAPS-mobile.md).
 
 ## Architecture notes
 
-- API access: `@fitbud/api-client` only; stage-1 methods via `lib/stage1Api.ts`.
-- Tokens / type: `@fitbud/tokens`, `@fitbud/ui-mobile` (Inter + Noto Sans Devanagari on native).
-- Config flags: `providers/ConfigProvider.tsx` → `GET /config`.
-- No client-side `generate*Assignments` on Today/Diet (server must expose assignments).
-
-Detailed gaps: [`GAPS-mobile.md`](./GAPS-mobile.md).
+- API: `@fitbud/api-client` + `lib/stage1Api.ts` (`updateMealTimes`, `getInvitationPreview`, etc.).
+- UI: `@fitbud/tokens`, `@fitbud/ui-mobile` (Satoshi stack).
+- Capture: `EXPO_PUBLIC_SCREEN_CAPTURE=1` enables `window.__fitbudCapture` for Playwright (`scripts/capture-all-mobile-screens.mjs`).

@@ -58,7 +58,7 @@ export function MealTimesScreen({ onBack }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await s1.putMealTimes({
+      await s1.updateMealTimes({
         overrides: slots.map((slot) => ({
           slotKey: slot.slotKey,
           dayPattern: "*",

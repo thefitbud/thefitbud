@@ -97,6 +97,9 @@ function readDevServerHost(): string | null {
 }
 
 export function resolveApiBaseUrl(): string {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return `${window.location.origin}/__fitbud_api`;
+  }
   const fromEnv = readEnvApiBaseUrl();
   const configured = (fromEnv?.trim() || DEFAULT_API_BASE_URL).replace(/\/$/, "");
   return apiBaseUrlForDevice(

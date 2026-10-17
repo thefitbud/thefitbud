@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import type {
   Checkin,
   CoachingRelationship,
@@ -33,6 +33,7 @@ import { canLogMealOnDate, mealKcalFromDayTotals } from "./mealHelpers";
 import { buildNutritionRings } from "./nutrition";
 import { scheduledAssignments } from "./scheduledAssignments";
 import { StepsCard } from "./steps/StepsCard";
+import { WebNutritionSummary } from "./web/WebTraineeChrome";
 
 function workoutTone(
   status: WorkoutAssignment["status"],
@@ -259,7 +260,11 @@ export function TodayTab({
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Nutrition</Text>
-          <NutritionRings data={rings} />
+          {Platform.OS === "web" ? (
+            <WebNutritionSummary data={rings} />
+          ) : (
+            <NutritionRings data={rings} />
+          )}
           {nextMeal && canLogNextMeal ? (
             <View style={styles.nextMeal}>
               <Text style={styles.nextMealTitle}>

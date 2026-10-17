@@ -20,11 +20,12 @@ type Segment = "clients" | "activity";
 
 type Props = {
   onOpenClient: (row: ClientDirectoryRow) => void;
+  initialSegment?: Segment;
 };
 
-export function ClientsTab({ onOpenClient }: Props) {
+export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) {
   const { api, refreshSession } = useAuth();
-  const [segment, setSegment] = useState<Segment>("clients");
+  const [segment, setSegment] = useState<Segment>(initialSegment);
   const [rows, setRows] = useState<ClientDirectoryRow[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -58,6 +59,10 @@ export function ClientsTab({ onOpenClient }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setSegment(initialSegment);
+  }, [initialSegment]);
 
   const filtered = useMemo(
     () => filterClientRows(rows, query),
