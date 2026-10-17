@@ -11,6 +11,7 @@ import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
+import { createMemoryDb } from "../test-support/memory-db.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 const SEEDED_FORM_ID = "11111111-1111-4111-8111-111111111111";
@@ -29,16 +30,6 @@ const MIGRATIONS_BEFORE = [
   "0002_coaching_configuration.sql",
   "0010_notifications.sql",
   "0013_domain_contracts.sql",
-];
-
-const APP_MIGRATIONS = [
-  ...MIGRATIONS_BEFORE,
-  "0014_onboarding_form_templates.sql",
-  "0011_templates_libraries.sql",
-  "0015_iteration_a.sql",
-  "0016_food_exercise_libraries.sql",
-  "0003_plans.sql",
-  "0017_plan_template_ownership.sql",
 ];
 
 function applySql(sqlite: Database, file: string) {
@@ -177,11 +168,9 @@ describe("onboarding form template pinning", () => {
   let db: Db;
 
   beforeEach(async () => {
-    const SQL = await initSqlJs();
-    const sqlite = new SQL.Database();
-    for (const file of APP_MIGRATIONS) applySql(sqlite, file);
-    db = drizzle(sqlite, { schema }) as unknown as Db;
-    closeDb = () => sqlite.close();
+    const handle = await createMemoryDb();
+    db = handle.db;
+    closeDb = handle.close;
     setTestDbOverride(db);
   });
 

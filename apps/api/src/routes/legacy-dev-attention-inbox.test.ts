@@ -1,4 +1,3 @@
-import initSqlJs from "sql.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +9,7 @@ import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
-import { drizzle } from "drizzle-orm/sql-js";
+import { createMemoryDb } from "../test-support/memory-db.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 
@@ -102,12 +101,11 @@ describe("legacy dev rows after check-in form and exception severity migrations"
   });
 
   it("serves attention and check-in inbox for rows shaped like the local dev database", async () => {
-    const SQL = await initSqlJs();
-    const sqlite = new SQL.Database();
-    closeDb = () => sqlite.close();
-    for (const file of MIGRATIONS_THROUGH_0018) {
-      sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-    }
+    const handle = await createMemoryDb({
+      through: "0018_assignment_schedule_status.sql",
+    });
+    closeDb = handle.close;
+    const sqlite = handle.sqlite;
 
     const answers = JSON.stringify({
       wellbeing: "Energy is good and I am sleeping about seven hours.",
@@ -193,8 +191,7 @@ describe("legacy dev rows after check-in form and exception severity migrations"
       [MISSED_WORKOUT_EXCEPTION_ID, RELATIONSHIP_ID, WORKOUT_SOURCE_ID, mealDetails],
     );
 
-    sqlite.exec(readFileSync(join(drizzleDir, "0019_checkin_form_templates.sql"), "utf8"));
-    sqlite.exec(readFileSync(join(drizzleDir, "0020_exception_severity.sql"), "utf8"));
+    handle.applyMigrationsFrom("0019_checkin_form_templates.sql");
 
     const pinned = sqlite.exec(
       `SELECT checkin_form_version_id FROM checkins WHERE id = '${SUBMITTED_CHECKIN_ID}'`,
@@ -208,8 +205,7 @@ describe("legacy dev rows after check-in form and exception severity migrations"
       ["overdue_checkin", "attention"],
     ]);
 
-    const db = drizzle(sqlite, { schema }) as unknown as Db;
-    setTestDbOverride(db);
+    setTestDbOverride(handle.db);
 
     const token = createTestIdToken(`trainer-${TRAINER_EMAIL}`, TRAINER_EMAIL);
     const sessionResponse = await app.request(
