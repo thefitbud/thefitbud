@@ -1,6 +1,6 @@
 # Trainer web — handoff (guide v1.2)
 
-Branch: `cursor/trainer-web-screens-09cc` → `cursor/stage1-foundation-a3da` (includes `be8a1ec` demo nutrient seed fix + `trainerCategories` on preferences).
+Branch: `cursor/trainer-web-screens-09cc` → `cursor/stage1-foundation-a3da` (merged through `7f1c521`: OTP `{ data }` envelope + `startOtp`/`verifyOtp` on api-client, `be8a1ec` demo nutrients, `trainerCategories` on preferences).
 
 ## E2E
 
