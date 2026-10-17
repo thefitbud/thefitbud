@@ -63,6 +63,7 @@ describe("FitBudApiClient", () => {
               createdAt: "2026-09-26T00:00:00.000Z",
               updatedAt: "2026-09-26T00:00:00.000Z",
               token: "raw-token",
+              inviteUrl: "https://app.example.test/i/raw-token",
             },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },

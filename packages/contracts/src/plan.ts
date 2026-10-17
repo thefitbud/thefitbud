@@ -320,3 +320,38 @@ export const acknowledgePlanConsistencyRequestSchema = z.object({
 export type AcknowledgePlanConsistencyRequest = z.infer<
   typeof acknowledgePlanConsistencyRequestSchema
 >;
+
+export const assignPlanVersionRequestSchema = z.object({
+  window: z.number().int().min(1).max(35),
+  effectiveFrom: isoDateTimeSchema,
+  effectiveTo: isoDateTimeSchema.optional(),
+  dietChangeScope: z.enum(["today_onward", "today_only"]).optional(),
+  notifyClient: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+export type AssignPlanVersionRequest = z.infer<
+  typeof assignPlanVersionRequestSchema
+>;
+
+export const assignPlanVersionResponseSchema = z.object({
+  replaced: z.object({ workouts: z.number().int(), meals: z.number().int() }),
+  created: z.object({ workouts: z.number().int(), meals: z.number().int() }),
+  dates: z.array(z.string()),
+});
+export type AssignPlanVersionResponse = z.infer<
+  typeof assignPlanVersionResponseSchema
+>;
+
+export const planVersionDiffResponseSchema = z.object({
+  addedWorkoutDays: z.array(z.string()),
+  removedWorkoutDays: z.array(z.string()),
+  changedWorkoutDays: z.array(z.string()),
+  addedMeals: z.array(z.string()),
+  removedMeals: z.array(z.string()),
+  changedMeals: z.array(z.string()),
+  kcalDeltaPerMeal: z.record(z.number().int()),
+  kcalDeltaPerDay: z.record(z.number().int()),
+});
+export type PlanVersionDiffResponse = z.infer<
+  typeof planVersionDiffResponseSchema
+>;

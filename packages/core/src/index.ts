@@ -261,3 +261,8 @@ export {
 } from "./adherence.js";
 
 export { deriveAge } from "./profile.js";
+
+export { formatTimeDiff } from "./format.js";
+export { routeForLinkKind, type LinkKind } from "./links.js";
+export { canLog, type LogDecision } from "./late-logging.js";
+export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";

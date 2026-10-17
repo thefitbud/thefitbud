@@ -79,7 +79,20 @@ export const acceptInvitationRequestSchema = z.object({
   token: z.string().min(1),
   displayName: z.string().trim().min(1).max(120).optional(),
   timezone: z.string().min(1).max(64).optional(),
+  mobileE164: z.string().trim().min(8).max(20).optional(),
+  password: z.string().min(8).max(64).optional(),
+  otpProof: z.string().min(1).optional(),
 });
+
+export const acceptInvitationWithTokenResponseSchema = z.object({
+  token: z.string(),
+  tokenKind: z.enum(["test_id_token", "firebase_custom_token"]),
+  userId: uuidSchema,
+  relationshipId: uuidSchema,
+});
+export type AcceptInvitationWithTokenResponse = z.infer<
+  typeof acceptInvitationWithTokenResponseSchema
+>;
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequestSchema>;
 
 export const coachingRelationshipSchema = z.object({

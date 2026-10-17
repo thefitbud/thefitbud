@@ -58,6 +58,8 @@ export {
   type EndRelationshipRequest,
   type ReactivateRelationshipRequest,
   type InvitationPreviewResponse,
+  acceptInvitationWithTokenResponseSchema,
+  type AcceptInvitationWithTokenResponse,
   type AcceptInvitationRequest,
   type AcceptInvitationResponse,
   type CoachingRelationship,
@@ -156,6 +158,9 @@ export {
 } from "./subscription.js";
 
 export {
+  assignPlanVersionRequestSchema,
+  assignPlanVersionResponseSchema,
+  planVersionDiffResponseSchema,
   acknowledgePlanConsistencyRequestSchema,
   assignmentScheduleStatusSchema,
   assignmentWindowModeSchema,
@@ -659,3 +664,34 @@ export {
   type UpdateNotificationPreferencesRequest,
   type UpdateReminderRulesRequest,
 } from "./notification.js";
+
+export {
+  traineeFoodSearchResponseSchema,
+  traineeFoodIndexResponseSchema,
+  type TraineeFoodSearchResponse,
+  type TraineeFoodIndexResponse,
+} from "./trainee-food.js";
+
+export {
+  coachAskSchema,
+  coachAskListResponseSchema,
+  createCoachAskRequestSchema,
+  type CoachAsk,
+  type CreateCoachAskRequest,
+} from "./coach-ask.js";
+
+export {
+  linkKindSchema,
+  linkResolveResponseSchema,
+  type LinkResolveResponse,
+} from "./links.js";
+
+export {
+  mealTimesResponseSchema,
+  updateMealTimesRequestSchema,
+} from "./meal-times.js";
+
+export {
+  activityFeedResponseSchema,
+  activityFeedEventSchema,
+} from "./activity-feed.js";

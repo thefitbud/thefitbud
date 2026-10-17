@@ -1,0 +1,21 @@
+import { z } from "zod";
+import { uuidSchema } from "./identity.js";
+
+export const mealTimeSlotSchema = z.object({
+  slotKey: z.string(),
+  label: z.string(),
+  planTime: z.string(),
+  overrideTime: z.string().nullable().optional(),
+});
+export const mealTimesResponseSchema = z.object({
+  slots: z.array(mealTimeSlotSchema),
+  mealTimesNeedReview: z.boolean().optional(),
+});
+export const mealTimeOverrideSchema = z.object({
+  slotKey: z.string(),
+  dayPattern: z.string(),
+  time: z.string(),
+});
+export const updateMealTimesRequestSchema = z.object({
+  overrides: z.array(mealTimeOverrideSchema),
+});

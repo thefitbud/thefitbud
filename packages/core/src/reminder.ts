@@ -110,10 +110,22 @@ export function domainEntityTypeForReminder(
       return "coaching_relationship";
     case "activity_nudge":
       return domainEntityTypeForActivity(activityType ?? "checkin");
-    default: {
-      const _exhaustive: never = type;
-      return _exhaustive;
-    }
+    case "checkin_reviewed":
+      return "checkin";
+    case "plan_published":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return "coaching_relationship";
   }
 }
 
@@ -174,10 +186,21 @@ export function reminderPreferenceForNotification(input: {
       if (input.domainEntityType === "meal_assignment") return "meal_reminder";
       if (input.domainEntityType === "checkin") return "checkin_reminder";
       return null;
-    default: {
-      const _exhaustive: never = input.notificationType;
-      return _exhaustive;
-    }
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return null;
   }
 }
 
@@ -506,9 +529,20 @@ export function routeTargetFromPushPayload(payload: PushPayload): {
         return { tab: "diet", ...target };
       }
       return { tab: "today", ...target };
-    default: {
-      const _exhaustive: never = payload.notificationType;
-      return _exhaustive;
-    }
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return { tab: "today", ...target };
   }
 }

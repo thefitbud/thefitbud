@@ -70,6 +70,20 @@ export const notificationTypeSchema = z.enum([
   ...reminderTypeSchema.options,
   "daily_summary",
   "activity_nudge",
+  "plan_published",
+  "checkin_reviewed",
+  "coach_answered",
+  "reminders_paused",
+  "relationship_ended",
+  "trainer_note_shared",
+  "reactivation_requested",
+  "trainer_ask_coach",
+  "trainer_checkin_submitted",
+  "trainer_intake_submitted",
+  "trainer_critical_digest",
+  "trainer_renewal",
+  "trainer_meal_times_changed",
+  "admin_whatsapp_budget",
 ]);
 export type NotificationType = z.infer<typeof notificationTypeSchema>;
 
