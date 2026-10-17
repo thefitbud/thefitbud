@@ -45,9 +45,12 @@ type ApiJsonBody = {
   error?: Record<string, unknown>;
 };
 
-/** Test helper: API payloads vary; callers narrow at the use site. */
-function responseData(body: ApiJsonBody): Record<string, unknown> {
-  return body.data ?? {};
+/** Integration test helper: API payloads vary; assertions narrow at runtime. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type IntegrationResponse = Record<string, any>;
+
+function responseData(body: ApiJsonBody): IntegrationResponse {
+  return (body.data ?? {}) as IntegrationResponse;
 }
 
 async function readJson(
@@ -102,13 +105,14 @@ describe("invitation through ended relationship", () => {
     );
     expect(forms.status).toBe(200);
     const globalForm = (
-      responseData(forms.body).items as Array<{ ownership: string }>
+      responseData(forms.body).items as Array<{ id: string; ownership: string }>
     ).find((item) => item.ownership === "global");
     expect(globalForm).toBeTruthy();
+    const globalFormId = globalForm!.id;
 
     const forkedForm = await readJson(
       await app.request(
-        `/onboarding/form-templates/${globalForm.id}/fork`,
+        `/onboarding/form-templates/${globalFormId}/fork`,
         {
           method: "POST",
           headers: {
@@ -234,8 +238,11 @@ describe("invitation through ended relationship", () => {
       ),
     );
     expect(rejected.status).toBe(422);
-    expect((rejected.body.error ?? {}).code).toBe("ONBOARDING_INCOMPLETE");
-    expect((rejected.body.error ?? {}).details.missingFieldIds).toContain("schedule");
+    const incompleteError = rejected.body.error as
+      | { code?: string; details?: { missingFieldIds?: string[] } }
+      | undefined;
+    expect(incompleteError?.code).toBe("ONBOARDING_INCOMPLETE");
+    expect(incompleteError?.details?.missingFieldIds).toContain("schedule");
 
     const drafted = await readJson(
       await app.request(
@@ -719,7 +726,10 @@ describe("invitation through ended relationship", () => {
     expect(responseData(scheduledCheckin.body).checkin.checkinFormVersionId).toBe(
       GLOBAL_CHECKIN_FORM_VERSION_ID,
     );
-    const checkin = responseData(scheduledCheckin.body).checkin;
+    const checkin = responseData(scheduledCheckin.body).checkin as {
+      id: string;
+      recordVersion: number;
+    };
     const submittedCheckin = await readJson(
       await app.request(
         `/checkins/${checkin.id}/submit`,
@@ -747,11 +757,15 @@ describe("invitation through ended relationship", () => {
       ),
     );
     expect(reviewContext.status, JSON.stringify(reviewContext.body)).toBe(200);
-    expect(responseData(reviewContext.body).pinnedForm.id).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID);
-    expect(responseData(reviewContext.body).checkin.answers.wellbeing).toBe(
+    const reviewData = responseData(reviewContext.body) as {
+      pinnedForm: { id: string };
+      checkin: { answers: { wellbeing: string }; recordStatus: string };
+    };
+    expect(reviewData.pinnedForm.id).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID);
+    expect(reviewData.checkin.answers.wellbeing).toBe(
       "Energy is steady and sleep was fine.",
     );
-    expect(responseData(reviewContext.body).checkin.recordStatus).toBe("submitted");
+    expect(reviewData.checkin.recordStatus).toBe("submitted");
 
     const reminderCheckin = await readJson(
       await app.request(
@@ -864,7 +878,12 @@ describe("invitation through ended relationship", () => {
     const execution = await db!
       .select()
       .from(schema.workoutExecutions)
-      .where(eq(schema.workoutExecutions.id, responseData(started.body).id));
+      .where(
+        eq(
+          schema.workoutExecutions.id,
+          responseData(started.body).id as string,
+        ),
+      );
     expect(execution[0]?.planVersionId).toBe(publishedVersionId);
     expect(execution[0]?.status).toBe("completed");
   }, 30_000);

@@ -1270,14 +1270,12 @@ planRoutes.post(
     if (!owned) {
       return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
     }
-    if (owned.relationship.status === "ended") {
-      return fail(
-        c,
-        409,
-        "RELATIONSHIP_ENDED",
-        "Ended relationships cannot publish plans.",
-      );
-    }
+    const writablePublish = await requireWritableRelationship(
+      c,
+      db,
+      owned.relationship.id,
+    );
+    if (!writablePublish.ok) return writablePublish.response;
 
     const versions = await db
       .select()
@@ -1731,14 +1729,12 @@ planRoutes.post(
     if (!owned) {
       return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
     }
-    if (owned.relationship.status === "ended") {
-      return fail(
-        c,
-        409,
-        "RELATIONSHIP_ENDED",
-        "Ended relationships cannot change plans.",
-      );
-    }
+    const writablePlan = await requireWritableRelationship(
+      c,
+      db,
+      owned.relationship.id,
+    );
+    if (!writablePlan.ok) return writablePlan.response;
     const versions = await db
       .select()
       .from(planVersions)

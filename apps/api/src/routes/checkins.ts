@@ -3,7 +3,7 @@ import {
   dateWindowParameters,
 } from "../openapi/document";
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   checkinListResponseSchema,
   checkinReviewContextSchema,
@@ -72,6 +72,7 @@ import {
 } from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -85,6 +86,18 @@ import { queueRealtimeHint } from "../realtime/emit";
 import { canAccessRelationship } from "./relationships";
 import type { ActorContext, Env, Variables } from "../types";
 
+type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
+type Db = ReturnType<typeof createDb>;
+
+async function blockIfRelationshipEnded(
+  c: AppContext,
+  db: Db,
+  relationshipId: string,
+): Promise<Response | null> {
+  const writable = await requireWritableRelationship(c, db, relationshipId);
+  return writable.ok ? null : writable.response;
+}
+
 const SCHEDULE_OPERATION = "checkin.schedule";
 const SCHEDULE_NEXT_OPERATION = "checkin.schedule_next";
 const ENSURE_DUE_OPERATION = "checkin.ensure_due";
@@ -96,8 +109,6 @@ export const checkinRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
 }>();
-
-type Db = ReturnType<typeof createDb>;
 
 async function loadAccessibleRelationship(
   db: Db,
@@ -423,6 +434,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedSchedule = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedSchedule) return endedSchedule;
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
     if (!config) {
@@ -540,6 +553,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedScheduleNext = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedScheduleNext) return endedScheduleNext;
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
     if (!config) {
@@ -668,6 +683,8 @@ checkinRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedEnsureDue = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedEnsureDue) return endedEnsureDue;
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
     if (!config) {
@@ -967,6 +984,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedNote = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedNote) return endedNote;
 
     if (parsed.data.checkinId) {
       const linked = await loadCheckinWithReview(db, parsed.data.checkinId);
@@ -1410,6 +1429,8 @@ checkinRoutes.put(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
+    const endedDraft = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedDraft) return endedDraft;
 
     if (!canSaveCheckinDraft({ recordStatus: loaded.checkin.recordStatus })) {
       return fail(
@@ -1529,6 +1550,8 @@ checkinRoutes.post(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
+    const endedSubmit = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedSubmit) return endedSubmit;
 
     const now = nowIso();
     if (
@@ -1721,6 +1744,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
+    const endedReview = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedReview) return endedReview;
 
     if (
       !canRecordCheckinReview({

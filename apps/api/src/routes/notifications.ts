@@ -45,6 +45,7 @@ import {
 } from "../domain/reminders";
 import { createId, nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -615,6 +616,12 @@ notificationRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const writableNudge = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableNudge.ok) return writableNudge.response;
     const result = await createActivityNudge(db, {
       relationshipId: relationship.id,
       trainerUserId: actor.userId,
