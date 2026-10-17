@@ -51,23 +51,29 @@ async function bumpRateLimit(
   max: number,
 ): Promise<boolean> {
   const now = new Date();
-  const windowStart = new Date(
+  const windowCutoff = new Date(
     now.getTime() - windowMinutes * 60_000,
   ).toISOString();
+  const nowStr = now.toISOString();
   const rows = await db
     .select()
     .from(authRateLimits)
     .where(eq(authRateLimits.bucketKey, bucketKey))
     .limit(1);
   const row = rows[0];
-  if (!row || row.windowStart < windowStart) {
-    await db
-      .insert(authRateLimits)
-      .values({ bucketKey, windowStart: now.toISOString(), count: 1 })
-      .onConflictDoUpdate({
-        target: authRateLimits.bucketKey,
-        set: { windowStart: now.toISOString(), count: 1 },
+  if (!row || row.windowStart < windowCutoff) {
+    if (row) {
+      await db
+        .update(authRateLimits)
+        .set({ windowStart: nowStr, count: 1 })
+        .where(eq(authRateLimits.bucketKey, bucketKey));
+    } else {
+      await db.insert(authRateLimits).values({
+        bucketKey,
+        windowStart: nowStr,
+        count: 1,
       });
+    }
     return false;
   }
   if (row.count >= max) {
@@ -78,6 +84,17 @@ async function bumpRateLimit(
     .set({ count: row.count + 1 })
     .where(eq(authRateLimits.bucketKey, bucketKey));
   return false;
+}
+
+function assertAuthRuntimeReady(env: import("../types.js").Env): string | null {
+  const authMode = env.AUTH_MODE === "firebase" ? "firebase" : "test";
+  if (authMode === "test" && env.ENVIRONMENT !== "local") {
+    return "Test auth (AUTH_MODE=test) requires ENVIRONMENT=local. Set both in wrangler.toml [vars] or apps/api/.dev.vars.";
+  }
+  if (authMode === "firebase" && !env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return "AUTH_MODE=firebase requires FIREBASE_SERVICE_ACCOUNT_JSON in .dev.vars.";
+  }
+  return null;
 }
 
 async function findIdentityByIdentifier(
@@ -114,6 +131,10 @@ authLoginRoutes.post(
     response: authTokenResponseSchema,
   }),
   async (c) => {
+    const configError = assertAuthRuntimeReady(c.env);
+    if (configError) {
+      return fail(c, 503, "AUTH_NOT_CONFIGURED", configError);
+    }
     const body = await c.req.json().catch(() => null);
     const parsed = authLoginRequestSchema.safeParse(body);
     if (!parsed.success) {
@@ -203,7 +224,7 @@ authLoginRoutes.post(
     const channels: Array<"email" | "whatsapp"> = [];
     if (identifier?.kind === "email") {
       const identity = await findIdentityByIdentifier(db, identifier);
-      if (identity) {
+      if (identity || parsed.data.purpose === "invite") {
         const code = String(crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000).padStart(6, "0");
         const idHash = await identifierHash(identifier.value);
         await db
