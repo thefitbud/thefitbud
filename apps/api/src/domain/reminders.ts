@@ -143,6 +143,7 @@ async function loadOrDefaultPreferences(db: Db, userId: string) {
         mealReminder: row.mealReminder,
         checkinReminder: row.checkinReminder,
         subscriptionRenewalReminder: row.subscriptionRenewalReminder,
+        dailySummaryReminder: row.dailySummaryReminder,
       },
       quietHoursStart: row.quietHoursStart,
       quietHoursEnd: row.quietHoursEnd,
@@ -155,6 +156,7 @@ async function loadOrDefaultPreferences(db: Db, userId: string) {
       mealReminder: true,
       checkinReminder: true,
       subscriptionRenewalReminder: true,
+      dailySummaryReminder: true,
     },
     quietHoursStart: null as string | null,
     quietHoursEnd: null as string | null,
@@ -303,7 +305,7 @@ function summaryCategoryAllowed(
   prefs: Awaited<ReturnType<typeof loadOrDefaultPreferences>>,
   remaining: RemainingLogs,
 ): boolean {
-  if (!prefs.pushEnabled) return false;
+  if (!prefs.pushEnabled || !prefs.categories.dailySummaryReminder) return false;
   if (remaining.workouts > 0 && prefs.categories.workoutReminder) return true;
   if (remaining.meals > 0 && prefs.categories.mealReminder) return true;
   if (remaining.checkins > 0 && prefs.categories.checkinReminder) return true;
@@ -1523,7 +1525,7 @@ export async function deliverReminderMessage(
   });
   const categoryOk =
     preference === "daily_summary"
-      ? prefs.pushEnabled
+      ? prefs.pushEnabled && prefs.categories.dailySummaryReminder
       : preference
         ? isCategoryEnabled({
             pushEnabled: prefs.pushEnabled,

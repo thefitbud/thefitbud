@@ -255,6 +255,7 @@ export {
   reminderPreferenceForActivity,
   reminderPreferenceForNotification,
   routeTargetFromPushPayload,
+  notificationInboxRoute,
   workoutReminderDedupeKey,
   type MealReminderPhase,
   type NudgeActivityType,

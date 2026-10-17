@@ -1,5 +1,5 @@
 import { foodSnapshotFromLibrary, materializePlanContent } from "@fitbud/core";
-import type { PlanContent } from "@fitbud/contracts";
+import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
 import { DEMO_ACCOUNTS } from "./spec.js";
 import {
   DEMO_ANITA_PENDING_INVITE_TOKEN,
@@ -342,7 +342,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const resolvedExceptionId = demoUuid("exception", "meera-resolved");
   lines.push(
     `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(resolvedExceptionId)}, ${sqlQuote(meeraRel)}, 'skipped_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(resolvedMealId)}, 'Skipped breakfast', ${sqlQuote(addDaysFromLocalDate(refDate, -5))}, ${sqlQuote(addDaysFromLocalDate(refDate, -4))}, 'client_logged_later', ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", resolvedMealId))}, ${sqlQuote(resolvedMealId)}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("plan-version", meeraRel, "v2"))}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'confirmed', 0, ${sqlQuote(addDaysFromLocalDate(refDate, -3))}, NULL, 'Client logged later', 0, NULL, NULL, NULL, 300000000, 15000000, 40000000, 8000000, 1, 1, ${sqlQuote(addDaysFromLocalDate(refDate, -3))}, ${sqlQuote(addDaysFromLocalDate(refDate, -3))}, ${sqlQuote(now)});`,
+    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", resolvedMealId))}, ${sqlQuote(resolvedMealId)}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("plan-version", meeraRel, "v2"))}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'confirmed', 0, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, NULL, 'Client logged later', 0, NULL, NULL, NULL, 300000000, 15000000, 40000000, 8000000, 1, 1, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, ${sqlQuote(now)});`,
   );
 
   const farhanRel = relId("rahul.coach@demo.fitbud.test", "farhan.paused@demo.fitbud.test");
@@ -409,7 +409,11 @@ function buildPersonaOverlays(input: HistoryInput): string {
 
 function foodSnapshotJson(lib: DemoLibraryIndex, slug: keyof DemoLibraryIndex["foods"]) {
   const food = lib.foods[slug];
-  return foodSnapshotFromLibrary(food.item, food.defaultServingId, 100_000_000);
+  return foodSnapshotFromLibrary(
+    food.item,
+    food.defaultServingId,
+    NUTRIENT_SCALE,
+  );
 }
 
 /** Assignment / log / exception SQL for demo personas (T24). */

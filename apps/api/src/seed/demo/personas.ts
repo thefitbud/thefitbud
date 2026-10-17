@@ -1,6 +1,7 @@
 /** Persona definitions and v2 library index for demo seed (T24). */
 import type { AdherenceState } from "@fitbud/contracts";
 import type { FoodLibraryItem, PlanContent } from "@fitbud/contracts";
+import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import {
   foodSnapshotFromLibrary,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
@@ -212,12 +213,12 @@ export function buildStandardPlanContent(
   const breakfastItem = foodSnapshotFromLibrary(
     breakfastFood.item,
     breakfastFood.defaultServingId,
-    100_000_000,
+    NUTRIENT_SCALE,
   );
   const lunchItem = foodSnapshotFromLibrary(
     lunchFood.item,
     lunchFood.defaultServingId,
-    100_000_000,
+    NUTRIENT_SCALE,
   );
   const exercise = lib.exercises["push-up"];
   return {

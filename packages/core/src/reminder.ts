@@ -10,6 +10,7 @@ import {
   pushPayloadSchema,
 } from "@fitbud/contracts";
 import { deriveCheckinStatus } from "./checkin.js";
+import { routeForLinkKind } from "./links.js";
 import { addDaysToLocalDate, isQualifyingWorkoutExecution } from "./workout.js";
 import { formatLocalDate, localDateTimeToUtcIso } from "./timezone.js";
 
@@ -699,6 +700,25 @@ export function pushPayloadContainsSensitiveKeys(
  * Mobile deep-link target from a validated routing payload.
  * Clients must refetch authoritative state after navigation — payload is not state.
  */
+/** Mobile inbox row deep-link path (refetch after navigation). */
+export function notificationInboxRoute(payload: PushPayload): string {
+  switch (payload.domainEntityType) {
+    case "meal_assignment":
+      return routeForLinkKind("meal", payload.domainEntityId, "today");
+    case "workout_assignment":
+      return routeForLinkKind("workout", payload.domainEntityId, "today");
+    case "checkin":
+      return routeForLinkKind("checkin", payload.domainEntityId);
+    case "coaching_relationship":
+      if (payload.notificationType === "reactivation_requested") {
+        return routeForLinkKind("reactivate", payload.domainEntityId);
+      }
+      return routeForLinkKind("today", payload.domainEntityId);
+    default:
+      return routeForLinkKind("today", payload.domainEntityId);
+  }
+}
+
 export function routeTargetFromPushPayload(payload: PushPayload): {
   tab: "workout" | "diet" | "today";
   domainEntityType: NotificationDomainEntityType;

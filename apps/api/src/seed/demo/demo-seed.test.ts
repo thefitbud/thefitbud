@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  mealAssignmentListResponseSchema,
+  mealComplianceSummaryResponseSchema,
+  meDayResponseSchema,
+} from "@fitbud/contracts";
 import { hashPassword } from "../../auth/password.js";
 import { app } from "../../index.js";
 import { setTestDbOverride, type Db } from "../../db/client.js";
@@ -27,6 +32,12 @@ function testEnv(): Env {
     ENVIRONMENT: "local",
     EMAIL_PROVIDER: "dev_sink",
   };
+}
+
+function addDays(isoDate: string, delta: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + delta));
+  return dt.toISOString().slice(0, 10);
 }
 
 async function login(email: string): Promise<string> {
@@ -286,6 +297,95 @@ describe("demo seed", () => {
     };
     expect(respBody.data.label).toBe("reminders_paused");
   });
+
+  it(
+    "serves contract-valid meal and diet read models for every demo trainee",
+    async () => {
+      const windowFrom = addDays(refDate, -7);
+      const windowTo = addDays(refDate, 7);
+      for (const account of DEMO_ACCOUNTS) {
+        if (account.role !== "trainee") continue;
+        const token = await login(account.email);
+        const relRows = sqliteExec(
+          `SELECT cr.id FROM coaching_relationships cr
+           JOIN users u ON u.id = cr.trainee_user_id
+           JOIN user_identities ui ON ui.user_id = u.id
+           WHERE ui.email_norm = '${account.email.replace(/'/g, "''")}'
+           ORDER BY cr.started_at DESC LIMIT 1`,
+        );
+        const relationshipId = String(relRows[0]?.values[0]?.[0] ?? "");
+        expect(relationshipId.length, account.email).toBeGreaterThan(10);
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          "x-fitbud-role": "trainee",
+        };
+        const assignments = await app.request(
+          `/meals/relationships/${relationshipId}/assignments?fromDate=${windowFrom}&toDate=${windowTo}`,
+          { headers },
+          testEnv(),
+        );
+        const assignmentsText = await assignments.text();
+        expect(assignments.status, `${account.email} assignments: ${assignmentsText}`).toBe(
+          200,
+        );
+        mealAssignmentListResponseSchema.parse(JSON.parse(assignmentsText).data);
+
+        const compliance = await app.request(
+          `/meals/relationships/${relationshipId}/compliance?fromDate=${windowFrom}&toDate=${windowTo}`,
+          { headers },
+          testEnv(),
+        );
+        const complianceText = await compliance.text();
+        expect(compliance.status, account.email).toBe(200);
+        mealComplianceSummaryResponseSchema.parse(JSON.parse(complianceText).data);
+
+        const day = await app.request(`/me/day/${refDate}`, { headers }, testEnv());
+        const dayText = await day.text();
+        expect(
+          [200, 404].includes(day.status),
+          `${account.email} /me/day: ${dayText}`,
+        ).toBe(true);
+        if (day.status === 200) {
+          meDayResponseSchema.parse(JSON.parse(dayText).data);
+        }
+      }
+
+      const lakshmiToken = await login("lakshmi.foods@demo.fitbud.test");
+      const foodSearch = await app.request(
+        "/me/foods/search?q=chapati&limit=5",
+        {
+          headers: {
+            Authorization: `Bearer ${lakshmiToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      expect(foodSearch.status).toBe(200);
+      const searchBody = (await foodSearch.json()) as {
+        data: { items: Array<{ id: string; defaultServingId: string | null }> };
+      };
+      const foodId = searchBody.data.items[0]?.id;
+      expect(foodId).toBeTruthy();
+      expect(searchBody.data.items[0]?.defaultServingId).toBeTruthy();
+      const detail = await app.request(
+        `/me/foods/${foodId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${lakshmiToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      expect(detail.status).toBe(200);
+      const detailBody = (await detail.json()) as {
+        data: { servings: Array<{ isDefault: boolean }> };
+      };
+      expect(detailBody.data.servings.length).toBeGreaterThan(1);
+    },
+    180_000,
+  );
 
   it("does not reference wiped legacy library foods without seed_version", () => {
     const rows = sqliteExec(

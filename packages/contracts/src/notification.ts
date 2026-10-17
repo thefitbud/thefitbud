@@ -103,6 +103,17 @@ export const trainerCategoriesSchema = z.object({
 });
 export type TrainerCategories = z.infer<typeof trainerCategoriesSchema>;
 
+export const channelPreferenceSchema = z.enum(["app", "app_and_whatsapp"]);
+export type ChannelPreference = z.infer<typeof channelPreferenceSchema>;
+
+export const whatsappOptInSchema = z.object({
+  granted: z.boolean(),
+  at: isoDateTimeSchema.nullable(),
+  source: z.string().max(64).nullable(),
+  textVersion: z.string().max(32).nullable(),
+});
+export type WhatsappOptIn = z.infer<typeof whatsappOptInSchema>;
+
 export const notificationPreferencesSchema = z.object({
   userId: uuidSchema,
   pushEnabled: z.boolean(),
@@ -111,7 +122,12 @@ export const notificationPreferencesSchema = z.object({
     mealReminder: z.boolean(),
     checkinReminder: z.boolean(),
     subscriptionRenewalReminder: z.boolean(),
+    dailySummaryReminder: z.boolean(),
   }),
+  channelPreference: channelPreferenceSchema,
+  whatsappOptIn: whatsappOptInSchema,
+  traineeTimezone: z.string().min(1).max(64).nullable(),
+  locale: z.string().min(2).max(16).nullable(),
   trainerCategories: trainerCategoriesSchema,
   preferredWorkoutTime: z
     .string()
@@ -140,8 +156,19 @@ export const updateNotificationPreferencesRequestSchema = z.object({
       mealReminder: z.boolean().optional(),
       checkinReminder: z.boolean().optional(),
       subscriptionRenewalReminder: z.boolean().optional(),
+      dailySummaryReminder: z.boolean().optional(),
     })
     .optional(),
+  channelPreference: channelPreferenceSchema.optional(),
+  whatsappOptIn: z
+    .object({
+      granted: z.boolean(),
+      source: z.string().max(64).optional(),
+      textVersion: z.string().max(32).optional(),
+    })
+    .optional(),
+  traineeTimezone: z.string().min(1).max(64).nullable().optional(),
+  locale: z.string().min(2).max(16).nullable().optional(),
   quietHoursStart: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -247,6 +274,8 @@ export const notificationSchema = z.object({
   createdAt: isoDateTimeSchema,
   readAt: isoDateTimeSchema.nullable(),
   routing: pushPayloadSchema,
+  /** In-app navigation path; clients refetch state after opening. */
+  route: z.string().min(1).max(256),
 });
 export type Notification = z.infer<typeof notificationSchema>;
 export type NotificationRecord = Notification;

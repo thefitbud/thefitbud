@@ -1264,6 +1264,9 @@ export const notificationPreferences = sqliteTable(
     })
       .notNull()
       .default(true),
+    dailySummaryReminder: integer("daily_summary_reminder", { mode: "boolean" })
+      .notNull()
+      .default(true),
     quietHoursStart: text("quiet_hours_start"),
     quietHoursEnd: text("quiet_hours_end"),
     channelPreference: text("channel_preference").notNull().default("app"),

@@ -25,6 +25,7 @@ import {
   reminderDeliveryDecision,
   reminderDedupeKey,
   routeTargetFromPushPayload,
+  notificationInboxRoute,
   type ReminderBackoffMode,
 } from "./reminder.js";
 
@@ -259,5 +260,6 @@ describe("reminder eligibility and payload safety", () => {
       domainEntityType: "workout_assignment",
       domainEntityId: "22222222-2222-4222-8222-222222222222",
     });
+    expect(notificationInboxRoute(payload)).toBe("/me/day/today");
   });
 });
