@@ -91,6 +91,18 @@ export type NotificationType = z.infer<typeof notificationTypeSchema>;
 export const notificationCategorySchema = reminderTypeSchema;
 export type NotificationCategory = ReminderType;
 
+/** Trainer inbox / push category toggles (TW-29). */
+export const trainerCategoriesSchema = z.object({
+  askCoach: z.boolean(),
+  checkinSubmitted: z.boolean(),
+  criticalDigest: z.boolean(),
+  intakeSubmitted: z.boolean(),
+  renewalsDue: z.boolean(),
+  mealTimesChanged: z.boolean(),
+  morningSummary: z.boolean(),
+});
+export type TrainerCategories = z.infer<typeof trainerCategoriesSchema>;
+
 export const notificationPreferencesSchema = z.object({
   userId: uuidSchema,
   pushEnabled: z.boolean(),
@@ -100,6 +112,12 @@ export const notificationPreferencesSchema = z.object({
     checkinReminder: z.boolean(),
     subscriptionRenewalReminder: z.boolean(),
   }),
+  trainerCategories: trainerCategoriesSchema,
+  preferredWorkoutTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .nullable()
+    .optional(),
   quietHoursStart: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -130,6 +148,12 @@ export const updateNotificationPreferencesRequestSchema = z.object({
     .nullable()
     .optional(),
   quietHoursEnd: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .nullable()
+    .optional(),
+  trainerCategories: trainerCategoriesSchema.partial().optional(),
+  preferredWorkoutTime: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
     .nullable()

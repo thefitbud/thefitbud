@@ -629,6 +629,7 @@ export {
   notificationDomainEntityTypeSchema,
   notificationListResponseSchema,
   notificationPreferencesSchema,
+  trainerCategoriesSchema,
   notificationSchema,
   notificationStateSchema,
   notificationTypeSchema,

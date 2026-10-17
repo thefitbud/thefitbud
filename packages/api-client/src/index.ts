@@ -851,10 +851,16 @@ export class FitBudApiClient {
   async listPlanTemplates(query?: {
     cursor?: string;
     limit?: number;
+    scope?: "all" | "bases" | "mine";
+    templateType?: string;
+    q?: string;
   }): Promise<PlanTemplateListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.scope) params.set("scope", query.scope);
+    if (query?.templateType) params.set("templateType", query.templateType);
+    if (query?.q) params.set("q", query.q);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",

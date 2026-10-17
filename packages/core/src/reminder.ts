@@ -249,6 +249,73 @@ export function reminderDeliveryDecision(input: {
   return "deliver";
 }
 
+export type ReminderBackoffMode =
+  | "normal"
+  | "self_logger"
+  | "soft_ignorer"
+  | "paused"
+  | "push_failed";
+
+/** Higher priority reminders are delivered first when the daily push cap applies. */
+export function reminderDeliveryPriority(type: NotificationType): number {
+  switch (type) {
+    case "activity_nudge":
+      return 0;
+    case "meal_reminder":
+      return 1;
+    case "workout_reminder":
+      return 2;
+    case "checkin_reminder":
+      return 3;
+    case "daily_summary":
+      return 4;
+    case "subscription_renewal_reminder":
+      return 5;
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return 10;
+    default:
+      return 9;
+  }
+}
+
+export function shouldSkipReminderForBackoff(input: {
+  mode: ReminderBackoffMode | string;
+  preferenceType: ReminderType | null;
+  pausedUntil?: string | null;
+  nowIso: string;
+  softIgnorerSkipTick?: boolean;
+}): boolean {
+  if (input.mode === "paused") {
+    if (input.pausedUntil && input.pausedUntil > input.nowIso) {
+      return true;
+    }
+  }
+  if (input.mode === "push_failed") return true;
+  if (input.mode === "self_logger") {
+    return (
+      input.preferenceType === "meal_reminder" ||
+      input.preferenceType === "workout_reminder"
+    );
+  }
+  if (input.mode === "soft_ignorer" && input.softIgnorerSkipTick) {
+    return input.preferenceType !== null;
+  }
+  return false;
+}
+
 export function addMinutesToLocalClock(input: {
   localDate: string;
   localTime: string;
@@ -316,10 +383,21 @@ export function dueMealReminderPhases(input: {
     ...afterClock,
     timeZone: input.timeZone,
   });
-  if (input.nowIso >= afterAt && input.nowIso <= input.windowEndsAt) {
-    return ["after"];
+  const snoozeClock = addMinutesToLocalClock({
+    localDate: input.localDate,
+    localTime: input.localTime,
+    deltaMinutes: MEAL_REMINDER_AFTER_MINUTES + MEAL_REMINDER_SNOOZE_MINUTES,
+  });
+  const snoozeAt = localClockToUtcIso({
+    ...snoozeClock,
+    timeZone: input.timeZone,
+  });
+  if (input.nowIso > input.windowEndsAt) return [];
+  if (input.nowIso < afterAt) return [];
+  if (input.nowIso >= snoozeAt) {
+    return ["snooze"];
   }
-  return [];
+  return ["after"];
 }
 
 /** Workout reminder WORKOUT_REMINDER_OFFSET_MINUTES before the anchor start time. */
@@ -350,11 +428,21 @@ export function dueWorkoutReminderTimes(input: {
 }
 
 /** End-of-day summary at min(lastMeal+60, 21:30) trainee-local. */
+export function isAtOrAfterHardStopLocal(
+  nowIso: string,
+  timeZone: string,
+): boolean {
+  const local = localTimeHhMm(nowIso, timeZone);
+  if (local === null) return false;
+  return local >= HARD_STOP_LOCAL_TIME;
+}
+
 export function isDailySummaryClockDue(input: {
   nowIso: string;
   timeZone: string;
   lastMealLocalTime?: string | null;
 }): boolean {
+  if (isAtOrAfterHardStopLocal(input.nowIso, input.timeZone)) return false;
   const local = localTimeHhMm(input.nowIso, input.timeZone);
   if (local === null) return false;
   let target = DAILY_SUMMARY_CAP_LOCAL_TIME;

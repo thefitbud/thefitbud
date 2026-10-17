@@ -1,3 +1,4 @@
+import { parseTrainerCategoriesJson } from "./trainer-categories.js";
 import {
   checkinFormDefinitionSchema,
   mealPrescriptionSchema,
@@ -936,6 +937,8 @@ export function mapNotificationPreferences(row: {
   mealReminder: boolean;
   checkinReminder: boolean;
   subscriptionRenewalReminder: boolean;
+  trainerCategoriesJson: string;
+  preferredWorkoutTime: string | null;
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
   updatedAt: string;
@@ -949,6 +952,8 @@ export function mapNotificationPreferences(row: {
       checkinReminder: row.checkinReminder,
       subscriptionRenewalReminder: row.subscriptionRenewalReminder,
     },
+    trainerCategories: parseTrainerCategoriesJson(row.trainerCategoriesJson),
+    preferredWorkoutTime: row.preferredWorkoutTime,
     quietHoursStart: row.quietHoursStart,
     quietHoursEnd: row.quietHoursEnd,
     updatedAt: row.updatedAt,
