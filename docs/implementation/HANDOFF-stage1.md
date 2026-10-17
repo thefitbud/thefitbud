@@ -129,7 +129,7 @@ Password (dev only): **`FitBud-demo-2026`**
 | Package | Tests |
 |---------|------:|
 | API | 190 |
-| core | 107 |
+| core | 109 |
 | contracts | 21 |
 | api-client | 5 |
 | trainer-web | 16 |
