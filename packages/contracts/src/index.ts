@@ -676,8 +676,12 @@ export {
   coachAskSchema,
   coachAskListResponseSchema,
   createCoachAskRequestSchema,
+  answerCoachAskRequestSchema,
+  coachAskNoteRequestSchema,
   type CoachAsk,
   type CreateCoachAskRequest,
+  type AnswerCoachAskRequest,
+  type CoachAskNoteRequest,
 } from "./coach-ask.js";
 
 export {

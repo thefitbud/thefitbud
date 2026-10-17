@@ -12,9 +12,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply fitbud --local --persist-to .wrangler/state",
     "db:migrate": "wrangler d1 migrations apply fitbud",
-    "db:seed:dev": "node scripts/seed-dev.ts",
     "db:seed:library": "node scripts/library-seed.ts",
-    "seed:demo": "node scripts/seed-demo.ts"
+    "seed:demo": "node scripts/seed-demo.ts",
+    "db:reset": "node scripts/db-reset.ts"
   },
   "dependencies": {
     "@fitbud/contracts": "workspace:*",

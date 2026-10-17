@@ -42,6 +42,13 @@ import {
   reconcilePublishedPlan,
   saveAssignmentPolicy,
 } from "../domain/assignment-schedule";
+import {
+  assignPlanVersion,
+  computePlanVersionDiff,
+  stableAssignFingerprint,
+} from "../domain/plan-version-assign";
+import { storeInboxNotification } from "../domain/inbox-notify";
+import { requireWritableRelationship } from "../lib/relationship-write-guard";
 import { createDb } from "../db/client";
 import {
   coachingConfigurations,
@@ -79,6 +86,7 @@ const CREATE_PLAN_OPERATION = "plan.create";
 const PUBLISH_PLAN_OPERATION = "plan.publish";
 const CREATE_DRAFT_FROM_VERSION_OPERATION = "plan.draft_from_version";
 const APPLY_TEMPLATE_OPERATION = "plan.apply_template";
+const ASSIGN_PLAN_OPERATION = "plan.assign";
 
 export const planRoutes = new Hono<{
   Bindings: Env;
@@ -1796,6 +1804,19 @@ planRoutes.post(
   requireAuthMiddleware,
   requireRole("trainer"),
   async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = c.req.header("Idempotency-Key")?.trim();
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
     const body = await c.req.json().catch(() => null);
     const parsed = assignPlanVersionRequestSchema.safeParse(body);
     if (!parsed.success) {
@@ -1804,12 +1825,73 @@ planRoutes.post(
     if (parsed.data.window > 35) {
       return fail(c, 400, "RANGE_TOO_LARGE", "Assignment window exceeds 35 days.");
     }
-    const data = assignPlanVersionResponseSchema.parse({
-      replaced: { workouts: 0, meals: 0 },
-      created: { workouts: parsed.data.dryRun ? 0 : 1, meals: parsed.data.dryRun ? 0 : 1 },
-      dates: [parsed.data.effectiveFrom.slice(0, 10)],
+    const planId = c.req.param("planId");
+    const versionId = c.req.param("versionId");
+    const fingerprint = await sha256Hex(
+      stableAssignFingerprint(planId, versionId, parsed.data),
+    );
+    const db = createDb(c.env.DB);
+    const prior = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: ASSIGN_PLAN_OPERATION,
+      idempotencyKey,
     });
-    return ok(c, data);
+    if (prior) {
+      if (prior.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request payload.",
+        );
+      }
+      return c.json(JSON.parse(prior.responseBody), prior.responseStatus as 200);
+    }
+    const owned = await loadOwnedPlan(db, planId, actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const writable = await requireWritableRelationship(c, db, owned.relationship.id);
+    if (!writable.ok) {
+      return writable.response;
+    }
+    try {
+      const result = await assignPlanVersion(db, {
+        planId,
+        versionId,
+        relationshipId: owned.relationship.id,
+        traineeUserId: owned.relationship.traineeUserId,
+        request: parsed.data,
+        dryRun: parsed.data.dryRun ?? false,
+      });
+      if (parsed.data.notifyClient && !parsed.data.dryRun) {
+        await storeInboxNotification(db, {
+          recipientUserId: owned.relationship.traineeUserId,
+          relationshipId: owned.relationship.id,
+          notificationType: "plan_published",
+          domainEntityId: versionId,
+          dedupeKey: `plan-published:${versionId}`,
+        });
+      }
+      const data = assignPlanVersionResponseSchema.parse(result);
+      const responseBody = { data };
+      await saveIdempotencyRecord(db, {
+        actorUserId: actor.userId,
+        operation: ASSIGN_PLAN_OPERATION,
+        idempotencyKey,
+        requestFingerprint: fingerprint,
+        responseStatus: 200,
+        responseBody,
+        expiresAt: addDaysIso(7),
+      });
+      return ok(c, data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "GENERATION_FAILED";
+      if (message === "PLAN_VERSION_NOT_FOUND") {
+        return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+      }
+      return fail(c, 422, "GENERATION_FAILED", "Couldn't create this week's schedule · Retry");
+    }
   },
 );
 
@@ -1826,19 +1908,24 @@ planRoutes.get(
   requireAuthMiddleware,
   requireRole("trainer"),
   async (c) => {
-    return ok(
-      c,
-      planVersionDiffResponseSchema.parse({
-        addedWorkoutDays: [],
-        removedWorkoutDays: [],
-        changedWorkoutDays: [],
-        addedMeals: [],
-        removedMeals: [],
-        changedMeals: [],
-        kcalDeltaPerMeal: {},
-        kcalDeltaPerDay: {},
-      }),
-    );
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, c.req.param("planId"), actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    try {
+      const diff = await computePlanVersionDiff(db, {
+        planId: c.req.param("planId"),
+        versionId: c.req.param("versionId"),
+      });
+      return ok(c, planVersionDiffResponseSchema.parse(diff));
+    } catch {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
   },
 );
 

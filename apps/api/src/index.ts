@@ -8,6 +8,8 @@ import {
   handleScheduledReminders,
 } from "./jobs/reminders";
 import { handleScheduledReplenishment } from "./jobs/replenishment";
+import { runCoachAskMaintenance } from "./domain/coach-asks";
+import { createDb } from "./db/client";
 import { ok } from "./lib/envelope";
 import { writeStructuredLog } from "./lib/log";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -182,6 +184,7 @@ const worker = {
   ): Promise<void> {
     await handleScheduledReminders(env, new Date(controller.scheduledTime));
     await handleScheduledReplenishment(env, new Date(controller.scheduledTime));
+    await runCoachAskMaintenance(createDb(env.DB));
   },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
     await handleReminderQueueBatch(batch, env);

@@ -1,12 +1,14 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import {
+  answerCoachAskRequestSchema,
   coachAskListResponseSchema,
+  coachAskNoteRequestSchema,
   coachAskSchema,
   createCoachAskRequestSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client.js";
-import { coachAsks, coachingRelationships } from "../db/schema.js";
+import { coachAsks, coachingRelationships, trainerNotes } from "../db/schema.js";
 import { storeInboxNotification } from "../domain/inbox-notify.js";
 import { createId, nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
@@ -174,3 +176,151 @@ function mapAsk(row: typeof coachAsks.$inferSelect) {
     lastAskedAt: row.lastAskedAt,
   };
 }
+
+coachAskRoutes.post(
+  "/:id/answer",
+  operation({
+    tag: "CoachAsks",
+    summary: "Answer coach ask",
+    description: "Trainer answers an open coach ask; optional client-visible note.",
+    roles: ["trainer"],
+    body: answerCoachAskRequestSchema,
+    response: coachAskSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = answerCoachAskRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid answer request.");
+    }
+    const db = createDb(c.env.DB);
+    const [ask] = await db
+      .select()
+      .from(coachAsks)
+      .where(eq(coachAsks.id, c.req.param("id")))
+      .limit(1);
+    if (!ask) {
+      return fail(c, 404, "COACH_ASK_NOT_FOUND", "Coach ask not found.");
+    }
+    const [rel] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, ask.relationshipId))
+      .limit(1);
+    if (!rel || rel.trainerUserId !== actor.userId) {
+      return fail(c, 403, "FORBIDDEN", "Not your coach ask.");
+    }
+    if (ask.status !== "open") {
+      return fail(c, 409, "COACH_ASK_CLOSED", "Coach ask is not open.");
+    }
+    const now = nowIso();
+    let trainerNoteId: string | null = null;
+    if (parsed.data.note?.trim()) {
+      trainerNoteId = createId();
+      await db.insert(trainerNotes).values({
+        id: trainerNoteId,
+        coachingRelationshipId: rel.id,
+        trainerUserId: actor.userId,
+        body: parsed.data.note.trim(),
+        visibility: "client",
+        subjectType: ask.itemType,
+        subjectId: ask.itemId,
+        checkinId: null,
+        sharedAt: now,
+        seenAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    await db
+      .update(coachAsks)
+      .set({
+        status: "answered",
+        answeredAt: now,
+        answeredBy: actor.userId,
+        trainerNoteId,
+      })
+      .where(eq(coachAsks.id, ask.id));
+    await storeInboxNotification(db, {
+      recipientUserId: rel.traineeUserId,
+      relationshipId: rel.id,
+      notificationType: "coach_answered",
+      domainEntityId: ask.id,
+      dedupeKey: `coach-answered:${ask.id}`,
+    });
+    const [row] = await db.select().from(coachAsks).where(eq(coachAsks.id, ask.id)).limit(1);
+    return ok(c, coachAskSchema.parse(mapAsk(row!)));
+  },
+);
+
+coachAskRoutes.post(
+  "/:id/notes",
+  operation({
+    tag: "CoachAsks",
+    summary: "Add note to coach ask",
+    description: "Trainer adds a note linked to the ask without answering.",
+    roles: ["trainer"],
+    body: coachAskNoteRequestSchema,
+    response: coachAskSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = coachAskNoteRequestSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid note request.");
+    }
+    const db = createDb(c.env.DB);
+    const [ask] = await db
+      .select()
+      .from(coachAsks)
+      .where(eq(coachAsks.id, c.req.param("id")))
+      .limit(1);
+    if (!ask) {
+      return fail(c, 404, "COACH_ASK_NOT_FOUND", "Coach ask not found.");
+    }
+    const [rel] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, ask.relationshipId))
+      .limit(1);
+    if (!rel || rel.trainerUserId !== actor.userId) {
+      return fail(c, 403, "FORBIDDEN", "Not your coach ask.");
+    }
+    const noteId = createId();
+    const now = nowIso();
+    await db.insert(trainerNotes).values({
+      id: noteId,
+      coachingRelationshipId: rel.id,
+      trainerUserId: actor.userId,
+      body: parsed.data.note,
+      visibility: "private",
+      subjectType: ask.itemType,
+      subjectId: ask.itemId,
+      checkinId: null,
+      sharedAt: null,
+      seenAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db
+      .update(coachAsks)
+      .set({ trainerNoteId: noteId })
+      .where(eq(coachAsks.id, ask.id));
+    const [row] = await db.select().from(coachAsks).where(eq(coachAsks.id, ask.id)).limit(1);
+    return ok(c, coachAskSchema.parse(mapAsk(row!)));
+  },
+);

@@ -35,3 +35,13 @@ export type CoachAsk = z.infer<typeof coachAskSchema>;
 export const coachAskListResponseSchema = z.object({
   items: z.array(coachAskSchema),
 });
+
+export const answerCoachAskRequestSchema = z.object({
+  note: z.string().trim().max(2000).nullable().optional(),
+});
+export type AnswerCoachAskRequest = z.infer<typeof answerCoachAskRequestSchema>;
+
+export const coachAskNoteRequestSchema = z.object({
+  note: z.string().trim().min(1).max(2000),
+});
+export type CoachAskNoteRequest = z.infer<typeof coachAskNoteRequestSchema>;

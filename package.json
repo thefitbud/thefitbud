@@ -18,9 +18,9 @@
     "db:generate": "pnpm --filter @fitbud/api db:generate",
     "db:migrate:local": "pnpm --filter @fitbud/api db:migrate:local",
     "db:migrate": "pnpm --filter @fitbud/api db:migrate",
-    "db:seed:dev": "pnpm --filter @fitbud/api db:seed:dev",
     "db:seed:library": "pnpm --filter @fitbud/api db:seed:library",
-    "seed:demo": "pnpm --filter @fitbud/api seed:demo"
+    "seed:demo": "pnpm --filter @fitbud/api seed:demo",
+    "db:reset": "pnpm --filter @fitbud/api db:reset"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
