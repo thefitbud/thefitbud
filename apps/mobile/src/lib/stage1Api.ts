@@ -14,7 +14,9 @@ import type {
   LinkKind,
   LinkResolveResponse,
   MeDayResponse,
+  TraineeFoodDetail,
   TraineeFoodSearchResponse,
+  Notification,
   UpdateMealTimesRequest,
   WeekReadModel,
 } from "@fitbud/contracts";
@@ -72,6 +74,8 @@ export type Stage1FitBudClient = FitBudApiClient & {
     expiresAt: string;
   }>;
   searchMeFoods(query: { q: string; limit?: number }): Promise<TraineeFoodSearchResponse>;
+  getTraineeFood(foodId: string): Promise<TraineeFoodDetail>;
+  markNotificationRead(notificationId: string): Promise<Notification>;
   resolveLink(kind: LinkKind, id: string): Promise<LinkResolveResponse>;
   listMeCoachNotes(since?: string): Promise<{
     items: Array<{

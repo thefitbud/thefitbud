@@ -21,10 +21,8 @@ import { MINIMAL_PNG_CONTENT_TYPE } from "../lib/minimalPng";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { uploadMealPhoto } from "./mealActions";
-import {
-  PORTION_MULTIPLIER_CHIPS,
-  servingPresetsForFood,
-} from "./food/servingPresetsV2";
+import { PORTION_MULTIPLIER_CHIPS } from "./food/servingPresetsV2";
+import { FoodServingChips } from "./food/FoodServingChips";
 import { fetchMeFoodRecent } from "../lib/meFoodsApi";
 
 const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
@@ -419,19 +417,13 @@ export function SomethingDifferentSheet({
                   serving
                 </Text>
               ) : null}
-              <View style={styles.servingRow}>
-                {servingPresetsForFood(item).map((preset) => (
-                  <Pressable
-                    key={preset.id}
-                    style={styles.servingChip}
-                    onPress={() =>
-                      addFood(item, preset.quantity, preset.servingId)
-                    }
-                  >
-                    <Text style={styles.servingChipText}>{preset.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
+              <FoodServingChips
+                api={api}
+                item={item}
+                onSelect={(food, quantity, servingId) =>
+                  addFood(food, quantity, servingId)
+                }
+              />
             </View>
           )}
         />

@@ -34,9 +34,14 @@ const CATEGORY_ROWS: Array<{
     description: "The day your check-in is due.",
   },
   {
-    key: "subscriptionRenewalReminder",
+    key: "dailySummaryReminder",
     label: "Daily summary",
     description: "One evening note if anything's left, by 9:30 pm.",
+  },
+  {
+    key: "subscriptionRenewalReminder",
+    label: "Plan renewal",
+    description: "When your coaching plan renewal window opens.",
   },
 ];
 
@@ -174,20 +179,66 @@ export function ReminderSettingsScreen({
               onPress={onOpenMealTimes}
             />
           ) : null}
-          <View style={[styles.row, styles.waRow, !waOn ? styles.waDisabled : null]}>
-            <View style={styles.waText}>
-              <Text style={styles.rowLabel}>
-                WhatsApp reminders{" "}
-                {!waOn ? (
-                  <Text style={styles.comingSoon}>· Coming soon</Text>
-                ) : null}
-              </Text>
-              <Text style={styles.hint}>
-                {waOn
-                  ? "Backup when app notifications don't reach you."
-                  : "WhatsApp reminders are coming soon. For now we'll remind you in the app."}
-              </Text>
-            </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Reminder channel</Text>
+            <Switch
+              value={prefs.channelPreference === "app_and_whatsapp"}
+              disabled={saving || !prefs.pushEnabled || !waOn}
+              onValueChange={(value) => {
+                void (async () => {
+                  setSaving(true);
+                  try {
+                    const updated = await api.updateNotificationPreferences({
+                      channelPreference: value ? "app_and_whatsapp" : "app",
+                    });
+                    setPrefs(updated);
+                  } catch (err) {
+                    setError(
+                      err instanceof ApiClientError
+                        ? err.message
+                        : "Could not save channel.",
+                    );
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
+              }}
+            />
+          </View>
+          <Text style={styles.hint}>
+            {waOn
+              ? "WhatsApp is a backup when app notifications don't reach you."
+              : "WhatsApp channel is off in this build — app notifications only."}
+          </Text>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>WhatsApp opt-in</Text>
+            <Switch
+              value={prefs.whatsappOptIn.granted}
+              disabled={saving || !waOn}
+              onValueChange={(value) => {
+                void (async () => {
+                  setSaving(true);
+                  try {
+                    const updated = await api.updateNotificationPreferences({
+                      whatsappOptIn: {
+                        granted: value,
+                        source: "mobile_reminder_settings",
+                        textVersion: "2026.10",
+                      },
+                    });
+                    setPrefs(updated);
+                  } catch (err) {
+                    setError(
+                      err instanceof ApiClientError
+                        ? err.message
+                        : "Could not save WhatsApp opt-in.",
+                    );
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
+              }}
+            />
           </View>
           {onOpenBatteryHelp ? (
             <PrimaryButton

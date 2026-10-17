@@ -39,7 +39,7 @@ node scripts/capture-all-mobile-screens.mjs http://127.0.0.1:8081
 
 **35 captures** in `docs/implementation/screens/mobile/` + `manifest.txt` (distinct SHA-256).
 
-**Meal assignments:** `GET /meals/.../assignments` still returns **500** on current `stage1` seed (`energyKcalScaled` validation). Mobile keeps `lib/mealAssignmentFallback.ts` until foundation branch returns **200** — remove patch + tests when backend lands.
+**Meal assignments:** `GET /meals/.../assignments` returns **200** after stage1 seed fix (merged be8a1ec). No mobile fallback patch.
 
 ## Per-screen status vs guide
 
@@ -87,7 +87,7 @@ Detailed gaps: [`GAPS-mobile.md`](./GAPS-mobile.md).
 
 ## Architecture
 
-- API: `@fitbud/api-client` + `stage1Api.ts`; `mealAssignmentFallback.ts` until meal list API fixed.
+- API: `@fitbud/api-client` + `stage1Api.ts` (`getTraineeFood`, `markNotificationRead`).
 - UI: `@fitbud/tokens`, `@fitbud/ui-mobile`, `BottomSheet` for TR-08, `react-native-gesture-handler` swipe rows (TM-01).
-- Food servings: `foodServingsSeed.json` (from API seed) + `servingPresetsV2.ts` heuristics TODO fallback.
+- Food servings: `GET /me/foods/:foodId` via `foodServingsApi.ts`; heuristic fallback in `servingPresetsV2.ts` only on fetch failure.
 - Capture: `EXPO_PUBLIC_SCREEN_CAPTURE=1` + `scripts/capture-all-mobile-screens.mjs`.

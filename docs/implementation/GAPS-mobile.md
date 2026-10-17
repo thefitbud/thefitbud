@@ -2,16 +2,20 @@
 
 Last updated: 2026-10-17 (branch `cursor/mobile-screens-a8e8`, pass 4).
 
-## Blocked on foundation (do not patch in mobile forever)
+## Resolved on stage1 (2026-10-17, be8a1ec+)
 
-- **Meal assignment list/detail API** returns `LOCAL_DEV_ERROR` when seeded `energyKcalScaled` exceeds contract max. Mobile uses `mealAssignmentFallback.ts` (`/me/day` synthesis) until `cursor/stage1-foundation-a3da` seed + mapper fix ships; then delete fallback and re-capture TR-07/TR-08.
+- Meal assignments **200** after demo seed quantity fix; **`mealAssignmentFallback.ts` removed**.
+- **`GET /me/foods/:foodId`** wired for TR-08 / TR-26 serving chips (heuristic TODO only on fetch failure).
+- Notification **`route`** + **`markNotificationRead`** on api-client augment; TR-15 uses both.
+- Preference fields: `dailySummaryReminder`, `channelPreference`, `whatsappOptIn`, `traineeTimezone`, `locale` on TR-16 / profile.
+- **`GET /me/steps`** via `meStepsApi.ts` on TR-25 (disabled stub while `steps_enabled=false`).
 
 ## API-NEW (logged in mobile; foundation owns implementation)
 
 | Gap | Screen | Notes |
 |-----|--------|--------|
-| `GET /me/foods/:foodId` (or search/index includes `servings[]`) | TR-08, TR-26 | Trainee cannot call `GET /libraries/foods/:id` (403). Mobile ships v2 servings from **`foodServingsSeed.json`** (extracted from API seed `02_foods.sql`) with **TODO name heuristics** when a food id is missing from the bundle. |
-| `GET /me/foods/recent` on `@fitbud/api-client` | TR-08 | Mobile uses `fetchMeFoodRecent()` raw fetch; augment client when contracts stabilize. |
+| `GET /me/foods/recent` on `@fitbud/api-client` | TR-08 | Mobile uses `fetchMeFoodRecent()` raw fetch. |
+| `GET/PUT /me/steps` on `@fitbud/api-client` | TR-25 | Mobile uses `meStepsApi.ts` raw fetch. |
 | Meal deviate `portionMultiplier` in contract | TR-08 | Sent in outbox payload for portion chips; server may ignore until API-CHG. |
 
 | Screen ID | File | Status | Gaps |

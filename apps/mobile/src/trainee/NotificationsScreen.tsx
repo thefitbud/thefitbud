@@ -7,9 +7,9 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
-import { markNotificationRead } from "../lib/notificationsApi";
+import { stage1Api } from "../lib/stage1Api";
 import {
-  deepLinkFromNotificationPayload,
+  deepLinkFromNotification,
   type NotificationDeepLink,
 } from "../notifications/routing";
 
@@ -44,7 +44,8 @@ export function NotificationsScreen({
   onOpenSettings,
   onNavigate,
 }: Props) {
-  const { api, accessToken } = useAuth();
+  const { api } = useAuth();
+  const s1 = stage1Api(api);
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,9 +83,9 @@ export function NotificationsScreen({
   }, [items, today]);
 
   async function openItem(item: Notification) {
-    if (item.readAt == null && accessToken) {
+    if (item.readAt == null) {
       try {
-        await markNotificationRead(accessToken, item.id);
+        await s1.markNotificationRead(item.id);
         setItems((prev) =>
           prev.map((row) =>
             row.id === item.id
@@ -100,16 +101,15 @@ export function NotificationsScreen({
         // Still navigate if mark-read fails offline.
       }
     }
-    const link = deepLinkFromNotificationPayload(item.routing);
+    const link = deepLinkFromNotification(item);
     if (link) onNavigate(link);
   }
 
   async function markAllRead() {
-    if (!accessToken) return;
     for (const item of items) {
       if (item.readAt != null) continue;
       try {
-        await markNotificationRead(accessToken, item.id);
+        await s1.markNotificationRead(item.id);
       } catch {
         break;
       }
@@ -137,6 +137,7 @@ export function NotificationsScreen({
             <Text style={styles.body}>
               {item.domainEntityType.replace(/_/g, " ")}
             </Text>
+            <Text style={styles.route}>{item.route}</Text>
             <Text style={styles.meta}>{formatWhen(item.createdAt)}</Text>
           </Pressable>
         ))}
@@ -231,6 +232,11 @@ const styles = StyleSheet.create({
   body: {
     color: colors.darkGrey,
     fontSize: 14,
+  },
+  route: {
+    color: colors.indigo,
+    fontSize: 12,
+    fontWeight: "500",
   },
   meta: {
     color: colors.midGrey,

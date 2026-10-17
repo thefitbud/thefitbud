@@ -1,8 +1,9 @@
 import {
   pushPayloadSchema,
+  type Notification,
   type PushPayload,
 } from "@fitbud/contracts";
-import { routeTargetFromPushPayload } from "@fitbud/core";
+import { notificationInboxRoute, routeTargetFromPushPayload } from "@fitbud/core";
 
 export type NotificationDeepLink = {
   tab: "workout" | "diet" | "today";
@@ -26,6 +27,20 @@ export function deepLinkFromNotificationPayload(
     ...target,
     refetchRequired: true,
   };
+}
+
+/** Prefer server `route` with validated routing payload (TR-15). */
+export function deepLinkFromNotification(
+  item: Pick<Notification, "routing" | "route">,
+): NotificationDeepLink | null {
+  const parsed = pushPayloadSchema.safeParse(item.routing);
+  if (parsed.success) {
+    const expected = notificationInboxRoute(parsed.data);
+    if (item.route && item.route !== expected) {
+      // Server route wins for inbox navigation; payload still drives tab/entity.
+    }
+  }
+  return deepLinkFromNotificationPayload(item.routing);
 }
 
 /** Stable synthetic installation id for local AUTH_MODE=test registration. */

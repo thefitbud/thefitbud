@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text } from "react-native";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TraineeFoodSearchResponse } from "@fitbud/contracts";
 
@@ -12,6 +12,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { FoodServingChips } from "./food/FoodServingChips";
 
 type Props = {
   onBack: () => void;
@@ -75,17 +76,20 @@ export function FoodSearchScreen({ onBack, onSelect }: Props) {
               ? Math.round(item.energyKcalScaled / NUTRIENT_SCALE)
               : null;
           return (
-            <Pressable
-              style={styles.row}
-              onPress={() => {
-                onSelect?.(item);
-              }}
-            >
+            <View style={styles.row}>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>
                 {kcal != null ? `${kcal} kcal / serving` : "Nutrition unknown"}
+                {item.defaultServingId ? " · default serving" : ""}
               </Text>
-            </Pressable>
+              <FoodServingChips
+                api={api}
+                item={item}
+                onSelect={(food) => {
+                  onSelect?.(food);
+                }}
+              />
+            </View>
           );
         }}
       />
