@@ -985,6 +985,12 @@ checkinRoutes.post(
       trainerUserId: actor.userId,
       checkinId: parsed.data.checkinId ?? null,
       body: parsed.data.body,
+      visibility: "private" as const,
+      subjectType: null,
+      subjectId: null,
+      sharedAt: null,
+      unsharedAt: null,
+      seenAt: null,
       createdAt: now,
       updatedAt: now,
     };

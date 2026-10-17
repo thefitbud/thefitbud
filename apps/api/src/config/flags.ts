@@ -22,7 +22,10 @@ export async function getFlags(env: Env, db: Db): Promise<ResolvedFlags> {
     }
   }
   for (const key of Object.keys(resolved) as FeatureFlagKey[]) {
-    const override = envFlagOverride(env, key);
+    const override = envFlagOverride(
+      env as unknown as Record<string, string | undefined>,
+      key,
+    );
     if (override !== undefined) {
       resolved[key] = override;
     }

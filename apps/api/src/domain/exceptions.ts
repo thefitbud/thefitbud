@@ -206,6 +206,10 @@ export async function evaluateRelationshipExceptions(
       activatedAt: null,
       acknowledgedAt: null,
       resolvedAt: null,
+      resolutionOutcome: null,
+      resolutionNote: null,
+      closedReason: null,
+      sourceLoggedLateAt: null,
       createdAt: now,
       updatedAt: now,
     };

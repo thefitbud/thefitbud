@@ -135,7 +135,7 @@ export const clientInvitations = sqliteTable(
     onboardingFormTemplateVersionId: text("onboarding_form_template_version_id")
       .notNull()
       .references(() => onboardingFormVersions.id),
-    reissuedFromId: text("reissued_from_id").references(() => clientInvitations.id),
+    reissuedFromId: text("reissued_from_id"),
     revokedAt: text("revoked_at"),
     emailSentAt: text("email_sent_at"),
     createdAt: text("created_at").notNull(),

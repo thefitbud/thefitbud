@@ -33,8 +33,10 @@ devRoutes.get(
   operation({
     tag: "Dev",
     summary: "List dev mail outbox (local only)",
+    description: "Lists captured system emails when EMAIL_PROVIDER=dev_sink.",
     security: "public",
     response: devMailListSchema,
+    successDescription: "Outbox rows for the optional to filter.",
   }),
   async (c) => {
     if (c.env.ENVIRONMENT !== "local") {
