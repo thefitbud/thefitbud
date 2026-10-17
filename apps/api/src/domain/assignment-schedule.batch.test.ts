@@ -4,8 +4,6 @@ import { createMemoryDb } from "../test-support/memory-db.js";
 import { insertMealAssignments, insertWorkoutAssignments } from "./assignment-schedule.js";
 import { coachingRelationships, plans, planVersions, users } from "../db/schema.js";
 import { createId, nowIso } from "../lib/crypto.js";
-import * as schema from "../db/schema.js";
-
 describe("assignment generation batching", () => {
   it("uses bounded D1 round trips for a 28-day window", async () => {
     const handle = await createMemoryDb();

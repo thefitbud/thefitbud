@@ -8,9 +8,6 @@ import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { nowIso } from "../lib/crypto.js";
 import type { Env } from "../types.js";
 import { checkins, exceptions, planVersions } from "../db/schema.js";
-import * as schema from "../db/schema.js";
-
-
 
 import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "../auth/password.js";
 import { buildDemoSeedSql } from "../seed/demo/build.js";
+import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
 
 describe("migration chain and seeds", () => {
@@ -10,9 +11,11 @@ describe("migration chain and seeds", () => {
       const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
       try {
         const passwordHash = await hashPassword("FitBud-demo-2026");
+        const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
         const demoSql = buildDemoSeedSql({
           referenceInstant: new Date().toISOString(),
           passwordHash,
+          libraryIndex,
         });
         handle.sqlite.exec(demoSql);
         const fk = handle.sqlite.exec("PRAGMA foreign_key_check");

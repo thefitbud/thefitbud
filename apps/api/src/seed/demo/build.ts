@@ -1,12 +1,15 @@
 import { DEMO_ACCOUNTS, DEMO_PASSWORD_PLAINTEXT } from "./spec.js";
 import { buildDemoHistorySql } from "./history.js";
 import { demoUuid, sqlQuote } from "./ids.js";
+import type { DemoLibraryIndex } from "./personas.js";
 
 export type DemoSeedInput = {
   /** ISO timestamp used as "now" for the seeded world */
   referenceInstant: string;
   /** PBKDF2 hash for {@link DEMO_PASSWORD_PLAINTEXT} */
   passwordHash: string;
+  /** Resolved v2 library rows (required for honest snapshots). */
+  libraryIndex: DemoLibraryIndex;
 };
 
 function kolkataLocalDate(instant: string): string {
@@ -63,6 +66,7 @@ DELETE FROM idempotency_records;
 DELETE FROM sync_mutations;
 DELETE FROM change_log;
 DELETE FROM trainee_custom_foods;
+DELETE FROM plan_templates WHERE ownership='trainer';
 DELETE FROM user_identities;
 DELETE FROM user_roles;
 DELETE FROM trainer_profiles;
@@ -144,7 +148,13 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
     }
   }
 
-  parts.push(buildDemoHistorySql({ referenceDate: refDate, referenceInstant: now }));
+  parts.push(
+    buildDemoHistorySql({
+      referenceDate: refDate,
+      referenceInstant: now,
+      libraryIndex: input.libraryIndex,
+    }),
+  );
 
   for (const account of DEMO_ACCOUNTS) {
     parts.push(`-- ${account.email} (${account.state})`);
@@ -153,10 +163,3 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
   return `${parts.join("\n")}\n`;
 }
 
-/** @deprecated use {@link buildDemoSeedSql} with password hash */
-export function buildDemoSeedSqlLegacy(referenceDate = new Date()): string {
-  return buildDemoSeedSql({
-    referenceInstant: referenceDate.toISOString(),
-    passwordHash: "pbkdf2$100000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-  });
-}
