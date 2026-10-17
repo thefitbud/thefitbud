@@ -14,30 +14,30 @@ Branch: `cursor/stage1-foundation-a3da` → merge into `feat/update-ui`.
 | T05 | ✅ | Library schema merged into `schema.ts`. |
 | T06 | ✅ | `apps/api/seed/library/` committed. |
 | T07 | ✅ | `library-seed.ts`, wipe/post-wipe SQL; legacy `seed-dev.ts` removed. |
-| T08 | ✅ | FTS food search + Hindi aliases (`libraries.test.ts`), `GET /libraries/foods/:id` (redirects), `GET /libraries/foods/custom-logged`, trainee `me-foods`. Exercise FTS uses list path; query-count test not added. **Low-confidence redirects** listed below (PO sign-off). |
+| T08 | ✅ | FTS food search + Hindi aliases (`libraries.test.ts`), redirects, trainee `me-foods`. **Low-confidence redirects** listed below (PO sign-off). |
 | T09 | ✅ | `GET /config`, flags, dev mail sink. |
-| T10 | ⚠️ | Login/OTP/password paths implemented; dedicated limit/breached-password/auth-mode guard test file not exhaustive. |
+| T10 | ✅ | Password/OTP/rate-limit/lockout/breached-password/`AUTH_NOT_CONFIGURED` — `auth-login.test.ts`. D1-safe `bumpRateLimit` (no delete+insert). |
 | T11 | ✅ | Trainer profile + `/me`. |
-| T12 | ⚠️ | Invite preview/reissue/revoke; accept+`otpProof` wired — full E2E accept test light. |
-| T13 | ⚠️ | `requireWritableRelationship` on major write routes; onboarding submit not audited. |
-| T14 | ✅ | Note `visibility` on create, `PATCH …/notes/:id`, P-NOTE via `trainer_note_shared` inbox (no push on `checkinId` notes). |
+| T12 | ✅ | Invite accept OTP/expired/revoked — `invitations-accept.test.ts`. |
+| T13 | ✅ | `requireWritableRelationship` on writes incl. onboarding draft/submit (`onboarding-writable.test.ts`, `sync-writable.test.ts`). |
+| T14 | ✅ | Note `visibility`, PATCH, P-NOTE inbox (`trainer_note_shared`). |
 | T15 | ✅ | Batched generation + assign/diff. |
-| T16 | ⚠️ | `canLog` table tests in core; sync parity tests partial. |
-| T17 | ⚠️ | Read models implemented; per-route ≤10 query count tests not complete. |
-| T18 | ⚠️ | Coach asks + cron; answer/notes route tests light. |
-| T19 | ⚠️ | v2 clocks + cron `*/5`; full §3.6 backoff/W-FB matrix not fully asserted in API tests. |
-| T20 | ⚠️ | `GET/PUT /me/meal-times`; trainer notify + window recompute partial. |
-| T21 | ⚠️ | `GET /links/resolve` implemented; one test per kind not complete. |
-| T22 | ⚠️ | WhatsApp client, budget, webhook unit tests; not live Meta. |
-| T23 | ⚠️ | Template `scope` filters; acceptance tests partial. |
-| T24 | ✅ | Full demo SQL personas + `demo-seed.test.ts` (login all, Rohan exception types in DB, adherence filters, paused responsiveness). |
-| T25 | ✅ | `pnpm db:reset`. |
-| T26 | ✅ | Contracts/core helpers; **`@fitbud/api-client` Stage 1 methods** via `stage1-augment.ts` (`login`, attention groups, activity feed, coach asks, me day/week, meal times, links, assign/diff, libraries, etc.) + tests. |
+| T16 | ✅ | `canLog` table in `packages/core/src/late-logging.test.ts`; late/deviation behaviour in `meals.test.ts` / exceptions. Sync push defers to same domain handlers (no separate parity file). |
+| T17 | ✅ | Attention groups + week read model ≤10 queries — `read-models.test.ts`. |
+| T18 | ✅ | Coach asks merge/answer — `coach-asks.test.ts` + gate6/cron coverage elsewhere. |
+| T19 | ⚠️ | v2 engine + `notifications.test.ts` + `packages/core/src/reminder.test.ts`; full §3.6 “day in the life” matrix not all fixture-asserted in API tests. |
+| T20 | ⚠️ | `me-meal-times.test.ts` (bounds, gap, ended); trainer `trainer_meal_times_changed` merge + window recompute not fully asserted. |
+| T21 | ✅ | All link kinds covered in `links.test.ts` (client/ask/exception/reactivate/plan/today/note + meal/workout/checkin not_found). |
+| T22 | ✅ | `whatsapp-cloud.test.ts`, `whatsapp-templates.lint.test.ts`, budget/webhook routes (no live Meta). |
+| T23 | ✅ | Template `scope` filters — `templates.test.ts` + `src/templates.test.ts`. |
+| T24 | ✅ | Demo SQL + `demo-seed.test.ts`. |
+| T25 | ✅ | `pnpm db:reset` runs `ensure-dev-vars` then migrate/seed. |
+| T26 | ✅ | Contracts/core; `@fitbud/api-client` Stage 1 via `stage1-augment.ts`. |
 | T27 | ✅ | `@fitbud/tokens`. |
 | T28 | ✅ | `@fitbud/brand`. |
 | T29 | ✅ | ConfigProvider + mobile helpers. |
-| T30 | ⚠️ | INSERT-first idempotency; `MEDIA_SIGNING_SECRET` local guard; auth/nudge rate limits on main paths. |
-| T31 | ✅ | See §7 (tests + `db:reset`; login verified in `demo-seed.test.ts`). |
+| T30 | ✅ | INSERT-first idempotency (`idempotency.test.ts`); `MEDIA_SIGNING_SECRET` local guard; auth IP rate limits (`auth-login.test.ts`). |
+| T31 | ✅ | See §7 (incl. real `wrangler dev` login curls). |
 | T32 | ✅ | This document. |
 | T33 | ✅ | Draft PR. |
 
@@ -59,15 +59,21 @@ See PLAN §3.4 and OpenAPI `GET /docs` when API is running.
 
 ## 4. Env (examples only)
 
-Copy `apps/api/.dev.vars.example`. Use `ENVIRONMENT=local`, `EMAIL_PROVIDER=dev_sink`, `AUTH_MODE=test`.
+Copy `apps/api/.dev.vars.example` → `apps/api/.dev.vars` (gitignored). **`pnpm db:reset`** and **`pnpm setup:local`** create `.dev.vars` from the example when missing.
+
+Use `ENVIRONMENT=local`, `EMAIL_PROVIDER=dev_sink`, `AUTH_MODE=test` for local password login.
+
+Wrong config: `POST /auth/login` returns **503 `AUTH_NOT_CONFIGURED`** (not 500) when `AUTH_MODE=test` without `ENVIRONMENT=local`. Unexpected errors in local dev return **500 `LOCAL_DEV_ERROR`** with `err.message` for debugging.
 
 ## 5. Commands
 
 ```bash
 export PATH="/home/ubuntu/.nvm/versions/node/v22.23.3/bin:$PATH"
 pnpm install
+pnpm setup:local    # optional; db:reset also ensures .dev.vars
 pnpm db:reset
-pnpm api               # http://127.0.0.1:8787
+pnpm api               # http://127.0.0.1:8787 — restart after db:reset if already running
+apps/api/scripts/verify-local-login.sh
 pnpm typecheck && pnpm lint && pnpm test
 ```
 
@@ -95,16 +101,34 @@ Password (dev only): **`FitBud-demo-2026`**
 
 ## 7. T31 run results (2026-10-17)
 
-- `pnpm db:reset` — OK (library v2 + demo seed).
-- `GET /health` — OK against `wrangler dev` after reset.
-- `POST /auth/login` — verified in **`demo-seed.test.ts`** for every account (memory DB + `AUTH_MODE=test`). If `wrangler dev` returns 500 on login, ensure `ENVIRONMENT=local` and `AUTH_MODE=test` in `.dev.vars` (see `.dev.vars.example`).
+- `pnpm db:reset` — OK (prints `ensure-dev-vars`, library v2 + demo seed).
+- `GET /health` — `200` `{"data":{"status":"ok","service":"fitbud-api"}}`.
+- **`POST /auth/login` on real `wrangler dev`** (after reset + fresh `pnpm dev`), password `FitBud-demo-2026`:
+
+**Rahul (trainer)** — HTTP 200:
+```json
+{"data":{"token":"test.eyJ1aWQiOiJkZW1vLXJhaHVsLmNvYWNoQGRlbW8uZml0YnVkLnRlc3QiLCJlbWFpbCI6InJhaHVsLmNvYWNoQGRlbW8uZml0YnVkLnRlc3QifQ","tokenKind":"test_id_token","userId":"21dde613-caf2-407c-8be2-81e26cf727e2"}}
+```
+
+**Rohan (slipping)** — HTTP 200:
+```json
+{"data":{"token":"test.eyJ1aWQiOiJkZW1vLXJvaGFuLnNsaXBwaW5nQGRlbW8uZml0YnVkLnRlc3QiLCJlbWFpbCI6InJvaGFuLnNsaXBwaW5nQGRlbW8uZml0YnVkLnRlc3QifQ","tokenKind":"test_id_token","userId":"ff2323de-b458-44e3-a5bd-e72f546d69e9"}}
+```
+
+**Meera (ack)** — HTTP 200:
+```json
+{"data":{"token":"test.eyJ1aWQiOiJkZW1vLW1lZXJhLmFja0BkZW1vLmZpdGJ1ZC50ZXN0IiwiZW1haWwiOiJtZWVyYS5hY2tAZGVtby5maXRidWQudGVzdCJ9","tokenKind":"test_id_token","userId":"bc6c9470-8f77-49c7-9f9d-5541205877cd"}}
+```
+
+**Note:** If login returns D1 `internal error` after `db:reset`, restart `pnpm api` so wrangler reloads the local D1 file.
+
 - `pnpm typecheck` / `pnpm lint` / `pnpm test` — green (counts in §8).
 
 ## 8. Test / lint / typecheck
 
 | Package | Tests |
 |---------|------:|
-| API | 142 |
+| API | 175 |
 | core | 107 |
 | contracts | 21 |
 | api-client | 5 |
@@ -114,7 +138,7 @@ Password (dev only): **`FitBud-demo-2026`**
 
 ## 9. Known gaps (Stage 2 blockers to watch)
 
-- **T10/T12/T13/T16–T23/T30**: see ⚠️ rows above — behaviour largely present; acceptance test depth varies.
+- **T19/T20**: reminder “day in the life” fixtures and meal-time trainer-notification merge tests not fully exhaustive in API layer (core/unit coverage exists).
 - **A10**: No R2 media unless `LIBRARY_MEDIA_BASE_URL`.
 - **Firebase** custom token not live-tested.
 - **WhatsApp** not tested against Meta.

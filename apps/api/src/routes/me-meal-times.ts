@@ -101,11 +101,37 @@ meMealTimeRoutes.put(
     if (!parsed.success) {
       return fail(c, 400, "INVALID_REQUEST", "Invalid meal times.");
     }
+    const timeToMinutes = (time: string): number | null => {
+      const [hRaw, mRaw] = time.split(":").map(Number);
+      const h = hRaw ?? 0;
+      const m = mRaw ?? 0;
+      if (!Number.isFinite(h) || !Number.isFinite(m)) {
+        return null;
+      }
+      return h * 60 + m;
+    };
+    const minutes: number[] = [];
     for (const override of parsed.data.overrides) {
       const [hRaw] = override.time.split(":").map(Number);
       const h = hRaw ?? 0;
       if (!Number.isFinite(h) || h < 5 || h > 22) {
         return fail(c, 400, "INVALID_TIME", "Times must be between 05:00 and 22:00.");
+      }
+      const total = timeToMinutes(override.time);
+      if (total === null) {
+        return fail(c, 400, "INVALID_TIME", "Times must be between 05:00 and 22:00.");
+      }
+      minutes.push(total);
+    }
+    const sorted = [...minutes].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i += 1) {
+      if (sorted[i]! - sorted[i - 1]! < 60) {
+        return fail(
+          c,
+          400,
+          "INVALID_MEAL_TIME_GAP",
+          "Meal times must be at least 60 minutes apart.",
+        );
       }
     }
     const db = createDb(c.env.DB);

@@ -5,7 +5,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as schema from "../db/schema.js";
 import type { Db } from "../db/client.js";
-import { createD1Database } from "./d1-sqlite.js";
+import {
+  createD1Database,
+  type D1QueryCounter,
+  wrapD1WithQueryCounter,
+} from "./d1-sqlite.js";
 import { splitSqlStatements } from "./sql-split.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
@@ -24,6 +28,8 @@ export type MemoryDbHandle = {
   close: () => void;
   applyMigrationsUpTo: (inclusiveFileName: string) => void;
   applyMigrationsFrom: (inclusiveFileName: string) => void;
+  /** Increments on each D1 prepare() when query counting is enabled. */
+  queryCounter: D1QueryCounter;
 };
 
 function assertFts5Available(): void {
@@ -178,7 +184,13 @@ export async function createMemoryDb(options?: {
     runLibrarySeed(sqlite);
   }
 
-  const d1 = createD1Database(sqlite);
+  const queryCounter: D1QueryCounter = {
+    count: 0,
+    reset() {
+      this.count = 0;
+    },
+  };
+  const d1 = wrapD1WithQueryCounter(createD1Database(sqlite), queryCounter);
   const db = drizzle(d1, { schema }) as Db;
 
   const applyMigrationsUpTo = (inclusiveFileName: string) => {
@@ -207,5 +219,6 @@ export async function createMemoryDb(options?: {
     close: () => sqlite.close(),
     applyMigrationsUpTo,
     applyMigrationsFrom,
+    queryCounter,
   };
 }

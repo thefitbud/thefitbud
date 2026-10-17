@@ -24,6 +24,8 @@ function run(command: string, args: string[]) {
   }
 }
 
+run("tsx", ["scripts/ensure-dev-vars.ts"]);
+
 console.log(`Removing ${allowed}`);
 rmSync(allowed, { recursive: true, force: true });
 
