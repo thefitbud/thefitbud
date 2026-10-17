@@ -30,7 +30,7 @@ describe("auth flow helpers", () => {
   });
 
   it("OTP start uses login purpose", async () => {
-    startOtp.mockResolvedValueOnce({ sent: true });
+    startOtp.mockResolvedValueOnce({ sent: true, channels: ["email"] });
     const s1 = (await import("../../lib/stage1Api")).stage1Api({} as never);
     await s1.startOtp({ identifier: "user@example.com", purpose: "login" });
     expect(startOtp).toHaveBeenCalledWith({
@@ -40,7 +40,12 @@ describe("auth flow helpers", () => {
   });
 
   it("OTP verify returns token", async () => {
-    verifyOtp.mockResolvedValueOnce({ token: "session" });
+    verifyOtp.mockResolvedValueOnce({
+      purpose: "login",
+      token: "session",
+      tokenKind: "test_id_token",
+      userId: "00000000-0000-4000-8000-000000000001",
+    });
     const s1 = (await import("../../lib/stage1Api")).stage1Api({} as never);
     const result = await s1.verifyOtp({
       identifier: "user@example.com",
@@ -48,6 +53,9 @@ describe("auth flow helpers", () => {
       code: "123456",
     });
     expect(verifyOtp).toHaveBeenCalled();
-    expect(result.token).toBe("session");
+    expect(result.purpose).toBe("login");
+    if (result.purpose === "login") {
+      expect(result.token).toBe("session");
+    }
   });
 });

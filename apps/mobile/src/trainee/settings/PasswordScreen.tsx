@@ -50,7 +50,11 @@ export function PasswordScreen({ onBack }: Props) {
         purpose: "reset",
         code,
       });
-      setOtpProof(result.otpProof ?? result.token);
+      if (result.purpose !== "reset") {
+        setError("That code didn't work.");
+        return;
+      }
+      setOtpProof(result.resetProof);
       setStep("set");
     } catch {
       setError("That code didn't work.");

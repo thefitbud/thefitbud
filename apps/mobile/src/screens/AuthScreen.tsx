@@ -84,6 +84,10 @@ export function AuthScreen() {
         purpose: "login",
         code,
       });
+      if (result.purpose !== "login") {
+        setLocalError("That code didn't work. Check the latest message or tap Resend.");
+        return;
+      }
       await finishAuth(result.token);
     } catch {
       setLocalError("That code didn't work. Check the latest message or tap Resend.");
@@ -114,7 +118,11 @@ export function AuthScreen() {
         purpose: "reset",
         code,
       });
-      setOtpProof(result.otpProof ?? result.token);
+      if (result.purpose !== "reset") {
+        setLocalError("That code didn't work. Request a new code.");
+        return;
+      }
+      setOtpProof(result.resetProof);
       setForgotStep("set");
     } catch {
       setLocalError("That code didn't work. Request a new code.");

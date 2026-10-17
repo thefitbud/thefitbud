@@ -43,7 +43,12 @@ describe("mobile integration flows (mocked api)", () => {
   });
 
   it("OTP verify uses stage1 client", async () => {
-    const verifyOtp = vi.fn().mockResolvedValue({ token: "session" });
+    const verifyOtp = vi.fn().mockResolvedValue({
+      purpose: "login",
+      token: "session",
+      tokenKind: "test_id_token",
+      userId: "00000000-0000-4000-8000-000000000001",
+    });
     const { stage1Api } = await import("../lib/stage1Api");
     const s1 = stage1Api({ verifyOtp } as never);
     const result = await s1.verifyOtp({
@@ -52,7 +57,10 @@ describe("mobile integration flows (mocked api)", () => {
       code: "123456",
     });
     expect(verifyOtp).toHaveBeenCalled();
-    expect(result.token).toBe("session");
+    expect(result.purpose).toBe("login");
+    if (result.purpose === "login") {
+      expect(result.token).toBe("session");
+    }
   });
 
   it("food search calls searchMeFoods", async () => {

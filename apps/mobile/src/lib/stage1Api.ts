@@ -5,7 +5,9 @@ import type {
   AttentionGroupsResponse,
   AuthLoginRequest,
   AuthOtpStartRequest,
+  AuthOtpStartResponse,
   AuthOtpVerifyRequest,
+  AuthOtpVerifyResponse,
   AuthPasswordResetRequest,
   AuthPasswordSetRequest,
   AuthTokenResponse,
@@ -50,8 +52,8 @@ type MealTimesResponse = {
 /** Stage 1 methods installed on FitBudApiClient via stage1-augment (not on the public type). */
 export type Stage1FitBudClient = FitBudApiClient & {
   login(body: AuthLoginRequest): Promise<AuthTokenResponse>;
-  startOtp(body: AuthOtpStartRequest): Promise<{ sent: boolean }>;
-  verifyOtp(body: AuthOtpVerifyRequest): Promise<AuthTokenResponse & { otpProof?: string }>;
+  startOtp(body: AuthOtpStartRequest): Promise<AuthOtpStartResponse>;
+  verifyOtp(body: AuthOtpVerifyRequest): Promise<AuthOtpVerifyResponse>;
   resetPassword(body: AuthPasswordResetRequest): Promise<AuthTokenResponse>;
   setPassword(body: AuthPasswordSetRequest): Promise<void>;
   getAttentionGroups(): Promise<AttentionGroupsResponse>;
