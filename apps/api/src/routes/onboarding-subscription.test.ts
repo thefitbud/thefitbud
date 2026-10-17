@@ -1,6 +1,5 @@
 import initSqlJs, { type Database } from "sql.js";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/sql-js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -204,12 +203,12 @@ const APP_MIGRATIONS = [
   "0020_exception_severity.sql",
 ];
 
+
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of APP_MIGRATIONS) applySql(sqlite, file);
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return { db, close: () => sqlite.close() };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function testEnv(): Env {

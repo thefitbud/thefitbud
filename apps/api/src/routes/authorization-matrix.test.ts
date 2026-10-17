@@ -5,9 +5,6 @@
  * trainee role rejection (403) across major protected surfaces.
  * Domain lifecycle tests remain in per-route suites.
  */
-import initSqlJs from "sql.js";
-import { drizzle } from "drizzle-orm/sql-js";
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -48,17 +45,12 @@ const MIGRATIONS = [
 const UNKNOWN_RELATIONSHIP = "00000000-0000-4000-8000-000000000099";
 const UNKNOWN_MEDIA = "00000000-0000-4000-8000-000000000098";
 
+
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of MIGRATIONS) {
-    sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-  }
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return {
-    db,
-    close: () => sqlite.close(),
-  };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function dummyD1(): D1Database {
