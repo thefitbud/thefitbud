@@ -16,7 +16,14 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
+import { createIdempotencyKey } from "../lib/idempotency";
+import { StatusChip } from "../components/StatusChip";
+import {
+  buildClientAttentionCards,
+  formatAttentionAge,
+} from "./attentionCards";
 import { statusLabel, typeLabel } from "./labels";
+import { openContextualWhatsApp } from "./whatsapp";
 
 type Segment = "needs_you" | "asked" | "checkins";
 
@@ -85,8 +92,30 @@ export function AttentionTab({
     [groups],
   );
 
+  async function acknowledgeItem(exceptionId: string) {
+    try {
+      await api.acknowledgeException(
+        exceptionId,
+        { note: null },
+        createIdempotencyKey(),
+      );
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not mark as reviewed.",
+      );
+    }
+  }
+
+  const clientCards = useMemo(
+    () => buildClientAttentionCards(groups),
+    [groups],
+  );
+
   return (
-    <Screen title="Attention" subtitle="Who needs you, and why.">
+    <Screen title="Today" subtitle="Who needs you, and why.">
       {error ? <ErrorBanner message={error} /> : null}
 
       <SegmentedControl
@@ -113,32 +142,59 @@ export function AttentionTab({
       ) : segment === "needs_you" ? (
         needsYouCount === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>You're all caught up</Text>
+            <Text style={styles.emptyTitle}>All caught up</Text>
             <Text style={styles.muted}>
-              Exceptions from your clients' plans show up here when something
-              needs a look.
+              When a client needs a look, you'll see one card per person here.
             </Text>
             <PrimaryButton label="Open clients" onPress={onOpenClients} />
           </View>
         ) : (
           <View style={styles.list}>
-            {groups.map((group) => (
-              <View key={group.relationshipId} style={styles.clientCard}>
-                <Text style={styles.who}>{group.traineeDisplayName}</Text>
-                {group.items.map((item) => (
+            {clientCards.map((card) => (
+              <View key={card.relationshipId} style={styles.clientCard}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.who}>{card.traineeDisplayName}</Text>
+                  <StatusChip
+                    label={card.primary.severity}
+                    tone={
+                      card.primary.severity === "critical"
+                        ? "warning"
+                        : "attention"
+                    }
+                  />
+                </View>
+                <Text style={styles.summary}>{card.primary.summary}</Text>
+                <Text style={styles.meta}>
+                  {typeLabel(card.primary.type)} ·{" "}
+                  {formatAttentionAge(card.primary.ageMinutes)}
+                  {card.itemCount > 1 ? ` · +${card.itemCount - 1} more` : ""}
+                </Text>
+                <PrimaryButton
+                  label="Review"
+                  onPress={() => onReviewException(card.primary.id)}
+                />
+                <View style={styles.swipeRow}>
                   <Pressable
-                    key={item.id}
                     accessibilityRole="button"
-                    onPress={() => onReviewException(item.id)}
-                    style={styles.itemRow}
+                    style={styles.swipeAction}
+                    onPress={() => {
+                      void acknowledgeItem(card.primary.id);
+                    }}
                   >
-                    <Text style={styles.meta}>
-                      {statusLabel(item.status)} · {typeLabel(item.type)}
-                    </Text>
-                    <Text style={styles.summary}>{item.summary}</Text>
-                    <Text style={styles.action}>Review</Text>
+                    <Text style={styles.swipeActionText}>Mark reviewed</Text>
                   </Pressable>
-                ))}
+                  <Pressable
+                    accessibilityRole="button"
+                    style={styles.swipeActionAlt}
+                    onPress={() => {
+                      void openContextualWhatsApp({
+                        draftText: `Hi — gentle nudge from FitBud: ${card.primary.summary}`,
+                      });
+                    }}
+                  >
+                    <Text style={styles.swipeActionTextAlt}>Nudge</Text>
+                  </Pressable>
+                </View>
               </View>
             ))}
           </View>
@@ -205,10 +261,50 @@ const styles = StyleSheet.create({
   clientCard: {
     backgroundColor: colors.white,
     borderColor: colors.lightGrey,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.lg,
+  },
+  cardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  swipeRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  swipeAction: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 8,
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+  },
+  swipeActionAlt: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+  },
+  swipeActionText: {
+    color: colors.indigo,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  swipeActionTextAlt: {
+    color: colors.deepNavy,
+    fontSize: 13,
+    fontWeight: "600",
   },
   card: {
     backgroundColor: colors.white,

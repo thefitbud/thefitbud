@@ -35,6 +35,7 @@ import {
   registerTraineeCaptureNav,
 } from "../dev/captureBridge";
 import { scheduledAssignments } from "./scheduledAssignments";
+import type { NotificationDeepLink } from "../notifications/routing";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
 
@@ -89,6 +90,46 @@ export function TraineeShell({
   const openOverlay: TraineeOverlayOpener = useCallback((next) => {
     setOverlay(next);
   }, []);
+
+  const handleNotificationNavigate = useCallback(
+    (link: NotificationDeepLink) => {
+      setTab(
+        link.tab === "workout"
+          ? "workout"
+          : link.tab === "diet"
+            ? "diet"
+            : "today",
+      );
+      if (link.domainEntityType === "meal_assignment") {
+        setOverlay({
+          screen: "something_different",
+          assignmentId: link.domainEntityId,
+        });
+        return;
+      }
+      if (link.domainEntityType === "workout_assignment") {
+        setOverlay({
+          screen: "workout_overview",
+          assignmentId: link.domainEntityId,
+        });
+        return;
+      }
+      if (link.domainEntityType === "checkin") {
+        void (async () => {
+          try {
+            const list = await api.listCheckins(relationship.id);
+            const match = list.items.find(
+              (item) => item.id === link.domainEntityId,
+            );
+            if (match) setActiveCheckin(match);
+          } catch {
+            // ignore
+          }
+        })();
+      }
+    },
+    [api, relationship.id],
+  );
 
   const loadEffectivePlan = useCallback(async () => {
     try {
@@ -319,7 +360,7 @@ export function TraineeShell({
     );
   }
 
-  if (overlay) {
+  if (overlay && overlay.screen !== "something_different") {
     return (
       <TraineeOverlayHost
         overlay={overlay}
@@ -328,6 +369,7 @@ export function TraineeShell({
         onClose={() => setOverlay(null)}
         onOpen={openOverlay}
         onSignOut={signOut}
+        onNotificationNavigate={handleNotificationNavigate}
       />
     );
   }
@@ -397,6 +439,19 @@ export function TraineeShell({
           <MoreScreen relationship={relationship} onOpenOverlay={openOverlay} />
         ) : null}
       </View>
+
+      {overlay?.screen === "something_different" ? (
+        <TraineeOverlayHost
+          overlay={overlay}
+          relationship={relationship}
+          effectivePlan={effectivePlan}
+          presentation="sheet"
+          onClose={() => setOverlay(null)}
+          onOpen={openOverlay}
+          onSignOut={signOut}
+          onNotificationNavigate={handleNotificationNavigate}
+        />
+      ) : null}
 
       <View accessibilityRole="tablist" style={styles.tabBar}>
         {TABS.map((item) => {

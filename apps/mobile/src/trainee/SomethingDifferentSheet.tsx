@@ -4,6 +4,7 @@ import { ApiClientError } from "@fitbud/api-client";
 import type {
   LoggedFoodItem,
   MealAssignment,
+  MealDeviationKind,
   TraineeFoodSearchResponse,
 } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
@@ -20,21 +21,26 @@ import { MINIMAL_PNG_CONTENT_TYPE } from "../lib/minimalPng";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { uploadMealPhoto } from "./mealActions";
+import { servingPresetsForFood } from "./food/servingPresetsV2";
 
 const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
 
-const SERVING_PRESETS = [
-  { label: "½ serving", quantity: 0.5 },
-  { label: "1 serving", quantity: 1 },
-  { label: "1 katori", quantity: 1 },
-  { label: "2 roti", quantity: 2 },
-] as const;
+const QUICK_OPTIONS: Array<{ kind: MealDeviationKind; label: string }> = [
+  { kind: "portion_adjustment", label: "Smaller portion" },
+  { kind: "portion_adjustment", label: "Bigger portion" },
+  { kind: "restaurant", label: "Ate out" },
+  { kind: "manual", label: "Type it in" },
+  { kind: "other", label: "Other" },
+];
 
 type Props = {
   assignment: MealAssignment;
   relationshipId: string;
+  variant?: "screen" | "sheet";
   onDone: () => void;
   onCancel: () => void;
+  onOpenFoodSearch?: () => void;
+  onAskCoach?: () => void;
 };
 
 type LoggedRow = LoggedFoodItem & { label: string; kcalPreview: number | null };
@@ -42,8 +48,11 @@ type LoggedRow = LoggedFoodItem & { label: string; kcalPreview: number | null };
 export function SomethingDifferentSheet({
   assignment,
   relationshipId,
+  variant = "screen",
   onDone,
   onCancel,
+  onOpenFoodSearch,
+  onAskCoach,
 }: Props) {
   const { api } = useAuth();
   const s1 = stage1Api(api);
@@ -74,7 +83,11 @@ export function SomethingDifferentSheet({
     }
   }, [query, s1]);
 
-  function addFood(item: TraineeFoodSearchItem, quantity = 1) {
+  function addFood(
+    item: TraineeFoodSearchItem,
+    quantity = 1,
+    servingId?: string,
+  ) {
     const kcalPreview =
       item.energyKcalScaled != null
         ? Math.round((item.energyKcalScaled / NUTRIENT_SCALE) * quantity)
@@ -83,7 +96,7 @@ export function SomethingDifferentSheet({
       ...prev,
       {
         foodId: item.id,
-        servingId: item.defaultServingId ?? undefined,
+        servingId: servingId ?? item.defaultServingId ?? undefined,
         quantity,
         label: item.name,
         kcalPreview,
@@ -119,6 +132,33 @@ export function SomethingDifferentSheet({
         return { ...row, quantity };
       }),
     );
+  }
+
+  async function saveQuick(kind: MealDeviationKind, notes: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "meal.deviate",
+        payload: {
+          assignmentId: assignment.id,
+          body: {
+            deviationKind: kind,
+            notes,
+            photoIntent: null,
+            items: [],
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not save meal.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function save() {
@@ -178,11 +218,27 @@ export function SomethingDifferentSheet({
     0,
   );
 
-  return (
-    <Screen
-      title="What did you have instead?"
-      subtitle={`${assignment.mealName} · log what you actually ate`}
-    >
+  const body = (
+    <>
+      <PrimaryButton
+        label="Log what I ate"
+        onPress={() => {
+          onOpenFoodSearch?.();
+        }}
+      />
+      <View style={styles.quickRow}>
+        {QUICK_OPTIONS.map((option) => (
+          <Pressable
+            key={option.label}
+            style={styles.quickChip}
+            onPress={() => {
+              void saveQuick(option.kind, option.label);
+            }}
+          >
+            <Text style={styles.quickChipText}>{option.label}</Text>
+          </Pressable>
+        ))}
+      </View>
       {assignment.prescription.instructions ? (
         <View style={styles.planned}>
           <Text style={styles.plannedTitle}>Planned</Text>
@@ -223,11 +279,13 @@ export function SomethingDifferentSheet({
                 </Text>
               ) : null}
               <View style={styles.servingRow}>
-                {SERVING_PRESETS.map((preset) => (
+                {servingPresetsForFood(item).map((preset) => (
                   <Pressable
-                    key={preset.label}
+                    key={preset.id}
                     style={styles.servingChip}
-                    onPress={() => addFood(item, preset.quantity)}
+                    onPress={() =>
+                      addFood(item, preset.quantity, preset.servingId)
+                    }
                   >
                     <Text style={styles.servingChipText}>{preset.label}</Text>
                   </Pressable>
@@ -286,12 +344,50 @@ export function SomethingDifferentSheet({
         </View>
       ) : null}
       <PrimaryButton label="Save meal" loading={saving} onPress={() => void save()} />
+      {onAskCoach ? (
+        <PrimaryButton
+          label="Ask coach about this meal"
+          variant="ghost"
+          onPress={onAskCoach}
+        />
+      ) : null}
       <PrimaryButton label="Cancel" variant="ghost" onPress={onCancel} />
+    </>
+  );
+
+  if (variant === "sheet") {
+    return body;
+  }
+
+  return (
+    <Screen
+      title="What did you have instead?"
+      subtitle={`${assignment.mealName} · log what you actually ate`}
+    >
+      {body}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  quickRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  quickChip: {
+    backgroundColor: colors.white,
+    borderColor: colors.paleLavender,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  quickChipText: {
+    color: colors.deepNavy,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   results: {
     maxHeight: 160,
     marginTop: spacing.sm,

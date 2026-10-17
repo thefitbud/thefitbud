@@ -1,5 +1,5 @@
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import type { RingDatum } from "@fitbud/ui-mobile";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { DateNavigatorDay, RingDatum } from "@fitbud/ui-mobile";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { formatHeadingDate } from "../../lib/dates";
 
@@ -8,18 +8,67 @@ export function isExpoWeb(): boolean {
 }
 
 /** Expo web: avoid ui-mobile DateNavigator/NutritionRings until RN-web gap/SVG issues are resolved. */
+function dotColor(state: DateNavigatorDay["state"]): string {
+  switch (state) {
+    case "done":
+      return colors.success;
+    case "partial":
+      return colors.warning;
+    case "open":
+      return colors.indigo;
+    case "rest":
+      return colors.lightGrey;
+    default:
+      return colors.midGrey;
+  }
+}
+
 export function WebDateHeading({
   timeZone,
   selectedDate,
   onSelectDate,
   today,
+  days = [],
 }: {
   timeZone: string;
   selectedDate: string;
   onSelectDate: (date: string) => void;
   today: string;
+  days?: DateNavigatorDay[];
 }) {
   return (
+    <View style={styles.dateBlock}>
+      {days.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.stripRow}>
+            {days.map((day) => {
+              const selected = day.localDate === selectedDate;
+              return (
+                <Pressable
+                  key={day.localDate}
+                  accessibilityRole="button"
+                  onPress={() => onSelectDate(day.localDate)}
+                  style={[styles.dayPill, selected ? styles.dayPillSelected : null]}
+                >
+                  <Text
+                    style={[styles.weekday, selected ? styles.dayTextSelected : null]}
+                  >
+                    {day.weekdayLabel}
+                  </Text>
+                  <Text
+                    style={[styles.dayNum, selected ? styles.dayTextSelected : null]}
+                  >
+                    {day.dayLabel}
+                  </Text>
+                  <View
+                    style={[styles.dot, { backgroundColor: dotColor(day.state) }]}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      ) : null}
     <View style={styles.dateRow}>
       <Pressable
         accessibilityRole="button"
@@ -58,6 +107,7 @@ export function WebDateHeading({
         </Pressable>
       ) : null}
     </View>
+    </View>
   );
 }
 
@@ -81,6 +131,44 @@ export function WebNutritionSummary({ data }: { data: RingDatum[] }) {
 }
 
 const styles = StyleSheet.create({
+  dateBlock: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  stripRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  dayPill: {
+    alignItems: "center",
+    borderRadius: 12,
+    minWidth: 44,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  dayPillSelected: {
+    backgroundColor: colors.white,
+  },
+  weekday: {
+    color: colors.midGrey,
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  dayNum: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  dayTextSelected: {
+    color: colors.indigo,
+  },
+  dot: {
+    borderRadius: 4,
+    height: 6,
+    marginTop: 2,
+    width: 6,
+  },
   dateRow: {
     alignItems: "center",
     flexDirection: "row",

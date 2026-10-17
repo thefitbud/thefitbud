@@ -139,11 +139,13 @@ export function patchMealAssignmentClient(
       return value;
     } catch (error) {
       if (!shouldUseMealAssignmentFallback(error)) throw error;
-      throw new ApiClientError(
-        "Meal assignment is not available offline. Open Diet and try again.",
-        404,
-        "NOT_FOUND",
-      );
+      throw new ApiClientError({
+        code: "NOT_FOUND",
+        message:
+          "Meal assignment is not available offline. Open Diet and try again.",
+        requestId: "unknown",
+        status: 404,
+      });
     }
   };
 

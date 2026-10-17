@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Notification } from "@fitbud/contracts";
@@ -8,9 +8,15 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { markNotificationRead } from "../lib/notificationsApi";
+import {
+  deepLinkFromNotificationPayload,
+  type NotificationDeepLink,
+} from "../notifications/routing";
 
 type Props = {
   onBack: () => void;
+  onOpenSettings: () => void;
+  onNavigate: (link: NotificationDeepLink) => void;
 };
 
 function formatWhen(iso: string): string {
@@ -20,11 +26,29 @@ function formatWhen(iso: string): string {
   }).format(new Date(iso));
 }
 
-export function NotificationsScreen({ onBack }: Props) {
+function notificationTitle(item: Notification): string {
+  const type = item.type.replace(/_/g, " ");
+  if (item.type === "meal_reminder") return "Meal reminder";
+  if (item.type === "workout_reminder") return "Workout reminder";
+  if (item.type === "trainer_note_shared") return "Coach note";
+  if (item.type === "coach_answered") return "Coach answered";
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function isToday(iso: string, today: string): boolean {
+  return iso.slice(0, 10) === today;
+}
+
+export function NotificationsScreen({
+  onBack,
+  onOpenSettings,
+  onNavigate,
+}: Props) {
   const { api, accessToken } = useAuth();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,6 +71,16 @@ export function NotificationsScreen({ onBack }: Props) {
     void load();
   }, [load]);
 
+  const { todayItems, earlierItems } = useMemo(() => {
+    const todayRows: Notification[] = [];
+    const earlier: Notification[] = [];
+    for (const item of items) {
+      if (isToday(item.createdAt, today)) todayRows.push(item);
+      else earlier.push(item);
+    }
+    return { todayItems: todayRows, earlierItems: earlier };
+  }, [items, today]);
+
   async function openItem(item: Notification) {
     if (item.readAt == null && accessToken) {
       try {
@@ -54,19 +88,73 @@ export function NotificationsScreen({ onBack }: Props) {
         setItems((prev) =>
           prev.map((row) =>
             row.id === item.id
-              ? { ...row, state: "read" as const, readAt: new Date().toISOString() }
+              ? {
+                  ...row,
+                  state: "read" as const,
+                  readAt: new Date().toISOString(),
+                }
               : row,
           ),
         );
       } catch {
-        // Still show the row if mark-read fails offline.
+        // Still navigate if mark-read fails offline.
       }
     }
+    const link = deepLinkFromNotificationPayload(item.routing);
+    if (link) onNavigate(link);
+  }
+
+  async function markAllRead() {
+    if (!accessToken) return;
+    for (const item of items) {
+      if (item.readAt != null) continue;
+      try {
+        await markNotificationRead(accessToken, item.id);
+      } catch {
+        break;
+      }
+    }
+    await load();
+  }
+
+  function renderSection(title: string, rows: Notification[]) {
+    if (rows.length === 0) return null;
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {rows.map((item) => (
+          <Pressable
+            key={item.id}
+            style={[styles.row, item.readAt == null ? styles.unread : null]}
+            onPress={() => {
+              void openItem(item);
+            }}
+          >
+            <View style={styles.rowTop}>
+              <Text style={styles.title}>{notificationTitle(item)}</Text>
+              {item.readAt == null ? <View style={styles.dot} /> : null}
+            </View>
+            <Text style={styles.body}>
+              {item.domainEntityType.replace(/_/g, " ")}
+            </Text>
+            <Text style={styles.meta}>{formatWhen(item.createdAt)}</Text>
+          </Pressable>
+        ))}
+      </View>
+    );
   }
 
   return (
     <Screen title="Notifications" subtitle="In-app inbox from FitBud.">
       {error ? <ErrorBanner message={error} /> : null}
+      <PrimaryButton
+        label="Mark all read"
+        variant="secondary"
+        disabled={items.every((item) => item.readAt != null)}
+        onPress={() => {
+          void markAllRead();
+        }}
+      />
       <PrimaryButton
         label="Refresh"
         variant="secondary"
@@ -81,30 +169,14 @@ export function NotificationsScreen({ onBack }: Props) {
         <Text style={styles.muted}>No notifications yet.</Text>
       ) : (
         <View style={styles.list}>
-          {items.map((item) => (
-            <Pressable
-              key={item.id}
-              style={[styles.row, item.readAt == null ? styles.unread : null]}
-              onPress={() => {
-                void openItem(item);
-              }}
-            >
-              <Text style={styles.title}>
-                {item.type.replace(/_/g, " ")}
-              </Text>
-              <Text style={styles.body}>
-                {item.state === "read" ? "Read" : "Unread"} ·{" "}
-                {item.domainEntityType.replace(/_/g, " ")}
-              </Text>
-              <Text style={styles.meta}>{formatWhen(item.createdAt)}</Text>
-            </Pressable>
-          ))}
+          {renderSection("Today", todayItems)}
+          {renderSection("Earlier", earlierItems)}
         </View>
       )}
       <PrimaryButton
         label="Notification settings"
         variant="secondary"
-        onPress={onBack}
+        onPress={onOpenSettings}
       />
       <PrimaryButton label="Done" variant="ghost" onPress={onBack} />
     </Screen>
@@ -118,28 +190,47 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   list: {
-    gap: spacing.md,
-    marginTop: spacing.lg,
+    gap: spacing.lg,
+    marginTop: spacing.md,
+  },
+  section: {
+    gap: spacing.sm,
+  },
+  sectionTitle: {
+    color: colors.deepNavy,
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
   row: {
     backgroundColor: colors.white,
     borderRadius: 12,
     gap: spacing.xs,
-    padding: spacing.lg,
+    padding: spacing.md,
   },
   unread: {
-    borderColor: colors.indigo,
-    borderWidth: 1,
+    borderColor: colors.paleLavender,
+    borderWidth: 2,
+  },
+  rowTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  dot: {
+    backgroundColor: colors.indigo,
+    borderRadius: 4,
+    height: 8,
+    width: 8,
   },
   title: {
     color: colors.deepNavy,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
   body: {
     color: colors.darkGrey,
     fontSize: 14,
-    lineHeight: 20,
   },
   meta: {
     color: colors.midGrey,

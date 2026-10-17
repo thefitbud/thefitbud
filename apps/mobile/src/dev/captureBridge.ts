@@ -289,13 +289,15 @@ export function installCaptureGlobals() {
   g.__fitbudCapture = {
     navigate: navigateCaptureScreen,
     loginTrainee: (email: string) =>
-      authNav?.signInWithPassword(email, "FitBud-demo-2026"),
+      authNav?.signInWithPassword(email, "FitBud-demo-2026") ??
+      Promise.resolve(),
     loginTrainer: () =>
       authNav?.signInWithPassword(
         "rahul.coach@demo.fitbud.test",
         "FitBud-demo-2026",
-      ),
-    loginInvite: () => authNav?.signInWithTestInvite(),
+      ) ?? Promise.resolve(),
+    loginInvite: () =>
+      authNav?.signInWithTestInvite() ?? Promise.resolve(),
     signOut: () => authNav?.signOut(),
     ready: true,
   };

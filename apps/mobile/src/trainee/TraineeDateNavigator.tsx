@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, StyleSheet, Text } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import type { WeekDayState } from "@fitbud/contracts";
 import {
   DateNavigator,
@@ -105,6 +105,7 @@ export function TraineeDateNavigator({
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
           today={today}
+          days={navigatorDays}
         />
       </>
     );
@@ -117,8 +118,8 @@ export function TraineeDateNavigator({
           {isFuture
             ? `Preview · ${formatHeadingDate(timeZone, selectedDate)}`
             : `Viewing ${selectedDate} · read-only except late logging`}
-        </Text>
-      ) : null}
+          </Text>
+        ) : null}
       <DateNavigator
         days={navigatorDays}
         selectedDate={selectedDate}

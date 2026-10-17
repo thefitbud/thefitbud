@@ -137,23 +137,33 @@ export function ExceptionReviewScreen({
           />
 
           {(detail.status === "detected" || detail.status === "active") && (
-            <PrimaryButton
-              label="Acknowledge"
-              loading={acting}
-              onPress={() => {
-                void acknowledge();
-              }}
-            />
+            <>
+              <Text style={styles.sectionLabel}>
+                Acknowledge — note you've seen this; signals stay open.
+              </Text>
+              <PrimaryButton
+                label="Acknowledge"
+                loading={acting}
+                onPress={() => {
+                  void acknowledge();
+                }}
+              />
+            </>
           )}
 
           {detail.status === "acknowledged" && (
-            <PrimaryButton
-              label="Resolve"
-              loading={acting}
-              onPress={() => {
-                void resolve();
-              }}
-            />
+            <>
+              <Text style={styles.sectionLabel}>
+                Resolve — close this after you've followed up.
+              </Text>
+              <PrimaryButton
+                label="Resolve"
+                loading={acting}
+                onPress={() => {
+                  void resolve();
+                }}
+              />
+            </>
           )}
 
           <PrimaryButton
@@ -212,6 +222,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     lineHeight: 24,
+  },
+  sectionLabel: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: spacing.sm,
   },
   muted: {
     color: colors.midGrey,

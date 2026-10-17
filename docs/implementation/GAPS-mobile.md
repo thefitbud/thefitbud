@@ -1,6 +1,10 @@
 # FitBud mobile — implementation gaps
 
-Last updated: 2026-10-17 (branch `cursor/mobile-screens-a8e8`).
+Last updated: 2026-10-17 (branch `cursor/mobile-screens-a8e8`, pass 3).
+
+## Blocked on foundation (do not patch in mobile forever)
+
+- **Meal assignment list/detail API** returns `LOCAL_DEV_ERROR` when seeded `energyKcalScaled` exceeds contract max. Mobile uses `mealAssignmentFallback.ts` (`/me/day` synthesis) until `cursor/stage1-foundation-a3da` seed + mapper fix ships; then delete fallback and re-capture TR-07/TR-08.
 
 | Screen ID | File | Status | Gaps |
 |-----------|------|--------|------|

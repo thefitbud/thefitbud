@@ -8,7 +8,9 @@ import type {
 type CoachAskItemType = CreateCoachAskRequest["itemType"];
 import type { CoachingRelationship } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
+import { BottomSheet } from "../components/BottomSheet";
 import { addDays, localDateInTimezone } from "../lib/dates";
+import type { NotificationDeepLink } from "../notifications/routing";
 import { AssignedMealPlanScreen } from "../trainee/AssignedMealPlanScreen";
 import { AskCoachSheet } from "../trainee/ask/AskCoachSheet";
 import { DeepLinkUnavailableScreen } from "../trainee/DeepLinkUnavailableScreen";
@@ -61,18 +63,22 @@ type Props = {
   overlay: TraineeOverlay;
   relationship: CoachingRelationship;
   effectivePlan: EffectivePlanResponse | null;
+  presentation?: "fullscreen" | "sheet";
   onClose: () => void;
   onOpen: TraineeOverlayOpener;
   onSignOut: () => void;
+  onNotificationNavigate?: (link: NotificationDeepLink) => void;
 };
 
 export function TraineeOverlayHost({
   overlay,
   relationship,
   effectivePlan,
+  presentation = "fullscreen",
   onClose,
   onOpen,
   onSignOut,
+  onNotificationNavigate,
 }: Props) {
   const { api, me } = useAuth();
   const [mealAssignment, setMealAssignment] = useState<MealAssignment | null>(
@@ -111,7 +117,16 @@ export function TraineeOverlayHost({
 
   switch (overlay.screen) {
     case "notifications":
-      return <NotificationsScreen onBack={onClose} />;
+      return (
+        <NotificationsScreen
+          onBack={onClose}
+          onOpenSettings={() => onOpen({ screen: "reminder_settings" })}
+          onNavigate={(link) => {
+            onClose();
+            onNotificationNavigate?.(link);
+          }}
+        />
+      );
     case "reminder_setup":
       return (
         <ReminderSetupScreen
@@ -124,6 +139,8 @@ export function TraineeOverlayHost({
         <ReminderSettingsScreen
           onBack={onClose}
           onOpenQuietHours={() => onOpen({ screen: "quiet_hours" })}
+          onOpenMealTimes={() => onOpen({ screen: "meal_times" })}
+          onOpenBatteryHelp={() => onOpen({ screen: "reminder_setup" })}
         />
       );
     case "quiet_hours":
@@ -138,11 +155,53 @@ export function TraineeOverlayHost({
       return <FoodSearchScreen onBack={onClose} />;
     case "something_different":
       if (!mealAssignment) {
+        if (presentation === "sheet") {
+          return (
+            <BottomSheet
+              visible
+              title="What did you have instead?"
+              subtitle="Loading meal…"
+              onDismiss={onClose}
+            >
+              <DeepLinkUnavailableScreen
+                reason="Could not load this meal."
+                onBack={onClose}
+              />
+            </BottomSheet>
+          );
+        }
         return (
           <DeepLinkUnavailableScreen
             reason="Could not load this meal."
             onBack={onClose}
           />
+        );
+      }
+      if (presentation === "sheet") {
+        return (
+          <BottomSheet
+            visible
+            title="What did you have instead?"
+            subtitle={`${mealAssignment.mealName} · log what you actually ate`}
+            onDismiss={onClose}
+          >
+            <SomethingDifferentSheet
+              variant="sheet"
+              assignment={mealAssignment}
+              relationshipId={relationship.id}
+              onDone={onClose}
+              onCancel={onClose}
+              onOpenFoodSearch={() => onOpen({ screen: "food_search" })}
+              onAskCoach={() =>
+                onOpen({
+                  screen: "ask_coach",
+                  itemType: "meal_assignment",
+                  itemId: mealAssignment.id,
+                  topic: mealAssignment.mealName,
+                })
+              }
+            />
+          </BottomSheet>
         );
       }
       return (
