@@ -57,36 +57,37 @@ Legend: ✅ matches guide closely on web capture · ⚠️ partial · ❌ blocke
 | TR-08 | ⚠️ | Portion chips (½×–1½×), repeat recent (`/me/foods/recent`), v2 serving chips from seed bundle + search | vs guide: planned-item prefill blocked on assignment API; sheet height still web-modal. |
 | TR-09 | ✅ | Meal plan read-only | vs `figma_trainee_07_assigned_diet_plan.jpg`: no banned chat/grocery. |
 | TR-10 | ✅ | Workout overview | vs `figma_trainee_03_active_workout` preamble only. |
-| TR-11 | ⚠️ | Active workout set logging | vs Figma: no live-activity / swipe exercise nav yet. |
-| TR-12 | ⚠️ | Summary screen | Capture harness; RPE row present. |
+| TR-11 | ⚠️ | Prev/next exercise, overview sheet, rep/load steppers, RPE chips; capture uses live API start | vs Figma: no rest timer / live activity yet. |
+| TR-12 | ⚠️ | Summary after capture complete | Harness completes via `Complete workout`. |
 | TR-13 | ✅ | Progress | No % judgement rings. |
 | TR-14 | ✅ | Check-in | vs `figma_trainee_02_checkin` structure lighter. |
 | TR-15 | ⚠️ | Today/Earlier sections + mark read + deep link | vs guide: row copy still type-driven; routing wired. |
 | TR-16 | ⚠️ | Category toggles, WhatsApp Coming soon, meal times link | vs §4: status card / Android channels not fully surfaced. |
 | TR-17 | ⚠️ | Quiet hours presets | No 24h preview bar. |
 | TR-18 | ✅ | Ask coach sheet | wa.me prefill only. |
-| TR-19 | ⚠️ | Sync status | Engine events not fully wired. |
+| TR-19 | ⚠️ | Sync status lists outbox queued / syncing / failed + retry | Synced rows drop when acked (store design). |
 | TR-20 | ⚠️ | More rows per §4 | No in-app timezone edit. |
 | TR-21 | ✅ | Widget tips | Copy only. |
 | TR-22 | ✅ | Ended coaching | |
 | TR-23 | ✅ | Deep link unavailable | |
 | TR-24 | ⚠️ | Meal times | `updateMealTimes`. |
 | TR-25 | ⚠️ | Steps toggle | No HealthKit/Connect. |
-| TR-26 | ⚠️ | Food search | Serving presets on TR-08; TR-26 list basic. |
-| TM-01 | ⚠️ | **Today** title; one card/client; Mark reviewed + Nudge | vs `figma_trainer_01_home.jpg`: no KPI tiles; cards not swipe (buttons instead). |
-| TM-02 | ⚠️ | Clients + Activity segment | vs `figma_trainer_02_clients.jpg`: filter icons partial. |
-| TM-03 | ⚠️ | Client status | Week dots / timezone badge partial. |
+| TR-26 | ⚠️ | Food search | Shared serving preset helper with TR-08. |
+| TM-01 | ⚠️ | Swipeable Mark reviewed / Nudge + visible buttons | vs Figma: no KPI tiles. |
+| TM-02 | ⚠️ | Clients + Activity; filter chips with icons | Attention chip heuristic until API flags. |
+| TM-03 | ⚠️ | Client status + week dots + recent activity | Timezone badge still partial. |
 | TM-04 | ✅ | Exception review | Acknowledge vs Resolve sections separated. |
 | TM-05 | ✅ | Check-ins inbox | |
 | TM-06 | ✅ | Check-in review | |
 | TM-07 | ⚠️ | Trainer more | |
 | TM-08 | ✅ | Role select | |
-| TM-09 | ⚠️ | Activity feed filters + paging | No row actions. |
+| TM-09 | ⚠️ | Activity feed filters, day grouping, Open/Nudge row actions | Server grouping API still N/A. |
 
 Detailed gaps: [`GAPS-mobile.md`](./GAPS-mobile.md).
 
 ## Architecture
 
 - API: `@fitbud/api-client` + `stage1Api.ts`; `mealAssignmentFallback.ts` until meal list API fixed.
-- UI: `@fitbud/tokens`, `@fitbud/ui-mobile`, `BottomSheet` for TR-08.
+- UI: `@fitbud/tokens`, `@fitbud/ui-mobile`, `BottomSheet` for TR-08, `react-native-gesture-handler` swipe rows (TM-01).
+- Food servings: `foodServingsSeed.json` (from API seed) + `servingPresetsV2.ts` heuristics TODO fallback.
 - Capture: `EXPO_PUBLIC_SCREEN_CAPTURE=1` + `scripts/capture-all-mobile-screens.mjs`.
