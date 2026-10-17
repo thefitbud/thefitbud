@@ -9,6 +9,12 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { stage1Api } from "../lib/stage1Api";
 import {
+  formatRelativeTime,
+  notificationRowBody,
+  notificationRowTitle,
+  notificationTypeIcon,
+} from "../notifications/copy";
+import {
   deepLinkFromNotification,
   type NotificationDeepLink,
 } from "../notifications/routing";
@@ -18,22 +24,6 @@ type Props = {
   onOpenSettings: () => void;
   onNavigate: (link: NotificationDeepLink) => void;
 };
-
-function formatWhen(iso: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(iso));
-}
-
-function notificationTitle(item: Notification): string {
-  const type = item.type.replace(/_/g, " ");
-  if (item.type === "meal_reminder") return "Meal reminder";
-  if (item.type === "workout_reminder") return "Workout reminder";
-  if (item.type === "trainer_note_shared") return "Coach note";
-  if (item.type === "coach_answered") return "Coach answered";
-  return type.charAt(0).toUpperCase() + type.slice(1);
-}
 
 function isToday(iso: string, today: string): boolean {
   return iso.slice(0, 10) === today;
@@ -131,14 +121,12 @@ export function NotificationsScreen({
             }}
           >
             <View style={styles.rowTop}>
-              <Text style={styles.title}>{notificationTitle(item)}</Text>
+              <Text style={styles.icon}>{notificationTypeIcon(item.type)}</Text>
+              <Text style={styles.title}>{notificationRowTitle(item)}</Text>
               {item.readAt == null ? <View style={styles.dot} /> : null}
             </View>
-            <Text style={styles.body}>
-              {item.domainEntityType.replace(/_/g, " ")}
-            </Text>
-            <Text style={styles.route}>{item.route}</Text>
-            <Text style={styles.meta}>{formatWhen(item.createdAt)}</Text>
+            <Text style={styles.body}>{notificationRowBody(item)}</Text>
+            <Text style={styles.meta}>{formatRelativeTime(item.createdAt)}</Text>
           </Pressable>
         ))}
       </View>
@@ -216,7 +204,11 @@ const styles = StyleSheet.create({
   rowTop: {
     alignItems: "center",
     flexDirection: "row",
+    gap: spacing.sm,
     justifyContent: "space-between",
+  },
+  icon: {
+    fontSize: 18,
   },
   dot: {
     backgroundColor: colors.indigo,
@@ -226,17 +218,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.deepNavy,
+    flex: 1,
     fontSize: 16,
     fontWeight: "600",
   },
   body: {
     color: colors.darkGrey,
     fontSize: 14,
-  },
-  route: {
-    color: colors.indigo,
-    fontSize: 12,
-    fontWeight: "500",
   },
   meta: {
     color: colors.midGrey,

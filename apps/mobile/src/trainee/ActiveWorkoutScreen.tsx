@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+
+const DEFAULT_REST_SECONDS = 90;
 import {
   Modal,
   Pressable,
@@ -52,6 +54,7 @@ export function ActiveWorkoutScreen({
   );
   const [repsInput, setRepsInput] = useState("");
   const [loadInput, setLoadInput] = useState("");
+  const [restRemaining, setRestRemaining] = useState<number | null>(null);
 
   const exercise = execution.exercises[exerciseIndex] ?? null;
   const setIndex = exercise ? firstPendingSetIndex(execution, exerciseIndex) : -1;
@@ -77,6 +80,17 @@ export function ActiveWorkoutScreen({
     );
     setLoadInput(currentSet.prescribedLoadLabel ?? "");
   }, [currentSet?.id, currentSet?.prescribedLoadLabel, currentSet?.prescribedReps]);
+
+  useEffect(() => {
+    if (restRemaining == null || restRemaining <= 0) return;
+    const timer = setTimeout(() => {
+      setRestRemaining((value) => {
+        if (value == null || value <= 1) return null;
+        return value - 1;
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [restRemaining]);
 
   const sessionTitle =
     execution.exercises[0]?.name != null
@@ -187,6 +201,7 @@ export function ActiveWorkoutScreen({
                   });
                   const next = await api.getWorkoutExecution(execution.id);
                   onChange(next);
+                  setRestRemaining(DEFAULT_REST_SECONDS);
                   if (firstPendingSetIndex(next, exerciseIndex) < 0) {
                     const nextEx = next.exercises.findIndex(
                       (ex, idx) =>
@@ -234,7 +249,39 @@ export function ActiveWorkoutScreen({
             }}
           />
         </View>
-      ) : allSetsDone ? (
+      ) : null}
+
+      {restRemaining != null && restRemaining > 0 ? (
+        <View style={styles.restCard}>
+          <Text style={styles.restTitle}>Rest</Text>
+          <Text style={styles.restTimer}>{restRemaining}s</Text>
+          <View style={styles.restActions}>
+            <PrimaryButton
+              label="−15 s"
+              variant="secondary"
+              onPress={() => {
+                setRestRemaining((value) =>
+                  Math.max(0, (value ?? 0) - 15),
+                );
+              }}
+            />
+            <PrimaryButton
+              label="+15 s"
+              variant="secondary"
+              onPress={() => {
+                setRestRemaining((value) => (value ?? 0) + 15);
+              }}
+            />
+            <PrimaryButton
+              label="Skip rest"
+              variant="ghost"
+              onPress={() => setRestRemaining(null)}
+            />
+          </View>
+        </View>
+      ) : null}
+
+      {allSetsDone ? (
         <View style={styles.currentCard}>
           <Text style={styles.eyebrow}>Session wrap-up</Text>
           <Text style={styles.exerciseName}>All sets recorded</Text>
@@ -303,11 +350,11 @@ export function ActiveWorkoutScreen({
             }}
           />
         </View>
-      ) : (
+      ) : !currentSet ? (
         <Text style={styles.muted}>
           No pending sets on this exercise. Use Next or open the overview.
         </Text>
-      )}
+      ) : null}
 
       <View style={styles.actions}>
         {execution.status === "started" ? (
@@ -486,6 +533,30 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 14,
     marginBottom: spacing.lg,
+  },
+  restCard: {
+    alignItems: "center",
+    backgroundColor: colors.paleLavender,
+    borderRadius: radii.card,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+  },
+  restTitle: {
+    color: colors.deepNavy,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  restTimer: {
+    color: colors.indigo,
+    fontSize: 36,
+    fontWeight: "700",
+  },
+  restActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    justifyContent: "center",
   },
   rpeRow: {
     flexDirection: "row",

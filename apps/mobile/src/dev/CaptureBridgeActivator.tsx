@@ -8,8 +8,6 @@ import {
   registerAuthCaptureNav,
 } from "./captureBridge";
 
-const DEMO_PASSWORD = "FitBud-demo-2026";
-
 export function CaptureBridgeActivator() {
   const { api, signInWithToken, signOut, selectRole } = useAuth();
   const s1 = stage1Api(api);

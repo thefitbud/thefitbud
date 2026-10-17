@@ -10,8 +10,9 @@ import { Screen } from "../components/Screen";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { ActivityFeedScreen } from "./ActivityFeedScreen";
 import {
-  buildClientDirectoryRows,
+  clientListQueryForChip,
   filterClientRows,
+  mapDirectoryItemToRow,
   onboardingStatusLabel,
   type ClientDirectoryRow,
   type ClientListFilter,
@@ -49,16 +50,10 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
     setLoading(true);
     setError(null);
     try {
-      const [invitations, relationships] = await Promise.all([
-        api.listInvitations({ limit: 50 }),
-        api.listRelationships({ limit: 50 }),
-      ]);
-      setRows(
-        buildClientDirectoryRows({
-          invitations: invitations.items,
-          relationships: relationships.items,
-        }),
+      const page = await api.listClients(
+        clientListQueryForChip(chip, query),
       );
+      setRows(page.items.map(mapDirectoryItemToRow));
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -68,7 +63,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, chip, query]);
 
   useEffect(() => {
     void load();
@@ -79,8 +74,8 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
   }, [initialSegment]);
 
   const filtered = useMemo(
-    () => filterClientRows(rows, query, chip),
-    [rows, query, chip],
+    () => filterClientRows(rows, "", chip),
+    [rows, chip],
   );
 
   return (

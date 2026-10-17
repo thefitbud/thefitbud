@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "./src/auth/AuthProvider";
@@ -6,8 +7,13 @@ import { AppRouter } from "./src/navigation/AppRouter";
 import { ConfigProvider } from "./src/providers/ConfigProvider";
 import { FontsProvider } from "./src/providers/FontsProvider";
 import { SyncProvider } from "./src/sync/SyncProvider";
+import { ensureAndroidNotificationChannels } from "./src/notifications/androidChannels";
 
 export default function App() {
+  useEffect(() => {
+    void ensureAndroidNotificationChannels();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <FontsProvider>

@@ -5,6 +5,8 @@ import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { AttentionTab } from "./AttentionTab";
 import { TrainerMoreScreen } from "./MoreScreen";
+import { TrainerNotificationSettingsScreen } from "./TrainerNotificationSettingsScreen";
+import { TrainerProfileScreen } from "./TrainerProfileScreen";
 import { CheckinReviewScreen } from "./CheckinReviewScreen";
 import { CheckinsTab } from "./CheckinsTab";
 import {
@@ -30,7 +32,9 @@ type Overlay =
       displayName: string;
       onboardingStatusLabelText: string;
     }
-  | { kind: "checkin"; checkinId: string; relationshipId: string };
+  | { kind: "checkin"; checkinId: string; relationshipId: string }
+  | { kind: "notifications" }
+  | { kind: "profile" };
 
 const TABS: Array<{ id: TrainerTab; label: string }> = [
   { id: "attention", label: "Attention" },
@@ -164,6 +168,16 @@ export function TrainerShell() {
     );
   }
 
+  if (overlay?.kind === "notifications") {
+    return (
+      <TrainerNotificationSettingsScreen onBack={() => setOverlay(null)} />
+    );
+  }
+
+  if (overlay?.kind === "profile") {
+    return <TrainerProfileScreen onBack={() => setOverlay(null)} />;
+  }
+
   return (
     <View style={styles.root}>
       <View style={styles.content}>
@@ -188,7 +202,12 @@ export function TrainerShell() {
           <CheckinsTab onReviewCheckin={openCheckin} />
         ) : null}
 
-        {tab === "more" ? <TrainerMoreScreen /> : null}
+        {tab === "more" ? (
+          <TrainerMoreScreen
+            onOpenNotifications={() => setOverlay({ kind: "notifications" })}
+            onOpenProfile={() => setOverlay({ kind: "profile" })}
+          />
+        ) : null}
       </View>
 
       <View accessibilityRole="tablist" style={styles.tabBar}>

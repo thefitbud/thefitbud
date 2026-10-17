@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,21 +28,25 @@ export function BottomSheet({
   onDismiss,
   children,
 }: Props) {
+  const isWeb = Platform.OS === "web";
+  const isIos = Platform.OS === "ios";
   return (
     <Modal
       animationType="slide"
-      transparent
+      transparent={isWeb || Platform.OS === "android"}
+      presentationStyle={isIos ? "pageSheet" : undefined}
+      statusBarTranslucent={Platform.OS === "android"}
       visible={visible}
       onRequestClose={onDismiss}
     >
-      <View style={styles.root}>
+      <View style={[styles.root, !isWeb ? styles.rootNative : null]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss sheet"
           style={styles.scrim}
           onPress={onDismiss}
         />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, !isWeb ? styles.sheetNative : null]}>
           <View style={styles.handle} accessibilityElementsHidden />
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -63,6 +68,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
   },
+  rootNative: {
+    justifyContent: "flex-end",
+  },
   scrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(15, 17, 21, 0.45)",
@@ -75,6 +83,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  sheetNative: {
+    maxHeight: "88%",
+    minHeight: "42%",
   },
   handle: {
     alignSelf: "center",

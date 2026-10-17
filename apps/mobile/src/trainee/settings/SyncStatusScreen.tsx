@@ -40,13 +40,25 @@ export function SyncStatusScreen({ onBack }: Props) {
 
   const refresh = useCallback(async () => {
     const all = await sync.store.listOutbox();
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const active = all.filter(
+      (row) =>
+        row.status === "pending" ||
+        row.status === "in_flight" ||
+        row.status === "rejected" ||
+        row.status === "conflicted",
+    );
+    const recentSynced = all
+      .filter((row) => row.status === "acked")
+      .filter(
+        (row) => now - new Date(row.updatedAt).getTime() < dayMs,
+      )
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, 10);
     setRows(
-      all.filter(
-        (row) =>
-          row.status === "pending" ||
-          row.status === "in_flight" ||
-          row.status === "rejected" ||
-          row.status === "conflicted",
+      [...active, ...recentSynced].sort((a, b) =>
+        b.updatedAt.localeCompare(a.updatedAt),
       ),
     );
   }, [sync]);
@@ -63,6 +75,7 @@ export function SyncStatusScreen({ onBack }: Props) {
   const inFlight = rows.filter(
     (row) => mapOutboxStatus(row.status) === "syncing",
   );
+  const synced = rows.filter((row) => mapOutboxStatus(row.status) === "synced");
   const failed = rows.filter((row) => mapOutboxStatus(row.status) === "failed");
 
   async function retrySync() {
@@ -87,7 +100,9 @@ export function SyncStatusScreen({ onBack }: Props) {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>
             {queued.length + inFlight.length === 0 && failed.length === 0
-              ? "All caught up"
+              ? synced.length > 0
+                ? "Recently synced"
+                : "All caught up"
               : `${queued.length} queued · ${inFlight.length} syncing`}
           </Text>
           <Text style={styles.body}>

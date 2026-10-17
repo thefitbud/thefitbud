@@ -3,12 +3,14 @@ import { Linking, StyleSheet, Switch, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { NotificationPreferences } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
+import * as Notifications from "expo-notifications";
 import { useConfig } from "../../providers/ConfigProvider";
 import { isWhatsAppAutomationEnabled } from "../../lib/config";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
+import { ensureAndroidNotificationChannels } from "../../notifications/androidChannels";
 
 type CategoryKey = keyof NotificationPreferences["categories"];
 
@@ -65,6 +67,9 @@ export function ReminderSettingsScreen({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [osPermission, setOsPermission] = useState<
+    "granted" | "denied" | "undetermined"
+  >("undetermined");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +91,14 @@ export function ReminderSettingsScreen({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      await ensureAndroidNotificationChannels();
+      const settings = await Notifications.getPermissionsAsync();
+      setOsPermission(settings.status);
+    })();
+  }, []);
 
   async function togglePush(enabled: boolean) {
     if (!prefs) return;
@@ -138,6 +151,29 @@ export function ReminderSettingsScreen({
         <Text style={styles.muted}>Loading…</Text>
       ) : (
         <View style={styles.stack}>
+          <View style={styles.statusCard}>
+            <Text style={styles.statusTitle}>
+              {osPermission === "granted" && prefs.pushEnabled
+                ? "Notifications: On"
+                : osPermission !== "granted"
+                  ? "Notifications: Off in phone settings"
+                  : "Notifications: Off in FitBud"}
+            </Text>
+            <Text style={styles.hint}>
+              {osPermission !== "granted"
+                ? "Turn on notifications in your phone settings so reminders can reach you."
+                : "Category toggles below control workout, meal, check-in, and summary reminders."}
+            </Text>
+            {osPermission !== "granted" ? (
+              <PrimaryButton
+                label="Turn on in Settings"
+                variant="secondary"
+                onPress={() => {
+                  void Linking.openSettings();
+                }}
+              />
+            ) : null}
+          </View>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Push notifications</Text>
             <Switch
@@ -179,8 +215,18 @@ export function ReminderSettingsScreen({
               onPress={onOpenMealTimes}
             />
           ) : null}
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Reminder channel</Text>
+          <View style={[styles.row, styles.waRow, !waOn ? styles.waDisabled : null]}>
+            <View style={styles.waText}>
+              <Text style={styles.rowLabel}>WhatsApp reminders</Text>
+              {!waOn ? (
+                <Text style={styles.comingSoon}>Coming soon</Text>
+              ) : null}
+              <Text style={styles.hint}>
+                {waOn
+                  ? "Used only when app notifications don't reach you."
+                  : "WhatsApp reminders are coming soon. For now we'll remind you in the app."}
+              </Text>
+            </View>
             <Switch
               value={prefs.channelPreference === "app_and_whatsapp"}
               disabled={saving || !prefs.pushEnabled || !waOn}
@@ -205,11 +251,6 @@ export function ReminderSettingsScreen({
               }}
             />
           </View>
-          <Text style={styles.hint}>
-            {waOn
-              ? "WhatsApp is a backup when app notifications don't reach you."
-              : "WhatsApp channel is off in this build — app notifications only."}
-          </Text>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>WhatsApp opt-in</Text>
             <Switch
@@ -279,6 +320,17 @@ function PressableRow({
 const styles = StyleSheet.create({
   stack: {
     gap: spacing.md,
+  },
+  statusCard: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 12,
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  statusTitle: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "700",
   },
   muted: {
     color: colors.midGrey,

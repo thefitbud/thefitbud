@@ -5,6 +5,7 @@ import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { PrimaryButton } from "../../components/PrimaryButton";
+import { QuietHoursPreviewBar } from "../../components/QuietHoursPreviewBar";
 import { Screen } from "../../components/Screen";
 
 type Props = {
@@ -75,9 +76,11 @@ export function QuietHoursScreen({ onBack }: Props) {
         <View style={styles.stack}>
           <Text style={styles.explain}>
             No notifications during these hours. Reminders that would fall here
-            are skipped, not saved for later. FitBud never sends reminders after
-            10 pm even if your quiet hours start later.
+            are skipped, not saved for later. Your coach can&apos;t override
+            this. FitBud never sends reminders after 10 pm even if your quiet
+            hours start later.
           </Text>
+          <QuietHoursPreviewBar quietStart={start} quietEnd={end} />
           {PRESETS.map((preset) => (
             <PrimaryButton
               key={preset.label}

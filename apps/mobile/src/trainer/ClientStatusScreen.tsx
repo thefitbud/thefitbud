@@ -8,6 +8,7 @@ import type {
   MealComplianceSummaryResponse,
   WorkoutAdherenceResponse,
 } from "@fitbud/contracts";
+import { formatTimeDiff } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -36,7 +37,7 @@ export function ClientStatusScreen({
   onOpenException,
   onOpenCheckin,
 }: Props) {
-  const { api, relationships } = useAuth();
+  const { api, relationships, me } = useAuth();
   const relationship = relationships.find((item) => item.id === relationshipId);
   const [plan, setPlan] = useState<EffectivePlanResponse | null>(null);
   const [exceptions, setExceptions] = useState<Exception[]>([]);
@@ -54,21 +55,38 @@ export function ClientStatusScreen({
   const [recentActivity, setRecentActivity] = useState<
     Array<{ id: string; summary: string; occurredAt: string }>
   >([]);
+  const [traineeTimezone, setTraineeTimezone] = useState<string | null>(null);
+  const [timezoneDiff, setTimezoneDiff] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const s1 = stage1Api(api);
-      const [effective, exceptionPage, checkinPage, adherence, compliance, feed] =
-        await Promise.all([
-          api.getEffectivePlan(relationshipId),
-          api.listExceptions(relationshipId),
-          api.listCheckins(relationshipId),
-          api.getWorkoutAdherence(relationshipId),
-          api.getMealCompliance(relationshipId),
-          s1.getActivityFeed({ limit: 5, rid: relationshipId }),
-        ]);
+      const [
+        workspace,
+        effective,
+        exceptionPage,
+        checkinPage,
+        adherence,
+        compliance,
+        feed,
+      ] = await Promise.all([
+        api.getClientWorkspace(relationshipId),
+        api.getEffectivePlan(relationshipId),
+        api.listExceptions(relationshipId),
+        api.listCheckins(relationshipId),
+        api.getWorkoutAdherence(relationshipId),
+        api.getMealCompliance(relationshipId),
+        s1.getActivityFeed({ limit: 5, rid: relationshipId }),
+      ]);
+      setTraineeTimezone(workspace.header.traineeTimezone);
+      setTimezoneDiff(
+        formatTimeDiff(
+          me?.timezone ?? "UTC",
+          workspace.header.traineeTimezone,
+        ),
+      );
       setPlan(effective);
       setExceptions(
         exceptionPage.items.filter(
@@ -97,7 +115,7 @@ export function ClientStatusScreen({
     } finally {
       setLoading(false);
     }
-  }, [api, relationshipId]);
+  }, [api, me?.timezone, relationshipId]);
 
   useEffect(() => {
     void load();
@@ -163,6 +181,14 @@ export function ClientStatusScreen({
           <View style={styles.banner}>
             <Text style={styles.bannerTitle}>Current state</Text>
             <Text style={styles.body}>{statusText}</Text>
+            {traineeTimezone ? (
+              <View style={styles.tzBadge}>
+                <Text style={styles.tzBadgeText}>
+                  {traineeTimezone}
+                  {timezoneDiff ? ` · ${timezoneDiff}` : ""}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.banner}>
@@ -303,6 +329,19 @@ const styles = StyleSheet.create({
   bannerTitle: {
     color: colors.deepNavy,
     fontSize: 15,
+    fontWeight: "600",
+  },
+  tzBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  tzBadgeText: {
+    color: colors.indigo,
+    fontSize: 12,
     fontWeight: "600",
   },
   body: {

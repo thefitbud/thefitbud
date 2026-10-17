@@ -23,7 +23,7 @@ import {
   buildClientAttentionCards,
   formatAttentionAge,
 } from "./attentionCards";
-import { statusLabel, typeLabel } from "./labels";
+import { typeLabel } from "./labels";
 import { openContextualWhatsApp } from "./whatsapp";
 
 type Segment = "needs_you" | "asked" | "checkins";

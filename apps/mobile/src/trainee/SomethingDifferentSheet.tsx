@@ -24,6 +24,10 @@ import { uploadMealPhoto } from "./mealActions";
 import { PORTION_MULTIPLIER_CHIPS } from "./food/servingPresetsV2";
 import { FoodServingChips } from "./food/FoodServingChips";
 import { fetchMeFoodRecent } from "../lib/meFoodsApi";
+import {
+  loggedRowsFromPlanned,
+  plannedSummaryLine,
+} from "../lib/plannedMealItems";
 
 const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
 
@@ -68,6 +72,18 @@ export function SomethingDifferentSheet({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+
+  const plannedSummary = plannedSummaryLine(assignment);
+
+  useEffect(() => {
+    if (prefilled) return;
+    const fromPlan = loggedRowsFromPlanned(assignment);
+    if (fromPlan.length > 0) {
+      setLogged(fromPlan);
+      setPrefilled(true);
+    }
+  }, [assignment, prefilled]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -297,6 +313,13 @@ export function SomethingDifferentSheet({
 
   const body = (
     <>
+      <View style={styles.planned}>
+        <Text style={styles.plannedTitle}>You planned</Text>
+        <Text style={styles.plannedBody}>{plannedSummary}</Text>
+        <Text style={styles.plannedHint}>
+          Edit rows below or tap Log what I ate to search the library.
+        </Text>
+      </View>
       <PrimaryButton
         label="Log what I ate"
         onPress={() => {
@@ -379,12 +402,9 @@ export function SomethingDifferentSheet({
         </View>
       ) : null}
       {assignment.prescription.instructions ? (
-        <View style={styles.planned}>
-          <Text style={styles.plannedTitle}>Planned</Text>
-          <Text style={styles.plannedBody}>
-            {assignment.prescription.instructions}
-          </Text>
-        </View>
+        <Text style={styles.instructions}>
+          {assignment.prescription.instructions}
+        </Text>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
       <Field
@@ -560,6 +580,16 @@ const styles = StyleSheet.create({
     color: colors.darkGrey,
     fontSize: 14,
     lineHeight: 20,
+  },
+  plannedHint: {
+    color: colors.midGrey,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  instructions: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
   },
   row: {
     backgroundColor: colors.white,
