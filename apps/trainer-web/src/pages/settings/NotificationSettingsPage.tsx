@@ -3,8 +3,7 @@ import { ApiClientError } from "@fitbud/api-client";
 import { apiClient } from "../../lib/api";
 import { LoadingBlock } from "../../components/StatePanels";
 import {
-  loadTrainerNotificationPrefs,
-  saveTrainerNotificationPrefs,
+  defaultTrainerCategories,
   TRAINER_NOTIFICATION_META,
   type TrainerNotificationPrefs,
 } from "../../lib/trainer-notification-prefs";
@@ -14,7 +13,7 @@ export function NotificationSettingsPage() {
   const [quietStart, setQuietStart] = useState("22:00");
   const [quietEnd, setQuietEnd] = useState("07:00");
   const [categories, setCategories] = useState<TrainerNotificationPrefs>(
-    loadTrainerNotificationPrefs(),
+    defaultTrainerCategories(),
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +28,9 @@ export function NotificationSettingsPage() {
       }
       if (result.quietHoursStart) setQuietStart(result.quietHoursStart);
       if (result.quietHoursEnd) setQuietEnd(result.quietHoursEnd);
+      if (result.trainerCategories) {
+        setCategories(result.trainerCategories);
+      }
       setError(null);
     } catch (err) {
       setError(
@@ -53,8 +55,8 @@ export function NotificationSettingsPage() {
         pushEnabled,
         quietHoursStart: quietStart,
         quietHoursEnd: quietEnd,
+        trainerCategories: categories,
       });
-      saveTrainerNotificationPrefs(categories);
       setMessage("Notification settings saved.");
     } catch (err) {
       setError(
@@ -66,11 +68,7 @@ export function NotificationSettingsPage() {
   }
 
   function toggleCategory(key: keyof TrainerNotificationPrefs) {
-    setCategories((current) => {
-      const next = { ...current, [key]: !current[key] };
-      saveTrainerNotificationPrefs(next);
-      return next;
-    });
+    setCategories((current) => ({ ...current, [key]: !current[key] }));
   }
 
   if (loading) return <LoadingBlock />;

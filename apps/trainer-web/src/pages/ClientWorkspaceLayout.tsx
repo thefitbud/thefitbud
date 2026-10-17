@@ -91,6 +91,19 @@ export function ClientWorkspaceLayout() {
     );
   }
 
+  if (!workspace) {
+    return (
+      <section className="page workspace-shell">
+        <p className="form-error" role="alert">
+          {workspaceError ?? "Could not load this client."}
+        </p>
+        <button type="button" className="button-secondary" onClick={reloadWorkspace}>
+          Try again
+        </button>
+      </section>
+    );
+  }
+
   const outletContext: WorkspaceOutletContext = {
     workspace,
     workspaceLoading,
@@ -101,27 +114,6 @@ export function ClientWorkspaceLayout() {
     openWorkspaceModal: setModal,
     relationshipId,
   };
-
-  if (!workspace) {
-    return (
-      <section className="page workspace-shell workspace-shell-degraded">
-        {workspaceError ? (
-          <p className="form-error" role="alert">
-            {workspaceError}
-          </p>
-        ) : (
-          <p className="muted">Workspace summary unavailable.</p>
-        )}
-        <div className="workspace-degraded-actions">
-          <Link className="workspace-back" to="/clients">← Clients</Link>
-          <button type="button" className="button-secondary" onClick={reloadWorkspace}>
-            Try again
-          </button>
-        </div>
-        <Outlet context={outletContext} />
-      </section>
-    );
-  }
 
   return (
     <section className="page workspace-shell">

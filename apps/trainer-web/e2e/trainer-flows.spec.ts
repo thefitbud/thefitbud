@@ -126,8 +126,9 @@ test("apply a workout template from the library", async ({ page }) => {
 
 test("share a client-visible note", async ({ page }) => {
   await signInWithPassword(page);
-  const sneha = await findClient(page, "sneha");
-  await page.goto(`/clients/${sneha.relationshipId}/overview`);
+  const rohan = await findClient(page, "rohan");
+  await page.goto(`/clients/${rohan.relationshipId}/overview`);
+  await page.getByTestId("screen-TW-09").waitFor();
   const addNote = page.getByRole("button", { name: /add note/i }).first();
   if (await addNote.isVisible().catch(() => false)) {
     await addNote.click();

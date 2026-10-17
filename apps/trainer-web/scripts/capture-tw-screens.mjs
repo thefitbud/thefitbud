@@ -45,18 +45,28 @@ async function loadSeed(page) {
       clients.find((c) =>
         c.traineeDisplayName?.toLowerCase().includes(needle.toLowerCase()),
       );
+    const rohan = byName("rohan");
     let workspaceRid = null;
-    for (const client of clients) {
-      if (!client.relationshipId) continue;
+    if (rohan?.relationshipId) {
       try {
-        await get(`/workspaces/relationships/${client.relationshipId}`);
-        workspaceRid = client.relationshipId;
-        break;
+        await get(`/workspaces/relationships/${rohan.relationshipId}`);
+        workspaceRid = rohan.relationshipId;
       } catch {
-        /* try next client */
+        /* fall through */
       }
     }
-    const rohan = byName("rohan");
+    if (!workspaceRid) {
+      for (const client of clients) {
+        if (!client.relationshipId) continue;
+        try {
+          await get(`/workspaces/relationships/${client.relationshipId}`);
+          workspaceRid = client.relationshipId;
+          break;
+        } catch {
+          /* try next client */
+        }
+      }
+    }
     const aarav = byName("aarav");
     const kavya = byName("kavya");
     const sneha = byName("sneha");
@@ -129,8 +139,8 @@ async function loadSeed(page) {
     let assignDraft = null;
     let planRid = null;
     const planCandidates = [
-      aarav?.relationshipId,
       rohan?.relationshipId,
+      aarav?.relationshipId,
       workspaceRid,
     ].filter(Boolean);
     for (const rid of planCandidates) {
@@ -153,7 +163,51 @@ async function loadSeed(page) {
     const dietTemplates = await get("/templates?limit=10&templateType=nutrition");
     const combinedTemplates = await get("/templates?limit=10&templateType=combined");
     const dietTemplateId = dietTemplates.items?.[0]?.id ?? null;
-    const combinedTemplateId = combinedTemplates.items?.[0]?.id ?? null;
+    let combinedTemplateId = combinedTemplates.items?.[0]?.id ?? null;
+    if (!combinedTemplateId) {
+      const content = {
+        workoutDays: [
+          {
+            id: crypto.randomUUID(),
+            order: 1,
+            name: "Day 1",
+            weekday: null,
+            required: true,
+            exercises: [],
+          },
+        ],
+        mealPrescriptions: [
+          {
+            id: crypto.randomUUID(),
+            order: 1,
+            name: "Breakfast",
+            mealType: "breakfast",
+            applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+            localTime: null,
+            scheduleHint: null,
+            instructions: null,
+            photoRequired: false,
+            required: true,
+            items: [],
+          },
+        ],
+      };
+      const created = await fetch("/api/templates", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          title: "Capture combined template",
+          templateType: "combined",
+          content,
+        }),
+      }).then((r) => r.json());
+      const body = created.data ?? created;
+      combinedTemplateId = body?.id ?? null;
+    }
     const asks = await get("/coach-asks?status=open");
     const askId = asks.items?.[0]?.id ?? null;
     return {
@@ -204,8 +258,8 @@ async function captureShot(page, shotId, testId, prepare, options = {}) {
 }
 
 function buildShots(seed) {
-  const w = seed.workspaceRid;
-  const p = seed.planRid ?? seed.assignDraft?.rid ?? w;
+  const r = seed.rohanRid ?? seed.workspaceRid;
+  const p = seed.rohanRid ?? seed.planRid ?? seed.assignDraft?.rid ?? r;
   const k = seed.kavyaRid;
   const s = seed.snehaRid;
   const assignRid = seed.assignDraft?.rid ?? p;
@@ -278,8 +332,8 @@ function buildShots(seed) {
       id: "TW-09",
       testId: "screen-TW-09",
       async run(page) {
-        if (!w) throw new Error("TW-09: no workspace client");
-        await page.goto(`${BASE}/clients/${w}/overview`, {
+        if (!r) throw new Error("TW-09: Rohan missing");
+        await page.goto(`${BASE}/clients/${r}/overview`, {
           waitUntil: "domcontentloaded",
         });
       },
@@ -298,8 +352,8 @@ function buildShots(seed) {
       id: "TW-11",
       testId: "screen-TW-11",
       async run(page) {
-        if (!w) throw new Error("TW-11: no workspace client");
-        await page.goto(`${BASE}/clients/${w}/configure`, {
+        if (!r) throw new Error("TW-11: Rohan missing");
+        await page.goto(`${BASE}/clients/${r}/configure`, {
           waitUntil: "domcontentloaded",
         });
       },
@@ -502,8 +556,8 @@ function buildShots(seed) {
       id: "TW-31",
       testId: "screen-TW-31",
       async run(page) {
-        if (!w) throw new Error("TW-31: no workspace client");
-        await page.goto(`${BASE}/clients/${w}/overview`, {
+        if (!r) throw new Error("TW-31: Rohan missing");
+        await page.goto(`${BASE}/clients/${r}/overview`, {
           waitUntil: "domcontentloaded",
         });
         const details = page.getByRole("button", { name: /^details$/i });
@@ -542,17 +596,14 @@ function buildShots(seed) {
       id: "TW-34",
       testId: "screen-TW-34",
       async run(page) {
-        if (!w) throw new Error("TW-34: no workspace client");
-        await page.goto(`${BASE}/clients/${w}/overview`, {
+        if (!r) throw new Error("TW-34: Rohan missing");
+        await page.goto(`${BASE}/clients/${r}/overview`, {
           waitUntil: "domcontentloaded",
         });
-        const addNote = page.getByRole("button", { name: /add note/i }).first();
-        if (await addNote.isVisible().catch(() => false)) {
-          await addNote.click();
-        } else {
-          await page.getByLabel("More actions").click();
-          await page.getByRole("button", { name: /^add note$/i }).click();
-        }
+        await page
+          .getByTestId("screen-TW-09")
+          .getByRole("button", { name: /^add note$/i })
+          .click();
       },
     },
   ];

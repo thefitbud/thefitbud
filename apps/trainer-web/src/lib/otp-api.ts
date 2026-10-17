@@ -1,7 +1,7 @@
 import type { AuthOtpStartRequest } from "@fitbud/contracts";
 import { resolveApiUrl } from "./api";
 
-/** OTP start returns a bare JSON body (202), not the usual `{ data }` envelope. */
+/** OTP start still returns a bare JSON body (202); api-client `request()` expects `{ data }`. */
 export async function startOtp(body: AuthOtpStartRequest): Promise<{
   sent: boolean;
   channels: Array<"email" | "whatsapp">;
