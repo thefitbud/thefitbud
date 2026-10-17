@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require("expo/metro-config");
+const { resolve } = require("metro-resolver");
 const path = require("path");
 
 const projectRoot = __dirname;
@@ -25,7 +26,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (workspacePackages[moduleName]) {
     return { type: "sourceFile", filePath: workspacePackages[moduleName] };
   }
-  return context.resolveRequest(context, moduleName, platform);
+  return resolve(context, moduleName, platform);
 };
 
 module.exports = config;

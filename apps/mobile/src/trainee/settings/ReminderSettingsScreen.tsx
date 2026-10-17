@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { Linking, StyleSheet, Switch, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { NotificationPreferences } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
+import { useConfig } from "../../providers/ConfigProvider";
+import { isWhatsAppAutomationEnabled } from "../../lib/config";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { PrimaryButton } from "../../components/PrimaryButton";
@@ -10,20 +12,50 @@ import { Screen } from "../../components/Screen";
 
 type CategoryKey = keyof NotificationPreferences["categories"];
 
-const CATEGORY_ROWS: Array<{ key: CategoryKey; label: string }> = [
-  { key: "workoutReminder", label: "Workout reminders" },
-  { key: "mealReminder", label: "Meal reminders" },
-  { key: "checkinReminder", label: "Check-in reminders" },
-  { key: "subscriptionRenewalReminder", label: "Subscription renewal" },
+const CATEGORY_ROWS: Array<{
+  key: CategoryKey;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: "workoutReminder",
+    label: "Workout reminders",
+    description:
+      "About an hour after your usual workout time if it isn't logged.",
+  },
+  {
+    key: "mealReminder",
+    label: "Meal reminders",
+    description: "About 40 min after each meal time if it isn't logged.",
+  },
+  {
+    key: "checkinReminder",
+    label: "Check-in reminders",
+    description: "The day your check-in is due.",
+  },
+  {
+    key: "subscriptionRenewalReminder",
+    label: "Daily summary",
+    description: "One evening note if anything's left, by 9:30 pm.",
+  },
 ];
 
 type Props = {
   onBack: () => void;
   onOpenQuietHours: () => void;
+  onOpenMealTimes?: () => void;
+  onOpenBatteryHelp?: () => void;
 };
 
-export function ReminderSettingsScreen({ onBack, onOpenQuietHours }: Props) {
+export function ReminderSettingsScreen({
+  onBack,
+  onOpenQuietHours,
+  onOpenMealTimes,
+  onOpenBatteryHelp,
+}: Props) {
   const { api } = useAuth();
+  const { config } = useConfig();
+  const waOn = isWhatsAppAutomationEnabled(config);
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,6 +118,11 @@ export function ReminderSettingsScreen({ onBack, onOpenQuietHours }: Props) {
     }
   }
 
+  const quietLabel =
+    prefs?.quietHoursStart && prefs?.quietHoursEnd
+      ? `${prefs.quietHoursStart} – ${prefs.quietHoursEnd}`
+      : "22:00 – 07:00";
+
   return (
     <Screen
       title="Reminder settings"
@@ -107,26 +144,84 @@ export function ReminderSettingsScreen({ onBack, onOpenQuietHours }: Props) {
             />
           </View>
           {CATEGORY_ROWS.map((row) => (
-            <View key={String(row.key)} style={styles.row}>
-              <Text style={styles.rowLabel}>{row.label}</Text>
-              <Switch
-                value={prefs.categories[row.key]}
-                disabled={saving || !prefs.pushEnabled}
-                onValueChange={(value) => {
-                  void toggleCategory(row.key, value);
-                }}
-              />
+            <View key={String(row.key)} style={styles.categoryBlock}>
+              <View style={styles.row}>
+                <Text style={styles.rowLabel}>{row.label}</Text>
+                <Switch
+                  value={prefs.categories[row.key]}
+                  disabled={saving || !prefs.pushEnabled}
+                  onValueChange={(value) => {
+                    void toggleCategory(row.key, value);
+                  }}
+                />
+              </View>
+              <Text style={styles.hint}>{row.description}</Text>
             </View>
           ))}
-          <PrimaryButton
+          <Text style={styles.coachCopy}>
+            Coach nudges: your coach can send a reminder about a specific item.
+            It follows your quiet hours and can't be turned off separately.
+          </Text>
+          <PressableRow
             label="Quiet hours"
-            variant="secondary"
+            value={quietLabel}
             onPress={onOpenQuietHours}
           />
+          {onOpenMealTimes ? (
+            <PressableRow
+              label="Meal times"
+              value="Using your plan's meal times"
+              onPress={onOpenMealTimes}
+            />
+          ) : null}
+          <View style={[styles.row, styles.waRow, !waOn ? styles.waDisabled : null]}>
+            <View style={styles.waText}>
+              <Text style={styles.rowLabel}>
+                WhatsApp reminders{" "}
+                {!waOn ? (
+                  <Text style={styles.comingSoon}>· Coming soon</Text>
+                ) : null}
+              </Text>
+              <Text style={styles.hint}>
+                {waOn
+                  ? "Backup when app notifications don't reach you."
+                  : "WhatsApp reminders are coming soon. For now we'll remind you in the app."}
+              </Text>
+            </View>
+          </View>
+          {onOpenBatteryHelp ? (
+            <PrimaryButton
+              label="Reminders not arriving?"
+              variant="secondary"
+              onPress={onOpenBatteryHelp}
+            />
+          ) : (
+            <PrimaryButton
+              label="Open phone notification settings"
+              variant="secondary"
+              onPress={() => {
+                void Linking.openSettings();
+              }}
+            />
+          )}
           <PrimaryButton label="Done" variant="ghost" onPress={onBack} />
         </View>
       )}
     </Screen>
+  );
+}
+
+function PressableRow({
+  label,
+  value,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  onPress: () => void;
+}) {
+  return (
+    <PrimaryButton label={`${label}: ${value}`} variant="secondary" onPress={onPress} />
   );
 }
 
@@ -137,6 +232,9 @@ const styles = StyleSheet.create({
   muted: {
     color: colors.midGrey,
     fontSize: 15,
+  },
+  categoryBlock: {
+    gap: spacing.xs,
   },
   row: {
     alignItems: "center",
@@ -154,5 +252,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     paddingRight: spacing.md,
+  },
+  hint: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: spacing.lg,
+  },
+  coachCopy: {
+    color: colors.darkGrey,
+    fontSize: 13,
+    lineHeight: 20,
+    paddingHorizontal: spacing.sm,
+  },
+  waRow: {
+    alignItems: "flex-start",
+  },
+  waDisabled: {
+    opacity: 0.9,
+  },
+  waText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  comingSoon: {
+    color: colors.indigo,
+    fontWeight: "600",
   },
 });

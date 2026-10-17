@@ -16,6 +16,7 @@ import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
 import { scheduledAssignments } from "./scheduledAssignments";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
+import { openActiveWorkout, workoutStartError } from "./workoutSession";
 
 function localDateInTimezone(timeZone: string, instant = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -61,10 +62,14 @@ export function WorkoutTab({
   relationship,
   selectedDate,
   onOpenOverlay,
+  autoStartToday = false,
+  onAutoStartConsumed,
 }: {
   relationship: CoachingRelationship;
   selectedDate?: string;
   onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
+  autoStartToday?: boolean;
+  onAutoStartConsumed?: () => void;
 }) {
   const { api, me } = useAuth();
   const sync = useSyncEngine();
@@ -105,6 +110,39 @@ export function WorkoutTab({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!autoStartToday || loading) return;
+    const todayAssignment = assignments.find(
+      (item) => item.localDate === focusDate,
+    );
+    if (!todayAssignment || focusDate !== today) {
+      onAutoStartConsumed?.();
+      return;
+    }
+    void (async () => {
+      setActingId(todayAssignment.id);
+      setError(null);
+      try {
+        const execution = await openActiveWorkout(api, sync, todayAssignment);
+        setActiveExecution(execution);
+      } catch (err) {
+        setError(workoutStartError(err));
+      } finally {
+        setActingId(null);
+        onAutoStartConsumed?.();
+      }
+    })();
+  }, [
+    autoStartToday,
+    loading,
+    assignments,
+    focusDate,
+    today,
+    api,
+    sync,
+    onAutoStartConsumed,
+  ]);
 
   const todayAssignment = assignments.find(
     (item) => item.localDate === focusDate,
@@ -194,27 +232,14 @@ export function WorkoutTab({
                         setActingId(todayAssignment.id);
                         setError(null);
                         try {
-                          await enqueueAndPush(sync, {
-                            recordId: todayAssignment.id,
-                            operation: "workout.start",
-                            payload: { assignmentId: todayAssignment.id },
-                          });
-                          const refreshed = await api.getWorkoutAssignment(
-                            todayAssignment.id,
-                          );
-                          if (!refreshed.execution) {
-                            throw new Error("Workout did not start.");
-                          }
-                          const execution = await api.getWorkoutExecution(
-                            refreshed.execution.id,
+                          const execution = await openActiveWorkout(
+                            api,
+                            sync,
+                            todayAssignment,
                           );
                           setActiveExecution(execution);
                         } catch (err) {
-                          setError(
-                            err instanceof ApiClientError
-                              ? err.message
-                              : "Could not start workout.",
-                          );
+                          setError(workoutStartError(err));
                         } finally {
                           setActingId(null);
                         }

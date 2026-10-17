@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { markNotificationRead } from "../lib/notificationsApi";
 
 type Props = {
   onBack: () => void;
@@ -20,7 +21,7 @@ function formatWhen(iso: string): string {
 }
 
 export function NotificationsScreen({ onBack }: Props) {
-  const { api } = useAuth();
+  const { api, accessToken } = useAuth();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +47,23 @@ export function NotificationsScreen({ onBack }: Props) {
     void load();
   }, [load]);
 
+  async function openItem(item: Notification) {
+    if (item.readAt == null && accessToken) {
+      try {
+        await markNotificationRead(accessToken, item.id);
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === item.id
+              ? { ...row, state: "read" as const, readAt: new Date().toISOString() }
+              : row,
+          ),
+        );
+      } catch {
+        // Still show the row if mark-read fails offline.
+      }
+    }
+  }
+
   return (
     <Screen title="Notifications" subtitle="In-app inbox from FitBud.">
       {error ? <ErrorBanner message={error} /> : null}
@@ -64,7 +82,13 @@ export function NotificationsScreen({ onBack }: Props) {
       ) : (
         <View style={styles.list}>
           {items.map((item) => (
-            <Pressable key={item.id} style={styles.row}>
+            <Pressable
+              key={item.id}
+              style={[styles.row, item.readAt == null ? styles.unread : null]}
+              onPress={() => {
+                void openItem(item);
+              }}
+            >
               <Text style={styles.title}>
                 {item.type.replace(/_/g, " ")}
               </Text>
@@ -77,6 +101,11 @@ export function NotificationsScreen({ onBack }: Props) {
           ))}
         </View>
       )}
+      <PrimaryButton
+        label="Notification settings"
+        variant="secondary"
+        onPress={onBack}
+      />
       <PrimaryButton label="Done" variant="ghost" onPress={onBack} />
     </Screen>
   );
@@ -97,6 +126,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: spacing.xs,
     padding: spacing.lg,
+  },
+  unread: {
+    borderColor: colors.indigo,
+    borderWidth: 1,
   },
   title: {
     color: colors.deepNavy,

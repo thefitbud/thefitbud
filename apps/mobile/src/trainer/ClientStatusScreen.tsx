@@ -173,8 +173,14 @@ export function ClientStatusScreen({
               {workouts?.totals.missed ?? 0}
             </Text>
             <Text style={styles.body}>
-              Meals confirmed {meals?.totals.confirmed ?? 0} · overdue{" "}
+              Meals confirmed {meals?.totals.confirmed ?? 0} · modified{" "}
+              {meals?.totals.modified ?? 0} · overdue{" "}
               {meals?.totals.overdue ?? 0}
+            </Text>
+            <Text style={styles.muted}>
+              Weekly kcal detail matches trainer web when the client logs meals;
+              mobile shows counts until a client week read model is exposed for
+              coaches.
             </Text>
           </View>
 

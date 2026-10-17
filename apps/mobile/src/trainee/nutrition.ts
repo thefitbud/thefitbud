@@ -15,7 +15,7 @@ function scaledToUnit(value: number | null | undefined): number {
   return Math.round(value / NUTRIENT_SCALE);
 }
 
-function nutrientsFromMealPrescription(meal: MealAssignment): MacroTotals {
+export function nutrientsFromMealPrescription(meal: MealAssignment): MacroTotals {
   let kcal = 0;
   let protein = 0;
   let carbs = 0;

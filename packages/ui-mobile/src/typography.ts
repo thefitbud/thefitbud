@@ -1,24 +1,26 @@
 import { Platform } from "react-native";
 import { fontFamily as tokenFontFamily } from "@fitbud/tokens";
 
+const webStack = tokenFontFamily;
+
 export const fontFamily = Platform.select({
-  web: tokenFontFamily,
-  default: "Inter_400Regular",
+  web: webStack,
+  default: "Satoshi-Regular",
 });
 
 export const fontFamilyMedium = Platform.select({
-  web: tokenFontFamily,
-  default: "Inter_500Medium",
+  web: webStack,
+  default: "Satoshi-Medium",
 });
 
 export const fontFamilyBold = Platform.select({
-  web: tokenFontFamily,
-  default: "Inter_700Bold",
+  web: webStack,
+  default: "Satoshi-Bold",
 });
 
 /** Hindi-ready body stack (Noto Sans Devanagari). */
 export const fontFamilyDevanagari = Platform.select({
-  web: tokenFontFamily,
+  web: webStack,
   default: "NotoSansDevanagari_400Regular",
 });
 

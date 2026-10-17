@@ -68,7 +68,7 @@ export type Stage1FitBudClient = FitBudApiClient & {
   putMealTimes(body: UpdateMealTimesRequest): Promise<MealTimesResponse>;
   searchMeFoods(query: { q: string; limit?: number }): Promise<TraineeFoodSearchResponse>;
   resolveLink(kind: LinkKind, id: string): Promise<LinkResolveResponse>;
-  listCoachNotes(since?: string): Promise<{
+  listMeCoachNotes(since?: string): Promise<{
     items: Array<{
       id: string;
       body: string;
@@ -77,7 +77,6 @@ export type Stage1FitBudClient = FitBudApiClient & {
       createdAt: string;
     }>;
   }>;
-  markCoachNoteSeen(noteId: string): Promise<void>;
   assignPlanVersion(
     planId: string,
     versionId: string,

@@ -4,25 +4,31 @@ Last updated: 2026-10-17 (branch `cursor/mobile-screens-a8e8`).
 
 | Screen ID | File | Status | Gaps |
 |-----------|------|--------|------|
-| TR-05 | `trainee/setup/ReminderSetupScreen.tsx` | Partial | No `expo-notifications` permission flow, OEM battery guide, or API-NEW preference fields (workout time, WhatsApp opt-in). |
-| TR-06 | `trainee/TodayTab.tsx` | Partial | Coach notes, steps card, late-logging banner, pull-to-refresh; hero priority not unit-tested in `@fitbud/core`. |
-| TR-07 | `trainee/DietTab.tsx` | Partial | Past/future dates read-only rules; skip meal; photo upload on confirm. |
-| TR-08 | `trainee/SomethingDifferentSheet.tsx` | Partial | Serving qty/unit UI; macro preview; custom food kcal entry. |
-| TR-15 | `trainee/NotificationsScreen.tsx` | Partial | Mark read, deep link routing from rows. |
-| TR-16 | `trainee/settings/ReminderSettingsScreen.tsx` | MVP | Push categories only (per §4). No WhatsApp channel rows while `wa_automation` off. |
-| TR-17 | `trainee/settings/QuietHoursScreen.tsx` | MVP | Free-text time inputs; no native time picker. |
+| TR-05 | `trainee/setup/ReminderSetupScreen.tsx` | MVP | Multi-step flow with `expo-notifications`, OEM battery sheet, quiet hours + timezone copy. Does not persist API-NEW fields (`preferredWorkoutTime`, WhatsApp opt-in audit). |
+| TR-06 | `trainee/TodayTab.tsx` | MVP | Coach notes, pull-to-refresh, workout Start→active tab, nutrition + next meal confirm, late-log banner, weekly consistency. Steps hidden (`steps_enabled`). Hero priority not unit-tested in `@fitbud/core`. |
+| TR-07 | `trainee/DietTab.tsx` | MVP | Shared date navigator, kcal on cards, skip + undo snackbar (undo not synced), late logging via open exceptions heuristic, optional meals blocked on past days. |
+| TR-08 | `trainee/SomethingDifferentSheet.tsx` | MVP | Quantity chips, custom kcal, macro preview; serving list still uses default serving only (no multi-serving picker API on search v2). |
+| TR-15 | `trainee/NotificationsScreen.tsx` | MVP | Mark read on open via raw `POST /notifications/:id/read`. Deep link routing from rows still minimal. |
+| TR-16 | `trainee/settings/ReminderSettingsScreen.tsx` | MVP | Four category toggles + coach nudges copy; daily summary uses `subscriptionRenewalReminder` key until API adds `dailySummary`. WhatsApp row "Coming soon" when `wa_automation` off. |
+| TR-17 | `trainee/settings/QuietHoursScreen.tsx` | MVP | Presets + free-text times; no native time picker or 24h preview bar. |
 | TR-19 | `trainee/settings/SyncStatusScreen.tsx` | MVP | Sync indicator states (syncing / problem) not wired to engine events. |
 | TR-20 | `trainee/MoreScreen.tsx` | MVP | Profile rows stubbed to overlays; no in-app timezone edit. |
 | TR-21 | `trainee/WidgetTipsScreen.tsx` | Placeholder | No widget implementation. |
 | TR-22 | `trainee/EndedCoachingScreen.tsx` | MVP | Shown when `relationship.status === ended`. |
 | TR-24 | `trainee/settings/MealTimesScreen.tsx` | MVP | Uses `getMealTimes` / `putMealTimes`. |
-| TR-25 | `trainee/settings/StepsSettingsScreen.tsx` | Partial | Hidden explanation when `steps_enabled` false; no Health Connect/HealthKit. |
-| TR-26 | `trainee/FoodSearchScreen.tsx` | MVP | Standalone search; not linked from diet row actions. |
-| TM-07 | `trainer/MoreScreen.tsx` | Partial | No OS notification permission row; no profile editor. |
-| TM-09 | `trainer/ActivityFeedScreen.tsx` | Partial | No filter chips, grouping, row actions, or cursor pagination. |
-| TM-01 | `trainer/AttentionTab.tsx` | Partial | Segmented Needs you / Asked / Check-ins; uses `getAttentionGroups` + `listCoachAsks`. |
+| TR-25 | `trainee/settings/StepsSettingsScreen.tsx` | Partial | `steps_enabled` respected; no Health Connect/HealthKit (`StepsCard` always hidden). |
+| TR-26 | `trainee/FoodSearchScreen.tsx` | MVP | Standalone search; serving picker not wired. |
+| TR-02 | `screens/AcceptInviteScreen.tsx` | MVP | Improved copy/checklist; still paste-token (no invite preview API). |
+| TR-04 | `screens/WaitingReviewScreen.tsx` | MVP | Checklist + meanwhile copy; no auto-refresh on focus. |
+| TM-07 | `trainer/MoreScreen.tsx` | MVP | OS notification permission + settings rows; no profile editor. |
+| TM-09 | `trainer/ActivityFeedScreen.tsx` | MVP | Filter chips + cursor "Load more"; no row actions or grouping. |
+| TM-01 | `trainer/AttentionTab.tsx` | MVP | Segments + Review cards; swipe actions not implemented. |
+| TM-03 | `trainer/ClientStatusScreen.tsx` | Partial | Adherence counts; coach week kcal read model not on API for mobile. |
 
 ## Server / client assumptions
 
-- **Assignment generation:** `generateWorkoutAssignments` / `generateMealAssignments` removed from Today and Diet tabs. If the server does not replenish assignments on a schedule, empty days may appear until generation is triggered elsewhere (documented here).
-- **Read models:** `GET /me/day`, `GET /me/week`, `GET /activity/feed`, and `GET /exceptions/attention?groupBy=relationship` must be available (stage-1 API).
+- **Assignment generation:** Today and Diet tabs do not call `generateWorkoutAssignments` / `generateMealAssignments`. Empty days depend on server-side generation elsewhere.
+- **Read models:** `GET /me/day`, `GET /me/week`, `GET /activity/feed`, and `GET /exceptions/attention?groupBy=relationship` are required (stage-1 API).
+- **Late logging:** Mobile treats any unresolved exception on the relationship as enabling late log on past required meals; per-item exception linkage is not on the assignment list yet.
+- **Notifications:** Mark-read uses direct fetch because `@fitbud/api-client` has no typed helper yet.
+- **Daily summary toggle:** UI label maps to `subscriptionRenewalReminder` in the preferences contract until a dedicated field exists.

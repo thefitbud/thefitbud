@@ -60,6 +60,7 @@ export function TraineeShell({
 
   const [tab, setTab] = useState<TraineeTab>("today");
   const [selectedDate, setSelectedDate] = useState(today);
+  const [workoutAutostart, setWorkoutAutostart] = useState(false);
   const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
   const [effectivePlan, setEffectivePlan] =
@@ -213,7 +214,10 @@ export function TraineeShell({
             effectivePlan={effectivePlan}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
-            onOpenWorkout={() => setTab("workout")}
+            onStartWorkout={() => {
+              setWorkoutAutostart(true);
+              setTab("workout");
+            }}
             onOpenDiet={() => setTab("diet")}
             onOpenCheckin={setActiveCheckin}
             onRefreshPlan={() => {
@@ -229,6 +233,8 @@ export function TraineeShell({
             relationship={relationship}
             selectedDate={selectedDate}
             onOpenOverlay={openOverlay}
+            autoStartToday={workoutAutostart}
+            onAutoStartConsumed={() => setWorkoutAutostart(false)}
           />
         ) : null}
 
@@ -236,6 +242,7 @@ export function TraineeShell({
           <DietTab
             relationship={relationship}
             selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
           />
         ) : null}

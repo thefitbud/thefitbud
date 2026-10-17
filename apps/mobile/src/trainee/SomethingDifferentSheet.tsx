@@ -16,13 +16,12 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
-import {
-  MINIMAL_PNG_CONTENT_TYPE,
-  minimalPngBytes,
-} from "../lib/minimalPng";
-import { createIdempotencyKey } from "../lib/idempotency";
+import { MINIMAL_PNG_CONTENT_TYPE } from "../lib/minimalPng";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
+import { uploadMealPhoto } from "./mealActions";
+
+const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
 
 type Props = {
   assignment: MealAssignment;
@@ -30,6 +29,8 @@ type Props = {
   onDone: () => void;
   onCancel: () => void;
 };
+
+type LoggedRow = LoggedFoodItem & { label: string; kcalPreview: number | null };
 
 export function SomethingDifferentSheet({
   assignment,
@@ -42,8 +43,9 @@ export function SomethingDifferentSheet({
   const sync = useSyncEngine();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TraineeFoodSearchItem[]>([]);
-  const [logged, setLogged] = useState<LoggedFoodItem[]>([]);
+  const [logged, setLogged] = useState<LoggedRow[]>([]);
   const [customName, setCustomName] = useState("");
+  const [customKcal, setCustomKcal] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +67,19 @@ export function SomethingDifferentSheet({
     }
   }, [query, s1]);
 
-  function addFood(item: TraineeFoodSearchItem) {
+  function addFood(item: TraineeFoodSearchItem, quantity = 1) {
+    const kcalPreview =
+      item.energyKcalScaled != null
+        ? Math.round((item.energyKcalScaled / NUTRIENT_SCALE) * quantity)
+        : null;
     setLogged((prev) => [
       ...prev,
       {
         foodId: item.id,
         servingId: item.defaultServingId ?? undefined,
-        quantity: 1,
+        quantity,
+        label: item.name,
+        kcalPreview,
       },
     ]);
     setResults([]);
@@ -81,35 +89,29 @@ export function SomethingDifferentSheet({
   function addCustom() {
     const name = customName.trim();
     if (!name) return;
+    const kcal = Number.parseInt(customKcal, 10);
     setLogged((prev) => [
       ...prev,
       {
         customFood: {
           name,
-          kcal: 0,
+          kcal: Number.isFinite(kcal) ? kcal : 0,
         },
+        label: name,
+        kcalPreview: Number.isFinite(kcal) ? kcal : null,
       },
     ]);
     setCustomName("");
+    setCustomKcal("");
   }
 
-  async function uploadMealPhoto(): Promise<string | null> {
-    if (!assignment.photoRequired) return null;
-    const target = await api.createUploadTarget(
-      {
-        coachingRelationshipId: relationshipId,
-        mediaType: "meal_photo",
-        contentType: MINIMAL_PNG_CONTENT_TYPE,
-        originalFilename: `meal-${assignment.id}.png`,
-      },
-      createIdempotencyKey(),
+  function updateQuantity(index: number, quantity: number) {
+    setLogged((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        return { ...row, quantity };
+      }),
     );
-    await api.uploadMediaContent(
-      target.mediaAsset.id,
-      minimalPngBytes(),
-      MINIMAL_PNG_CONTENT_TYPE,
-    );
-    return target.mediaAsset.id;
   }
 
   async function save() {
@@ -120,7 +122,9 @@ export function SomethingDifferentSheet({
     setSaving(true);
     setError(null);
     try {
-      const mediaAssetId = await uploadMealPhoto();
+      const mediaAssetId = assignment.photoRequired
+        ? await uploadMealPhoto(api, relationshipId, assignment)
+        : null;
       const photoIntent = mediaAssetId
         ? {
             notedAt: new Date().toISOString(),
@@ -129,6 +133,16 @@ export function SomethingDifferentSheet({
             clientRef: `meal-photo-${assignment.id}`,
           }
         : null;
+      const items: LoggedFoodItem[] = logged.map((row) => {
+        if (row.customFood) {
+          return { customFood: row.customFood };
+        }
+        return {
+          foodId: row.foodId,
+          servingId: row.servingId,
+          quantity: row.quantity,
+        };
+      });
       await enqueueAndPush(sync, {
         recordId: assignment.id,
         operation: "meal.deviate",
@@ -138,7 +152,7 @@ export function SomethingDifferentSheet({
             deviationKind: "logged_foods",
             notes: null,
             photoIntent,
-            items: logged,
+            items,
           },
         },
       });
@@ -151,6 +165,11 @@ export function SomethingDifferentSheet({
       setSaving(false);
     }
   }
+
+  const macroPreview = logged.reduce(
+    (sum, row) => sum + (row.kcalPreview ?? 0),
+    0,
+  );
 
   return (
     <Screen
@@ -180,11 +199,12 @@ export function SomethingDifferentSheet({
           keyExtractor={(item) => item.id}
           style={styles.results}
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => addFood(item)}>
+            <Pressable style={styles.row} onPress={() => addFood(item, 1)}>
               <Text style={styles.rowTitle}>{item.name}</Text>
               {item.energyKcalScaled != null ? (
                 <Text style={styles.rowMeta}>
-                  {Math.round(item.energyKcalScaled / NUTRIENT_SCALE)} kcal
+                  {Math.round(item.energyKcalScaled / NUTRIENT_SCALE)} kcal /
+                  serving
                 </Text>
               ) : null}
             </Pressable>
@@ -197,14 +217,45 @@ export function SomethingDifferentSheet({
         onChangeText={setCustomName}
         placeholder="Not in library?"
       />
+      <Field
+        label="Custom kcal (optional)"
+        value={customKcal}
+        onChangeText={setCustomKcal}
+        placeholder="e.g. 420"
+        keyboardType="number-pad"
+      />
       <PrimaryButton label="Add custom" variant="secondary" onPress={addCustom} />
       {logged.length > 0 ? (
         <View style={styles.logged}>
-          <Text style={styles.loggedTitle}>Logged ({logged.length})</Text>
+          <Text style={styles.loggedTitle}>
+            Logged ({logged.length}) · ~{macroPreview} kcal
+          </Text>
           {logged.map((item, index) => (
-            <Text key={`${index}`} style={styles.loggedLine}>
-              {item.customFood?.name ?? `Food ${item.foodId?.slice(0, 8)}`}
-            </Text>
+            <View key={`${index}`} style={styles.loggedRow}>
+              <Text style={styles.loggedLine}>{item.label}</Text>
+              <View style={styles.qtyRow}>
+                {QUANTITY_CHIPS.map((qty) => (
+                  <Pressable
+                    key={qty}
+                    style={[
+                      styles.qtyChip,
+                      item.quantity === qty ? styles.qtyChipActive : null,
+                    ]}
+                    onPress={() => updateQuantity(index, qty)}
+                  >
+                    <Text
+                      style={
+                        item.quantity === qty
+                          ? styles.qtyChipTextActive
+                          : styles.qtyChipText
+                      }
+                    >
+                      {qty}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
           ))}
         </View>
       ) : null}
@@ -236,15 +287,42 @@ const styles = StyleSheet.create({
   logged: {
     backgroundColor: colors.paleLavender,
     borderRadius: 12,
-    gap: spacing.xs,
+    gap: spacing.sm,
     padding: spacing.md,
   },
   loggedTitle: {
     color: colors.deepNavy,
     fontWeight: "600",
   },
+  loggedRow: {
+    gap: spacing.xs,
+  },
   loggedLine: {
     color: colors.darkGrey,
     fontSize: 14,
+    fontWeight: "600",
+  },
+  qtyRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  qtyChip: {
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  qtyChipActive: {
+    backgroundColor: colors.indigo,
+  },
+  qtyChipText: {
+    color: colors.deepNavy,
+    fontSize: 13,
+  },
+  qtyChipTextActive: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

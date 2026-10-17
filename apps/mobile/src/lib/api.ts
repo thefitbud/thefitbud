@@ -1,8 +1,6 @@
 import { FitBudApiClient } from "@fitbud/api-client";
 import type { Role } from "@fitbud/contracts";
-import { getExpoGoProjectConfig } from "expo/src/environment/ExpoGo";
 import { NativeModules, Platform } from "react-native";
-import getDevServer from "react-native/Libraries/Core/Devtools/getDevServer";
 import { apiBaseUrlForDevice, deviceApiHost, preferredDevServerHost } from "./apiBaseUrl";
 
 /** Local Wrangler default. Override with EXPO_PUBLIC_API_BASE_URL. */
@@ -16,8 +14,22 @@ function readEnvApiBaseUrl(): string | undefined {
 }
 
 function readBundleDevServerUrl(): string | null {
+  if (Platform.OS === "web") return null;
   try {
-    const info = getDevServer();
+    const getDevServer = (
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("react-native/Libraries/Core/Devtools/getDevServer") as {
+        default: () => {
+          bundleLoadedFromServer?: boolean;
+          url?: string;
+        };
+      }
+    ).default;
+    const _typedGetDevServer = getDevServer as () => {
+        bundleLoadedFromServer?: boolean;
+        url?: string;
+      };
+    const info = _typedGetDevServer();
     if (info.bundleLoadedFromServer && info.url) return info.url;
   } catch {
     return null;
@@ -26,6 +38,7 @@ function readBundleDevServerUrl(): string | null {
 }
 
 function readManifestDevServerHosts(): string[] {
+  if (Platform.OS === "web") return [];
   const constants = NativeModules.ExponentConstants as
     | { manifest?: unknown; experienceUrl?: string }
     | undefined;
@@ -52,7 +65,21 @@ function readManifestDevServerHosts(): string[] {
   return hosts;
 }
 
+function readExpoGoDebuggerHost(): string | null {
+  if (Platform.OS === "web") return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getExpoGoProjectConfig } = require("expo/src/environment/ExpoGo") as {
+      getExpoGoProjectConfig: () => { debuggerHost?: string } | null;
+    };
+    return getExpoGoProjectConfig()?.debuggerHost ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function readDevServerHost(): string | null {
+  if (Platform.OS === "web") return null;
   const sourceCode = NativeModules.SourceCode as
     | {
         scriptURL?: string;
@@ -62,7 +89,7 @@ function readDevServerHost(): string | null {
 
   return preferredDevServerHost([
     readBundleDevServerUrl(),
-    getExpoGoProjectConfig()?.debuggerHost,
+    readExpoGoDebuggerHost(),
     ...readManifestDevServerHosts(),
     sourceCode?.scriptURL,
     sourceCode?.getConstants?.()?.scriptURL,

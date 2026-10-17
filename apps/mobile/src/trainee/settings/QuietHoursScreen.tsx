@@ -11,6 +11,11 @@ type Props = {
   onBack: () => void;
 };
 
+const PRESETS: Array<{ label: string; start: string; end: string }> = [
+  { label: "Night 10 pm–7 am", start: "22:00", end: "07:00" },
+  { label: "Late night 11 pm–6 am", start: "23:00", end: "06:00" },
+];
+
 export function QuietHoursScreen({ onBack }: Props) {
   const { api } = useAuth();
   const [start, setStart] = useState("22:00");
@@ -68,7 +73,23 @@ export function QuietHoursScreen({ onBack }: Props) {
         <Text style={styles.muted}>Loading…</Text>
       ) : (
         <View style={styles.stack}>
-          <Text style={styles.label}>Start</Text>
+          <Text style={styles.explain}>
+            No notifications during these hours. Reminders that would fall here
+            are skipped, not saved for later. FitBud never sends reminders after
+            10 pm even if your quiet hours start later.
+          </Text>
+          {PRESETS.map((preset) => (
+            <PrimaryButton
+              key={preset.label}
+              label={preset.label}
+              variant="secondary"
+              onPress={() => {
+                setStart(preset.start);
+                setEnd(preset.end);
+              }}
+            />
+          ))}
+          <Text style={styles.label}>From</Text>
           <TextInput
             accessibilityLabel="Quiet hours start"
             value={start}
@@ -77,7 +98,7 @@ export function QuietHoursScreen({ onBack }: Props) {
             placeholderTextColor={colors.midGrey}
             style={styles.input}
           />
-          <Text style={styles.label}>End</Text>
+          <Text style={styles.label}>To</Text>
           <TextInput
             accessibilityLabel="Quiet hours end"
             value={end}
@@ -101,6 +122,11 @@ const styles = StyleSheet.create({
   muted: {
     color: colors.midGrey,
     fontSize: 15,
+  },
+  explain: {
+    color: colors.midGrey,
+    fontSize: 14,
+    lineHeight: 20,
   },
   label: {
     color: colors.deepNavy,

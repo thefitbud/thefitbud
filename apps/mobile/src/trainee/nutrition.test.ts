@@ -5,8 +5,9 @@ import { buildNutritionRings } from "./nutrition";
 
 function meal(partial: Partial<MealAssignment> & Pick<MealAssignment, "id" | "status">): MealAssignment {
   const kcalScaled = 500 * NUTRIENT_SCALE;
+  const { id, status, ...rest } = partial;
   return {
-    id: partial.id,
+    id,
     coachingRelationshipId: "00000000-0000-4000-8000-000000000001",
     planId: "00000000-0000-4000-8000-000000000002",
     planVersionId: "00000000-0000-4000-8000-000000000003",
@@ -16,7 +17,7 @@ function meal(partial: Partial<MealAssignment> & Pick<MealAssignment, "id" | "st
     windowStartsAt: "2026-10-17T06:00:00.000Z",
     windowEndsAt: "2026-10-17T08:00:00.000Z",
     photoRequired: false,
-    status: partial.status,
+    status,
     scheduleStatus: "scheduled",
     prescription: {
       id: "00000000-0000-4000-8000-000000000005",
@@ -40,10 +41,10 @@ function meal(partial: Partial<MealAssignment> & Pick<MealAssignment, "id" | "st
       instructions: null,
       scheduleHint: null,
     },
-    compliance: partial.compliance ?? null,
+    compliance: rest.compliance ?? null,
     createdAt: "2026-10-17T00:00:00.000Z",
     updatedAt: "2026-10-17T00:00:00.000Z",
-    ...partial,
+    ...rest,
   } as MealAssignment;
 }
 

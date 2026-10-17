@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Linking, StyleSheet, Text, View } from "react-native";
+import * as Notifications from "expo-notifications";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useConfig } from "../providers/ConfigProvider";
 import { useAuth } from "../auth/AuthProvider";
@@ -22,6 +23,20 @@ export function TrainerMoreScreen({ onOpenReminderSettings }: Props) {
           Plan builder and templates stay on trainer web. Mobile is for attention,
           clients, and check-ins.
         </Text>
+        <PrimaryButton
+          label="Allow notifications"
+          variant="secondary"
+          onPress={() => {
+            void Notifications.requestPermissionsAsync();
+          }}
+        />
+        <PrimaryButton
+          label="Open phone notification settings"
+          variant="secondary"
+          onPress={() => {
+            void Linking.openSettings();
+          }}
+        />
         {onOpenReminderSettings ? (
           <PrimaryButton
             label="Notification settings"
