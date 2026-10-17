@@ -415,6 +415,7 @@ async function collectCandidates(
     const [prefRow] = await db
       .select({
         preferredWorkoutTime: notificationPreferences.preferredWorkoutTime,
+        quietHoursStart: notificationPreferences.quietHoursStart,
       })
       .from(notificationPreferences)
       .where(eq(notificationPreferences.userId, relationship.traineeUserId))
@@ -469,6 +470,7 @@ async function collectCandidates(
           timeZone,
           resolved: isWorkoutResolved(executions[0]?.status ?? null),
           workoutStartLocalTime: prefRow?.preferredWorkoutTime ?? null,
+          quietHoursStart: prefRow?.quietHoursStart ?? null,
         });
         for (const slot of slots) {
           candidates.push({

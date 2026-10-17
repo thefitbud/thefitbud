@@ -33,6 +33,14 @@ function istWallClockToUtc(localDate: string, hours: number, minutes: number): s
   return new Date(utcMs).toISOString();
 }
 
+function dubaiWallClockToUtc(localDate: string, hours: number, minutes: number): string {
+  const [year, month, day] = localDate.split("-").map(Number) as [number, number, number];
+  const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+  const dubaiOffsetMinutes = 4 * 60;
+  const utcMs = utcMidnight + (hours * 60 + minutes - dubaiOffsetMinutes) * 60_000;
+  return new Date(utcMs).toISOString();
+}
+
 
 import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 
@@ -1044,7 +1052,12 @@ describe("notifications and reminders (D4)", () => {
     expect(keys).toContain(mealReminderDedupeKey(breakfast.id, "after"));
     expect(keys.some((key) => key.includes(lunch.id))).toBe(false);
 
-    await evaluateAt(istWallClockToUtc(localDate, 17, 0));
+    await evaluateAt(istWallClockToUtc(localDate, 19, 14));
+    const beforeWorkoutNudge = await db.select().from(schema.notifications);
+    expect(beforeWorkoutNudge.map((row) => row.dedupeKey)).not.toContain(
+      workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+    );
+    await evaluateAt(istWallClockToUtc(localDate, 19, 15));
     const eveningWorkout = await db.select().from(schema.notifications);
     expect(eveningWorkout.map((row) => row.dedupeKey)).toContain(
       workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
@@ -1930,7 +1943,7 @@ describe("§3.6 day-in-life reminder battery", () => {
     ).toBe(true);
   });
 
-  it("uses preferred workout time 19:00 for the 75-minute reminder", async () => {
+  it("uses preferred workout time 19:00 for the post-workout nudge at 20:15", async () => {
     const { trainerCookie, traineeToken, relationshipId, today } =
       await reachActiveCheckinConfig("wo1900");
     await db
@@ -1995,7 +2008,7 @@ describe("§3.6 day-in-life reminder battery", () => {
       {
         method: "POST",
         headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
-        body: JSON.stringify({ now: istWallClockToUtc(today, 17, 44) }),
+        body: JSON.stringify({ now: istWallClockToUtc(today, 20, 14) }),
       },
       testEnv(),
     );
@@ -2014,7 +2027,7 @@ describe("§3.6 day-in-life reminder battery", () => {
       {
         method: "POST",
         headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
-        body: JSON.stringify({ now: istWallClockToUtc(today, 17, 45) }),
+        body: JSON.stringify({ now: istWallClockToUtc(today, 20, 15) }),
       },
       testEnv(),
     );
@@ -2026,6 +2039,203 @@ describe("§3.6 day-in-life reminder battery", () => {
       rows.some(
         (row) =>
           row.dedupeKey === workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+      ),
+    ).toBe(true);
+  });
+
+  it("clamps a 21:30 preferred workout nudge to 21:59 before quiet hours", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("clamp2130");
+    await db
+      .delete(schema.workoutAssignments)
+      .where(eq(schema.workoutAssignments.coachingRelationshipId, relationshipId));
+    await app.request(
+      "/notifications/preferences",
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ preferredWorkoutTime: "21:30" }),
+      },
+      testEnv(),
+    );
+    const planId = "77777777-7777-4777-8777-777777777701";
+    const versionId = "77777777-7777-4777-8777-777777777702";
+    const workoutId = "77777777-7777-4777-8777-777777777703";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Clamp plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.workoutAssignments).values({
+      id: workoutId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      workoutDayId: "88888888-8888-4888-8888-888888888801",
+      workoutDayName: "Evening",
+      workoutDayJson: JSON.stringify({ name: "Evening", exercises: [] }),
+      localDate: today,
+      windowStartsAt: istWallClockToUtc(today, 0, 0),
+      windowEndsAt: istWallClockToUtc(today, 23, 0),
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 21, 58) }),
+      },
+      testEnv(),
+    );
+    let rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.domainEntityId, workoutId));
+    expect(
+      rows.some(
+        (row) =>
+          row.dedupeKey === workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+      ),
+    ).toBe(false);
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: istWallClockToUtc(today, 21, 59) }),
+      },
+      testEnv(),
+    );
+    rows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.domainEntityId, workoutId));
+    expect(
+      rows.some(
+        (row) =>
+          row.dedupeKey === workoutReminderDedupeKey(workoutId, WORKOUT_REMINDER_SLOT),
+      ),
+    ).toBe(true);
+  });
+
+  it("fires meal reminders in Asia/Dubai local time", async () => {
+    const { trainerCookie, relationshipId, today } =
+      await reachActiveCheckinConfig("dubai");
+    const [rel] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    await db
+      .update(schema.users)
+      .set({ timezone: "Asia/Dubai" })
+      .where(eq(schema.users.id, rel!.traineeUserId));
+    const planId = "99999999-9999-4999-8999-999999999901";
+    const versionId = "99999999-9999-4999-8999-999999999902";
+    const assignmentId = "99999999-9999-4999-8999-999999999903";
+    const stamp = nowIso();
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: relationshipId,
+      title: "Dubai plan",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "published",
+      contentJson: JSON.stringify({ workoutDays: [], mealPrescriptions: [] }),
+      creationSource: "blank",
+      publishedAt: stamp,
+      effectiveFrom: today,
+      effectiveTo: null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    const lunch = {
+      id: "99999999-9999-4999-8999-999999999904",
+      order: 1,
+      name: "Lunch",
+      mealType: "lunch",
+      applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      localTime: "13:00",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [],
+    };
+    await db.insert(schema.mealAssignments).values({
+      id: assignmentId,
+      coachingRelationshipId: relationshipId,
+      planId,
+      planVersionId: versionId,
+      mealPrescriptionId: lunch.id,
+      mealName: "Lunch",
+      mealPrescriptionJson: JSON.stringify(lunch),
+      localDate: today,
+      windowStartsAt: dubaiWallClockToUtc(today, 0, 0),
+      windowEndsAt: dubaiWallClockToUtc(today, 23, 0),
+      photoRequired: false,
+      scheduleStatus: "scheduled",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: dubaiWallClockToUtc(today, 13, 39) }),
+      },
+      testEnv(),
+    );
+    const early = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(early).toHaveLength(0);
+    await app.request(
+      "/notifications/reminders/evaluate",
+      {
+        method: "POST",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ now: dubaiWallClockToUtc(today, 13, 40) }),
+      },
+      testEnv(),
+    );
+    const mealRows = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.notificationType, "meal_reminder"));
+    expect(
+      mealRows.some(
+        (row) => row.dedupeKey === mealReminderDedupeKey(assignmentId, "after"),
       ),
     ).toBe(true);
   });
