@@ -1,4 +1,11 @@
 export {
+  DEFAULT_FEATURE_FLAGS,
+  FEATURE_FLAG_KEYS,
+  envFlagOverride,
+  type FeatureFlagKey,
+} from "./config.js";
+
+export {
   isRolePermittedOnSurface,
   resolveSelectedRole,
   rolesAllowedForSurface,

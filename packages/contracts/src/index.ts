@@ -1,4 +1,10 @@
 export {
+  configFlagsSchema,
+  configResponseSchema,
+  type ConfigResponse,
+} from "./config.js";
+
+export {
   accountStateSchema,
   apiDataEnvelopeSchema,
   apiErrorBodySchema,

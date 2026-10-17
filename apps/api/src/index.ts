@@ -37,6 +37,8 @@ import { realtimeRoutes } from "./routes/realtime";
 import { templateRoutes } from "./routes/templates";
 import { libraryRoutes } from "./routes/libraries";
 import { clientRoutes } from "./routes/clients";
+import { configRoutes } from "./routes/config";
+import { devRoutes } from "./routes/dev";
 import { openApiRouteOptions, operation } from "./openapi/document";
 import type { Env, Variables } from "./types";
 
@@ -66,6 +68,8 @@ app.get(
     ),
 );
 
+app.route("/config", configRoutes);
+app.route("/dev", devRoutes);
 app.route("/auth", authRoutes);
 app.route("/me", meRoutes);
 app.route("/invitations", invitationRoutes);
