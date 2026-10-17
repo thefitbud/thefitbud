@@ -432,6 +432,19 @@ const FOOD_CLASSIFICATIONS = new Set([
   "branded_product",
 ]);
 const NUTRITION_BASES = new Set(["per_100_g", "per_100_ml"]);
+const FOOD_CUISINE_REGIONS = new Set(["indian", "indian_pantry", "global"]);
+
+function mapFoodCuisineRegion(
+  row: FoodLibraryItemRow,
+): FoodLibraryItem["cuisineRegion"] {
+  if (FOOD_CUISINE_REGIONS.has(row.cuisineRegion)) {
+    return row.cuisineRegion as FoodLibraryItem["cuisineRegion"];
+  }
+  if (row.cuisine && FOOD_CUISINE_REGIONS.has(row.cuisine)) {
+    return row.cuisine as FoodLibraryItem["cuisineRegion"];
+  }
+  return "indian";
+}
 
 export function mapFoodLibraryItem(
   row: FoodLibraryItemRow,
@@ -450,19 +463,22 @@ export function mapFoodLibraryItem(
     ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     name: row.name,
-    cuisineRegion: row.cuisineRegion,
+    cuisineRegion: mapFoodCuisineRegion(row),
     classification,
     basis,
     energyKcalScaled: row.energyKcalScaled,
     proteinScaled: row.proteinScaled,
     carbsScaled: row.carbsScaled,
     fatScaled: row.fatScaled,
-    servings: servings.map((serving) => ({
-      id: serving.id,
-      label: serving.label,
-      unit: serving.unit,
-      conversionScaled: serving.conversionScaled,
-    })),
+    servings: servings
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((serving) => ({
+        id: serving.id,
+        label: serving.label,
+        unit: serving.unit,
+        conversionScaled: serving.conversionScaled,
+      })),
     notes: row.notes,
     description: row.description,
     status: row.status,

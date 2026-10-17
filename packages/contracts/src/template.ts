@@ -180,7 +180,7 @@ export const foodLibraryItemSchema = z.object({
   ownership: libraryOwnershipSchema,
   trainerUserId: uuidSchema.nullable(),
   name: z.string().min(1).max(120),
-  cuisineRegion: z.literal("indian"),
+  cuisineRegion: z.enum(["indian", "indian_pantry", "global"]),
   classification: foodClassificationSchema.nullable(),
   basis: nutritionBasisSchema.nullable(),
   energyKcalScaled: z.number().int().nonnegative().nullable(),
