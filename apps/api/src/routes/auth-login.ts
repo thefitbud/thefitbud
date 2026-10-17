@@ -3,7 +3,9 @@ import { Hono } from "hono";
 import {
   authLoginRequestSchema,
   authOtpStartRequestSchema,
+  authOtpStartResponseSchema,
   authOtpVerifyRequestSchema,
+  authOtpVerifyResponseSchema,
   authPasswordResetRequestSchema,
   authPasswordSetRequestSchema,
   authTokenResponseSchema,
@@ -212,6 +214,7 @@ authLoginRoutes.post(
     description: "Send a one-time code when the identifier is known.",
     security: "public",
     body: authOtpStartRequestSchema,
+    response: authOtpStartResponseSchema,
   }),
   async (c) => {
     const body = await c.req.json().catch(() => null);
@@ -265,7 +268,14 @@ authLoginRoutes.post(
     if (flags.wa_otp && identifier?.kind === "mobile") {
       channels.push("whatsapp");
     }
-    return c.json({ sent: true, channels: channels.length ? channels : ["email"] }, 202);
+    return ok(
+      c,
+      authOtpStartResponseSchema.parse({
+        sent: true,
+        channels: channels.length ? channels : ["email"],
+      }),
+      202,
+    );
   },
 );
 
@@ -277,6 +287,7 @@ authLoginRoutes.post(
     description: "Verify a one-time code for login, reset, or invite.",
     security: "public",
     body: authOtpVerifyRequestSchema,
+    response: authOtpVerifyResponseSchema,
   }),
   async (c) => {
     const body = await c.req.json().catch(() => null);
@@ -343,12 +354,15 @@ authLoginRoutes.post(
       if ("error" in token) {
         return fail(c, 503, token.error, "Authentication provider is not configured.");
       }
-      return ok(c, {
-        purpose: "login",
-        token: token.token,
-        tokenKind: token.tokenKind,
-        userId: user.id,
-      });
+      return ok(
+        c,
+        authOtpVerifyResponseSchema.parse({
+          purpose: "login",
+          token: token.token,
+          tokenKind: token.tokenKind,
+          userId: user.id,
+        }),
+      );
     }
     const secret = c.env.MEDIA_SIGNING_SECRET ?? "fitbud-local-proof-secret";
     if (parsed.data.purpose === "reset") {
@@ -357,14 +371,20 @@ authLoginRoutes.post(
         identifierHash: idHash,
         purpose: "reset",
       });
-      return ok(c, { purpose: "reset", resetProof });
+      return ok(
+        c,
+        authOtpVerifyResponseSchema.parse({ purpose: "reset", resetProof }),
+      );
     }
     const otpProof = await issuePurposeProof(secret, {
       otpId: otp.id,
       identifierHash: idHash,
       purpose: "invite",
     });
-    return ok(c, { purpose: "invite", otpProof });
+    return ok(
+      c,
+      authOtpVerifyResponseSchema.parse({ purpose: "invite", otpProof }),
+    );
   },
 );
 

@@ -130,8 +130,8 @@ Password (dev only): **`FitBud-demo-2026`**
 |---------|------:|
 | API | 191 |
 | core | 109 |
-| contracts | 21 |
-| api-client | 5 |
+| contracts | 22 |
+| api-client | 7 |
 | trainer-web | 16 |
 | mobile | 30 |
 | tokens | 6 |
@@ -162,6 +162,19 @@ Password (dev only): **`FitBud-demo-2026`**
 | TR-24 meal times | `GET/PUT /me/meal-times` (existing) |
 | TR-25 steps | `GET/PUT /me/steps` stub; `403 FEATURE_DISABLED` when `steps_enabled=false` |
 | TR-26 food search | `GET /me/foods/search`, `GET /me/foods/:foodId`, `getTraineeFood` on api-client |
+
+### Trainer-web gaps (`GAPS-trainer-web.md`, backend / client)
+
+| Gap | Resolution |
+|-----|------------|
+| TW-29 `trainerCategories` | On `notificationPreferencesSchema`, API mapper, `getNotificationPreferences` / `updateNotificationPreferences`; contract + api-client tests |
+| Auth OTP envelope | `POST /auth/otp/start` and `/auth/otp/verify` return `{ data }`; `startOtp` / `verifyOtp` on api-client |
+| TW-23 `listPlanTemplates` filters | `scope`, `templateType`, `q` on `FitBudApiClient.listPlanTemplates` |
+| TW-25 check-in template scope | `scope` query on `listCheckinFormTemplates` (server already filters) |
+| TW-08 invitation lifecycle | `reissueInvitation`, `revokeInvitation` on api-client |
+| TW-30 reactivation cancel | `cancelReactivation` on api-client |
+| TW-09a / TW-09–21 workspace nutrition | Demo seed `NUTRIENT_SCALE` quantities; `traineeTimezone` on workspace header from trainee profile |
+| TW-12–16 publish on heavy plans | Same seed fix; plan GET/publish validate scaled nutrients |
 
 ## 10. Known gaps (Stage 2 blockers to watch)
 - **A10**: No R2 media unless `LIBRARY_MEDIA_BASE_URL`.
