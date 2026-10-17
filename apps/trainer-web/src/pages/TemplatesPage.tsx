@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PlanTemplate, PlanTemplateType } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
+import { listPlanTemplatesExtended } from "../lib/http-api";
 import { pageClientDirectory } from "../lib/clients";
 import { LibrariesPanel } from "./templates/LibrariesPanel";
 import { OnboardingTemplates } from "./templates/OnboardingTemplates";
@@ -46,10 +47,17 @@ function isPlanFamily(
   return family === "workout" || family === "nutrition" || family === "combined";
 }
 
-export function TemplatesPage() {
-  const [family, setFamily] = useState<TemplateFamily>("onboarding");
+export function TemplatesPage({
+  initialFamily = "onboarding",
+}: {
+  initialFamily?: TemplateFamily;
+}) {
+  const [family, setFamily] = useState<TemplateFamily>(initialFamily);
+  useEffect(() => {
+    setFamily(initialFamily);
+  }, [initialFamily]);
   const plans = useCursorPage("plan-templates", (cursor) =>
-    apiClient.listPlanTemplates({ cursor, limit: 50 }),
+    listPlanTemplatesExtended({ cursor, limit: 50 }),
   );
   const [clients, setClients] = useState<ApplyClient[]>([]);
   const [clientError, setClientError] = useState<string | null>(null);

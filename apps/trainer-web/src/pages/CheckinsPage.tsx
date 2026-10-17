@@ -47,8 +47,14 @@ function formatLocalDate(value: string): string {
   }).format(date);
 }
 
-function relationshipLabel(coachingRelationshipId: string): string {
-  return `Client · ${coachingRelationshipId.slice(0, 8)}…`;
+function relationshipLabel(
+  coachingRelationshipId: string,
+  names: Map<string, string>,
+): string {
+  return (
+    names.get(coachingRelationshipId) ??
+    `Client · ${coachingRelationshipId.slice(0, 8)}…`
+  );
 }
 
 function relationshipInitials(coachingRelationshipId: string): string {
@@ -70,12 +76,25 @@ export function CheckinsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | CheckinStatus>(
     "all",
   );
+  const [clientNames, setClientNames] = useState<Map<string, string>>(
+    () => new Map(),
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiClient.listTrainerCheckinInbox();
+      const [result, clients] = await Promise.all([
+        apiClient.listTrainerCheckinInbox(),
+        apiClient.listClients({ limit: 100 }),
+      ]);
+      const names = new Map<string, string>();
+      for (const row of clients.items) {
+        const rid = row.relationshipId;
+        const label = row.traineeDisplayName;
+        if (rid && label) names.set(rid, label);
+      }
+      setClientNames(names);
       setItems(result.items);
     } catch (err) {
       setError(
@@ -243,7 +262,11 @@ export function CheckinsPage() {
                   </thead>
                   <tbody>
                     {visibleItems.map((item) => (
-                      <CheckinRow key={item.checkin.id} item={item} />
+                      <CheckinRow
+                        key={item.checkin.id}
+                        item={item}
+                        clientNames={clientNames}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -300,8 +323,14 @@ function StatusChip({
   );
 }
 
-function CheckinRow({ item }: { item: TrainerCheckinInboxItem }) {
-  const label = relationshipLabel(item.coachingRelationshipId);
+function CheckinRow({
+  item,
+  clientNames,
+}: {
+  item: TrainerCheckinInboxItem;
+  clientNames: Map<string, string>;
+}) {
+  const label = relationshipLabel(item.coachingRelationshipId, clientNames);
   return (
     <tr>
       <td>

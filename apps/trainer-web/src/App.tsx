@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthProvider";
+import { CodeSignInPage } from "./auth/CodeSignInPage";
+import { ForgotPasswordPage } from "./auth/ForgotPasswordPage";
 import { SignInPage } from "./auth/SignInPage";
 import { RequireAuth } from "./layout/RequireAuth";
 import { AddClientPage } from "./pages/AddClientPage";
@@ -16,22 +18,37 @@ import { ClientsPage } from "./pages/ClientsPage";
 import { ConfigureCoachingPage } from "./pages/ConfigureCoachingPage";
 import { ExceptionDetailPage } from "./pages/ExceptionDetailPage";
 import { HomePage } from "./pages/HomePage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingReviewPage } from "./pages/OnboardingReviewPage";
-import { TemplatesPage } from "./pages/TemplatesPage";
+import { PendingInvitationPage } from "./pages/PendingInvitationPage";
+import { TemplatesHub } from "./pages/TemplatesHub";
+import { WelcomePage } from "./pages/WelcomePage";
+import { NotificationSettingsPage } from "./pages/settings/NotificationSettingsPage";
+import { ProfileSettingsPage } from "./pages/settings/ProfileSettingsPage";
+import { SettingsLayout } from "./pages/settings/SettingsLayout";
 
 export function App() {
   return (
     <AuthProvider>
       <Routes>
         <Route path="/sign-in" element={<SignInPage />} />
+        <Route path="/sign-in/code" element={<CodeSignInPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route element={<RequireAuth />}>
+          <Route path="/welcome" element={<WelcomePage />} />
           <Route path="/" element={<HomePage />} />
           <Route path="/exceptions/:exceptionId" element={<ExceptionDetailPage />} />
           <Route path="/checkins" element={<CheckinsPage />} />
-          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/templates/*" element={<TemplatesHub />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/add" element={<AddClientPage />} />
           <Route path="/clients/new" element={<Navigate to="/clients/add" replace />} />
+          <Route path="/invitations/:invitationId" element={<PendingInvitationPage />} />
+          <Route path="/settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="profile" replace />} />
+            <Route path="profile" element={<ProfileSettingsPage />} />
+            <Route path="notifications" element={<NotificationSettingsPage />} />
+          </Route>
           <Route
             path="/clients/:relationshipId"
             element={<ClientWorkspaceLayout />}
@@ -48,7 +65,7 @@ export function App() {
             <Route path="configure" element={<ConfigureCoachingPage />} />
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AuthProvider>
   );

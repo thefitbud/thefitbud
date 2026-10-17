@@ -1,9 +1,11 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { ErrorState } from "../components/StatePanels";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { AppShell } from "./AppShell";
 
 export function RequireAuth() {
-  const { me, loading } = useAuth();
+  const { me, loading, sessionError, refreshMe, clearSessionError } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -14,12 +16,40 @@ export function RequireAuth() {
     );
   }
 
+  if (sessionError && !me) {
+    return (
+      <main className="centered-status">
+        <ErrorState
+          title="Can't reach FitBud"
+          message={sessionError}
+          onRetry={() => {
+            clearSessionError();
+            void refreshMe();
+          }}
+        />
+      </main>
+    );
+  }
+
   if (!me) {
-    return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
+    const next = `${location.pathname}${location.search}`;
+    return (
+      <Navigate
+        to={`/sign-in?next=${encodeURIComponent(next)}`}
+        replace
+        state={{ from: next }}
+      />
+    );
+  }
+
+  const onWelcome = location.pathname.startsWith("/welcome");
+  if (!me.trainerProfile?.displayName && !onWelcome) {
+    return <Navigate to="/welcome" replace />;
   }
 
   return (
     <AppShell>
+      <OfflineBanner />
       <Outlet />
     </AppShell>
   );

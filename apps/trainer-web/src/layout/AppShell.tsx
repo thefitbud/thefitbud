@@ -1,10 +1,14 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState, type FormEvent, type ReactNode, type SVGProps } from "react";
 import { useAuth } from "../auth/AuthProvider";
+import { useConfig } from "../lib/config";
 import { apiClient } from "../lib/api";
+import { stage1Api } from "../lib/stage1-api";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { email, signOut } = useAuth();
+  const { config } = useConfig();
+  const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [clientCount, setClientCount] = useState<number | null>(null);
@@ -17,14 +21,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         const [relationships, invitations, attention] = await Promise.all([
           apiClient.listRelationships({ limit: 50 }),
           apiClient.listInvitations(),
-          apiClient.getAttentionFeed({ limit: 50 }),
+          stage1Api.getAttentionGroups(),
         ]);
         if (cancelled) return;
         const pendingInvites = invitations.items.filter(
           (item) => item.status === "pending",
         ).length;
         setClientCount(relationships.items.length + pendingInvites);
-        setAttentionCount(attention.items.length);
+        setAttentionCount(attention.groups.length);
       } catch {
         if (!cancelled) {
           setClientCount(null);
@@ -97,11 +101,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="side-nav-footer">
           <p className="nav-help">
-            <span className="nav-help-icon" aria-hidden="true">
-              <IconHelp />
-            </span>
-            Help & Support
+            <a href={`mailto:${supportEmail}`} className="nav-help-link">
+              <span className="nav-help-icon" aria-hidden="true">
+                <IconHelp />
+              </span>
+              Help & Support
+            </a>
           </p>
+          <NavLink to="/settings/profile" className="nav-settings-link">
+            Settings
+          </NavLink>
           <div className="trainer-card">
             <span className="avatar" aria-hidden="true">
               {initials(displayName)}

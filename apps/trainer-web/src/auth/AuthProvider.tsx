@@ -11,6 +11,11 @@ import { ApiClientError } from "@fitbud/api-client";
 import type { MeResponse } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import {
+  AuthFlowError,
+  establishTrainerSession,
+  signInWithPassword,
+} from "../lib/auth-flow";
+import {
   clearSession,
   getStoredAccessToken,
   getStoredEmail,
@@ -22,29 +27,22 @@ type AuthContextValue = {
   me: MeResponse | null;
   email: string | null;
   loading: boolean;
-  error: string | null;
-  signIn: (email: string) => Promise<void>;
+  sessionError: string | null;
+  signInWithPassword: (identifier: string, password: string) => Promise<void>;
+  signInWithToken: (token: string, identifier: string) => Promise<void>;
+  signInDevTest: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
+  clearSessionError: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-function formatAuthError(error: unknown): string {
-  if (error instanceof ApiClientError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Something went wrong. Try again.";
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [email, setEmail] = useState<string | null>(getStoredEmail());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   const refreshMe = useCallback(async () => {
     const token = getStoredAccessToken();
@@ -55,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await apiClient.me();
     setMe(profile);
     setEmail(getStoredEmail());
+    setSessionError(null);
   }, []);
 
   useEffect(() => {
@@ -67,16 +66,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         await refreshMe();
       } catch (err) {
-        clearSession();
-        if (!cancelled) {
+        if (cancelled) return;
+        if (err instanceof ApiClientError && err.status === 401) {
+          clearSession();
           setMe(null);
           setEmail(null);
-          if (err instanceof ApiClientError && err.status === 401) {
-            setError(null);
-          } else {
-            setError(formatAuthError(err));
-          }
+          setSessionError(null);
+          return;
         }
+        setSessionError(
+          err instanceof Error
+            ? err.message
+            : "Can't reach FitBud. Check your connection and try again.",
+        );
+        setMe(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -86,29 +89,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshMe]);
 
-  const signIn = useCallback(async (rawEmail: string) => {
-    const normalized = rawEmail.trim().toLowerCase();
-    if (!normalized || !normalized.includes("@")) {
-      throw new Error("Enter a valid email address.");
-    }
+  const signInWithPasswordHandler = useCallback(
+    async (identifier: string, password: string) => {
+      setSessionError(null);
+      const profile = await signInWithPassword(identifier, password);
+      setMe(profile);
+      setEmail(profile.email ?? getStoredEmail());
+    },
+    [],
+  );
 
-    setError(null);
+  const signInWithToken = useCallback(async (token: string, identifier: string) => {
+    setSessionError(null);
+    const profile = await establishTrainerSession(token, identifier);
+    setMe(profile);
+    setEmail(profile.email ?? identifier);
+  }, []);
+
+  const signInDevTest = useCallback(async (rawEmail: string) => {
+    if (!import.meta.env.DEV) {
+      throw new AuthFlowError("generic", "Test sign-in is only available in development.");
+    }
+    const normalized = rawEmail.trim().toLowerCase();
     const uid = `trainer-${normalized}`;
     const idToken = createTestIdToken(uid, normalized);
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-
-    // Provisions trainer role/profile and sets an HTTP-only cookie when Secure
-    // cookies are allowed. Local HTTP still authenticates via the stored Bearer.
-    await apiClient.createWebSession({ idToken, timezone });
-    storeSession(idToken, normalized);
-    const profile = await apiClient.me();
-    if (profile.selectedRole !== "trainer") {
-      clearSession();
-      throw new Error("This account cannot use trainer web.");
-    }
-    setMe(profile);
-    setEmail(normalized);
-  }, []);
+    await signInWithToken(idToken, normalized);
+  }, [signInWithToken]);
 
   const signOut = useCallback(async () => {
     try {
@@ -119,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearSession();
     setMe(null);
     setEmail(null);
-    setError(null);
+    setSessionError(null);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -127,12 +133,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       me,
       email,
       loading,
-      error,
-      signIn,
+      sessionError,
+      signInWithPassword: signInWithPasswordHandler,
+      signInWithToken,
+      signInDevTest,
       signOut,
       refreshMe,
+      clearSessionError: () => setSessionError(null),
     }),
-    [me, email, loading, error, signIn, signOut, refreshMe],
+    [
+      me,
+      email,
+      loading,
+      sessionError,
+      signInWithPasswordHandler,
+      signInWithToken,
+      signInDevTest,
+      signOut,
+      refreshMe,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -145,3 +164,5 @@ export function useAuth(): AuthContextValue {
   }
   return context;
 }
+
+export { AuthFlowError };
