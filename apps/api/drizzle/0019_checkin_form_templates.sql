@@ -2,8 +2,9 @@
 -- Separate from onboarding forms. Versions are insert-only.
 -- A scheduled check-in pins checkin_form_version_id.
 
-PRAGMA foreign_keys = OFF;
-BEGIN TRANSACTION;
+-- D1: wrangler wraps each migration file in its own transaction; explicit BEGIN/COMMIT and
+-- PRAGMA foreign_keys are rejected. defer_foreign_keys lets the table rebuild run with FK checks at commit.
+PRAGMA defer_foreign_keys = true;
 
 CREATE TABLE `checkin_form_templates` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -94,5 +95,3 @@ INSERT INTO `checkin_form_versions` (
 ALTER TABLE `checkins` ADD COLUMN `checkin_form_version_id` text NOT NULL DEFAULT 'c1000001-0000-4000-8000-000000000011';
 CREATE INDEX `checkins_form_version_idx` ON `checkins` (`checkin_form_version_id`);
 
-COMMIT;
-PRAGMA foreign_keys = ON;

@@ -2,8 +2,9 @@
 -- Applied after 0000–0013. Does not rewrite those migrations.
 -- Versions stay insert-only. Each invitation stores the exact version id.
 
-PRAGMA foreign_keys = OFF;
-BEGIN TRANSACTION;
+-- D1: wrangler wraps each migration file in its own transaction; explicit BEGIN/COMMIT and
+-- PRAGMA foreign_keys are rejected. defer_foreign_keys lets the table rebuild run with FK checks at commit.
+PRAGMA defer_foreign_keys = true;
 
 CREATE TABLE `onboarding_form_templates` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -199,5 +200,3 @@ CREATE INDEX `client_invitations_trainer_email_idx`
 CREATE INDEX `client_invitations_form_version_idx`
 	ON `client_invitations` (`onboarding_form_template_version_id`);
 
-COMMIT;
-PRAGMA foreign_keys = ON;

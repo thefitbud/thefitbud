@@ -1,0 +1,2 @@
+apps/api/seed/library/sql/*.sql linguist-generated -diff
+apps/api/seed/library/*.json linguist-generated -diff

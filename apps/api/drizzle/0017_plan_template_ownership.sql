@@ -3,8 +3,9 @@
 -- Existing trainer templates stay editable in place.
 -- Global bases are read-only. source_template_id is provenance only, with no live join.
 
-PRAGMA foreign_keys = OFF;
-BEGIN TRANSACTION;
+-- D1: wrangler wraps each migration file in its own transaction; explicit BEGIN/COMMIT and
+-- PRAGMA foreign_keys are rejected. defer_foreign_keys lets the table rebuild run with FK checks at commit.
+PRAGMA defer_foreign_keys = true;
 
 CREATE TABLE `plan_templates__next` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -102,5 +103,3 @@ INSERT INTO `plan_templates` (
 
 ALTER TABLE `plan_versions` ADD COLUMN `source_template_id` text;
 
-COMMIT;
-PRAGMA foreign_keys = ON;
