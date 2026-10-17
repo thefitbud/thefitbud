@@ -3,9 +3,8 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AuthFlowError, useAuth } from "./AuthProvider";
 import { AuthLayout } from "./AuthLayout";
 import { useConfig, isWhatsAppOtpEnabled } from "../lib/config";
+import { apiClient } from "../lib/api";
 import { fetchDevMailCode } from "../lib/auth-flow";
-import { startOtp } from "../lib/otp-api";
-import { stage1Api } from "../lib/stage1-api";
 import { useOnline } from "../hooks/useOnline";
 
 type Step = "request" | "verify";
@@ -43,7 +42,7 @@ export function CodeSignInPage() {
     setError(null);
     setMessage(null);
     try {
-      await startOtp({
+      await apiClient.startOtp({
         identifier: identifier.trim(),
         purpose: "login",
       });
@@ -69,21 +68,13 @@ export function CodeSignInPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const result = await stage1Api.verifyOtp({
+      const result = await apiClient.verifyOtp({
         identifier: identifier.trim(),
         code: code.trim(),
         purpose: "login",
       });
-      if (
-        typeof result === "object" &&
-        result !== null &&
-        "token" in result &&
-        typeof (result as { token: unknown }).token === "string"
-      ) {
-        await signInWithToken(
-          (result as { token: string }).token,
-          identifier.trim(),
-        );
+      if (result.purpose === "login") {
+        await signInWithToken(result.token, identifier.trim());
         return;
       }
       setError("That code didn't work. Check the latest message or resend.");

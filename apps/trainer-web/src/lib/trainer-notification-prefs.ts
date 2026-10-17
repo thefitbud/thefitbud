@@ -1,8 +1,8 @@
-import type { TrainerCategories } from "@fitbud/contracts";
+import type { NotificationPreferences } from "@fitbud/contracts";
 
-export type TrainerNotificationKey = keyof TrainerCategories;
+export type TrainerNotificationPrefs = NotificationPreferences["trainerCategories"];
 
-export type TrainerNotificationPrefs = TrainerCategories;
+export type TrainerNotificationKey = keyof TrainerNotificationPrefs;
 
 export const TRAINER_NOTIFICATION_META: Array<{
   key: TrainerNotificationKey;
@@ -46,7 +46,7 @@ export const TRAINER_NOTIFICATION_META: Array<{
   },
 ];
 
-export function defaultTrainerCategories(): TrainerCategories {
+export function defaultTrainerCategories(): TrainerNotificationPrefs {
   return {
     askCoach: true,
     checkinSubmitted: true,
