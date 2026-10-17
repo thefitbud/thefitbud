@@ -128,7 +128,7 @@ Password (dev only): **`FitBud-demo-2026`**
 
 | Package | Tests |
 |---------|------:|
-| API | 190 |
+| API | 191 |
 | core | 109 |
 | contracts | 21 |
 | api-client | 5 |
@@ -148,6 +148,20 @@ Password (dev only): **`FitBud-demo-2026`**
 | TW-29 trainer categories | `GET/PUT /notifications/preferences` field `trainerCategories`; api-client uses `notificationPreferencesSchema` |
 | TW-09a `traineeTimezone` | `GET /workspaces/relationships/:rid` → `traineeTimezone` (no client change) |
 | TR-05 `preferredWorkoutTime` | `PUT /notifications/preferences` → wired in `domain/reminders.ts` workout anchor |
+
+### Mobile gaps (`GAPS-mobile.md`, backend)
+
+| Mobile gap | Resolution |
+|------------|------------|
+| TR-08 meal assignments `LOCAL_DEV_ERROR` | Demo seed `quantityScaled` → `NUTRIENT_SCALE` (1 serving); regression in `demo-seed.test.ts` |
+| TR-08 v2 serving presets | `GET /me/foods/:foodId` → `traineeFoodDetailSchema` with `servings[]` + `defaultServingId`; search/index use DB default serving |
+| TR-15 notification deep links | `notificationSchema.route` + `routing` payload; `notificationInboxRoute` in `@fitbud/core` |
+| TR-15 mark read typed client | `markNotificationRead(id)` on `@fitbud/api-client` |
+| TR-16 daily summary toggle | `categories.dailySummaryReminder` on `GET/PUT /notifications/preferences` |
+| TR-16–TR-20 settings §4 | `channelPreference`, `whatsappOptIn`, `traineeTimezone` (writes `users.timezone`), `locale` on preferences |
+| TR-24 meal times | `GET/PUT /me/meal-times` (existing) |
+| TR-25 steps | `GET/PUT /me/steps` stub; `403 FEATURE_DISABLED` when `steps_enabled=false` |
+| TR-26 food search | `GET /me/foods/search`, `GET /me/foods/:foodId`, `getTraineeFood` on api-client |
 
 ## 10. Known gaps (Stage 2 blockers to watch)
 - **A10**: No R2 media unless `LIBRARY_MEDIA_BASE_URL`.

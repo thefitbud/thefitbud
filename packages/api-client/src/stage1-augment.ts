@@ -30,8 +30,10 @@ import {
   reactivateRelationshipRequestSchema,
   reengagementCandidatesResponseSchema,
   responsivenessResponseSchema,
+  traineeFoodDetailSchema,
   traineeFoodIndexResponseSchema,
   traineeFoodSearchResponseSchema,
+  notificationSchema,
   updateMealTimesRequestSchema,
   updateTrainerProfileRequestSchema,
   weekReadModelSchema,
@@ -344,6 +346,26 @@ proto.getMeFoodIndex = async function getMeFoodIndex(
     "GET",
     `/me/foods/index${suffix}`,
     traineeFoodIndexResponseSchema,
+    { auth: true },
+  );
+};
+
+proto.getTraineeFood = async function getTraineeFood(foodId: string) {
+  return this.request(
+    "GET",
+    `/me/foods/${encodeURIComponent(foodId)}`,
+    traineeFoodDetailSchema,
+    { auth: true },
+  );
+};
+
+proto.markNotificationRead = async function markNotificationRead(
+  notificationId: string,
+) {
+  return this.request(
+    "POST",
+    `/notifications/${encodeURIComponent(notificationId)}/read`,
+    notificationSchema,
     { auth: true },
   );
 };

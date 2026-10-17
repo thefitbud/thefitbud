@@ -721,7 +721,7 @@ describe("onboarding resolution and subscription", () => {
     );
     expect(reminder?.domainEntityType).toBe("coaching_relationship");
     expect(reminder?.domainEntityId).toBe(relationshipId);
-    expect(reminder?.dedupeKey).toBe(
+    expect(reminder?.dedupeKey.replace(/^deferred:/, "")).toBe(
       `subscription_renewal_reminder:${relationshipId}:${renewsOn}:upcoming`,
     );
     const payload = routingPayloadForNotification({

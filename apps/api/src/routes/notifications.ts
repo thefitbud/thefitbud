@@ -23,11 +23,13 @@ import {
   updateReminderRulesRequestSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
+import { getFlags } from "../config/flags.js";
 import {
   coachingRelationships,
   deviceTokens,
   notificationPreferences,
   reminderRules,
+  users,
 } from "../db/schema";
 import {
   mapDeviceToken,
@@ -103,6 +105,8 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
     mealReminder: true,
     checkinReminder: true,
     subscriptionRenewalReminder: true,
+    dailySummaryReminder: true,
+    channelPreference: "app",
     trainerCategoriesJson: "[]",
     quietHoursStart: null,
     quietHoursEnd: null,
@@ -292,12 +296,28 @@ notificationRoutes.get(
     }
     const db = createDb(c.env.DB);
     const row = await ensurePreferences(db, actor.userId, nowIso());
+    const [userRow] = await db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, actor.userId))
+      .limit(1);
     return ok(
       c,
-      notificationPreferencesSchema.parse(mapNotificationPreferences(row)),
+      notificationPreferencesSchema.parse(
+        mapNotificationPreferences(row, userRow?.timezone ?? null),
+      ),
     );
   },
 );
+
+function isValidIanaTimezone(zone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 notificationRoutes.put(
   "/preferences",
@@ -328,6 +348,7 @@ notificationRoutes.put(
 
     const db = createDb(c.env.DB);
     const now = nowIso();
+    const flags = await getFlags(c.env, db);
     const current = await ensurePreferences(db, actor.userId, now);
     const nextTrainerCategories = parsed.data.trainerCategories
       ? {
@@ -335,6 +356,61 @@ notificationRoutes.put(
           ...parsed.data.trainerCategories,
         }
       : parseTrainerCategoriesJson(current.trainerCategoriesJson);
+
+    let nextChannel = current.channelPreference;
+    if (parsed.data.channelPreference !== undefined) {
+      if (
+        parsed.data.channelPreference === "app_and_whatsapp" &&
+        !flags.wa_automation
+      ) {
+        return fail(
+          c,
+          400,
+          "FEATURE_DISABLED",
+          "WhatsApp automation is not enabled.",
+        );
+      }
+      nextChannel = parsed.data.channelPreference;
+    } else if (!flags.wa_automation && nextChannel === "app_and_whatsapp") {
+      nextChannel = "app";
+    }
+
+    let whatsappGranted = current.whatsappOptInGranted;
+    let whatsappAt = current.whatsappOptInAt;
+    let whatsappSource = current.whatsappOptInSource;
+    let whatsappTextVersion = current.whatsappOptInTextVersion;
+    if (parsed.data.whatsappOptIn !== undefined) {
+      if (parsed.data.whatsappOptIn.granted && !flags.wa_automation) {
+        return fail(
+          c,
+          400,
+          "FEATURE_DISABLED",
+          "WhatsApp opt-in is not available.",
+        );
+      }
+      whatsappGranted = parsed.data.whatsappOptIn.granted;
+      if (whatsappGranted) {
+        whatsappAt = now;
+        whatsappSource = parsed.data.whatsappOptIn.source ?? "settings";
+        whatsappTextVersion = parsed.data.whatsappOptIn.textVersion ?? null;
+      } else {
+        whatsappAt = null;
+        whatsappSource = null;
+        whatsappTextVersion = null;
+      }
+    }
+
+    if (parsed.data.traineeTimezone !== undefined) {
+      const zone = parsed.data.traineeTimezone;
+      if (zone !== null && !isValidIanaTimezone(zone)) {
+        return fail(c, 400, "INVALID_REQUEST", "Invalid traineeTimezone.");
+      }
+      await db
+        .update(users)
+        .set({ timezone: zone ?? "UTC", updatedAt: now })
+        .where(eq(users.id, actor.userId));
+    }
+
     await db
       .update(notificationPreferences)
       .set({
@@ -348,6 +424,16 @@ notificationRoutes.put(
         subscriptionRenewalReminder:
           parsed.data.categories?.subscriptionRenewalReminder ??
           current.subscriptionRenewalReminder,
+        dailySummaryReminder:
+          parsed.data.categories?.dailySummaryReminder ??
+          current.dailySummaryReminder,
+        channelPreference: nextChannel,
+        whatsappOptInGranted: whatsappGranted,
+        whatsappOptInAt: whatsappAt,
+        whatsappOptInSource: whatsappSource,
+        whatsappOptInTextVersion: whatsappTextVersion,
+        locale:
+          parsed.data.locale === undefined ? current.locale : parsed.data.locale,
         trainerCategoriesJson: serializeTrainerCategories(nextTrainerCategories),
         preferredWorkoutTime:
           parsed.data.preferredWorkoutTime === undefined
@@ -370,10 +456,15 @@ notificationRoutes.put(
       .from(notificationPreferences)
       .where(eq(notificationPreferences.userId, actor.userId))
       .limit(1);
+    const [userRow] = await db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, actor.userId))
+      .limit(1);
     return ok(
       c,
       notificationPreferencesSchema.parse(
-        mapNotificationPreferences(updated[0]!),
+        mapNotificationPreferences(updated[0]!, userRow?.timezone ?? null),
       ),
     );
   },

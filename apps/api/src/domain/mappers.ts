@@ -52,6 +52,7 @@ import {
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
   materializePlanContent,
+  notificationInboxRoute,
 } from "@fitbud/core";
 import type {
   checkinFormTemplates,
@@ -930,19 +931,31 @@ export function mapDeviceToken(row: {
   };
 }
 
-export function mapNotificationPreferences(row: {
-  userId: string;
-  pushEnabled: boolean;
-  workoutReminder: boolean;
-  mealReminder: boolean;
-  checkinReminder: boolean;
-  subscriptionRenewalReminder: boolean;
-  trainerCategoriesJson: string;
-  preferredWorkoutTime: string | null;
-  quietHoursStart: string | null;
-  quietHoursEnd: string | null;
-  updatedAt: string;
-}) {
+export function mapNotificationPreferences(
+  row: {
+    userId: string;
+    pushEnabled: boolean;
+    workoutReminder: boolean;
+    mealReminder: boolean;
+    checkinReminder: boolean;
+    subscriptionRenewalReminder: boolean;
+    dailySummaryReminder: boolean;
+    channelPreference: string;
+    whatsappOptInGranted: boolean;
+    whatsappOptInAt: string | null;
+    whatsappOptInSource: string | null;
+    whatsappOptInTextVersion: string | null;
+    trainerCategoriesJson: string;
+    preferredWorkoutTime: string | null;
+    locale: string | null;
+    quietHoursStart: string | null;
+    quietHoursEnd: string | null;
+    updatedAt: string;
+  },
+  userTimezone: string | null,
+) {
+  const channelPreference =
+    row.channelPreference === "app_and_whatsapp" ? "app_and_whatsapp" : "app";
   return {
     userId: row.userId,
     pushEnabled: row.pushEnabled,
@@ -951,7 +964,17 @@ export function mapNotificationPreferences(row: {
       mealReminder: row.mealReminder,
       checkinReminder: row.checkinReminder,
       subscriptionRenewalReminder: row.subscriptionRenewalReminder,
+      dailySummaryReminder: row.dailySummaryReminder,
     },
+    channelPreference,
+    whatsappOptIn: {
+      granted: row.whatsappOptInGranted,
+      at: row.whatsappOptInAt,
+      source: row.whatsappOptInSource,
+      textVersion: row.whatsappOptInTextVersion,
+    },
+    traineeTimezone: userTimezone,
+    locale: row.locale,
     trainerCategories: parseTrainerCategoriesJson(row.trainerCategoriesJson),
     preferredWorkoutTime: row.preferredWorkoutTime,
     quietHoursStart: row.quietHoursStart,
@@ -1024,5 +1047,12 @@ export function mapNotification(row: {
       domainEntityId: row.domainEntityId,
       createdAt: row.createdAt,
     },
+    route: notificationInboxRoute({
+      notificationId: row.id,
+      notificationType: row.notificationType,
+      domainEntityType: row.domainEntityType,
+      domainEntityId: row.domainEntityId,
+      createdAt: row.createdAt,
+    }),
   };
 }

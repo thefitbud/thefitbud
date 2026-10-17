@@ -501,7 +501,17 @@ describe("contracts", () => {
           mealReminder: true,
           checkinReminder: true,
           subscriptionRenewalReminder: true,
+          dailySummaryReminder: true,
         },
+        channelPreference: "app",
+        whatsappOptIn: {
+          granted: false,
+          at: null,
+          source: null,
+          textVersion: null,
+        },
+        traineeTimezone: "Asia/Kolkata",
+        locale: null,
         trainerCategories: {
           askCoach: true,
           checkinSubmitted: true,
