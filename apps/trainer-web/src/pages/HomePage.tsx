@@ -85,18 +85,18 @@ function oldestOpenAge(group: AttentionGroup): number {
   return Math.max(...open.map((i) => i.ageMinutes));
 }
 
-/** Chip copy: "Since 2 days" — same logic as mobile `formatAttentionAge`. */
+/** Short ages for Home rows: "since 1 d", "20 h", "12 min". */
 function formatAttentionAge(ageMinutes: number): string {
   if (ageMinutes < 60) {
     const mins = Math.max(0, ageMinutes);
-    return mins === 1 ? "Since 1 min" : `Since ${mins} min`;
+    return mins === 1 ? "since 1 min" : `since ${mins} min`;
   }
   if (ageMinutes < 24 * 60) {
     const hours = Math.round(ageMinutes / 60);
-    return hours === 1 ? "Since 1 hour" : `Since ${hours} hours`;
+    return hours === 1 ? "1 h" : `${hours} h`;
   }
   const days = Math.round(ageMinutes / (24 * 60));
-  return days === 1 ? "Since 1 day" : `Since ${days} days`;
+  return days === 1 ? "since 1 d" : `since ${days} d`;
 }
 
 function weekdayShortFromCivil(localDate: string): string | null {
@@ -144,8 +144,25 @@ function issueLine(group: AttentionGroup, primary: AttentionItem): {
     (i) => i.status === "detected" || i.status === "active",
   );
   const items = open.length > 0 ? open : group.items;
+  const workouts = items.filter(
+    (i) => i.type === "missed_workout" || i.type === "skipped_workout",
+  );
+  const meals = items.filter(
+    (i) =>
+      i.type === "overdue_meal" ||
+      i.type === "skipped_meal" ||
+      i.type === "meal_logged_later",
+  );
   const sameType = items.filter((i) => i.type === primary.type);
-  const weekdays = sameType
+  const related =
+    primary.type === "missed_workout" || primary.type === "skipped_workout"
+      ? workouts
+      : primary.type === "overdue_meal" ||
+          primary.type === "skipped_meal" ||
+          primary.type === "meal_logged_later"
+        ? meals
+        : sameType;
+  const weekdays = related
     .map((i) => localDateFromDetails(i.details))
     .filter((d): d is string => Boolean(d))
     .map((d) => weekdayShortFromCivil(d))
@@ -158,21 +175,21 @@ function issueLine(group: AttentionGroup, primary: AttentionItem): {
   const dayList =
     uniqueWeekdays.length > 0 ? uniqueWeekdays.join(", ") : null;
   if (
-    sameType.length >= 2 &&
+    related.length >= 2 &&
     (primary.type === "missed_workout" || primary.type === "skipped_workout")
   ) {
     text = dayList
-      ? `Missed ${sameType.length} workouts (${dayList})`
-      : `Missed ${sameType.length} workouts`;
+      ? `Missed ${related.length} workouts (${dayList})`
+      : `Missed ${related.length} workouts`;
   } else if (
-    sameType.length >= 2 &&
+    related.length >= 2 &&
     (primary.type === "overdue_meal" ||
       primary.type === "skipped_meal" ||
       primary.type === "meal_logged_later")
   ) {
     text = dayList
-      ? `Missed ${sameType.length} meals (${dayList})`
-      : `Missed ${sameType.length} meals`;
+      ? `Missed ${related.length} meals (${dayList})`
+      : `Missed ${related.length} meals`;
   } else if (dayList && !/\([A-Z][a-z]{2}/.test(text)) {
     text = `${text} (${dayList})`;
   }
@@ -624,13 +641,15 @@ export function HomePage() {
     .slice(0, 2)
     .map((r) => r.group.traineeDisplayName.split(" ")[0])
     .filter(Boolean);
-  const summary = loading
-    ? "Loading your day…"
-    : attentionCount === 0
-      ? "You're all caught up. Nothing needs your attention right now."
-      : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
-          firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
-        }`;
+  const summary = error
+    ? null
+    : loading
+      ? "Loading your day…"
+      : attentionCount === 0
+        ? "You're all caught up. Nothing needs your attention right now."
+        : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
+            firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
+          }`;
 
   const showAttention = filter === "all" || filter === "attention";
   const showCheckinsRail = filter === "all" || filter === "checkins";
@@ -647,7 +666,8 @@ export function HomePage() {
     gettingStarted.length === 0 &&
     reviewedGroups.length === 0;
 
-  const tileNum = (n: number) => (loading ? "—" : String(n));
+  const tileNum = (n: number) =>
+    loading || error ? "—" : String(n);
 
   return (
     <div className="home-triage" data-testid="screen-TW-04">
@@ -658,7 +678,7 @@ export function HomePage() {
             {todayLabel}
           </div>
           <h1 className="home-title">Today</h1>
-          <p className="home-summary">{summary}</p>
+          {summary ? <p className="home-summary">{summary}</p> : null}
         </div>
         <div className="home-tiles" role="group" aria-label="Filter by">
           <button
@@ -972,17 +992,20 @@ export function HomePage() {
                         <b>
                           {name} asked about {item}
                           {date ? ` · ${date}` : ""}{" "}
+                          <StatusChip
+                            kind="ask"
+                            value="open"
+                            label={`Asked coach · ${formatRelative(ask.askedAt).replace(/ ago$/, "")}`}
+                            className="home-ask-inline"
+                          />
+                        </b>
+                        <span>
                           <span className="home-topic">
                             {labelFor("coach_ask_topic", ask.topic)}
-                          </span>
-                        </b>
-                        <span>Opened WhatsApp from their log</span>
+                          </span>{" "}
+                          · Opened WhatsApp from their log
+                        </span>
                       </div>
-                      <StatusChip
-                        kind="ask"
-                        value="open"
-                        label={`Asked coach · ${formatRelative(ask.askedAt).replace(/ ago$/, "")}`}
-                      />
                       <Button
                         variant="tinted"
                         className="button-sm"

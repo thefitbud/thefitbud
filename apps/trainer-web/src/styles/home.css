@@ -176,7 +176,7 @@
 
 .home-row {
   display: grid;
-  grid-template-columns: minmax(96px, 140px) minmax(0, 1fr) minmax(72px, 92px) minmax(56px, 78px) 68px 28px;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(72px, 92px) minmax(48px, 64px) 68px 28px;
   align-items: center;
   gap: 8px;
   min-height: 56px;
@@ -211,8 +211,14 @@
   font-weight: 600;
   color: var(--deep-navy, #1a1248);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.home-ask-inline {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 6px;
 }
 
 .home-av {

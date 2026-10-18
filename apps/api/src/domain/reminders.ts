@@ -121,6 +121,7 @@ export type ActivityNudgeResult =
       notification: NotificationRow;
       deduped: boolean;
       deferredForQuietHours?: boolean;
+      quietHoursEnd?: string | null;
     }
   | {
       ok: false;
@@ -1471,11 +1472,18 @@ export async function createActivityNudge(
     .where(eq(notifications.id, notificationId))
     .limit(1);
   if (!stored[0]) return { ok: false, code: "ACTIVITY_NOT_FOUND" };
+  const deferredForQuietHours = stored[0].state === "deferred";
+  let quietHoursEnd: string | null = null;
+  if (deferredForQuietHours) {
+    const prefs = await loadOrDefaultPreferences(db, relationship.traineeUserId);
+    quietHoursEnd = prefs.quietHoursEnd ?? DEFAULT_QUIET_HOURS_END;
+  }
   return {
     ok: true,
     notification: stored[0],
     deduped: result.outcome === "deduped",
-    deferredForQuietHours: stored[0].state === "deferred",
+    deferredForQuietHours,
+    quietHoursEnd,
   };
 }
 

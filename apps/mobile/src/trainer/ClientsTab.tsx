@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, fontFamily, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
@@ -192,12 +193,14 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
 
 const styles = StyleSheet.create({
   muted: {
+    fontFamily,
     color: colors.midGrey,
     fontSize: 14,
     lineHeight: 20,
     marginTop: spacing.lg,
   },
   mutedInline: {
+    fontFamily,
     color: colors.midGrey,
     fontSize: 13,
     marginTop: spacing.xs,
@@ -207,6 +210,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   emptyTitle: {
+    fontFamily: fontFamilySemiBold,
     color: colors.deepNavy,
     fontSize: 18,
     fontWeight: "600",
@@ -228,6 +232,7 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   who: {
+    fontFamily: fontFamilySemiBold,
     color: colors.deepNavy,
     fontSize: 16,
     fontWeight: "600",
