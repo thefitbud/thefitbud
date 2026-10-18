@@ -116,7 +116,14 @@ export function WelcomePage() {
       <header className="page-header">
         <h1>Welcome to FitBud</h1>
         <p className="lede">Three quick steps before your first client.</p>
-        <div className="welcome-progress" aria-label="Progress">
+        <div
+          className="welcome-progress"
+          role="progressbar"
+          aria-label="Onboarding progress"
+          aria-valuemin={1}
+          aria-valuemax={3}
+          aria-valuenow={step}
+        >
           {[1, 2, 3].map((n) => (
             <div
               key={n}

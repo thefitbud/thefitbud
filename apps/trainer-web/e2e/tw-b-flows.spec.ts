@@ -25,9 +25,14 @@ async function signIn(
 async function fetchDevCode(to: string): Promise<string | null> {
   const res = await fetch(`${API}/dev/mail?to=${encodeURIComponent(to)}`);
   if (!res.ok) return null;
-  const data = (await res.json()) as { items?: Array<{ subject?: string }> };
-  const subject = data.items?.[0]?.subject ?? "";
-  return /(\d{6})/.exec(subject)?.[1] ?? null;
+  const raw = (await res.json()) as {
+    data?: { items?: Array<{ subject?: string; textBody?: string }> };
+    items?: Array<{ subject?: string; textBody?: string }>;
+  };
+  const items = raw.data?.items ?? raw.items ?? [];
+  const newest = items[0];
+  const haystack = `${newest?.subject ?? ""} ${newest?.textBody ?? ""}`;
+  return /(\d{6})/.exec(haystack)?.[1] ?? null;
 }
 
 test.describe("TW-B auth flows", () => {
@@ -75,11 +80,13 @@ test.describe("TW-B auth flows", () => {
     page,
     request,
   }) => {
-    // Exhaust a throwaway identifier only — never lock the demo coach used by later tests.
+    // IP bucket is 30/15m. Use a dedicated CF-Connecting-IP so we don't lock e2e.
     const identifier = `ratelimit.${Date.now()}@demo.fitbud.test`;
+    const probeIp = `203.0.113.${(Date.now() % 200) + 20}`;
     let saw429 = false;
-    for (let i = 0; i < 20; i += 1) {
+    for (let i = 0; i < 40; i += 1) {
       const res = await request.post(`${API}/auth/login`, {
+        headers: { "CF-Connecting-IP": probeIp },
         data: { identifier, password: "bad-password-xxx" },
       });
       if (res.status() === 429) {
@@ -89,6 +96,13 @@ test.describe("TW-B auth flows", () => {
     }
     expect(saw429).toBeTruthy();
     await page.goto("/sign-in");
+    await page.route("**/auth/login", async (route) => {
+      const headers = {
+        ...route.request().headers(),
+        "cf-connecting-ip": probeIp,
+      };
+      await route.continue({ headers });
+    });
     await page.getByRole("textbox", { name: /mobile number or email/i }).fill(identifier);
     await page.locator('input[name="password"]').fill("bad-password-xxx");
     await page.getByRole("button", { name: /^sign in$/i }).click();

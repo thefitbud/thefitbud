@@ -35,6 +35,16 @@ function mapLoginError(err: unknown): AuthFlowError {
         "Too many tries. Wait 15 minutes or sign in with a code.",
       );
     }
+    if (
+      err.status === 403 ||
+      err.code === "FORBIDDEN_ROLE" ||
+      /trainer role|set up as a client/i.test(err.message)
+    ) {
+      return new AuthFlowError(
+        "role",
+        "This account is set up as a client. Open the FitBud app on your phone.",
+      );
+    }
     if (err.status === 401) {
       return new AuthFlowError(
         "credentials",
@@ -106,12 +116,14 @@ export async function fetchDevMailCode(to: string): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
-    const data = (await res.json()) as {
-      items?: Array<{ subject?: string }>;
+    const raw = (await res.json()) as {
+      data?: { items?: Array<{ subject?: string; textBody?: string }> };
+      items?: Array<{ subject?: string; textBody?: string }>;
     };
-    const subject = data.items?.[0]?.subject ?? "";
-    const match = /(\d{6})/.exec(subject);
-    return match?.[1] ?? null;
+    const items = raw.data?.items ?? raw.items ?? [];
+    const newest = items[0];
+    const haystack = `${newest?.subject ?? ""} ${newest?.textBody ?? ""}`;
+    return /(\d{6})/.exec(haystack)?.[1] ?? null;
   } catch {
     return null;
   }
