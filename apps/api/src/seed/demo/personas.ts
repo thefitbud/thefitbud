@@ -61,6 +61,7 @@ export type DemoPersonaKey =
   | "ended"
   | "reactivation_pending"
   | "dubai_meal_times"
+  | "attention_hole"
   | "food_deviations"
   | "dual_role";
 
@@ -89,6 +90,7 @@ function adherenceForState(state: DemoPersonaKey): AdherenceState | undefined {
       return "on_track";
     case "slipping":
     case "acknowledged":
+    case "attention_hole":
       return "needs_attention";
     case "reminders_paused":
       return "no_recent_data";

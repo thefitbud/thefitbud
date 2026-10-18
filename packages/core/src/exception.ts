@@ -342,12 +342,16 @@ export function mealActivitySeverity(input: {
   return mealAdherenceCandidate(input)?.severity ?? "on_track";
 }
 
-/** Filter candidates that already have an open exception for the same source. */
+/**
+ * Filter candidates that already have an exception for the same source.
+ * Callers pass open + acknowledged + resolved keys so Resolve cannot be undone
+ * by immediate re-detection of the same hole.
+ */
 export function filterNewExceptionCandidates(
   candidates: ExceptionCandidate[],
-  openKeys: ReadonlySet<string>,
+  blockedKeys: ReadonlySet<string>,
 ): ExceptionCandidate[] {
   return candidates.filter(
-    (candidate) => !openKeys.has(exceptionKey(candidate)),
+    (candidate) => !blockedKeys.has(exceptionKey(candidate)),
   );
 }

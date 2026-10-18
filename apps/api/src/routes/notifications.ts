@@ -747,17 +747,27 @@ notificationRoutes.post(
               result.code === "RELATIONSHIP_NOT_FOUND"
             ? 404
             : 409;
+      const retryAfter =
+        "retryAfter" in result ? result.retryAfter : undefined;
+      const retryMins =
+        typeof retryAfter === "number"
+          ? Math.max(1, Math.ceil(retryAfter / 60))
+          : null;
       const message =
         result.code === "RELATIONSHIP_ENDED"
           ? "Ended relationships do not send nudges."
           : result.code === "ACTIVITY_RESOLVED"
             ? "This activity is already resolved."
-            : result.code === "NUDGE_LIMIT" ||
-                result.code === "NUDGE_RATE_LIMITED"
-              ? "Nudge limit reached for this client or activity."
-              : "Activity not found.";
+            : result.code === "REMINDERS_PAUSED"
+              ? "Client has paused reminders. Nudge isn't available."
+              : result.code === "NUDGE_LIMIT" ||
+                  result.code === "NUDGE_RATE_LIMITED"
+                ? retryMins
+                  ? `You can nudge again in ${retryMins} min`
+                  : "Nudge limit reached for this client or activity."
+                : "Activity not found.";
       return fail(c, status, result.code, message, {
-        retryAfter: "retryAfter" in result ? result.retryAfter : undefined,
+        retryAfter,
       });
     }
     return ok(
@@ -765,6 +775,7 @@ notificationRoutes.post(
       nudgeActivityResponseSchema.parse({
         notification: mapNotification(result.notification),
         deduped: result.deduped,
+        deferredForQuietHours: result.deferredForQuietHours ?? false,
       }),
     );
   },

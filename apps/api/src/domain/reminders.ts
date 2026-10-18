@@ -116,7 +116,12 @@ type RemainingLogs = {
 };
 
 export type ActivityNudgeResult =
-  | { ok: true; notification: NotificationRow; deduped: boolean }
+  | {
+      ok: true;
+      notification: NotificationRow;
+      deduped: boolean;
+      deferredForQuietHours?: boolean;
+    }
   | {
       ok: false;
       code:
@@ -125,7 +130,9 @@ export type ActivityNudgeResult =
         | "ACTIVITY_NOT_FOUND"
         | "ACTIVITY_RESOLVED"
         | "NUDGE_RATE_LIMITED"
-        | "NUDGE_LIMIT";
+        | "NUDGE_LIMIT"
+        | "REMINDERS_PAUSED";
+      retryAfter?: number;
     };
 
 async function loadOrDefaultPreferences(db: Db, userId: string) {
@@ -1341,6 +1348,18 @@ export async function createActivityNudge(
     return { ok: false, code: "RELATIONSHIP_ENDED" };
   }
 
+  const [reminderState] = await db
+    .select()
+    .from(reminderStates)
+    .where(eq(reminderStates.traineeUserId, relationship.traineeUserId))
+    .limit(1);
+  if (
+    reminderState?.mode === "paused" &&
+    (!reminderState.pausedUntil || reminderState.pausedUntil > now)
+  ) {
+    return { ok: false, code: "REMINDERS_PAUSED" };
+  }
+
   const activity = await loadNudgeActivity(
     db,
     relationship.id,
@@ -1456,6 +1475,7 @@ export async function createActivityNudge(
     ok: true,
     notification: stored[0],
     deduped: result.outcome === "deduped",
+    deferredForQuietHours: stored[0].state === "deferred",
   };
 }
 

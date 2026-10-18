@@ -8,7 +8,14 @@ import {
   createCoachAskRequestSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client.js";
-import { coachAsks, coachingRelationships, trainerNotes } from "../db/schema.js";
+import {
+  checkins,
+  coachAsks,
+  coachingRelationships,
+  mealAssignments,
+  trainerNotes,
+  workoutAssignments,
+} from "../db/schema.js";
 import { storeInboxNotification } from "../domain/inbox-notify.js";
 import { createId, nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
@@ -22,6 +29,90 @@ import {
 import type { Env, Variables } from "../types.js";
 
 export const coachAskRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+type Db = ReturnType<typeof createDb>;
+type AskRow = typeof coachAsks.$inferSelect;
+
+async function resolveItemMeta(
+  db: Db,
+  ask: AskRow,
+): Promise<{ itemLabel: string | null; itemDate: string | null }> {
+  if (ask.itemType === "meal_assignment") {
+    const [row] = await db
+      .select({
+        mealName: mealAssignments.mealName,
+        localDate: mealAssignments.localDate,
+      })
+      .from(mealAssignments)
+      .where(eq(mealAssignments.id, ask.itemId))
+      .limit(1);
+    return {
+      itemLabel: row?.mealName ?? null,
+      itemDate: row?.localDate ?? null,
+    };
+  }
+  if (ask.itemType === "workout_assignment") {
+    const [row] = await db
+      .select({
+        workoutDayName: workoutAssignments.workoutDayName,
+        localDate: workoutAssignments.localDate,
+      })
+      .from(workoutAssignments)
+      .where(eq(workoutAssignments.id, ask.itemId))
+      .limit(1);
+    return {
+      itemLabel: row?.workoutDayName ?? "Workout",
+      itemDate: row?.localDate ?? null,
+    };
+  }
+  if (ask.itemType === "checkin") {
+    const [row] = await db
+      .select({ localDate: checkins.localDate })
+      .from(checkins)
+      .where(eq(checkins.id, ask.itemId))
+      .limit(1);
+    return {
+      itemLabel: "Check-in",
+      itemDate: row?.localDate ?? null,
+    };
+  }
+  return { itemLabel: null, itemDate: null };
+}
+
+async function mapAsk(
+  db: Db,
+  row: AskRow,
+  opts?: { forTrainee?: boolean },
+) {
+  const meta = await resolveItemMeta(db, row);
+  let answerVisibleToClient: boolean | undefined;
+  if (row.trainerNoteId) {
+    const [note] = await db
+      .select({ visibility: trainerNotes.visibility })
+      .from(trainerNotes)
+      .where(eq(trainerNotes.id, row.trainerNoteId))
+      .limit(1);
+    answerVisibleToClient = note?.visibility === "client";
+  }
+  return {
+    id: row.id,
+    relationshipId: row.relationshipId,
+    itemType: row.itemType,
+    itemId: row.itemId,
+    topic: row.topic,
+    status: row.status,
+    askCount: row.askCount,
+    askedAt: row.askedAt,
+    lastAskedAt: row.lastAskedAt,
+    itemLabel: meta.itemLabel,
+    itemDate: meta.itemDate,
+    coachAnswered: row.status === "answered",
+    // Trainee never learns about private notes beyond "coach answered".
+    answerVisibleToClient: opts?.forTrainee
+      ? answerVisibleToClient === true
+      : answerVisibleToClient,
+  };
+}
 
 coachAskRoutes.post(
   "/",
@@ -86,7 +177,7 @@ coachAskRoutes.post(
         .from(coachAsks)
         .where(eq(coachAsks.id, existing.id))
         .limit(1);
-      return ok(c, coachAskSchema.parse(mapAsk(row!)));
+      return ok(c, coachAskSchema.parse(await mapAsk(db, row!)));
     }
     const id = createId();
     await db.insert(coachAsks).values({
@@ -112,7 +203,7 @@ coachAskRoutes.post(
       dedupeKey: `coach-ask:${id}`,
     });
     const [row] = await db.select().from(coachAsks).where(eq(coachAsks.id, id)).limit(1);
-    return ok(c, coachAskSchema.parse(mapAsk(row!)), 201);
+    return ok(c, coachAskSchema.parse(await mapAsk(db, row!)), 201);
   },
 );
 
@@ -136,46 +227,33 @@ coachAskRoutes.get(
     const status = c.req.query("status") ?? "open";
     const db = createDb(c.env.DB);
     const rels = await db.select().from(coachingRelationships);
+    const forTrainee = actor.selectedRole === "trainee";
     const allowed = rels.filter((rel) =>
-      actor.selectedRole === "trainer"
-        ? rel.trainerUserId === actor.userId
-        : rel.traineeUserId === actor.userId,
+      forTrainee
+        ? rel.traineeUserId === actor.userId
+        : rel.trainerUserId === actor.userId,
     );
     const relIds = allowed.map((rel) => rel.id);
     if (relIds.length === 0) {
       return ok(c, coachAskListResponseSchema.parse({ items: [] }));
     }
-    const rows =
-      relIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(coachAsks)
-            .where(
-              and(
-                eq(coachAsks.status, status as "open"),
-                inArray(coachAsks.relationshipId, relIds),
-              ),
-            )
-            .orderBy(desc(coachAsks.lastAskedAt));
-    const items = rows.map((row) => mapAsk(row));
+    const rows = await db
+      .select()
+      .from(coachAsks)
+      .where(
+        and(
+          eq(coachAsks.status, status as "open"),
+          inArray(coachAsks.relationshipId, relIds),
+        ),
+      )
+      .orderBy(desc(coachAsks.lastAskedAt));
+    const items = [];
+    for (const row of rows) {
+      items.push(await mapAsk(db, row, { forTrainee }));
+    }
     return ok(c, coachAskListResponseSchema.parse({ items }));
   },
 );
-
-function mapAsk(row: typeof coachAsks.$inferSelect) {
-  return {
-    id: row.id,
-    relationshipId: row.relationshipId,
-    itemType: row.itemType,
-    itemId: row.itemId,
-    topic: row.topic,
-    status: row.status,
-    askCount: row.askCount,
-    askedAt: row.askedAt,
-    lastAskedAt: row.lastAskedAt,
-  };
-}
 
 coachAskRoutes.post(
   "/:id/answer",
@@ -222,6 +300,7 @@ coachAskRoutes.post(
       return fail(c, 409, "COACH_ASK_CLOSED", "Coach ask is not open.");
     }
     const now = nowIso();
+    const visibleToClient = parsed.data.visibleToClient === true;
     let trainerNoteId: string | null = null;
     if (parsed.data.note?.trim()) {
       trainerNoteId = createId();
@@ -230,11 +309,11 @@ coachAskRoutes.post(
         coachingRelationshipId: rel.id,
         trainerUserId: actor.userId,
         body: parsed.data.note.trim(),
-        visibility: "client",
+        visibility: visibleToClient ? "client" : "private",
         subjectType: ask.itemType,
         subjectId: ask.itemId,
         checkinId: null,
-        sharedAt: now,
+        sharedAt: visibleToClient ? now : null,
         seenAt: null,
         createdAt: now,
         updatedAt: now,
@@ -257,7 +336,7 @@ coachAskRoutes.post(
       dedupeKey: `coach-answered:${ask.id}`,
     });
     const [row] = await db.select().from(coachAsks).where(eq(coachAsks.id, ask.id)).limit(1);
-    return ok(c, coachAskSchema.parse(mapAsk(row!)));
+    return ok(c, coachAskSchema.parse(await mapAsk(db, row!)));
   },
 );
 
@@ -321,6 +400,6 @@ coachAskRoutes.post(
       .set({ trainerNoteId: noteId })
       .where(eq(coachAsks.id, ask.id));
     const [row] = await db.select().from(coachAsks).where(eq(coachAsks.id, ask.id)).limit(1);
-    return ok(c, coachAskSchema.parse(mapAsk(row!)));
+    return ok(c, coachAskSchema.parse(await mapAsk(db, row!)));
   },
 );

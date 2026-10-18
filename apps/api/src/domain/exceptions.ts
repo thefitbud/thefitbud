@@ -234,17 +234,18 @@ export async function evaluateRelationshipExceptions(
     });
   }
 
-  const openKeys = new Set(
+  // Skip sources that already have an open, acknowledged, or resolved item so
+  // evaluate/detect cannot recreate Critical rows ~ms after a Resolve.
+  const blockedKeys = new Set(
     existingRows
       .filter(
         (row) =>
-          isOpenExceptionStatus(row.status) &&
-          candidateKeys.has(exceptionKey(row)),
+          isOpenExceptionStatus(row.status) || row.status === "resolved",
       )
       .map((row) => exceptionKey(row)),
   );
 
-  const freshCandidates = filterNewExceptionCandidates(candidates, openKeys);
+  const freshCandidates = filterNewExceptionCandidates(candidates, blockedKeys);
 
   const createdRows: ExceptionRow[] = [];
   for (const candidate of freshCandidates) {

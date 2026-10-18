@@ -1,9 +1,15 @@
 import { useFonts } from "expo-font";
 import { NotoSansDevanagari_400Regular } from "@expo-google-fonts/noto-sans-devanagari";
-import { ActivityIndicator, Platform, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
-import { colors } from "@fitbud/ui-mobile";
+import { colors, defaultTextStyle } from "@fitbud/ui-mobile";
 
 const FONTSHARE_SATOSHI_CSS =
   "https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&display=swap";
@@ -23,6 +29,25 @@ function useWebFontStylesheets() {
   }, []);
 }
 
+function applyDefaultSatoshiTextStyle() {
+  const style = defaultTextStyle;
+  // React Native still honors defaultProps for Text/TextInput style merge.
+  const TextWithDefaults = Text as typeof Text & {
+    defaultProps?: { style?: unknown };
+  };
+  const TextInputWithDefaults = TextInput as typeof TextInput & {
+    defaultProps?: { style?: unknown };
+  };
+  TextWithDefaults.defaultProps = {
+    ...TextWithDefaults.defaultProps,
+    style: [TextWithDefaults.defaultProps?.style, style],
+  };
+  TextInputWithDefaults.defaultProps = {
+    ...TextInputWithDefaults.defaultProps,
+    style: [TextInputWithDefaults.defaultProps?.style, style],
+  };
+}
+
 function NativeFontsProvider({ children }: { children: ReactNode }) {
   /* eslint-disable @typescript-eslint/no-require-imports -- expo-font expects require() for .ttf assets */
   const [loaded] = useFonts({
@@ -33,6 +58,11 @@ function NativeFontsProvider({ children }: { children: ReactNode }) {
     NotoSansDevanagari_400Regular,
   });
   /* eslint-enable @typescript-eslint/no-require-imports */
+
+  useEffect(() => {
+    if (!loaded) return;
+    applyDefaultSatoshiTextStyle();
+  }, [loaded]);
 
   if (!loaded) {
     return (
@@ -55,6 +85,8 @@ function NativeFontsProvider({ children }: { children: ReactNode }) {
 /**
  * Load Satoshi TTFs on every platform (including Expo web). CSS @font-face alone
  * leaves RN-web Text faces "unloaded"; expo-font registers usable families.
+ * After load, sets Text/TextInput default style to Satoshi-Regular so body
+ * copy does not fall back to -apple-system.
  */
 export function FontsProvider({ children }: { children: ReactNode }) {
   useWebFontStylesheets();

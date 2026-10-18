@@ -448,7 +448,10 @@ describe("intervention loop", () => {
           "Content-Type": "application/json",
           "Idempotency-Key": "resolve-early",
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          outcome: "plan_adjusted",
+          note: "Adjusted next week",
+        }),
       },
       testEnv(),
     );
@@ -458,6 +461,51 @@ describe("intervention loop", () => {
       data: { status: string };
     };
     expect(resolveBody.data.status).toBe("resolved");
+
+    const [resolvedRow] = await db
+      .select()
+      .from(schema.exceptions)
+      .where(eq(schema.exceptions.id, exceptionId))
+      .limit(1);
+    expect(resolvedRow?.resolutionOutcome).toBe("plan_adjusted");
+    expect(resolvedRow?.resolutionNote).toBe("Adjusted next week");
+
+    const interventionRows = await db
+      .select()
+      .from(schema.interventions)
+      .where(eq(schema.interventions.exceptionId, exceptionId));
+    expect(interventionRows.some((row) => row.kind === "resolve")).toBe(true);
+    expect(interventionRows.some((row) => row.kind === "note")).toBe(true);
+    expect(
+      interventionRows.find((row) => row.kind === "resolve")?.summary,
+    ).toContain("plan_adjusted");
+    expect(
+      interventionRows.find((row) => row.kind === "note")?.summary,
+    ).toBe("Adjusted next week");
+
+    // Re-evaluate must not recreate an active exception for the same source.
+    const reEval = await app.request(
+      `/exceptions/relationships/${relationshipId}/evaluate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "eval-after-resolve",
+        },
+        body: "{}",
+      },
+      testEnv(),
+    );
+    expect(reEval.status).toBe(200);
+    const reEvalBody = (await reEval.json()) as {
+      data: { created: number; exceptions: Array<{ sourceEntityId: string; status: string }> };
+    };
+    expect(
+      reEvalBody.data.exceptions.some(
+        (ex) => ex.sourceEntityId === checkinId && ex.status !== "resolved",
+      ),
+    ).toBe(false);
 
     const checkinAfterResolve = await db
       .select()

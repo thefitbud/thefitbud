@@ -108,7 +108,7 @@ function buildOnboardingStack(input: {
   );
   const configId = demoUuid("coaching-config", input.relId);
   lines.push(
-    `INSERT INTO coaching_configurations (id, coaching_relationship_id, status, version_number, record_version, goal_short, goal_description, notes, configured_at, activated_at, created_at, updated_at) VALUES (${sqlQuote(configId)}, ${sqlQuote(input.relId)}, 'active', 1, 0, 'Demo goal', NULL, NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
+    `INSERT INTO coaching_configurations (id, coaching_relationship_id, status, version_number, record_version, goal_short, goal_description, notes, configured_at, activated_at, created_at, updated_at) VALUES (${sqlQuote(configId)}, ${sqlQuote(input.relId)}, 'active', 1, 0, 'Lose 4 kg by December', NULL, NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
   );
   lines.push(
     `INSERT INTO workout_expectations (id, coaching_configuration_id, sessions_per_week, completion_window_hours, created_at, updated_at) VALUES (${sqlQuote(demoUuid("workout-exp", input.relId))}, ${sqlQuote(configId)}, 3, 24, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
@@ -142,9 +142,12 @@ function buildPlanAndSubscription(input: {
   const renewsOn =
     input.state === "slipping"
       ? addDaysFromLocalDate(input.refDate, -3)
-      : input.state === "active_on_track"
-        ? addDaysFromLocalDate(input.refDate, 20)
-        : addDaysFromLocalDate(input.refDate, 25);
+      : input.state === "acknowledged"
+        ? // Meera: renewal Due (today) so Home renewals rail shows amber Due chip
+          input.refDate
+        : input.state === "active_on_track"
+          ? addDaysFromLocalDate(input.refDate, 20)
+          : addDaysFromLocalDate(input.refDate, 25);
   const lines = [
     `INSERT INTO plans (id, coaching_relationship_id, title, created_at, updated_at) VALUES (${sqlQuote(planId)}, ${sqlQuote(input.relId)}, 'Coaching plan', ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
     `INSERT INTO plan_versions (id, plan_id, version_number, status, record_version, content_json, creation_source, source_template_id, published_at, effective_from, effective_to, created_at, updated_at) VALUES (${sqlQuote(v1Id)}, ${sqlQuote(planId)}, 1, 'superseded', 0, ${jsonQuote(v1Content)}, 'blank', NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(`${startedLocal}T00:00:00.000Z`)}, ${sqlQuote(v2Effective)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
@@ -298,7 +301,8 @@ function shouldLogMeal(
   if (
     state === "slipping" ||
     state === "acknowledged" ||
-    state === "notifications_off"
+    state === "notifications_off" ||
+    state === "attention_hole"
   ) {
     if (state === "slipping" && localDate === refDate) {
       if (mealName === "Breakfast" || mealName === "Lunch" || mealName === "Dinner") {
@@ -316,6 +320,7 @@ function shouldLogMeal(
       if (localDate === yesterday && mealName === "Dinner") return false;
       if (localDate === refDate && mealName === "Lunch") return false;
     }
+    // attention_hole: keep meals logged; workout hole alone drives Attention.
     return "confirm";
   }
   if (state === "food_deviations") {
@@ -350,6 +355,12 @@ function shouldLogWorkout(
   // Meera (acknowledged): keep workouts logged so detection does not open a
   // fresh active exception beside her seeded acknowledged "Missed lunch".
   if (state === "acknowledged") {
+    return "completed";
+  }
+  // Extra attention clients: miss only yesterday's workout (Attention severity).
+  if (state === "attention_hole") {
+    const yesterday = addDaysFromLocalDate(refDate, -1);
+    if (localDate === yesterday) return false;
     return "completed";
   }
   if (localDate >= adherenceStart && localDate <= refDate) {
@@ -445,6 +456,36 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `DELETE FROM workout_executions WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND assignment_id IN (SELECT id FROM workout_assignments WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND local_date >= ${sqlQuote(adherenceStart)});`,
     `DELETE FROM checkins WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND local_date >= ${sqlQuote(adherenceStart)};`,
   );
+  // Re-engage eligibility: no logs in 48h (above) + ≥3 reminders in 48h.
+  const reengageAt = new Date(Date.parse(now) - 6 * 3_600_000).toISOString();
+  for (let i = 0; i < 3; i += 1) {
+    lines.push(
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", `farhan-reengage-${i}`))}, ${sqlQuote(userId("farhan.paused@demo.fitbud.test"))}, ${sqlQuote(farhanRel)}, 'meal_reminder', 'meal_assignment', ${sqlQuote(demoUuid("meal-assignment", "farhan.paused@demo.fitbud.test", refDate, `reengage-${i}`))}, 'delivered', ${sqlQuote(`farhan-reengage-${i}`)}, ${sqlQuote(reengageAt)}, NULL, '{"summary":"Reminder"}');`,
+    );
+  }
+
+  // Deepak + Aarav: one Attention-severity open item each (mix with Criticals).
+  const deepakRel = relId("rahul.coach@demo.fitbud.test", "deepak.dubai@demo.fitbud.test");
+  const deepakWorkoutId = demoUuid(
+    "workout-assignment",
+    "deepak.dubai@demo.fitbud.test",
+    addDaysFromLocalDate(refDate, -1),
+  );
+  const deepakDetected = new Date(Date.parse(now) - 30 * 3_600_000).toISOString();
+  lines.push(
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "deepak-skipped-workout"))}, ${sqlQuote(deepakRel)}, 'skipped_workout', 'attention', 'active', 'demo-v1', 'workout_assignment', ${sqlQuote(deepakWorkoutId)}, 'Skipped workout', ${sqlQuote(deepakDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+  );
+  const aaravRelForEx = relId("rahul.coach@demo.fitbud.test", "aarav.ontrack@demo.fitbud.test");
+  const aaravMealId = demoUuid(
+    "meal-assignment",
+    "aarav.ontrack@demo.fitbud.test",
+    addDaysFromLocalDate(refDate, -1),
+    MEAL_PRESCRIPTION_IDS.snack,
+  );
+  const aaravDetected = new Date(Date.parse(now) - 12 * 3_600_000).toISOString();
+  lines.push(
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "aarav-skipped-meal"))}, ${sqlQuote(aaravRelForEx)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(aaravMealId)}, 'Skipped snack', ${sqlQuote(aaravDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+  );
 
   const ishitaRel = relId("rahul.coach@demo.fitbud.test", "ishita.pushoff@demo.fitbud.test");
   const ishitaMealId = demoUuid("meal-assignment", "ishita.pushoff@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
@@ -458,7 +499,6 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO reactivation_requests (id, relationship_id, trainer_user_id, status, intake_update_requested, expires_at, created_at) VALUES (${sqlQuote(demoUuid("reactivation", "nikhil"))}, ${sqlQuote(nikhilRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'pending', 0, ${sqlQuote(new Date(Date.parse(now) + 9 * 86_400_000).toISOString())}, ${sqlQuote(now)});`,
   );
 
-  const deepakRel = relId("rahul.coach@demo.fitbud.test", "deepak.dubai@demo.fitbud.test");
   lines.push(
     `INSERT INTO meal_time_overrides (relationship_id, slot_key, day_pattern, time, updated_at) VALUES (${sqlQuote(deepakRel)}, 'lunch', 'all', '14:30', ${sqlQuote(now)}), (${sqlQuote(deepakRel)}, 'dinner', 'weekdays', '21:00', ${sqlQuote(now)});`,
     `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", "deepak-meal-times"))}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, ${sqlQuote(deepakRel)}, 'trainer_meal_times_changed', 'coaching_relationship', ${sqlQuote(deepakRel)}, 'delivered', ${sqlQuote(`meal-times-${deepakRel}`)}, ${sqlQuote(now)}, NULL, '{"summary":"Meal times updated"}');`,

@@ -155,6 +155,7 @@ exceptionRoutes.get(
             status: string;
             ageMinutes: number;
             summary: string;
+            details: Record<string, unknown> | null;
           }>;
         }
       >();
@@ -178,6 +179,7 @@ exceptionRoutes.get(
           status: ex.status,
           ageMinutes,
           summary: ex.summary,
+          details: ex.details ?? null,
         });
         grouped.set(item.coachingRelationshipId, bucket);
       }
@@ -852,11 +854,15 @@ exceptionRoutes.post(
     }
 
     const now = nowIso();
+    const outcome = parsed.data.outcome ?? "other";
+    const noteText = parsed.data.note?.trim() || null;
     await db
       .update(exceptions)
       .set({
         status: "resolved",
         resolvedAt: now,
+        resolutionOutcome: outcome,
+        resolutionNote: noteText,
         updatedAt: now,
       })
       .where(eq(exceptions.id, row.id));
@@ -866,28 +872,45 @@ exceptionRoutes.post(
       exceptionId: row.id,
       trainerUserId: actor.userId,
       action: "resolve",
-      note: parsed.data.note ?? null,
+      note: noteText,
       createdAt: now,
     });
 
-    const kind = parsed.data.interventionKind ?? "resolve";
+    // Always store a resolve intervention with the chosen outcome.
     await db.insert(interventions).values({
       id: createId(),
       coachingRelationshipId: relationship.id,
       trainerUserId: actor.userId,
       exceptionId: row.id,
       checkinId: null,
-      kind,
-      summary: parsed.data.note?.trim() || `Resolved: ${row.summary}`,
+      kind: "resolve",
+      summary: `Resolved (${outcome}): ${row.summary}`,
       resultingPlanVersionId: parsed.data.resultingPlanVersionId ?? null,
       createdAt: now,
       updatedAt: now,
     });
+    // Plus a separate note intervention when text is entered.
+    if (noteText) {
+      await db.insert(interventions).values({
+        id: createId(),
+        coachingRelationshipId: relationship.id,
+        trainerUserId: actor.userId,
+        exceptionId: row.id,
+        checkinId: null,
+        kind: "note",
+        summary: noteText,
+        resultingPlanVersionId: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
     const updated = {
       ...row,
       status: "resolved" as const,
       resolvedAt: now,
+      resolutionOutcome: outcome,
+      resolutionNote: noteText,
       updatedAt: now,
     };
     const responseBody = {

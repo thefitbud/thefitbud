@@ -29,6 +29,13 @@ export const coachAskSchema = z.object({
   askCount: z.number().int(),
   askedAt: isoDateTimeSchema,
   lastAskedAt: isoDateTimeSchema,
+  /** Human item name when resolved (e.g. "Lunch"). */
+  itemLabel: z.string().min(1).max(120).nullable().optional(),
+  /** Civil date of the source item when known (YYYY-MM-DD). */
+  itemDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  /** Present after answer; trainee never receives private note bodies. */
+  coachAnswered: z.boolean().optional(),
+  answerVisibleToClient: z.boolean().optional(),
 });
 export type CoachAsk = z.infer<typeof coachAskSchema>;
 
@@ -38,6 +45,8 @@ export const coachAskListResponseSchema = z.object({
 
 export const answerCoachAskRequestSchema = z.object({
   note: z.string().trim().max(2000).nullable().optional(),
+  /** When false (default), the optional note stays private to the trainer. */
+  visibleToClient: z.boolean().optional().default(false),
 });
 export type AnswerCoachAskRequest = z.infer<typeof answerCoachAskRequestSchema>;
 

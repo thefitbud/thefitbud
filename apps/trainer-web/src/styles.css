@@ -505,37 +505,44 @@ body.is-offline .button-destructive {
   font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.2;
+  border: 1px solid transparent;
 }
 
 .status-chip-critical {
   background: var(--semantic-critical-fill, #fef2f2);
   color: var(--semantic-critical-text, #b91c1c);
+  border-color: #fecaca;
 }
 
 .status-chip-attention {
   background: var(--semantic-attention-fill, #fffbeb);
   color: var(--semantic-attention-text, #b45309);
+  border-color: #fde68a;
 }
 
 .status-chip-positive {
   background: var(--semantic-positive-fill, #ecfdf5);
   color: var(--semantic-positive-text, #047857);
+  border-color: #a7f3d0;
 }
 
 .status-chip-info {
   background: var(--semantic-info-fill, #eff6ff);
   color: var(--semantic-info-text, #1d4ed8);
+  border-color: #bfdbfe;
 }
 
 .status-chip-neutral,
 .status-chip-brand-selected {
   background: var(--semantic-neutral-fill, #f3f4f6);
   color: var(--semantic-neutral-text, #374151);
+  border-color: #e5e7eb;
 }
 
 .status-chip-brand-selected {
   background: var(--semantic-brand-selected-fill, #edeaff);
   color: var(--semantic-brand-selected-text, #4527c6);
+  border-color: #d4ccff;
 }
 
 .overflow-menu {
@@ -544,15 +551,24 @@ body.is-offline .button-destructive {
 }
 
 .overflow-menu-trigger {
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--white);
-  color: var(--deep-navy);
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-500, #5b616b);
   font-size: 1.25rem;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1;
   cursor: pointer;
+}
+
+.overflow-menu-trigger:hover,
+.overflow-menu-trigger:focus-visible {
+  color: var(--deep-navy, #1a1248);
+  background: #f3f4f6;
+  outline: none;
 }
 
 .overflow-menu-list {
@@ -1482,6 +1498,26 @@ body.is-offline .button-destructive {
 
 .state-panel.is-error {
   border-color: var(--error);
+}
+
+.link,
+a.link,
+button.link {
+  color: var(--indigo, #4527c6);
+  font: inherit;
+  font-weight: 600;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.link:hover,
+a.link:hover,
+button.link:hover {
+  text-decoration: none;
+  opacity: 0.9;
 }
 
 .templates-hub-tabs {

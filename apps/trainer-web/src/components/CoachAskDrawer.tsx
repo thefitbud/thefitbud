@@ -3,21 +3,23 @@ import { X } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   formatCivilDate,
-  formatLocalDate,
   formatRelative,
   labelFor,
 } from "@fitbud/core";
 import type { CoachAsk } from "@fitbud/contracts";
+import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
+import { whatsappHref } from "../lib/whatsapp";
 import { Button } from "./Button";
 import { OverflowMenu } from "./OverflowMenu";
+import { useOnlineStatus } from "./OfflineBanner";
 import { StatusChip } from "./StatusChip";
 import { LoadingBlock } from "./StatePanels";
 
 export function CoachAskDrawer({
   askId,
-  clientName,
+  clientName: clientNameProp,
   onClose,
   onChanged,
 }: {
@@ -26,7 +28,14 @@ export function CoachAskDrawer({
   onClose: () => void;
   onChanged?: () => void;
 }) {
+  const online = useOnlineStatus();
   const [ask, setAsk] = useState<CoachAsk | null>(null);
+  const [displayName, setDisplayName] = useState(
+    clientNameProp.trim() || "Client",
+  );
+  const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +43,12 @@ export function CoachAskDrawer({
   const [visibleToClient, setVisibleToClient] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (clientNameProp.trim()) {
+      setDisplayName(clientNameProp.trim());
+    }
+  }, [clientNameProp]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +66,14 @@ export function CoachAskDrawer({
         setAsk(null);
       } else {
         setAsk(found);
+        try {
+          const ws = await apiClient.getClientWorkspace(found.relationshipId);
+          const name = ws.header.traineeDisplayName?.trim();
+          if (name) setDisplayName(name);
+          setClientWhatsappE164(ws.header.clientWhatsappE164 ?? null);
+        } catch {
+          /* keep existing displayName */
+        }
       }
     } catch (err) {
       setError(
@@ -71,6 +94,7 @@ export function CoachAskDrawer({
     closeRef.current?.focus();
     function onKey(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
+        if (document.querySelector(".overflow-menu-list")) return;
         ev.preventDefault();
         onClose();
       }
@@ -80,16 +104,18 @@ export function CoachAskDrawer({
   }, [onClose]);
 
   async function markAnswered() {
-    if (!ask) return;
+    if (!ask || !online) return;
     setActing(true);
     setError(null);
     try {
       await stage1Api.answerCoachAsk(
         ask.id,
-        { note: note.trim() || null },
+        {
+          note: note.trim() || null,
+          visibleToClient,
+        },
         createIdempotencyKey(),
       );
-      void visibleToClient;
       onChanged?.();
       onClose();
     } catch (err) {
@@ -105,17 +131,15 @@ export function CoachAskDrawer({
 
   const answered = ask?.status === "answered";
   const isPain = ask?.topic === "pain" || ask?.topic === "pain_or_discomfort";
-  const itemLabel = ask
-    ? labelFor("coach_ask_item_type", ask.itemType)
+  const itemLabel =
+    ask?.itemLabel?.trim() ||
+    (ask ? labelFor("coach_ask_item_type", ask.itemType) : "");
+  const dateLabel = ask?.itemDate
+    ? formatCivilDate(ask.itemDate)
     : "";
-  const dateLabel = ask
-    ? formatCivilDate(
-        formatLocalDate(
-          new Date(ask.askedAt),
-          Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        ),
-      )
-    : "";
+  const waHref = clientWhatsappE164
+    ? whatsappHref({ phoneE164: clientWhatsappE164 })
+    : null;
 
   return (
     <div className="drawer-backdrop" role="presentation" onClick={onClose}>
@@ -130,8 +154,11 @@ export function CoachAskDrawer({
       >
         <header className="drawer-head">
           <h2>
-            {clientName} asked about <strong>{itemLabel}</strong>
-            {dateLabel ? ` · ${dateLabel}` : ""}
+            {displayName} asked about{" "}
+            <strong>
+              {itemLabel}
+              {dateLabel ? ` · ${dateLabel}` : ""}
+            </strong>
           </h2>
           <button
             ref={closeRef}
@@ -157,7 +184,7 @@ export function CoachAskDrawer({
             <>
               <StatusChip
                 kind="ask"
-                value={ask.status}
+                value={ask.topic}
                 label={labelFor("coach_ask_topic", ask.topic)}
               />
               <p className="muted">
@@ -165,14 +192,16 @@ export function CoachAskDrawer({
               </p>
               {isPain ? (
                 <p role="status" style={{ color: "#B45309" }}>
-                  Pain was reported. Check in with {clientName} directly.
+                  Pain was reported. Check in with {displayName} directly.
                 </p>
               ) : null}
               <div className="drawer-source">
                 <p style={{ margin: 0, fontWeight: 600 }}>{itemLabel}</p>
-                <p className="muted" style={{ margin: "6px 0 0" }}>
-                  Topic: {labelFor("coach_ask_topic", ask.topic)}
-                </p>
+                {dateLabel ? (
+                  <p className="muted" style={{ margin: "6px 0 0" }}>
+                    {dateLabel}
+                  </p>
+                ) : null}
               </div>
               {!answered ? (
                 <>
@@ -184,20 +213,35 @@ export function CoachAskDrawer({
                       onChange={(e) => setNote(e.target.value)}
                     />
                   </label>
-                  <label
-                    className="field"
-                    style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                  <div
+                    className="switch-row"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      marginTop: 8,
+                    }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={visibleToClient}
-                      onChange={(e) => setVisibleToClient(e.target.checked)}
-                    />
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={visibleToClient}
+                      aria-label="Visible to client"
+                      className={
+                        visibleToClient
+                          ? "button-secondary is-on"
+                          : "button-secondary"
+                      }
+                      style={{ minHeight: 32, padding: "4px 12px" }}
+                      onClick={() => setVisibleToClient((v) => !v)}
+                    >
+                      {visibleToClient ? "On" : "Off"}
+                    </button>
                     <span>Visible to client</span>
-                  </label>
+                  </div>
                   <p className="drawer-helper">
                     Reply on WhatsApp as usual. Marking it answered lets{" "}
-                    {clientName} see it here too.
+                    {displayName} see it here too.
                   </p>
                 </>
               ) : (
@@ -212,16 +256,19 @@ export function CoachAskDrawer({
             <div style={{ display: "flex", gap: 8 }}>
               <Button
                 variant="primary"
-                disabled={acting}
+                disabled={acting || !online}
                 onClick={() => void markAnswered()}
               >
                 Mark answered
               </Button>
               <Button
                 variant="secondary"
-                onClick={() =>
-                  window.open("https://wa.me/", "_blank", "noopener,noreferrer")
-                }
+                disabled={!waHref}
+                onClick={() => {
+                  if (waHref) {
+                    window.open(waHref, "_blank", "noopener,noreferrer");
+                  }
+                }}
               >
                 Open WhatsApp chat
               </Button>
@@ -251,6 +298,11 @@ export function CoachAskDrawer({
                 ]}
               />
             </div>
+            {!online ? (
+              <p className="muted" role="status">
+                You&apos;re offline. Mark answered needs a connection.
+              </p>
+            ) : null}
           </div>
         ) : null}
       </aside>

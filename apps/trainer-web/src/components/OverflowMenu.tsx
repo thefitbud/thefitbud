@@ -32,13 +32,18 @@ export function OverflowMenu({
       }
     }
     function onKey(ev: KeyboardEvent) {
-      if (ev.key === "Escape") setOpen(false);
+      if (ev.key !== "Escape") return;
+      // Keep parent drawers open when closing this menu.
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      setOpen(false);
     }
     document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     return () => {
       document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
     };
   }, [open]);
 

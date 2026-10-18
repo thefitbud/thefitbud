@@ -57,6 +57,8 @@ export const attentionGroupItemSchema = z.object({
   status: exceptionStatusSchema,
   ageMinutes: z.number().int().nonnegative(),
   summary: z.string(),
+  /** Optional exception details (e.g. localDate) for weekday-aware reason lines. */
+  details: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 export type AttentionGroupItem = z.infer<typeof attentionGroupItemSchema>;
 

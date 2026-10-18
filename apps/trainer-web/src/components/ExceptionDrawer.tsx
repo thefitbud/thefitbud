@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   formatCivilDate,
+  formatClockTime,
   formatInstant,
   formatLocalDate,
   labelFor,
@@ -12,8 +13,10 @@ import type { ExceptionDetail } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
+import { clientWhatsappHref } from "../lib/whatsapp";
 import { Button } from "./Button";
 import { OverflowMenu } from "./OverflowMenu";
+import { useOnlineStatus } from "./OfflineBanner";
 import { StatusChip } from "./StatusChip";
 import { LoadingBlock } from "./StatePanels";
 
@@ -22,6 +25,69 @@ const OUTCOMES = [
   { id: "plan_adjusted", label: "Plan adjusted" },
   { id: "no_action", label: "No action needed" },
 ] as const;
+
+const VIEWER_TZ =
+  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+function detailString(
+  details: Record<string, unknown> | null | undefined,
+  key: string,
+): string | null {
+  if (!details) return null;
+  const value = details[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function windowEndIso(
+  details: Record<string, unknown> | null | undefined,
+): string | null {
+  return (
+    detailString(details, "windowEnd") ??
+    detailString(details, "windowEndsAt")
+  );
+}
+
+function loggedLine(detail: ExceptionDetail): string {
+  const details = detail.details;
+  if (detail.type === "skipped_meal" || detail.type === "skipped_workout") {
+    return "Logged: Skipped";
+  }
+  if (detail.type === "meal_deviation") {
+    const kind = detailString(details, "deviationKind");
+    return kind ? `Logged: Changed · ${kind}` : "Logged: Changed";
+  }
+  if (
+    detail.type === "meal_logged_later" ||
+    details?.loggedLater === true
+  ) {
+    return "Logged: Logged later";
+  }
+  const loggedAt = detailString(details, "loggedAt");
+  if (loggedAt) {
+    return `Logged: ${formatInstant(loggedAt, VIEWER_TZ)}`;
+  }
+  return "Logged: nothing yet";
+}
+
+function reasonHeading(
+  detail: ExceptionDetail,
+  plannedTitle: string | null,
+): string {
+  const localDate = detailString(detail.details, "localDate");
+  const dateLabel = localDate ? formatCivilDate(localDate) : null;
+  const mealName = detailString(detail.details, "mealName");
+  const itemName = mealName ?? plannedTitle;
+  const base = detail.summary || labelFor("exception_type", detail.type);
+  const parts = [base];
+  if (
+    itemName &&
+    !base.toLowerCase().includes(itemName.toLowerCase())
+  ) {
+    parts.push(itemName);
+  }
+  if (dateLabel) parts.push(dateLabel);
+  return parts.join(" · ");
+}
 
 export function ExceptionDrawer({
   exceptionId,
@@ -34,6 +100,10 @@ export function ExceptionDrawer({
 }) {
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
   const [clientName, setClientName] = useState("Client");
+  const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
+    null,
+  );
+  const [plannedTitle, setPlannedTitle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +113,14 @@ export function ExceptionDrawer({
   const [showResolveForm, setShowResolveForm] = useState(false);
   const [reminderLine, setReminderLine] = useState<string | null>(null);
   const [nudgeHint, setNudgeHint] = useState<string | null>(null);
+  const [nudgeBlockedUntil, setNudgeBlockedUntil] = useState<number | null>(
+    null,
+  );
+  const [nudgeNow, setNudgeNow] = useState(() => Date.now());
+  const online = useOnlineStatus();
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const nudgeRef = useRef<() => void>(() => undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,13 +128,37 @@ export function ExceptionDrawer({
     try {
       const result = await apiClient.getException(exceptionId);
       setDetail(result);
+
+      let title: string | null =
+        detailString(result.details, "mealName") ?? null;
+      try {
+        if (result.sourceEntityType === "workout_assignment") {
+          const workout = await apiClient.getWorkoutAssignment(
+            result.sourceEntityId,
+          );
+          title = workout.workoutDayName;
+        } else if (result.sourceEntityType === "meal_assignment" && !title) {
+          const meal = await apiClient.getMealAssignment(
+            result.sourceEntityId,
+          );
+          title = meal.mealName;
+        } else if (result.sourceEntityType === "checkin") {
+          title = "Check-in";
+        }
+      } catch {
+        /* source may be gone; keep title from details */
+      }
+      setPlannedTitle(title);
+
       try {
         const ws = await apiClient.getClientWorkspace(
           result.coachingRelationshipId,
         );
         setClientName(ws.header.traineeDisplayName || "Client");
+        setClientWhatsappE164(ws.header.clientWhatsappE164 ?? null);
       } catch {
         setClientName("Client");
+        setClientWhatsappE164(null);
       }
       try {
         const resp = await stage1Api.getResponsiveness(
@@ -78,11 +178,10 @@ export function ExceptionDrawer({
         setReminderLine(null);
       }
     } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "This item no longer exists",
-      );
+      const is404 =
+        err instanceof ApiClientError &&
+        (err.status === 404 || err.code === "EXCEPTION_NOT_FOUND");
+      setError(is404 ? "This item no longer exists" : err instanceof ApiClientError ? err.message : "This item no longer exists");
       setDetail(null);
     } finally {
       setLoading(false);
@@ -94,30 +193,16 @@ export function ExceptionDrawer({
   }, [load]);
 
   useEffect(() => {
-    closeRef.current?.focus();
-    function onKey(ev: KeyboardEvent) {
-      if (ev.key === "Escape") {
-        ev.preventDefault();
-        onClose();
+    if (nudgeBlockedUntil == null) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setNudgeNow(now);
+      if (now >= nudgeBlockedUntil) {
+        setNudgeBlockedUntil(null);
       }
-      if (ev.key !== "Tab" || !panelRef.current) return;
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (ev.shiftKey && document.activeElement === first) {
-        ev.preventDefault();
-        last.focus();
-      } else if (!ev.shiftKey && document.activeElement === last) {
-        ev.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [nudgeBlockedUntil]);
 
   async function markReviewed() {
     setActing(true);
@@ -154,7 +239,6 @@ export function ExceptionDrawer({
               : outcome === "plan_adjusted"
                 ? "plan_adjusted"
                 : "no_action",
-          interventionKind: note.trim() ? "note" : "resolve",
         },
         createIdempotencyKey(),
       );
@@ -172,6 +256,7 @@ export function ExceptionDrawer({
 
   async function nudge() {
     if (!detail) return;
+    if (nudgeBlockedUntil != null && Date.now() < nudgeBlockedUntil) return;
     setNudgeHint(null);
     try {
       const activityType =
@@ -180,23 +265,107 @@ export function ExceptionDrawer({
           : detail.sourceEntityType === "meal_assignment"
             ? "meal"
             : "checkin";
-      await apiClient.nudgeActivity(detail.coachingRelationshipId, {
-        activityType,
-        activityId: detail.sourceEntityId,
-      });
-      setNudgeHint("Nudge sent");
-    } catch (err) {
-      const msg =
-        err instanceof ApiClientError ? err.message : "Could not nudge";
-      if (/rate|limit|again/i.test(msg)) {
-        setNudgeHint("You can nudge again in 40 min");
-      } else if (/quiet/i.test(msg)) {
-        setNudgeHint("Nudge will arrive after 7:00 am (client's quiet hours).");
+      const result = await apiClient.nudgeActivity(
+        detail.coachingRelationshipId,
+        {
+          activityType,
+          activityId: detail.sourceEntityId,
+        },
+      );
+      if (result.deferredForQuietHours) {
+        setNudgeHint(
+          "Nudge will arrive after 7:00 am (client's quiet hours).",
+        );
+      } else if (result.deduped) {
+        setNudgeHint("Already nudged today.");
       } else {
-        setNudgeHint(msg);
+        setNudgeHint("Nudge sent");
       }
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        if (err.code === "REMINDERS_PAUSED") {
+          setNudgeHint(
+            err.message ||
+              "Client has paused reminders. Nudge isn't available.",
+          );
+          return;
+        }
+        const retryAfterRaw = err.details?.retryAfter;
+        const retryAfter =
+          typeof retryAfterRaw === "number" ? retryAfterRaw : null;
+        if (
+          err.code === "NUDGE_LIMIT" ||
+          err.code === "NUDGE_RATE_LIMITED" ||
+          retryAfter != null
+        ) {
+          if (retryAfter != null) {
+            const mins = Math.max(1, Math.ceil(retryAfter / 60));
+            setNudgeHint(`You can nudge again in ${mins} min`);
+            setNudgeBlockedUntil(Date.now() + retryAfter * 1000);
+            setNudgeNow(Date.now());
+          } else {
+            setNudgeHint(err.message);
+          }
+          return;
+        }
+        if (
+          /quiet/i.test(err.message) ||
+          err.details?.deferredForQuietHours === true
+        ) {
+          setNudgeHint(
+            "Nudge will arrive after 7:00 am (client's quiet hours).",
+          );
+          return;
+        }
+        setNudgeHint(err.message);
+        return;
+      }
+      setNudgeHint("Could not nudge");
     }
   }
+
+  nudgeRef.current = () => {
+    void nudge();
+  };
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") {
+        if (document.querySelector(".overflow-menu-list")) return;
+        ev.preventDefault();
+        onClose();
+        return;
+      }
+      const target = ev.target as HTMLElement | null;
+      const typing =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (!typing && (ev.key === "n" || ev.key === "N")) {
+        ev.preventDefault();
+        nudgeRef.current();
+        return;
+      }
+      if (ev.key !== "Tab" || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (ev.shiftKey && document.activeElement === first) {
+        ev.preventDefault();
+        last.focus();
+      } else if (!ev.shiftKey && document.activeElement === last) {
+        ev.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const resolved = detail?.status === "resolved";
   const acknowledged = detail?.status === "acknowledged";
@@ -204,10 +373,13 @@ export function ExceptionDrawer({
     detail &&
     (detail.status === "detected" || detail.status === "active");
 
-  const reason =
-    detail == null
-      ? ""
-      : detail.summary || labelFor("exception_type", detail.type);
+  const dueIso = detail ? windowEndIso(detail.details) : null;
+  const nudgeBlocked =
+    nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil;
+  const whatsappHref = clientWhatsappHref({
+    phoneE164: clientWhatsappE164,
+    name: clientName,
+  });
 
   return (
     <div className="drawer-backdrop" role="presentation" onClick={onClose}>
@@ -222,7 +394,7 @@ export function ExceptionDrawer({
       >
         <header className="drawer-head">
           <h2>{clientName}</h2>
-          {detail ? (
+          {detail && !resolved ? (
             <StatusChip kind="severity" value={detail.severity} />
           ) : null}
           <button
@@ -256,21 +428,22 @@ export function ExceptionDrawer({
                 </p>
               ) : null}
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-                {reason}
+                {reasonHeading(detail, plannedTitle)}
               </h3>
 
               <div className="drawer-source">
                 <p style={{ margin: "0 0 6px", fontWeight: 600 }}>
-                  {labelFor("exception_type", detail.type)}
+                  {plannedTitle ??
+                    detailString(detail.details, "mealName") ??
+                    labelFor("exception_type", detail.type)}
                 </p>
                 <p className="muted" style={{ margin: 0 }}>
-                  Source: planned item ·{" "}
-                  {detail.details && typeof detail.details.windowEnd === "string"
-                    ? `Due by ${formatInstant(String(detail.details.windowEnd), Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC")}`
+                  {dueIso
+                    ? `Due by ${formatClockTime(dueIso, VIEWER_TZ)}`
                     : "See client plan for the window"}
                 </p>
                 <p className="muted" style={{ margin: "6px 0 0" }}>
-                  Logged: nothing yet / see activity for changes
+                  {loggedLine(detail)}
                 </p>
               </div>
 
@@ -280,19 +453,12 @@ export function ExceptionDrawer({
               <ul className="drawer-timeline">
                 <li>
                   Detected{" "}
-                  {formatInstant(
-                    detail.detectedAt,
-                    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-                  )}
+                  {formatInstant(detail.detectedAt, VIEWER_TZ)}
                 </li>
                 {detail.acknowledgedAt ? (
                   <li>
                     Acknowledged · you,{" "}
-                    {formatInstant(
-                      detail.acknowledgedAt,
-                      Intl.DateTimeFormat().resolvedOptions().timeZone ||
-                        "UTC",
-                    )}
+                    {formatInstant(detail.acknowledgedAt, VIEWER_TZ)}
                   </li>
                 ) : null}
                 {detail.resolvedAt ? (
@@ -301,28 +467,12 @@ export function ExceptionDrawer({
                     {formatCivilDate(
                       formatLocalDate(
                         new Date(detail.resolvedAt),
-                        Intl.DateTimeFormat().resolvedOptions().timeZone ||
-                          "UTC",
+                        VIEWER_TZ,
                       ),
                     )}
                   </li>
                 ) : null}
               </ul>
-
-              {resolved ? (
-                <p className="muted">
-                  Resolved by you ·{" "}
-                  {detail.resolvedAt
-                    ? formatCivilDate(
-                        formatLocalDate(
-                          new Date(detail.resolvedAt),
-                          Intl.DateTimeFormat().resolvedOptions().timeZone ||
-                            "UTC",
-                        ),
-                      )
-                    : ""}
-                </p>
-              ) : null}
 
               {(acknowledged || showResolveForm) && !resolved ? (
                 <>
@@ -356,7 +506,7 @@ export function ExceptionDrawer({
                   {active ? (
                     <Button
                       variant="primary"
-                      disabled={acting}
+                      disabled={acting || !online}
                       onClick={() => void markReviewed()}
                     >
                       Mark reviewed
@@ -365,7 +515,7 @@ export function ExceptionDrawer({
                   {acknowledged ? (
                     <Button
                       variant="primary"
-                      disabled={acting}
+                      disabled={acting || !online}
                       onClick={() => {
                         if (!showResolveForm && !acknowledged) {
                           setShowResolveForm(true);
@@ -380,7 +530,7 @@ export function ExceptionDrawer({
                   {active || acknowledged ? (
                     <Button
                       variant="secondary"
-                      disabled={acting}
+                      disabled={acting || !online || nudgeBlocked}
                       onClick={() => void nudge()}
                     >
                       Nudge
@@ -401,6 +551,20 @@ export function ExceptionDrawer({
                             `/clients/${detail.coachingRelationshipId}/plan`,
                           );
                         },
+                      },
+                      {
+                        id: "whatsapp",
+                        label: "WhatsApp client",
+                        onSelect: () => {
+                          if (whatsappHref) {
+                            window.open(
+                              whatsappHref,
+                              "_blank",
+                              "noopener,noreferrer",
+                            );
+                          }
+                        },
+                        disabled: !whatsappHref,
                       },
                       {
                         id: "client",

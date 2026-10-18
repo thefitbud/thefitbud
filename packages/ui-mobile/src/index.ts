@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
-export { colors, radii, spacing, touchTargetMin, ringColors, semanticColors } from "./theme.js";
+export {
+  colors,
+  defaultTextStyle,
+  radii,
+  spacing,
+  touchTargetMin,
+  ringColors,
+  semanticColors,
+} from "./theme.js";
 export {
   fontFamily,
   fontFamilyBold,

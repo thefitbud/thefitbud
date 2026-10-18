@@ -17,7 +17,6 @@ import {
 import { ApiClientError } from "@fitbud/api-client";
 import {
   formatCivilDate,
-  formatInstant,
   formatLocalDate,
   formatRelative,
   labelFor,
@@ -34,8 +33,13 @@ import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
 import { CoachAskDrawer } from "../components/CoachAskDrawer";
 import { OverflowMenu } from "../components/OverflowMenu";
+import { useOnlineStatus } from "../components/OfflineBanner";
 import { StatusChip } from "../components/StatusChip";
-import { ErrorState, LoadingBlock } from "../components/StatePanels";
+import {
+  ErrorState,
+  errorKindFromFailure,
+  type ErrorKind,
+} from "../components/StatePanels";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
@@ -81,16 +85,40 @@ function oldestOpenAge(group: AttentionGroup): number {
   return Math.max(...open.map((i) => i.ageMinutes));
 }
 
-/** Mockup age copy: "since 5 d" / "since 1 h". */
-function formatSinceAge(ageMinutes: number): string {
-  const m = Math.max(0, ageMinutes);
-  if (m < 60) return `since ${m} min`;
-  if (m < 24 * 60) {
-    const h = Math.round(m / 60);
-    return `since ${h} h`;
+/** Chip copy: "Since 2 days" — same logic as mobile `formatAttentionAge`. */
+function formatAttentionAge(ageMinutes: number): string {
+  if (ageMinutes < 60) {
+    const mins = Math.max(0, ageMinutes);
+    return mins === 1 ? "Since 1 min" : `Since ${mins} min`;
   }
-  const d = Math.round(m / (24 * 60));
-  return `since ${d} d`;
+  if (ageMinutes < 24 * 60) {
+    const hours = Math.round(ageMinutes / 60);
+    return hours === 1 ? "Since 1 hour" : `Since ${hours} hours`;
+  }
+  const days = Math.round(ageMinutes / (24 * 60));
+  return days === 1 ? "Since 1 day" : `Since ${days} days`;
+}
+
+function weekdayShortFromCivil(localDate: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
+  if (!match) return null;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-GB", {
+    weekday: "short",
+    timeZone: "UTC",
+  });
+}
+
+function localDateFromDetails(
+  details: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!details) return null;
+  const value = details.localDate;
+  return typeof value === "string" ? value : null;
 }
 
 function initials(name: string): string {
@@ -116,9 +144,39 @@ function issueLine(group: AttentionGroup, primary: AttentionItem): {
     (i) => i.status === "detected" || i.status === "active",
   );
   const items = open.length > 0 ? open : group.items;
-  const text =
-    primary.summary?.trim() ||
-    labelFor("exception_type", primary.type);
+  const sameType = items.filter((i) => i.type === primary.type);
+  const weekdays = sameType
+    .map((i) => localDateFromDetails(i.details))
+    .filter((d): d is string => Boolean(d))
+    .map((d) => weekdayShortFromCivil(d))
+    .filter((d): d is string => Boolean(d));
+  const uniqueWeekdays = [...new Set(weekdays)];
+
+  let text =
+    primary.summary?.trim() || labelFor("exception_type", primary.type);
+
+  const dayList =
+    uniqueWeekdays.length > 0 ? uniqueWeekdays.join(", ") : null;
+  if (
+    sameType.length >= 2 &&
+    (primary.type === "missed_workout" || primary.type === "skipped_workout")
+  ) {
+    text = dayList
+      ? `Missed ${sameType.length} workouts (${dayList})`
+      : `Missed ${sameType.length} workouts`;
+  } else if (
+    sameType.length >= 2 &&
+    (primary.type === "overdue_meal" ||
+      primary.type === "skipped_meal" ||
+      primary.type === "meal_logged_later")
+  ) {
+    text = dayList
+      ? `Missed ${sameType.length} meals (${dayList})`
+      : `Missed ${sameType.length} meals`;
+  } else if (dayList && !/\([A-Z][a-z]{2}/.test(text)) {
+    text = `${text} (${dayList})`;
+  }
+
   const more = Math.max(0, items.length - 1);
   const title = items
     .map((i) => i.summary || labelFor("exception_type", i.type))
@@ -126,8 +184,22 @@ function issueLine(group: AttentionGroup, primary: AttentionItem): {
   return { text, more, title };
 }
 
+function askItemLabel(ask: CoachAsk): string {
+  return (
+    ask.itemLabel?.trim() ||
+    labelFor("coach_ask_item_type", ask.itemType) ||
+    "an item"
+  );
+}
+
+function askDateLabel(ask: CoachAsk): string | null {
+  if (ask.itemDate) return formatCivilDate(ask.itemDate);
+  return null;
+}
+
 export function HomePage() {
   const { me } = useAuth();
+  const online = useOnlineStatus();
   const timeZone =
     me?.timezone ??
     Intl.DateTimeFormat().resolvedOptions().timeZone ??
@@ -157,7 +229,11 @@ export function HomePage() {
   >([]);
   const [nameByRid, setNameByRid] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    requestId?: string | null;
+    kind?: ErrorKind;
+  } | null>(null);
   const [sectionErrors, setSectionErrors] = useState<Record<string, string>>(
     {},
   );
@@ -180,10 +256,13 @@ export function HomePage() {
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
   const undoTimer = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setSectionErrors({});
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    const quiet = opts?.quiet === true;
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+      setSectionErrors({});
+    }
     const nextErrors: Record<string, string> = {};
     try {
       const results = await Promise.allSettled([
@@ -205,7 +284,7 @@ export function HomePage() {
         results[0].status === "fulfilled" ? results[0].value : null;
       if (!attention) {
         nextErrors.attention = "Couldn't load needs attention";
-        setGroups([]);
+        if (!quiet) setGroups([]);
       } else {
         setGroups(attention.groups);
       }
@@ -214,12 +293,12 @@ export function HomePage() {
         setCoachAsks(results[1].value.items);
       } else {
         nextErrors.asks = "Couldn't load asked-coach items";
-        setCoachAsks([]);
+        if (!quiet) setCoachAsks([]);
       }
 
       if (results[2].status === "fulfilled") {
         setReengage(results[2].value.items);
-      } else {
+      } else if (!quiet) {
         setReengage([]);
       }
 
@@ -227,7 +306,7 @@ export function HomePage() {
         setRenewals(results[3].value.items);
       } else {
         nextErrors.renewals = "Couldn't load renewals";
-        setRenewals([]);
+        if (!quiet) setRenewals([]);
       }
 
       if (results[4].status === "fulfilled") {
@@ -238,7 +317,7 @@ export function HomePage() {
         );
       } else {
         nextErrors.checkins = "Couldn't load check-ins";
-        setCheckins([]);
+        if (!quiet) setCheckins([]);
       }
 
       const names = new Map<string, string>();
@@ -280,26 +359,69 @@ export function HomePage() {
           names.set(g.relationshipId, g.traineeDisplayName);
         }
       }
-      setNameByRid(names);
+      if (!quiet) {
+        setNameByRid(names);
+      } else if (names.size > 0) {
+        setNameByRid((prev) => {
+          const merged = new Map(prev);
+          for (const [k, v] of names) merged.set(k, v);
+          return merged;
+        });
+      }
 
       if (results[7].status === "fulfilled") {
         setActivity(results[7].value.events.slice(0, 6));
-      } else {
+      } else if (!quiet) {
         setActivity([]);
       }
 
-      setSectionErrors(nextErrors);
-      if (!attention && Object.keys(nextErrors).length > 0) {
-        setError("Could not load your home feed.");
+      if (!quiet) {
+        setSectionErrors(nextErrors);
+        if (!attention) {
+          const attentionErr =
+            results[0].status === "rejected" ? results[0].reason : null;
+          const kind =
+            attentionErr instanceof ApiClientError
+              ? errorKindFromFailure({
+                  status: attentionErr.status,
+                  code: attentionErr.code,
+                  message: attentionErr.message,
+                })
+              : "server";
+          setError({
+            message:
+              attentionErr instanceof ApiClientError
+                ? attentionErr.message
+                : "Could not load your home feed.",
+            requestId:
+              attentionErr instanceof ApiClientError
+                ? attentionErr.requestId
+                : null,
+            kind,
+          });
+        }
       }
     } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load your home feed.",
-      );
+      if (!quiet) {
+        const kind =
+          err instanceof ApiClientError
+            ? errorKindFromFailure({
+                status: err.status,
+                code: err.code,
+                message: err.message,
+              })
+            : "server";
+        setError({
+          message:
+            err instanceof ApiClientError
+              ? err.message
+              : "Could not load your home feed.",
+          requestId: err instanceof ApiClientError ? err.requestId : null,
+          kind,
+        });
+      }
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [timeZone]);
 
@@ -307,8 +429,16 @@ export function HomePage() {
     void load();
   }, [load]);
 
+  // Quiet poll so new coach asks / attention appear within ~5s.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void load({ quiet: true });
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [load]);
+
   useRealtimeHints(apiClient, [...nameByRid.keys()], () => {
-    void load();
+    void load({ quiet: true });
   });
 
   const openGroups = useMemo(() => {
@@ -459,6 +589,7 @@ export function HomePage() {
       if (row?.primary) openException(row.primary.id);
     } else if (key === "a") {
       ev.preventDefault();
+      if (!online) return;
       const row = visibleOpen[focusIdx];
       if (row?.primary) {
         void acknowledgeFromOverflow(row.primary.id, row.group.relationshipId);
@@ -471,6 +602,7 @@ export function HomePage() {
       }
     } else if (key === "n") {
       ev.preventDefault();
+      if (!online) return;
       const row = visibleOpen[focusIdx];
       if (row?.primary) {
         void nudgeClient(row.group.relationshipId, row.primary.id);
@@ -492,13 +624,12 @@ export function HomePage() {
     .slice(0, 2)
     .map((r) => r.group.traineeDisplayName.split(" ")[0])
     .filter(Boolean);
-  const summary =
-    attentionCount === 0
+  const summary = loading
+    ? "Loading your day…"
+    : attentionCount === 0
       ? "You're all caught up. Nothing needs your attention right now."
       : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
-          firstNames.length
-            ? ` ${firstNames.join(" and ")} first.`
-            : ""
+          firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
         }`;
 
   const showAttention = filter === "all" || filter === "attention";
@@ -515,6 +646,8 @@ export function HomePage() {
     checkins.length === 0 &&
     gettingStarted.length === 0 &&
     reviewedGroups.length === 0;
+
+  const tileNum = (n: number) => (loading ? "—" : String(n));
 
   return (
     <div className="home-triage" data-testid="screen-TW-04">
@@ -543,7 +676,7 @@ export function HomePage() {
             </span>
             <span>
               <span className="home-tile-lbl">Needs attention</span>
-              <span className="home-tile-num">{attentionCount}</span>
+              <span className="home-tile-num">{tileNum(attentionCount)}</span>
             </span>
           </button>
           <button
@@ -561,7 +694,7 @@ export function HomePage() {
             </span>
             <span>
               <span className="home-tile-lbl">Check-ins to review</span>
-              <span className="home-tile-num">{checkinCount}</span>
+              <span className="home-tile-num">{tileNum(checkinCount)}</span>
             </span>
           </button>
           <button
@@ -579,18 +712,63 @@ export function HomePage() {
             </span>
             <span>
               <span className="home-tile-lbl">Renewals due</span>
-              <span className="home-tile-num">{renewalCount}</span>
+              <span className="home-tile-num">{tileNum(renewalCount)}</span>
             </span>
           </button>
         </div>
       </header>
 
-      {loading ? <LoadingBlock label="Loading…" /> : null}
       {error ? (
-        <ErrorState message={error} onRetry={() => void load()} />
+        <ErrorState
+          kind={error.kind}
+          message={error.message}
+          requestId={error.requestId}
+          onRetry={() => void load()}
+        />
       ) : null}
 
-      {allClear ? (
+      {!error && loading ? (
+        <div className="home-grid" aria-busy="true" aria-label="Loading">
+          <div className="home-col">
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-skel home-skel-title" />
+              </div>
+              <div className="home-rows">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="home-row home-skel-row">
+                    <div className="home-skel home-skel-av" />
+                    <div className="home-skel home-skel-line" />
+                    <div className="home-skel home-skel-chip" />
+                    <div className="home-skel home-skel-age" />
+                    <div className="home-skel home-skel-btn" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+          <div className="home-col home-rail">
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-skel home-skel-title" />
+              </div>
+              <div className="home-list">
+                {[0, 1].map((i) => (
+                  <div key={i} className="home-li">
+                    <div className="home-skel home-skel-av" />
+                    <div className="home-li-tx">
+                      <div className="home-skel home-skel-line" />
+                      <div className="home-skel home-skel-sub" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {!error && allClear ? (
         <div className="home-card" style={{ padding: 24 }}>
           <h2 className="home-title" style={{ fontSize: 18 }}>
             All clear
@@ -604,6 +782,7 @@ export function HomePage() {
         </div>
       ) : null}
 
+      {!error && !loading ? (
       <div className="home-grid">
         <div className="home-col">
           {showAttention && openGroups.length > 0 ? (
@@ -640,7 +819,7 @@ export function HomePage() {
                   const { group, primary } = row;
                   if (!primary) return null;
                   const issue = issueLine(group, primary);
-                  const age = formatSinceAge(oldestOpenAge(group));
+                  const age = formatAttentionAge(oldestOpenAge(group));
                   const absTitle = `Open since ${formatRelative(
                     new Date(
                       Date.now() - oldestOpenAge(group) * 60_000,
@@ -655,7 +834,7 @@ export function HomePage() {
                       ref={(el) => {
                         rowRefs.current[idx] = el;
                       }}
-                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, open ${age.replace("since ", "")}. Review button.`}
+                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}. Review button.`}
                     >
                       <div className="home-who" role="gridcell">
                         <span className={avatarClass(group.traineeDisplayName)}>
@@ -695,6 +874,7 @@ export function HomePage() {
                             {
                               id: "ack",
                               label: "Acknowledge",
+                              disabled: !online,
                               onSelect: () =>
                                 void acknowledgeFromOverflow(
                                   primary.id,
@@ -704,6 +884,7 @@ export function HomePage() {
                             {
                               id: "nudge",
                               label: "Nudge",
+                              disabled: !online,
                               onSelect: () =>
                                 void nudgeClient(
                                   group.relationshipId,
@@ -746,17 +927,20 @@ export function HomePage() {
               {openGroups.length > ATTENTION_CAP ? (
                 <div className="home-foot">
                   <span className="muted">
-                    Showing {visibleOpen.length} of {openGroups.length} clients
+                    Showing {visibleOpen.length} of {openGroups.length}
+                    {!showAllAttention ? (
+                      <>
+                        {" · "}
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => setShowAllAttention(true)}
+                        >
+                          View all
+                        </button>
+                      </>
+                    ) : null}
                   </span>
-                  {!showAllAttention ? (
-                    <button
-                      type="button"
-                      className="link"
-                      onClick={() => setShowAllAttention(true)}
-                    >
-                      View all ({openGroups.length}) →
-                    </button>
-                  ) : null}
                 </div>
               ) : null}
             </section>
@@ -777,6 +961,8 @@ export function HomePage() {
               <div className="home-list">
                 {coachAsks.slice(0, SECTION_CAP).map((ask) => {
                   const name = nameByRid.get(ask.relationshipId) ?? "Client";
+                  const item = askItemLabel(ask);
+                  const date = askDateLabel(ask);
                   return (
                     <div key={ask.id} className="home-li">
                       <span className={avatarClass(name)}>
@@ -784,9 +970,8 @@ export function HomePage() {
                       </span>
                       <div className="home-li-tx">
                         <b>
-                          {name} asked about{" "}
-                          {labelFor("coach_ask_item_type", ask.itemType) ||
-                            "an item"}
+                          {name} asked about {item}
+                          {date ? ` · ${date}` : ""}{" "}
                           <span className="home-topic">
                             {labelFor("coach_ask_topic", ask.topic)}
                           </span>
@@ -801,6 +986,7 @@ export function HomePage() {
                       <Button
                         variant="tinted"
                         className="button-sm"
+                        disabled={!online}
                         onClick={() => openAsk(ask.id)}
                       >
                         Mark answered
@@ -857,6 +1043,7 @@ export function HomePage() {
                       <Button
                         variant="tinted"
                         className="button-sm"
+                        disabled={!online}
                         onClick={() => items[0] && openException(items[0].id)}
                       >
                         Resolve
@@ -902,7 +1089,11 @@ export function HomePage() {
                         Review intake
                       </Link>
                     ) : (
-                      <Button variant="tinted" className="button-sm">
+                      <Button
+                        variant="tinted"
+                        className="button-sm"
+                        disabled={!online}
+                      >
                         Resend invite
                       </Button>
                     )}
@@ -1060,8 +1251,7 @@ export function HomePage() {
                     <span>
                       <b>{ev.traineeDisplayName ?? "Client"}</b> {ev.summary}
                       <span className="home-ev-when">
-                        {ev.traineeLocalTime ||
-                          formatInstant(ev.occurredAt, timeZone)}
+                        {formatRelative(ev.occurredAt)}
                       </span>
                     </span>
                   </div>
@@ -1071,6 +1261,7 @@ export function HomePage() {
           ) : null}
         </div>
       </div>
+      ) : null}
 
       {drawerExceptionId ? (
         <ExceptionDrawer

@@ -139,13 +139,18 @@ export function mapDirectoryItemToRow(
 ): ClientDirectoryRow {
   const relationshipId = item.relationshipId;
   const invitationId = item.invitationId;
+  const goal = item.goalShort?.trim() ?? "";
+  const subtitle =
+    goal && goal.toLowerCase() !== "demo goal"
+      ? goal
+      : onboardingStatusLabel(item.status);
   return {
     key: relationshipId
       ? `relationship:${relationshipId}`
       : `invitation:${invitationId ?? item.traineeDisplayName}`,
     kind: relationshipId ? "relationship" : "invitation",
     name: item.traineeDisplayName,
-    subtitle: item.goalShort ?? onboardingStatusLabel(item.status),
+    subtitle,
     onboardingStatus: item.status,
     relationshipId,
     invitationId,

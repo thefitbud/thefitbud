@@ -7,6 +7,7 @@ import {
 } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Checkin, CoachingRelationship } from "@fitbud/contracts";
+import { formatCivilDate } from "@fitbud/core";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -181,7 +182,7 @@ export function CheckinScreen({
     <Screen
       chrome="app"
       title="Check-in"
-      subtitle={`${statusLabel(checkin.status)} · due ${checkin.localDate}`}
+      subtitle={`${statusLabel(checkin.status)} · due ${formatCivilDate(checkin.localDate)}`}
     >
       {error ? <ErrorBanner message={error} /> : null}
       <View style={styles.field}>
@@ -282,7 +283,7 @@ export function TodayCheckinCard({
 
   const subtitle = useMemo(() => {
     if (!checkin) return null;
-    return `${statusLabel(checkin.status)} · ${checkin.localDate}`;
+    return `${statusLabel(checkin.status)} · ${formatCivilDate(checkin.localDate)}`;
   }, [checkin]);
 
   if (loading) {
@@ -303,7 +304,7 @@ export function TodayCheckinCard({
         <Text style={styles.bannerTitle}>Check-in</Text>
         <Text style={styles.bannerBody}>
           {checkin
-            ? `Next check-in is scheduled for ${checkin.localDate}.`
+            ? `Next check-in is scheduled for ${formatCivilDate(checkin.localDate)}.`
             : "No check-in is due right now."}
         </Text>
       </View>

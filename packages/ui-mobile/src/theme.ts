@@ -14,6 +14,22 @@ import {
   warning,
 } from "@fitbud/tokens";
 
+/**
+ * Default body text style for React Native `Text` / `TextInput`.
+ * Use this (or rely on `FontsProvider`, which applies it globally after
+ * Satoshi loads) so copy on sign-in / Today / Clients uses Satoshi instead
+ * of the platform UI font (-apple-system / system).
+ *
+ * @example
+ * ```tsx
+ * import { defaultTextStyle } from "@fitbud/ui-mobile";
+ * <Text style={[defaultTextStyle, styles.body]}>Hello</Text>
+ * ```
+ */
+export const defaultTextStyle = {
+  fontFamily: "Satoshi-Regular",
+} as const;
+
 export const colors = {
   deepNavy: brand.deepNavy,
   indigo: brand.indigo,

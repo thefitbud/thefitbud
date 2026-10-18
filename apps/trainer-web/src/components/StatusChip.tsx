@@ -62,6 +62,11 @@ function toneFor(kind: StatusChipKind, value: string): SemanticTone {
   if (kind === "ask") {
     return value === "answered" ? "positive" : "info";
   }
+  if (kind === "renewal") {
+    if (value === "expired" || value === "due") return "attention";
+    if (value === "upcoming") return "info";
+    return "neutral";
+  }
   return "neutral";
 }
 

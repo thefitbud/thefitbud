@@ -183,6 +183,87 @@ describe("coach asks", () => {
     expect(rows[0]?.status).toBe("expired");
   });
 
+  it("keeps private answer notes off the trainee note feed", async () => {
+    const ctx = await reachCoachingReady("privacy");
+    const itemId = createId();
+    const create = await app.request(
+      "/coach-asks",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ctx.traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          relationshipId: ctx.relationshipId,
+          itemType: "checkin",
+          itemId,
+          topic: "portion_size",
+        }),
+      },
+      testEnv(),
+    );
+    expect(create.status).toBe(201);
+    const created = (await create.json()) as { data: { id: string } };
+
+    const answer = await app.request(
+      `/coach-asks/${created.data.id}/answer`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "x-fitbud-role": "trainer",
+          "Content-Type": "application/json",
+          "Idempotency-Key": `answer-private-${created.data.id}`,
+        },
+        body: JSON.stringify({
+          note: "Secret coaching tip — keep private",
+          visibleToClient: false,
+        }),
+      },
+      testEnv(),
+    );
+    expect(answer.status).toBe(200);
+
+    const notes = await app.request(
+      "/me/coach-notes",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${ctx.traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    expect(notes.status).toBe(200);
+    const notesBody = (await notes.json()) as {
+      data: { items: Array<{ body: string }> };
+    };
+    expect(
+      notesBody.data.items.some((n) => n.body.includes("Secret coaching tip")),
+    ).toBe(false);
+
+    const answeredList = await app.request(
+      "/coach-asks?status=answered",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${ctx.traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const answeredBody = (await answeredList.json()) as {
+      data: { items: Array<{ id: string; coachAnswered?: boolean; answerVisibleToClient?: boolean }> };
+    };
+    const row = answeredBody.data.items.find((i) => i.id === created.data.id);
+    expect(row?.coachAnswered).toBe(true);
+    expect(row?.answerVisibleToClient).toBe(false);
+  });
+
   it("blocks new asks when the relationship has ended", async () => {
     const ctx = await reachCoachingReady("ended");
     const endedAt = nowIso();
