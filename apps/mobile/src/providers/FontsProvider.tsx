@@ -28,6 +28,7 @@ function NativeFontsProvider({ children }: { children: ReactNode }) {
   const [loaded] = useFonts({
     "Satoshi-Regular": require("../../assets/fonts/satoshi/Satoshi-400.ttf"),
     "Satoshi-Medium": require("../../assets/fonts/satoshi/Satoshi-500.ttf"),
+    "Satoshi-SemiBold": require("../../assets/fonts/satoshi/Satoshi-600.ttf"),
     "Satoshi-Bold": require("../../assets/fonts/satoshi/Satoshi-700.ttf"),
     NotoSansDevanagari_400Regular,
   });

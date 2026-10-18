@@ -27,8 +27,9 @@ async function authedJson<T>(
     const text = await res.text();
     throw new Error(text || `Request failed (${res.status})`);
   }
-  const json = await res.json();
-  return parse(json);
+  const json = (await res.json()) as { data?: unknown };
+  // API responses are `{ data: T }` envelopes; unwrap before schema parse.
+  return parse(json.data ?? json);
 }
 
 export async function listPlanTemplatesExtended(query?: {

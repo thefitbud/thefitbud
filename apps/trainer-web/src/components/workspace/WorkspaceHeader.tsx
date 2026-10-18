@@ -74,7 +74,7 @@ export function WorkspaceHeader({
   });
 
   const whatsappHrefValue = clientWhatsappHref({
-    phoneE164: header.trainerWhatsappE164,
+    phoneE164: header.clientWhatsappE164,
     name: header.traineeDisplayName,
     onboardingStatus: header.onboardingStatus,
   });

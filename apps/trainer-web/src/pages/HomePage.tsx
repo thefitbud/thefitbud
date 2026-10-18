@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
+import { labelFor } from "@fitbud/core";
 import type {
   AttentionGroupsResponse,
   CoachAsk,
@@ -272,7 +273,9 @@ export function HomePage() {
                   <p className="attention-row-name">
                     {nameByRid.get(ask.relationshipId) ?? "Client"}
                   </p>
-                  <p className="attention-row-issue">Asked about {ask.topic}</p>
+                  <p className="attention-row-issue">
+                    Asked about {labelFor("coach_ask_topic", ask.topic)}
+                  </p>
                 </div>
                 <button
                   type="button"

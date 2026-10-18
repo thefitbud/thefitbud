@@ -1,14 +1,8 @@
 /** Trainee-local calendar helpers (IANA timezone). */
+import { formatCivilDate, formatLocalDate as coreFormatLocalDate } from "@fitbud/core";
 
 export function localDateInTimezone(timeZone: string, instant = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
+  return coreFormatLocalDate(instant, timeZone);
 }
 
 export function addDays(localDate: string, days: number): string {
@@ -29,28 +23,19 @@ export function weekDatesFrom(startMonday: string): string[] {
   return Array.from({ length: 7 }, (_, index) => addDays(startMonday, index));
 }
 
+/** Product-rule date heading: "Thu 15 Oct" (never US long form). */
 export function formatHeadingDate(timeZone: string, localDate?: string): string {
-  const instant = localDate
-    ? new Date(`${localDate}T12:00:00Z`)
-    : new Date();
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone,
-  }).format(instant);
+  const date = localDate ?? localDateInTimezone(timeZone);
+  return formatCivilDate(date);
 }
 
-export function weekdayShort(timeZone: string, localDate: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    timeZone,
-  }).format(new Date(`${localDate}T12:00:00Z`));
+export function weekdayShort(_timeZone: string, localDate: string): string {
+  const [y, m, d] = localDate.split("-").map(Number);
+  const utc = new Date(Date.UTC(y!, m! - 1, d!));
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][utc.getUTCDay()]!;
 }
 
-export function dayOfMonth(timeZone: string, localDate: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    timeZone,
-  }).format(new Date(`${localDate}T12:00:00Z`));
+export function dayOfMonth(_timeZone: string, localDate: string): string {
+  const parts = localDate.split("-");
+  return String(Number(parts[2]));
 }

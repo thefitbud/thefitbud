@@ -16,16 +16,18 @@
   },
   "dependencies": {
     "@fitbud/api-client": "workspace:*",
+    "@fitbud/brand": "workspace:*",
     "@fitbud/contracts": "workspace:*",
     "@fitbud/core": "workspace:*",
     "@fitbud/tokens": "workspace:*",
-    "@fitbud/brand": "workspace:*",
+    "lucide-react": "^1.59.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.5.0"
   },
   "devDependencies": {
     "@fitbud/config": "workspace:*",
+    "@playwright/test": "^1.51.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
@@ -33,7 +35,6 @@
     "typescript": "catalog:",
     "typescript-eslint": "^8.29.1",
     "vite": "^6.3.2",
-    "vitest": "catalog:",
-    "@playwright/test": "^1.51.0"
+    "vitest": "catalog:"
   }
 }

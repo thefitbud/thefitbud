@@ -42,6 +42,17 @@ export function RequireAuth() {
     );
   }
 
+  if (!me.permittedRoles.includes("trainer")) {
+    return (
+      <main className="centered-status" data-testid="trainee-only-gate">
+        <h1>Client account</h1>
+        <p>
+          This account is set up as a client. Open the FitBud app on your phone.
+        </p>
+      </main>
+    );
+  }
+
   const onWelcome = location.pathname.startsWith("/welcome");
   if (!me.trainerProfile?.displayName && !onWelcome) {
     return <Navigate to="/welcome" replace />;

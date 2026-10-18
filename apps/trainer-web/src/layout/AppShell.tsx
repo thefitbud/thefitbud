@@ -1,9 +1,11 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState, type FormEvent, type ReactNode, type SVGProps } from "react";
+import { formatCivilDate, formatLocalDate } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { useConfig } from "../lib/config";
 import { apiClient } from "../lib/api";
 import { stage1Api } from "../lib/stage1-api";
+import { BrandMark } from "../components/BrandMark";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { email, signOut } = useAuth();
@@ -48,11 +50,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const displayName = trainerName(email);
-  const today = new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  }).format(new Date());
+  const today = formatCivilDate(
+    formatLocalDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
+  );
 
   return (
     <div className="app-shell" data-testid="screen-TW-03">
@@ -62,14 +62,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="side-nav">
         <div className="brand-lockup">
           <span className="brand-glyph" aria-hidden="true">
-            <img src="/favicon-32.png" width={28} height={28} alt="" />
+            <BrandMark size={28} />
           </span>
           <span className="brand-copy">
-            <span className="brand-mark">FitBud Coach</span>
-            <span className="brand-tagline">
-              <span className="live-dot" aria-hidden="true" />
-              Active Coaching
-            </span>
+            <span className="brand-mark">FitBud</span>
+            <span className="brand-tagline">Progress, guided.</span>
           </span>
         </div>
         <p className="nav-kicker">Menu</p>

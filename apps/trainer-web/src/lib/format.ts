@@ -1,33 +1,27 @@
-import { formatTimeDiff } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatInstant,
+  formatRelative,
+  formatTimeDiff,
+} from "@fitbud/core";
 
-export function formatIsoDateTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
-export function formatLocalDate(localDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return localDate;
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+/** @deprecated Prefer formatInstant from @fitbud/core. */
+export function formatIsoDateTime(iso: string, timeZone?: string): string {
+  return formatInstant(
+    iso,
+    timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   );
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
 }
 
-export function formatAgeMinutes(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
+/** Civil localDate → product rule date ("Thu 15 Oct"). */
+export function formatLocalDate(localDate: string): string {
+  return formatCivilDate(localDate);
+}
+
+export function formatAgeMinutes(minutes: number, now = new Date()): string {
+  const clamped = Math.max(0, minutes);
+  const iso = new Date(now.getTime() - clamped * 60_000).toISOString();
+  return formatRelative(iso, now);
 }
 
 export function traineeTimeDiffLabel(
@@ -38,3 +32,10 @@ export function traineeTimeDiffLabel(
   if (!label || label.toLowerCase().includes("same")) return null;
   return label;
 }
+
+export {
+  formatCivilDate,
+  formatInstant,
+  formatRelative,
+  formatTimeDiff,
+};

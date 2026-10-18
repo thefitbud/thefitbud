@@ -1,34 +1,113 @@
 import { StyleSheet, Text, View } from "react-native";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import {
+  AlertOctagon,
+  AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  Info,
+} from "lucide-react-native";
+import { labelFor, sentenceCaseEnum, type LabelNamespace } from "@fitbud/core";
+import { radii, semanticColors, spacing } from "@fitbud/ui-mobile";
 
-type Tone = "neutral" | "positive" | "attention" | "warning";
+export type StatusChipKind =
+  | "lifecycle"
+  | "adherence"
+  | "severity"
+  | "checkin"
+  | "renewal"
+  | "meal"
+  | "workout"
+  | "sync"
+  | "ask";
 
-export function StatusChip({
-  label,
-  tone = "neutral",
-}: {
-  label: string;
-  tone?: Tone;
-}) {
+type Tone = "critical" | "attention" | "positive" | "info" | "neutral";
+
+/** @deprecated Prefer kind+value API. */
+type LegacyTone = "neutral" | "positive" | "attention" | "warning";
+
+const KIND_NAMESPACE: Record<StatusChipKind, LabelNamespace | null> = {
+  lifecycle: "onboarding_status",
+  adherence: "adherence_state",
+  severity: "exception_severity",
+  checkin: "checkin_status",
+  renewal: null,
+  meal: "meal_assignment_status",
+  workout: "workout_assignment_status",
+  sync: null,
+  ask: "coach_ask_status",
+};
+
+function toneFor(kind: StatusChipKind, value: string): Tone {
+  if (kind === "severity") {
+    return value === "critical" ? "critical" : "attention";
+  }
+  if (kind === "adherence") {
+    if (value === "on_track") return "positive";
+    if (value === "needs_attention") return "attention";
+    return "neutral";
+  }
+  if (value === "overdue" || value === "critical") return "attention";
+  if (value === "on_track" || value === "answered" || value === "reviewed") {
+    return "positive";
+  }
+  if (kind === "ask") return "info";
+  return "neutral";
+}
+
+type Props =
+  | {
+      kind: StatusChipKind;
+      value: string;
+      label?: string;
+      tone?: never;
+    }
+  | {
+      /** Legacy tone-only API — maps warning→attention colours. */
+      label: string;
+      tone?: LegacyTone;
+      kind?: never;
+      value?: never;
+    };
+
+export function StatusChip(props: Props) {
+  if ("kind" in props && props.kind) {
+    const namespace = KIND_NAMESPACE[props.kind];
+    const text =
+      props.label ??
+      (namespace
+        ? labelFor(namespace, props.value)
+        : sentenceCaseEnum(props.value));
+    const tone = toneFor(props.kind, props.value);
+    return <ChipVisual label={text} tone={tone} />;
+  }
+
+  const legacyTone = props.tone ?? "neutral";
+  const tone: Tone =
+    legacyTone === "warning" ? "attention" : (legacyTone as Tone);
+  return <ChipVisual label={props.label} tone={tone} />;
+}
+
+function ChipVisual({ label, tone }: { label: string; tone: Tone }) {
+  const Icon =
+    tone === "critical"
+      ? AlertOctagon
+      : tone === "attention"
+        ? AlertTriangle
+        : tone === "positive"
+          ? CheckCircle2
+          : tone === "info"
+            ? Info
+            : CircleDashed;
+  const palette = semanticColors[tone === "critical" ? "critical" : tone === "attention" ? "attention" : tone === "positive" ? "positive" : tone === "info" ? "info" : "neutral"];
   return (
     <View
       style={[
         styles.chip,
-        tone === "positive" && styles.positive,
-        tone === "attention" && styles.attention,
-        tone === "warning" && styles.warning,
+        { backgroundColor: palette.fill },
       ]}
     >
-      <Text
-        style={[
-          styles.label,
-          tone === "positive" && styles.positiveLabel,
-          tone === "attention" && styles.attentionLabel,
-          tone === "warning" && styles.warningLabel,
-        ]}
-      >
-        {label}
-      </Text>
+      <Icon size={14} color={palette.text} strokeWidth={1.75} />
+      <Text style={[styles.label, { color: palette.text }]}>{label}</Text>
     </View>
   );
 }
@@ -36,32 +115,15 @@ export function StatusChip({
 const styles = StyleSheet.create({
   chip: {
     alignSelf: "flex-start",
-    backgroundColor: colors.lightGrey,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  positive: {
-    backgroundColor: "#ECFDF5",
-  },
-  attention: {
-    backgroundColor: colors.paleLavender,
-  },
-  warning: {
-    backgroundColor: "#FFF7ED",
-  },
   label: {
-    color: colors.darkGrey,
     fontSize: 12,
     fontWeight: "600",
-  },
-  positiveLabel: {
-    color: "#047857",
-  },
-  attentionLabel: {
-    color: colors.indigo,
-  },
-  warningLabel: {
-    color: "#B45309",
   },
 });

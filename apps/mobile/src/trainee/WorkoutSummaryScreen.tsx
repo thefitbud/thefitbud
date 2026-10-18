@@ -1,8 +1,10 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { WorkoutExecution } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
+import { enumLabel } from "@fitbud/core";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { durationMinutesFromExecution } from "./workoutDuration";
 
 export function WorkoutSummaryScreen({
   execution,
@@ -23,30 +25,20 @@ export function WorkoutSummaryScreen({
     (count, exercise) => count + exercise.sets.length,
     0,
   );
-  const started = Date.parse(execution.startedAt);
-  const completed = execution.completedAt
-    ? Date.parse(execution.completedAt)
-    : Date.now();
-  const durationMinutes = Math.max(
-    1,
-    Math.round((completed - started) / 60_000),
-  );
+  const durationMinutes = durationMinutesFromExecution(execution);
 
   return (
-    <Screen
-      title="Workout Summary"
-      subtitle="Session captured for your trainer. No gamification."
-    >
+    <Screen title="Workout Summary" subtitle="Session captured for your coach.">
       <View style={styles.card}>
         <Text style={styles.label}>Outcome</Text>
-        <Text style={styles.value}>
-          {execution.status.replace(/_/g, " ")}
-        </Text>
+        <Text style={styles.value}>{enumLabel(execution.status)}</Text>
       </View>
-      <View style={styles.card}>
-        <Text style={styles.label}>Duration</Text>
-        <Text style={styles.value}>{durationMinutes} min</Text>
-      </View>
+      {durationMinutes != null ? (
+        <View style={styles.card}>
+          <Text style={styles.label}>Duration</Text>
+          <Text style={styles.value}>{durationMinutes} min</Text>
+        </View>
+      ) : null}
       <View style={styles.card}>
         <Text style={styles.label}>Sets completed</Text>
         <Text style={styles.value}>
@@ -81,8 +73,7 @@ const styles = StyleSheet.create({
   },
   value: {
     color: colors.deepNavy,
-    fontSize: 20,
-    fontWeight: "700",
-    textTransform: "capitalize",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });
