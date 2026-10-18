@@ -367,7 +367,7 @@ export function ExceptionDrawer({
                       variant="primary"
                       disabled={acting}
                       onClick={() => {
-                        if (!showResolveForm) {
+                        if (!showResolveForm && !acknowledged) {
                           setShowResolveForm(true);
                           return;
                         }

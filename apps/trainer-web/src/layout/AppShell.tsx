@@ -109,7 +109,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         stage1Api.getAttentionGroups(),
         apiClient.listTrainerCheckinInbox(),
       ]);
-      setAttentionCount(attention.groups.length);
+      const openGroups = attention.groups.filter((g) =>
+        g.items.some(
+          (i) => i.status === "detected" || i.status === "active",
+        ),
+      );
+      setAttentionCount(openGroups.length);
       const submitted = inbox.items.filter(
         (row) => row.checkin.status === "submitted",
       ).length;

@@ -142,13 +142,6 @@ export function CheckinsPage() {
             Review loaded check-ins that are due or have been submitted.
           </p>
         </div>
-        <button
-          type="button"
-          className="button-secondary"
-          onClick={() => void load()}
-        >
-          Refresh
-        </button>
       </header>
 
       <dl className="kpi-row" aria-label="Loaded check-in inbox">
