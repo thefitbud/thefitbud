@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
-import { formatCivilDate } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { Button } from "../Button";
 import { OverflowMenu } from "../OverflowMenu";
@@ -12,6 +13,15 @@ import { resolveTraineeTimezone } from "../../lib/trainee-timezone";
 import { TimezoneBadge } from "./TimezoneBadge";
 import { primaryActionFor } from "./primaryAction";
 import type { WorkspaceModal } from "./WorkspaceModals";
+
+const WEEK_MS = 7 * 86_400_000;
+
+function relationshipWeek(startedAt: string | null | undefined): number | null {
+  if (!startedAt) return null;
+  const started = Date.parse(startedAt);
+  if (Number.isNaN(started)) return null;
+  return Math.max(1, Math.floor((Date.now() - started) / WEEK_MS) + 1);
+}
 
 function titleCaseGender(value: string): string {
   const trimmed = value.trim();
@@ -24,11 +34,13 @@ export function WorkspaceHeader({
   relationshipId,
   submittedCheckinCount,
   onOpenModal,
+  online = true,
 }: {
   workspace: ClientWorkspace;
   relationshipId: string;
   submittedCheckinCount: number;
   onOpenModal: (modal: WorkspaceModal) => void;
+  online?: boolean;
 }) {
   const { me } = useAuth();
   const navigate = useNavigate();
@@ -80,6 +92,10 @@ export function WorkspaceHeader({
       ),
     });
   }
+  const weekNumber = ended ? null : relationshipWeek(header.startedAt);
+  if (weekNumber != null) {
+    metaNodes.push({ key: "week", node: <span>Week {weekNumber}</span> });
+  }
   if (workspace.overview.nextCheckin) {
     metaNodes.push({
       key: "checkin",
@@ -105,12 +121,17 @@ export function WorkspaceHeader({
     });
   }
   if (header.renewalState && header.renewalState !== "current") {
+    const renewsOn = header.renewsOn
+      ? formatCivilDate(header.renewsOn)
+      : null;
+    const stateLabel = labelFor("renewal_state", header.renewalState);
     metaNodes.push({
       key: "renewal",
       node: (
         <StatusChip
           kind="renewal"
           value={header.renewalState}
+          label={`Renewal ${stateLabel.toLowerCase()}${renewsOn ? ` · ${renewsOn}` : ""}`}
           className="status-chip-xs"
         />
       ),
@@ -153,12 +174,14 @@ export function WorkspaceHeader({
             id: "note",
             label: "Add note",
             onSelect: () => onOpenModal({ type: "note" }),
+            disabled: !online,
           },
           {
             id: "end",
             label: "End coaching",
             onSelect: () => onOpenModal({ type: "end" }),
             destructive: true,
+            disabled: !online,
           },
         ]
       : []),
@@ -172,6 +195,11 @@ export function WorkspaceHeader({
         </p>
       ) : null}
       <div className="wsh-in">
+        <nav className="wsh-crumb" aria-label="Breadcrumb">
+          <Link to="/clients">Clients</Link>
+          <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span aria-current="page">{header.traineeDisplayName}</span>
+        </nav>
         <div className="wsh-r1">
           <span className="avatar workspace-avatar lg" aria-hidden="true">
             {initials}
@@ -234,12 +262,13 @@ export function WorkspaceHeader({
             {ended ? (
               <Button
                 variant="primary"
+                disabled={!online}
                 onClick={() => onOpenModal({ type: "reactivate" })}
               >
                 Reactivate coaching
               </Button>
             ) : primary ? (
-              <Button variant="primary" onClick={runPrimary}>
+              <Button variant="primary" disabled={!online} onClick={runPrimary}>
                 {primary.label}
               </Button>
             ) : null}

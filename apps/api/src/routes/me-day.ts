@@ -86,20 +86,48 @@ meDayRoutes.get(
           eq(mealAssignments.localDate, date),
         ),
       );
+    // Join compliance via assignment for this local date (loggedAt is an ISO
+    // instant, not a civil date — never filter loggedAt === date).
     const mealLogs = await db
-      .select()
+      .select({
+        compliance: mealCompliance,
+        assignment: mealAssignments,
+      })
       .from(mealCompliance)
+      .innerJoin(
+        mealAssignments,
+        eq(mealCompliance.assignmentId, mealAssignments.id),
+      )
       .where(
         and(
-          eq(mealCompliance.coachingRelationshipId, rel.id),
-          eq(mealCompliance.loggedAt, date),
+          eq(mealAssignments.coachingRelationshipId, rel.id),
+          eq(mealAssignments.localDate, date),
         ),
       );
     const workoutLogs = await db
-      .select()
+      .select({
+        execution: workoutExecutions,
+        assignment: workoutAssignments,
+      })
       .from(workoutExecutions)
-      .where(eq(workoutExecutions.coachingRelationshipId, rel.id));
-    const kcal = mealLogs.reduce((sum, row) => sum + (row.kcalScaled ?? 0), 0);
+      .innerJoin(
+        workoutAssignments,
+        eq(workoutExecutions.assignmentId, workoutAssignments.id),
+      )
+      .where(
+        and(
+          eq(workoutAssignments.coachingRelationshipId, rel.id),
+          eq(workoutAssignments.localDate, date),
+        ),
+      );
+    const kcal = mealLogs.reduce(
+      (sum, row) => sum + (row.compliance.kcalScaled ?? 0),
+      0,
+    );
+    const perMeal = mealLogs.map((row) => ({
+      slotKey: row.assignment.mealPrescriptionId,
+      kcalScaled: row.compliance.kcalScaled ?? 0,
+    }));
     return ok(
       c,
       dayResponseSchema.parse({
@@ -112,7 +140,7 @@ meDayRoutes.get(
           workouts: workoutLogs.length,
           meals: mealLogs.length,
         },
-        totals: { kcalScaled: kcal, perMeal: [] },
+        totals: { kcalScaled: kcal, perMeal },
       }),
     );
   },

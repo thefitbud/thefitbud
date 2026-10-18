@@ -371,6 +371,13 @@ export async function listRelationshipActivity(
   return pageActivity(items, input.limit);
 }
 
+const FUTURE_ACTIVITY_STATES = new Set([
+  "pending",
+  "scheduled",
+  "upcoming",
+  "due",
+]);
+
 async function loadRecentActivity(
   db: Db,
   relationshipId: string,
@@ -378,7 +385,7 @@ async function loadRecentActivity(
 ): Promise<WorkspaceActivityItem[]> {
   const shared = {
     relationshipId,
-    limit: RECENT_ACTIVITY_LIMIT,
+    limit: RECENT_ACTIVITY_LIMIT * 3,
     cursor: null,
     nowIso,
   };
@@ -387,7 +394,14 @@ async function loadRecentActivity(
     listRelationshipActivity(db, { ...shared, type: "meal" }),
     listRelationshipActivity(db, { ...shared, type: "checkin" }),
   ]);
+  const nowMs = Date.parse(nowIso);
   return [...workouts.items, ...meals.items, ...checkinItems.items]
+    .filter((item) => {
+      // Exclude future slots and purely scheduled/pending items.
+      if (Date.parse(item.occurredAt) > nowMs) return false;
+      if (FUTURE_ACTIVITY_STATES.has(item.state)) return false;
+      return true;
+    })
     .sort((left, right) => {
       if (left.localDate !== right.localDate) {
         return left.localDate < right.localDate ? 1 : -1;
@@ -507,6 +521,10 @@ async function loadLatestSubscription(
   });
 }
 
+function severityRank(severity: string): number {
+  return severity === "critical" ? 0 : 1;
+}
+
 async function loadOpenException(db: Db, relationshipId: string) {
   const rows = await db
     .select()
@@ -517,10 +535,17 @@ async function loadOpenException(db: Db, relationshipId: string) {
         inArray(exceptions.status, ["detected", "active"]),
       ),
     )
-    .orderBy(desc(exceptions.detectedAt), desc(exceptions.id))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
+    .orderBy(asc(exceptions.detectedAt), asc(exceptions.id));
+  if (rows.length === 0) return null;
+  const row = [...rows].sort((a, b) => {
+    const sev = severityRank(a.severity) - severityRank(b.severity);
+    if (sev !== 0) return sev;
+    // Oldest first within the same severity (matches Home triage).
+    if (a.detectedAt !== b.detectedAt) {
+      return a.detectedAt < b.detectedAt ? -1 : 1;
+    }
+    return a.id < b.id ? -1 : 1;
+  })[0]!;
   return activeExceptionSummarySchema.parse({
     id: row.id,
     type: row.type,
@@ -534,6 +559,27 @@ async function loadOpenException(db: Db, relationshipId: string) {
 }
 
 async function loadNextCheckin(db: Db, relationshipId: string, nowIso: string) {
+  // Prefer a submitted check-in awaiting review over the next scheduled draft.
+  const submitted = await db
+    .select({
+      checkin: checkins,
+      review: checkinReviews,
+    })
+    .from(checkins)
+    .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+    .where(
+      and(
+        eq(checkins.coachingRelationshipId, relationshipId),
+        eq(checkins.recordStatus, "submitted"),
+        isNull(checkinReviews.id),
+      ),
+    )
+    .orderBy(desc(checkins.submittedAt), desc(checkins.localDate))
+    .limit(1);
+  if (submitted[0]) {
+    return mapCheckin(submitted[0].checkin, null, nowIso);
+  }
+
   const rows = await db
     .select({
       checkin: checkins,
@@ -676,6 +722,8 @@ export async function loadClientWorkspace(
         : null,
       goalShort: configuration?.goalShort ?? null,
       renewalState: subscription?.renewalState ?? null,
+      renewsOn: subscription?.renewsOn ?? null,
+      startedAt: relationship.startedAt ?? null,
       adherenceState: adherence.get(relationship.id) ?? "not_available",
       traineeProfile: {
         displayName,

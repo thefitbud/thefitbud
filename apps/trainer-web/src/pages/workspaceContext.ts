@@ -11,4 +11,8 @@ export type WorkspaceOutletContext = {
   reloadWorkspace: () => void;
   openWorkspaceModal: (modal: WorkspaceModal) => void;
   relationshipId: string;
+  /** False when the browser is offline: mutating CTAs must be disabled. */
+  online: boolean;
+  /** Coaching ended: workspace is read-only except reactivation. */
+  ended: boolean;
 };

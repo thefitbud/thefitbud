@@ -208,9 +208,13 @@ export async function buildWeekReadModel(
       ),
     );
 
+  const nowMs = Date.parse(input.nowIso);
+
   let workoutsAssigned = 0;
   let workoutsCompleted = 0;
   for (const row of workouts) {
+    // Exclude future workout slots from "so far" counts.
+    if (Date.parse(row.assignment.windowStartsAt) > nowMs) continue;
     workoutsAssigned += 1;
     const status = deriveWorkoutAssignmentStatus({
       nowIso: input.nowIso,
@@ -225,6 +229,8 @@ export async function buildWeekReadModel(
   let mealsAssigned = 0;
   let mealsLogged = 0;
   for (const row of meals) {
+    // Exclude future meal slots from "Meals logged so far".
+    if (Date.parse(row.assignment.windowStartsAt) > nowMs) continue;
     mealsAssigned += 1;
     const status = deriveMealAssignmentStatus({
       nowIso: input.nowIso,
@@ -243,44 +249,81 @@ export async function buildWeekReadModel(
 
   const days = dates.map((date) => {
     const dayWorkouts = workouts.filter((w) => w.assignment.localDate === date);
-    const dayMeals = meals.filter((m) => m.assignment.localDate === date);
-    if (dayWorkouts.length === 0 && dayMeals.length === 0) {
-      return { date, state: "rest" as WeekDayState };
-    }
-    if (date > today) {
-      return { date, state: "future" as WeekDayState };
-    }
-    const woDone = dayWorkouts.filter((w) => {
-      const status = deriveWorkoutAssignmentStatus({
-        nowIso: input.nowIso,
-        windowEndsAt: w.assignment.windowEndsAt,
-        executionStatus: w.execution?.status ?? null,
-      });
-      return status === "completed" || status === "modified" || status === "skipped";
-    }).length;
-    const mealDone = dayMeals.filter((m) => {
+    const dayMeals = meals
+      .filter((m) => m.assignment.localDate === date)
+      .sort((a, b) =>
+        a.assignment.windowStartsAt < b.assignment.windowStartsAt ? -1 : 1,
+      );
+
+    const mealSlots = dayMeals.map((m) => {
       const status = deriveMealAssignmentStatus({
         nowIso: input.nowIso,
         windowEndsAt: m.assignment.windowEndsAt,
         complianceOutcome: m.compliance?.outcome ?? null,
         loggedAt: m.compliance?.loggedAt ?? null,
       });
-      return (
+      if (
         status === "confirmed" ||
         status === "modified" ||
-        status === "skipped" ||
-        status === "logged_later"
+        status === "logged_later" ||
+        status === "skipped"
+      ) {
+        return "logged" as const;
+      }
+      if (Date.parse(m.assignment.windowStartsAt) > nowMs) {
+        return date === today ? ("later" as const) : ("upcoming" as const);
+      }
+      if (date < today || Date.parse(m.assignment.windowEndsAt) < nowMs) {
+        return "missed" as const;
+      }
+      return "later" as const;
+    });
+
+    const mealsLoggedDay = mealSlots.filter((s) => s === "logged").length;
+    const mealsAssignedDay =
+      date > today
+        ? dayMeals.length
+        : dayMeals.filter((m) => Date.parse(m.assignment.windowStartsAt) <= nowMs)
+            .length;
+
+    let workoutLabel = "Rest";
+    let workoutState: WeekDayState = "rest";
+    if (dayWorkouts.length === 0) {
+      workoutState = date > today ? "future" : "rest";
+      workoutLabel = "Rest";
+    } else if (date > today) {
+      workoutState = "future";
+      workoutLabel = dayWorkouts[0]!.assignment.workoutDayName;
+    } else {
+      workoutLabel = dayWorkouts[0]!.assignment.workoutDayName;
+      const woStatuses = dayWorkouts.map((w) =>
+        deriveWorkoutAssignmentStatus({
+          nowIso: input.nowIso,
+          windowEndsAt: w.assignment.windowEndsAt,
+          executionStatus: w.execution?.status ?? null,
+        }),
       );
-    }).length;
-    const total = dayWorkouts.length + dayMeals.length;
-    const done = woDone + mealDone;
-    if (done === 0 && date < today) {
-      return { date, state: "missed" as WeekDayState };
+      const allDone = woStatuses.every(
+        (s) => s === "completed" || s === "modified" || s === "skipped",
+      );
+      const anyDone = woStatuses.some(
+        (s) => s === "completed" || s === "modified" || s === "skipped",
+      );
+      const allMissed = woStatuses.every((s) => s === "missed");
+      if (allDone) workoutState = "done";
+      else if (allMissed || (!anyDone && date < today)) workoutState = "missed";
+      else if (anyDone) workoutState = "partial";
+      else workoutState = date < today ? "missed" : "partial";
     }
-    if (done >= total) {
-      return { date, state: "done" as WeekDayState };
-    }
-    return { date, state: "partial" as WeekDayState };
+
+    return {
+      date,
+      state: workoutState,
+      workoutLabel,
+      mealsLogged: mealsLoggedDay,
+      mealsAssigned: mealsAssignedDay,
+      mealSlots,
+    };
   });
 
   const assigned = await loadAssignedTodayNutrition(

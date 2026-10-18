@@ -104,6 +104,10 @@ export const workspaceHeaderSchema = z.object({
   effectivePlan: workspaceEffectivePlanSummarySchema.nullable(),
   goalShort: z.string().max(120).nullable(),
   renewalState: renewalStateSchema.nullable(),
+  /** Subscription renewal date (civil) for the header renewal chip. */
+  renewsOn: localDateSchema.nullable().optional(),
+  /** Coaching relationship start (ISO instant) for "Week N". */
+  startedAt: isoDateTimeSchema.nullable().optional(),
   adherenceState: adherenceStateSchema,
   traineeProfile: workspaceTraineeProfileSchema,
   traineeTimezone: z.string().min(1).max(64),

@@ -105,8 +105,10 @@ subscriptionRoutes.get(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
     const current = await latestSubscription(db, relationshipId);
+    // New clients have no subscription yet — return 200 null so Configure
+    // does not log a console 404 (TW-C).
     if (!current) {
-      return fail(c, 404, "SUBSCRIPTION_NOT_FOUND", "Subscription not found.");
+      return ok(c, null);
     }
     const today = await trainerToday(db, relationship.trainerUserId);
     return ok(

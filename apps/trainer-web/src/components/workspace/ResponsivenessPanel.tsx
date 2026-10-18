@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ResponsivenessResponse } from "@fitbud/contracts";
+import { formatHhMmTime } from "@fitbud/core";
 import { stage1Api } from "../../lib/stage1-api";
 import { LoadingBlock } from "../StatePanels";
 
@@ -14,6 +15,29 @@ const LABEL_COPY: Record<
   notifications_off: "Notifications off",
   not_enough_data: "Not enough data yet",
 };
+
+export function quietHoursText(
+  data: Pick<ResponsivenessResponse, "quietHoursStart" | "quietHoursEnd">,
+): string | null {
+  if (!data.quietHoursStart || !data.quietHoursEnd) return null;
+  return `${formatHhMmTime(data.quietHoursStart)} – ${formatHhMmTime(data.quietHoursEnd)}`;
+}
+
+function compactHeadline(data: ResponsivenessResponse): string {
+  const { sent, opened } = data.counts;
+  switch (data.label) {
+    case "responds":
+      return `Responds to ${opened} of ${sent} reminders`;
+    case "often_misses":
+      return `Often misses reminders · ${opened} of ${sent} opened`;
+    case "not_enough_data":
+      return sent > 0
+        ? `Not enough data yet · ${sent} sent`
+        : LABEL_COPY.not_enough_data;
+    default:
+      return LABEL_COPY[data.label];
+  }
+}
 
 export function ResponsivenessPanel({
   relationshipId,
@@ -48,16 +72,24 @@ export function ResponsivenessPanel({
   if (!data) return <LoadingBlock label="Loading reminder responsiveness…" />;
 
   const summary = LABEL_COPY[data.label];
-  const detail = `${data.counts.opened} of ${data.counts.sent} reminders opened this week`;
+
+  const quiet = quietHoursText(data);
+  const subParts = [
+    "Last 14 days",
+    data.pushEnabled === undefined
+      ? null
+      : data.pushEnabled
+        ? "push on"
+        : "push off",
+    quiet ? `quiet hours ${quiet}` : null,
+  ].filter(Boolean);
 
   if (compact) {
     return (
-      <p className="responsiveness-line">
-        <strong>{summary}</strong>
-        {data.label === "responds" || data.label === "often_misses" ? (
-          <span className="muted"> · {detail}</span>
-        ) : null}
-      </p>
+      <div className="responsiveness-line">
+        <div className="ov-big">{compactHeadline(data)}</div>
+        <div className="ov-sub">{subParts.join(" · ")}</div>
+      </div>
     );
   }
 
@@ -65,6 +97,7 @@ export function ResponsivenessPanel({
     <div className="responsiveness-panel">
       <h3>Reminder responsiveness</h3>
       <p>{summary}</p>
+      <p className="muted">{subParts.join(" · ")}</p>
       <dl className="detail-list compact">
         <div>
           <dt>Sent</dt>

@@ -9,6 +9,7 @@ import {
   coachingRelationships,
   deviceTokens,
   mealCompliance,
+  notificationPreferences,
   notifications,
   reminderStates,
   traineeProfiles,
@@ -16,6 +17,39 @@ import {
 } from "../db/schema.js";
 
 export async function deriveResponsiveness(
+  db: Db,
+  input: {
+    relationshipId: string;
+    days: number;
+    nowIso: string;
+  },
+): Promise<ResponsivenessResponse> {
+  const base = await deriveResponsivenessLabel(db, input);
+  const [relationship] = await db
+    .select({ traineeUserId: coachingRelationships.traineeUserId })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, input.relationshipId))
+    .limit(1);
+  if (!relationship) return base;
+  const [prefs] = await db
+    .select({
+      pushEnabled: notificationPreferences.pushEnabled,
+      quietHoursStart: notificationPreferences.quietHoursStart,
+      quietHoursEnd: notificationPreferences.quietHoursEnd,
+    })
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, relationship.traineeUserId))
+    .limit(1);
+  if (!prefs) return base;
+  return {
+    ...base,
+    pushEnabled: prefs.pushEnabled,
+    quietHoursStart: prefs.quietHoursStart ?? null,
+    quietHoursEnd: prefs.quietHoursEnd ?? null,
+  };
+}
+
+async function deriveResponsivenessLabel(
   db: Db,
   input: {
     relationshipId: string;

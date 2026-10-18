@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatTimeDiff } from "@fitbud/core";
+import { formatClockTime, formatTimeDiff } from "@fitbud/core";
 
 export function TimezoneBadge({
   traineeName,
@@ -20,11 +20,7 @@ export function TimezoneBadge({
   const diff = formatTimeDiff(trainerTimezone, traineeTimezone, now);
   if (!diff || diff.toLowerCase().includes("same")) return null;
 
-  const localTime = new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: traineeTimezone,
-  }).format(now);
+  const localTime = formatClockTime(now, traineeTimezone);
 
   const first = traineeName.split(" ")[0] ?? traineeName;
 

@@ -32,6 +32,7 @@ import {
 import { Button } from "../components/Button";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
+import { quietHoursText } from "../components/workspace/ResponsivenessPanel";
 import { apiClient } from "../lib/api";
 import { useConfig, isWhatsAppAutomationEnabled } from "../lib/config";
 import { createIdempotencyKey } from "../lib/idempotency";
@@ -144,7 +145,7 @@ function AccordionSection({
 
 export function ConfigureCoachingPage() {
   const { relationshipId = "" } = useParams();
-  const { workspace, reloadWorkspace } =
+  const { workspace, reloadWorkspace, online = true } =
     useOutletContext<WorkspaceOutletContext>();
   const { config } = useConfig();
   const waAutomationOn = isWhatsAppAutomationEnabled(config);
@@ -186,6 +187,7 @@ export function ConfigureCoachingPage() {
   const [reminderSaving, setReminderSaving] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [notificationsOff, setNotificationsOff] = useState(false);
+  const [quietHours, setQuietHours] = useState<string | null>(null);
 
   const applyConfiguration = useCallback((config: CoachingConfiguration) => {
     setConfiguration(config);
@@ -313,7 +315,11 @@ export function ConfigureCoachingPage() {
 
       setNotificationsOff(
         responsivenessResult.ok &&
-          responsivenessResult.value.label === "notifications_off",
+          (responsivenessResult.value.label === "notifications_off" ||
+            responsivenessResult.value.pushEnabled === false),
+      );
+      setQuietHours(
+        responsivenessResult.ok ? quietHoursText(responsivenessResult.value) : null,
       );
     } catch (err) {
       setError(
@@ -338,6 +344,7 @@ export function ConfigureCoachingPage() {
     (header?.onboardingStatus === "coaching_ready" ||
       header?.onboardingStatus === "active");
   const readOnly = !canEdit;
+  const mutationsBlocked = !online || relationshipEnded;
 
   const configurationMatchesForm =
     configuration != null &&
@@ -431,6 +438,7 @@ export function ConfigureCoachingPage() {
 
   async function onAcknowledgeDifference() {
     if (
+      mutationsBlocked ||
       !effectivePlan ||
       !configurationMatchesForm ||
       consistencyWarnings.length === 0
@@ -463,7 +471,7 @@ export function ConfigureCoachingPage() {
 
   async function saveDraft(event?: FormEvent) {
     event?.preventDefault();
-    if (!relationshipId || readOnly) return;
+    if (!relationshipId || readOnly || !online) return;
     setActing(true);
     setError(null);
     setMessage(null);
@@ -516,7 +524,7 @@ export function ConfigureCoachingPage() {
   }
 
   async function activate() {
-    if (!relationshipId || !configuration) return;
+    if (!relationshipId || !configuration || mutationsBlocked) return;
     setActing(true);
     setError(null);
     setMessage(null);
@@ -605,7 +613,7 @@ export function ConfigureCoachingPage() {
   }
 
   async function createNewVersion() {
-    if (!relationshipId || !configuration) return;
+    if (!relationshipId || !configuration || mutationsBlocked) return;
     setActing(true);
     setError(null);
     setMessage(null);
@@ -632,7 +640,7 @@ export function ConfigureCoachingPage() {
   }
 
   async function saveSubscriptionFields() {
-    if (!relationshipId || header?.onboardingStatus === "ended") return;
+    if (!relationshipId || mutationsBlocked) return;
     setActing(true);
     setSubscriptionError(null);
     try {
@@ -662,7 +670,7 @@ export function ConfigureCoachingPage() {
   }
 
   async function toggleReminder(type: ReminderType, enabled: boolean) {
-    if (!relationshipId || header?.onboardingStatus === "ended") return;
+    if (!relationshipId || mutationsBlocked) return;
     const previous = reminders[type];
     setReminders((current) => ({ ...current, [type]: enabled }));
     setReminderSaving(type);
@@ -725,7 +733,7 @@ export function ConfigureCoachingPage() {
         onClick: () => {
           void createNewVersion();
         },
-        disabled: acting || header?.onboardingStatus === "ended",
+        disabled: acting || mutationsBlocked,
       };
     }
     if (status === "configured") {
@@ -734,7 +742,7 @@ export function ConfigureCoachingPage() {
         onClick: () => {
           void activate();
         },
-        disabled: acting || header?.onboardingStatus === "ended",
+        disabled: acting || mutationsBlocked,
       };
     }
     return {
@@ -744,7 +752,7 @@ export function ConfigureCoachingPage() {
       },
       disabled:
         acting ||
-        header?.onboardingStatus === "ended" ||
+        mutationsBlocked ||
         (header?.onboardingStatus !== "coaching_ready" &&
           header?.onboardingStatus !== "active"),
     };
@@ -775,6 +783,7 @@ export function ConfigureCoachingPage() {
   }
 
   const fieldsDisabled = acting || !canEdit;
+  const subscriptionDisabled = acting || relationshipEnded;
 
   return (
     <div
@@ -1034,6 +1043,9 @@ export function ConfigureCoachingPage() {
               <span>Body weight</span>
               <input
                 type="checkbox"
+                role="switch"
+                className="configure-switch-input"
+                aria-checked={form.requireBodyWeight}
                 checked={form.requireBodyWeight}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -1047,6 +1059,9 @@ export function ConfigureCoachingPage() {
               <span>Progress photos</span>
               <input
                 type="checkbox"
+                role="switch"
+                className="configure-switch-input"
+                aria-checked={form.requireProgressPhotos}
                 checked={form.requireProgressPhotos}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -1060,6 +1075,9 @@ export function ConfigureCoachingPage() {
               <span>Session RPE</span>
               <input
                 type="checkbox"
+                role="switch"
+                className="configure-switch-input"
+                aria-checked={form.requireSessionRpe}
                 checked={form.requireSessionRpe}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -1079,13 +1097,16 @@ export function ConfigureCoachingPage() {
         >
           <fieldset
             className="configure-switch-list"
-            disabled={header?.onboardingStatus === "ended"}
+            disabled={mutationsBlocked}
           >
             {REMINDER_CATEGORIES.map((category) => (
               <label key={category.type} className="configure-switch">
                 <span>{category.label}</span>
                 <input
                   type="checkbox"
+                  role="switch"
+                  className="configure-switch-input"
+                  aria-checked={Boolean(reminders[category.type])}
                   checked={Boolean(reminders[category.type])}
                   disabled={reminderSaving === category.type}
                   onChange={(event) => {
@@ -1098,7 +1119,8 @@ export function ConfigureCoachingPage() {
           <p className="configure-reminder-note">
             FitBud times reminders around {firstName}&apos;s meal times and
             workout time, only when something isn&apos;t logged, and never in{" "}
-            {pronoun} quiet hours (10:00 pm – 7:00 am). {firstName} controls{" "}
+            {pronoun} quiet hours{quietHours ? ` (${quietHours})` : ""}.{" "}
+            {firstName} controls{" "}
             {pronoun} own notification settings and can adjust {pronoun} meal
             times.
             {header?.hasCustomMealTimes
@@ -1150,7 +1172,7 @@ export function ConfigureCoachingPage() {
                 name="planName"
                 maxLength={120}
                 value={subscriptionForm.planName}
-                disabled={acting || header?.onboardingStatus === "ended"}
+                disabled={subscriptionDisabled}
                 onChange={(event) =>
                   setSubscriptionForm((current) => ({
                     ...current,
@@ -1164,7 +1186,7 @@ export function ConfigureCoachingPage() {
               <select
                 name="paymentFrequency"
                 value={subscriptionForm.paymentFrequency}
-                disabled={acting || header?.onboardingStatus === "ended"}
+                disabled={subscriptionDisabled}
                 onChange={(event) =>
                   setSubscriptionForm((current) => ({
                     ...current,
@@ -1186,7 +1208,7 @@ export function ConfigureCoachingPage() {
                 type="date"
                 name="startsOn"
                 value={subscriptionForm.startsOn}
-                disabled={acting || header?.onboardingStatus === "ended"}
+                disabled={subscriptionDisabled}
                 onChange={(event) =>
                   setSubscriptionForm((current) => ({
                     ...current,
@@ -1201,7 +1223,7 @@ export function ConfigureCoachingPage() {
                 type="date"
                 name="renewsOn"
                 value={subscriptionForm.renewsOn}
-                disabled={acting || header?.onboardingStatus === "ended"}
+                disabled={subscriptionDisabled}
                 onChange={(event) =>
                   setSubscriptionForm((current) => ({
                     ...current,
@@ -1215,11 +1237,11 @@ export function ConfigureCoachingPage() {
                 {subscriptionError}
               </p>
             ) : null}
-            {header?.onboardingStatus !== "ended" ? (
+            {!relationshipEnded ? (
               <Button
                 type="button"
                 variant="secondary"
-                disabled={acting}
+                disabled={acting || !online}
                 onClick={() => {
                   void saveSubscriptionFields();
                 }}
@@ -1235,9 +1257,9 @@ export function ConfigureCoachingPage() {
           acknowledged={
             acknowledgedFingerprint === consistencyFingerprintValue
           }
-          acting={acting}
+          acting={acting || mutationsBlocked}
           onAcknowledge={
-            configurationMatchesForm
+            configurationMatchesForm || mutationsBlocked
               ? () => {
                   void onAcknowledgeDifference();
                 }
@@ -1245,7 +1267,7 @@ export function ConfigureCoachingPage() {
           }
           planTo={`/clients/${relationshipId}/plan`}
           configureTo={`/clients/${relationshipId}/configure`}
-          showPlanLink
+          showPlanLink={!relationshipEnded}
           showConfigureLink={false}
         />
 
@@ -1273,7 +1295,7 @@ export function ConfigureCoachingPage() {
           {status === "draft" && form.goalShort.trim() && canEdit ? (
             <Button
               variant="secondary"
-              disabled={acting}
+              disabled={acting || mutationsBlocked}
               onClick={() => {
                 void (async () => {
                   if (!configuration) {

@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, Outlet, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ClientWorkspace } from "@fitbud/contracts";
-import { ForbiddenState } from "../components/StatePanels";
+import {
+  ErrorState,
+  ForbiddenState,
+  errorKindFromFailure,
+  type ErrorKind,
+} from "../components/StatePanels";
+import { useOnlineStatus } from "../components/OfflineBanner";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader";
 import {
   WorkspaceModals,
@@ -18,7 +24,13 @@ export function ClientWorkspaceLayout() {
   const [workspace, setWorkspace] = useState<ClientWorkspace | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceErrorRequestId, setWorkspaceErrorRequestId] = useState<
+    string | null
+  >(null);
+  const [workspaceErrorKind, setWorkspaceErrorKind] =
+    useState<ErrorKind>("server");
   const [notFound, setNotFound] = useState(false);
+  const online = useOnlineStatus();
   const [forbidden, setForbidden] = useState(false);
   const [submittedCheckins, setSubmittedCheckins] = useState(0);
   const [modal, setModal] = useState<WorkspaceModal>(null);
@@ -35,6 +47,7 @@ export function ClientWorkspaceLayout() {
     setWorkspace(null);
     setWorkspaceLoading(true);
     setWorkspaceError(null);
+    setWorkspaceErrorRequestId(null);
     setNotFound(false);
     setForbidden(false);
 
@@ -63,11 +76,17 @@ export function ClientWorkspaceLayout() {
           setNotFound(true);
           setWorkspaceError(null);
         } else {
-          setWorkspaceError(
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load this client.",
+          const apiError = err instanceof ApiClientError ? err : null;
+          setWorkspaceError(apiError?.message ?? "Could not load this client.");
+          setWorkspaceErrorKind(
+            errorKindFromFailure({
+              status: apiError?.status,
+              code: apiError?.code,
+              message: err instanceof Error ? err.message : undefined,
+            }),
           );
+          const rid = apiError?.requestId;
+          setWorkspaceErrorRequestId(rid && rid !== "unknown" ? rid : null);
         }
       } finally {
         if (!cancelled) setWorkspaceLoading(false);
@@ -112,17 +131,20 @@ export function ClientWorkspaceLayout() {
 
   if (!workspace) {
     return (
-      <section className="page workspace-shell">
-        <p className="form-error" role="alert">
-          {workspaceError ?? "Could not load this client."}
-        </p>
-        <button type="button" className="button-secondary" onClick={reloadWorkspace}>
-          Try again
-        </button>
+      <section className="page workspace-shell" data-testid="screen-TW-33">
+        <ErrorState
+          kind={workspaceErrorKind}
+          title="We couldn't load this client"
+          message={workspaceError ?? undefined}
+          requestId={workspaceErrorRequestId}
+          onRetry={reloadWorkspace}
+          screenId="TW-09"
+        />
       </section>
     );
   }
 
+  const ended = workspace.header.onboardingStatus === "ended";
   const outletContext: WorkspaceOutletContext = {
     workspace,
     workspaceLoading,
@@ -132,22 +154,24 @@ export function ClientWorkspaceLayout() {
     reloadWorkspace,
     openWorkspaceModal: setModal,
     relationshipId,
+    online,
+    ended,
   };
 
   return (
     <section className="page workspace-shell">
-      <Link className="workspace-back" to="/clients">← Clients</Link>
       <WorkspaceHeader
         workspace={workspace}
         relationshipId={relationshipId}
         submittedCheckinCount={submittedCheckins}
         onOpenModal={setModal}
+        online={online}
       />
       <Outlet context={outletContext} />
       <WorkspaceModals
         relationshipId={relationshipId}
         traineeName={workspace.header.traineeDisplayName}
-        ended={workspace.header.onboardingStatus === "ended"}
+        ended={ended}
         modal={modal}
         onClose={() => setModal(null)}
         onChanged={reloadWorkspace}

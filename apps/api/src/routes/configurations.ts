@@ -295,13 +295,10 @@ configurationRoutes.get(
     }
 
     const bundle = await loadConfigurationBundle(db, relationshipId);
+    // New clients have no configuration yet — return 200 null so Configure
+    // does not log a console 404 (TW-C).
     if (!bundle) {
-      return fail(
-        c,
-        404,
-        "CONFIGURATION_NOT_FOUND",
-        "Coaching configuration not found.",
-      );
+      return ok(c, null);
     }
 
     return ok(c, parseMappedConfiguration(bundle));

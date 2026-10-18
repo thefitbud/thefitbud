@@ -9,11 +9,12 @@ import {
   formatRelative,
   labelFor,
 } from "@fitbud/core";
-import { AlertOctagon, AlertTriangle } from "lucide-react";
+import { AlertOctagon, AlertTriangle, Check, X } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
+import { ErrorState } from "../components/StatePanels";
 import { MeasurementTrend } from "../components/MeasurementTrend";
 import { StatusChip } from "../components/StatusChip";
 import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel";
@@ -59,6 +60,40 @@ function weekdayLabel(date: string, today: string): string {
 
 function dayNum(date: string): number {
   return civilParts(date).d;
+}
+
+type WeekDayView = WeekReadModel["days"][number];
+
+function workoutCircleState(
+  day: WeekDayView,
+  today: string | undefined,
+): "done" | "missed" | "rest" | "future" {
+  if (day.state === "done") return "done";
+  if (day.state === "missed") return "missed";
+  if (day.state === "future") return "future";
+  if (day.state === "partial") return day.date === today ? "future" : "rest";
+  return "rest";
+}
+
+function mealSlotsFor(day: WeekDayView) {
+  if (day.mealSlots) return day.mealSlots;
+  const assigned = day.mealsAssigned ?? 0;
+  const logged = day.mealsLogged ?? 0;
+  return Array.from({ length: assigned }, (_, i) =>
+    i < logged ? ("logged" as const) : ("missed" as const),
+  );
+}
+
+function mealCountLabel(day: WeekDayView, isToday: boolean): string | null {
+  const assigned = day.mealsAssigned ?? mealSlotsFor(day).length;
+  if (assigned === 0) return null;
+  const slots = mealSlotsFor(day);
+  if (slots.length > 0 && slots.every((slot) => slot === "upcoming")) {
+    return `${slots.length} planned`;
+  }
+  const logged = day.mealsLogged ?? slots.filter((slot) => slot === "logged").length;
+  const suffix = isToday && slots.some((slot) => slot === "later") ? " so far" : "";
+  return `${logged} of ${assigned}${suffix}`;
 }
 
 function MiniRing({
@@ -116,7 +151,7 @@ export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const drawerId = params.get("exception");
-  const { workspace, openWorkspaceModal, refreshEpoch } =
+  const { workspace, openWorkspaceModal, refreshEpoch, online = true } =
     useOutletContext<WorkspaceOutletContext>();
   const { me } = useAuth();
   const viewerTz = me?.timezone ?? "Asia/Kolkata";
@@ -126,13 +161,28 @@ export function ClientOverviewPage() {
 
   const [noteBusyId, setNoteBusyId] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const [notesLoadError, setNotesLoadError] = useState<{
+    message: string;
+    requestId: string | null;
+  } | null>(null);
 
   const loadNotes = useCallback(() => {
     if (!relationshipId) return;
     void apiClient
       .listTrainerNotes(relationshipId)
-      .then((res) => setNotes(res.items.slice(0, 3)))
-      .catch(() => setNotes([]));
+      .then((res) => {
+        setNotesLoadError(null);
+        setNotes(res.items.slice(0, 3));
+      })
+      .catch((err: unknown) => {
+        setNotes([]);
+        const apiError = err instanceof ApiClientError ? err : null;
+        const rid = apiError?.requestId;
+        setNotesLoadError({
+          message: apiError?.message ?? "Could not load notes.",
+          requestId: rid && rid !== "unknown" ? rid : null,
+        });
+      });
   }, [relationshipId]);
 
   async function makeNotePrivate(note: TrainerNote) {
@@ -195,7 +245,9 @@ export function ClientOverviewPage() {
 
   const { header, overview, plan } = workspace;
   const version = plan.version;
+  const ended = header.onboardingStatus === "ended";
   const coachingReady =
+    ended ||
     header.onboardingStatus === "active" ||
     header.onboardingStatus === "coaching_ready";
   const firstName = header.traineeDisplayName.split(" ")[0] ?? "Client";
@@ -223,12 +275,30 @@ export function ClientOverviewPage() {
   const nutrition = week?.todayNutrition;
   const todayDate = nutrition?.date ?? week?.days.find(() => true)?.date;
   const weekEnd = week?.days[week.days.length - 1]?.date;
+  const configured = workspace.configuration.configuration;
+  const sessionsPerWeek =
+    configured?.workout.sessionsPerWeek ?? plan.version?.content.workoutDays.length;
+  const mealsPerDay =
+    configured?.nutrition.mealsPerDay ??
+    plan.version?.content.mealPrescriptions.length;
+  const planWorkoutsLabel =
+    sessionsPerWeek != null && sessionsPerWeek > 0
+      ? `${sessionsPerWeek} a week`
+      : null;
+  const planMealsLabel =
+    mealsPerDay != null && mealsPerDay > 0
+      ? `${mealsPerDay} a day${
+          nutrition?.assigned?.kcal
+            ? ` · ${formatKcal(nutrition.assigned.kcal)}`
+            : ""
+        }`
+      : null;
 
   return (
     <div className="overview-grid" data-testid="screen-TW-09">
       <div className="overview-main">
         {openEx ? (
-          <section className="ov-card ov-attention">
+          <section className="ov-card ov-attention" data-testid="ov-attention">
             <div className="ov-card-h">
               <h2 className="t-h3">Needs attention</h2>
               <span className="t-cap muted">Most severe open item</span>
@@ -258,12 +328,15 @@ export function ClientOverviewPage() {
                 </span>
               </div>
               <StatusChip kind="severity" value={openEx.severity} />
-              <Button
-                variant="tinted"
-                onClick={() => setParams({ exception: openEx.id })}
-              >
-                Review
-              </Button>
+              {ended ? null : (
+                <Button
+                  variant="tinted"
+                  disabled={!online}
+                  onClick={() => setParams({ exception: openEx.id })}
+                >
+                  Review
+                </Button>
+              )}
             </div>
           </section>
         ) : null}
@@ -279,28 +352,69 @@ export function ClientOverviewPage() {
                 </div>
               ) : null}
             </div>
+            <div className="ov-legend" aria-label="Legend">
+              <span>
+                <i className="is-workout-done" />
+                Workout done
+              </span>
+              <span>
+                <i className="is-workout-missed" />
+                Missed
+              </span>
+              <span>
+                <i className="is-meal-logged" />
+                Meal logged
+              </span>
+              <span>
+                <i className="is-meal-no" />
+                Not logged
+              </span>
+            </div>
           </div>
           {week ? (
             <>
               <div className="ov-week" role="list" aria-label="Week consistency">
-                {week.days.map((day) => (
-                  <div
-                    key={day.date}
-                    className={`ov-day${todayDate === day.date ? " is-today" : ""}`}
-                    role="listitem"
-                  >
-                    <div className="ov-dn">
-                      {weekdayLabel(day.date, todayDate ?? "")}
-                    </div>
-                    <div className="ov-dd">{dayNum(day.date)}</div>
+                {week.days.map((day) => {
+                  const isToday = todayDate === day.date;
+                  const circle = workoutCircleState(day, todayDate);
+                  const slots = mealSlotsFor(day);
+                  const countLabel = mealCountLabel(day, isToday);
+                  const label = day.workoutLabel ?? "Rest";
+                  const isRestLabel = circle === "rest" || label === "Rest";
+                  return (
                     <div
-                      className={`ov-wk is-${day.state}`}
-                      role="img"
-                      title={labelFor("week_day_state", day.state)}
-                      aria-label={labelFor("week_day_state", day.state)}
-                    />
-                  </div>
-                ))}
+                      key={day.date}
+                      className={`ov-day${isToday ? " is-today" : ""}`}
+                      role="listitem"
+                    >
+                      <div className="ov-dn">
+                        {weekdayLabel(day.date, todayDate ?? "")}
+                      </div>
+                      <div className="ov-dd">{dayNum(day.date)}</div>
+                      <div
+                        className={`ov-wk is-${circle}`}
+                        role="img"
+                        title={labelFor("week_day_state", day.state)}
+                        aria-label={`Workout: ${labelFor("week_day_state", day.state)}`}
+                      >
+                        {circle === "done" ? (
+                          <Check size={16} strokeWidth={2.25} aria-hidden="true" />
+                        ) : circle === "missed" ? (
+                          <X size={16} strokeWidth={2.25} aria-hidden="true" />
+                        ) : null}
+                      </div>
+                      <div className={`ov-wl${isRestLabel ? " is-muted" : ""}`}>
+                        {label}
+                      </div>
+                      <div className="ov-meals" aria-hidden="true">
+                        {slots.map((slot, index) => (
+                          <i key={index} className={`is-${slot}`} />
+                        ))}
+                      </div>
+                      <div className="ov-ml">{countLabel ?? "\u00a0"}</div>
+                    </div>
+                  );
+                })}
               </div>
               <div className="ov-stats">
                 <div className="ov-stat">
@@ -512,6 +626,18 @@ export function ClientOverviewPage() {
             {header.hasCustomMealTimes ? (
               <div className="ov-sub">Custom meal times</div>
             ) : null}
+            {planWorkoutsLabel ? (
+              <div className="ov-kv">
+                <span>Workouts</span>
+                <b>{planWorkoutsLabel}</b>
+              </div>
+            ) : null}
+            {planMealsLabel ? (
+              <div className="ov-kv">
+                <span>Meals</span>
+                <b>{planMealsLabel}</b>
+              </div>
+            ) : null}
           </section>
         ) : (
           <section className="ov-card ov-side">
@@ -519,13 +645,15 @@ export function ClientOverviewPage() {
               <h3>Plan</h3>
             </div>
             <div className="ov-big">No plan yet</div>
-            <Link
-              className="button-primary"
-              to={`/clients/${relationshipId}/plan`}
-              style={{ marginTop: 12, display: "inline-flex" }}
-            >
-              Set up plan
-            </Link>
+            {ended ? null : (
+              <Link
+                className="button-primary"
+                to={`/clients/${relationshipId}/plan`}
+                style={{ marginTop: 12, display: "inline-flex" }}
+              >
+                Set up plan
+              </Link>
+            )}
           </section>
         )}
 
@@ -534,7 +662,7 @@ export function ClientOverviewPage() {
             <h3>Reminders</h3>
             <button
               type="button"
-              className="text-link"
+              className="button-secondary button-compact"
               onClick={() => openWorkspaceModal({ type: "responsiveness" })}
             >
               Details
@@ -591,10 +719,11 @@ export function ClientOverviewPage() {
         <section className="ov-card ov-side">
           <div className="ov-side-h">
             <h3>Coach notes</h3>
-            {header.onboardingStatus !== "ended" ? (
+            {!ended ? (
               <button
                 type="button"
                 className="text-link"
+                disabled={!online}
                 onClick={() => openWorkspaceModal({ type: "note" })}
               >
                 Add note
@@ -606,7 +735,16 @@ export function ClientOverviewPage() {
               {noteError}
             </p>
           ) : null}
-          {notes.length === 0 ? (
+          {notesLoadError ? (
+            <ErrorState
+              kind="server"
+              title="We couldn't load notes"
+              message={notesLoadError.message}
+              requestId={notesLoadError.requestId}
+              onRetry={loadNotes}
+              screenId="TW-09"
+            />
+          ) : notes.length === 0 ? (
             <p className="muted">No notes yet</p>
           ) : (
             <ul className="ov-notes">
@@ -623,12 +761,12 @@ export function ClientOverviewPage() {
                       {formatRelative(note.createdAt)}
                     </time>
                   </div>
-                  {header.onboardingStatus !== "ended" ? (
+                  {!ended ? (
                     <div className="ov-note-actions">
                       <button
                         type="button"
                         className="text-link"
-                        disabled={noteBusyId === note.id}
+                        disabled={!online || noteBusyId === note.id}
                         onClick={() => openWorkspaceModal({ type: "note", note })}
                       >
                         Edit
@@ -637,7 +775,7 @@ export function ClientOverviewPage() {
                         <button
                           type="button"
                           className="text-link"
-                          disabled={noteBusyId === note.id}
+                          disabled={!online || noteBusyId === note.id}
                           onClick={() => void makeNotePrivate(note)}
                         >
                           Make private
@@ -646,7 +784,7 @@ export function ClientOverviewPage() {
                       <button
                         type="button"
                         className="text-link"
-                        disabled={noteBusyId === note.id}
+                        disabled={!online || noteBusyId === note.id}
                         onClick={() => void deleteNote(note)}
                       >
                         Delete

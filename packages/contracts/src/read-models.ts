@@ -47,6 +47,27 @@ export const weekTodayNutritionSchema = z.object({
 });
 export type WeekTodayNutrition = z.infer<typeof weekTodayNutritionSchema>;
 
+export const weekMealSlotStateSchema = z.enum([
+  "logged",
+  "missed",
+  "later",
+  "upcoming",
+]);
+export type WeekMealSlotState = z.infer<typeof weekMealSlotStateSchema>;
+
+export const weekDaySchema = z.object({
+  date: localDateSchema,
+  /** Workout-day rollup: done / missed / rest / future / partial. */
+  state: weekDayStateSchema,
+  /** Short workout label ("Upper A") or "Rest". */
+  workoutLabel: z.string().optional(),
+  mealsLogged: z.number().int().nonnegative().optional(),
+  mealsAssigned: z.number().int().nonnegative().optional(),
+  /** Per-slot meal dots for the day strip. */
+  mealSlots: z.array(weekMealSlotStateSchema).optional(),
+});
+export type WeekDay = z.infer<typeof weekDaySchema>;
+
 export const weekReadModelSchema = z.object({
   start: localDateSchema,
   workouts: z.object({
@@ -57,12 +78,7 @@ export const weekReadModelSchema = z.object({
     assigned: z.number().int().nonnegative(),
     logged: z.number().int().nonnegative(),
   }),
-  days: z.array(
-    z.object({
-      date: localDateSchema,
-      state: weekDayStateSchema,
-    }),
-  ),
+  days: z.array(weekDaySchema),
   todayNutrition: weekTodayNutritionSchema,
 });
 export type WeekReadModel = z.infer<typeof weekReadModelSchema>;
@@ -127,6 +143,11 @@ export const responsivenessResponseSchema = z.object({
     loggedAfter: z.number().int().nonnegative(),
     loggedBefore: z.number().int().nonnegative(),
   }),
+  /** Client push preference (notification_preferences). */
+  pushEnabled: z.boolean().optional(),
+  /** Client quiet hours (HH:mm) when set. */
+  quietHoursStart: z.string().nullable().optional(),
+  quietHoursEnd: z.string().nullable().optional(),
 });
 export type ResponsivenessResponse = z.infer<typeof responsivenessResponseSchema>;
 
