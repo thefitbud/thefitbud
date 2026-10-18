@@ -19,6 +19,14 @@ describe("formatCivilDate", () => {
       "Wed 15 Oct 2025",
     );
   });
+
+  it("accepts ISO datetimes by taking the YYYY-MM-DD prefix", () => {
+    expect(
+      formatCivilDate("2026-09-22T00:00:00.000Z", {
+        now: new Date("2026-10-18T00:00:00Z"),
+      }),
+    ).toBe("Tue 22 Sep");
+  });
 });
 
 describe("formatClockTime", () => {

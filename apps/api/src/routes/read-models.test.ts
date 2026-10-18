@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { formatLocalDate } from "@fitbud/core";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
@@ -170,7 +171,179 @@ describe("read models", () => {
     );
     expect(response.status).toBe(200);
     expect(queryCounter.count).toBeLessThanOrEqual(10);
-    const body = (await response.json()) as { data: { days: unknown[] } };
+    const body = (await response.json()) as {
+      data: {
+        days: unknown[];
+        todayNutrition: {
+          date: string;
+          logged: {
+            kcal: number;
+            proteinG: number;
+            carbsG: number;
+            fatG: number;
+            hasUnknown?: boolean;
+          };
+          assigned: {
+            kcal: number;
+            proteinG: number;
+            carbsG: number;
+            fatG: number;
+          } | null;
+        };
+      };
+    };
     expect(body.data.days).toHaveLength(7);
+    expect(body.data.todayNutrition.date).toBe(today);
+    expect(body.data.todayNutrition.logged).toEqual({
+      kcal: 0,
+      proteinG: 0,
+      carbsG: 0,
+      fatG: 0,
+    });
+    expect(body.data.todayNutrition.assigned).toBeNull();
+  });
+
+  it("includes todayNutrition logged and assigned macros without percent", async () => {
+    const ctx = await reachCoachingReady("week-nutrition");
+    const today = formatLocalDate(new Date(), "Asia/Kolkata");
+    const now = nowIso();
+    const planId = createId();
+    const versionId = createId();
+    const assignmentId = createId();
+    const mealId = createId();
+    const foodId = createId();
+
+    const mealPrescription = {
+      id: mealId,
+      order: 1,
+      name: "Lunch",
+      mealType: "lunch",
+      applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      localTime: "13:00",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [
+        {
+          snapshotKind: "legacy" as const,
+          name: "Dal",
+          classification: null,
+          basis: null,
+          canonical: null,
+          serving: { label: "1 katori", unit: "serving", conversionScaled: null },
+          quantityScaled: NUTRIENT_SCALE,
+          calculated: {
+            energyKcalScaled: 520 * NUTRIENT_SCALE,
+            proteinScaled: 24 * NUTRIENT_SCALE,
+            carbsScaled: 60 * NUTRIENT_SCALE,
+            fatScaled: 12 * NUTRIENT_SCALE,
+            partial: false,
+          },
+        },
+      ],
+    };
+
+    await db.insert(schema.plans).values({
+      id: planId,
+      coachingRelationshipId: ctx.relationshipId,
+      title: "Nutrition week plan",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.planVersions).values({
+      id: versionId,
+      planId,
+      versionNumber: 1,
+      recordVersion: 0,
+      status: "effective",
+      contentJson: JSON.stringify({
+        workoutDays: [],
+        mealPrescriptions: [mealPrescription],
+      }),
+      creationSource: "blank",
+      publishedAt: now,
+      effectiveFrom: now,
+      effectiveTo: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.mealAssignments).values({
+      id: assignmentId,
+      coachingRelationshipId: ctx.relationshipId,
+      planId,
+      planVersionId: versionId,
+      mealPrescriptionId: mealId,
+      mealName: "Lunch",
+      mealPrescriptionJson: JSON.stringify(mealPrescription),
+      localDate: today,
+      windowStartsAt: now,
+      windowEndsAt: now,
+      photoRequired: false,
+      scheduleStatus: "scheduled",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.mealCompliance).values({
+      id: createId(),
+      assignmentId,
+      coachingRelationshipId: ctx.relationshipId,
+      planVersionId: versionId,
+      traineeUserId: ctx.traineeUserId,
+      outcome: "modified",
+      recordVersion: 0,
+      loggedAt: now,
+      deviationKind: "logged_foods",
+      notes: null,
+      photoRequired: false,
+      photoIntentJson: null,
+      mediaAssetId: null,
+      itemsJson: JSON.stringify([{ foodId, quantity: 1 }]),
+      kcalScaled: 480 * NUTRIENT_SCALE,
+      proteinScaled: 22 * NUTRIENT_SCALE,
+      carbsScaled: 55 * NUTRIENT_SCALE,
+      fatScaled: 11 * NUTRIENT_SCALE,
+      loggedLate: false,
+      loggedAfterResolve: false,
+      clientLoggedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const response = await app.request(
+      `/workspaces/relationships/${ctx.relationshipId}/week?start=${today}`,
+      { headers: { Cookie: ctx.trainerCookie, "x-fitbud-role": "trainer" } },
+      testEnv(),
+    );
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const percentKeys = new Set<string>();
+    collectPercentKeys(JSON.parse(text), percentKeys);
+    expect(percentKeys.size).toBe(0);
+
+    const body = JSON.parse(text) as {
+      data: {
+        todayNutrition: {
+          date: string;
+          logged: {
+            kcal: number;
+            proteinG: number;
+            carbsG: number;
+            fatG: number;
+            hasUnknown?: boolean;
+          };
+          assigned: {
+            kcal: number;
+            proteinG: number;
+            carbsG: number;
+            fatG: number;
+          } | null;
+        };
+      };
+    };
+    expect(body.data.todayNutrition).toEqual({
+      date: today,
+      logged: { kcal: 480, proteinG: 22, carbsG: 55, fatG: 11 },
+      assigned: { kcal: 520, proteinG: 24, carbsG: 60, fatG: 12 },
+    });
   });
 });

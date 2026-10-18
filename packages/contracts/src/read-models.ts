@@ -31,6 +31,22 @@ export const meDayResponseSchema = z.object({
 });
 export type MeDayResponse = z.infer<typeof meDayResponseSchema>;
 
+const weekNutritionMacrosSchema = z.object({
+  kcal: z.number().int().nonnegative(),
+  proteinG: z.number().int().nonnegative(),
+  carbsG: z.number().int().nonnegative(),
+  fatG: z.number().int().nonnegative(),
+});
+
+export const weekTodayNutritionSchema = z.object({
+  date: localDateSchema,
+  logged: weekNutritionMacrosSchema.extend({
+    hasUnknown: z.boolean().optional(),
+  }),
+  assigned: weekNutritionMacrosSchema.nullable(),
+});
+export type WeekTodayNutrition = z.infer<typeof weekTodayNutritionSchema>;
+
 export const weekReadModelSchema = z.object({
   start: localDateSchema,
   workouts: z.object({
@@ -47,6 +63,7 @@ export const weekReadModelSchema = z.object({
       state: weekDayStateSchema,
     }),
   ),
+  todayNutrition: weekTodayNutritionSchema,
 });
 export type WeekReadModel = z.infer<typeof weekReadModelSchema>;
 

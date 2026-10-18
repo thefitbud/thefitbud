@@ -25,7 +25,13 @@ function parseCivilDate(localDate: string): {
   month: number;
   day: number;
 } | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate.trim());
+  const trimmed = localDate.trim();
+  // Accept ISO datetimes by taking the YYYY-MM-DD prefix.
+  const civil =
+    trimmed.length >= 10 && trimmed[4] === "-" && trimmed[7] === "-"
+      ? trimmed.slice(0, 10)
+      : trimmed;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(civil);
   if (!match) return null;
   return {
     year: Number(match[1]),

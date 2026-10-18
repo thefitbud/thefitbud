@@ -277,17 +277,35 @@ const LABELS = {
     draft: "Draft",
     configured: "Configured",
     active: "Active",
-    archived: "Archived",
+    superseded: "Superseded",
   },
   meal_photo_requirement: {
-    never: "Never",
-    optional: "Optional",
-    required: "Required",
+    none: "Never",
+    selected_meals: "Selected meals",
+    all_meals: "All meals",
   },
   checkin_cadence: {
     weekly: "Weekly",
     biweekly: "Every 2 weeks",
     monthly: "Monthly",
+  },
+  payment_frequency: {
+    weekly: "Weekly",
+    monthly: "Monthly",
+    quarterly: "Quarterly",
+    yearly: "Yearly",
+  },
+  nutrition_basis: {
+    per_100_g: "Per 100 g",
+    per_100_ml: "Per 100 ml",
+  },
+  workspace_activity_type: {
+    workout: "Workout",
+    meal: "Meal",
+    checkin: "Check-in",
+  },
+  onboarding_review_outcome: {
+    coaching_ready: "Coaching ready",
   },
   trainer_note_visibility: {
     private: "Private",

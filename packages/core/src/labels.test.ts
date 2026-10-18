@@ -34,7 +34,10 @@ import {
   mediaTypeSchema,
   notificationStateSchema,
   notificationTypeSchema,
+  nutritionBasisSchema,
+  onboardingReviewOutcomeSchema,
   onboardingStatusSchema,
+  paymentFrequencySchema,
   planTemplateTypeSchema,
   planVersionStatusSchema,
   progressEntryTypeSchema,
@@ -46,6 +49,7 @@ import {
   setExecutionStatusSchema,
   trainerNoteVisibilitySchema,
   weekDayStateSchema,
+  workspaceActivityTypeSchema,
   workoutAssignmentStatusSchema,
   workoutExecutionStatusSchema,
 } from "@fitbud/contracts";
@@ -159,6 +163,22 @@ describe("labels", () => {
           values: mealPhotoRequirementSchema.options,
         },
         { name: "checkin_cadence", values: checkinCadenceSchema.options },
+        {
+          name: "payment_frequency",
+          values: paymentFrequencySchema.options,
+        },
+        {
+          name: "nutrition_basis",
+          values: nutritionBasisSchema.options,
+        },
+        {
+          name: "workspace_activity_type",
+          values: workspaceActivityTypeSchema.options,
+        },
+        {
+          name: "onboarding_review_outcome",
+          values: onboardingReviewOutcomeSchema.options,
+        },
         {
           name: "trainer_note_visibility",
           values: trainerNoteVisibilitySchema.options,

@@ -738,6 +738,7 @@ export {
 export {
   meDayResponseSchema,
   weekReadModelSchema,
+  weekTodayNutritionSchema,
   weekDayStateSchema,
   attentionGroupsResponseSchema,
   attentionGroupSchema,
@@ -748,6 +749,7 @@ export {
   resolveExceptionOutcomeSchema,
   type MeDayResponse,
   type WeekReadModel,
+  type WeekTodayNutrition,
   type WeekDayState,
   type AttentionGroupsResponse,
   type ClientFacets,
