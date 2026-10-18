@@ -162,6 +162,7 @@ export type InterventionListResponse = z.infer<
 export const activeExceptionSummarySchema = z.object({
   id: uuidSchema,
   type: exceptionTypeSchema,
+  severity: exceptionSeveritySchema,
   status: exceptionStatusSchema,
   summary: z.string(),
   sourceEntityType: exceptionSourceEntityTypeSchema,

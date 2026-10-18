@@ -36,6 +36,7 @@ export function WorkspaceModals({
           </header>
           <NoteComposer
             relationshipId={relationshipId}
+            traineeName={traineeName}
             onSaved={onChanged}
             onClose={onClose}
           />

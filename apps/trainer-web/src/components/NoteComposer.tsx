@@ -1,20 +1,30 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { ApiClientError } from "@fitbud/api-client";
+import { labelFor } from "@fitbud/core";
 type TrainerNoteVisibility = "private" | "client";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { Button } from "./Button";
+
+const MAX_CHARS = 1000;
+const COUNTER_FROM = 800;
+
 export function NoteComposer({
   relationshipId,
+  traineeName,
   subjectType,
   subjectId,
   checkinId,
+  readOnly = false,
   onSaved,
   onClose,
 }: {
   relationshipId: string;
+  traineeName?: string;
   subjectType?: string;
   subjectId?: string;
   checkinId?: string;
+  readOnly?: boolean;
   onSaved?: () => void;
   onClose?: () => void;
 }) {
@@ -23,16 +33,32 @@ export function NoteComposer({
     useState<TrainerNoteVisibility>("private");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const firstName = useMemo(() => {
+    const raw = (traineeName ?? "Client").trim().split(/\s+/)[0];
+    return raw || "Client";
+  }, [traineeName]);
+
+  if (readOnly) {
+    return (
+      <p className="muted" role="status">
+        Coaching has ended. Notes are read-only.
+      </p>
+    );
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    const trimmed = body.trim();
+    if (!trimmed) return;
     setSubmitting(true);
     setError(null);
     try {
       await apiClient.createTrainerNote(
         relationshipId,
         {
-          body: body.trim(),
+          body: trimmed,
           visibility,
           subjectType: subjectType ?? null,
           subjectId: subjectId ?? undefined,
@@ -40,8 +66,18 @@ export function NoteComposer({
         },
         createIdempotencyKey(),
       );
+      const message =
+        visibility === "client"
+          ? `Shared with ${firstName}`
+          : "Saved privately";
+      setToast(message);
+      setBody("");
+      setVisibility("private");
       onSaved?.();
-      onClose?.();
+      window.setTimeout(() => {
+        setToast(null);
+        onClose?.();
+      }, 1200);
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Could not save note.",
@@ -51,18 +87,27 @@ export function NoteComposer({
     }
   }
 
+  const showCounter = body.length >= COUNTER_FROM;
+
   return (
     <form className="note-composer stack-form" onSubmit={onSubmit}>
       <label className="field">
         <span>Note</span>
         <textarea
           required
-          rows={4}
-          maxLength={4000}
+          rows={5}
+          maxLength={MAX_CHARS}
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          aria-describedby={showCounter ? "note-char-count" : undefined}
         />
+        {showCounter ? (
+          <span id="note-char-count" className="field-hint">
+            {body.length} / {MAX_CHARS}
+          </span>
+        ) : null}
       </label>
+
       <label className="switch-row">
         <input
           type="checkbox"
@@ -73,21 +118,43 @@ export function NoteComposer({
         />
         <span>Visible to client</span>
       </label>
-      <p className="muted">
-        {visibility === "client"
-          ? "The client will see this in the app and get a push notification."
-          : "Only you can see this note."}
-      </p>
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
+
+      {visibility === "client" ? (
+        <div className="note-visible-preview">
+          <p className="muted">
+            {firstName} will see this on her Today screen and get a notification.
+          </p>
+          <span className="note-preview-chip" aria-hidden="true">
+            From you · just now
+          </span>
+        </div>
+      ) : (
+        <p className="muted">
+          Only you can see this note (
+          {labelFor("trainer_note_visibility", "private")}).
+        </p>
+      )}
+
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {toast ? (
+        <p className="banner-info" role="status">
+          {toast}
+        </p>
+      ) : null}
+
       <div className="button-row">
         {onClose ? (
-          <button type="button" className="button-secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         ) : null}
-        <button type="submit" className="button-primary" disabled={submitting}>
+        <Button type="submit" variant="primary" disabled={submitting}>
           {submitting ? "Saving…" : "Save note"}
-        </button>
+        </Button>
       </div>
     </form>
   );

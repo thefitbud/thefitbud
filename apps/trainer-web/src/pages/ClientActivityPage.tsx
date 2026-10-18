@@ -34,9 +34,7 @@ function activityStateLabel(
 }
 
 function typeLabel(type: WorkspaceActivityType): string {
-  if (type === "workout") return "Workout";
-  if (type === "meal") return "Meal";
-  return "Check-in";
+  return labelFor("workspace_activity_type", type);
 }
 
 function isUnresolved(item: WorkspaceActivityItem): boolean {
@@ -80,12 +78,7 @@ function PlanVersionReference({
       label = "Earlier plan version";
     }
   }
-  return (
-    <p className="activity-plan-ref">
-      {label}
-      <span className="activity-plan-id">{planVersionId}</span>
-    </p>
-  );
+  return <p className="activity-plan-ref">{label}</p>;
 }
 
 export function ClientActivityPage() {

@@ -868,6 +868,7 @@ export function mapActiveExceptionSummary(
   return {
     id: row.id,
     type: row.type,
+    severity: row.severity,
     status: row.status,
     summary: row.summary,
     sourceEntityType: row.sourceEntityType,

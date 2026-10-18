@@ -44,7 +44,11 @@ const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
 const EXPO_WEB_URL = process.env.EXPO_WEB_URL;
 
-/** Screens Batch 0 + TW-A + TW-B cleaned — error hits fail the suite. */
+const ROHAN_RID = "c422296e-ed7b-4196-a2b4-647096af3002";
+const SNEHA_RID = "6a68b615-c47c-4bfc-a7f8-550becf7878a";
+const UNKNOWN_RID = "00000000-0000-4000-8000-000000000000";
+
+/** Screens Batch 0 + TW-A + TW-B + TW-C cleaned — error hits fail the suite. */
 const WEB_HARD_FAIL_ROUTES = new Set([
   "/sign-in",
   "/sign-in/code",
@@ -60,6 +64,14 @@ const WEB_HARD_FAIL_ROUTES = new Set([
   "/not-a-real-route",
   "/?exception",
   "/?ask",
+  `/clients/${ROHAN_RID}/overview`,
+  `/clients/${ROHAN_RID}/configure`,
+  `/clients/${ROHAN_RID}/plan`,
+  `/clients/${ROHAN_RID}/activity`,
+  `/clients/${ROHAN_RID}/history`,
+  `/clients/${SNEHA_RID}/onboarding`,
+  `/clients/${UNKNOWN_RID}`,
+  `/clients/${UNKNOWN_RID}/overview`,
 ]);
 const MOBILE_HARD_FAIL_ROUTES = new Set([
   "mobile/sign-in",
@@ -191,10 +203,8 @@ async function resolveClientWorkspacePath(page: Page): Promise<string> {
 }
 
 test.describe("banned-strings · trainer web", () => {
-  test("sign-in + TW-A/TW-B routes hard-fail; workspace report", async ({
-    page,
-  }) => {
-    test.setTimeout(180_000);
+  test("sign-in + TW-A/TW-B/TW-C routes hard-fail", async ({ page }) => {
+    test.setTimeout(240_000);
 
     const allHits: Hit[] = [];
 
@@ -218,9 +228,15 @@ test.describe("banned-strings · trainer web", () => {
       "/?exception=95af751f-156c-44ac-a945-ec30870134ae",
       "/?ask=b532e1ca-7fea-4563-8d50-4468bc66f586",
       "/not-a-real-route",
+      `/clients/${ROHAN_RID}/overview`,
+      `/clients/${ROHAN_RID}/configure`,
+      `/clients/${ROHAN_RID}/plan`,
+      `/clients/${ROHAN_RID}/activity`,
+      `/clients/${ROHAN_RID}/history`,
+      `/clients/${SNEHA_RID}/onboarding`,
+      `/clients/${UNKNOWN_RID}/overview`,
     ];
-    const reportRoutes = [await resolveClientWorkspacePath(page)];
-    for (const route of [...hardRoutes, ...reportRoutes]) {
+    for (const route of hardRoutes) {
       await page.goto(route);
       await page.waitForTimeout(800);
       const key =

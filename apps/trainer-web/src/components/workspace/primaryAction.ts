@@ -10,6 +10,8 @@ export type WorkspacePrimaryAction = {
     | "review_exception"
     | "adjust_plan"
     | "reactivate";
+  /** Set when kind is review_exception so the workspace drawer can open in place. */
+  exceptionId?: string;
 };
 
 export function primaryActionFor(input: {
@@ -55,7 +57,8 @@ export function primaryActionFor(input: {
     return {
       kind: "review_exception",
       label: "Review issue",
-      to: `/?exception=${input.openExceptionId}`,
+      to: `/clients/${rid}/overview?exception=${input.openExceptionId}`,
+      exceptionId: input.openExceptionId,
     };
   }
   if (

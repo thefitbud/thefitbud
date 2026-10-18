@@ -1,23 +1,22 @@
-import { Link, NavLink } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
-import { formatCivilDate, labelFor } from "@fitbud/core";
+import { formatCivilDate } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
+import { Button } from "../Button";
+import { OverflowMenu } from "../OverflowMenu";
+import { StatusChip } from "../StatusChip";
+import { WhatsAppGlyph } from "../WhatsAppGlyph";
 import { clientWhatsappHref } from "../../lib/whatsapp";
 import { resolveTraineeTimezone } from "../../lib/trainee-timezone";
 import { TimezoneBadge } from "./TimezoneBadge";
 import { primaryActionFor } from "./primaryAction";
 import type { WorkspaceModal } from "./WorkspaceModals";
 
-function adherenceLabel(state: string): string {
-  return labelFor("adherence_state", state) || "Not available";
-}
-
-function statusLabel(status: string): string {
-  return (
-    labelFor("onboarding_status", status) ||
-    labelFor("relationship_status", status) ||
-    labelFor("invitation_status", status)
-  );
+function titleCaseGender(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 }
 
 export function WorkspaceHeader({
@@ -32,6 +31,8 @@ export function WorkspaceHeader({
   onOpenModal: (modal: WorkspaceModal) => void;
 }) {
   const { me } = useAuth();
+  const navigate = useNavigate();
+  const [, setParams] = useSearchParams();
   const header = workspace.header;
   const ended = header.onboardingStatus === "ended";
   const configurationActive =
@@ -65,150 +66,239 @@ export function WorkspaceHeader({
     .map((p) => p.charAt(0).toUpperCase())
     .join("");
 
-  const meta: string[] = [];
-  if (header.goalShort) meta.push(header.goalShort);
+  const metaNodes: Array<{ key: string; node: ReactNode }> = [];
+  if (header.goalShort) {
+    metaNodes.push({ key: "goal", node: <span>{header.goalShort}</span> });
+  }
   if (header.effectivePlan?.title) {
-    meta.push(header.effectivePlan.title);
+    metaNodes.push({
+      key: "plan",
+      node: (
+        <Link to={`/clients/${relationshipId}/plan`}>
+          {header.effectivePlan.title}
+        </Link>
+      ),
+    });
   }
   if (workspace.overview.nextCheckin) {
-    meta.push(
-      `Next check-in ${formatCivilDate(workspace.overview.nextCheckin.localDate)}`,
-    );
+    metaNodes.push({
+      key: "checkin",
+      node: (
+        <span>
+          Next check-in{" "}
+          {formatCivilDate(workspace.overview.nextCheckin.localDate)}
+        </span>
+      ),
+    });
   }
   const profileParts: string[] = [];
   if (header.traineeProfile.age != null) {
     profileParts.push(String(header.traineeProfile.age));
   }
   if (header.traineeProfile.gender) {
-    profileParts.push(header.traineeProfile.gender);
+    profileParts.push(titleCaseGender(header.traineeProfile.gender));
   }
-  if (profileParts.length) meta.push(profileParts.join(" · "));
+  if (profileParts.length) {
+    metaNodes.push({
+      key: "profile",
+      node: <span>{profileParts.join(" · ")}</span>,
+    });
+  }
+  if (header.renewalState && header.renewalState !== "current") {
+    metaNodes.push({
+      key: "renewal",
+      node: (
+        <StatusChip
+          kind="renewal"
+          value={header.renewalState}
+          className="status-chip-xs"
+        />
+      ),
+    });
+  }
+
+  function runPrimary() {
+    if (!primary) return;
+    if (primary.kind === "reactivate") {
+      onOpenModal({ type: "reactivate" });
+      return;
+    }
+    if (primary.kind === "review_exception" && primary.exceptionId) {
+      setParams({ exception: primary.exceptionId });
+      navigate(`/clients/${relationshipId}/overview?exception=${primary.exceptionId}`);
+      return;
+    }
+    navigate(primary.to);
+  }
+
+  const overflowItems = [
+    {
+      id: "configure",
+      label: "Configure coaching",
+      onSelect: () => navigate(`/clients/${relationshipId}/configure`),
+    },
+    {
+      id: "onboarding",
+      label: "Onboarding answers",
+      onSelect: () => navigate(`/clients/${relationshipId}/onboarding`),
+    },
+    {
+      id: "reminders",
+      label: "Reminder settings for this client",
+      onSelect: () => onOpenModal({ type: "responsiveness" }),
+    },
+    {
+      id: "note",
+      label: "Add note",
+      onSelect: () => onOpenModal({ type: "note" }),
+    },
+    ...(!ended
+      ? [
+          {
+            id: "end",
+            label: "End coaching",
+            onSelect: () => onOpenModal({ type: "end" }),
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <header className="workspace-identity workspace-header-v2">
+    <header className="wsh" data-testid="screen-TW-09a">
       {ended ? (
         <p className="banner-neutral" role="status" data-testid="screen-TW-30">
           Coaching ended. This workspace is read-only except reactivation.
         </p>
       ) : null}
-      <div className="workspace-identity-row workspace-header-row1">
-        <span className="avatar workspace-avatar" aria-hidden="true">{initials}</span>
-        <div>
-          <h1 className="workspace-title">{header.traineeDisplayName}</h1>
-          <div className="workspace-chips">
-            <span className="workspace-client-status">{statusLabel(header.onboardingStatus)}</span>
-            <span className={`workspace-adherence is-${header.adherenceState.replaceAll("_", "-")}`}>
-              {adherenceLabel(header.adherenceState)}
-            </span>
-            {header.renewalState && header.renewalState !== "current" ? (
-              <span className="renewal-chip">{header.renewalState}</span>
+      <div className="wsh-in">
+        <div className="wsh-r1">
+          <span className="avatar workspace-avatar lg" aria-hidden="true">
+            {initials}
+          </span>
+          <div className="wsh-id">
+            <div className="wsh-name-row">
+              <h1 className="workspace-title">{header.traineeDisplayName}</h1>
+              <StatusChip kind="lifecycle" value={header.onboardingStatus} />
+              <StatusChip kind="adherence" value={header.adherenceState} />
+            </div>
+            {metaNodes.length > 0 ? (
+              <div className="wsh-meta">
+                {metaNodes.map((item) => (
+                  <span key={item.key} className="wsh-meta-item">
+                    {item.node}
+                  </span>
+                ))}
+              </div>
             ) : null}
+            <div className="wsh-signals">
+              {me?.timezone ? (
+                <TimezoneBadge
+                  traineeName={header.traineeDisplayName}
+                  traineeTimezone={resolveTraineeTimezone(header).timezone}
+                  trainerTimezone={me.timezone}
+                />
+              ) : null}
+              {header.hasCustomMealTimes ? (
+                <Link
+                  className="chip-link"
+                  to={`/clients/${relationshipId}/plan`}
+                >
+                  Custom meal times
+                </Link>
+              ) : null}
+            </div>
+          </div>
+          <div className="wsh-acts">
+            {whatsappHrefValue ? (
+              <a
+                className="button-secondary button-whatsapp"
+                href={whatsappHrefValue}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <WhatsAppGlyph />
+                Message on WhatsApp
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="button-secondary button-whatsapp"
+                disabled
+                title="No WhatsApp number on file for this client"
+              >
+                <WhatsAppGlyph />
+                Message on WhatsApp
+              </button>
+            )}
+            {ended ? (
+              <Button
+                variant="primary"
+                onClick={() => onOpenModal({ type: "reactivate" })}
+              >
+                Reactivate coaching
+              </Button>
+            ) : primary ? (
+              <Button variant="primary" onClick={runPrimary}>
+                {primary.label}
+              </Button>
+            ) : null}
+            <OverflowMenu items={overflowItems} />
           </div>
         </div>
-      </div>
-      <p className="workspace-meta-v2">
-        {meta.map((item) => (
-          <span key={item}>{item}</span>
-        ))}
-      </p>
-      <div className="workspace-signals">
-        {me?.timezone ? (
-          <TimezoneBadge
-            traineeName={header.traineeDisplayName}
-            traineeTimezone={resolveTraineeTimezone(header).timezone}
-            trainerTimezone={me.timezone}
-          />
-        ) : null}
-        {header.hasCustomMealTimes ? (
-          <Link className="chip-link" to={`/clients/${relationshipId}/plan`}>
-            Custom meal times
-          </Link>
-        ) : null}
-      </div>
-      <div className="workspace-header-actions">
-        {primary && !ended ? (
-          primary.kind === "reactivate" ? (
-            <button
-              type="button"
-              className="button-primary"
-              onClick={() => onOpenModal({ type: "reactivate" })}
-            >
-              {primary.label}
-            </button>
-          ) : (
-            <Link className="button-primary" to={primary.to}>
-              {primary.label}
-            </Link>
-          )
-        ) : ended ? (
-          <button
-            type="button"
-            className="button-primary"
-            onClick={() => onOpenModal({ type: "reactivate" })}
+        <nav className="wsh-tabs" aria-label="Client sections" role="tablist">
+          <NavLink
+            to={`/clients/${relationshipId}/overview`}
+            className={tabClass}
+            end
+            role="tab"
           >
-            Reactivate coaching
-          </button>
-        ) : null}
-        {whatsappHrefValue ? (
-          <a
-            className="button-secondary"
-            href={whatsappHrefValue}
-            target="_blank"
-            rel="noreferrer"
+            Overview
+          </NavLink>
+          <NavLink
+            to={`/clients/${relationshipId}/plan`}
+            className={tabClass}
+            role="tab"
           >
-            WhatsApp
-          </a>
-        ) : (
-          <button type="button" className="button-secondary" disabled title="No WhatsApp number on file">
-            WhatsApp
-          </button>
-        )}
-        <details className="workspace-menu">
-          <summary className="workspace-icon-btn" aria-label="More actions">⋯</summary>
-          <div className="workspace-menu-panel">
-            <Link to={`/clients/${relationshipId}/configure`}>Configure coaching</Link>
-            <Link to={`/clients/${relationshipId}/onboarding`}>Onboarding answers</Link>
-            <button type="button" onClick={() => onOpenModal({ type: "responsiveness" })}>
-              Reminder settings for this client
-            </button>
-            <button type="button" onClick={() => onOpenModal({ type: "note" })}>
-              Add note
-            </button>
-            {!ended ? (
-              <button type="button" onClick={() => onOpenModal({ type: "end" })}>
-                End coaching
-              </button>
+            Plan
+          </NavLink>
+          <NavLink
+            to={`/clients/${relationshipId}/activity`}
+            className={tabClass}
+            role="tab"
+          >
+            Activity
+          </NavLink>
+          <NavLink
+            to={`/clients/${relationshipId}/progress`}
+            className={tabClass}
+            role="tab"
+          >
+            Progress
+          </NavLink>
+          <NavLink
+            to={`/clients/${relationshipId}/check-ins`}
+            className={tabClass}
+            role="tab"
+          >
+            Check-ins
+            {submittedCheckinCount > 0 ? (
+              <span className="tab-badge">{submittedCheckinCount}</span>
             ) : null}
-          </div>
-        </details>
+          </NavLink>
+          <NavLink
+            to={`/clients/${relationshipId}/history`}
+            className={tabClass}
+            role="tab"
+          >
+            History
+          </NavLink>
+        </nav>
       </div>
-      <nav className="workspace-tabs" aria-label="Client sections">
-        <NavLink to={`/clients/${relationshipId}/overview`} className={tabClass} end>
-          Overview
-        </NavLink>
-        <NavLink to={`/clients/${relationshipId}/plan`} className={tabClass}>
-          Plan
-        </NavLink>
-        <NavLink to={`/clients/${relationshipId}/activity`} className={tabClass}>
-          Activity
-        </NavLink>
-        <NavLink to={`/clients/${relationshipId}/progress`} className={tabClass}>
-          Progress
-        </NavLink>
-        <NavLink to={`/clients/${relationshipId}/check-ins`} className={tabClass}>
-          Check-ins
-          {submittedCheckinCount > 0 ? (
-            <span className="tab-badge">{submittedCheckinCount}</span>
-          ) : null}
-        </NavLink>
-        <NavLink to={`/clients/${relationshipId}/history`} className={tabClass}>
-          History
-        </NavLink>
-      </nav>
     </header>
   );
 }
 
 function tabClass({ isActive }: { isActive: boolean }) {
-  return isActive ? "workspace-tab is-active" : "workspace-tab";
+  return isActive ? "wsh-tab is-active" : "wsh-tab";
 }

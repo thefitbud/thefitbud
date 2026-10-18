@@ -139,15 +139,6 @@ export function ClientHistoryPage() {
                 : "What happened, what changed, and what you did. Kind is a single server filter."}
             </p>
           </div>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => {
-              void load();
-            }}
-          >
-            Refresh
-          </button>
         </div>
 
         <form

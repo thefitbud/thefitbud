@@ -1,26 +1,112 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import type { TrainerNote, WeekReadModel } from "@fitbud/contracts";
-import { formatCivilDate, formatRelative, labelFor } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatKcal,
+  formatNumber,
+  formatRelative,
+  labelFor,
+} from "@fitbud/core";
+import { AlertOctagon, AlertTriangle } from "lucide-react";
+import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
-import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel";
 import { MeasurementTrend } from "../components/MeasurementTrend";
+import { StatusChip } from "../components/StatusChip";
+import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel";
 import { apiClient } from "../lib/api";
-import { formatIsoDateTime, formatLocalDate } from "../lib/format";
 import { stage1Api } from "../lib/stage1-api";
 import type { WorkspaceOutletContext } from "./workspaceContext";
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+function civilParts(date: string) {
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
+  return { y: y!, m: m!, d: d! };
+}
+
+function weekdayLabel(date: string, today: string): string {
+  if (date === today) return "Today";
+  const { y, m, d } = civilParts(date);
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  return WEEKDAYS[utc.getUTCDay()]!;
+}
+
+function dayNum(date: string): number {
+  return civilParts(date).d;
+}
+
+function MiniRing({
+  value,
+  max,
+  color,
+  label,
+  unit,
+}: {
+  value: number;
+  max: number;
+  color: string;
+  label: string;
+  unit: string;
+}) {
+  const r = 14;
+  const c = 2 * Math.PI * r;
+  const pct = max > 0 ? Math.min(value / max, 1) : 0;
+  const dash = pct * c;
+  return (
+    <div className="ov-mini">
+      <svg viewBox="0 0 36 36" aria-hidden="true">
+        <circle
+          cx="18"
+          cy="18"
+          r={r}
+          fill="none"
+          stroke="var(--ink-200, #E6E8EB)"
+          strokeWidth="5"
+        />
+        <circle
+          cx="18"
+          cy="18"
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c}`}
+          transform="rotate(-90 18 18)"
+        />
+      </svg>
+      <span>
+        <b>
+          {formatNumber(value)} / {formatNumber(max)}
+          {unit ? ` ${unit}` : ""}
+        </b>
+        {label}
+      </span>
+    </div>
+  );
+}
 
 export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const drawerId = params.get("exception");
-  const { workspace, openWorkspaceModal } = useOutletContext<WorkspaceOutletContext>();
+  const { workspace, openWorkspaceModal } =
+    useOutletContext<WorkspaceOutletContext>();
   const [week, setWeek] = useState<WeekReadModel | null>(null);
   const [notes, setNotes] = useState<TrainerNote[]>([]);
+  const [weekError, setWeekError] = useState(false);
 
   useEffect(() => {
     if (!relationshipId) return;
-    void stage1Api.getWorkspaceWeek(relationshipId).then(setWeek).catch(() => setWeek(null));
+    setWeekError(false);
+    void stage1Api
+      .getWorkspaceWeek(relationshipId)
+      .then(setWeek)
+      .catch(() => {
+        setWeek(null);
+        setWeekError(true);
+      });
     void apiClient
       .listTrainerNotes(relationshipId)
       .then((res) => setNotes(res.items.slice(0, 3)))
@@ -40,6 +126,7 @@ export function ClientOverviewPage() {
   const coachingReady =
     header.onboardingStatus === "active" ||
     header.onboardingStatus === "coaching_ready";
+  const firstName = header.traineeDisplayName.split(" ")[0] ?? "Client";
 
   if (!coachingReady) {
     return (
@@ -60,80 +147,240 @@ export function ClientOverviewPage() {
     );
   }
 
+  const openEx = overview.openException;
+  const nutrition = week?.todayNutrition;
+  const todayDate = nutrition?.date ?? week?.days.find(() => true)?.date;
+  const weekEnd = week?.days[week.days.length - 1]?.date;
+
   return (
     <div className="overview-grid" data-testid="screen-TW-09">
       <div className="overview-main">
-        {overview.openException ? (
-          <section className="overview-card priority-card">
-            <h2>Needs attention</h2>
-            <p>{overview.openException.summary}</p>
-            <span className="severity-chip is-attention">Needs review</span>
-            <button
-              type="button"
-              className="button-primary"
-              onClick={() =>
-                setParams({ exception: overview.openException!.id })
-              }
-            >
-              Review
-            </button>
+        {openEx ? (
+          <section className="ov-card ov-attention">
+            <div className="ov-card-h">
+              <h2 className="t-h3">Needs attention</h2>
+              <span className="t-cap muted">Most severe open item</span>
+            </div>
+            <div className="ov-att">
+              <span
+                className={`ov-att-ico is-${openEx.severity}`}
+                aria-hidden="true"
+              >
+                {openEx.severity === "critical" ? (
+                  <AlertOctagon size={20} strokeWidth={1.75} />
+                ) : (
+                  <AlertTriangle size={20} strokeWidth={1.75} />
+                )}
+              </span>
+              <div className="ov-att-tx">
+                <b>
+                  {openEx.summary?.trim() ||
+                    labelFor("exception_type", openEx.type)}
+                </b>
+                <span>
+                  Open {formatRelative(openEx.detectedAt)}
+                  {openEx.status === "acknowledged"
+                    ? ", reviewed"
+                    : ", not reviewed yet"}
+                  .
+                </span>
+              </div>
+              <StatusChip kind="severity" value={openEx.severity} />
+              <Button
+                variant="tinted"
+                onClick={() => setParams({ exception: openEx.id })}
+              >
+                Review
+              </Button>
+            </div>
           </section>
         ) : null}
 
-        <section className="overview-card">
-          <h2>This week</h2>
+        <section className="ov-card">
+          <div className="ov-card-h">
+            <div>
+              <h2 className="t-h3">This week</h2>
+              {week ? (
+                <div className="t-cap muted" style={{ marginTop: 2 }}>
+                  {formatCivilDate(week.start)}
+                  {weekEnd ? ` – ${formatCivilDate(weekEnd)}` : ""}
+                </div>
+              ) : null}
+            </div>
+          </div>
           {week ? (
             <>
-              <p>
-                {week.workouts.completed} of {week.workouts.assigned} workouts ·{" "}
-                {week.meals.logged} of {week.meals.assigned} meals
-                {overview.nextCheckin
-                  ? ` · Check-in ${formatLocalDate(overview.nextCheckin.localDate)}`
-                  : ""}
-              </p>
-              <div className="week-dots" aria-hidden="true">
+              <div className="ov-week" role="list" aria-label="Week consistency">
                 {week.days.map((day) => (
-                  <span
+                  <div
                     key={day.date}
-                    className={`week-dot is-${day.state}`}
-                    title={formatCivilDate(day.date)}
-                  />
+                    className={`ov-day${todayDate === day.date ? " is-today" : ""}`}
+                    role="listitem"
+                  >
+                    <div className="ov-dn">
+                      {weekdayLabel(day.date, todayDate ?? "")}
+                    </div>
+                    <div className="ov-dd">{dayNum(day.date)}</div>
+                    <div
+                      className={`ov-wk is-${day.state}`}
+                      title={labelFor("week_day_state", day.state)}
+                      aria-label={labelFor("week_day_state", day.state)}
+                    />
+                  </div>
                 ))}
               </div>
+              <div className="ov-stats">
+                <div className="ov-stat">
+                  <div className="ov-stat-v">
+                    {week.workouts.completed}{" "}
+                    <small>of {week.workouts.assigned}</small>
+                  </div>
+                  <div className="ov-stat-l">Workouts done</div>
+                </div>
+                <div className="ov-stat">
+                  <div className="ov-stat-v">
+                    {week.meals.logged}{" "}
+                    <small>of {week.meals.assigned}</small>
+                  </div>
+                  <div className="ov-stat-l">Meals logged so far</div>
+                </div>
+                <div className="ov-stat">
+                  <div className="ov-stat-v">
+                    {overview.nextCheckin
+                      ? formatCivilDate(overview.nextCheckin.localDate, {
+                          includeWeekday: true,
+                        }).split(" ")[0]
+                      : "—"}
+                  </div>
+                  <div className="ov-stat-l">
+                    {overview.nextCheckin?.status === "submitted"
+                      ? "Check-in submitted"
+                      : overview.nextCheckin
+                        ? "Next check-in"
+                        : "No check-in"}
+                  </div>
+                </div>
+              </div>
+              {nutrition ? (
+                <div className="ov-nut">
+                  <div className="ov-nut-lbl">
+                    Today&apos;s nutrition
+                    <span>Logged so far</span>
+                  </div>
+                  <MiniRing
+                    value={nutrition.logged.kcal}
+                    max={nutrition.assigned?.kcal ?? nutrition.logged.kcal || 1}
+                    color="var(--brand-indigo, #4527C6)"
+                    label="kcal"
+                    unit=""
+                  />
+                  <MiniRing
+                    value={nutrition.logged.proteinG}
+                    max={
+                      nutrition.assigned?.proteinG ??
+                      nutrition.logged.proteinG ||
+                      1
+                    }
+                    color="var(--brand-deep-navy, #1A1248)"
+                    label="Protein"
+                    unit="g"
+                  />
+                  <MiniRing
+                    value={nutrition.logged.carbsG}
+                    max={
+                      nutrition.assigned?.carbsG ?? nutrition.logged.carbsG || 1
+                    }
+                    color="#7C6CF0"
+                    label="Carbs"
+                    unit="g"
+                  />
+                  <MiniRing
+                    value={nutrition.logged.fatG}
+                    max={nutrition.assigned?.fatG ?? nutrition.logged.fatG || 1}
+                    color="#0E7490"
+                    label="Fat"
+                    unit="g"
+                  />
+                </div>
+              ) : null}
+              {nutrition?.assigned ? (
+                <p className="ov-nut-line muted">
+                  {nutrition.logged.hasUnknown ? "≥ " : ""}
+                  {formatKcal(nutrition.logged.kcal)} /{" "}
+                  {formatKcal(nutrition.assigned.kcal)} · P{" "}
+                  {formatNumber(nutrition.logged.proteinG)}/
+                  {formatNumber(nutrition.assigned.proteinG)} g · C{" "}
+                  {formatNumber(nutrition.logged.carbsG)}/
+                  {formatNumber(nutrition.assigned.carbsG)} g · F{" "}
+                  {formatNumber(nutrition.logged.fatG)}/
+                  {formatNumber(nutrition.assigned.fatG)} g
+                </p>
+              ) : null}
             </>
+          ) : weekError ? (
+            <p className="form-error" role="alert">
+              Could not load this week.{" "}
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => {
+                  setWeekError(false);
+                  void stage1Api
+                    .getWorkspaceWeek(relationshipId)
+                    .then(setWeek)
+                    .catch(() => setWeekError(true));
+                }}
+              >
+                Retry
+              </button>
+            </p>
           ) : (
-            <p className="muted">Weekly consistency loads separately.</p>
+            <p className="muted">Loading week…</p>
           )}
         </section>
 
-        <section className="overview-card">
-          <div className="section-head-inline">
-            <h2>Recent activity</h2>
-            <Link to={`/clients/${relationshipId}/activity`}>View all activity</Link>
+        <section className="ov-card">
+          <div className="ov-card-h">
+            <h2 className="t-h3">Recent activity</h2>
+            <Link
+              className="text-link"
+              to={`/clients/${relationshipId}/activity`}
+            >
+              View all activity
+            </Link>
           </div>
           {overview.recentActivity.length === 0 ? (
-            <p className="muted">
-              No activity logged yet. Activity appears once {header.traineeDisplayName.split(" ")[0]} starts logging.
+            <p className="muted ov-pad">
+              No activity logged yet. Activity appears once {firstName} starts
+              logging.
             </p>
           ) : (
-            <ul className="overview-activity-list">
+            <ul className="ov-activity">
               {overview.recentActivity.slice(0, 5).map((item) => (
                 <li key={`${item.type}:${item.id}`}>
-                  <span className={`status-pill status-${item.state}`}>
-                    {labelFor(
+                  <div>
+                    <b>{item.title}</b>
+                    <span className="muted s">
+                      {labelFor("workspace_activity_type", item.type)}
+                    </span>
+                  </div>
+                  <StatusChip
+                    kind={
                       item.type === "workout"
-                        ? "workout_assignment_status"
+                        ? "workout"
                         : item.type === "meal"
-                          ? "meal_assignment_status"
-                          : "checkin_status",
-                      item.state,
-                    )}
-                  </span>
-                  <span>{item.title}</span>
-                  <span className="muted">
-                    {" · "}
+                          ? "meal"
+                          : "checkin"
+                    }
+                    value={item.state}
+                  />
+                  <time
+                    className="ov-when"
+                    title={item.occurredAt}
+                    dateTime={item.occurredAt}
+                  >
                     {formatRelative(item.occurredAt)}
-                  </span>
+                  </time>
                 </li>
               ))}
             </ul>
@@ -143,38 +390,68 @@ export function ClientOverviewPage() {
 
       <aside className="overview-side">
         {overview.nextCheckin ? (
-          <section className="overview-card">
-            <h2>Next check-in</h2>
-            <p>{formatLocalDate(overview.nextCheckin.localDate)}</p>
-            <Link to={`/clients/${relationshipId}/check-ins/${overview.nextCheckin.id}`}>
-              Open
-            </Link>
+          <section className="ov-card ov-side">
+            <div className="ov-side-h">
+              <h3>Check-in</h3>
+              <Link
+                className="text-link"
+                to={`/clients/${relationshipId}/check-ins/${overview.nextCheckin.id}`}
+              >
+                Open
+              </Link>
+            </div>
+            <div className="ov-big">
+              {labelFor("checkin_status", overview.nextCheckin.status)} check-in
+            </div>
+            <div className="ov-sub">
+              {formatCivilDate(overview.nextCheckin.localDate)}
+              {overview.nextCheckin.status === "submitted"
+                ? " · waiting for your review"
+                : ""}
+            </div>
           </section>
         ) : null}
 
         {plan.plan && version ? (
-          <section className="overview-card">
-            <h2>Plan</h2>
-            <p>{plan.plan.title}</p>
-            <p className="muted">
-              Effective since {formatLocalDate(version.effectiveFrom ?? "")} · v
+          <section className="ov-card ov-side">
+            <div className="ov-side-h">
+              <h3>Plan</h3>
+              <Link
+                className="text-link"
+                to={`/clients/${relationshipId}/plan`}
+              >
+                Open plan
+              </Link>
+            </div>
+            <div className="ov-big">{plan.plan.title}</div>
+            <div className="ov-sub">
+              Effective since{" "}
+              {formatCivilDate(version.effectiveFrom ?? "")} · Version{" "}
               {version.versionNumber}
-            </p>
-            <Link to={`/clients/${relationshipId}/plan`}>Open plan</Link>
+            </div>
+            {header.hasCustomMealTimes ? (
+              <div className="ov-sub">Custom meal times</div>
+            ) : null}
           </section>
         ) : (
-          <section className="overview-card">
-            <h2>Plan</h2>
-            <p>No plan yet</p>
-            <Link className="button-primary" to={`/clients/${relationshipId}/plan`}>
+          <section className="ov-card ov-side">
+            <div className="ov-side-h">
+              <h3>Plan</h3>
+            </div>
+            <div className="ov-big">No plan yet</div>
+            <Link
+              className="button-primary"
+              to={`/clients/${relationshipId}/plan`}
+              style={{ marginTop: 12, display: "inline-flex" }}
+            >
               Set up plan
             </Link>
           </section>
         )}
 
-        <section className="overview-card">
-          <div className="section-head-inline">
-            <h2>Reminders</h2>
+        <section className="ov-card ov-side">
+          <div className="ov-side-h">
+            <h3>Reminders</h3>
             <button
               type="button"
               className="text-link"
@@ -186,9 +463,19 @@ export function ClientOverviewPage() {
           <ResponsivenessPanel relationshipId={relationshipId} compact />
         </section>
 
-        <section className="overview-card">
-          <h2>Progress</h2>
-          {overview.progress.measurements.length >= 2 ? (
+        <section className="ov-card ov-side">
+          <div className="ov-side-h">
+            <h3>Progress</h3>
+            <Link
+              className="text-link"
+              to={`/clients/${relationshipId}/progress`}
+            >
+              View
+            </Link>
+          </div>
+          {overview.progress.measurements.filter(
+            (m) => m.type === "body_weight_kg",
+          ).length >= 2 ? (
             <MeasurementTrend
               compact
               label="Weight"
@@ -207,15 +494,23 @@ export function ClientOverviewPage() {
         </section>
 
         {header.renewalState && header.renewalState !== "current" ? (
-          <section className="overview-card">
-            <h2>Renewal</h2>
-            <p>{header.renewalState}</p>
+          <section className="ov-card ov-side">
+            <div className="ov-side-h">
+              <h3>Renewal</h3>
+              <Link
+                className="text-link"
+                to={`/clients/${relationshipId}/configure`}
+              >
+                Open settings
+              </Link>
+            </div>
+            <StatusChip kind="renewal" value={header.renewalState} />
           </section>
         ) : null}
 
-        <section className="overview-card">
-          <div className="section-head-inline">
-            <h2>Coach notes</h2>
+        <section className="ov-card ov-side">
+          <div className="ov-side-h">
+            <h3>Coach notes</h3>
             <button
               type="button"
               className="text-link"
@@ -227,14 +522,20 @@ export function ClientOverviewPage() {
           {notes.length === 0 ? (
             <p className="muted">No notes yet</p>
           ) : (
-            <ul className="notes-preview">
+            <ul className="ov-notes">
               {notes.map((note) => (
                 <li key={note.id}>
                   <p>{note.body}</p>
-                  <span className="note-badge">
-                    {note.visibility === "client" ? "Visible to client" : "Private"}
-                  </span>
-                  <time className="muted">{formatIsoDateTime(note.createdAt)}</time>
+                  <div className="ov-note-meta">
+                    <span
+                      className={`note-vis-badge is-${note.visibility === "client" ? "client" : "private"}`}
+                    >
+                      {labelFor("trainer_note_visibility", note.visibility)}
+                    </span>
+                    <time dateTime={note.createdAt}>
+                      {formatRelative(note.createdAt)}
+                    </time>
+                  </div>
                 </li>
               ))}
             </ul>

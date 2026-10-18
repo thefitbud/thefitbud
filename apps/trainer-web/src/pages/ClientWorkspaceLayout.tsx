@@ -90,13 +90,13 @@ export function ClientWorkspaceLayout() {
   if (notFound) {
     return (
       <section className="page centered-status" data-testid="screen-TW-33">
-        <h1>We couldn&apos;t find that page</h1>
+        <h1>Client not found</h1>
         <p className="lede">
           This coaching relationship doesn&apos;t exist or you don&apos;t have
           access.
         </p>
-        <Link className="button-primary" to="/">
-          Home
+        <Link className="button-primary" to="/clients">
+          Back to clients
         </Link>
       </section>
     );
