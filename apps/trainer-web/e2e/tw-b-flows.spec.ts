@@ -2,8 +2,12 @@
  * TW-B behavioural flows: auth, roster, add client, welcome, invite lifecycle.
  * Requires API :8787 and trainer-web :5173 with seeded demo data.
  */
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { hashPassword } from "../../api/src/auth/password.ts";
 
 const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
 const EMAIL = "rahul.coach@demo.fitbud.test";
@@ -12,6 +16,32 @@ const NOVA = "nova.coach@demo.fitbud.test";
 const ANITA_INVITE = "06b54e81-016c-4220-a9a8-31195324669b";
 const ANITA_EMAIL = "anita.invite@demo.fitbud.test";
 const KAVYA_EMAIL = "kavya.ended@demo.fitbud.test";
+const API_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../api",
+);
+
+/** Demo password is on the reset deny-list; restore the seed hash via D1. */
+async function restoreDemoPassword(email: string) {
+  const hash = await hashPassword(PASSWORD);
+  const sql = `UPDATE user_identities SET password_hash = '${hash.replace(/'/g, "''")}', failed_login_count = 0, locked_until = NULL WHERE email_norm = '${email.toLowerCase()}';`;
+  execFileSync(
+    "pnpm",
+    [
+      "exec",
+      "wrangler",
+      "d1",
+      "execute",
+      "fitbud",
+      "--local",
+      "--persist-to",
+      ".wrangler/state",
+      "--command",
+      sql,
+    ],
+    { cwd: API_ROOT, stdio: "pipe" },
+  );
+}
 
 async function signIn(
   page: Page,
@@ -181,63 +211,40 @@ test.describe("TW-B auth flows", () => {
 
   test("forgot-password code → new password → signed in", async ({ page }) => {
     test.setTimeout(120_000);
+
+    async function enterOtp(otp: string) {
+      const boxes = page.locator(".otp-box");
+      await expect(boxes.first()).toBeVisible({ timeout: 15_000 });
+      // Always write the mail-sink code (DEV autofill can race with a prior message).
+      for (let i = 0; i < 6; i += 1) {
+        await boxes.nth(i).fill(otp[i]!);
+      }
+      await expect(
+        page.getByRole("button", { name: /^verify code$/i }),
+      ).toBeEnabled({ timeout: 10_000 });
+    }
+
     await page.goto("/forgot-password?next=/clients");
     await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
     await page.getByRole("button", { name: /send code/i }).click();
     await expect(page.getByText(/if an account exists/i)).toBeVisible({
       timeout: 15_000,
     });
-    // Wait for DEV autofill or mail sink, then ensure boxes match latest code.
-    await page.waitForTimeout(800);
     const code = await fetchDevCode(EMAIL);
     expect(code).toBeTruthy();
-    async function pasteOtp(otp: string) {
-      const first = page.locator(".otp-box").first();
-      await first.click();
-      await first.evaluate((el, value) => {
-        const input = el as HTMLInputElement;
-        const dt = new DataTransfer();
-        dt.setData("text/plain", value);
-        input.dispatchEvent(
-          new ClipboardEvent("paste", {
-            clipboardData: dt,
-            bubbles: true,
-            cancelable: true,
-          }),
-        );
-      }, otp);
-    }
-    await pasteOtp(code!);
+    await enterOtp(code!);
     await page.getByRole("button", { name: /^verify code$/i }).click();
-    await expect(page.getByLabel(/^New password$/i)).toBeVisible({
+    await expect(page.getByText(/choose a new password/i)).toBeVisible({
       timeout: 20_000,
     });
-    const newPass = `FitBud-reset-${Date.now().toString().slice(-4)}aA1`;
-    await page.getByLabel(/^New password$/i).fill(newPass);
+    const newPass = `FitBud-reset-${Date.now().toString().slice(-4)}aA1!`;
+    await page.locator('input[autocomplete="new-password"]').fill(newPass);
     await page.getByRole("button", { name: /save password and sign in/i }).click();
     await page.waitForURL((url) => url.pathname.startsWith("/clients"), {
       timeout: 45_000,
     });
-    // Restore demo password for later tests.
-    await page.goto("/forgot-password");
-    await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-    await page.getByRole("button", { name: /send code/i }).click();
-    await expect(page.getByText(/if an account exists/i)).toBeVisible({
-      timeout: 15_000,
-    });
-    await page.waitForTimeout(800);
-    const code2 = await fetchDevCode(EMAIL);
-    expect(code2).toBeTruthy();
-    await pasteOtp(code2!);
-    await page.getByRole("button", { name: /^verify code$/i }).click();
-    await expect(page.getByLabel(/^New password$/i)).toBeVisible({
-      timeout: 20_000,
-    });
-    await page.getByLabel(/^New password$/i).fill(PASSWORD);
-    await page.getByRole("button", { name: /save password and sign in/i }).click();
-    await page.waitForURL((url) => !url.pathname.includes("/forgot"), {
-      timeout: 45_000,
-    });
+    // Seed demo password is on the reset deny-list — restore via D1 for later tests.
+    await restoreDemoPassword(EMAIL);
   });
 
   test("sign-in mockup chrome: icons, no DEV hints by default", async ({
@@ -255,9 +262,7 @@ test.describe("TW-B auth flows", () => {
   });
 });
 
-test.describe("TW-B first-run + roster + invite", () => {
-  test.describe.configure({ mode: "serial" });
-
+test.describe("TW-B first-run welcome", () => {
   test("fresh trainer completes welcome steps 1–3 and finish", async ({
     page,
   }) => {
@@ -292,7 +297,6 @@ test.describe("TW-B first-run + roster + invite", () => {
     page,
   }) => {
     test.setTimeout(90_000);
-    // Nova may already have a profile from prior test — use capture preview as rahul.
     await signIn(page);
     await page.waitForURL((url) => !url.pathname.includes("/sign-in"), {
       timeout: 45_000,
@@ -302,7 +306,9 @@ test.describe("TW-B first-run + roster + invite", () => {
     await page.getByRole("button", { name: /^continue$/i }).click();
     await expect(page.getByRole("alert")).toContainText(/valid|10-digit/i);
   });
+});
 
+test.describe("TW-B roster + invite", () => {
   test("roster search, Ended segment, FilterBar one row at 1440", async ({
     page,
   }) => {
@@ -342,8 +348,9 @@ test.describe("TW-B first-run + roster + invite", () => {
     });
   });
 
-  test("add client share card: WhatsApp, copy, QR", async ({ page }) => {
+  test("add client share card: WhatsApp, copy, QR", async ({ page, context }) => {
     test.setTimeout(90_000);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await signIn(page);
     await page.waitForURL((url) => !url.pathname.includes("/sign-in"), {
       timeout: 45_000,
@@ -394,6 +401,10 @@ test.describe("TW-B first-run + roster + invite", () => {
     );
     await expect(page.getByTestId("reactivate-client-link")).toBeVisible();
   });
+});
+
+test.describe("TW-B invite lifecycle (serial)", () => {
+  test.describe.configure({ mode: "serial" });
 
   test("pending invite reissue confirm + revoke", async ({ page, request }) => {
     test.setTimeout(120_000);
@@ -408,17 +419,29 @@ test.describe("TW-B first-run + roster + invite", () => {
       page.getByText(/old link will stop working/i),
     ).toBeVisible();
     await page.getByRole("button", { name: /create new link/i }).click();
-    await page.waitForURL(/\/invitations\//, { timeout: 30_000 });
+    await page.waitForURL(
+      (url) =>
+        /\/invitations\/[0-9a-f-]{36}/i.test(url.pathname) &&
+        !url.pathname.includes(ANITA_INVITE),
+      { timeout: 30_000 },
+    );
     const newUrl = page.url();
-    expect(newUrl).toMatch(/\/invitations\/[0-9a-f-]{36}/i);
     expect(newUrl).not.toContain(ANITA_INVITE);
 
-    // Old invitation id should no longer be pending for actions.
+    // Old demo token belongs to the revoked row — preview may 4xx or return revoked.
     const preview = await request.get(
       `${API}/invitations/preview?token=fitbud-demo-anita-invite-pending`,
     );
-    // Reissue invalidates token — accept 404/410/400.
-    expect([400, 404, 410, 409]).toContain(preview.status());
+    if (preview.ok()) {
+      const body = (await preview.json()) as {
+        data?: { status?: string };
+        status?: string;
+      };
+      const status = body.data?.status ?? body.status;
+      expect(status).toMatch(/revoked|expired|invalid/i);
+    } else {
+      expect([400, 404, 410, 409, 422]).toContain(preview.status());
+    }
 
     await page.getByRole("button", { name: /more actions/i }).click();
     await page.getByRole("menuitem", { name: /revoke invite/i }).click();
@@ -457,15 +480,17 @@ test.describe("TW-B first-run + roster + invite", () => {
     });
     expect(verify.ok()).toBeTruthy();
     const verified = (await verify.json()) as { data: { otpProof: string } };
+    // Demo seed password is on the reset/accept deny-list.
+    const acceptPassword = `FitBud-Accept-${stamp.toString().slice(-4)}aA1!`;
     const accept = await request.post(`${API}/invitations/accept`, {
       data: {
         token: invite.data.token,
-        password: PASSWORD,
+        password: acceptPassword,
         otpProof: verified.data.otpProof,
         displayName: `Accept ${stamp}`,
       },
     });
-    expect(accept.ok()).toBeTruthy();
+    expect(accept.ok(), await accept.text()).toBeTruthy();
     const accepted = (await accept.json()) as {
       data: { relationshipId: string };
     };

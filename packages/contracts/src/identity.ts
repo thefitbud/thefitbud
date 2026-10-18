@@ -55,7 +55,8 @@ export const meResponseSchema = z.object({
   traineeProfileId: uuidSchema.nullable(),
   trainerProfile: z
     .object({
-      displayName: z.string().min(1),
+      // Empty string is valid for first-run trainers (TW-02) before welcome save.
+      displayName: z.string().max(120),
       whatsappE164: z.string().nullable(),
     })
     .nullable()

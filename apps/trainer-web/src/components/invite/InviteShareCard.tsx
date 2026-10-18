@@ -37,12 +37,24 @@ export function InviteShareCard({
 
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteUrl);
+      } else {
+        throw new Error("clipboard unavailable");
+      }
     } catch {
-      setCopied(false);
+      const ta = document.createElement("textarea");
+      ta.value = inviteUrl;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
     }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
   }
 
   return (
