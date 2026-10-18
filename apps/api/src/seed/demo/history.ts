@@ -342,9 +342,14 @@ function shouldLogWorkout(
   if (state === "reminders_paused") {
     return localDate < adherenceStart ? "completed" : false;
   }
-  if (state === "slipping" || state === "acknowledged") {
+  if (state === "slipping") {
     const missFrom = addDaysFromLocalDate(refDate, -2);
     if (localDate >= missFrom) return false;
+    return "completed";
+  }
+  // Meera (acknowledged): keep workouts logged so detection does not open a
+  // fresh active exception beside her seeded acknowledged "Missed lunch".
+  if (state === "acknowledged") {
     return "completed";
   }
   if (localDate >= adherenceStart && localDate <= refDate) {
@@ -369,29 +374,44 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const deviationMealId = demoUuid("meal-assignment", "rohan.slipping@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
   const overdueCheckinId = demoUuid("checkin", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -7));
 
+  // Stable IDs from docs/spec/09-demo-data.md (agents verify these URLs).
+  const ROHAN_ACTIVE_EXCEPTION_ID = "95af751f-156c-44ac-a945-ec30870134ae";
+  const ROHAN_RESOLVED_EXCEPTION_ID = "fa80cb4f-f852-403e-9c91-318a9944f238";
+  const MEERA_ACK_EXCEPTION_ID = "f588b76a-62a3-42bb-bf85-0570ea52c9eb";
+
   // Spread ages so attention cards aren't all "just now". Cap seeded rows so
   // detection for today's unlogged holes stays ≤10 open total per client.
   const exceptionRows = [
-    ["rohan-missed-workout", rohanRel, "missed_workout", "critical", missedWorkoutId, "workout_assignment", 2, 6],
-    ["rohan-skipped-workout", rohanRel, "skipped_workout", "attention", skippedWorkoutId, "workout_assignment", 0, 18],
-    ["rohan-overdue-meal", rohanRel, "overdue_meal", "critical", overdueMealId, "meal_assignment", 1, 4],
-    ["rohan-skipped-meal", rohanRel, "skipped_meal", "attention", skippedMealId, "meal_assignment", 0, 9],
-    ["rohan-meal-deviation", rohanRel, "meal_deviation", "attention", deviationMealId, "meal_assignment", 0, 3],
-    ["rohan-overdue-checkin", rohanRel, "overdue_checkin", "attention", overdueCheckinId, "checkin", 7, 2],
+    ["rohan-missed-workout", ROHAN_ACTIVE_EXCEPTION_ID, rohanRel, "missed_workout", "critical", missedWorkoutId, "workout_assignment", 2, 6],
+    ["rohan-skipped-workout", demoUuid("exception", "rohan-skipped-workout"), rohanRel, "skipped_workout", "attention", skippedWorkoutId, "workout_assignment", 0, 18],
+    ["rohan-overdue-meal", demoUuid("exception", "rohan-overdue-meal"), rohanRel, "overdue_meal", "critical", overdueMealId, "meal_assignment", 1, 4],
+    ["rohan-skipped-meal", demoUuid("exception", "rohan-skipped-meal"), rohanRel, "skipped_meal", "attention", skippedMealId, "meal_assignment", 0, 9],
+    ["rohan-meal-deviation", demoUuid("exception", "rohan-meal-deviation"), rohanRel, "meal_deviation", "attention", deviationMealId, "meal_assignment", 0, 3],
+    ["rohan-overdue-checkin", demoUuid("exception", "rohan-overdue-checkin-active"), rohanRel, "overdue_checkin", "attention", overdueCheckinId, "checkin", 7, 2],
   ] as const;
-  for (const [key, rel, type, severity, sourceId, sourceType, daysAgo, hoursAgo] of exceptionRows) {
+  for (const [, id, rel, type, severity, sourceId, sourceType, daysAgo, hoursAgo] of exceptionRows) {
     const detected = new Date(
       Date.parse(now) - daysAgo * 86_400_000 - hoursAgo * 3_600_000,
     ).toISOString();
     const summary = labelFor("exception_type", type);
     lines.push(
-      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", key))}, ${sqlQuote(rel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(sourceId)}, ${sqlQuote(summary)}, ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(rel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(sourceId)}, ${sqlQuote(summary)}, ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
   }
 
+  const rohanResolvedDetected = new Date(
+    Date.parse(now) - 10 * 86_400_000,
+  ).toISOString();
+  const rohanResolvedAt = new Date(
+    Date.parse(now) - 9 * 86_400_000,
+  ).toISOString();
+  lines.push(
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(ROHAN_RESOLVED_EXCEPTION_ID)}, ${sqlQuote(rohanRel)}, 'missed_workout', 'attention', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -10)))}, 'Missed workout', ${sqlQuote(rohanResolvedDetected)}, ${sqlQuote(rohanResolvedAt)}, 'talked', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+  );
+
   const meeraRel = relId("rahul.coach@demo.fitbud.test", "meera.ack@demo.fitbud.test");
   const ackMealId = demoUuid("meal-assignment", "meera.ack@demo.fitbud.test", addDaysFromLocalDate(refDate, -2), MEAL_PRESCRIPTION_IDS.lunch);
-  const ackExceptionId = demoUuid("exception", "meera-ack-meal");
+  const ackExceptionId = MEERA_ACK_EXCEPTION_ID;
   const meeraDetected = new Date(
     Date.parse(`${addDaysFromLocalDate(refDate, -2)}T09:00:00.000Z`),
   ).toISOString();
