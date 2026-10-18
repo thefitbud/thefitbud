@@ -125,6 +125,25 @@ describe("food nutrition calculation", () => {
     expect(displayNutrients(item).proteinGrams).toBe(0.1);
   });
 
+  it("dayMacrosFromScaledItems sums scaled then unscales once", () => {
+    // 0.6g + 0.6g → per-item round = 1+1=2; sum-then-round = 1
+    const a = {
+      energyKcalScaled: scaleDecimal(0.4),
+      proteinScaled: scaleDecimal(0.6),
+      carbsScaled: scaleDecimal(1.4),
+      fatScaled: scaleDecimal(0.6),
+      partial: false,
+    };
+    const b = { ...a };
+    const perItem =
+      unscaleNutrient(a.proteinScaled) + unscaleNutrient(b.proteinScaled);
+    const day = dayMacrosFromScaledItems([a, b]);
+    expect(perItem).toBe(2);
+    expect(day.proteinG).toBe(1);
+    expect(day.fatG).toBe(1);
+    expect(day.unknown).toBe(false);
+  });
+
   it("reads a legacy portion snapshot without recalculating it", () => {
     const item = mealFoodItemSchema.parse({
       name: "Dal",
