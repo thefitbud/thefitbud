@@ -530,4 +530,62 @@ describe("demo seed", () => {
     );
     expect(rows[0]?.values[0]?.[0]).toBe(0);
   });
+
+  it("trainer week todayNutrition kcal matches trainee /me/day for Rohan and Aarav", async () => {
+    const trainerToken = await login("rahul.coach@demo.fitbud.test");
+    const cases = [
+      {
+        email: "rohan.slipping@demo.fitbud.test",
+        rel: demoUuid("relationship", "rohan.slipping@demo.fitbud.test"),
+      },
+      {
+        email: "aarav.ontrack@demo.fitbud.test",
+        rel: demoUuid("relationship", "aarav.ontrack@demo.fitbud.test"),
+      },
+    ] as const;
+
+    for (const c of cases) {
+      const weekRes = await app.request(
+        `/workspaces/relationships/${c.rel}/week`,
+        {
+          headers: {
+            Authorization: `Bearer ${trainerToken}`,
+            "x-fitbud-role": "trainer",
+          },
+        },
+        testEnv(),
+      );
+      expect(weekRes.status, await weekRes.clone().text()).toBe(200);
+      const weekBody = (await weekRes.json()) as {
+        data: {
+          todayNutrition: {
+            date: string;
+            logged: { kcal: number };
+            assigned: { kcal: number } | null;
+          };
+        };
+      };
+      const today = weekBody.data.todayNutrition.date;
+      const trainerLogged = weekBody.data.todayNutrition.logged.kcal;
+
+      const traineeToken = await login(c.email);
+      const dayRes = await app.request(`/me/day/${today}`, {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      }, testEnv());
+      expect(dayRes.status, await dayRes.clone().text()).toBe(200);
+      const dayBody = (await dayRes.json()) as {
+        data: { totals: { kcalScaled: number } };
+      };
+      const traineeLogged = Math.round(
+        dayBody.data.totals.kcalScaled / NUTRIENT_SCALE,
+      );
+      expect(
+        traineeLogged,
+        `${c.email}: trainer week logged ${trainerLogged} vs trainee /me/day ${traineeLogged}`,
+      ).toBe(trainerLogged);
+    }
+  }, 120_000);
 });

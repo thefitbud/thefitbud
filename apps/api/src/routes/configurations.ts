@@ -251,7 +251,7 @@ configurationRoutes.get(
     summary: "Configurations operation for GET /configurations/relationships/:relationshipId.",
     description: "Configurations operation for GET /configurations/relationships/:relationshipId.",
     roles: ["trainer", "trainee"],
-    response: coachingConfigurationSchema,
+    response: coachingConfigurationSchema.nullable(),
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,

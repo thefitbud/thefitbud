@@ -199,7 +199,9 @@ describe("coaching configuration", () => {
       { headers: { Cookie: trainerCookie } },
       testEnv(),
     );
-    expect(missing.status).toBe(404);
+    expect(missing.status).toBe(200);
+    const missingBody = (await missing.json()) as { data: unknown };
+    expect(missingBody.data).toBeNull();
 
     const draft = await app.request(
       `/configurations/relationships/${relationshipId}/draft`,

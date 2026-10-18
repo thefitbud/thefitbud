@@ -83,7 +83,7 @@ subscriptionRoutes.get(
     summary: "Subscriptions operation for GET /relationships/:relationshipId/subscription.",
     description: "Subscriptions operation for GET /relationships/:relationshipId/subscription.",
     roles: ["trainer"],
-    response: subscriptionSchema,
+    response: subscriptionSchema.nullable(),
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
