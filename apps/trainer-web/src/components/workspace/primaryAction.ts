@@ -46,19 +46,21 @@ export function primaryActionFor(input: {
       to: `/clients/${rid}/configure`,
     };
   }
-  if (input.reviewCheckin?.status === "submitted") {
-    return {
-      kind: "review_checkin",
-      label: "Review check-in",
-      to: `/clients/${rid}/check-ins/${input.reviewCheckin.id}`,
-    };
-  }
+  // Open attention/critical issue beats check-in review for the single primary
+  // CTA (TW-09a); submitted check-in still surfaces on the overview side card.
   if (input.openExceptionId) {
     return {
       kind: "review_exception",
       label: "Review issue",
       to: `/clients/${rid}/overview?exception=${input.openExceptionId}`,
       exceptionId: input.openExceptionId,
+    };
+  }
+  if (input.reviewCheckin?.status === "submitted") {
+    return {
+      kind: "review_checkin",
+      label: "Review check-in",
+      to: `/clients/${rid}/check-ins/${input.reviewCheckin.id}`,
     };
   }
   if (
