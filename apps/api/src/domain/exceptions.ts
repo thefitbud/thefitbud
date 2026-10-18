@@ -146,6 +146,40 @@ async function collectCandidatesForRelationship(
   return candidates;
 }
 
+/** True when the exception source still sits inside the detection lookback. */
+async function isSourceInDetectionWindow(
+  db: Db,
+  row: ExceptionRow,
+  windowStart: string,
+): Promise<boolean> {
+  if (row.sourceEntityType === "meal_assignment") {
+    const [assignment] = await db
+      .select({ localDate: mealAssignments.localDate })
+      .from(mealAssignments)
+      .where(eq(mealAssignments.id, row.sourceEntityId))
+      .limit(1);
+    return Boolean(assignment && assignment.localDate >= windowStart);
+  }
+  if (row.sourceEntityType === "workout_assignment") {
+    const [assignment] = await db
+      .select({ localDate: workoutAssignments.localDate })
+      .from(workoutAssignments)
+      .where(eq(workoutAssignments.id, row.sourceEntityId))
+      .limit(1);
+    return Boolean(assignment && assignment.localDate >= windowStart);
+  }
+  if (row.sourceEntityType === "checkin") {
+    const [checkin] = await db
+      .select({ localDate: checkins.localDate })
+      .from(checkins)
+      .where(eq(checkins.id, row.sourceEntityId))
+      .limit(1);
+    return Boolean(checkin && checkin.localDate >= windowStart);
+  }
+  // Unknown source types: only resolve when positively re-checked via candidates.
+  return false;
+}
+
 /**
  * Deterministic exception detection for one coaching relationship.
  * Creates Detected exceptions, promotes them to Active, and resolves an open
@@ -169,6 +203,7 @@ export async function evaluateRelationshipExceptions(
     .from(exceptions)
     .where(eq(exceptions.coachingRelationshipId, relationshipId));
 
+  const windowStart = detectionWindowStartLocalDate(now);
   const candidates = await collectCandidatesForRelationship(
     db,
     relationshipId,
@@ -180,6 +215,9 @@ export async function evaluateRelationshipExceptions(
   for (const row of existingRows) {
     if (!isOpenExceptionStatus(row.status)) continue;
     if (candidateKeys.has(exceptionKey(row))) continue;
+    // Lookback only limits new detection. Older open items stay open unless we
+    // positively re-check their source inside the window and the condition cleared.
+    if (!(await isSourceInDetectionWindow(db, row, windowStart))) continue;
     await db
       .update(exceptions)
       .set({

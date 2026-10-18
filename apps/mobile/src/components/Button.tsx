@@ -19,7 +19,9 @@ export type ButtonVariant =
   | "secondary"
   | "tertiary"
   | "destructive"
-  | "whatsapp";
+  | "whatsapp"
+  /** @deprecated Alias of tertiary — kept for existing call sites. */
+  | "ghost";
 
 type Props = PressableProps & {
   label: string;
@@ -39,8 +41,10 @@ export function Button({
   ...rest
 }: Props) {
   const isDisabled = Boolean(disabled || loading);
+  const resolved =
+    variant === "ghost" ? "tertiary" : variant;
   const spinnerColor =
-    variant === "primary" || variant === "destructive"
+    resolved === "primary" || resolved === "destructive"
       ? colors.white
       : colors.indigo;
 
@@ -52,11 +56,11 @@ export function Button({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.base,
-        variant === "primary" && styles.primary,
-        variant === "secondary" && styles.secondary,
-        variant === "whatsapp" && styles.whatsapp,
-        variant === "tertiary" && styles.tertiary,
-        variant === "destructive" && styles.destructive,
+        resolved === "primary" && styles.primary,
+        resolved === "secondary" && styles.secondary,
+        resolved === "whatsapp" && styles.whatsapp,
+        resolved === "tertiary" && styles.tertiary,
+        resolved === "destructive" && styles.destructive,
         pressed && !isDisabled && styles.pressed,
         isDisabled && styles.disabled,
       ]}
@@ -69,11 +73,11 @@ export function Button({
           <Text
             style={[
               styles.label,
-              (variant === "primary" || variant === "destructive") &&
+              (resolved === "primary" || resolved === "destructive") &&
                 styles.labelOnFill,
-              (variant === "secondary" || variant === "whatsapp") &&
+              (resolved === "secondary" || resolved === "whatsapp") &&
                 styles.labelSecondary,
-              variant === "tertiary" && styles.labelTertiary,
+              resolved === "tertiary" && styles.labelTertiary,
             ]}
           >
             {label}

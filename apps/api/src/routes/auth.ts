@@ -86,16 +86,20 @@ authRoutes.post("/session",
     parsed.data.timezone ?? "UTC",
   );
 
-  // Only provision a trainer role for brand-new accounts. Existing trainee-only
-  // accounts (e.g. sneha.review) must never be upgraded by signing into web.
+  // Provision trainer for new accounts and for existing users who are not
+  // already trainee-only. Trainee-only accounts (e.g. sneha.review) must never
+  // be upgraded by signing into trainer web. Legacy rows with no roles yet
+  // still get a trainer profile (dev/session bootstrap).
   const existingActor = await loadActorByUserId(db, {
     userId,
     surface: "trainer_web",
     authMethod: "session",
     requestedRole: null,
   });
-  const alreadyTrainer = existingActor?.permittedRoles.includes("trainer");
-  if (created || alreadyTrainer) {
+  const permitted = existingActor?.permittedRoles ?? [];
+  const isTraineeOnly =
+    permitted.includes("trainee") && !permitted.includes("trainer");
+  if (created || !isTraineeOnly) {
     await ensureRoleAndProfile(db, {
       userId,
       role: "trainer",

@@ -139,6 +139,7 @@ describe("FitBudApiClient", () => {
                 traineeTimezone: "Asia/Kolkata",
                 hasCustomMealTimes: false,
                 trainerWhatsappE164: null,
+                clientWhatsappE164: "+919876543210",
                 traineeProfile: {
                   displayName: "Asha",
                   age: null,

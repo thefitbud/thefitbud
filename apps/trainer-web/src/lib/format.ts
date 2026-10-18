@@ -9,7 +9,8 @@ import {
 export function formatIsoDateTime(iso: string, timeZone?: string): string {
   return formatInstant(
     iso,
-    timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    timeZone ??
+      (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
   );
 }
 
