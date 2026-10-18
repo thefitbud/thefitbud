@@ -1,0 +1,24 @@
+{
+  "app": "trainer-web",
+  "hardFailErrors": [],
+  "reportOnlyErrors": [
+    {
+      "id": "iso-date",
+      "severity": "error",
+      "match": "2026-09-22T00:00",
+      "route": "/clients/f2a64fdb-96ad-46f3-a95e-99151b4a25f1",
+      "why": "Raw ISO date/timestamp. Use the packages/core formatter ('Thu 15 Oct')."
+    }
+  ],
+  "warns": [
+    {
+      "id": "24h-time",
+      "severity": "warn",
+      "match": "00:00",
+      "route": "/clients/f2a64fdb-96ad-46f3-a95e-99151b4a25f1",
+      "why": "Times are 'h:mm am/pm'. 24 h values appear in some guide AC (quiet hours); see BATCHES.md Spec questions."
+    }
+  ],
+  "errorCount": 1,
+  "warnCount": 1
+}
