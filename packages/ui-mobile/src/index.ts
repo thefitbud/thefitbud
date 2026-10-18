@@ -17,6 +17,7 @@ export {
   textStyles,
   typeScale,
 } from "./typography.js";
+export { FitText } from "./FitText.js";
 export { NutritionRings, type RingDatum } from "./NutritionRings.js";
 export { DateNavigator, type DateNavigatorDay } from "./DateNavigator.js";
 export { WeeklyConsistency } from "./WeeklyConsistency.js";

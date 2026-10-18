@@ -1,6 +1,13 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
+import { Pressable, StyleSheet, View } from "react-native";
+import {
+  colors,
+  fontFamily,
+  fontFamilyMedium,
+  spacing,
+  typeScale,
+} from "@fitbud/ui-mobile";
+import { Text } from "../../components/Text";
 import { tagline } from "@fitbud/tokens";
 import { useConfig } from "../../providers/ConfigProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -110,6 +117,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   link: {
+    fontFamily: fontFamilyMedium,
     color: colors.indigo,
     fontSize: typeScale.body,
     fontWeight: "600",
@@ -122,11 +130,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   noteTitle: {
+    fontFamily: fontFamilyMedium,
     color: colors.deepNavy,
     fontSize: typeScale.body,
     fontWeight: "700",
   },
   noteBody: {
+    fontFamily,
     color: colors.midGrey,
     fontSize: typeScale.body,
     lineHeight: 22,

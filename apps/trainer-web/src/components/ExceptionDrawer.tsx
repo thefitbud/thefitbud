@@ -69,6 +69,18 @@ function loggedLine(detail: ExceptionDetail): string {
   return "Logged: nothing yet";
 }
 
+/** Format HH:mm quiet-hours end as a friendly clock like "7:00 am". */
+function formatQuietEnd(hhmm: string): string {
+  const match = /^(\d{1,2}):(\d{2})/.exec(hhmm.trim());
+  if (!match) return hhmm;
+  let hour = Number(match[1]);
+  const minute = match[2];
+  const suffix = hour >= 12 ? "pm" : "am";
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  return `${hour}:${minute} ${suffix}`;
+}
+
 function reasonHeading(
   detail: ExceptionDetail,
   plannedTitle: string | null,
@@ -117,8 +129,11 @@ export function ExceptionDrawer({
     null,
   );
   const [nudgeNow, setNudgeNow] = useState(() => Date.now());
+  const [nudgePaused, setNudgePaused] = useState(false);
+  const [dueByIso, setDueByIso] = useState<string | null>(null);
+  const [quietHoursEnd, setQuietHoursEnd] = useState<string | null>(null);
   const online = useOnlineStatus();
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const nudgeRef = useRef<() => void>(() => undefined);
 
@@ -131,24 +146,36 @@ export function ExceptionDrawer({
 
       let title: string | null =
         detailString(result.details, "mealName") ?? null;
+      let due =
+        windowEndIso(result.details) ??
+        detailString(result.details, "windowEndsAt");
       try {
         if (result.sourceEntityType === "workout_assignment") {
           const workout = await apiClient.getWorkoutAssignment(
             result.sourceEntityId,
           );
           title = workout.workoutDayName;
-        } else if (result.sourceEntityType === "meal_assignment" && !title) {
+          due = due ?? workout.windowEndsAt;
+        } else if (result.sourceEntityType === "meal_assignment") {
           const meal = await apiClient.getMealAssignment(
             result.sourceEntityId,
           );
-          title = meal.mealName;
+          if (!title) title = meal.mealName;
+          due = due ?? meal.windowEndsAt;
         } else if (result.sourceEntityType === "checkin") {
           title = "Check-in";
+          try {
+            const checkin = await apiClient.getCheckin(result.sourceEntityId);
+            due = due ?? checkin.windowEndsAt;
+          } catch {
+            /* optional */
+          }
         }
       } catch {
         /* source may be gone; keep title from details */
       }
       setPlannedTitle(title);
+      setDueByIso(due);
 
       try {
         const ws = await apiClient.getClientWorkspace(
@@ -167,6 +194,7 @@ export function ExceptionDrawer({
         );
         if (resp.label === "reminders_paused") {
           setReminderLine("Reminders paused by client");
+          setNudgePaused(true);
         } else if (resp.label === "notifications_off") {
           setReminderLine("Client has notifications off");
         } else if (resp.counts.sent > 0) {
@@ -273,8 +301,16 @@ export function ExceptionDrawer({
         },
       );
       if (result.deferredForQuietHours) {
+        const end =
+          result.quietHoursEnd?.trim() ||
+          quietHoursEnd ||
+          "quiet hours end";
+        const endLabel = /^\d{1,2}:\d{2}/.test(end)
+          ? formatQuietEnd(end)
+          : end;
+        setQuietHoursEnd(result.quietHoursEnd ?? quietHoursEnd);
         setNudgeHint(
-          "Nudge will arrive after 7:00 am (client's quiet hours).",
+          `Nudge will arrive after ${endLabel} (client's quiet hours).`,
         );
       } else if (result.deduped) {
         setNudgeHint("Already nudged today.");
@@ -284,6 +320,7 @@ export function ExceptionDrawer({
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.code === "REMINDERS_PAUSED") {
+          setNudgePaused(true);
           setNudgeHint(
             err.message ||
               "Client has paused reminders. Nudge isn't available.",
@@ -312,8 +349,17 @@ export function ExceptionDrawer({
           /quiet/i.test(err.message) ||
           err.details?.deferredForQuietHours === true
         ) {
+          const endRaw =
+            (typeof err.details?.quietHoursEnd === "string"
+              ? err.details.quietHoursEnd
+              : null) ||
+            quietHoursEnd ||
+            "quiet hours end";
+          const endLabel = /^\d{1,2}:\d{2}/.test(endRaw)
+            ? formatQuietEnd(endRaw)
+            : endRaw;
           setNudgeHint(
-            "Nudge will arrive after 7:00 am (client's quiet hours).",
+            `Nudge will arrive after ${endLabel} (client's quiet hours).`,
           );
           return;
         }
@@ -373,9 +419,14 @@ export function ExceptionDrawer({
     detail &&
     (detail.status === "detected" || detail.status === "active");
 
-  const dueIso = detail ? windowEndIso(detail.details) : null;
+  const dueIso =
+    dueByIso ?? (detail ? windowEndIso(detail.details) : null);
   const nudgeBlocked =
-    nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil;
+    nudgePaused ||
+    (nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil);
+  const isSkipped =
+    detail?.type === "skipped_meal" || detail?.type === "skipped_workout";
+  const showNudge = Boolean(detail && !resolved && !isSkipped);
   const whatsappHref = clientWhatsappHref({
     phoneE164: clientWhatsappE164,
     name: clientName,
@@ -383,7 +434,7 @@ export function ExceptionDrawer({
 
   return (
     <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <aside
+      <div
         ref={panelRef}
         className="drawer-panel"
         role="dialog"
@@ -440,7 +491,7 @@ export function ExceptionDrawer({
                 <p className="muted" style={{ margin: 0 }}>
                   {dueIso
                     ? `Due by ${formatClockTime(dueIso, VIEWER_TZ)}`
-                    : "See client plan for the window"}
+                    : "Due by —"}
                 </p>
                 <p className="muted" style={{ margin: "6px 0 0" }}>
                   {loggedLine(detail)}
@@ -527,7 +578,7 @@ export function ExceptionDrawer({
                       Resolve
                     </Button>
                   ) : null}
-                  {active || acknowledged ? (
+                  {showNudge && (active || acknowledged) ? (
                     <Button
                       variant="secondary"
                       disabled={acting || !online || nudgeBlocked}
@@ -593,7 +644,7 @@ export function ExceptionDrawer({
             ) : null}
           </>
         ) : null}
-      </aside>
+      </div>
     </div>
   );
 }

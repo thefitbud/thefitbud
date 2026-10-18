@@ -405,8 +405,18 @@ function buildPersonaOverlays(input: HistoryInput): string {
       Date.parse(now) - daysAgo * 86_400_000 - hoursAgo * 3_600_000,
     ).toISOString();
     const summary = labelFor("exception_type", type);
+    const localDate =
+      type === "missed_workout"
+        ? addDaysFromLocalDate(refDate, -2)
+        : type === "overdue_checkin"
+          ? addDaysFromLocalDate(refDate, -7)
+          : refDate;
+    const detailsJson = JSON.stringify({
+      localDate,
+      windowEndsAt: `${localDate}T18:30:00.000Z`,
+    });
     lines.push(
-      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(rel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(sourceId)}, ${sqlQuote(summary)}, ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, details_json, detected_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(rel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(sourceId)}, ${sqlQuote(summary)}, ${sqlQuote(detailsJson)}, ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
   }
 

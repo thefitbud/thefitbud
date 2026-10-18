@@ -356,5 +356,7 @@ export const nudgeActivityResponseSchema = z.object({
   notification: notificationSchema,
   deduped: z.boolean(),
   deferredForQuietHours: z.boolean().optional(),
+  /** Client quiet-hours end (HH:mm) when deferred for quiet hours. */
+  quietHoursEnd: z.string().nullable().optional(),
 });
 export type NudgeActivityResponse = z.infer<typeof nudgeActivityResponseSchema>;

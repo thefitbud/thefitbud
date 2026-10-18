@@ -41,7 +41,7 @@ export function CoachAskDrawer({
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [visibleToClient, setVisibleToClient] = useState(false);
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -143,7 +143,7 @@ export function CoachAskDrawer({
 
   return (
     <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <aside
+      <div
         ref={panelRef}
         className="drawer-panel"
         role="dialog"
@@ -184,7 +184,7 @@ export function CoachAskDrawer({
             <>
               <StatusChip
                 kind="ask"
-                value={ask.topic}
+                value={ask.status}
                 label={labelFor("coach_ask_topic", ask.topic)}
               />
               <p className="muted">
@@ -305,7 +305,7 @@ export function CoachAskDrawer({
             ) : null}
           </div>
         ) : null}
-      </aside>
+      </div>
     </div>
   );
 }

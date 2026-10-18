@@ -776,6 +776,7 @@ notificationRoutes.post(
         notification: mapNotification(result.notification),
         deduped: result.deduped,
         deferredForQuietHours: result.deferredForQuietHours ?? false,
+        quietHoursEnd: result.quietHoursEnd ?? null,
       }),
     );
   },

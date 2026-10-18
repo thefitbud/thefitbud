@@ -3,12 +3,18 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import type { ReactNode } from "react";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import {
+  colors,
+  fontFamily,
+  fontFamilyBold,
+  fontFamilySemiBold,
+  spacing,
+} from "@fitbud/ui-mobile";
 import { BrandMark } from "./BrandMark";
+import { Text } from "./Text";
 
 type Props = {
   title: string;
@@ -99,6 +105,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
   brand: {
+    fontFamily: fontFamilySemiBold,
     color: colors.indigo,
     fontSize: 13,
     fontWeight: "600",
@@ -107,6 +114,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   title: {
+    fontFamily: fontFamilyBold,
     color: colors.deepNavy,
     fontSize: 28,
     fontWeight: "700",
@@ -118,6 +126,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   subtitle: {
+    fontFamily,
     color: colors.midGrey,
     fontSize: 16,
     lineHeight: 22,

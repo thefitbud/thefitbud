@@ -341,7 +341,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
             className="shell-search"
             onClick={() => openPalette()}
-            aria-label="Search clients"
+            aria-label="Search clients ⌘K"
           >
             <Search size={16} strokeWidth={1.75} aria-hidden />
             <span>Search clients</span>
