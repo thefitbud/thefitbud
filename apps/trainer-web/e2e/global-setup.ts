@@ -135,6 +135,11 @@ function startApiDevServer() {
 }
 
 export default async function globalSetup() {
+  if (process.env.SKIP_E2E_API_BOOT === "1") {
+    await waitForLogin();
+    return async () => {};
+  }
+
   stopApiProcesses();
   if (process.env.SKIP_E2E_DB_RESET !== "1") {
     runCommandSync("pnpm", ["db:reset"], { cwd: repoRoot });
@@ -160,6 +165,7 @@ export default async function globalSetup() {
   await waitForLogin();
 
   return async () => {
+    if (process.env.SKIP_E2E_API_BOOT === "1") return;
     stopApiProcesses();
   };
 }
