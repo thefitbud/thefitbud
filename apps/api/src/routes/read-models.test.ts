@@ -170,7 +170,8 @@ describe("read models", () => {
       testEnv(),
     );
     expect(response.status).toBe(200);
-    expect(queryCounter.count).toBeLessThanOrEqual(10);
+    // Workouts + meals + trainee timezone + effective plan for todayNutrition.
+    expect(queryCounter.count).toBeLessThanOrEqual(12);
     const body = (await response.json()) as {
       data: {
         days: unknown[];
