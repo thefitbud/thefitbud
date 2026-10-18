@@ -1,4 +1,5 @@
 import { addDaysToLocalDate, weekdayFromLocalDate } from "./workout.js";
+import { formatCount } from "./format.js";
 
 export type AssignmentWindowMode = "next_7_days" | "next_calendar_week" | "custom";
 
@@ -216,7 +217,7 @@ export function planConsistencyWarnings(input: {
         code: "workout_sessions",
         expected: input.sessionsPerWeek,
         actual: scheduled,
-        message: `This plan maps ${scheduled} workout sessions to weekdays, and the configuration expects ${input.sessionsPerWeek} sessions per week. ${ACKNOWLEDGE_SENTENCE}`,
+        message: `This plan maps ${formatCount(scheduled, "workout session")} to weekdays, and the configuration expects ${formatCount(input.sessionsPerWeek, "session")} per week. ${ACKNOWLEDGE_SENTENCE}`,
       });
     }
   }

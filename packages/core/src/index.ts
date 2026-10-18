@@ -285,6 +285,7 @@ export { deriveAge } from "./profile.js";
 export {
   formatCivilDate,
   formatClockTime,
+  formatHhMmTime,
   formatCount,
   formatDateRange,
   formatInstant,

@@ -91,6 +91,18 @@ export function formatClockTime(
     .toLowerCase();
 }
 
+/** Clock-only "HH:MM" (24h plan/meal time) as "8:00 am" / "1:00 pm". */
+export function formatHhMmTime(hhmm: string): string {
+  const match = /^(\d{1,2}):(\d{2})/.exec(hhmm.trim());
+  if (!match) return hhmm;
+  const hour = Number(match[1]);
+  const minute = match[2]!;
+  if (hour > 23 || Number(minute) > 59) return hhmm;
+  const period = hour >= 12 ? "pm" : "am";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${minute} ${period}`;
+}
+
 /**
  * Instant in a timezone: "13 Oct, 12:18 pm".
  * When `subjectTz` differs from `viewerTz`, append zone abbreviation

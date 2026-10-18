@@ -121,7 +121,7 @@ export function ClientProgressPage() {
   return (
     <div className="workspace-page" data-testid="screen-TW-18">
       <section className="workspace-card">
-        <p className="workspace-kicker">Stored series</p>
+        <p className="workspace-kicker">Progress</p>
         <h2 className="workspace-card-title">Progress</h2>
         <p className="lede">
           Charts use the paged measurement list. The progress summary is capped at

@@ -141,7 +141,7 @@ export function ClientHistoryPage() {
       <section className="workspace-card" aria-labelledby="history-list-heading">
         <div className="workspace-card-head">
           <div>
-            <p className="workspace-kicker">Ledger</p>
+            <p className="workspace-kicker">History</p>
             <h2 id="history-list-heading" className="workspace-card-title">
               {kind === "plan_version" ? "Plan history" : "Coaching history"}
             </h2>

@@ -231,7 +231,7 @@ export function ClientActivityPage() {
     <div className="workspace-page" data-testid="screen-TW-17">
       <div className="workspace-toolbar">
         <div>
-          <p className="workspace-kicker">Execution</p>
+          <p className="workspace-kicker">Activity</p>
           <h2 className="workspace-card-title">Activity</h2>
           <p className="lede">
             Workout, meal, and check-in rows for this client. Type, state, and

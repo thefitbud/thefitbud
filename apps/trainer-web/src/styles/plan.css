@@ -63,7 +63,7 @@
 
 .plan-kicker {
   margin: 0 0 0.25rem;
-  color: #98a0b3;
+  color: var(--ink-500, #5b616b);
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.08em;

@@ -102,7 +102,7 @@ export function ClientCheckinsPage() {
       <section className="workspace-card" aria-labelledby="checkins-heading">
         <div className="workspace-card-head">
           <div>
-            <p className="workspace-kicker">Schedule</p>
+            <p className="workspace-kicker">Check-ins</p>
             <h2 id="checkins-heading" className="workspace-card-title">
               Check-ins
             </h2>

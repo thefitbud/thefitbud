@@ -584,7 +584,21 @@
   padding-bottom: 4px;
 }
 
-.filter-bar-row,
+.filter-bar-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  scrollbar-width: thin;
+}
+
+.filter-bar-row > * {
+  flex-shrink: 0;
+}
+
 .filter-bar-more {
   display: flex;
   flex-wrap: wrap;
@@ -642,8 +656,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   max-width: 100%;
 }
 
@@ -657,7 +671,7 @@
 
 .filter-pills {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
 }
 

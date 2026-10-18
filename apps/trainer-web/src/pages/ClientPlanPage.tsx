@@ -960,7 +960,7 @@ function PlanVersionList({
     <section className="plan-card plan-versions" aria-labelledby="plan-versions-heading" data-testid="screen-TW-15">
       <div className="plan-card-head">
         <div>
-          <p className="plan-kicker">Versions</p>
+          <p className="plan-kicker">Plan</p>
           <h2 id="plan-versions-heading">Plan versions</h2>
           <p className="muted">
             Filter by status and effective dates. Clearing the filters returns the

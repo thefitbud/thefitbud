@@ -13,6 +13,7 @@ import {
 import {
   aggregateNutrients,
   displayNutrients,
+  formatHhMmTime,
   formatScaledQuantity,
   materializeFoodSnapshot,
 } from "@fitbud/core";
@@ -221,7 +222,7 @@ function MealReadOnly({ meal }: { meal: MealPrescription }) {
       </h4>
       <p className="muted">
         {meal.mealType ?? "Meal"}
-        {meal.localTime ? ` · ${meal.localTime}` : ""}
+        {meal.localTime ? ` · ${formatHhMmTime(meal.localTime)}` : ""}
         {" · "}
         {(meal.applicableWeekdays ?? []).length > 0
           ? (meal.applicableWeekdays ?? []).map((weekday) => weekdayLabel(weekday)).join(", ")
