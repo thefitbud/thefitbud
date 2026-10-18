@@ -1,5 +1,6 @@
 import { Link, NavLink } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
+import { formatCivilDate } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { clientWhatsappHref } from "../../lib/whatsapp";
 import { resolveTraineeTimezone } from "../../lib/trainee-timezone";
@@ -25,20 +26,6 @@ function statusLabel(status: string): string {
     .split("_")
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(" ");
-}
-
-function formatCheckinDate(localDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return localDate;
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
-  );
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
 }
 
 export function WorkspaceHeader({
@@ -93,7 +80,7 @@ export function WorkspaceHeader({
   }
   if (workspace.overview.nextCheckin) {
     meta.push(
-      `Next check-in ${formatCheckinDate(workspace.overview.nextCheckin.localDate)}`,
+      `Next check-in ${formatCivilDate(workspace.overview.nextCheckin.localDate)}`,
     );
   }
   const profileParts: string[] = [];

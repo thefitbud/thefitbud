@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
+import { formatCivilDate } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -66,14 +67,15 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
             <Pressable
               key={item.checkin.id}
               accessibilityRole="button"
-              accessibilityLabel={`Review check-in due ${item.checkin.localDate}`}
+              accessibilityLabel={`Review check-in due ${formatCivilDate(item.checkin.localDate)}`}
               onPress={() => onReviewCheckin(item)}
               style={styles.card}
             >
-              <Text style={styles.who}>Due {item.checkin.localDate}</Text>
+              <Text style={styles.who}>
+                Due {formatCivilDate(item.checkin.localDate)}
+              </Text>
               <Text style={styles.meta}>
-                {statusLabel(item.checkin.status)} · Client{" "}
-                {item.traineeUserId.slice(0, 8)}…
+                {statusLabel(item.checkin.status)} · Client
               </Text>
               <Text style={styles.action}>Review</Text>
             </Pressable>

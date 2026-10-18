@@ -2,14 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Checkin } from "@fitbud/contracts";
+import { formatCivilDate, formatInstant, labelFor } from "@fitbud/core";
+import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 
 type WorkspaceOutlet = { refreshEpoch?: number };
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
-}
 
 function localDateUtc(offsetDays = 0): string {
   const date = new Date();
@@ -17,21 +15,12 @@ function localDateUtc(offsetDays = 0): string {
   return date.toISOString().slice(0, 10);
 }
 
-function formatLocalDate(localDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return localDate;
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
-  );
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
-}
-
 export function ClientCheckinsPage() {
+  const { me } = useAuth();
+  const timeZone =
+    me?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone ??
+    "UTC";
   const { relationshipId = "" } = useParams();
   const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
   const [items, setItems] = useState<Checkin[]>([]);
@@ -146,14 +135,14 @@ export function ClientCheckinsPage() {
               <li key={item.id} className="workspace-row">
                 <div className="workspace-row-copy">
                   <p className="workspace-row-title">
-                    {formatLocalDate(item.localDate)}
+                    {formatCivilDate(item.localDate)}
                   </p>
                   <p className="workspace-row-meta">
                     <span className={`status-pill status-${item.status}`}>
-                      {statusLabel(item.status)}
+                      {labelFor("checkin_status", item.status)}
                     </span>
                     <span>
-                      Window ends {new Date(item.windowEndsAt).toLocaleString()}
+                      Window ends {formatInstant(item.windowEndsAt, timeZone)}
                     </span>
                   </p>
                 </div>

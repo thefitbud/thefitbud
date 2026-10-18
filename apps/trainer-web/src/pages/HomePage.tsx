@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import { labelFor } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatLocalDate,
+  formatPersonName,
+  labelFor,
+} from "@fitbud/core";
 import type {
   AttentionGroupsResponse,
   CoachAsk,
@@ -46,7 +51,13 @@ function initials(name: string): string {
 }
 
 export function HomePage() {
-  const { email } = useAuth();
+  const { me } = useAuth();
+  const timeZone =
+    me?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone ??
+    "UTC";
+  const todayLabel = formatCivilDate(formatLocalDate(new Date(), timeZone));
+  const trainerName = formatPersonName(me?.trainerProfile?.displayName);
   const [params, setParams] = useSearchParams();
   const drawerExceptionId = params.get("exception");
   const drawerAskId = params.get("ask");
@@ -135,8 +146,6 @@ export function HomePage() {
     [groups],
   );
 
-  const trainerFirst = email?.split("@")[0]?.replace(/\./g, " ") ?? "Coach";
-
   function openException(id: string) {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -172,7 +181,11 @@ export function HomePage() {
     <div className="home-triage" data-testid="screen-TW-04">
       <header className="page-header">
         <div>
-          <h1>Good to see you, {trainerFirst}</h1>
+          <h1>Today</h1>
+          <p className="lede muted">{todayLabel}</p>
+          {trainerName ? (
+            <p className="muted">{trainerName}</p>
+          ) : null}
           <p className="lede">
             One row per client. Review the most important item first.
           </p>
@@ -328,7 +341,7 @@ export function HomePage() {
                       item.planName}
                   </p>
                   <p className="attention-row-issue">
-                    Renewal {item.renewalState} · {item.renewsOn}
+                    Renewal {item.renewalState} · {formatCivilDate(item.renewsOn)}
                   </p>
                 </div>
                 <Link

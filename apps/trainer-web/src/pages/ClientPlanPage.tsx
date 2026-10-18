@@ -11,7 +11,11 @@ import {
   type PlanVersionStatus,
   type PlanWithVersions,
 } from "@fitbud/contracts";
-import { consistencyFingerprint, planConsistencyWarnings } from "@fitbud/core";
+import {
+  consistencyFingerprint,
+  labelFor,
+  planConsistencyWarnings,
+} from "@fitbud/core";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
 import { AssignPlanModal } from "../components/plan/AssignPlanModal";
 import {
@@ -52,10 +56,6 @@ function formatWhen(value: string | null | undefined): string {
     day: "numeric",
     year: "numeric",
   }).format(date);
-}
-
-function versionStatusLabel(status: string): string {
-  return status.replace(/_/g, " ");
 }
 
 function warningsFor(
@@ -699,7 +699,7 @@ export function ClientPlanPage() {
                 <h2 id="effective-plan-heading">{viewed.planTitle}</h2>
                 <p className="plan-meta">
                   <span className="plan-chip plan-chip-success">
-                    {versionStatusLabel(viewed.version.status)}{" "}
+                    {labelFor("plan_version_status", viewed.version.status)}{" "}
                     {formatWhen(viewed.version.effectiveFrom)} (Version{" "}
                     {viewed.version.versionNumber})
                   </span>
@@ -765,7 +765,10 @@ export function ClientPlanPage() {
                     <dt className="section-kicker">Nutrition</dt>
                     <dd>
                       {configuration.nutrition.mealsPerDay} meals / day · photos{" "}
-                      {configuration.nutrition.photoRequirement.replace(/_/g, " ")}
+                      {labelFor(
+                        "meal_photo_requirement",
+                        configuration.nutrition.photoRequirement,
+                      )}
                     </dd>
                   </div>
                   <div>
@@ -978,7 +981,7 @@ function PlanVersionList({
             <option value="">Any status</option>
             {planVersionStatusSchema.options.map((option) => (
               <option key={option} value={option}>
-                {versionStatusLabel(option)}
+                {labelFor("plan_version_status", option)}
               </option>
             ))}
           </select>
@@ -1035,7 +1038,7 @@ function PlanVersionList({
                   </p>
                   <p className="workspace-row-meta">
                     <span className={`status-pill status-${item.status}`}>
-                      {versionStatusLabel(item.status)}
+                      {labelFor("plan_version_status", item.status)}
                     </span>
                     <span>
                       Effective {formatWhen(item.effectiveFrom)}

@@ -8,6 +8,8 @@ import {
   type WorkspaceActivityItem,
   type WorkspaceActivityType,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
+import { formatCivilDate, formatDateRange } from "@fitbud/core";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import type { WorkspaceOutletContext } from "./workspaceContext";
@@ -18,8 +20,17 @@ function localDateUtc(offsetDays = 0): string {
   return date.toISOString().slice(0, 10);
 }
 
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
+function activityStateLabel(
+  type: WorkspaceActivityType,
+  state: string,
+): string {
+  if (type === "workout") {
+    return labelFor("workout_assignment_status", state);
+  }
+  if (type === "meal") {
+    return labelFor("meal_assignment_status", state);
+  }
+  return labelFor("checkin_status", state);
 }
 
 function typeLabel(type: WorkspaceActivityType): string {
@@ -270,7 +281,7 @@ export function ClientActivityPage() {
             <option value="">Any state</option>
             {stateOptions.map((option) => (
               <option key={option} value={option}>
-                {statusLabel(option)}
+                {activityStateLabel(activityType, option)}
               </option>
             ))}
           </select>
@@ -318,7 +329,8 @@ export function ClientActivityPage() {
               {typeLabel(activityType)} activity
             </h2>
             <p className="lede">
-              Generate assignments still uses {generateFrom} to {generateTo}.
+              Generate assignments still uses{" "}
+              {formatDateRange(generateFrom, generateTo)}.
             </p>
           </div>
         </div>
@@ -336,7 +348,7 @@ export function ClientActivityPage() {
                 <div className="workspace-row-copy">
                   <p className="workspace-row-title">{item.title}</p>
                   <p className="workspace-row-meta">
-                    <span>{item.localDate}</span>
+                    <span>{formatCivilDate(item.localDate)}</span>
                     <span className="workspace-kind">{typeLabel(item.type)}</span>
                   </p>
                   <PlanVersionReference
@@ -365,7 +377,7 @@ export function ClientActivityPage() {
                     </p>
                   ) : null}
                   <span className={`status-pill status-${item.state}`}>
-                    {statusLabel(item.state)}
+                    {activityStateLabel(item.type, item.state)}
                   </span>
                 </div>
               </li>

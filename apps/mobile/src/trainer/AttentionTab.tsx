@@ -6,8 +6,10 @@ import type {
   CoachAsk,
   TrainerCheckinInboxItem,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
+import { formatRelative } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
@@ -218,10 +220,12 @@ export function AttentionTab({
           <View style={styles.list}>
             {asks.map((ask) => (
               <View key={ask.id} style={styles.card}>
-                <Text style={styles.who}>{ask.topic}</Text>
+                <Text style={styles.who}>
+                  {labelFor("coach_ask_topic", ask.topic)}
+                </Text>
                 <Text style={styles.meta}>
-                  {ask.itemType.replace(/_/g, " ")} · asked{" "}
-                  {new Date(ask.lastAskedAt).toLocaleDateString("en-IN")}
+                  {labelFor("coach_ask_item_type", ask.itemType)} · asked{" "}
+                  {formatRelative(ask.lastAskedAt)}
                 </Text>
               </View>
             ))}
@@ -239,7 +243,7 @@ export function AttentionTab({
             >
               <Text style={styles.who}>Client check-in</Text>
               <Text style={styles.summary}>
-                {item.checkin.localDate} · {item.checkin.status}
+                {formatCivilDate(item.checkin.localDate)} · {item.checkin.status}
               </Text>
               <Text style={styles.action}>Review check-in</Text>
             </Pressable>

@@ -4,6 +4,7 @@ import { ApiClientError } from "@fitbud/api-client";
 type ActivityFeedEvent = Awaited<
   ReturnType<ReturnType<typeof stage1Api>["getActivityFeed"]>
 >["events"][number];
+import { formatCivilDate, formatRelative } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
@@ -13,13 +14,6 @@ import { Screen } from "../components/Screen";
 import { SegmentedControl } from "../components/SegmentedControl";
 
 type Filter = "all" | "meals" | "workouts" | "checkins";
-
-function formatWhen(iso: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(iso));
-}
 
 function matchesFilter(event: ActivityFeedEvent, filter: Filter): boolean {
   if (filter === "all") return true;
@@ -143,11 +137,7 @@ export function ActivityFeedScreen({ relationshipId, header }: Props) {
           <View style={styles.list}>
             {grouped.map(([day, dayEvents]) => (
               <View key={day} style={styles.group}>
-                <Text style={styles.groupTitle}>
-                  {new Intl.DateTimeFormat("en-IN", {
-                    dateStyle: "full",
-                  }).format(new Date(`${day}T12:00:00.000Z`))}
-                </Text>
+                <Text style={styles.groupTitle}>{formatCivilDate(day)}</Text>
                 {dayEvents.map((event) => (
                   <View key={event.id} style={styles.row}>
                     <Text style={styles.who}>
@@ -155,7 +145,7 @@ export function ActivityFeedScreen({ relationshipId, header }: Props) {
                     </Text>
                     <Text style={styles.summary}>{event.summary}</Text>
                     <Text style={styles.meta}>
-                      {formatWhen(event.occurredAt)}
+                      {formatRelative(event.occurredAt)}
                       {event.traineeLocalTime
                         ? ` · ${event.traineeLocalTime} their time`
                         : ""}

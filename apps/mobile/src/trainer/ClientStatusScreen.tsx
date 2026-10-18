@@ -9,6 +9,7 @@ import type {
   WorkoutAdherenceResponse,
 } from "@fitbud/contracts";
 import { formatTimeDiff } from "@fitbud/core";
+import { formatRelative } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -286,7 +287,7 @@ export function ClientStatusScreen({
               recentActivity.map((event) => (
                 <Text key={event.id} style={styles.body}>
                   {event.summary} ·{" "}
-                  {new Date(event.occurredAt).toLocaleDateString("en-IN")}
+                  {formatRelative(event.occurredAt)}
                 </Text>
               ))
             )}

@@ -63,6 +63,8 @@ export type AttentionGroupItem = z.infer<typeof attentionGroupItemSchema>;
 export const attentionGroupSchema = z.object({
   relationshipId: uuidSchema,
   traineeDisplayName: z.string(),
+  /** Client WhatsApp for trainer→client wa.me links. Null when unknown. */
+  clientWhatsappE164: z.string().nullable().optional(),
   items: z.array(attentionGroupItemSchema),
   itemCount: z.number().int().nonnegative().optional(),
   mostSevere: exceptionSeveritySchema.optional(),

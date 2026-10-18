@@ -8,11 +8,8 @@ import type {
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { LinkedMedia } from "../components/LinkedMedia";
+import { labelFor } from "@fitbud/core";
 import { formatObservedAt } from "../components/MeasurementTrend";
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
-}
 
 export function CheckinReviewPage() {
   const navigate = useNavigate();
@@ -229,7 +226,7 @@ export function CheckinReviewPage() {
                 Submission
               </h2>
               <span className={`status-pill status-${context.checkin.status}`}>
-                {statusLabel(context.checkin.status)}
+                {labelFor("checkin_status", context.checkin.status)}
               </span>
             </div>
             <p className="workspace-summary">
@@ -280,7 +277,11 @@ export function CheckinReviewPage() {
             )}
             {context.checkin.review ? (
               <p className="workspace-row-meta">
-                Recorded outcome {statusLabel(context.checkin.review.outcome)}
+                Recorded outcome{" "}
+                {labelFor(
+                  "checkin_review_outcome",
+                  context.checkin.review.outcome,
+                )}
                 {context.checkin.review.notes
                   ? ` · ${context.checkin.review.notes}`
                   : ""}
@@ -305,7 +306,7 @@ export function CheckinReviewPage() {
                   >
                     <div className="workspace-row-copy">
                       <p className="workspace-row-title">
-                        {statusLabel(item.type)} · {item.value}
+                        {labelFor("measurement_type", item.type)} · {item.value}
                         {item.unit ? ` ${item.unit}` : ""}
                       </p>
                       <p className="workspace-row-meta">
@@ -316,7 +317,7 @@ export function CheckinReviewPage() {
                       {item.mediaAssetId ? (
                         <LinkedMedia
                           mediaAssetId={item.mediaAssetId}
-                          label={`${statusLabel(item.type)} photo`}
+                          label={`${labelFor("measurement_type", item.type)} photo`}
                         />
                       ) : null}
                     </div>
@@ -399,9 +400,9 @@ export function CheckinReviewPage() {
                     <div className="workspace-row-copy">
                       <p className="workspace-row-title">
                         <span className={`status-pill status-${item.status}`}>
-                          {statusLabel(item.status)}
+                          {labelFor("exception_status", item.status)}
                         </span>{" "}
-                        {statusLabel(item.type)}
+                        {labelFor("exception_type", item.type)}
                       </p>
                       <p className="workspace-row-meta">
                         <Link to={`/exceptions/${item.id}`}>{item.summary}</Link>

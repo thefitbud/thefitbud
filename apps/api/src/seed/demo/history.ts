@@ -1,4 +1,8 @@
-import { foodSnapshotFromLibrary, materializePlanContent } from "@fitbud/core";
+import {
+  foodSnapshotFromLibrary,
+  labelFor,
+  materializePlanContent,
+} from "@fitbud/core";
 import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
 import { DEMO_ACCOUNTS } from "./spec.js";
 import {
@@ -206,10 +210,22 @@ function buildAssignmentsAndLogs(input: {
         `INSERT INTO meal_assignments (id, coaching_relationship_id, plan_id, plan_version_id, meal_prescription_id, meal_name, meal_prescription_json, local_date, window_starts_at, window_ends_at, photo_required, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(meal.id)}, ${sqlQuote(meal.name)}, ${jsonQuote(meal)}, ${sqlQuote(localDate)}, ${sqlQuote(windowStart)}, ${sqlQuote(windowEnd)}, 0, 'scheduled', NULL, NULL, ${sqlQuote(windowStart)}, ${sqlQuote(windowStart)});`,
       );
 
-      const shouldLog = shouldLogMeal(input.state, localDate, input.refDate, meal.name, adherenceStart);
-      if (shouldLog === "confirm") {
+      // Never log a meal whose slot time hasn't started yet in the client TZ.
+      const slotReached = Date.parse(windowStart) <= Date.parse(input.now);
+      const shouldLog = shouldLogMeal(
+        input.state,
+        localDate,
+        input.refDate,
+        meal.name,
+        adherenceStart,
+      );
+      if (shouldLog === "confirm" && slotReached) {
         const complianceId = demoUuid("meal-compliance", assignmentId);
-        const loggedAt = clampIsoToNow(windowEnd, input.now);
+        const loggedAt = clampIsoToNow(
+          // Log near the slot start, not the long window end (avoids future stamps).
+          new Date(Date.parse(windowStart) + 30 * 60_000).toISOString(),
+          input.now,
+        );
         lines.push(
           `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(complianceId)}, ${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, 'confirmed', 0, ${sqlQuote(loggedAt)}, NULL, NULL, 0, NULL, NULL, NULL, 400000000, 20000000, 50000000, 10000000, 0, 0, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)});`,
         );
@@ -337,18 +353,22 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const deviationMealId = demoUuid("meal-assignment", "rohan.slipping@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
   const overdueCheckinId = demoUuid("checkin", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -7));
 
+  // Spread ages so attention cards aren't all "just now".
   const exceptionRows = [
-    ["rohan-missed-workout", rohanRel, "missed_workout", "critical", missedWorkoutId, "workout_assignment", 2],
-    ["rohan-skipped-workout", rohanRel, "skipped_workout", "attention", skippedWorkoutId, "workout_assignment", 0],
-    ["rohan-overdue-meal", rohanRel, "overdue_meal", "critical", overdueMealId, "meal_assignment", 0],
-    ["rohan-skipped-meal", rohanRel, "skipped_meal", "attention", skippedMealId, "meal_assignment", 0],
-    ["rohan-meal-deviation", rohanRel, "meal_deviation", "attention", deviationMealId, "meal_assignment", 0],
-    ["rohan-overdue-checkin", rohanRel, "overdue_checkin", "attention", overdueCheckinId, "checkin", 7],
+    ["rohan-missed-workout", rohanRel, "missed_workout", "critical", missedWorkoutId, "workout_assignment", 2, 6],
+    ["rohan-skipped-workout", rohanRel, "skipped_workout", "attention", skippedWorkoutId, "workout_assignment", 0, 18],
+    ["rohan-overdue-meal", rohanRel, "overdue_meal", "critical", overdueMealId, "meal_assignment", 1, 4],
+    ["rohan-skipped-meal", rohanRel, "skipped_meal", "attention", skippedMealId, "meal_assignment", 0, 9],
+    ["rohan-meal-deviation", rohanRel, "meal_deviation", "attention", deviationMealId, "meal_assignment", 0, 3],
+    ["rohan-overdue-checkin", rohanRel, "overdue_checkin", "attention", overdueCheckinId, "checkin", 7, 2],
   ] as const;
-  for (const [key, rel, type, severity, sourceId, sourceType, daysAgo] of exceptionRows) {
-    const detected = new Date(Date.parse(now) - daysAgo * 86_400_000).toISOString();
+  for (const [key, rel, type, severity, sourceId, sourceType, daysAgo, hoursAgo] of exceptionRows) {
+    const detected = new Date(
+      Date.parse(now) - daysAgo * 86_400_000 - hoursAgo * 3_600_000,
+    ).toISOString();
+    const summary = labelFor("exception_type", type);
     lines.push(
-      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", key))}, ${sqlQuote(rel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(sourceId)}, ${sqlQuote(type)}, ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", key))}, ${sqlQuote(rel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(sourceId)}, ${sqlQuote(summary)}, ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
   }
 

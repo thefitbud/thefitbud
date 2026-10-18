@@ -38,6 +38,7 @@ import {
   exceptions,
   interventions,
   traineeProfiles,
+  userIdentities,
 } from "../db/schema";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
@@ -130,6 +131,15 @@ exceptionRoutes.get(
     const nameByUserId = new Map(
       profileRows.map((row) => [row.userId, row.displayName]),
     );
+    const identityRows = await db
+      .select({
+        userId: userIdentities.userId,
+        mobileE164: userIdentities.mobileE164,
+      })
+      .from(userIdentities);
+    const phoneByUserId = new Map(
+      identityRows.map((row) => [row.userId, row.mobileE164]),
+    );
 
     if (groupByRelationship) {
       const grouped = new Map<
@@ -137,6 +147,7 @@ exceptionRoutes.get(
         {
           relationshipId: string;
           traineeDisplayName: string;
+          clientWhatsappE164: string | null;
           items: Array<{
             id: string;
             type: string;
@@ -157,6 +168,7 @@ exceptionRoutes.get(
           relationshipId: item.coachingRelationshipId,
           traineeDisplayName:
             nameByUserId.get(item.traineeUserId) ?? "Client",
+          clientWhatsappE164: phoneByUserId.get(item.traineeUserId) ?? null,
           items: [],
         };
         bucket.items.push({

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import type { TrainerNote, WeekReadModel } from "@fitbud/contracts";
+import { formatCivilDate, formatRelative, labelFor } from "@fitbud/core";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
 import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel";
 import { MeasurementTrend } from "../components/MeasurementTrend";
@@ -8,16 +9,6 @@ import { apiClient } from "../lib/api";
 import { formatIsoDateTime, formatLocalDate } from "../lib/format";
 import { stage1Api } from "../lib/stage1-api";
 import type { WorkspaceOutletContext } from "./workspaceContext";
-
-function relativeTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diff = Date.now() - date.getTime();
-  const hours = Math.floor(diff / 3_600_000);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
@@ -105,7 +96,7 @@ export function ClientOverviewPage() {
                   <span
                     key={day.date}
                     className={`week-dot is-${day.state}`}
-                    title={day.date}
+                    title={formatCivilDate(day.date)}
                   />
                 ))}
               </div>
@@ -129,10 +120,17 @@ export function ClientOverviewPage() {
               {overview.recentActivity.slice(0, 5).map((item) => (
                 <li key={`${item.type}:${item.id}`}>
                   <span className={`status-pill status-${item.state}`}>
-                    {item.state.replace(/_/g, " ")}
+                    {labelFor(
+                      item.type === "workout"
+                        ? "workout_assignment_status"
+                        : item.type === "meal"
+                          ? "meal_assignment_status"
+                          : "checkin_status",
+                      item.state,
+                    )}
                   </span>
                   <span>{item.title}</span>
-                  <span className="muted">{relativeTime(item.occurredAt)}</span>
+                  <span className="muted">{formatRelative(item.occurredAt)}</span>
                 </li>
               ))}
             </ul>

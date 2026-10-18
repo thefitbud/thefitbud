@@ -10,6 +10,8 @@ import type {
   CoachingRelationship,
   ProgressSummary,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
+import { formatInstant } from "@fitbud/core";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -22,10 +24,6 @@ import {
 } from "../lib/minimalPng";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
-
-function formatMeasurementType(type: string): string {
-  return type.replace(/_/g, " ");
-}
 
 export function ProgressTab({
   relationship,
@@ -238,7 +236,8 @@ export function ProgressTab({
           {measurements.map((item) => (
             <View key={item.id} style={styles.row}>
               <Text style={styles.rowTitle}>
-                {formatMeasurementType(item.type)} · {item.value} {item.unit}
+                {labelFor("measurement_type", item.type)} · {item.value}{" "}
+                {item.unit}
               </Text>
               <Text style={styles.rowMeta}>
                 {new Date(item.observedAt).toLocaleString()} · {item.source}
@@ -254,7 +253,7 @@ export function ProgressTab({
           {entries.map((item) => (
             <View key={item.id} style={styles.row}>
               <Text style={styles.rowTitle}>
-                {item.title ?? item.entryType.replace(/_/g, " ")}
+                {item.title ?? labelFor("progress_entry_type", item.entryType)}
               </Text>
               <Text style={styles.rowMeta}>
                 {new Date(item.observedAt).toLocaleString()}
@@ -270,7 +269,8 @@ export function ProgressTab({
           {media.map((item) => (
             <View key={item.id} style={styles.row}>
               <Text style={styles.rowTitle}>
-                {item.mediaType.replace(/_/g, " ")} · {item.status}
+                {labelFor("media_type", item.mediaType)} ·{" "}
+                {labelFor("media_asset_status", item.status)}
               </Text>
               <Text style={styles.rowMeta}>
                 {item.uploadedAt

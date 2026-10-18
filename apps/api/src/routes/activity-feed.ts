@@ -1,6 +1,7 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { NUTRIENT_SCALE, activityFeedResponseSchema } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import { createDb } from "../db/client.js";
 import {
   checkins,
@@ -138,15 +139,16 @@ activityFeedRoutes.get(
       .orderBy(desc(coachAsks.lastAskedAt))
       .limit(50);
     for (const row of asks) {
+      const topicLabel = labelFor("coach_ask_topic", row.topic);
       events.push({
         id: `ask:${row.id}`,
         relationshipId: row.relationshipId,
         traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
         type: "coach_ask",
-        subtype: row.topic,
+        subtype: topicLabel,
         occurredAt: row.lastAskedAt,
         traineeLocalTime: null,
-        summary: `Coach ask: ${row.topic}`,
+        summary: `Coach ask: ${topicLabel}`,
       });
     }
     events.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));

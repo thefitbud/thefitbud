@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
+import { labelFor } from "@fitbud/core";
 import type { WorkoutExecution } from "@fitbud/contracts";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
@@ -138,7 +139,9 @@ export function ActiveWorkoutScreen({
         <Text style={styles.progressLabel}>
           Sets {setsDone}/{setsTotal}
         </Text>
-        <Text style={styles.status}>{execution.status.replace(/_/g, " ")}</Text>
+        <Text style={styles.status}>
+          {labelFor("workout_execution_status", execution.status)}
+        </Text>
       </View>
 
       {currentSet && exercise ? (

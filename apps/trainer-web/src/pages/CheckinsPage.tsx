@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CheckinStatus, TrainerCheckinInboxItem } from "@fitbud/contracts";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { apiClient } from "../lib/api";
 
 const CHECKIN_STATUS_ORDER: CheckinStatus[] = [
@@ -16,45 +17,11 @@ const KNOWN_KPI_STATUSES = ["due", "overdue", "submitted"] as const;
 
 type KnownKpiStatus = (typeof KNOWN_KPI_STATUSES)[number];
 
-function statusLabel(status: string): string {
-  return status
-    .split("_")
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function formatLocalDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) {
-    return value;
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return value;
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
-
 function relationshipLabel(
   coachingRelationshipId: string,
   names: Map<string, string>,
 ): string {
-  return (
-    names.get(coachingRelationshipId) ??
-    `Client · ${coachingRelationshipId.slice(0, 8)}…`
-  );
+  return names.get(coachingRelationshipId) ?? "Client";
 }
 
 function relationshipInitials(coachingRelationshipId: string): string {
@@ -179,7 +146,7 @@ export function CheckinsPage() {
         {KNOWN_KPI_STATUSES.map((status) => (
           <Kpi
             key={status}
-            label={statusLabel(status)}
+            label={labelFor("checkin_status", status)}
             value={kpiValue(countStatus(items, status))}
             tone={kpiTone[status]}
           />
@@ -235,7 +202,7 @@ export function CheckinsPage() {
                   <StatusChip
                     key={status}
                     filter={status}
-                    label={statusLabel(status)}
+                    label={labelFor("checkin_status", status)}
                     count={countFor(status)}
                     selected={activeFilter === status}
                     onSelect={() => setStatusFilter(status)}
@@ -347,12 +314,12 @@ function CheckinRow({
       </td>
       <td>
         <time className="roster-meta" dateTime={item.checkin.localDate}>
-          {formatLocalDate(item.checkin.localDate)}
+          {formatCivilDate(item.checkin.localDate)}
         </time>
       </td>
       <td>
         <span className={`status-pill status-${item.checkin.status}`}>
-          {statusLabel(item.checkin.status)}
+          {labelFor("checkin_status", item.checkin.status)}
         </span>
       </td>
       <td>

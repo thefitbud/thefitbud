@@ -1,4 +1,6 @@
 import type { MeasurementType } from "@fitbud/contracts";
+import { formatInstant } from "@fitbud/core";
+import { labelFor } from "@fitbud/core";
 
 export const MEASUREMENT_SERIES: readonly MeasurementType[] = [
   "body_weight_kg",
@@ -6,14 +8,6 @@ export const MEASUREMENT_SERIES: readonly MeasurementType[] = [
   "hip_cm",
   "chest_cm",
 ];
-
-const MEASUREMENT_LABELS: Record<MeasurementType, string> = {
-  body_weight_kg: "Body weight",
-  waist_cm: "Waist",
-  hip_cm: "Hip",
-  chest_cm: "Chest",
-  other: "Other",
-};
 
 export type TrendPoint = {
   id: string;
@@ -23,16 +17,14 @@ export type TrendPoint = {
 };
 
 export function measurementTypeLabel(type: string): string {
-  if (type in MEASUREMENT_LABELS) {
-    return MEASUREMENT_LABELS[type as MeasurementType];
-  }
-  return type.replace(/_/g, " ");
+  return labelFor("measurement_type", type);
 }
 
-export function formatObservedAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+export function formatObservedAt(
+  value: string,
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+): string {
+  return formatInstant(value, timeZone);
 }
 
 function byTime(points: TrendPoint[]): TrendPoint[] {

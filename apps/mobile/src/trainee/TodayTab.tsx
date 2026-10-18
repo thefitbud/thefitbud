@@ -7,6 +7,7 @@ import type {
   MealAssignment,
   WorkoutAssignment,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import {
   NutritionRings,
   WeeklyConsistency,
@@ -18,6 +19,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
+import { formatInstant } from "@fitbud/core";
 import {
   addDays,
   localDateInTimezone,
@@ -228,7 +230,7 @@ export function TodayTab({
                 {workout.workoutDay.exercises.length} exercises
               </Text>
               <StatusChip
-                label={workout.status.replace(/_/g, " ")}
+                label={labelFor("workout_assignment_status", workout.status)}
                 tone={workoutTone(workout.status)}
               />
               <PrimaryButton
@@ -326,10 +328,7 @@ export function TodayTab({
                 <Text style={styles.noteBody}>{note.body}</Text>
                 <Text style={styles.noteMeta}>
                   {note.seenAt ? "Read" : "New"} ·{" "}
-                  {new Date(note.sharedAt ?? note.createdAt).toLocaleString(
-                    "en-IN",
-                    { dateStyle: "medium", timeStyle: "short" },
-                  )}
+                  {formatInstant(note.sharedAt ?? note.createdAt, timeZone)}
                 </Text>
               </View>
             ))}

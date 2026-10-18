@@ -6,31 +6,11 @@ import {
   type HistoryItem,
   type HistoryItemKind,
 } from "@fitbud/contracts";
+import { formatInstant, labelFor, sentenceCaseEnum } from "@fitbud/core";
+import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
 import type { WorkspaceOutletContext } from "./workspaceContext";
-
-const KIND_LABELS: Record<HistoryItemKind, string> = {
-  onboarding_submitted: "Onboarding submitted",
-  onboarding_reviewed: "Onboarding reviewed",
-  configuration_activated: "Configuration",
-  subscription_revision: "Subscription",
-  plan_version: "Plan",
-  workout_execution: "Workout",
-  meal_compliance: "Diet",
-  checkin_submitted: "Check-in submitted",
-  checkin_reviewed: "Check-in reviewed",
-  measurement: "Measurement",
-  progress_entry: "Progress",
-  progress_photo: "Progress photo",
-  exception: "Exception",
-  trainer_note: "Note",
-  intervention: "Intervention",
-};
-
-function kindLabel(kind: HistoryItemKind): string {
-  return KIND_LABELS[kind] ?? kind.replace(/_/g, " ");
-}
 
 function parseKind(value: string | null): HistoryItemKind | undefined {
   const parsed = historyItemKindSchema.safeParse(value);
@@ -38,6 +18,11 @@ function parseKind(value: string | null): HistoryItemKind | undefined {
 }
 
 export function ClientHistoryPage() {
+  const { me } = useAuth();
+  const timeZone =
+    me?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone ??
+    "UTC";
   const { relationshipId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutletContext>();
@@ -182,7 +167,7 @@ export function ClientHistoryPage() {
               <option value="">All history</option>
               {historyItemKindSchema.options.map((option) => (
                 <option key={option} value={option}>
-                  {kindLabel(option)}
+                  {labelFor("history_kind", option)}
                 </option>
               ))}
             </select>
@@ -239,13 +224,15 @@ export function ClientHistoryPage() {
             {items.map((item) => (
               <li key={`${item.kind}:${item.id}`} className="history-item">
                 <div className="history-item-meta">
-                  <span className="workspace-kind">{kindLabel(item.kind)}</span>
+                  <span className="workspace-kind">
+                    {labelFor("history_kind", item.kind)}
+                  </span>
                   <time dateTime={item.occurredAt}>
-                    {new Date(item.occurredAt).toLocaleString()}
+                    {formatInstant(item.occurredAt, timeZone)}
                   </time>
                   {item.status ? (
                     <span className="history-status">
-                      {item.status.replace(/_/g, " ")}
+                      {sentenceCaseEnum(item.status)}
                     </span>
                   ) : null}
                 </div>

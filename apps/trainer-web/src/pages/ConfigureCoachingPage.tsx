@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
+import { sentenceCaseEnum } from "@fitbud/core";
 import type {
   CheckinCadence,
   CoachingConfiguration,
@@ -408,7 +409,7 @@ export function ConfigureCoachingPage() {
       );
       applySubscription(saved);
       setSubscriptionMessage(
-        `Saved subscription version ${saved.versionNumber}. Renewal ${saved.renewalState.replace(/_/g, " ")}.`,
+        `Saved subscription version ${saved.versionNumber}. Renewal ${sentenceCaseEnum(saved.renewalState)}.`,
       );
       reloadWorkspace();
     } catch (err) {
@@ -515,7 +516,7 @@ export function ConfigureCoachingPage() {
         {subscription ? (
           <p className="lede">
             Version {subscription.versionNumber}. Renewal{" "}
-            {subscription.renewalState.replace(/_/g, " ")}.
+            {sentenceCaseEnum(subscription.renewalState)}.
           </p>
         ) : (
           <p className="lede">No subscription version yet.</p>

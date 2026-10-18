@@ -1,5 +1,6 @@
 import { ApiClientError } from "@fitbud/api-client";
 import type { ClientDirectoryItem, PlanTemplateType } from "@fitbud/contracts";
+import { formatInstant } from "@fitbud/core";
 
 export type ApplyClient = ClientDirectoryItem & { relationshipId: string };
 
@@ -20,14 +21,8 @@ export function matchesName(name: string, query: string): boolean {
   return name.toLowerCase().includes(needle);
 }
 
-export function formatUpdated(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
+export function formatUpdated(value: string, timeZone = "UTC"): string {
+  return formatInstant(value, timeZone);
 }
 
 export function templateTypeLabel(type: PlanTemplateType): string {
