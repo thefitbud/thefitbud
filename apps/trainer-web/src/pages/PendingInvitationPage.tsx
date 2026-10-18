@@ -135,15 +135,14 @@ export function PendingInvitationPage() {
       ? `Revoked on ${formatCivilDate(invite.updatedAt.slice(0, 10))}`
       : null;
 
-  const waLink =
-    invite.recipientWhatsappE164 && (inviteUrl || true)
-      ? whatsappHref({
-          phoneE164: invite.recipientWhatsappE164,
-          draftText: inviteUrl
-            ? `Hi ${name.split(/\s+/)[0]}, here's your FitBud invite: ${inviteUrl}`
-            : `Hi ${name.split(/\s+/)[0]}, please accept your FitBud invitation so we can start onboarding.`,
-        })
-      : null;
+  const waLink = invite.recipientWhatsappE164
+    ? whatsappHref({
+        phoneE164: invite.recipientWhatsappE164,
+        draftText: inviteUrl
+          ? `Hi ${name.split(/\s+/)[0]}, here's your FitBud invite: ${inviteUrl}`
+          : `Hi ${name.split(/\s+/)[0]}, please accept your FitBud invitation so we can start onboarding.`,
+      })
+    : null;
 
   const readOnly = invite.status !== "pending";
 
@@ -242,7 +241,7 @@ export function PendingInvitationPage() {
                 Remind on WhatsApp
               </a>
             ) : (
-              <Button variant="primary" disabled>
+              <Button variant="primary" disabled title="No WhatsApp number on this invite">
                 Remind on WhatsApp
               </Button>
             )}

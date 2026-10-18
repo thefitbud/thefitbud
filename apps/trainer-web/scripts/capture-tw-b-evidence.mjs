@@ -100,12 +100,14 @@ async function main() {
   await page.waitForTimeout(800);
   await shot(page, "TW-01--error");
 
-  // Offline
+  // Offline (navigate first, then cut network so the page stays mounted)
+  await page.goto(`${BASE}/sign-in`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(300);
   await context.setOffline(true);
-  await page.goto(`${BASE}/sign-in`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
   await shot(page, "TW-01--offline");
   await context.setOffline(false);
+  await page.waitForTimeout(300);
 
   // Trainee gate
   await page.goto(`${BASE}/sign-in`, { waitUntil: "networkidle" });

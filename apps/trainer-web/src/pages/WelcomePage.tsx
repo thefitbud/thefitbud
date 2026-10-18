@@ -39,9 +39,11 @@ export function WelcomePage() {
   const [displayName, setDisplayName] = useState(
     draft?.displayName ?? me?.trainerProfile?.displayName ?? "",
   );
-  const [whatsapp, setWhatsapp] = useState(
-    draft?.whatsapp ?? me?.trainerProfile?.whatsappE164?.replace(/^91/, "") ?? "",
-  );
+  const [whatsapp, setWhatsapp] = useState(() => {
+    if (draft?.whatsapp) return draft.whatsapp;
+    const raw = me?.trainerProfile?.whatsappE164 ?? "";
+    return raw.replace(/^\+?91/, "");
+  });
   const [timezone, setTimezone] = useState(
     draft?.timezone ??
       me?.timezone ??
