@@ -7,7 +7,7 @@ How to run FitBud locally and walk through every MVP workflow using the seeded d
 1. Install prerequisites (Node **22.23+**, pnpm **9.15.4**, Git).
 2. From the repo root: `pnpm install`, `pnpm setup:local`, `pnpm db:reset`.
 3. Terminal A: `pnpm api` (listens on **8787**, bound to `0.0.0.0` for LAN).
-4. Terminal B: `pnpm --filter @fitbud/trainer-web dev -- --host 127.0.0.1 --port 5173`.
+4. Terminal B: `pnpm web` (trainer web on `http://127.0.0.1:5173` by default).
 5. Terminal C: `pnpm --filter @fitbud/mobile exec expo start` (Expo Go) or `pnpm mobile` (dev client).
 6. Sign in on web or mobile with any demo account below (password **`FitBud-demo-2026`**).
 

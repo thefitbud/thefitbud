@@ -6,6 +6,7 @@
     "node": ">=22.23.0"
   },
   "scripts": {
+    "build:packages": "turbo run build --filter=\"./packages/*\"",
     "dev": "turbo run dev --parallel",
     "api": "pnpm --filter @fitbud/api dev",
     "web": "pnpm --filter @fitbud/trainer-web dev",

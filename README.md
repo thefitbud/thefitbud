@@ -110,7 +110,7 @@ pnpm mobile
 
 ### Local URLs and configuration
 
-The API listens at `http://127.0.0.1:8787` (interactive API docs: `/docs`). Before starting, trainer web asks the operating system for an available port, so it does not try `5173`; use the URL Vite prints in the terminal. The trainer web dev server proxies `/api` requests to the local API. Expo prints instructions for opening the mobile app in a simulator or development client; mobile needs the API running as well. By default, mobile targets the local API. To override that address, set `EXPO_PUBLIC_API_BASE_URL` as described in `.env.example`.
+The API listens at `http://127.0.0.1:8787` (interactive API docs: `/docs`). Trainer web defaults to `http://127.0.0.1:5173` (Vite uses the next free port if 5173 is taken). The trainer web dev server proxies `/api` requests to the local API. Expo prints instructions for opening the mobile app in a simulator or development client; mobile needs the API running as well. By default, mobile targets the local API. To override that address, set `EXPO_PUBLIC_API_BASE_URL` as described in `.env.example`.
 
 The root `package.json` also defines workspace-wide build, lint, typecheck, test, affected-package validation, and API database scripts.
 
@@ -176,13 +176,15 @@ pnpm api
 
 ### Trainer web (port 5173)
 
-In a second terminal, pin Vite to port **5173** (recommended for docs and E2E):
+In a second terminal:
 
 ```sh
-pnpm --filter @fitbud/trainer-web dev -- --host 127.0.0.1 --port 5173
+pnpm web
 ```
 
-- App: `http://127.0.0.1:5173`
+Or: `pnpm --filter @fitbud/trainer-web dev` (same as `pnpm web`; `predev` rebuilds workspace packages).
+
+- App: `http://127.0.0.1:5173` (or the port Vite prints if 5173 is busy)
 - Sign in: **rahul.coach@demo.fitbud.test** / **FitBud-demo-2026** (or any demo account in [LOCAL_TESTING.md](docs/LOCAL_TESTING.md))
 - `/api` is proxied to the local Worker on `8787`.
 
@@ -272,6 +274,7 @@ pwsh apps/api/scripts/verify-local-login.ps1
 | Symptom | What to do |
 |---------|------------|
 | **Port 8787 already in use** / stale Wrangler or workerd | **macOS/Linux:** `pkill -9 -f 'wrangler dev'`; `pkill -9 workerd`; `fuser -k 8787/tcp`. **Windows:** `Get-NetTCPConnection -LocalPort 8787` then `Stop-Process -Id <PID> -Force`. Restart with `pnpm api`. |
+| **`No matching export` in `packages/contracts/dist`** after switching branches | Workspace `dist/` is stale. Run `pnpm build:packages` or any root dev command (`pnpm api`, `pnpm web`, `pnpm db:reset`) — they rebuild packages first. Or run `pnpm build` from the repo root. |
 | **FTS5 / SQLite version error** during `db:reset` or search | Upgrade Node to **22.23+** (`node -v`). Reinstall deps after switching Node. |
 | **Phone cannot reach API** | API must run with `--ip 0.0.0.0` (`pnpm api` already does). Set `EXPO_PUBLIC_API_BASE_URL` to `http://<LAN-IP>:8787`, not `127.0.0.1`. Check firewall rules above. |
 | **Metro port conflict (8081)** | Stop other React Native/Expo processes; or `expo start --port 8082` and update firewall if needed. |

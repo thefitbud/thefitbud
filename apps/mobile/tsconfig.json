@@ -5,5 +5,5 @@
     "resolveJsonModule": true,
     "types": ["react"]
   },
-  "include": ["App.tsx", "index.js", "src"]
+  "include": ["App.tsx", "index.js", "src", "src/types/**/*.d.ts"]
 }

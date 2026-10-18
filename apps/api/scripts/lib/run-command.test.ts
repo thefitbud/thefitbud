@@ -1,5 +1,20 @@
+import type { SpawnSyncReturns } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { formatCommand, failedSpawnExitCode } from "./run-command.js";
+
+function mockSpawnResult(
+  partial: Partial<SpawnSyncReturns<string>>,
+): SpawnSyncReturns<string> {
+  return {
+    pid: 1,
+    output: [null, "", ""],
+    stdout: "",
+    stderr: "",
+    status: 0,
+    signal: null,
+    ...partial,
+  };
+}
 
 describe("formatCommand", () => {
   it("joins command and args", () => {
@@ -14,14 +29,14 @@ describe("formatCommand", () => {
 describe("failedSpawnExitCode", () => {
   it("returns null on success", () => {
     expect(
-      failedSpawnExitCode({ status: 0, output: [null, "", ""], pid: 1, signal: null, stderr: null, stdout: null, error: undefined }, "pnpm", []),
+      failedSpawnExitCode(mockSpawnResult({ status: 0 }), "pnpm", []),
     ).toBeNull();
   });
 
   it("returns exit code when status is non-zero", () => {
     expect(
       failedSpawnExitCode(
-        { status: 2, output: [null, "", ""], pid: 1, signal: null, stderr: null, stdout: null, error: undefined },
+        mockSpawnResult({ status: 2 }),
         "tsx",
         ["scripts/db-reset.ts"],
       ),
@@ -31,15 +46,11 @@ describe("failedSpawnExitCode", () => {
   it("returns 1 when spawn error is set", () => {
     expect(
       failedSpawnExitCode(
-        {
+        mockSpawnResult({
           status: null,
-          output: [null, "", ""],
           pid: 0,
-          signal: null,
-          stderr: null,
-          stdout: null,
           error: new Error("spawn tsx ENOENT"),
-        },
+        }),
         "tsx",
         [],
       ),
