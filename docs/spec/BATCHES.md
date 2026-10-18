@@ -345,3 +345,10 @@ docs/spec/mockups/ is the binding visual target (png/ + html/ + DESIGN-NOTES.md)
 23. Keep "Recent activity" feed on Home.
 24. Add a "tinted" button variant (lavender) for repeated per-row/per-card actions; still one filled primary per card/screen.
 25. Retitle demo seed people to realistic names (Rohan Mehta, Aarav Shah, Rahul Verma, etc., as in mockups).
+
+## Mobile batches consolidated (18 Oct, founder-approved for token efficiency)
+M-1+M-2 -> MA: TR-01..09, TR-26 (entry, onboarding, Today, plan views)
+M-3+M-4 -> MB: TR-10..15, TR-18, TR-23 (workout flow, logging)
+M-5+M-6 -> MC: TR-16, TR-17, TR-19..22, TR-24, TR-25 (diet, progress, settings)
+M-7+M-8 -> MD: TM-01..09 (trainer mobile)
+Same QA gate per batch; all fixes sent in one round.
