@@ -68,7 +68,7 @@ function stopApiProcesses() {
       "bash",
       [
         "-c",
-        "pkill -9 -f 'wrangler dev src/index.ts' 2>/dev/null || true; pkill -9 -f 'wrangler.js dev' 2>/dev/null || true; pkill -9 workerd 2>/dev/null || true; fuser -k 8787/tcp 2>/dev/null || true; sleep 2",
+        "for pid in $(lsof -ti:8787 2>/dev/null); do kill -9 $pid 2>/dev/null || true; done; pkill -9 -f 'wrangler.dev.src/index.ts' 2>/dev/null || true; pkill -9 -f 'wrangler.js.dev' 2>/dev/null || true; pkill -9 -f 'wrangler/bin/wrangler.js' 2>/dev/null || true; pkill -9 -f workerd 2>/dev/null || true; fuser -k 8787/tcp 2>/dev/null || true; sleep 3",
       ],
       { stdio: "ignore" },
     );
