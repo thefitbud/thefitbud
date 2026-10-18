@@ -4,7 +4,6 @@ import { ApiClientError } from "@fitbud/api-client";
 import type { Invitation } from "@fitbud/contracts";
 import {
   formatCivilDate,
-  formatInstant,
   formatPersonName,
   whatsappHref,
 } from "@fitbud/core";
@@ -133,7 +132,7 @@ export function PendingInvitationPage() {
   const invitedDate = formatCivilDate(invite.createdAt.slice(0, 10));
   const revokedLabel =
     invite.status === "revoked"
-      ? `Revoked on ${formatInstant(invite.updatedAt)}`
+      ? `Revoked on ${formatCivilDate(invite.updatedAt.slice(0, 10))}`
       : null;
 
   const waLink =
