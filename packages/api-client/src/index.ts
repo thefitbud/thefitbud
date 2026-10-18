@@ -645,7 +645,9 @@ export class FitBudApiClient {
     return this.request(
       "GET",
       `/configurations/relationships/${relationshipId}`,
-      coachingConfigurationSchema,
+      options?.notFoundAsNull
+        ? coachingConfigurationSchema.nullable()
+        : coachingConfigurationSchema,
       { auth: true, notFoundAsNull: options?.notFoundAsNull === true },
     );
   }
