@@ -27,9 +27,9 @@
 .home-title {
   margin: 0;
   font-family: var(--font-family, Satoshi, "Noto Sans", system-ui, sans-serif);
-  font-size: 28px;
-  line-height: 36px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 28px;
   color: var(--deep-navy, #1a1248);
   letter-spacing: -0.02em;
 }
