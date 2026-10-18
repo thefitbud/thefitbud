@@ -281,13 +281,23 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
         ) : null}
       </label>
       {error ? (
-        <p className="form-error" role="alert">
+        <p className="form-error" role="alert" data-testid="add-client-error">
           {error}{" "}
           {duplicateId ? (
-            <Link to={`/invitations/${duplicateId}`}>Open invite</Link>
+            <Link
+              to={`/invitations/${duplicateId}`}
+              data-testid="duplicate-invite-link"
+            >
+              Resend instead
+            </Link>
           ) : null}
           {reactivateRid ? (
-            <Link to={`/clients/${reactivateRid}`}>Reactivate</Link>
+            <Link
+              to={`/clients/${reactivateRid}`}
+              data-testid="reactivate-client-link"
+            >
+              Reactivate
+            </Link>
           ) : null}
         </p>
       ) : null}

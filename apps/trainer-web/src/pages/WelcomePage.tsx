@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { PlanTemplateSummary } from "@fitbud/contracts";
 import { normalizeWhatsappE164 } from "@fitbud/core";
@@ -30,7 +30,6 @@ function loadDraft(): Draft | null {
 
 export function WelcomePage() {
   const { me, refreshMe } = useAuth();
-  const navigate = useNavigate();
   const [params] = useSearchParams();
   const capturePreview =
     import.meta.env.DEV && params.get("capture") === "welcome";
@@ -108,7 +107,6 @@ export function WelcomePage() {
   function finish() {
     sessionStorage.removeItem(DRAFT_KEY);
     setDone(true);
-    navigate("/", { replace: true });
   }
 
   return (

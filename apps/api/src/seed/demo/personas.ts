@@ -63,7 +63,8 @@ export type DemoPersonaKey =
   | "dubai_meal_times"
   | "attention_hole"
   | "food_deviations"
-  | "dual_role";
+  | "dual_role"
+  | "first_run";
 
 export type DemoPersonaSpec = {
   key: DemoPersonaKey;

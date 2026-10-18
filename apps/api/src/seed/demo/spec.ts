@@ -17,6 +17,8 @@ export const DEMO_PASSWORD_PLAINTEXT = "FitBud-demo-2026";
 export const DEMO_ACCOUNTS: DemoAccountSpec[] = [
   { email: "rahul.coach@demo.fitbud.test", role: "trainer", state: "main_trainer", displayName: "Rahul Verma" },
   { email: "priya.coach@demo.fitbud.test", role: "trainer", state: "second_trainer", displayName: "Priya Malhotra" },
+  /** Empty displayName → natural TW-02 first-run at /welcome. */
+  { email: "nova.coach@demo.fitbud.test", role: "trainer", state: "first_run", displayName: "" },
   { email: "anita.invite@demo.fitbud.test", role: "invite", trainerEmail: "rahul.coach@demo.fitbud.test", state: "invite_pending", displayName: "Anita Desai" },
   { email: "vikram.onboarding@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "onboarding_incomplete", displayName: "Vikram Rao" },
   { email: "sneha.review@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "awaiting_review", displayName: "Sneha Kulkarni" },

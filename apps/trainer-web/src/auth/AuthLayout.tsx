@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Users } from "lucide-react";
 import { BrandMark } from "../components/BrandMark";
 import { useConfig } from "../lib/config";
 
@@ -26,7 +27,10 @@ export function AuthLayout({
           <b>FitBud</b>
         </div>
         <div className="auth-pitch">
-          <span className="auth-eyebrow">For trainers</span>
+          <span className="auth-eyebrow">
+            <Users size={14} strokeWidth={2} aria-hidden="true" />
+            For trainers
+          </span>
           <h1>See who needs you today.</h1>
           <p>Progress, guided.</p>
           {showGlimpse ? (
@@ -47,14 +51,14 @@ export function AuthLayout({
                   <span className="auth-glimpse-who">
                     <span className="av c6">NR</span>Neha Reddy
                   </span>
-                  <span>Breakfast not logged</span>
+                  <span>Breakfast not logged (Sat)</span>
                   <span className="chip attn">Attention</span>
                 </div>
                 <div className="auth-glimpse-row">
                   <span className="auth-glimpse-who">
                     <span className="av c7">PS</span>Priya Sharma
                   </span>
-                  <span>Check-in submitted</span>
+                  <span>Check-in submitted · Fri</span>
                   <span className="chip info">To review</span>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Mail } from "lucide-react";
+import { Eye, EyeOff, Info, Lock, Mail } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { AuthFlowError, useAuth } from "./AuthProvider";
@@ -8,6 +8,8 @@ import { useConfig, isWhatsAppOtpEnabled } from "../lib/config";
 import { useOnline } from "../hooks/useOnline";
 
 const DEMO_PASSWORD = "FitBud-demo-2026";
+const showDevHints =
+  import.meta.env.DEV && import.meta.env.VITE_SHOW_DEV_HINTS === "1";
 
 function looksLikeMobile(value: string): boolean {
   const digits = value.replace(/\D/g, "");
@@ -21,11 +23,9 @@ export function SignInPage() {
   const { config } = useConfig();
   const online = useOnline();
   const [identifier, setIdentifier] = useState(
-    import.meta.env.DEV ? "rahul.coach@demo.fitbud.test" : "",
+    showDevHints ? "rahul.coach@demo.fitbud.test" : "",
   );
-  const [password, setPassword] = useState(
-    import.meta.env.DEV ? DEMO_PASSWORD : "",
-  );
+  const [password, setPassword] = useState(showDevHints ? DEMO_PASSWORD : "");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +134,7 @@ export function SignInPage() {
             </Link>
           </span>
           <span className="input-shell">
+            <Lock size={16} strokeWidth={1.75} aria-hidden="true" />
             <input
               type={showPassword ? "text" : "password"}
               name="password"
@@ -168,6 +169,7 @@ export function SignInPage() {
           variant="primary"
           className="btn-lg btn-block"
           disabled={submitting || loading || !online}
+          data-testid="sign-in-submit"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </Button>
@@ -183,10 +185,11 @@ export function SignInPage() {
         </Link>
       </form>
       <div className="auth-note">
+        <Info size={16} strokeWidth={1.75} aria-hidden="true" />
         <span>Trainer accounts only. Clients use the FitBud app.</span>
       </div>
-      {import.meta.env.DEV ? (
-        <details className="dev-auth-panel">
+      {showDevHints ? (
+        <details className="dev-auth-panel" data-testid="dev-test-identity">
           <summary>Development test identity</summary>
           <p className="muted">
             Bypasses password login with the API test token double.

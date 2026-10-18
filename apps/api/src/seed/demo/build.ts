@@ -135,8 +135,10 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
     }
     const phone = `+9190000000${String(phoneIndex++).padStart(2, "0")}`;
     const displayName =
-      account.displayName ||
-      titleCaseDemoName(account.email.split("@")[0]!.replace(/\./g, " "));
+      account.state === "first_run"
+        ? ""
+        : account.displayName ||
+          titleCaseDemoName(account.email.split("@")[0]!.replace(/\./g, " "));
     const timezone =
       account.email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
     parts.push(
@@ -145,7 +147,7 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
         role: account.role,
         displayName,
         timezone,
-        phone,
+        phone: account.state === "first_run" ? undefined : phone,
         passwordHash: input.passwordHash,
         now,
       }),
