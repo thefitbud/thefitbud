@@ -243,9 +243,7 @@ function MealReadOnly({ meal }: { meal: MealPrescription }) {
               </p>
               {macroText(item) ? <p className="muted">{macroText(item)}</p> : null}
               {item.sourceFoodLibraryItemId ? (
-                <p className="muted plan-comp-source">
-                  Library snapshot {item.sourceFoodLibraryItemId}
-                </p>
+                <p className="muted plan-comp-source">From food library</p>
               ) : null}
             </li>
           ))}
@@ -1043,9 +1041,7 @@ function FoodFields({
         </div>
       </div>
       {item.sourceFoodLibraryItemId ? (
-        <p className="muted plan-comp-source">
-          Library snapshot {item.sourceFoodLibraryItemId}
-        </p>
+        <p className="muted plan-comp-source">From food library</p>
       ) : null}
       {item.snapshotKind === "calculated" ? (
         <div className="plan-comp-food-grid">

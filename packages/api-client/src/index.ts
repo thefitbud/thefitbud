@@ -86,6 +86,8 @@ import {
   notificationPreferencesSchema,
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
+  reminderRulesResponseSchema,
+  updateReminderRulesRequestSchema,
   updateNotificationPreferencesRequestSchema,
   updatePlanTemplateRequestSchema,
   updateExerciseLibraryItemRequestSchema,
@@ -267,6 +269,8 @@ import {
   type NotificationPreferences,
   type RegisterDeviceTokenRequest,
   type RegisterDeviceTokenResponse,
+  type ReminderRulesResponse,
+  type UpdateReminderRulesRequest,
   type UpdateNotificationPreferencesRequest,
   type RealtimeEvent,
   type RealtimeSubscriptionTarget,
@@ -627,12 +631,20 @@ export class FitBudApiClient {
 
   async getCoachingConfiguration(
     relationshipId: string,
-  ): Promise<CoachingConfiguration> {
+  ): Promise<CoachingConfiguration>;
+  async getCoachingConfiguration(
+    relationshipId: string,
+    options: { notFoundAsNull: true },
+  ): Promise<CoachingConfiguration | null>;
+  async getCoachingConfiguration(
+    relationshipId: string,
+    options?: { notFoundAsNull?: boolean },
+  ): Promise<CoachingConfiguration | null> {
     return this.request(
       "GET",
       `/configurations/relationships/${relationshipId}`,
       coachingConfigurationSchema,
-      { auth: true },
+      { auth: true, notFoundAsNull: options?.notFoundAsNull === true },
     );
   }
 
@@ -691,12 +703,20 @@ export class FitBudApiClient {
     );
   }
 
-  async getSubscription(relationshipId: string): Promise<Subscription> {
+  async getSubscription(relationshipId: string): Promise<Subscription>;
+  async getSubscription(
+    relationshipId: string,
+    options: { notFoundAsNull: true },
+  ): Promise<Subscription | null>;
+  async getSubscription(
+    relationshipId: string,
+    options?: { notFoundAsNull?: boolean },
+  ): Promise<Subscription | null> {
     return this.request(
       "GET",
       `/relationships/${relationshipId}/subscription`,
       subscriptionSchema,
-      { auth: true },
+      { auth: true, notFoundAsNull: options?.notFoundAsNull === true },
     );
   }
 
@@ -2009,6 +2029,30 @@ export class FitBudApiClient {
     );
   }
 
+  async getReminderRules(
+    relationshipId: string,
+  ): Promise<ReminderRulesResponse> {
+    return this.request(
+      "GET",
+      `/notifications/relationships/${relationshipId}/reminder-rules`,
+      reminderRulesResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async saveReminderRules(
+    relationshipId: string,
+    body: UpdateReminderRulesRequest,
+  ): Promise<ReminderRulesResponse> {
+    const parsed = updateReminderRulesRequestSchema.parse(body);
+    return this.request(
+      "PUT",
+      `/notifications/relationships/${relationshipId}/reminder-rules`,
+      reminderRulesResponseSchema,
+      { auth: true, body: parsed },
+    );
+  }
+
   async nudgeActivity(
     relationshipId: string,
     body: NudgeActivityRequest,
@@ -2132,6 +2176,8 @@ export class FitBudApiClient {
       auth?: boolean;
       body?: unknown;
       idempotencyKey?: string;
+      /** When true, HTTP 404 returns null instead of throwing (empty resource). */
+      notFoundAsNull?: boolean;
     } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
@@ -2170,6 +2216,9 @@ export class FitBudApiClient {
     const json: unknown = await response.json().catch(() => null);
 
     if (!response.ok) {
+      if (options.notFoundAsNull && response.status === 404) {
+        return null as T;
+      }
       const parsedError = apiErrorBodySchema.safeParse(json);
       if (parsedError.success) {
         throw new ApiClientError({

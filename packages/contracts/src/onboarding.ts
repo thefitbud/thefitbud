@@ -10,6 +10,13 @@ const onboardingFieldBaseSchema = z.object({
   label: z.string().min(1).max(200),
   required: z.boolean(),
   helpText: z.string().min(1).max(500).optional(),
+  /** Optional form section label for grouped review (TW-10). Absent → ungrouped. */
+  section: z.string().min(1).max(120).optional(),
+  /**
+   * When true, surface the answer in the trainer "Worth noting" summary (TW-10).
+   * Never inferred by clients — only show when the template sets this flag.
+   */
+  highlight: z.boolean().optional(),
 });
 
 const textLimitSchema = {
@@ -62,6 +69,8 @@ export const onboardingFieldDefinitionSchema = z.discriminatedUnion("type", [
   }),
   onboardingFieldBaseSchema.extend({
     type: z.literal("number"),
+    /** Optional unit shown beside number answers in review (e.g. "kg"). */
+    unit: z.string().min(1).max(32).optional(),
   }),
   onboardingFieldBaseSchema.extend({
     type: z.literal("yes_no"),

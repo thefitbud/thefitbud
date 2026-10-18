@@ -239,7 +239,12 @@ export function formatOnboardingAnswer(
 ): string {
   if (isBlankOnboardingAnswer(value) || value == null) return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    const unit =
+      field.type === "number" && field.unit?.trim() ? ` ${field.unit.trim()}` : "";
+    return `${value}${unit}`;
+  }
   if (Array.isArray(value)) {
     const labels = optionLabels(field);
     return value.map((id) => labels.get(id) ?? id).join(", ");
