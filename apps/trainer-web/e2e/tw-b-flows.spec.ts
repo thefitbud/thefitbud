@@ -75,24 +75,26 @@ test.describe("TW-B auth flows", () => {
     page,
     request,
   }) => {
-    // Hit API directly to avoid flaky UI timing; assert copy mapping via one UI try after 429.
+    // Exhaust a throwaway identifier only — never lock the demo coach used by later tests.
     const identifier = `ratelimit.${Date.now()}@demo.fitbud.test`;
-    for (let i = 0; i < 12; i += 1) {
-      await request.post(`${API}/auth/login`, {
+    let saw429 = false;
+    for (let i = 0; i < 20; i += 1) {
+      const res = await request.post(`${API}/auth/login`, {
         data: { identifier, password: "bad-password-xxx" },
       });
+      if (res.status() === 429) {
+        saw429 = true;
+        break;
+      }
     }
+    expect(saw429).toBeTruthy();
     await page.goto("/sign-in");
-    await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-    // Exhaust account lock for rahul by wrong password attempts via API
-    for (let i = 0; i < 10; i += 1) {
-      await request.post(`${API}/auth/login`, {
-        data: { identifier: EMAIL, password: "bad-password-xxx" },
-      });
-    }
+    await page.getByRole("textbox", { name: /mobile number or email/i }).fill(identifier);
     await page.locator('input[name="password"]').fill("bad-password-xxx");
     await page.getByRole("button", { name: /^sign in$/i }).click();
-    await expect(page.getByRole("alert")).toContainText(/too many tries|don't match/i);
+    await expect(page.getByRole("alert")).toContainText(
+      "Too many tries. Wait 15 minutes or sign in with a code.",
+    );
   });
 });
 
