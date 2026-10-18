@@ -71,7 +71,7 @@ export function WorkoutTab({
   autoStartToday?: boolean;
   onAutoStartConsumed?: () => void;
 }) {
-  const { api, me } = useAuth();
+  const { api, me, refreshSession } = useAuth();
   const sync = useSyncEngine();
   const [assignments, setAssignments] = useState<WorkoutAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,7 +179,16 @@ export function WorkoutTab({
   }
 
   return (
-    <Screen chrome="app" title="Workout" showHeader={false}>
+    <Screen
+      chrome="app"
+      title="Workout"
+      showHeader={false}
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void load();
+      }}
+    >
       {error ? <ErrorBanner message={error} /> : null}
       {loading ? (
         <Text style={styles.muted}>Loading assignments…</Text>
@@ -323,14 +332,6 @@ export function WorkoutTab({
               </Pressable>
             ))
           )}
-
-          <PrimaryButton
-            label="Refresh"
-            variant="secondary"
-            onPress={() => {
-              void load();
-            }}
-          />
         </View>
       )}
     </Screen>

@@ -22,6 +22,10 @@ type Props = {
   /** When false, omit the in-screen title block (shell provides AppTopBar). */
   showHeader?: boolean;
   refreshing?: boolean;
+  /**
+   * Pull-to-refresh handler. List screens should pass this (with `refreshing`)
+   * instead of a manual Refresh button; screens that omit it still render fine.
+   */
   onRefresh?: () => void;
 };
 

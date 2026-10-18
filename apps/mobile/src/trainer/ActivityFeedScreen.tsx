@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 type ActivityFeedEvent = Awaited<
@@ -9,6 +9,7 @@ import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { Screen } from "../components/Screen";
 import { SegmentedControl } from "../components/SegmentedControl";
 
 type Filter = "all" | "meals" | "workouts" | "checkins";
@@ -31,10 +32,12 @@ function matchesFilter(event: ActivityFeedEvent, filter: Filter): boolean {
 
 type Props = {
   relationshipId?: string;
+  /** Optional chrome above the feed (e.g. Clients/Activity segment control). */
+  header?: ReactNode;
 };
 
-export function ActivityFeedScreen({ relationshipId }: Props) {
-  const { api } = useAuth();
+export function ActivityFeedScreen({ relationshipId, header }: Props) {
+  const { api, refreshSession } = useAuth();
   const s1 = stage1Api(api);
   const [events, setEvents] = useState<ActivityFeedEvent[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -107,102 +110,104 @@ export function ActivityFeedScreen({ relationshipId }: Props) {
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [filtered]);
 
-  if (loading && events.length === 0) {
-    return <Text style={styles.muted}>Loading activity…</Text>;
-  }
-
   return (
-    <View style={styles.wrap}>
-      {error ? <ErrorBanner message={error} /> : null}
-      <SegmentedControl
-        options={[
-          { id: "all", label: "All" },
-          { id: "meals", label: "Meals" },
-          { id: "workouts", label: "Workouts" },
-          { id: "checkins", label: "Check-ins" },
-        ]}
-        value={filter}
-        onChange={setFilter}
-      />
-      <PrimaryButton
-        label="Refresh"
-        variant="secondary"
-        loading={loading}
-        onPress={() => {
-          void loadReset();
-        }}
-      />
-      {filtered.length === 0 ? (
-        <Text style={styles.muted}>
-          No client activity yet. It'll appear as your clients log.
-        </Text>
-      ) : (
-        <View style={styles.list}>
-          {grouped.map(([day, dayEvents]) => (
-            <View key={day} style={styles.group}>
-              <Text style={styles.groupTitle}>
-                {new Intl.DateTimeFormat("en-IN", {
-                  dateStyle: "full",
-                }).format(new Date(`${day}T12:00:00.000Z`))}
-              </Text>
-              {dayEvents.map((event) => (
-                <View key={event.id} style={styles.row}>
-                  <Text style={styles.who}>
-                    {event.traineeDisplayName ?? "Client"}
-                  </Text>
-                  <Text style={styles.summary}>{event.summary}</Text>
-                  <Text style={styles.meta}>
-                    {formatWhen(event.occurredAt)}
-                    {event.traineeLocalTime
-                      ? ` · ${event.traineeLocalTime} their time`
-                      : ""}
-                    {event.kcal != null ? ` · ${event.kcal} kcal` : ""}
-                  </Text>
-                  <View style={styles.actions}>
-                    <Pressable
-                      accessibilityRole="button"
-                      style={styles.actionBtn}
-                      onPress={() => {
-                        if (event.link) {
-                          void import("expo-linking").then((Linking) =>
-                            Linking.openURL(event.link!),
-                          );
-                        }
-                      }}
-                    >
-                      <Text style={styles.actionText}>Open</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      style={styles.actionBtnAlt}
-                      onPress={() => {
-                        void import("./whatsapp").then(({ openContextualWhatsApp }) =>
-                          openContextualWhatsApp({
-                            draftText: `Hi — saw your update: ${event.summary}`,
-                          }),
-                        );
-                      }}
-                    >
-                      <Text style={styles.actionTextAlt}>Nudge</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-      )}
-      {cursor ? (
-        <PrimaryButton
-          label="Load more"
-          variant="ghost"
-          loading={loadingMore}
-          onPress={() => {
-            void loadMore();
-          }}
+    <Screen
+      title="Clients"
+      subtitle="Lookup and recent activity."
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void loadReset();
+      }}
+    >
+      <View style={styles.wrap}>
+        {header}
+        {error ? <ErrorBanner message={error} /> : null}
+        <SegmentedControl
+          options={[
+            { id: "all", label: "All" },
+            { id: "meals", label: "Meals" },
+            { id: "workouts", label: "Workouts" },
+            { id: "checkins", label: "Check-ins" },
+          ]}
+          value={filter}
+          onChange={setFilter}
         />
-      ) : null}
-    </View>
+        {loading && events.length === 0 ? (
+          <Text style={styles.muted}>Loading activity…</Text>
+        ) : filtered.length === 0 ? (
+          <Text style={styles.muted}>
+            No client activity yet. It'll appear as your clients log.
+          </Text>
+        ) : (
+          <View style={styles.list}>
+            {grouped.map(([day, dayEvents]) => (
+              <View key={day} style={styles.group}>
+                <Text style={styles.groupTitle}>
+                  {new Intl.DateTimeFormat("en-IN", {
+                    dateStyle: "full",
+                  }).format(new Date(`${day}T12:00:00.000Z`))}
+                </Text>
+                {dayEvents.map((event) => (
+                  <View key={event.id} style={styles.row}>
+                    <Text style={styles.who}>
+                      {event.traineeDisplayName ?? "Client"}
+                    </Text>
+                    <Text style={styles.summary}>{event.summary}</Text>
+                    <Text style={styles.meta}>
+                      {formatWhen(event.occurredAt)}
+                      {event.traineeLocalTime
+                        ? ` · ${event.traineeLocalTime} their time`
+                        : ""}
+                      {event.kcal != null ? ` · ${event.kcal} kcal` : ""}
+                    </Text>
+                    <View style={styles.actions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        style={styles.actionBtn}
+                        onPress={() => {
+                          if (event.link) {
+                            void import("expo-linking").then((Linking) =>
+                              Linking.openURL(event.link!),
+                            );
+                          }
+                        }}
+                      >
+                        <Text style={styles.actionText}>Open</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        style={styles.actionBtnAlt}
+                        onPress={() => {
+                          void import("./whatsapp").then(
+                            ({ openContextualWhatsApp }) =>
+                              openContextualWhatsApp({
+                                draftText: `Hi — saw your update: ${event.summary}`,
+                              }),
+                          );
+                        }}
+                      >
+                        <Text style={styles.actionTextAlt}>Nudge</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        )}
+        {cursor ? (
+          <PrimaryButton
+            label="Load more"
+            variant="ghost"
+            loading={loadingMore}
+            onPress={() => {
+              void loadMore();
+            }}
+          />
+        ) : null}
+      </View>
+    </Screen>
   );
 }
 

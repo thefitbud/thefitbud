@@ -116,7 +116,15 @@ export function AttentionTab({
   );
 
   return (
-    <Screen title="Today" subtitle="Who needs you, and why.">
+    <Screen
+      title="Today"
+      subtitle="Who needs you, and why."
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void load();
+      }}
+    >
       {error ? <ErrorBanner message={error} /> : null}
 
       <SegmentedControl
@@ -127,15 +135,6 @@ export function AttentionTab({
         ]}
         value={segment}
         onChange={setSegment}
-      />
-
-      <PrimaryButton
-        label="Refresh"
-        variant="secondary"
-        onPress={() => {
-          void refreshSession();
-          void load();
-        }}
       />
 
       {loading ? (

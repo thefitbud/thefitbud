@@ -5,7 +5,6 @@ import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { statusLabel } from "./labels";
 
@@ -44,17 +43,13 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
     <Screen
       title="Check-ins"
       subtitle="Due, overdue, and submitted check-ins across your clients."
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void load();
+      }}
     >
       {error ? <ErrorBanner message={error} /> : null}
-
-      <PrimaryButton
-        label="Refresh"
-        variant="secondary"
-        onPress={() => {
-          void refreshSession();
-          void load();
-        }}
-      />
 
       {loading ? (
         <Text style={styles.muted}>Loading check-ins…</Text>

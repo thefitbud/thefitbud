@@ -5,7 +5,6 @@ import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { ActivityFeedScreen } from "./ActivityFeedScreen";
@@ -78,125 +77,120 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
     [rows, chip],
   );
 
+  const segmentControl = (
+    <SegmentedControl
+      options={[
+        { id: "clients", label: "Clients" },
+        { id: "activity", label: "Activity" },
+      ]}
+      value={segment}
+      onChange={setSegment}
+    />
+  );
+
+  if (segment === "activity") {
+    return <ActivityFeedScreen header={segmentControl} />;
+  }
+
   return (
-    <Screen title="Clients" subtitle="Lookup and recent activity.">
-      <SegmentedControl
-        options={[
-          { id: "clients", label: "Clients" },
-          { id: "activity", label: "Activity" },
-        ]}
-        value={segment}
-        onChange={setSegment}
+    <Screen
+      title="Clients"
+      subtitle="Lookup and recent activity."
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void load();
+      }}
+    >
+      {segmentControl}
+
+      {error ? <ErrorBanner message={error} /> : null}
+
+      <Field
+        label="Lookup"
+        value={query}
+        onChangeText={setQuery}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="Name, email, or status"
+        hint="Filters clients you own."
       />
 
-      {segment === "activity" ? (
-        <View style={styles.activity}>
-          <ActivityFeedScreen />
+      <View style={styles.chipRow}>
+        {FILTER_CHIPS.map((option) => (
+          <Pressable
+            key={option.id}
+            accessibilityRole="button"
+            style={[
+              styles.filterChip,
+              chip === option.id ? styles.filterChipActive : null,
+            ]}
+            onPress={() => setChip(option.id)}
+          >
+            <Text
+              style={
+                chip === option.id
+                  ? styles.filterChipTextActive
+                  : styles.filterChipText
+              }
+            >
+              {option.icon} {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {loading && rows.length === 0 ? (
+        <Text style={styles.muted}>Loading clients…</Text>
+      ) : filtered.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>
+            {rows.length === 0 ? "No clients yet" : "No matches"}
+          </Text>
+          <Text style={styles.muted}>
+            {rows.length === 0
+              ? "Invite trainees from trainer web."
+              : "Try a different name, email, or status."}
+          </Text>
         </View>
       ) : (
-        <>
-          {error ? <ErrorBanner message={error} /> : null}
-
-          <Field
-            label="Lookup"
-            value={query}
-            onChangeText={setQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="Name, email, or status"
-            hint="Filters clients you own."
-          />
-
-          <View style={styles.chipRow}>
-            {FILTER_CHIPS.map((option) => (
+        <View style={styles.list}>
+          {filtered.map((row) => {
+            const canOpen = Boolean(row.relationshipId);
+            return (
               <Pressable
-                key={option.id}
+                key={row.key}
                 accessibilityRole="button"
-                style={[
-                  styles.filterChip,
-                  chip === option.id ? styles.filterChipActive : null,
-                ]}
-                onPress={() => setChip(option.id)}
+                accessibilityLabel={`${row.name}, ${onboardingStatusLabel(row.onboardingStatus)}`}
+                accessibilityState={{ disabled: !canOpen }}
+                disabled={!canOpen}
+                onPress={() => {
+                  if (canOpen) onOpenClient(row);
+                }}
+                style={[styles.card, !canOpen && styles.cardDisabled]}
               >
-                <Text
-                  style={
-                    chip === option.id
-                      ? styles.filterChipTextActive
-                      : styles.filterChipText
-                  }
-                >
-                  {option.icon} {option.label}
+                <Text style={styles.who}>{row.name}</Text>
+                <Text style={styles.meta}>
+                  {onboardingStatusLabel(row.onboardingStatus)}
                 </Text>
+                <Text style={styles.subtitle}>{row.subtitle}</Text>
+                {canOpen ? (
+                  <Text style={styles.action}>Open status</Text>
+                ) : (
+                  <Text style={styles.mutedInline}>
+                    Invitation pending — open after accept
+                  </Text>
+                )}
               </Pressable>
-            ))}
-          </View>
-
-          <PrimaryButton
-            label="Refresh"
-            variant="secondary"
-            loading={loading}
-            onPress={() => {
-              void refreshSession();
-              void load();
-            }}
-          />
-
-          {loading && rows.length === 0 ? (
-            <Text style={styles.muted}>Loading clients…</Text>
-          ) : filtered.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>
-                {rows.length === 0 ? "No clients yet" : "No matches"}
-              </Text>
-              <Text style={styles.muted}>
-                {rows.length === 0
-                  ? "Invite trainees from trainer web."
-                  : "Try a different name, email, or status."}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.list}>
-              {filtered.map((row) => {
-                const canOpen = Boolean(row.relationshipId);
-                return (
-                  <Pressable
-                    key={row.key}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${row.name}, ${onboardingStatusLabel(row.onboardingStatus)}`}
-                    accessibilityState={{ disabled: !canOpen }}
-                    disabled={!canOpen}
-                    onPress={() => {
-                      if (canOpen) onOpenClient(row);
-                    }}
-                    style={[styles.card, !canOpen && styles.cardDisabled]}
-                  >
-                    <Text style={styles.who}>{row.name}</Text>
-                    <Text style={styles.meta}>
-                      {onboardingStatusLabel(row.onboardingStatus)}
-                    </Text>
-                    <Text style={styles.subtitle}>{row.subtitle}</Text>
-                    {canOpen ? (
-                      <Text style={styles.action}>Open status</Text>
-                    ) : (
-                      <Text style={styles.mutedInline}>
-                        Invitation pending — open after accept
-                      </Text>
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </>
+            );
+          })}
+        </View>
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  activity: {
-    marginTop: spacing.lg,
-  },
   muted: {
     color: colors.midGrey,
     fontSize: 14,

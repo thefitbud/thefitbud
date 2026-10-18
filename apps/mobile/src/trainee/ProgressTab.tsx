@@ -32,7 +32,7 @@ export function ProgressTab({
 }: {
   relationship: CoachingRelationship;
 }) {
-  const { api } = useAuth();
+  const { api, refreshSession } = useAuth();
   const sync = useSyncEngine();
   const [summary, setSummary] = useState<ProgressSummary | null>(null);
   const [weight, setWeight] = useState("");
@@ -184,6 +184,11 @@ export function ProgressTab({
       chrome="app"
       title="Progress"
       subtitle="Measurements and photos you have logged."
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void load();
+      }}
     >
       {error ? <ErrorBanner message={error} /> : null}
 
@@ -276,14 +281,6 @@ export function ProgressTab({
           ))}
         </View>
       ) : null}
-
-      <PrimaryButton
-        label="Refresh"
-        variant="ghost"
-        onPress={() => {
-          void load();
-        }}
-      />
     </Screen>
   );
 }

@@ -34,7 +34,7 @@ export function NotificationsScreen({
   onOpenSettings,
   onNavigate,
 }: Props) {
-  const { api } = useAuth();
+  const { api, refreshSession } = useAuth();
   const s1 = stage1Api(api);
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,7 +134,15 @@ export function NotificationsScreen({
   }
 
   return (
-    <Screen title="Notifications" subtitle="In-app inbox from FitBud.">
+    <Screen
+      title="Notifications"
+      subtitle="In-app inbox from FitBud."
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void load();
+      }}
+    >
       {error ? <ErrorBanner message={error} /> : null}
       <PrimaryButton
         label="Mark all read"
@@ -142,14 +150,6 @@ export function NotificationsScreen({
         disabled={items.every((item) => item.readAt != null)}
         onPress={() => {
           void markAllRead();
-        }}
-      />
-      <PrimaryButton
-        label="Refresh"
-        variant="secondary"
-        loading={loading}
-        onPress={() => {
-          void load();
         }}
       />
       {loading && items.length === 0 ? (
