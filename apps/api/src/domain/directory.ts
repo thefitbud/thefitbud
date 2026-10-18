@@ -3,9 +3,10 @@ import type {
   AdherenceState,
   ClientDirectoryItem,
   OnboardingStatus,
+  RenewalState,
 } from "@fitbud/contracts";
 import { clientDirectoryListResponseSchema } from "@fitbud/contracts";
-import { formatLocalDate } from "@fitbud/core";
+import { deriveRenewalState, formatLocalDate } from "@fitbud/core";
 import type { Db } from "../db/client";
 import {
   checkinReviews,
@@ -15,6 +16,7 @@ import {
   coachingRelationships,
   planVersions,
   plans,
+  subscriptionVersions,
   traineeProfiles,
   users,
 } from "../db/schema";
@@ -24,6 +26,7 @@ import { mapCheckin } from "./mappers";
 import { buildPage } from "../lib/cursor";
 
 type DirectoryRow = ClientDirectoryItem & { id: string };
+type RenewalFilter = RenewalState | "none";
 
 export async function loadClientDirectory(
   db: Db,
@@ -34,7 +37,7 @@ export async function loadClientDirectory(
     status?: OnboardingStatus[];
     adherenceState?: AdherenceState[];
     goal?: string[];
-    renewal?: Array<"due" | "overdue" | "none">;
+    renewal?: RenewalFilter[];
     cursor: { k: string; id: string } | null;
     limit: number;
   },
@@ -85,70 +88,90 @@ export async function loadClientDirectory(
 
   const relationshipIds = relationships.map((row) => row.id);
   const traineeIds = relationships.map((row) => row.traineeUserId);
-  const [profiles, goals, checkinRows, planRows] = await Promise.all([
-    traineeIds.length === 0
-      ? Promise.resolve([])
-      : db
-          .select({
-            userId: traineeProfiles.userId,
-            displayName: traineeProfiles.displayName,
-          })
-          .from(traineeProfiles)
-          .where(inArray(traineeProfiles.userId, traineeIds)),
-    relationshipIds.length === 0
-      ? Promise.resolve([])
-      : db
-          .select({
-            relationshipId: coachingConfigurations.coachingRelationshipId,
-            goalShort: coachingConfigurations.goalShort,
-          })
-          .from(coachingConfigurations)
-          .where(
-            and(
+  const [profiles, goals, checkinRows, planRows, subscriptionRows] =
+    await Promise.all([
+      traineeIds.length === 0
+        ? Promise.resolve([])
+        : db
+            .select({
+              userId: traineeProfiles.userId,
+              displayName: traineeProfiles.displayName,
+            })
+            .from(traineeProfiles)
+            .where(inArray(traineeProfiles.userId, traineeIds)),
+      relationshipIds.length === 0
+        ? Promise.resolve([])
+        : db
+            .select({
+              relationshipId: coachingConfigurations.coachingRelationshipId,
+              goalShort: coachingConfigurations.goalShort,
+            })
+            .from(coachingConfigurations)
+            .where(
+              and(
+                inArray(
+                  coachingConfigurations.coachingRelationshipId,
+                  relationshipIds,
+                ),
+                eq(coachingConfigurations.status, "active"),
+              ),
+            ),
+      relationshipIds.length === 0
+        ? Promise.resolve([])
+        : db
+            .select({
+              checkin: checkins,
+              reviewId: checkinReviews.id,
+            })
+            .from(checkins)
+            .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+            .where(
+              and(
+                inArray(checkins.coachingRelationshipId, relationshipIds),
+                eq(checkins.recordStatus, "draft"),
+                isNull(checkinReviews.id),
+              ),
+            )
+            .orderBy(asc(checkins.localDate), asc(checkins.id)),
+      relationshipIds.length === 0
+        ? Promise.resolve([])
+        : db
+            .select({
+              relationshipId: plans.coachingRelationshipId,
+              planId: plans.id,
+              title: plans.title,
+              effectiveFrom: planVersions.effectiveFrom,
+              versionNumber: planVersions.versionNumber,
+            })
+            .from(planVersions)
+            .innerJoin(plans, eq(planVersions.planId, plans.id))
+            .where(
+              and(
+                inArray(plans.coachingRelationshipId, relationshipIds),
+                eq(planVersions.status, "effective"),
+              ),
+            )
+            .orderBy(
+              desc(planVersions.effectiveFrom),
+              desc(planVersions.versionNumber),
+            ),
+      relationshipIds.length === 0
+        ? Promise.resolve([])
+        : db
+            .select({
+              relationshipId: subscriptionVersions.coachingRelationshipId,
+              renewsOn: subscriptionVersions.renewsOn,
+              versionNumber: subscriptionVersions.versionNumber,
+            })
+            .from(subscriptionVersions)
+            .where(
               inArray(
-                coachingConfigurations.coachingRelationshipId,
+                subscriptionVersions.coachingRelationshipId,
                 relationshipIds,
               ),
-              eq(coachingConfigurations.status, "active"),
-            ),
-          ),
-    relationshipIds.length === 0
-      ? Promise.resolve([])
-      : db
-          .select({
-            checkin: checkins,
-            reviewId: checkinReviews.id,
-          })
-          .from(checkins)
-          .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-          .where(
-            and(
-              inArray(checkins.coachingRelationshipId, relationshipIds),
-              eq(checkins.recordStatus, "draft"),
-              isNull(checkinReviews.id),
-            ),
-          )
-          .orderBy(asc(checkins.localDate), asc(checkins.id)),
-    relationshipIds.length === 0
-      ? Promise.resolve([])
-      : db
-          .select({
-            relationshipId: plans.coachingRelationshipId,
-            planId: plans.id,
-            title: plans.title,
-            effectiveFrom: planVersions.effectiveFrom,
-            versionNumber: planVersions.versionNumber,
-          })
-          .from(planVersions)
-          .innerJoin(plans, eq(planVersions.planId, plans.id))
-          .where(
-            and(
-              inArray(plans.coachingRelationshipId, relationshipIds),
-              eq(planVersions.status, "effective"),
-            ),
-          )
-          .orderBy(desc(planVersions.effectiveFrom), desc(planVersions.versionNumber)),
-  ]);
+            )
+            .orderBy(desc(subscriptionVersions.versionNumber)),
+    ]);
 
   const nameByUser = new Map(profiles.map((row) => [row.userId, row.displayName]));
   const goalByRelationship = new Map(
@@ -181,6 +204,17 @@ export async function loadClientDirectory(
       effectiveFrom: row.effectiveFrom,
     });
   }
+  const renewalByRelationship = new Map<
+    string,
+    { renewsOn: string; renewalState: RenewalState }
+  >();
+  for (const row of subscriptionRows) {
+    if (renewalByRelationship.has(row.relationshipId)) continue;
+    renewalByRelationship.set(row.relationshipId, {
+      renewsOn: row.renewsOn,
+      renewalState: deriveRenewalState({ today, renewsOn: row.renewsOn }),
+    });
+  }
 
   const rows: DirectoryRow[] = [];
   for (const relationship of relationships) {
@@ -192,6 +226,7 @@ export async function loadClientDirectory(
       invitation?.recipientDisplayName ??
       invitation?.recipientEmail ??
       "Client";
+    const renewal = renewalByRelationship.get(relationship.id);
     rows.push({
       id: `relationship:${relationship.id}`,
       relationshipId: relationship.id,
@@ -203,6 +238,8 @@ export async function loadClientDirectory(
       effectivePlan: planByRelationship.get(relationship.id) ?? null,
       adherenceState:
         adherenceByRelationship.get(relationship.id) ?? "not_available",
+      renewalState: renewal?.renewalState ?? null,
+      renewsOn: renewal?.renewsOn ?? null,
       updatedAt: relationship.updatedAt,
       email: invitation?.recipientEmail ?? null,
     } as DirectoryRow & { email: string | null });
@@ -223,6 +260,8 @@ export async function loadClientDirectory(
       nextCheckin: null,
       effectivePlan: null,
       adherenceState: "not_available",
+      renewalState: null,
+      renewsOn: null,
       updatedAt: invitation.updatedAt,
       email: invitation.recipientEmail,
     } as DirectoryRow & { email: string | null });
@@ -253,6 +292,10 @@ export async function loadClientDirectory(
       ) {
         return false;
       }
+      if (input.renewal && input.renewal.length > 0) {
+        const stateKey: RenewalFilter = row.renewalState ?? "none";
+        if (!input.renewal.includes(stateKey)) return false;
+      }
       if (input.cursor) {
         if (row.updatedAt > input.cursor.k) return false;
         if (row.updatedAt === input.cursor.k && row.id >= input.cursor.id) {
@@ -280,7 +323,8 @@ export async function loadClientDirectory(
     facets.status[row.status] = (facets.status[row.status] ?? 0) + 1;
     facets.adherence[row.adherenceState] =
       (facets.adherence[row.adherenceState] ?? 0) + 1;
-    facets.renewal.none = (facets.renewal.none ?? 0) + 1;
+    const renewalKey = row.renewalState ?? "none";
+    facets.renewal[renewalKey] = (facets.renewal[renewalKey] ?? 0) + 1;
   }
 
   const page = buildPage(filtered, input.limit, (item) => item.updatedAt);
@@ -294,6 +338,8 @@ export async function loadClientDirectory(
       nextCheckin: item.nextCheckin,
       effectivePlan: item.effectivePlan,
       adherenceState: item.adherenceState,
+      renewalState: item.renewalState,
+      renewsOn: item.renewsOn,
       updatedAt: item.updatedAt,
     })),
     facets,

@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
-import {
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "./Text";
 import { brand, surface } from "@fitbud/tokens";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 

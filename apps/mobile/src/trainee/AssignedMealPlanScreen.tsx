@@ -1,5 +1,6 @@
 import type { EffectivePlanResponse } from "@fitbud/contracts";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";

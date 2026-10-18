@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet } from "react-native";
+import { Text } from "../../components/Text";
 import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";

@@ -44,6 +44,39 @@ function jsonQuote(value: unknown): string {
   return sqlQuote(JSON.stringify(value));
 }
 
+/** Varied roster goals (TW-06) — not the same caption on every row. */
+function demoGoalShort(traineeEmail: string, state: string): string {
+  const byEmail: Record<string, string> = {
+    "aarav.ontrack@demo.fitbud.test": "Build race endurance",
+    "rohan.slipping@demo.fitbud.test": "Lose 4 kg by December",
+    "meera.ack@demo.fitbud.test": "Tone and stay consistent",
+    "farhan.paused@demo.fitbud.test": "Maintain muscle while traveling",
+    "ishita.pushoff@demo.fitbud.test": "Rebuild morning routine",
+    "deepak.dubai@demo.fitbud.test": "Cut for summer photos",
+    "arjun.attention@demo.fitbud.test": "Hit 4 gym days / week",
+    "neha.attention@demo.fitbud.test": "Improve sleep and recovery",
+    "tanvi.attention@demo.fitbud.test": "Prep for half marathon",
+    "lakshmi.foods@demo.fitbud.test": "Stabilize weekday meals",
+    "karan.dual@demo.fitbud.test": "Coach + train dual role",
+    "kavya.ended@demo.fitbud.test": "Postpartum strength return",
+    "nikhil.reactivate@demo.fitbud.test": "Restart after travel break",
+  };
+  if (byEmail[traineeEmail]) return byEmail[traineeEmail]!;
+  if (state === "slipping") return "Lose 4 kg by December";
+  if (state === "active_on_track") return "Build race endurance";
+  return "Stay consistent this month";
+}
+
+/** Next Sunday (civil) on or after refDate — matches weekly check-in cadence. */
+function nextWeeklyCheckinDate(refDate: string): string {
+  let cursor = refDate;
+  for (let i = 0; i < 8; i += 1) {
+    if (weekdayFromDate(cursor) === 0) return cursor;
+    cursor = addDaysFromLocalDate(cursor, 1);
+  }
+  return addDaysFromLocalDate(refDate, 7);
+}
+
 type HistoryInput = {
   referenceDate: string;
   referenceInstant: string;
@@ -107,8 +140,9 @@ function buildOnboardingStack(input: {
     `INSERT INTO onboarding_reviews (id, coaching_relationship_id, onboarding_form_response_id, trainer_user_id, outcome, created_at) VALUES (${sqlQuote(demoUuid("onboarding-review", input.traineeEmail))}, ${sqlQuote(input.relId)}, ${sqlQuote(responseId)}, ${sqlQuote(userId(input.trainerEmail))}, 'coaching_ready', ${sqlQuote(input.startedAt)});`,
   );
   const configId = demoUuid("coaching-config", input.relId);
+  const goalShort = demoGoalShort(input.traineeEmail, input.state);
   lines.push(
-    `INSERT INTO coaching_configurations (id, coaching_relationship_id, status, version_number, record_version, goal_short, goal_description, notes, configured_at, activated_at, created_at, updated_at) VALUES (${sqlQuote(configId)}, ${sqlQuote(input.relId)}, 'active', 1, 0, 'Lose 4 kg by December', NULL, NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
+    `INSERT INTO coaching_configurations (id, coaching_relationship_id, status, version_number, record_version, goal_short, goal_description, notes, configured_at, activated_at, created_at, updated_at) VALUES (${sqlQuote(configId)}, ${sqlQuote(input.relId)}, 'active', 1, 0, ${sqlQuote(goalShort)}, NULL, NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
   );
   lines.push(
     `INSERT INTO workout_expectations (id, coaching_configuration_id, sessions_per_week, completion_window_hours, created_at, updated_at) VALUES (${sqlQuote(demoUuid("workout-exp", input.relId))}, ${sqlQuote(configId)}, 3, 24, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
@@ -497,8 +531,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
   }
 
-  // Deepak + Aarav + attention_hole clients: Attention-severity open items so
-  // Home shows a mix of Critical and Attention across ~8 clients.
+  // Deepak + attention_hole clients: Attention-severity open items so Home
+  // shows Critical/Attention across 8 clients; Aarav stays On track.
   const deepakRel = relId("rahul.coach@demo.fitbud.test", "deepak.dubai@demo.fitbud.test");
   const deepakWorkoutId = demoUuid(
     "workout-assignment",
@@ -508,21 +542,6 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const deepakDetected = new Date(Date.parse(now) - 30 * 3_600_000).toISOString();
   lines.push(
     `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "deepak-skipped-workout"))}, ${sqlQuote(deepakRel)}, 'skipped_workout', 'attention', 'active', 'demo-v1', 'workout_assignment', ${sqlQuote(deepakWorkoutId)}, 'Skipped workout', ${sqlQuote(deepakDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-  );
-  const aaravRelForEx = relId("rahul.coach@demo.fitbud.test", "aarav.ontrack@demo.fitbud.test");
-  // Use today dinner assignment id but keep outcome skipped so evaluate cannot
-  // clear the Attention item (on-track meals are otherwise confirmed).
-  const aaravMealId = demoUuid(
-    "meal-assignment",
-    "aarav.ontrack@demo.fitbud.test",
-    refDate,
-    MEAL_PRESCRIPTION_IDS.dinner,
-  );
-  const aaravDetected = new Date(Date.parse(now) - 12 * 3_600_000).toISOString();
-  lines.push(
-    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(aaravMealId)};`,
-    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", aaravMealId))}, ${sqlQuote(aaravMealId)}, ${sqlQuote(aaravRelForEx)}, ${sqlQuote(demoUuid("plan-version", aaravRelForEx, "v2"))}, ${sqlQuote(userId("aarav.ontrack@demo.fitbud.test"))}, 'skipped', 0, ${sqlQuote(now)}, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "aarav-skipped-meal"))}, ${sqlQuote(aaravRelForEx)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(aaravMealId)}, 'Skipped dinner', ${sqlQuote(aaravDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
   for (const [email, key] of [
@@ -584,6 +603,31 @@ function buildPersonaOverlays(input: HistoryInput): string {
   lines.push(
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "lakshmi-today"))}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("checkin-schedule", lakshmiRel))}, ${sqlQuote(refDate)}, ${sqlQuote(localDayStartIso(refDate, "09:00", "Asia/Kolkata"))}, ${sqlQuote(new Date(Date.parse(now) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
+
+  // Upcoming weekly check-in drafts so roster "Next check-in" is schedule-real.
+  const nextCheckinDate = nextWeeklyCheckinDate(addDaysFromLocalDate(refDate, 1));
+  const upcomingCheckinClients = [
+    "aarav.ontrack@demo.fitbud.test",
+    "rohan.slipping@demo.fitbud.test",
+    "meera.ack@demo.fitbud.test",
+    "farhan.paused@demo.fitbud.test",
+    "ishita.pushoff@demo.fitbud.test",
+    "deepak.dubai@demo.fitbud.test",
+    "arjun.attention@demo.fitbud.test",
+    "neha.attention@demo.fitbud.test",
+    "tanvi.attention@demo.fitbud.test",
+  ] as const;
+  for (const email of upcomingCheckinClients) {
+    const trainer =
+      email.startsWith("lakshmi.") || email.startsWith("karan.")
+        ? "priya.coach@demo.fitbud.test"
+        : "rahul.coach@demo.fitbud.test";
+    const relationship = relId(trainer, email);
+    const timezone = email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
+    lines.push(
+      `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", `${email}-next`))}, ${sqlQuote(relationship)}, ${sqlQuote(demoUuid("checkin-schedule", relationship))}, ${sqlQuote(nextCheckinDate)}, ${sqlQuote(localDayStartIso(nextCheckinDate, "09:00", timezone))}, ${sqlQuote(new Date(Date.parse(localDayStartIso(nextCheckinDate, "09:00", timezone)) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    );
+  }
 
   const aaravRel = relId("rahul.coach@demo.fitbud.test", "aarav.ontrack@demo.fitbud.test");
   lines.push(

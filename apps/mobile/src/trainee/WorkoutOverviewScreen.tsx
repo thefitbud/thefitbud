@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import type { WorkoutAssignment } from "@fitbud/contracts";

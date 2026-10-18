@@ -36,6 +36,22 @@ export function CodeSignInPage() {
   }, [cooldown]);
 
   if (!loading && me) {
+    if (!me.permittedRoles.includes("trainer")) {
+      return (
+        <AuthLayout
+          title="Client account"
+          lead=""
+          screenTestId="screen-TW-01"
+          showGlimpse={false}
+        >
+          <div className="auth-role-gate" data-testid="trainee-only-gate">
+            <p role="alert">
+              This account is set up as a client. Open the FitBud app on your phone.
+            </p>
+          </div>
+        </AuthLayout>
+      );
+    }
     return <Navigate to={next} replace />;
   }
 
@@ -99,7 +115,12 @@ export function CodeSignInPage() {
 
   if (roleGate) {
     return (
-      <AuthLayout title="Client account" lead="" screenTestId="screen-TW-01">
+      <AuthLayout
+        title="Client account"
+        lead=""
+        screenTestId="screen-TW-01"
+        showGlimpse={false}
+      >
         <div className="auth-role-gate" data-testid="trainee-only-gate">
           <p role="alert">
             This account is set up as a client. Open the FitBud app on your phone.

@@ -133,6 +133,15 @@ test.describe("TW-B auth flows", () => {
     await expect(page.getByTestId("trainee-only-gate")).toContainText(
       "This account is set up as a client",
     );
+    // Authenticated trainee on any route must keep the gate (not full sign-in).
+    await page.goto("/clients");
+    await expect(page.getByTestId("trainee-only-gate")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/needs attention/i)).toHaveCount(0);
+    await expect(page.getByTestId("trainee-only-gate")).toContainText(
+      "This account is set up as a client",
+    );
   });
 
   test("rate limit returns lockout copy after many failures", async ({
@@ -309,7 +318,7 @@ test.describe("TW-B first-run welcome", () => {
 });
 
 test.describe("TW-B roster + invite", () => {
-  test("roster search, Ended segment, FilterBar one row at 1440", async ({
+  test("roster search, Ended segment, FilterBar unclipped at 1280/1440", async ({
     page,
   }) => {
     test.setTimeout(90_000);
@@ -317,24 +326,31 @@ test.describe("TW-B roster + invite", () => {
     await page.waitForURL((url) => !url.pathname.includes("/sign-in"), {
       timeout: 45_000,
     });
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/clients");
-    await page.getByTestId("screen-TW-06").waitFor({ state: "visible" });
 
-    const bar = page.getByTestId("filter-bar");
-    await expect(bar).toBeVisible();
-    const groups = bar.locator(".filter-pill-group");
-    const count = await groups.count();
-    expect(count).toBeGreaterThanOrEqual(3);
-    const tops: number[] = [];
-    for (let i = 0; i < count; i += 1) {
-      const box = await groups.nth(i).boundingBox();
-      expect(box).toBeTruthy();
-      tops.push(Math.round(box!.y));
+    async function assertFilterBarUnclipped() {
+      const bar = page.getByTestId("filter-bar");
+      await expect(bar).toBeVisible();
+      const ok = await bar.evaluate((el) => {
+        const style = getComputedStyle(el);
+        if (style.overflowX === "hidden") return false;
+        const pills = Array.from(el.querySelectorAll(".filter-pill"));
+        const barBox = el.getBoundingClientRect();
+        return pills.every((pill) => {
+          const box = pill.getBoundingClientRect();
+          return box.right <= barBox.right + 1 && box.left >= barBox.left - 1;
+        });
+      });
+      expect(ok, "FilterBar pills must not be clipped").toBe(true);
     }
-    const spread = Math.max(...tops) - Math.min(...tops);
-    expect(spread, `FilterBar groups Y spread ${spread}`).toBeLessThanOrEqual(8);
 
+    for (const width of [1440, 1280] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/clients");
+      await page.getByTestId("screen-TW-06").waitFor({ state: "visible" });
+      await assertFilterBarUnclipped();
+    }
+
+    await expect(page.getByText(/\d+ active/i)).toBeVisible();
     await expect(page.getByText(/Kavya/i)).toHaveCount(0);
     await page.getByPlaceholder(/search clients/i).fill("rohan");
     await page.waitForTimeout(400);
@@ -342,6 +358,25 @@ test.describe("TW-B roster + invite", () => {
     await expect(page.getByText(/Rohan/i).first()).toBeVisible();
     await page.getByPlaceholder(/search clients/i).fill("");
     await page.waitForTimeout(400);
+
+    // Renewal filter uses Home Renewals derivation (Rohan = expired).
+    await page.goto("/clients?renewal=expired");
+    await page.getByRole("button", { name: /^More/i }).click();
+    await expect(page.getByText(/Rohan/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/Expired/i).first()).toBeVisible();
+
+    // History: Invited → Expired then Back restores status=invited.
+    await page.goto("/clients");
+    await page.getByRole("button", { name: /^Invited/i }).click();
+    await expect(page).toHaveURL(/status=invited/);
+    await page.getByRole("button", { name: /^More/i }).click();
+    await page.getByRole("button", { name: /^Expired$/i }).click();
+    await expect(page).toHaveURL(/renewal=expired/);
+    await page.goBack();
+    await expect(page).toHaveURL(/status=invited/);
+
     await page.getByRole("tab", { name: /^Ended$/i }).click();
     await expect(page.getByText(/Kavya|Nikhil/i).first()).toBeVisible({
       timeout: 15_000,

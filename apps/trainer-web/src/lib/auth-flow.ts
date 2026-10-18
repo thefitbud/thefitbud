@@ -56,29 +56,40 @@ function mapLoginError(err: unknown): AuthFlowError {
   return new AuthFlowError("generic", "Something went wrong. Try again.");
 }
 
+function isForbiddenRole(err: unknown): boolean {
+  return (
+    err instanceof ApiClientError &&
+    (err.status === 403 ||
+      err.code === "FORBIDDEN_ROLE" ||
+      /trainer role|set up as a client/i.test(err.message))
+  );
+}
+
+/**
+ * Store the bearer token and load `/me`. Cookie session is best-effort —
+ * trainee-only accounts are rejected by POST /auth/session but must still
+ * keep a client session so RequireAuth can show the trainee gate on any route.
+ */
 export async function establishTrainerSession(
   idToken: string,
   emailHint: string,
 ): Promise<MeResponse> {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  await apiClient.createWebSession({ idToken, timezone });
   storeSession(idToken, emailHint.trim().toLowerCase());
-  const profile = await apiClient.me();
-  if (!profile.permittedRoles.includes("trainer")) {
-    clearSession();
-    throw new AuthFlowError(
-      "role",
-      "This account is set up as a client. Open the FitBud app on your phone.",
-    );
+  try {
+    await apiClient.createWebSession({ idToken, timezone });
+  } catch (err) {
+    if (!isForbiddenRole(err)) {
+      clearSession();
+      throw mapLoginError(err);
+    }
   }
-  if (profile.selectedRole && profile.selectedRole !== "trainer") {
+  try {
+    return await apiClient.me();
+  } catch (err) {
     clearSession();
-    throw new AuthFlowError(
-      "role",
-      "This account is set up as a client. Open the FitBud app on your phone.",
-    );
+    throw mapLoginError(err);
   }
-  return profile;
 }
 
 export async function signInWithPassword(

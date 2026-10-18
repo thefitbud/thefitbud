@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "./Text";
 import { colors, radii, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { BottomSheet } from "./BottomSheet";
 

@@ -1,15 +1,8 @@
 import { useEffect, useState } from "react";
 
 const DEFAULT_REST_SECONDS = 90;
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import { labelFor } from "@fitbud/core";
 import type { WorkoutExecution } from "@fitbud/contracts";

@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { FitText as Text } from "./FitText.js";
 import { colors, radii, spacing, touchTargetMin } from "./theme.js";
 import { typeScale } from "./typography.js";
 

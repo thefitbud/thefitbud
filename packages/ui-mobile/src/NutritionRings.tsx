@@ -1,6 +1,7 @@
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { rings } from "@fitbud/tokens";
+import { FitText as Text } from "./FitText.js";
 import { colors, spacing } from "./theme.js";
 import { typeScale } from "./typography.js";
 

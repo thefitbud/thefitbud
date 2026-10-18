@@ -1,5 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { WeekDayState } from "@fitbud/contracts";
+import { FitText as Text } from "./FitText.js";
 import { colors, spacing } from "./theme.js";
 import { fontFamilyMedium, typeScale } from "./typography.js";
 

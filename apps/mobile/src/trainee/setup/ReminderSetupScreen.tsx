@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Linking, Platform, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, StyleSheet, View } from "react-native";
+import { Text } from "../../components/Text";
 import * as Notifications from "expo-notifications";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";

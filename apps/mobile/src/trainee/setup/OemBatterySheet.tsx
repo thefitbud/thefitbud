@@ -1,4 +1,5 @@
-import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "../../components/Text";
 import Constants from "expo-constants";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { PrimaryButton } from "../../components/PrimaryButton";

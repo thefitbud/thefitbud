@@ -43,10 +43,13 @@ import { inviteEmailBody, inviteEmailSubject } from "../emails/invite.js";
 import { sendSystemEmail } from "../lib/email.js";
 import { trainerProfiles, userIdentities } from "../db/schema";
 import { verifyPurposeProof } from "../auth/proof.js";
-import { hashPassword } from "../auth/password.js";
+import {
+  hashPassword,
+  passwordRequirementMessage,
+  validatePasswordPlaintext,
+} from "../auth/password.js";
 import { identifierHash } from "../auth/identifiers.js";
 import { mintAuthToken } from "../auth/custom-token.js";
-import { validatePasswordPlaintext } from "../auth/password.js";
 import { acceptInvitationWithTokenResponseSchema } from "@fitbud/contracts";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import {
@@ -57,6 +60,7 @@ import {
   sha256Hex,
 } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { invitePublicUrl } from "../lib/public-app-url";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -258,8 +262,7 @@ invitationRoutes.post(
       .where(eq(clientInvitations.id, invitationId))
       .limit(1);
     const row = rows[0]!;
-    const appHost = c.env.APP_HOST ?? "localhost";
-    const inviteUrl = `https://${appHost}/i/${token}`;
+    const inviteUrl = invitePublicUrl(c.env, token);
     const [trainerProfile] = await db
       .select()
       .from(trainerProfiles)
@@ -484,8 +487,7 @@ invitationRoutes.post(
       .from(clientInvitations)
       .where(eq(clientInvitations.id, newId))
       .limit(1);
-    const appHost = c.env.APP_HOST ?? "localhost";
-    const inviteUrl = `https://${appHost}/i/${token}`;
+    const inviteUrl = invitePublicUrl(c.env, token);
     return ok(
       c,
       createInvitationResponseSchema.parse({
@@ -648,7 +650,7 @@ invitationRoutes.post("/accept",
     }
     const violation = validatePasswordPlaintext(parsed.data.password);
     if (violation) {
-      return fail(c, 400, violation, "Password does not meet requirements.");
+      return fail(c, 400, violation, passwordRequirementMessage(violation));
     }
     const secret = c.env.MEDIA_SIGNING_SECRET ?? "fitbud-local-proof-secret";
     const verified = await verifyPurposeProof(secret, parsed.data.otpProof, "invite");

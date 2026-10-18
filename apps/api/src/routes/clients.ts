@@ -148,9 +148,12 @@ clientRoutes.get(
       return fail(c, 400, "INVALID_CURSOR", "Cursor is not valid.");
     }
 
-    const renewal = renewalParsed.data?.map((value) =>
-      value === "expired" ? "overdue" : value === "overdue" ? "overdue" : value === "due" ? "due" : value === "upcoming" ? "due" : "none",
-    ) as Array<"due" | "overdue" | "none"> | undefined;
+    const renewal = renewalParsed.data?.map((value) => {
+      // Accept legacy "overdue" query alias as expired (Home/core vocabulary).
+      if (value === "overdue") return "expired" as const;
+      if (value === "none") return "none" as const;
+      return value;
+    });
 
     const db = createDb(c.env.DB);
     const page = await loadClientDirectory(db, {

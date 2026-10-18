@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, StyleSheet, Switch, Text, View } from "react-native";
+import { Linking, StyleSheet, Switch, View } from "react-native";
+import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { NotificationPreferences } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";

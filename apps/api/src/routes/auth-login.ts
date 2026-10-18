@@ -17,7 +17,12 @@ import {
   normalizeIdentifier,
 } from "../auth/identifiers.js";
 import { issuePurposeProof, verifyPurposeProof } from "../auth/proof.js";
-import { hashPassword, validatePasswordPlaintext, verifyPassword } from "../auth/password.js";
+import {
+  hashPassword,
+  passwordRequirementMessage,
+  validatePasswordPlaintext,
+  verifyPassword,
+} from "../auth/password.js";
 import { getFlags } from "../config/flags.js";
 import { createDb } from "../db/client.js";
 import {
@@ -406,7 +411,7 @@ authLoginRoutes.post(
     }
     const violation = validatePasswordPlaintext(parsed.data.newPassword);
     if (violation) {
-      return fail(c, 400, violation, "Password does not meet requirements.");
+      return fail(c, 400, violation, passwordRequirementMessage(violation));
     }
     const secret = c.env.MEDIA_SIGNING_SECRET ?? "fitbud-local-proof-secret";
     const verified = await verifyPurposeProof(secret, parsed.data.resetProof, "reset");
@@ -500,7 +505,7 @@ authLoginRoutes.post(
     }
     const violation = validatePasswordPlaintext(parsed.data.newPassword);
     if (violation) {
-      return fail(c, 400, violation, "Password does not meet requirements.");
+      return fail(c, 400, violation, passwordRequirementMessage(violation));
     }
     const db = createDb(c.env.DB);
     const [identity] = await db

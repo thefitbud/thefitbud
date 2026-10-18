@@ -31,7 +31,7 @@ export function AuthLayout({
             <Users size={14} strokeWidth={2} aria-hidden="true" />
             For trainers
           </span>
-          <h1>See who needs you today.</h1>
+          <p className="auth-brand-headline">See who needs you today.</p>
           <p>Progress, guided.</p>
           {showGlimpse ? (
             <div className="auth-glimpse">
@@ -75,7 +75,7 @@ export function AuthLayout({
           <div className="auth-mark-tile" aria-hidden="true">
             <BrandMark size={30} />
           </div>
-          <h2>{title}</h2>
+          <h1 className="auth-form-title">{title}</h1>
           {lead ? <p className="auth-lead">{lead}</p> : null}
           {children}
         </div>

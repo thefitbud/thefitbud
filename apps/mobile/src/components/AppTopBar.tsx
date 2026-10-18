@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "./Text";
 import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
 import { SyncIndicator } from "./SyncIndicator";
 

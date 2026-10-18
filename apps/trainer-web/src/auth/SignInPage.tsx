@@ -38,6 +38,39 @@ export function SignInPage() {
   const next = nextRaw.startsWith("/") ? nextRaw : "/";
 
   if (!loading && me) {
+    if (!me.permittedRoles.includes("trainer")) {
+      return (
+        <AuthLayout
+          title="Client account"
+          lead=""
+          screenTestId="screen-TW-01"
+          showGlimpse={false}
+        >
+          <div className="auth-role-gate" data-testid="trainee-only-gate">
+            <p role="alert">
+              This account is set up as a client. Open the FitBud app on your phone.
+            </p>
+            <div className="auth-store-links">
+              <a
+                className="button-secondary"
+                href="https://apps.apple.com/app/fitbud"
+              >
+                App Store
+              </a>
+              <a
+                className="button-secondary"
+                href="https://play.google.com/store/apps/details?id=com.thefitbud.app"
+              >
+                Google Play
+              </a>
+            </div>
+            <p className="auth-alt-links">
+              <Link to="/sign-in">Try another account</Link>
+            </p>
+          </div>
+        </AuthLayout>
+      );
+    }
     return <Navigate to={next} replace />;
   }
 
