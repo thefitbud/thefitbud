@@ -35,6 +35,8 @@ function directoryItem(
     nextCheckin: null,
     effectivePlan: null,
     adherenceState: "on_track",
+    renewalState: null,
+    renewsOn: null,
     updatedAt: "2026-04-01T00:00:00.000Z",
     ...overrides,
   };

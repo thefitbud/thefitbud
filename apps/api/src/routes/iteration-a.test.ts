@@ -222,6 +222,8 @@ type DirectoryItem = {
   status: string;
   goalShort: string | null;
   adherenceState: string;
+  renewalState: string | null;
+  renewsOn: string | null;
   effectivePlan: { id: string; title: string } | null;
   nextCheckin: { id: string } | null;
 };
@@ -233,7 +235,15 @@ async function listClients(cookie: string, query = "") {
     testEnv(),
   );
   const body = (await response.json()) as {
-    data?: { items: DirectoryItem[]; nextCursor: string | null };
+    data?: {
+      items: DirectoryItem[];
+      nextCursor: string | null;
+      facets?: {
+        status?: Record<string, number>;
+        adherence?: Record<string, number>;
+        renewal?: Record<string, number>;
+      };
+    };
     error?: { code: string };
   };
   return { status: response.status, body };
