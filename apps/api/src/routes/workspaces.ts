@@ -6,6 +6,7 @@ import {
   workspaceActivityListResponseSchema,
   workspaceActivityQuerySchema,
 } from "@fitbud/contracts";
+import { addDaysToLocalDate, formatLocalDate, weekdayFromLocalDate } from "@fitbud/core";
 import { loadTraineeTimezone } from "../domain/assignment-schedule.js";
 import { buildWeekReadModel } from "../domain/week-read-model.js";
 import { createDb } from "../db/client";

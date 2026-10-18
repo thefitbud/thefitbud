@@ -25,6 +25,27 @@ function civilParts(date: string) {
   return { y: y!, m: m!, d: d! };
 }
 
+/** Monday of the civil week containing `date` (trainee-local YYYY-MM-DD). */
+function mondayOfWeek(date: string): string {
+  const { y, m, d } = civilParts(date);
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  const day = utc.getUTCDay(); // 0 Sun … 6 Sat
+  const delta = day === 0 ? -6 : 1 - day;
+  utc.setUTCDate(utc.getUTCDate() + delta);
+  const yy = utc.getUTCFullYear();
+  const mm = String(utc.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(utc.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function todayCivilUtc(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function weekdayLabel(date: string, today: string): string {
   if (date === today) return "Today";
   const { y, m, d } = civilParts(date);
@@ -100,8 +121,9 @@ export function ClientOverviewPage() {
   useEffect(() => {
     if (!relationshipId) return;
     setWeekError(false);
+    const weekStart = mondayOfWeek(todayCivilUtc());
     void stage1Api
-      .getWorkspaceWeek(relationshipId)
+      .getWorkspaceWeek(relationshipId, weekStart)
       .then(setWeek)
       .catch(() => {
         setWeek(null);
@@ -269,7 +291,9 @@ export function ClientOverviewPage() {
                   </div>
                   <MiniRing
                     value={nutrition.logged.kcal}
-                    max={nutrition.assigned?.kcal ?? nutrition.logged.kcal || 1}
+                    max={
+                      (nutrition.assigned?.kcal ?? nutrition.logged.kcal) || 1
+                    }
                     color="var(--brand-indigo, #4527C6)"
                     label="kcal"
                     unit=""
@@ -277,9 +301,8 @@ export function ClientOverviewPage() {
                   <MiniRing
                     value={nutrition.logged.proteinG}
                     max={
-                      nutrition.assigned?.proteinG ??
-                      nutrition.logged.proteinG ||
-                      1
+                      (nutrition.assigned?.proteinG ??
+                        nutrition.logged.proteinG) || 1
                     }
                     color="var(--brand-deep-navy, #1A1248)"
                     label="Protein"
@@ -288,7 +311,8 @@ export function ClientOverviewPage() {
                   <MiniRing
                     value={nutrition.logged.carbsG}
                     max={
-                      nutrition.assigned?.carbsG ?? nutrition.logged.carbsG || 1
+                      (nutrition.assigned?.carbsG ??
+                        nutrition.logged.carbsG) || 1
                     }
                     color="#7C6CF0"
                     label="Carbs"
@@ -296,7 +320,9 @@ export function ClientOverviewPage() {
                   />
                   <MiniRing
                     value={nutrition.logged.fatG}
-                    max={nutrition.assigned?.fatG ?? nutrition.logged.fatG || 1}
+                    max={
+                      (nutrition.assigned?.fatG ?? nutrition.logged.fatG) || 1
+                    }
                     color="#0E7490"
                     label="Fat"
                     unit="g"
@@ -326,7 +352,10 @@ export function ClientOverviewPage() {
                 onClick={() => {
                   setWeekError(false);
                   void stage1Api
-                    .getWorkspaceWeek(relationshipId)
+                    .getWorkspaceWeek(
+                      relationshipId,
+                      mondayOfWeek(todayCivilUtc()),
+                    )
                     .then(setWeek)
                     .catch(() => setWeekError(true));
                 }}
