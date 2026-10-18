@@ -13,9 +13,6 @@ const ANITA_INVITE = "06b54e81-016c-4220-a9a8-31195324669b";
 const ANITA_EMAIL = "anita.invite@demo.fitbud.test";
 const KAVYA_EMAIL = "kavya.ended@demo.fitbud.test";
 
-// Seed mutations (forgot-password restore, reissue/revoke, nova welcome) must not race.
-test.describe.configure({ mode: "serial" });
-
 async function signIn(
   page: Page,
   email = EMAIL,
@@ -64,6 +61,8 @@ async function apiLogin(
 }
 
 test.describe("TW-B auth flows", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("wrong password shows generic error", async ({ page }) => {
     await page.goto("/sign-in");
     await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
@@ -144,6 +143,7 @@ test.describe("TW-B auth flows", () => {
     await expect(page.getByRole("alert")).toContainText(
       "Too many tries. Wait 15 minutes or sign in with a code.",
     );
+    await page.unroute("**/auth/login");
   });
 
   test("next= redirect returns to original path after sign-in", async ({
@@ -175,6 +175,8 @@ test.describe("TW-B auth flows", () => {
       timeout: 30_000,
     });
     await expect(page).not.toHaveURL(/\/sign-in/);
+    await page.unroute("**/me");
+    await page.unroute("**/api/me");
   });
 
   test("forgot-password code → new password → signed in", async ({ page }) => {
@@ -182,38 +184,56 @@ test.describe("TW-B auth flows", () => {
     await page.goto("/forgot-password?next=/clients");
     await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
     await page.getByRole("button", { name: /send code/i }).click();
-    await expect(page.getByText(/if an account exists/i)).toBeVisible();
-    const code = await fetchDevCode(EMAIL);
-    expect(code).toBeTruthy();
-    const boxes = page.locator(".otp-box");
-    if ((await boxes.count()) > 0) {
-      for (let i = 0; i < 6; i += 1) {
-        await boxes.nth(i).fill(code![i]!);
-      }
-    } else {
-      await page.locator('input[name="code"], input[autocomplete="one-time-code"]').fill(code!);
-    }
-    await page.getByRole("button", { name: /^verify code$/i }).click();
-    await expect(page.getByText(/new password|choose a new password/i)).toBeVisible({
+    await expect(page.getByText(/if an account exists/i)).toBeVisible({
       timeout: 15_000,
     });
-    const newPass = `FitBud-reset-${Date.now().toString().slice(-4)}aA1!`;
-    await page.locator('input[autocomplete="new-password"]').fill(newPass);
+    // Wait for DEV autofill or mail sink, then ensure boxes match latest code.
+    await page.waitForTimeout(800);
+    const code = await fetchDevCode(EMAIL);
+    expect(code).toBeTruthy();
+    async function pasteOtp(otp: string) {
+      const first = page.locator(".otp-box").first();
+      await first.click();
+      await first.evaluate((el, value) => {
+        const input = el as HTMLInputElement;
+        const dt = new DataTransfer();
+        dt.setData("text/plain", value);
+        input.dispatchEvent(
+          new ClipboardEvent("paste", {
+            clipboardData: dt,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      }, otp);
+    }
+    await pasteOtp(code!);
+    await page.getByRole("button", { name: /^verify code$/i }).click();
+    await expect(page.getByLabel(/^New password$/i)).toBeVisible({
+      timeout: 20_000,
+    });
+    const newPass = `FitBud-reset-${Date.now().toString().slice(-4)}aA1`;
+    await page.getByLabel(/^New password$/i).fill(newPass);
     await page.getByRole("button", { name: /save password and sign in/i }).click();
-    await page.waitForURL(/\/clients/, { timeout: 45_000 });
+    await page.waitForURL((url) => url.pathname.startsWith("/clients"), {
+      timeout: 45_000,
+    });
     // Restore demo password for later tests.
     await page.goto("/forgot-password");
     await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
     await page.getByRole("button", { name: /send code/i }).click();
-    await expect(page.getByText(/if an account exists/i)).toBeVisible();
+    await expect(page.getByText(/if an account exists/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.waitForTimeout(800);
     const code2 = await fetchDevCode(EMAIL);
     expect(code2).toBeTruthy();
-    const boxes2 = page.locator(".otp-box");
-    for (let i = 0; i < 6; i += 1) {
-      await boxes2.nth(i).fill(code2![i]!);
-    }
+    await pasteOtp(code2!);
     await page.getByRole("button", { name: /^verify code$/i }).click();
-    await page.locator('input[autocomplete="new-password"]').fill(PASSWORD);
+    await expect(page.getByLabel(/^New password$/i)).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByLabel(/^New password$/i).fill(PASSWORD);
     await page.getByRole("button", { name: /save password and sign in/i }).click();
     await page.waitForURL((url) => !url.pathname.includes("/forgot"), {
       timeout: 45_000,
@@ -236,6 +256,8 @@ test.describe("TW-B auth flows", () => {
 });
 
 test.describe("TW-B first-run + roster + invite", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("fresh trainer completes welcome steps 1–3 and finish", async ({
     page,
   }) => {
