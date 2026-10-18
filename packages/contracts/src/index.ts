@@ -703,6 +703,9 @@ export {
 } from "./me-steps.js";
 
 export {
+  coachAskItemTypeSchema,
+  coachAskStatusSchema,
+  coachAskTopicSchema,
   coachAskSchema,
   coachAskListResponseSchema,
   createCoachAskRequestSchema,
@@ -742,6 +745,7 @@ export {
   responsivenessResponseSchema,
   responsivenessLabelSchema,
   reengagementCandidatesResponseSchema,
+  resolveExceptionOutcomeSchema,
   type MeDayResponse,
   type WeekReadModel,
   type WeekDayState,

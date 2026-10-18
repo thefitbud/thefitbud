@@ -293,23 +293,39 @@ function shouldLogMeal(
   if (state === "reminders_paused") {
     return localDate < adherenceStart ? "confirm" : false;
   }
-  // Slipping / acknowledged / push-off: leave only the last few days unlogged
-  // so exception volume stays realistic (~a few open items per client).
+  // Slipping / ack / push-off: keep almost everything logged so detection does
+  // not flood attention. Leave a few deliberate holes that match persona overlays.
   if (
     state === "slipping" ||
     state === "acknowledged" ||
     state === "notifications_off"
   ) {
-    const missFrom = addDaysFromLocalDate(refDate, -2);
-    if (localDate >= missFrom) return false;
-    return mealName !== "Snack" ? "confirm" : false;
+    if (state === "slipping" && localDate === refDate) {
+      if (mealName === "Breakfast" || mealName === "Lunch" || mealName === "Dinner") {
+        return false;
+      }
+    }
+    if (state === "acknowledged" && mealName === "Lunch") {
+      const ackDay = addDaysFromLocalDate(refDate, -2);
+      if (localDate === ackDay) return false;
+    }
+    if (state === "notifications_off") {
+      // Yesterday's dinner is past-window so detection opens a critical;
+      // today's lunch stays pending (coach-ask persona) without flooding.
+      const yesterday = addDaysFromLocalDate(refDate, -1);
+      if (localDate === yesterday && mealName === "Dinner") return false;
+      if (localDate === refDate && mealName === "Lunch") return false;
+    }
+    return "confirm";
   }
   if (state === "food_deviations") {
     if (mealName === "Lunch" && localDate === refDate) return false;
-    return mealName !== "Snack" ? "confirm" : false;
+    return "confirm";
   }
+  // On-track (and default): log every prescribed meal once its slot has started,
+  // including snacks — unlogged snacks become critical overdue otherwise.
   if (localDate >= adherenceStart && localDate <= refDate) {
-    return mealName !== "Snack" ? "confirm" : false;
+    return "confirm";
   }
   if (localDate < adherenceStart) {
     return "confirm";
@@ -353,7 +369,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const deviationMealId = demoUuid("meal-assignment", "rohan.slipping@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
   const overdueCheckinId = demoUuid("checkin", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -7));
 
-  // Spread ages so attention cards aren't all "just now".
+  // Spread ages so attention cards aren't all "just now". Cap seeded rows so
+  // detection for today's unlogged holes stays ≤10 open total per client.
   const exceptionRows = [
     ["rohan-missed-workout", rohanRel, "missed_workout", "critical", missedWorkoutId, "workout_assignment", 2, 6],
     ["rohan-skipped-workout", rohanRel, "skipped_workout", "attention", skippedWorkoutId, "workout_assignment", 0, 18],

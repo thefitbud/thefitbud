@@ -2,97 +2,63 @@
 
 Branch: `cursor/batch-0-foundation-cd97`  
 Base: `cursor/stage1-foundation-a3da`  
-Proof commands: `pnpm typecheck` (green), `pnpm test` (green), `pnpm db:reset` (complete), banned-strings Playwright (see below).
+Proof commands: `pnpm typecheck` (green), `pnpm exec turbo run test --force` (green).
 
-Test counts (`pnpm test`, Node 22.23.3):
+Test counts (Node 22.23.3):
 
 | Package | Tests |
 |---|---|
-| api | 206 passed |
+| api | 208 passed |
 | core | 121 passed |
 | mobile | 52 passed |
 | trainer-web | 21 passed |
 | contracts | 22 passed |
 | api-client | 7 passed |
 | tokens | 7 passed |
-| **Total** | **436 passed** |
+| **Total** | **438 passed** |
 
 ## Item table
 
 | # | Item | Result | Proof |
 |---|---|---|---|
-| 0.1 | Attention group-by-client before limit | PASS | `apps/api/src/routes/batch-0.test.ts` · `A1: attention groupBy=relationship returns separate client groups; limit counts groups` |
-| 0.2 | Ended relationships excluded (inbox/attention/feed/Home) | PASS | `batch-0.test.ts` · `A2: ended Kavya and Nikhil absent from inbox and attention`; filters in `routes/checkins.ts`, `domain/exceptions.ts`, `routes/activity-feed.ts` |
-| 0.3 | Seed `detected_at`/`acknowledged_at` full instants; mapper tolerant | PASS | `batch-0.test.ts` · `A3: Meera exception GET returns 200 with coerced detectedAt`; `coerceIsoInstant` unit test |
-| 0.4 | Idempotent detection; realistic exception volume | PASS | `batch-0.test.ts` · `A4: open exceptions per client stay realistic after attention evaluate` (≤12/group); `DETECTION_LOOKBACK_DAYS=3` in `domain/exceptions.ts:35` without resolving aged open items |
-| 0.5 | Structured exception details; no ISO in `summary` | PASS (core) / FAIL (Home UI) | Unit: `packages/core/src/exception.test.ts`; Home still hits `iso-date` (`2026-10-15`) — see banned-strings report (screen batches) |
-| 0.6 | `clientWhatsappE164` in workspace header / re-engage | PASS | `batch-0.test.ts` · `A6: workspace header includes clientWhatsappE164`; contract `packages/contracts/src/workspace.ts:113`; `WorkspaceHeader.tsx` |
-| 0.7 | Web `{data}` envelope unwrapped | PASS | `apps/trainer-web/src/lib/http-api.test.ts` |
-| 0.8 | RequireAuth role check (trainee-only) | PASS | `apps/trainer-web/src/layout/RequireAuth.test.tsx` · `includes the client-account message`; decision 20 via `A12` |
-| 0.9 | Activity feed kcal ÷ NUTRIENT_SCALE | PASS | `batch-0.test.ts` · `A9: activity feed kcal is divided by NUTRIENT_SCALE` |
-| 0.10 | Workout duration from events | PASS | `apps/mobile/src/trainee/workoutDuration.test.ts` |
-| 0.11 | No future-dated seed events; sneha.review trainee-only | PASS | `batch-0.test.ts` · `A11` + `A12/decision 20: sneha.review is trainee-only` |
-| 0.12 | Seed display names title-cased; `formatPersonName()` | PASS (seed/API) / FAIL (Home UI) | `batch-0.test.ts` · `A13`; `packages/core/src/format.test.ts` title-case; Home still hits `lowercase-demo-name`=`rahul` (nav/account chrome — screen batches) |
-| 0.13 | `packages/core/src/labels.ts` for every API enum | PASS | `packages/core/src/labels.test.ts` · `covers every value of core contract enums`; mobile `trainer/labels.ts` + web `HomePage.tsx` wired |
-| 0.14 | Date/time formatter in `packages/core/src/format.ts` | PASS | `packages/core/src/format.test.ts` (`Thu 15 Oct`, `7:30 am`, clamped relative); web `lib/format.ts` + mobile `lib/dates.ts` re-export |
-| 0.15 | Token hex fixes + web `--radius` 16 | PASS | `packages/tokens/src/brand-hex.test.ts`; `tokens.ts:7–8`; `styles.css` `--radius: 16px` |
-| 0.16 | Satoshi single web import; native 600; body 16 / display 28; touch 48 | PASS | Web: only `index.html` Fontshare import (styles.css has Noto only); `FontsProvider.tsx` Satoshi-600; `typography.ts` body 16 / display 28; `theme.ts` `touchTargetMin=48`; specimen `evidence/B0-type.png` |
-| 0.17 | Button hierarchy + OverflowMenu (web + mobile) | PASS | `apps/trainer-web/src/components/Button.tsx`, `OverflowMenu.tsx`; `apps/mobile/src/components/Button.tsx`, `OverflowMenu.tsx`; specimens `B0-buttons-web.png`, `B0-buttons-mobile.png` |
-| 0.18 | StatusChip with Lucide icons (attention amber) | PASS | Web + mobile `StatusChip.tsx` (attention `#FFFBEB`/`#B45309`); specimen `B0-chips.png` |
-| 0.19 | Pull-to-refresh Screen; remove 7 manual Refresh buttons | PASS | `Screen.tsx` `onRefresh` + RefreshControl; 7 list screens wired; no `label="Refresh"` remaining; banned-strings mobile roleCheck did not report `manual-refresh-button` on Today/Attention |
-| 0.20 | Honest Week four-dot logo | PASS | `BrandMark.tsx` (web + mobile); `AppShell.tsx` uses mark; specimen `B0-logo.png` from `packages/brand/logo/mark.svg` |
-| 0.21 | Banned-strings Playwright (web + Expo web) | PASS (harness) | `e2e/banned-strings.spec.ts` (+ `playwright.banned.config.ts` for seeded-API runs); reports in `evidence/banned-strings-web.json`, `banned-strings-mobile.json` |
+| 0.1 | Attention group-by-client before limit | PASS | `apps/api/src/routes/batch-0.test.ts` · `A1` |
+| 0.2 | Ended relationships excluded | PASS | `batch-0.test.ts` · `A2` |
+| 0.3 | Seed instants + mapper coerce | PASS | `batch-0.test.ts` · `A3` + `coerceIsoInstant` unit |
+| 0.4 | Idempotent detection; ≤10 open/client | PASS | `batch-0.test.ts` · `A4` (≤10), `A4b` (human summaries), `A4c` (Aarav not critical; future meal slots not confirmed). Seed: `history.ts` slotReached + snack logging + capped Rohan overlays |
+| 0.5 | Structured exception details; human summary | PASS | Core `exception.test.ts`; Home renders `labelFor("exception_type", …)`; mapper coerces `summary===type` |
+| 0.6 | `clientWhatsappE164` | PASS | `batch-0.test.ts` · `A6`; mobile Nudge/Review pass `phoneE164` into `wa.me/{digits}` |
+| 0.7 | Web `{data}` unwrap | PASS | `http-api.test.ts` |
+| 0.8 | RequireAuth role check | PASS | `RequireAuth.test.tsx` + `A12` |
+| 0.9 | Activity feed kcal ÷ scale | PASS | `batch-0.test.ts` · `A9` |
+| 0.10 | Workout duration | PASS | `workoutDuration.test.ts` |
+| 0.11 | No future seed events; sneha trainee-only | PASS | `A11` + `A12`; meal `slotReached` gate |
+| 0.12 | `formatPersonName` greeting | PASS | Home `Hi, {formatPersonName(profile) first}` · AppShell sidebar uses profile `formatPersonName` (not email local-part). Live: web Home shows “Hi, Rahul” |
+| 0.13 | `labels.ts` for every contract enum | PASS | `packages/core/src/labels.test.ts` covers every mapped contract enum value (incl. `renewal_state`); UI call sites use `labelFor` (Plan/Check-ins/Activity/History/Overview/Configure, mobile Today/Progress/Attention/workout/Activity). Underscore-replace helpers removed from WorkspaceHeader, LibrarySearch, clients label helpers |
+| 0.14 | Core date formatters | PASS | `format.test.ts`; Clients/Plan/Templates/Check-ins/Overview/Workout/Diet use `formatCivilDate` / `formatInstant` / `formatRelative`. Check-ins roster shows client names (not UUID initials). Live: Overview relative times use middot separator (no `Dinner-7h`) |
+| 0.15 | Token hex + `--radius` 16 | PASS | `brand-hex.test.ts`; `styles.css` |
+| 0.16 | Satoshi + type scale | PASS | Expo `FontsProvider` loads TTFs via expo-font (Expo web: `Satoshi-Regular/SemiBold/Bold` status `loaded` on `/__specimens`). Specimen `B0-type.png` from live `/__specimens` |
+| 0.17 | Button + OverflowMenu | PASS | Real components on `/__specimens` (web) and Expo `/__specimens`. Captures: `B0-buttons-web.png`, `B0-buttons-mobile.png` |
+| 0.18 | StatusChip | PASS | Live `/__specimens` · `B0-chips.png` |
+| 0.19 | Pull-to-refresh | PASS | Screen `onRefresh`; banned roleCheck hard-fails Refresh on cleaned mobile screens |
+| 0.20 | Honest Week logo + Attention tab | PASS | Sidebar `BrandMark variant="inverse"` (white dots). Mobile tab title `"Attention"`; chip `formatAttentionAge` → `Since 2 days · +N more`. Live logo specimen `B0-logo.png` |
+| 0.21 | Banned-strings hard-fail | PASS (harness) | `e2e/banned-strings.spec.ts`: `expect(hardErrors).toEqual([])` for cleaned routes (`/sign-in`, mobile sign-in/Workout/Progress/Notifications/Clients/More/Waiting). Other routes report-only. Regex includes `-7h ago` without requiring a space before `-` |
 
-## Banned-strings remaining hits (expected until screen batches)
+## Live visual checks (this pass)
 
-Command:
+- Web `/__specimens`: Button / Overflow / StatusChip / inverse logo / type — screenshots rewritten under `docs/spec/evidence/`.
+- Expo web `/__specimens`: same components; Satoshi registered faces loaded (not all CSS `@font-face` aliases).
+- Home greeting: profile first name via `formatPersonName`.
+- Attention chip copy uses full `days` / lowercase `more`.
 
-```bash
-EXPO_WEB_URL=http://127.0.0.1:8081 pnpm exec playwright test --config=playwright.banned.config.ts
-# Expo must run with EXPO_PUBLIC_SCREEN_CAPTURE=1 so __fitbudCapture is available
-```
+## Banned-strings remaining (report-only until screen batches)
 
-### Trainer web — Home `/`
+Cleaned screens hard-fail. Expected remaining on Home/roster/workspace/Today/Attention until their batches (nav copy, etc.):
 
-| id | match |
-|---|---|
-| iso-date | `2026-10-15` |
-| snake-case | `missed_workout` |
-| good-to-see-you | `Good to see you` |
-| templates-and-libraries | `Templates & Libraries` |
-| lowercase-demo-name | `rahul` |
-| help-and-support (warn) | `Help & Support` |
-
-### Trainer web — roster `/clients`
-
-| id | match |
-|---|---|
-| templates-and-libraries | `Templates & Libraries` |
-| help-and-support (warn) | `Help & Support` |
-
-### Trainer web — client workspace `/clients/f2a64fdb-…`
-
-| id | match |
-|---|---|
-| iso-date | `2026-09-22T00:00`, `2026-10-18`, `2026-10-19`, `2026-10-20`, `2026-10-21` |
-| templates-and-libraries | `Templates & Libraries` |
-| help-and-support (warn) | `Help & Support` |
-| 24h-time (warn) | `00:00` |
-
-### Mobile Today (TR-06 via capture bridge)
-
-| id | match |
-|---|---|
-| iso-date | `2026-10-18` |
-
-### Mobile trainer Attention (TM-01 via capture bridge)
-
-| id | match |
-|---|---|
-| snake-case | `missed_workout` |
+- `templates-and-libraries` (`Templates & Libraries` in sidebar — screen-batch TW-03)
+- `help-and-support` (warn)
+- Possible Home/workspace leftovers tracked in later batches
 
 ## Notes
 
-- `pnpm db:reset` completed successfully after Batch 0 seed changes (demo accounts listed; no UNIQUE constraint failures).
-- RequireAuth sneha E2E browser path is covered by unit gate + `/me` role API test; full sign-in E2E against trainer web as sneha is left to screen-batch TR-04/TM-08 runs.
-- Specimen HTML source: `evidence/b0-specimens.html` (not a product screen).
+- Prior HTML mock `b0-specimens.html` is superseded by app routes `/__specimens`.
+- `pnpm db:reset` still required after seed changes when validating against a live D1/SQLite demo DB.

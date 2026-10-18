@@ -134,7 +134,7 @@ describe("client directory rows", () => {
       href: null,
     });
     expect(onboardingStatusLabel("onboarding_submitted")).toBe(
-      "Onboarding submitted",
+      "Awaiting review",
     );
   });
 

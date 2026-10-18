@@ -51,7 +51,7 @@ describe("buildClientDirectoryRows", () => {
       relationships: [relationship],
     });
     expect(filterClientRows(rows, "alex")).toHaveLength(1);
-    expect(filterClientRows(rows, "coaching")).toHaveLength(1);
+    expect(filterClientRows(rows, "ready")).toHaveLength(1);
     expect(filterClientRows(rows, "zzz")).toHaveLength(0);
   });
 });
