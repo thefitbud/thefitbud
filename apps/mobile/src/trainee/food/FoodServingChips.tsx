@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "../../components/Text";
 import type { FitBudApiClient } from "@fitbud/api-client";
 import type { TraineeFoodSearchResponse } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";

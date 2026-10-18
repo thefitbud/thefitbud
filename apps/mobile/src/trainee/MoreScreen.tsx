@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import type { CoachingRelationship } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useConfig } from "../providers/ConfigProvider";

@@ -34,6 +34,17 @@ export function validatePasswordPlaintext(password: string): string | null {
   return null;
 }
 
+/** User-facing copy for validatePasswordPlaintext codes. */
+export function passwordRequirementMessage(code: string): string {
+  if (code === "PASSWORD_BREACHED") {
+    return "This password is too common.";
+  }
+  if (code === "PASSWORD_LENGTH") {
+    return "Use a password between 8 and 64 characters.";
+  }
+  return "Password does not meet requirements.";
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) {

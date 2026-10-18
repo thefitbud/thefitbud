@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import * as Notifications from "expo-notifications";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useConfig } from "../providers/ConfigProvider";

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, StyleSheet, Text } from "react-native";
+import { Platform, StyleSheet } from "react-native";
+import { Text } from "../components/Text";
 import type { WeekDayState } from "@fitbud/contracts";
 import {
   DateNavigator,

@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "../../components/Text";
 import { colors, spacing } from "@fitbud/ui-mobile";
 
 export function SettingsRow({

@@ -222,6 +222,8 @@ type DirectoryItem = {
   status: string;
   goalShort: string | null;
   adherenceState: string;
+  renewalState: string | null;
+  renewsOn: string | null;
   effectivePlan: { id: string; title: string } | null;
   nextCheckin: { id: string } | null;
 };
@@ -233,7 +235,15 @@ async function listClients(cookie: string, query = "") {
     testEnv(),
   );
   const body = (await response.json()) as {
-    data?: { items: DirectoryItem[]; nextCursor: string | null };
+    data?: {
+      items: DirectoryItem[];
+      nextCursor: string | null;
+      facets?: {
+        status?: Record<string, number>;
+        adherence?: Record<string, number>;
+        renewal?: Record<string, number>;
+      };
+    };
     error?: { code: string };
   };
   return { status: response.status, body };
@@ -810,5 +820,92 @@ describe("iteration A directory, profile, and libraries", () => {
     expect(effectiveBody.data.version.content.mealPrescriptions[0]?.items).toEqual(
       [],
     );
+  });
+
+  it("filters directory by renewal state from the same derivation as Home", async () => {
+    const trainer = await createTrainerSession("directory-renewal@example.com");
+    const invited = await invite(trainer.cookie, "renewal", "Renewal Client");
+    const client = await acceptInvite("renewal", invited.data.token);
+    await activateCoaching(
+      trainer.cookie,
+      client.traineeToken,
+      client.relationshipId,
+      "renewal",
+      "Cut for summer",
+    );
+    const today = formatLocalDate(new Date(), "Asia/Kolkata");
+    const addDays = (base: string, days: number) => {
+      const [y, m, d] = base.split("-").map(Number);
+      const dt = new Date(Date.UTC(y!, m! - 1, d! + days));
+      return dt.toISOString().slice(0, 10);
+    };
+    const expiredOn = addDays(today, -3);
+    const dueOn = today;
+    const saveSub = async (renewsOn: string, key: string, version: number) => {
+      const response = await app.request(
+        `/relationships/${client.relationshipId}/subscription`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: trainer.cookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify({
+            expectedVersion: version,
+            planName: "Monthly coaching",
+            paymentFrequency: "monthly",
+            startsOn: addDays(today, -30),
+            renewsOn,
+          }),
+        },
+        testEnv(),
+      );
+      expect(response.status === 200 || response.status === 201).toBe(true);
+    };
+    await saveSub(expiredOn, "dir-renewal-expired", 0);
+
+    const expired = await listClients(
+      trainer.cookie,
+      "?status=active&renewal=expired",
+    );
+    expect(expired.status).toBe(200);
+    expect(expired.body.data?.items).toEqual([
+      expect.objectContaining({
+        relationshipId: client.relationshipId,
+        renewalState: "expired",
+        renewsOn: expiredOn,
+      }),
+    ]);
+    expect(expired.body.data?.facets?.renewal?.expired).toBeGreaterThanOrEqual(1);
+
+    const dueList = await listClients(trainer.cookie, "?status=active&renewal=due");
+    expect(dueList.body.data?.items).toEqual([]);
+
+    await saveSub(dueOn, "dir-renewal-due", 1);
+    const due = await listClients(trainer.cookie, "?status=active&renewal=due");
+    expect(due.body.data?.items).toEqual([
+      expect.objectContaining({
+        relationshipId: client.relationshipId,
+        renewalState: "due",
+        renewsOn: dueOn,
+      }),
+    ]);
+
+    const attention = await app.request(
+      "/subscriptions/attention",
+      { headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    expect(attention.status).toBe(200);
+    const attentionBody = (await attention.json()) as {
+      data: { items: Array<{ coachingRelationshipId: string; renewalState: string }> };
+    };
+    expect(attentionBody.data.items).toEqual([
+      expect.objectContaining({
+        coachingRelationshipId: client.relationshipId,
+        renewalState: "due",
+      }),
+    ]);
   });
 });

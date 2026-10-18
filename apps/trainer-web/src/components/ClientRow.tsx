@@ -108,6 +108,12 @@ export function ClientRow({
         <div className="client-card-chips">
           <StatusChip kind="lifecycle" value={item.status} />
           <StatusChip kind="adherence" value={item.adherenceState} />
+          {item.renewalState &&
+          (item.renewalState === "upcoming" ||
+            item.renewalState === "due" ||
+            item.renewalState === "expired") ? (
+            <StatusChip kind="renewal" value={item.renewalState} />
+          ) : null}
         </div>
         <p className="client-card-meta">
           Next check-in: {checkinLabel ?? "—"}
@@ -159,7 +165,14 @@ export function ClientRow({
         )}
       </td>
       <td>
-        <span className="muted-dash">—</span>
+        {item.renewalState &&
+        (item.renewalState === "upcoming" ||
+          item.renewalState === "due" ||
+          item.renewalState === "expired") ? (
+          <StatusChip kind="renewal" value={item.renewalState} />
+        ) : (
+          <span className="muted-dash">—</span>
+        )}
       </td>
       <td className="client-row-action">{primaryAction}</td>
     </tr>

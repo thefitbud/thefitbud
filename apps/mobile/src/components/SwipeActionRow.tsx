@@ -1,5 +1,6 @@
 import { useRef, type ReactNode } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Text } from "./Text";
 import { Swipeable } from "react-native-gesture-handler";
 import { colors, spacing } from "@fitbud/ui-mobile";
 

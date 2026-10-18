@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 
 export type FilterPillOption = {
@@ -62,7 +62,7 @@ type Props = {
   trailing?: ReactNode;
 };
 
-/** One-row FilterBar: search + multi-select pills (TW-06). */
+/** FilterBar: search + pills; Status/Adherence primary, Goal/Renewal in More. */
 export function FilterBar({
   search,
   onSearchChange,
@@ -75,28 +75,54 @@ export function FilterBar({
   onClear,
   trailing,
 }: Props) {
+  const moreSelected =
+    goal.selected.length + renewal.selected.length;
+  const [moreOpen, setMoreOpen] = useState(moreSelected > 0);
+  useEffect(() => {
+    if (moreSelected > 0) setMoreOpen(true);
+  }, [moreSelected]);
+
   return (
     <div className="filter-bar" data-testid="filter-bar">
-      <label className="filter-search">
-        <Search size={16} strokeWidth={1.75} aria-hidden="true" />
-        <span className="sr-only">Search</span>
-        <input
-          type="search"
-          value={search}
-          placeholder={searchPlaceholder}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-      </label>
-      <MultiSelectPills {...status} />
-      <MultiSelectPills {...adherence} />
-      <MultiSelectPills {...goal} />
-      <MultiSelectPills {...renewal} />
-      {showClear ? (
-        <button type="button" className="filter-clear link" onClick={onClear}>
-          Clear
+      <div className="filter-bar-row">
+        <label className="filter-search">
+          <Search size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span className="sr-only">Search</span>
+          <input
+            type="search"
+            value={search}
+            placeholder={searchPlaceholder}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </label>
+        <MultiSelectPills {...status} />
+        <MultiSelectPills {...adherence} />
+        <button
+          type="button"
+          className={
+            moreOpen || moreSelected > 0
+              ? "filter-more is-active"
+              : "filter-more"
+          }
+          aria-expanded={moreOpen}
+          aria-controls="filter-bar-more"
+          onClick={() => setMoreOpen((open) => !open)}
+        >
+          More{moreSelected > 0 ? ` (${moreSelected})` : ""}
         </button>
+        {showClear ? (
+          <button type="button" className="filter-clear link" onClick={onClear}>
+            Clear
+          </button>
+        ) : null}
+        {trailing}
+      </div>
+      {moreOpen ? (
+        <div className="filter-bar-more" id="filter-bar-more">
+          <MultiSelectPills {...goal} />
+          <MultiSelectPills {...renewal} />
+        </div>
       ) : null}
-      {trailing}
     </div>
   );
 }

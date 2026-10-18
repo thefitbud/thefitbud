@@ -1,4 +1,5 @@
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "../../components/Text";
 import type { DateNavigatorDay, RingDatum } from "@fitbud/ui-mobile";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { formatHeadingDate } from "../../lib/dates";

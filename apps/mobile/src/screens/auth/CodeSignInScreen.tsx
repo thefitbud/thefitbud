@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "../../components/Text";
 import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
 import { useConfig } from "../../providers/ConfigProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";

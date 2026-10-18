@@ -4,6 +4,7 @@ import { checkinStatusSchema } from "./checkin.js";
 import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { onboardingStatusSchema } from "./relationship.js";
 import { clientFacetsSchema } from "./read-models.js";
+import { renewalStateSchema } from "./subscription.js";
 import { workspaceEffectivePlanSummarySchema } from "./workspace.js";
 import { localDateSchema } from "./workout.js";
 
@@ -25,6 +26,9 @@ export const clientDirectoryItemSchema = z.object({
   nextCheckin: clientDirectoryNextCheckinSchema.nullable(),
   effectivePlan: workspaceEffectivePlanSummarySchema.nullable(),
   adherenceState: adherenceStateSchema,
+  /** Same derivation as Home Renewals (`deriveRenewalState`). */
+  renewalState: renewalStateSchema.nullable(),
+  renewsOn: localDateSchema.nullable(),
   updatedAt: isoDateTimeSchema,
 });
 export type ClientDirectoryItem = z.infer<typeof clientDirectoryItemSchema>;

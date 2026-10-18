@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type { ClientDirectoryItem, OnboardingStatus } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import type {
+  AdherenceState,
+  ClientDirectoryItem,
+  OnboardingStatus,
+} from "@fitbud/contracts";
 import { ClientRow } from "../components/ClientRow";
 import { FilterBar } from "../components/FilterBar";
 import { ErrorState, LoadingBlock } from "../components/StatePanels";
@@ -31,6 +34,41 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 const DIRECTORY_PAGE_LIMIT = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 
+/** Compact FilterBar labels so pills fit at 1280 without clipping. */
+function shortStatusLabel(value: OnboardingStatus): string {
+  switch (value) {
+    case "invited":
+      return "Invited";
+    case "onboarding_pending":
+      return "Pending";
+    case "onboarding_submitted":
+      return "Submitted";
+    case "coaching_ready":
+      return "Ready";
+    case "active":
+      return "Active";
+    case "ended":
+      return "Ended";
+    default:
+      return value;
+  }
+}
+
+function shortAdherenceLabel(value: AdherenceState): string {
+  switch (value) {
+    case "on_track":
+      return "On track";
+    case "needs_attention":
+      return "Attention";
+    case "no_recent_data":
+      return "No data";
+    case "not_available":
+      return "N/A";
+    default:
+      return value;
+  }
+}
+
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
 }
@@ -44,6 +82,7 @@ export function ClientsPage() {
   const [facets, setFacets] = useState<{
     status?: Record<string, number>;
     adherence?: Record<string, number>;
+    renewal?: Record<string, number>;
   } | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,6 +161,7 @@ export function ClientsPage() {
 
   function updateFilters(
     change: (current: ClientDirectoryFilters) => ClientDirectoryFilters,
+    options?: { replace?: boolean },
   ) {
     setSearchParams(
       (current) =>
@@ -129,7 +169,9 @@ export function ClientsPage() {
           current,
           change(parseClientDirectoryFilters(current)),
         ),
-      { replace: true },
+      // Push pill/segment changes so Back restores prior filters (TW-06).
+      // Debounced search typing may still replace to avoid history spam.
+      { replace: options?.replace ?? false },
     );
   }
 
@@ -185,14 +227,12 @@ export function ClientsPage() {
     ...filters.goal.map((goalShort) => ({ goalShort })),
   ]);
   const filtersActive = hasClientDirectoryFilters(filters);
-  const activeCount =
+  const segmentCount =
     filters.segment === "ended"
-      ? items.length
-      : (facets?.status
-          ? Object.entries(facets.status)
-              .filter(([k]) => k !== "ended")
-              .reduce((sum, [, n]) => sum + n, 0)
-          : items.length);
+      ? (facets?.status?.ended ?? items.length)
+      : (facets?.status?.active ?? 0);
+  const segmentLabel =
+    filters.segment === "ended" ? "ended" : "active";
 
   return (
     <section className="page clients-page" data-testid="screen-TW-06">
@@ -201,9 +241,7 @@ export function ClientsPage() {
           <h1>
             Clients{" "}
             <span className="clients-count muted">
-              {filters.segment === "ended"
-                ? `${activeCount} ended`
-                : `${activeCount} active`}
+              {segmentCount} {segmentLabel}
             </span>
           </h1>
         </div>
@@ -259,7 +297,9 @@ export function ClientsPage() {
 
       <FilterBar
         search={filters.q}
-        onSearchChange={(q) => updateFilters((f) => ({ ...f, q }))}
+        onSearchChange={(q) =>
+          updateFilters((f) => ({ ...f, q }), { replace: true })
+        }
         showClear={filtersActive}
         onClear={() =>
           updateFilters((f) => ({
@@ -273,7 +313,7 @@ export function ClientsPage() {
           selected: filters.status.filter((s) => s !== "ended"),
           options: CLIENT_STATUS_FILTERS.map((value) => ({
             value,
-            label: labelFor("onboarding_status", value),
+            label: shortStatusLabel(value),
             count: facets?.status?.[value],
           })),
           onToggle: (value) =>
@@ -291,7 +331,7 @@ export function ClientsPage() {
           selected: filters.adherenceState,
           options: CLIENT_ADHERENCE_FILTERS.map((value) => ({
             value,
-            label: labelFor("adherence_state", value),
+            label: shortAdherenceLabel(value),
             count: facets?.adherence?.[value],
           })),
           onToggle: (value) =>
@@ -320,6 +360,7 @@ export function ClientsPage() {
           options: CLIENT_RENEWAL_FILTERS.map((value) => ({
             value,
             label: renewalFilterLabel(value),
+            count: facets?.renewal?.[value],
           })),
           onToggle: (value) =>
             updateFilters((f) => ({

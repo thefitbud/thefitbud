@@ -135,8 +135,9 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
               ? String((err.details as { invitationId: string }).invitationId)
               : null;
           setDuplicateId(id);
+          // Link text supplies "Resend instead" — keep it out of the message.
           setError(
-            `${formatPersonName(displayName) || "This client"} already has a pending invite · Resend instead`,
+            `${formatPersonName(displayName) || "This client"} already has a pending invite.`,
           );
         } else if (err.code === "CLIENT_ENDED") {
           const rid =

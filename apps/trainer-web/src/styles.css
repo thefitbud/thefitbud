@@ -1497,6 +1497,7 @@ body.is-offline .button-destructive {
   font-weight: 600;
 }
 
+.auth-pitch .auth-brand-headline,
 .auth-pitch h1 {
   margin: 18px 0 0;
   font-size: 44px;
@@ -1667,6 +1668,7 @@ body.is-offline .button-destructive {
   justify-content: center;
 }
 
+.auth-fcard h1.auth-form-title,
 .auth-fcard h2 {
   font-size: 28px;
   line-height: 36px;

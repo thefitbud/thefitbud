@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Text } from "../../components/Text";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import type { OutboxEntry } from "../../sync/engine";
 import { useSyncEngine } from "../../sync/SyncProvider";

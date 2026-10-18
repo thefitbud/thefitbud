@@ -1,5 +1,6 @@
-import { Text } from "react-native";
+
 import { useAuth } from "../auth/AuthProvider";
+import { Text } from "../components/Text";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 

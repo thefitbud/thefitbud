@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import { colors, spacing, typeScale, fontFamily, fontFamilySemiBold, fontFamilyBold } from "@fitbud/ui-mobile";
 import { Button } from "../components/Button";
 import { OverflowMenu } from "../components/OverflowMenu";
