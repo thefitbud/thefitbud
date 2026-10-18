@@ -124,10 +124,10 @@ function loggedTodayNutrition(
   }>,
   today: string,
 ): WeekTodayNutrition["logged"] {
-  let kcal = 0;
-  let proteinG = 0;
-  let carbsG = 0;
-  let fatG = 0;
+  let kcalScaled = 0;
+  let proteinScaled = 0;
+  let carbsScaled = 0;
+  let fatScaled = 0;
   let hasUnknown = false;
 
   for (const row of meals) {
@@ -144,15 +144,20 @@ function loggedTodayNutrition(
     if (scaled.some((v) => v == null)) {
       hasUnknown = true;
     }
-    kcal += unscaleNutrient(compliance.kcalScaled);
-    proteinG += unscaleNutrient(compliance.proteinScaled);
-    carbsG += unscaleNutrient(compliance.carbsScaled);
-    fatG += unscaleNutrient(compliance.fatScaled);
+    // Sum scaled first, unscale once — matches /me/day totals.
+    kcalScaled += compliance.kcalScaled ?? 0;
+    proteinScaled += compliance.proteinScaled ?? 0;
+    carbsScaled += compliance.carbsScaled ?? 0;
+    fatScaled += compliance.fatScaled ?? 0;
   }
 
-  return hasUnknown
-    ? { kcal, proteinG, carbsG, fatG, hasUnknown: true }
-    : { kcal, proteinG, carbsG, fatG };
+  const macros = {
+    kcal: unscaleNutrient(kcalScaled),
+    proteinG: unscaleNutrient(proteinScaled),
+    carbsG: unscaleNutrient(carbsScaled),
+    fatG: unscaleNutrient(fatScaled),
+  };
+  return hasUnknown ? { ...macros, hasUnknown: true } : macros;
 }
 
 export async function buildWeekReadModel(

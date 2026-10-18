@@ -533,20 +533,24 @@ describe("demo seed", () => {
 
   it("trainer week todayNutrition kcal matches trainee /me/day for Rohan and Aarav", async () => {
     const trainerToken = await login("rahul.coach@demo.fitbud.test");
+    const traineeRel = (email: string) => {
+      const rows = sqliteExec(
+        `SELECT cr.id FROM coaching_relationships cr
+         JOIN user_identities ui ON ui.user_id = cr.trainee_user_id
+         WHERE ui.email_norm = '${email}'`,
+      )[0]?.values;
+      return String(rows?.[0]?.[0] ?? "");
+    };
     const cases = [
-      {
-        email: "rohan.slipping@demo.fitbud.test",
-        rel: demoUuid("relationship", "rohan.slipping@demo.fitbud.test"),
-      },
-      {
-        email: "aarav.ontrack@demo.fitbud.test",
-        rel: demoUuid("relationship", "aarav.ontrack@demo.fitbud.test"),
-      },
+      "rohan.slipping@demo.fitbud.test",
+      "aarav.ontrack@demo.fitbud.test",
     ] as const;
 
-    for (const c of cases) {
+    for (const email of cases) {
+      const rel = traineeRel(email);
+      expect(rel.length, email).toBeGreaterThan(10);
       const weekRes = await app.request(
-        `/workspaces/relationships/${c.rel}/week`,
+        `/workspaces/relationships/${rel}/week`,
         {
           headers: {
             Authorization: `Bearer ${trainerToken}`,
@@ -568,7 +572,7 @@ describe("demo seed", () => {
       const today = weekBody.data.todayNutrition.date;
       const trainerLogged = weekBody.data.todayNutrition.logged.kcal;
 
-      const traineeToken = await login(c.email);
+      const traineeToken = await login(email);
       const dayRes = await app.request(`/me/day/${today}`, {
         headers: {
           Authorization: `Bearer ${traineeToken}`,
@@ -584,7 +588,7 @@ describe("demo seed", () => {
       );
       expect(
         traineeLogged,
-        `${c.email}: trainer week logged ${trainerLogged} vs trainee /me/day ${traineeLogged}`,
+        `${email}: trainer week logged ${trainerLogged} vs trainee /me/day ${traineeLogged}`,
       ).toBe(trainerLogged);
     }
   }, 120_000);
