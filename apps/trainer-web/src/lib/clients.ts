@@ -8,17 +8,31 @@ import {
 } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
 
-export const CLIENT_STATUS_FILTERS = onboardingStatusSchema.options;
+export const CLIENT_STATUS_FILTERS = [
+  "invited",
+  "onboarding_pending",
+  "onboarding_submitted",
+  "coaching_ready",
+  "active",
+] as const satisfies readonly OnboardingStatus[];
+
 export const CLIENT_ADHERENCE_FILTERS = adherenceStateSchema.options;
+
+export const CLIENT_RENEWAL_FILTERS = ["upcoming", "due", "expired"] as const;
+export type RenewalFilter = (typeof CLIENT_RENEWAL_FILTERS)[number];
 
 const DIRECTORY_SCAN_LIMIT = 50;
 const DIRECTORY_SCAN_PAGES = 40;
+
+export type ClientDirectorySegment = "current" | "ended";
 
 export type ClientDirectoryFilters = {
   q: string;
   status: OnboardingStatus[];
   adherenceState: AdherenceState[];
   goal: string[];
+  renewal: RenewalFilter[];
+  segment: ClientDirectorySegment;
 };
 
 export type ClientDirectoryListQuery = {
@@ -26,34 +40,50 @@ export type ClientDirectoryListQuery = {
   status?: OnboardingStatus[];
   adherenceState?: AdherenceState[];
   goal?: string[];
+  renewal?: RenewalFilter[];
   cursor?: string;
   limit?: number;
 };
 
 export function emptyClientDirectoryFilters(): ClientDirectoryFilters {
-  return { q: "", status: [], adherenceState: [], goal: [] };
+  return {
+    q: "",
+    status: [],
+    adherenceState: [],
+    goal: [],
+    renewal: [],
+    segment: "current",
+  };
 }
 
 export function onboardingStatusLabel(status: OnboardingStatus): string {
   return labelFor("onboarding_status", status);
 }
 
-export function primaryActionForStatus(status: OnboardingStatus): {
+/** One contextual action per roster row (TW-06). */
+export function primaryActionForStatus(
+  status: OnboardingStatus,
+  invitationId?: string | null,
+): {
   label: string;
   href: string | null;
 } {
   switch (status) {
     case "invited":
-      return { label: "Waiting for acceptance", href: null };
+      return {
+        label: "Resend invite",
+        href: invitationId ? `/invitations/${invitationId}` : null,
+      };
     case "onboarding_pending":
       return { label: "View onboarding", href: "onboarding" };
     case "onboarding_submitted":
       return { label: "Review intake", href: "onboarding" };
     case "coaching_ready":
+      return { label: "Set up plan", href: "plan" };
     case "active":
-      return { label: "Open workspace", href: "overview" };
+      return { label: "Open", href: "overview" };
     case "ended":
-      return { label: "Reactivate", href: "overview" };
+      return { label: "Open", href: "overview" };
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -69,17 +99,27 @@ export function checkinStatusLabel(status: CheckinStatus): string {
   return labelFor("checkin_status", status);
 }
 
+export function renewalFilterLabel(value: RenewalFilter): string {
+  if (value === "upcoming") return "Upcoming";
+  if (value === "due") return "Due";
+  return "Expired";
+}
+
 /**
  * Workspace path for one directory row.
- * Pending invitations have a null relationship id and stay unlinkable.
+ * Pending invitations open TW-08 invitation detail.
  */
 export function directoryWorkspaceHref(item: {
   relationshipId: string | null;
+  invitationId: string | null;
   status: OnboardingStatus;
 }): string | null {
+  if (item.status === "invited" && item.invitationId) {
+    return `/invitations/${item.invitationId}`;
+  }
   if (!item.relationshipId) return null;
-  const action = primaryActionForStatus(item.status);
-  if (!action.href) return null;
+  const action = primaryActionForStatus(item.status, item.invitationId);
+  if (!action.href || action.href.startsWith("/")) return action.href;
   return `/clients/${item.relationshipId}/${action.href}`;
 }
 
@@ -90,21 +130,36 @@ export function hasClientDirectoryFilters(
     filters.q.trim().length > 0 ||
     filters.status.length > 0 ||
     filters.adherenceState.length > 0 ||
-    filters.goal.length > 0
+    filters.goal.length > 0 ||
+    filters.renewal.length > 0
   );
 }
 
 export function parseClientDirectoryFilters(
   params: URLSearchParams,
 ): ClientDirectoryFilters {
+  const statuses = uniqueInOrder(
+    onboardingStatusSchema.options,
+    params.getAll("status"),
+  );
+  const onlyEnded =
+    statuses.length > 0 && statuses.every((s) => s === "ended");
+  const segment: ClientDirectorySegment =
+    params.get("segment") === "ended" || onlyEnded ? "ended" : "current";
+
   return {
     q: params.get("q") ?? "",
-    status: uniqueInOrder(CLIENT_STATUS_FILTERS, params.getAll("status")),
+    status:
+      segment === "ended"
+        ? ["ended"]
+        : statuses.filter((s) => s !== "ended"),
     adherenceState: uniqueInOrder(
       CLIENT_ADHERENCE_FILTERS,
       params.getAll("adherenceState"),
     ),
     goal: uniqueGoals(params.getAll("goal")),
+    renewal: uniqueInOrder(CLIENT_RENEWAL_FILTERS, params.getAll("renewal")),
+    segment,
   };
 }
 
@@ -117,13 +172,23 @@ export function writeClientDirectoryFilters(
   params.delete("status");
   params.delete("adherenceState");
   params.delete("goal");
+  params.delete("renewal");
+  params.delete("segment");
   params.delete("cursor");
   if (filters.q) params.set("q", filters.q);
-  for (const status of filters.status) params.append("status", status);
+  if (filters.segment === "ended") {
+    params.append("status", "ended");
+    params.set("segment", "ended");
+  } else {
+    for (const status of filters.status) {
+      if (status !== "ended") params.append("status", status);
+    }
+  }
   for (const state of filters.adherenceState) {
     params.append("adherenceState", state);
   }
   for (const goal of filters.goal) params.append("goal", goal);
+  for (const renewal of filters.renewal) params.append("renewal", renewal);
   return params;
 }
 
@@ -135,6 +200,8 @@ export function clientDirectoryFilterKey(
     status: filters.status,
     adherenceState: filters.adherenceState,
     goal: filters.goal,
+    renewal: filters.renewal,
+    segment: filters.segment,
   });
 }
 
@@ -155,28 +222,45 @@ export function clientDirectoryFiltersFromKey(
     status?: unknown;
     adherenceState?: unknown;
     goal?: unknown;
+    renewal?: unknown;
+    segment?: unknown;
   };
   const params = new URLSearchParams();
   if (typeof record.q === "string") params.set("q", record.q);
+  if (record.segment === "ended") params.set("segment", "ended");
   appendStrings(params, "status", record.status);
   appendStrings(params, "adherenceState", record.adherenceState);
   appendStrings(params, "goal", record.goal);
+  appendStrings(params, "renewal", record.renewal);
   return parseClientDirectoryFilters(params);
 }
 
-/** First page omits cursor. Passing null or "" also omits it so a filter change does not resume an old page. */
+/**
+ * Builds the list query. Current segment never asks for ended rows
+ * (spec decision 12). When no status pills are selected on Current,
+ * every non-ended lifecycle is requested so ended stays out.
+ */
 export function clientDirectoryListQuery(
   filters: ClientDirectoryFilters,
   options?: { cursor?: string | null; limit?: number },
 ): ClientDirectoryListQuery {
   const q = filters.q.trim();
+  let status: OnboardingStatus[] | undefined;
+  if (filters.segment === "ended") {
+    status = ["ended"];
+  } else if (filters.status.length > 0) {
+    status = filters.status.filter((s) => s !== "ended");
+  } else {
+    status = [...CLIENT_STATUS_FILTERS];
+  }
   return {
     ...(q ? { q } : {}),
-    ...(filters.status.length > 0 ? { status: filters.status } : {}),
+    ...(status && status.length > 0 ? { status } : {}),
     ...(filters.adherenceState.length > 0
       ? { adherenceState: filters.adherenceState }
       : {}),
     ...(filters.goal.length > 0 ? { goal: filters.goal } : {}),
+    ...(filters.renewal.length > 0 ? { renewal: filters.renewal } : {}),
     ...(options?.cursor ? { cursor: options.cursor } : {}),
     ...(options?.limit !== undefined ? { limit: options.limit } : {}),
   };

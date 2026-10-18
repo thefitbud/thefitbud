@@ -179,6 +179,56 @@ invitationRoutes.post(
       );
     }
 
+    const recipientEmail = normalizeEmail(parsed.data.recipientEmail);
+
+    const [pendingSameEmail] = await db
+      .select()
+      .from(clientInvitations)
+      .where(
+        and(
+          eq(clientInvitations.trainerUserId, actor.userId),
+          eq(clientInvitations.recipientEmail, recipientEmail),
+          eq(clientInvitations.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (pendingSameEmail) {
+      return fail(
+        c,
+        409,
+        "INVITE_PENDING",
+        "A pending invite already exists for this email.",
+        { invitationId: pendingSameEmail.id },
+      );
+    }
+
+    const [endedIdentity] = await db
+      .select({
+        relationshipId: coachingRelationships.id,
+      })
+      .from(coachingRelationships)
+      .innerJoin(
+        userIdentities,
+        eq(userIdentities.userId, coachingRelationships.traineeUserId),
+      )
+      .where(
+        and(
+          eq(coachingRelationships.trainerUserId, actor.userId),
+          eq(coachingRelationships.status, "ended"),
+          eq(userIdentities.emailNorm, recipientEmail),
+        ),
+      )
+      .limit(1);
+    if (endedIdentity) {
+      return fail(
+        c,
+        409,
+        "CLIENT_ENDED",
+        "This client coached with you before. Reactivate instead.",
+        { relationshipId: endedIdentity.relationshipId },
+      );
+    }
+
     const token = createSessionToken();
     const tokenHash = await sha256Hex(token);
     const timestamp = nowIso();
@@ -186,7 +236,6 @@ invitationRoutes.post(
       parsed.data.expiresInDays ?? DEFAULT_INVITE_DAYS,
     );
     const invitationId = createId();
-    const recipientEmail = normalizeEmail(parsed.data.recipientEmail);
 
     await db.insert(clientInvitations).values({
       id: invitationId,

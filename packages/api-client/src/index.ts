@@ -994,6 +994,7 @@ export class FitBudApiClient {
     status?: OnboardingStatus[];
     adherenceState?: AdherenceState[];
     goal?: string[];
+    renewal?: Array<"upcoming" | "due" | "expired">;
     cursor?: string;
     limit?: number;
   }): Promise<ClientDirectoryListResponse> {
@@ -1004,6 +1005,7 @@ export class FitBudApiClient {
       params.append("adherenceState", state);
     }
     for (const goal of query?.goal ?? []) params.append("goal", goal);
+    for (const renewal of query?.renewal ?? []) params.append("renewal", renewal);
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
     const suffix = params.size > 0 ? `?${params.toString()}` : "";

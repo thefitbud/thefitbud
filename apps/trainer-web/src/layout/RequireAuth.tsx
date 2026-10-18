@@ -49,6 +49,17 @@ export function RequireAuth() {
         <p>
           This account is set up as a client. Open the FitBud app on your phone.
         </p>
+        <div className="auth-store-links">
+          <a className="button-secondary" href="https://apps.apple.com/app/fitbud">
+            App Store
+          </a>
+          <a
+            className="button-secondary"
+            href="https://play.google.com/store/apps/details?id=com.thefitbud.app"
+          >
+            Google Play
+          </a>
+        </div>
       </main>
     );
   }

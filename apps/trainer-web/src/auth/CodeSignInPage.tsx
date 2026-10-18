@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AuthFlowError, useAuth } from "./AuthProvider";
 import { AuthLayout } from "./AuthLayout";
+import { OtpCodeInput } from "./OtpCodeInput";
+import { Button } from "../components/Button";
 import { useConfig, isWhatsAppOtpEnabled } from "../lib/config";
 import { apiClient } from "../lib/api";
 import { fetchDevMailCode } from "../lib/auth-flow";
@@ -15,7 +17,8 @@ export function CodeSignInPage() {
   const { config } = useConfig();
   const waOtp = isWhatsAppOtpEnabled(config);
   const online = useOnline();
-  const next = params.get("next") ?? "/";
+  const nextRaw = params.get("next") ?? "/";
+  const next = nextRaw.startsWith("/") ? nextRaw : "/";
 
   const [step, setStep] = useState<Step>("request");
   const [identifier, setIdentifier] = useState("");
@@ -24,6 +27,7 @@ export function CodeSignInPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roleGate, setRoleGate] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -67,6 +71,7 @@ export function CodeSignInPage() {
     if (!online) return;
     setSubmitting(true);
     setError(null);
+    setRoleGate(false);
     try {
       const result = await apiClient.verifyOtp({
         identifier: identifier.trim(),
@@ -79,7 +84,10 @@ export function CodeSignInPage() {
       }
       setError("That code didn't work. Check the latest message or resend.");
     } catch (err) {
-      if (err instanceof AuthFlowError) {
+      if (err instanceof AuthFlowError && err.code === "role") {
+        setRoleGate(true);
+        setError(err.message);
+      } else if (err instanceof AuthFlowError) {
         setError(err.message);
       } else {
         setError("That code didn't work. Check the latest message or resend.");
@@ -89,35 +97,58 @@ export function CodeSignInPage() {
     }
   }
 
+  if (roleGate) {
+    return (
+      <AuthLayout title="Client account" lead="" screenTestId="screen-TW-01">
+        <div className="auth-role-gate" data-testid="trainee-only-gate">
+          <p role="alert">
+            This account is set up as a client. Open the FitBud app on your phone.
+          </p>
+        </div>
+      </AuthLayout>
+    );
+  }
+
   return (
-    <AuthLayout title="Sign in with a code">
+    <AuthLayout
+      title="Sign in with a code"
+      lead="We'll email a 6-digit code. No SMS."
+      screenTestId="screen-TW-01-code"
+    >
       {!online ? (
         <p className="offline-inline" role="status">
           You&apos;re offline. Connect to continue.
         </p>
       ) : null}
       {step === "request" ? (
-        <form className="stack-form" onSubmit={sendCode}>
+        <form className="auth-form" onSubmit={sendCode}>
           <label className="field">
             <span>Mobile number or email</span>
-            <input
-              type="text"
-              required
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              disabled={submitting || !online}
-            />
+            <span className="input-shell">
+              <input
+                type="text"
+                autoComplete="username"
+                required
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                disabled={submitting || !online}
+              />
+            </span>
           </label>
-          <fieldset className="field">
+          <fieldset className="field auth-channel-fieldset">
             <legend>Send code to</legend>
             <label className="radio-row">
               <input type="radio" name="channel" checked readOnly />
               Email
             </label>
             <label className="radio-row is-disabled">
-              <input type="radio" name="channel" disabled={!waOtp} />
+              <input type="radio" name="channel" disabled />
               WhatsApp
-              {!waOtp ? <span className="chip-coming">Coming soon</span> : null}
+              {!waOtp ? (
+                <span className="chip-coming" data-testid="wa-otp-coming-soon">
+                  Coming soon
+                </span>
+              ) : null}
             </label>
             {!waOtp ? (
               <p className="muted">
@@ -136,47 +167,43 @@ export function CodeSignInPage() {
               {error}
             </p>
           ) : null}
-          <button
+          <Button
             type="submit"
-            className="button-primary"
+            variant="primary"
+            className="btn-lg btn-block"
             disabled={submitting || !online}
           >
             {submitting ? "Sending…" : "Send code"}
-          </button>
+          </Button>
         </form>
       ) : (
-        <form className="stack-form" onSubmit={verifyCode}>
+        <form className="auth-form" onSubmit={verifyCode}>
           {message ? <p className="form-success">{message}</p> : null}
           <p className="muted">Sent to {maskIdentifier(identifier)}</p>
-          <label className="field">
-            <span>6-digit code</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxLength={6}
-              required
+          <div className="field">
+            <span className="field-label">6-digit code</span>
+            <OtpCodeInput
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              onChange={setCode}
               disabled={submitting || !online}
             />
-          </label>
+          </div>
           {error ? (
             <p className="form-error" role="alert">
               {error}
             </p>
           ) : null}
-          <button
+          <Button
             type="submit"
-            className="button-primary"
+            variant="primary"
+            className="btn-lg btn-block"
             disabled={submitting || code.length !== 6 || !online}
           >
             {submitting ? "Verifying…" : "Verify and sign in"}
-          </button>
+          </Button>
           <button
             type="button"
-            className="text-btn"
+            className="button-ghost"
             disabled={cooldown > 0 || submitting || !online}
             onClick={() => void sendCode()}
           >

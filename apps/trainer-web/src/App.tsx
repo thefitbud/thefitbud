@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthProvider";
 import { CodeSignInPage } from "./auth/CodeSignInPage";
 import { ForgotPasswordPage } from "./auth/ForgotPasswordPage";
+import { SetPasswordPage } from "./auth/SetPasswordPage";
 import { SignInPage } from "./auth/SignInPage";
 import { RequireAuth } from "./layout/RequireAuth";
 import { AddClientPage } from "./pages/AddClientPage";
@@ -39,6 +40,7 @@ export function App() {
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-in/code" element={<CodeSignInPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/__specimens" element={<SpecimensPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<WelcomePage />} />

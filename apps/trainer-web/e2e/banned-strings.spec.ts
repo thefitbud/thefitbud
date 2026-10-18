@@ -44,9 +44,15 @@ const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
 const EXPO_WEB_URL = process.env.EXPO_WEB_URL;
 
-/** Screens Batch 0 + TW-A cleaned — error hits fail the suite. */
+/** Screens Batch 0 + TW-A + TW-B cleaned — error hits fail the suite. */
 const WEB_HARD_FAIL_ROUTES = new Set([
   "/sign-in",
+  "/sign-in/code",
+  "/forgot-password",
+  "/welcome",
+  "/clients",
+  "/clients/add",
+  "/invitations/06b54e81-016c-4220-a9a8-31195324669b",
   "/",
   "/checkins",
   "/templates",
@@ -182,20 +188,27 @@ async function resolveClientWorkspacePath(page: Page): Promise<string> {
 }
 
 test.describe("banned-strings · trainer web", () => {
-  test("sign-in + TW-A routes hard-fail; roster/workspace report", async ({
+  test("sign-in + TW-A/TW-B routes hard-fail; workspace report", async ({
     page,
   }) => {
     test.setTimeout(180_000);
 
     const allHits: Hit[] = [];
 
-    await page.goto("/sign-in");
-    await page.waitForTimeout(500);
-    allHits.push(...scanText(await collectText(page), "/sign-in", "web"));
+    for (const route of ["/sign-in", "/sign-in/code", "/forgot-password"]) {
+      await page.goto(route);
+      await page.waitForTimeout(500);
+      allHits.push(...scanText(await collectText(page), route, "web"));
+      allHits.push(...(await scanRoleChecks(page, route, "web")));
+    }
 
     await signInTrainerWeb(page);
     const hardRoutes = [
       "/",
+      "/welcome?capture=welcome",
+      "/clients",
+      "/clients/add",
+      "/invitations/06b54e81-016c-4220-a9a8-31195324669b",
       "/checkins",
       "/templates",
       "/settings",
@@ -203,7 +216,7 @@ test.describe("banned-strings · trainer web", () => {
       "/?ask=b532e1ca-7fea-4563-8d50-4468bc66f586",
       "/not-a-real-route",
     ];
-    const reportRoutes = ["/clients", await resolveClientWorkspacePath(page)];
+    const reportRoutes = [await resolveClientWorkspacePath(page)];
     for (const route of [...hardRoutes, ...reportRoutes]) {
       await page.goto(route);
       await page.waitForTimeout(800);
@@ -212,7 +225,9 @@ test.describe("banned-strings · trainer web", () => {
           ? "/?exception"
           : route.startsWith("/?ask")
             ? "/?ask"
-            : route;
+            : route.startsWith("/welcome")
+              ? "/welcome"
+              : route;
       const text = await collectText(page);
       allHits.push(...scanText(text, key, "web"));
       allHits.push(...(await scanRoleChecks(page, key, "web")));

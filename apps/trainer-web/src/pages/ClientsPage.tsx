@@ -1,54 +1,35 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type { AdherenceState, ClientDirectoryItem } from "@fitbud/contracts";
-import { formatCivilDate as coreFormatCivilDate } from "@fitbud/core";
-import { StatusBadge } from "../components/StatusBadge";
+import type { ClientDirectoryItem, OnboardingStatus } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
+import { ClientRow } from "../components/ClientRow";
+import { FilterBar } from "../components/FilterBar";
+import { ErrorState, LoadingBlock } from "../components/StatePanels";
+import { Button } from "../components/Button";
 import { apiClient } from "../lib/api";
 import {
   CLIENT_ADHERENCE_FILTERS,
+  CLIENT_RENEWAL_FILTERS,
   CLIENT_STATUS_FILTERS,
-  adherenceStateLabel,
-  checkinStatusLabel,
   clientDirectoryFilterKey,
   clientDirectoryFiltersFromKey,
-  clientDirectoryItemKey,
   clientDirectoryListQuery,
-  directoryWorkspaceHref,
   distinctGoalShorts,
   emptyClientDirectoryFilters,
   hasClientDirectoryFilters,
-  onboardingStatusLabel,
   pageClientDirectory,
   parseClientDirectoryFilters,
-  primaryActionForStatus,
+  renewalFilterLabel,
   toggleClientDirectoryValue,
   writeClientDirectoryFilters,
   type ClientDirectoryFilters,
+  type RenewalFilter,
 } from "../lib/clients";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 const DIRECTORY_PAGE_LIMIT = 30;
 const SEARCH_DEBOUNCE_MS = 250;
-
-function formatCivilDate(value: string): string {
-  return coreFormatCivilDate(value);
-}
-
-function initials(name: string): string {
-  const words = name
-    .trim()
-    .split(/\s+/)
-    .map((part) => part.replace(/[^A-Za-z0-9]/g, ""))
-    .filter(Boolean);
-  const first = words[0];
-  const second = words[1];
-  if (first && second) {
-    const letters = `${first.charAt(0)}${second.charAt(0)}`.toUpperCase();
-    return letters || "CL";
-  }
-  const compact = words[0] ?? "";
-  return (compact.slice(0, 2) || "CL").toUpperCase();
-}
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
@@ -57,17 +38,20 @@ function errorMessage(err: unknown, fallback: string): string {
 export function ClientsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseClientDirectoryFilters(searchParams);
+  const isNarrow = useMediaQuery("(max-width: 767px)");
   const [queryForRequest, setQueryForRequest] = useState(filters.q);
   const [items, setItems] = useState<ClientDirectoryItem[]>([]);
+  const [facets, setFacets] = useState<{
+    status?: Record<string, number>;
+    adherence?: Record<string, number>;
+  } | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [goalOptions, setGoalOptions] = useState<string[]>([]);
-  const [goalsLoading, setGoalsLoading] = useState(true);
-  const [goalsError, setGoalsError] = useState<string | null>(null);
-  const [goalReload, setGoalReload] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -104,6 +88,8 @@ export function ClientsPage() {
         if (generation.current !== id) return;
         setItems(page.items);
         setNextCursor(page.nextCursor);
+        setFacets(page.facets ?? null);
+        setSelectedIndex(0);
       })
       .catch((err: unknown) => {
         if (generation.current !== id) return;
@@ -119,26 +105,20 @@ export function ClientsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setGoalsLoading(true);
-    setGoalsError(null);
-    // Goal pills page the directory with no goal filter. There is no facet endpoint.
-    void pageClientDirectory((query) => apiClient.listClients(query))
+    void pageClientDirectory((query) => apiClient.listClients(query), {
+      ...emptyClientDirectoryFilters(),
+      segment: "current",
+    })
       .then((page) => {
-        if (cancelled) return;
-        setGoalOptions(distinctGoalShorts(page));
+        if (!cancelled) setGoalOptions(distinctGoalShorts(page));
       })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setGoalOptions([]);
-        setGoalsError(errorMessage(err, "Could not load goals."));
-      })
-      .finally(() => {
-        if (!cancelled) setGoalsLoading(false);
+      .catch(() => {
+        if (!cancelled) setGoalOptions([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [goalReload]);
+  }, []);
 
   function updateFilters(
     change: (current: ClientDirectoryFilters) => ClientDirectoryFilters,
@@ -180,354 +160,284 @@ export function ClientsPage() {
       });
   }
 
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.target instanceof HTMLInputElement) return;
+      if (event.key === "ArrowDown" || event.key === "j") {
+        event.preventDefault();
+        setSelectedIndex((i) => Math.min(i + 1, Math.max(items.length - 1, 0)));
+      } else if (event.key === "ArrowUp" || event.key === "k") {
+        event.preventDefault();
+        setSelectedIndex((i) => Math.max(i - 1, 0));
+      } else if (event.key === "Enter" && items[selectedIndex]) {
+        const row = document.querySelectorAll("[data-client-row]")[
+          selectedIndex
+        ] as HTMLElement | undefined;
+        row?.click();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [items, selectedIndex]);
+
   const goalChoices = distinctGoalShorts([
     ...goalOptions.map((goalShort) => ({ goalShort })),
     ...filters.goal.map((goalShort) => ({ goalShort })),
   ]);
   const filtersActive = hasClientDirectoryFilters(filters);
+  const activeCount =
+    filters.segment === "ended"
+      ? items.length
+      : (facets?.status
+          ? Object.entries(facets.status)
+              .filter(([k]) => k !== "ended")
+              .reduce((sum, [, n]) => sum + n, 0)
+          : items.length);
 
   return (
     <section className="page clients-page" data-testid="screen-TW-06">
-      <header className="page-header">
+      <header className="page-header clients-header">
         <div>
-          <h1 className="roster-title">Client Roster</h1>
-          <p className="lede">
-            Invite a trainee, then follow onboarding until coaching is
-            configured and a plan is published.
-          </p>
+          <h1>
+            Clients{" "}
+            <span className="clients-count muted">
+              {filters.segment === "ended"
+                ? `${activeCount} ended`
+                : `${activeCount} active`}
+            </span>
+          </h1>
         </div>
         <Link to="/clients/add" className="button-primary">
-          + Add Client
+          Add client
         </Link>
       </header>
 
-      <div className="roster-card">
-        <div className="roster-toolbar">
-          <label className="roster-search">
-            <span className="sr-only">Search clients</span>
-            <SearchIcon />
-            <input
-              id="clients-search"
-              type="search"
-              value={filters.q}
-              onChange={(event) =>
-                updateFilters((current) => ({
-                  ...current,
-                  q: event.target.value,
-                }))
-              }
-              placeholder="Name or email"
-              autoComplete="off"
-            />
-          </label>
-          <div className="roster-filters">
-            <FilterGroup label="Status">
-              {CLIENT_STATUS_FILTERS.map((status) => (
-                <FilterPill
-                  key={status}
-                  pressed={filters.status.includes(status)}
-                  onClick={() =>
-                    updateFilters((current) => ({
-                      ...current,
-                      status: toggleClientDirectoryValue(
-                        CLIENT_STATUS_FILTERS,
-                        current.status,
-                        status,
-                      ),
-                    }))
-                  }
-                >
-                  {onboardingStatusLabel(status)}
-                </FilterPill>
-              ))}
-            </FilterGroup>
-            <FilterGroup label="Adherence">
-              {CLIENT_ADHERENCE_FILTERS.map((state) => (
-                <FilterPill
-                  key={state}
-                  pressed={filters.adherenceState.includes(state)}
-                  onClick={() =>
-                    updateFilters((current) => ({
-                      ...current,
-                      adherenceState: toggleClientDirectoryValue(
-                        CLIENT_ADHERENCE_FILTERS,
-                        current.adherenceState,
-                        state,
-                      ),
-                    }))
-                  }
-                >
-                  {adherenceStateLabel(state)}
-                </FilterPill>
-              ))}
-            </FilterGroup>
-            <FilterGroup label="Goal">
-              {goalsLoading && goalChoices.length === 0 ? (
-                <span className="muted">Loading goals…</span>
-              ) : goalChoices.length === 0 ? (
-                <span className="muted">No short goals yet</span>
-              ) : (
-                goalChoices.map((goal) => (
-                  <FilterPill
-                    key={goal}
-                    pressed={filters.goal.includes(goal)}
-                    onClick={() =>
-                      updateFilters((current) => ({
-                        ...current,
-                        goal: toggleClientDirectoryValue(
-                          goalChoices,
-                          current.goal,
-                          goal,
-                        ),
-                      }))
-                    }
-                  >
-                    {goal}
-                  </FilterPill>
-                ))
-              )}
-            </FilterGroup>
-            {filtersActive ? (
-              <button
-                type="button"
-                className="button-link"
-                onClick={() => updateFilters(() => emptyClientDirectoryFilters())}
+      <div
+        className="segment-control"
+        role="tablist"
+        aria-label="Client list segment"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filters.segment === "current"}
+          className={
+            filters.segment === "current"
+              ? "segment-tab is-selected"
+              : "segment-tab"
+          }
+          onClick={() =>
+            updateFilters((f) => ({
+              ...f,
+              segment: "current",
+              status: f.status.filter((s) => s !== "ended"),
+            }))
+          }
+        >
+          Current
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filters.segment === "ended"}
+          className={
+            filters.segment === "ended"
+              ? "segment-tab is-selected"
+              : "segment-tab"
+          }
+          onClick={() =>
+            updateFilters((f) => ({
+              ...f,
+              segment: "ended",
+              status: ["ended"],
+            }))
+          }
+        >
+          Ended
+        </button>
+      </div>
+
+      <FilterBar
+        search={filters.q}
+        onSearchChange={(q) => updateFilters((f) => ({ ...f, q }))}
+        showClear={filtersActive}
+        onClear={() =>
+          updateFilters((f) => ({
+            ...emptyClientDirectoryFilters(),
+            segment: f.segment,
+            status: f.segment === "ended" ? ["ended"] : [],
+          }))
+        }
+        status={{
+          label: "Status",
+          selected: filters.status.filter((s) => s !== "ended"),
+          options: CLIENT_STATUS_FILTERS.map((value) => ({
+            value,
+            label: labelFor("onboarding_status", value),
+            count: facets?.status?.[value],
+          })),
+          onToggle: (value) =>
+            updateFilters((f) => ({
+              ...f,
+              status: toggleClientDirectoryValue(
+                CLIENT_STATUS_FILTERS,
+                f.status.filter((s) => s !== "ended"),
+                value as OnboardingStatus,
+              ),
+            })),
+        }}
+        adherence={{
+          label: "Adherence",
+          selected: filters.adherenceState,
+          options: CLIENT_ADHERENCE_FILTERS.map((value) => ({
+            value,
+            label: labelFor("adherence_state", value),
+            count: facets?.adherence?.[value],
+          })),
+          onToggle: (value) =>
+            updateFilters((f) => ({
+              ...f,
+              adherenceState: toggleClientDirectoryValue(
+                CLIENT_ADHERENCE_FILTERS,
+                f.adherenceState,
+                value as (typeof CLIENT_ADHERENCE_FILTERS)[number],
+              ),
+            })),
+        }}
+        goal={{
+          label: "Goal",
+          selected: filters.goal,
+          options: goalChoices.map((value) => ({ value, label: value })),
+          onToggle: (value) =>
+            updateFilters((f) => ({
+              ...f,
+              goal: toggleClientDirectoryValue(goalChoices, f.goal, value),
+            })),
+        }}
+        renewal={{
+          label: "Renewal",
+          selected: filters.renewal,
+          options: CLIENT_RENEWAL_FILTERS.map((value) => ({
+            value,
+            label: renewalFilterLabel(value),
+          })),
+          onToggle: (value) =>
+            updateFilters((f) => ({
+              ...f,
+              renewal: toggleClientDirectoryValue(
+                CLIENT_RENEWAL_FILTERS,
+                f.renewal,
+                value as RenewalFilter,
+              ),
+            })),
+        }}
+      />
+
+      {loading && items.length === 0 ? <LoadingBlock /> : null}
+
+      {error && items.length === 0 ? (
+        <ErrorState
+          title="Could not load clients"
+          message={error}
+          onRetry={() => setReloadNonce((n) => n + 1)}
+        />
+      ) : null}
+
+      {!loading && !error && items.length === 0 ? (
+        <div className="empty-state" data-testid="clients-empty">
+          {filtersActive ? (
+            <>
+              <h2>No clients match these filters</h2>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  updateFilters((f) => ({
+                    ...emptyClientDirectoryFilters(),
+                    segment: f.segment,
+                    status: f.segment === "ended" ? ["ended"] : [],
+                  }))
+                }
               >
                 Clear filters
-              </button>
-            ) : null}
-          </div>
-          {goalsError ? (
-            <p className="form-error" role="alert">
-              {goalsError}{" "}
-              <button
-                type="button"
-                className="button-link"
-                onClick={() => setGoalReload((current) => current + 1)}
-              >
-                Retry
-              </button>
-            </p>
-          ) : null}
+              </Button>
+            </>
+          ) : (
+            <>
+              <h2>No clients yet</h2>
+              <p>Invite your first client to start coaching.</p>
+              <Link to="/clients/add" className="button-primary">
+                Add client
+              </Link>
+            </>
+          )}
         </div>
+      ) : null}
 
-        {loading ? (
-          <p className="roster-status" aria-busy="true">
-            Loading clients…
-          </p>
-        ) : error && items.length === 0 ? (
-          <div className="empty-state" role="alert">
-            <h2>Could not load clients</h2>
-            <p>{error}</p>
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={() => setReloadNonce((current) => current + 1)}
-            >
-              Retry
-            </button>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="empty-state" role="status">
-            {filtersActive ? (
-              <>
-                <h2>No matching clients</h2>
-                <p>No clients match these filters.</p>
-                <button
-                  type="button"
-                  className="button-secondary"
-                  onClick={() =>
-                    updateFilters(() => emptyClientDirectoryFilters())
-                  }
-                >
-                  Clear filters
-                </button>
-              </>
-            ) : (
-              <>
-                <h2>No clients yet</h2>
-                <p>Invite a trainee to start onboarding.</p>
-                <Link to="/clients/add" className="button-primary">
-                  + Add Client
-                </Link>
-              </>
-            )}
+      {items.length > 0 ? (
+        isNarrow ? (
+          <div className="client-card-stack">
+            {items.map((item, index) => (
+              <ClientRow
+                key={
+                  item.relationshipId ??
+                  item.invitationId ??
+                  `${item.traineeDisplayName}-${index}`
+                }
+                item={item}
+                layout="card"
+                selected={index === selectedIndex}
+              />
+            ))}
           </div>
         ) : (
-          <>
-            {error ? (
-              <p className="form-error roster-banner" role="alert">
-                {error}{" "}
-                <button type="button" className="button-link" onClick={loadMore}>
-                  Retry
-                </button>
-              </p>
-            ) : null}
-            <div className="roster-scroll">
-              <table className="roster-table" aria-label="Clients">
-                <thead>
-                  <tr>
-                    <th scope="col">Client</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Next check-in</th>
-                    <th scope="col">Plan</th>
-                    <th scope="col">Adherence</th>
-                    <th scope="col">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <ClientRow key={clientDirectoryItemKey(item)} item={item} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {nextCursor && !loading ? (
-          <div className="roster-more">
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={loadMore}
-              disabled={loadingMore}
-            >
-              {loadingMore ? "Loading…" : "Load more"}
-            </button>
+          <div className="clients-table-wrap card">
+            <table className="clients-table">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Status</th>
+                  <th>Adherence</th>
+                  <th>Next check-in</th>
+                  <th>Plan</th>
+                  <th>Renewal</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <ClientRow
+                    key={
+                      item.relationshipId ??
+                      item.invitationId ??
+                      `${item.traineeDisplayName}-${index}`
+                    }
+                    item={item}
+                    selected={index === selectedIndex}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
+        )
+      ) : null}
 
-function FilterGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  const id = `client-filter-${label.toLowerCase()}`;
-  return (
-    <div className="roster-filter-row">
-      <span id={id} className="roster-filter-label">
-        {label}
-      </span>
-      <div className="segment" role="group" aria-labelledby={id}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function FilterPill({
-  pressed,
-  onClick,
-  children,
-}: {
-  pressed: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      className={pressed ? "segment-btn is-on" : "segment-btn"}
-      aria-pressed={pressed}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      className="roster-search-icon"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function ClientRow({ item }: { item: ClientDirectoryItem }) {
-  const action = primaryActionForStatus(item.status);
-  const href = directoryWorkspaceHref(item);
-  const goal = item.goalShort?.trim() || "No short goal";
-
-  return (
-    <tr>
-      <td>
-        <div className="roster-person">
-          <span className="avatar" aria-hidden="true">
-            {initials(item.traineeDisplayName)}
-          </span>
-          <div className="roster-person-copy">
-            <p className="client-name">
-              <span>{item.traineeDisplayName}</span>
-            </p>
-            <p className="client-subtitle">{goal}</p>
-          </div>
-        </div>
-      </td>
-      <td>
-        <StatusBadge status={item.status} />
-      </td>
-      <td>
-        {item.nextCheckin ? (
-          <div className="roster-checkin">
-            <time dateTime={item.nextCheckin.localDate}>
-              {formatCivilDate(item.nextCheckin.localDate)}
-            </time>
-            <span className={`status-pill status-${item.nextCheckin.status}`}>
-              {checkinStatusLabel(item.nextCheckin.status)}
-            </span>
-          </div>
-        ) : (
-          <span className="muted">No check-in</span>
-        )}
-      </td>
-      <td>
-        <span className="roster-plan">
-          {item.effectivePlan?.title ?? "No effective plan"}
-        </span>
-      </td>
-      <td>
-        <AdherenceLabel state={item.adherenceState} />
-      </td>
-      <td>
-        {href ? (
-          <Link
-            to={href}
-            className="button-secondary"
-            aria-label={`${action.label} for ${item.traineeDisplayName}`}
+      {nextCursor ? (
+        <div className="load-more-row">
+          <Button
+            variant="secondary"
+            disabled={loadingMore}
+            onClick={() => loadMore()}
           >
-            {action.label}
-          </Link>
-        ) : (
-          <span className="muted-action">{action.label}</span>
-        )}
-      </td>
-    </tr>
-  );
-}
+            {loadingMore ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      ) : null}
 
-function AdherenceLabel({ state }: { state: AdherenceState }) {
-  return (
-    <span className={`status-pill adherence-${state}`}>
-      {adherenceStateLabel(state)}
-    </span>
+      {error && items.length > 0 ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
   );
 }

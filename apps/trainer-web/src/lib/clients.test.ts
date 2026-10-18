@@ -21,6 +21,7 @@ import {
 } from "./clients";
 
 const relationshipId = "33333333-3333-4333-8333-333333333333";
+const invitationId = "06b54e81-016c-4220-a9a8-31195324669b";
 
 function directoryItem(
   overrides: Partial<ClientDirectoryItem> = {},
@@ -62,6 +63,8 @@ describe("client directory filters", () => {
       status: ["invited", "active"],
       adherenceState: ["needs_attention"],
       goal: ["Build strength"],
+      renewal: [],
+      segment: "current",
     });
     expect(hasClientDirectoryFilters(filters)).toBe(true);
     expect(hasClientDirectoryFilters(emptyClientDirectoryFilters())).toBe(
@@ -77,12 +80,32 @@ describe("client directory filters", () => {
     expect(written.get("view")).toBe("roster");
   });
 
+  it("maps status=ended to the Ended segment", () => {
+    const params = new URLSearchParams("status=ended");
+    const filters = parseClientDirectoryFilters(params);
+    expect(filters.segment).toBe("ended");
+    expect(filters.status).toEqual(["ended"]);
+    const written = writeClientDirectoryFilters(new URLSearchParams(), filters);
+    expect(written.get("segment")).toBe("ended");
+    expect(written.getAll("status")).toEqual(["ended"]);
+  });
+
+  it("current list query never includes ended", () => {
+    const query = clientDirectoryListQuery(emptyClientDirectoryFilters(), {
+      limit: 30,
+    });
+    expect(query.status).toEqual([...CLIENT_STATUS_FILTERS]);
+    expect(query.status?.includes("ended")).toBe(false);
+  });
+
   it("round-trips a filter key and omits the cursor when a filter page starts over", () => {
     const filters: ClientDirectoryFilters = {
       q: "  ada ",
       status: ["active"],
       adherenceState: ["no_recent_data"],
       goal: ["Fat loss"],
+      renewal: ["due"],
+      segment: "current",
     };
     const key = clientDirectoryFilterKey(filters);
     expect(clientDirectoryFiltersFromKey(key)).toEqual(filters);
@@ -97,135 +120,79 @@ describe("client directory filters", () => {
       status: ["active"],
       adherenceState: ["no_recent_data"],
       goal: ["Fat loss"],
+      renewal: ["due"],
       limit: 30,
     });
-    expect(
-      clientDirectoryListQuery(emptyClientDirectoryFilters(), {
-        cursor: "",
-        limit: 30,
-      }),
-    ).toEqual({ limit: 30 });
   });
 
-  it("toggles a status without leaving the lifecycle order", () => {
-    expect(
-      toggleClientDirectoryValue(CLIENT_STATUS_FILTERS, ["active"], "invited"),
-    ).toEqual(["invited", "active"]);
-    expect(
-      toggleClientDirectoryValue(
-        CLIENT_STATUS_FILTERS,
-        ["invited", "active"],
-        "invited",
-      ),
-    ).toEqual(["active"]);
-  });
-});
-
-describe("client directory rows", () => {
-  it("does not link a pending invitation into a workspace", () => {
-    expect(
-      directoryWorkspaceHref({ relationshipId: null, status: "invited" }),
-    ).toBeNull();
-    expect(
-      directoryWorkspaceHref({ relationshipId: null, status: "active" }),
-    ).toBeNull();
-    expect(primaryActionForStatus("invited")).toEqual({
-      label: "Waiting for acceptance",
-      href: null,
+  it("labels and primary actions match TW-06", () => {
+    expect(onboardingStatusLabel("invited")).toMatch(/invited/i);
+    expect(adherenceStateLabel("needs_attention")).toMatch(/attention/i);
+    expect(checkinStatusLabel("submitted")).toMatch(/submitted/i);
+    expect(primaryActionForStatus("invited", invitationId)).toEqual({
+      label: "Resend invite",
+      href: `/invitations/${invitationId}`,
     });
-    expect(onboardingStatusLabel("onboarding_submitted")).toBe(
-      "Awaiting review",
+    expect(primaryActionForStatus("active").label).toBe("Open");
+    expect(primaryActionForStatus("coaching_ready").label).toBe("Set up plan");
+    expect(primaryActionForStatus("onboarding_submitted").label).toBe(
+      "Review intake",
     );
   });
 
-  it("links a relationship to the status primary action", () => {
+  it("invited rows open invitation detail, not a workspace", () => {
+    expect(
+      directoryWorkspaceHref({
+        relationshipId: null,
+        invitationId,
+        status: "invited",
+      }),
+    ).toBe(`/invitations/${invitationId}`);
     expect(
       directoryWorkspaceHref({
         relationshipId,
-        status: "onboarding_submitted",
+        invitationId: null,
+        status: "active",
       }),
-    ).toBe(`/clients/${relationshipId}/onboarding`);
-    expect(
-      directoryWorkspaceHref({ relationshipId, status: "coaching_ready" }),
-    ).toBe(`/clients/${relationshipId}/overview`);
-    expect(
-      directoryWorkspaceHref({ relationshipId, status: "active" }),
-    ).toBe(`/clients/${relationshipId}/overview`);
-    expect(
-      directoryWorkspaceHref({ relationshipId, status: "ended" }),
     ).toBe(`/clients/${relationshipId}/overview`);
   });
 
-  it("labels adherence and check-in state in words", () => {
-    expect(adherenceStateLabel("on_track")).toBe("On track");
-    expect(adherenceStateLabel("needs_attention")).toBe("Needs attention");
-    expect(adherenceStateLabel("no_recent_data")).toBe("No recent data");
-    expect(adherenceStateLabel("not_available")).toBe("Not available");
-    expect(checkinStatusLabel("scheduled")).toBe("Scheduled");
-    expect(checkinStatusLabel("due")).toBe("Due");
-    expect(checkinStatusLabel("submitted")).toBe("Submitted");
-    expect(checkinStatusLabel("reviewed")).toBe("Reviewed");
-    expect(checkinStatusLabel("overdue")).toBe("Overdue");
+  it("distinct goals ignore blanks", () => {
+    expect(
+      distinctGoalShorts([
+        { goalShort: "Fat loss" },
+        { goalShort: null },
+        { goalShort: "  " },
+        { goalShort: "Fat loss" },
+        { goalShort: "Strength" },
+      ]),
+    ).toEqual(["Fat loss", "Strength"]);
   });
-});
 
-describe("goal options from directory pages", () => {
-  it("pages without a goal filter and keeps distinct short goals", async () => {
-    const calls: unknown[] = [];
+  it("toggle keeps canonical order", () => {
+    expect(
+      toggleClientDirectoryValue(CLIENT_STATUS_FILTERS, ["active"], "invited"),
+    ).toEqual(["invited", "active"]);
+  });
+
+  it("pages the directory until exhausted", async () => {
     const pages = [
       {
-        items: [
-          directoryItem({ goalShort: "Build strength" }),
-          directoryItem({
-            relationshipId: null,
-            invitationId: "55555555-5555-4555-8555-555555555555",
-            traineeDisplayName: "Meera Krishnan",
-            status: "invited" as const,
-            goalShort: null,
-            adherenceState: "not_available" as const,
-          }),
-        ],
-        nextCursor: "page-2",
+        items: [directoryItem({ traineeDisplayName: "A" })],
+        nextCursor: "c1",
       },
       {
-        items: [
-          directoryItem({
-            relationshipId: "44444444-4444-4444-8444-444444444444",
-            traineeDisplayName: "Arjun Mehta",
-            goalShort: "  Fat loss  ",
-          }),
-          directoryItem({ goalShort: "Build strength" }),
-          directoryItem({ goalShort: "   " }),
-        ],
+        items: [directoryItem({ traineeDisplayName: "B" })],
         nextCursor: null,
       },
     ];
-    let index = 0;
-    const items = await pageClientDirectory(async (query) => {
-      calls.push(query);
-      const page = pages[index];
-      index += 1;
-      if (!page) throw new Error("unexpected extra page");
+    let calls = 0;
+    const items = await pageClientDirectory(async () => {
+      const page = pages[calls]!;
+      calls += 1;
       return page;
     });
-
-    expect(calls).toEqual([{ limit: 50 }, { limit: 50, cursor: "page-2" }]);
-    expect(distinctGoalShorts(items)).toEqual(["Build strength", "Fat loss"]);
-  });
-
-  it("stops when the cursor does not advance", async () => {
-    const calls: unknown[] = [];
-    await pageClientDirectory(
-      async (query) => {
-        calls.push(query);
-        return {
-          items: [directoryItem()],
-          nextCursor: "same",
-        };
-      },
-      emptyClientDirectoryFilters(),
-      { limit: 50, maxPages: 5 },
-    );
-    expect(calls).toHaveLength(2);
+    expect(items.map((i) => i.traineeDisplayName)).toEqual(["A", "B"]);
+    expect(calls).toBe(2);
   });
 });

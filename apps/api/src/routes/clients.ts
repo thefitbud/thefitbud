@@ -84,6 +84,17 @@ clientRoutes.get(
           "Repeatable exact match against the active configuration short goal.",
         schema: { type: "string" },
       },
+      {
+        name: "renewal",
+        in: "query",
+        required: false,
+        description:
+          "Repeatable renewal filter: upcoming, due, or expired (also accepts overdue as due).",
+        schema: {
+          type: "string",
+          enum: ["upcoming", "due", "expired", "overdue", "none"],
+        },
+      },
       limitParameter({ defaultValue: 30, maximum: 50 }),
       cursorParameter(),
     ],
@@ -107,7 +118,16 @@ clientRoutes.get(
     const goalParsed = repeatable(z.string().trim().min(1).max(120)).safeParse(
       c.req.queries("goal"),
     );
-    if (!statusParsed.success || !adherenceParsed.success || !goalParsed.success) {
+    const renewalSchema = z.enum(["upcoming", "due", "expired", "overdue", "none"]);
+    const renewalParsed = repeatable(renewalSchema).safeParse(
+      c.req.queries("renewal"),
+    );
+    if (
+      !statusParsed.success ||
+      !adherenceParsed.success ||
+      !goalParsed.success ||
+      !renewalParsed.success
+    ) {
       return fail(
         c,
         400,
@@ -128,6 +148,10 @@ clientRoutes.get(
       return fail(c, 400, "INVALID_CURSOR", "Cursor is not valid.");
     }
 
+    const renewal = renewalParsed.data?.map((value) =>
+      value === "expired" ? "overdue" : value === "overdue" ? "overdue" : value === "due" ? "due" : value === "upcoming" ? "due" : "none",
+    ) as Array<"due" | "overdue" | "none"> | undefined;
+
     const db = createDb(c.env.DB);
     const page = await loadClientDirectory(db, {
       trainerUserId: actor.userId,
@@ -136,6 +160,7 @@ clientRoutes.get(
       status: statusParsed.data,
       adherenceState: adherenceParsed.data,
       goal: goalParsed.data,
+      renewal,
       cursor,
       limit,
     });
