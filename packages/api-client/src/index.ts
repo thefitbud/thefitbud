@@ -719,7 +719,9 @@ export class FitBudApiClient {
     return this.request(
       "GET",
       `/relationships/${relationshipId}/subscription`,
-      subscriptionSchema,
+      options?.notFoundAsNull
+        ? subscriptionSchema.nullable()
+        : subscriptionSchema,
       { auth: true, notFoundAsNull: options?.notFoundAsNull === true },
     );
   }

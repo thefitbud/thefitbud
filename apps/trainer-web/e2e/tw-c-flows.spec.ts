@@ -54,7 +54,8 @@ test.describe("TW-C workspace", () => {
     await expect(tabs.getByRole("link", { name: /Progress/i })).toBeVisible();
     await expect(tabs.getByRole("link", { name: /Check-ins/i })).toBeVisible();
     await expect(tabs.getByRole("link", { name: /History/i })).toBeVisible();
-    await expect(tabs.getByText(/^3$/)).toBeVisible();
+    // Check-ins is the only tab that may carry a count badge.
+    await expect(tabs.locator(".tab-badge")).toHaveCount(1);
     await page.getByRole("button", { name: /more actions/i }).click();
     await expect(
       page.getByRole("menuitem", { name: /Configure coaching/i }),
