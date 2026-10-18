@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "howToUse": "Visit each route (web) or screen (Expo web), take document.body.innerText (plus title/aria-label/placeholder/tooltip text where you can), and test each pattern with new RegExp(regex, flags). Severity 'error' fails the test. 'warn' is reported for a human to review. Patterns with scope 'mobile' or 'web' run only there. roleChecks are Playwright locator checks.",
+  "patterns": [
+    {
+      "id": "iso-date",
+      "regex": "\\b\\d{4}-\\d{2}-\\d{2}(?:[T ]\\d{2}:\\d{2})?",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "Raw ISO date/timestamp. Use the packages/core formatter ('Thu 15 Oct')."
+    },
+    {
+      "id": "uuid",
+      "regex": "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "UUID shown to the user."
+    },
+    {
+      "id": "hex8-fragment",
+      "regex": "\\b(?=[0-9a-f]{0,7}[0-9])(?=[0-9a-f]{0,7}[a-f])[0-9a-f]{8}\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "8-hex UUID fragment used as a name or title (e.g. 'Trainee 9035c4ad', shortId())."
+    },
+    {
+      "id": "snake-case",
+      "regex": "(?<![\\w@./:=-])[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?![\\w@./-])",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "Raw enum (overdue_meal, portion_size, upper_back, steps_enabled). Map it through packages/core labels."
+    },
+    {
+      "id": "good-to-see-you",
+      "regex": "good to see you",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Greeting removed (TW-04)."
+    },
+    {
+      "id": "templates-and-libraries",
+      "regex": "Templates\\s*&\\s*Libraries",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "The nav and H1 label is 'Templates' (TW-03/TW-23)."
+    },
+    {
+      "id": "active-coaching",
+      "regex": "Active Coaching",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Sidebar status claim removed (TW-03)."
+    },
+    {
+      "id": "placeholder",
+      "regex": "\\bplaceholder\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Dev placeholder copy (e.g. 'TR-21 placeholder')."
+    },
+    {
+      "id": "screen-id",
+      "regex": "\\bT[RWM]-\\d{2}[a-z]?\\b",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "Spec IDs in UI. The only exception is the support mailto subject, which isn't rendered."
+    },
+    {
+      "id": "negative-relative-time",
+      "regex": "(?:^|[\\s(·])(?:in\\s+)?-\\d+\\s?(?:s|sec|secs|m|min|mins|minutes?|h|hr|hrs|hours?|d|days?|w|wk|wks|weeks?)\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Negative relative time. Clamp to 'just now'."
+    },
+    {
+      "id": "us-numeric-date",
+      "regex": "\\b\\d{1,2}/\\d{1,2}/\\d{2,4}\\b",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "mm/dd/yyyy or dd/mm/yyyy. Use 'Thu 15 Oct'."
+    },
+    {
+      "id": "us-long-date",
+      "regex": "\\b(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2}\\b",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "US long date ('Sunday, October 18'). Use 'Sun 18 Oct'."
+    },
+    {
+      "id": "library-snapshot",
+      "regex": "Library snapshot",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Internal snapshot label with a UUID (PlanCompositionEditor)."
+    },
+    {
+      "id": "percent",
+      "regex": "\\d+(?:\\.\\d+)?\\s?%",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "No % scores, adherence or completion rates."
+    },
+    {
+      "id": "streak",
+      "regex": "\\bstreaks?\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "No streaks (§1.5)."
+    },
+    {
+      "id": "banned-figma-claims",
+      "regex": "Live Sync|Dropout Risk|Photo Proof|Priority Trainer Queue|Day Streak|Compliance",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Banned Figma elements (§1.5)."
+    },
+    {
+      "id": "dev-copy",
+      "regex": "mvp\\.v2|No gamification|Selected role|\\bdeterministic\\b|outside FitBud|Trainee daily execution|LOCAL_DEV_ERROR|Invalid datetime|\\[object Object\\]|\\bundefined\\b|\\bNaN\\b|\\bnull\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Developer and internal copy leaking into the UI."
+    },
+    {
+      "id": "help-and-support",
+      "regex": "Help\\s*&\\s*Support",
+      "flags": "",
+      "scope": "both",
+      "severity": "warn",
+      "why": "The guide labels the support entry 'Help' (mailto tech@thefitbud.com). Check it against the screen spec."
+    },
+    {
+      "id": "absurd-kcal",
+      "regex": "\\b\\d{1,3}(?:,\\d{2,3}){2,}\\s?kcal\\b|\\b\\d{5,}\\s?kcal\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Unscaled nutrient (400000000 kcal; NUTRIENT_SCALE = 1e6)."
+    },
+    {
+      "id": "absurd-minutes",
+      "regex": "\\b\\d{4,}\\s?min\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Unbounded duration (29068 min)."
+    },
+    {
+      "id": "lowercase-demo-name",
+      "regex": "(?<![\\w.@/-])(?:rahul|priya|rohan|meera|sneha|vikram|aarav|deepak|farhan|ishita|kavya|nikhil|lakshmi|anita)(?![\\w.@-])",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "Name not title-cased ('ishita pushoff', 'rahul coach'). Case-sensitive. Emails are excluded by the look-arounds."
+    },
+    {
+      "id": "sent-claim",
+      "regex": "\\bSent on WhatsApp\\b|\\bWhatsApp sent\\b|\\bMessage sent\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "FitBud never knows a wa.me message was sent. It says 'Opened WhatsApp'."
+    },
+    {
+      "id": "24h-time",
+      "regex": "\\b(?:[01]?\\d|2[0-3]):[0-5]\\d\\b(?!\\s?(?:am|pm|AM|PM))",
+      "flags": "",
+      "scope": "both",
+      "severity": "warn",
+      "why": "Times are 'h:mm am/pm'. 24 h values appear in some guide AC (quiet hours); see BATCHES.md Spec questions."
+    }
+  ],
+  "roleChecks": [
+    {
+      "id": "manual-refresh-button",
+      "scope": "mobile",
+      "locator": "getByRole('button', { name: /^\\s*refresh\\s*$/i })",
+      "expectCount": 0,
+      "severity": "error",
+      "why": "Mobile lists use pull-to-refresh (Screen onRefresh), never a Refresh button."
+    },
+    {
+      "id": "manual-refresh-button-web-lists",
+      "scope": "web",
+      "locator": "getByRole('button', { name: /^\\s*refresh\\s*$/i })",
+      "expectCount": 0,
+      "severity": "warn",
+      "why": "The web check-in and history lists had manual Refresh buttons. Realtime is a refetch hint (TW-04 §7). Check it against the screen spec."
+    }
+  ]
+}
