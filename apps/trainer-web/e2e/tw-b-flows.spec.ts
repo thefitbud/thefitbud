@@ -150,9 +150,9 @@ test.describe("TW-B roster + invite", () => {
     await page.getByTestId("screen-TW-08").waitFor({ state: "visible" });
     await expect(page.getByText(/Anita/i).first()).toBeVisible();
     await expect(page.getByText(/Invited/i).first()).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: /remind on whatsapp/i }),
-    ).toBeVisible();
+    const remind = page.getByRole("link", { name: /remind on whatsapp/i });
+    await expect(remind).toBeVisible();
+    await expect(remind).toHaveAttribute("href", /wa\.me\/919876501111/);
     await expect(
       page.getByRole("button", { name: /copy new link/i }),
     ).toBeVisible();
