@@ -337,3 +337,11 @@ These are listed so agents don't silently pick one side. When your batch touches
 18. Web Needs attention = rows (one per client); cards elsewhere per C-15.
 19. Logo: Honest Week four-dot mark from `packages/brand/logo/mark.svg` everywhere (web shell, sign-in, mobile).
 20. sneha.review is trainee-only: fix seed/API so she has no trainer role; trainee-only accounts must never see "Choose mode" or trainer web.
+
+## Approved visual target (18 Oct, founder-approved)
+docs/spec/mockups/ is the binding visual target (png/ + html/ + DESIGN-NOTES.md). Where a mockup and a screen file differ in layout/styling, the mockup wins; content rules (product rules, banned strings) still apply. Founder picks:
+21. Navy sidebar on trainer web (02, not 02c).
+22. Home heading "Today" (no greeting; 02b is rejected).
+23. Keep "Recent activity" feed on Home.
+24. Add a "tinted" button variant (lavender) for repeated per-row/per-card actions; still one filled primary per card/screen.
+25. Retitle demo seed people to realistic names (Rohan Mehta, Aarav Shah, Rahul Verma, etc., as in mockups).

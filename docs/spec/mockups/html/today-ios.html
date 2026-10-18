@@ -1,0 +1,205 @@
+<!doctype html><html lang="en-IN"><head><meta charset="utf-8"><title>FitBud · Today (iOS)</title><link rel="stylesheet" href="tokens.css"><style>
+  body { background: #fff; }
+  .m { color: var(--ink-700); }
+  .wrap { padding: 0 16px 120px; }
+  .appbar { display: flex; align-items: center; justify-content: space-between; height: 48px; }
+  .appbar .ttl { font-size: 15px; font-weight: 600; color: var(--ink-500); }
+  .appbar .ttl b { color: var(--navy); font-weight: 700; }
+  .appbar .r { display: flex; gap: 4px; }
+  .iconbtn { position: relative; width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: var(--ink-700); }
+  .iconbtn svg.ic { width: 22px; height: 22px; }
+  .iconbtn .ud { position: absolute; top: 10px; right: 11px; width: 9px; height: 9px; border-radius: 50%; background: var(--indigo); box-shadow: 0 0 0 2px var(--page-mobile); }
+  .sec-h { display: flex; align-items: center; justify-content: space-between; margin: 24px 4px 10px; }
+  .sec-h a { font-size: 14px; font-weight: 600; color: var(--indigo); display: inline-flex; align-items: center; gap: 2px; }
+  .sec-h a svg.ic { width: 16px; height: 16px; }
+</style>
+</head>
+<body><div class="phone ios m"><div class="sb" data-chrome><span class="time">7:30</span><span class="island"></span><span class="icons"><svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3.2" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3.2" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3.2" height="12" rx="1" fill="currentColor"/></svg><svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 2.3c2.4 0 4.6.9 6.3 2.5l1.2-1.3A10.6 10.6 0 0 0 8.5.5 10.6 10.6 0 0 0 1 3.5l1.2 1.3a9 9 0 0 1 6.3-2.5Z" fill="currentColor"/><path d="M8.5 5.8c1.5 0 2.8.5 3.9 1.5l1.2-1.3a7.4 7.4 0 0 0-10.2 0l1.2 1.3c1-1 2.4-1.5 3.9-1.5Z" fill="currentColor"/><path d="M8.5 9.2c.6 0 1.1.2 1.5.6L8.5 11.5 7 9.8c.4-.4.9-.6 1.5-.6Z" fill="currentColor"/></svg><svg width="27" height="13" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2" fill="currentColor"/><path d="M25 4.5v4c.8-.3 1.4-1.1 1.4-2s-.6-1.7-1.4-2Z" fill="currentColor" opacity=".45"/></svg></span></div><div class="scroll" style="padding-top:54px"><style>
+  .greet { margin: 6px 4px 16px; }
+  .greet p { font-size: 16px; line-height: 22px; color: var(--ink-500); margin-top: 2px; }
+  .strip { padding: 12px 10px 12px; }
+  .strip-h { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; }
+  .strip-h span { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .strip-h .nv { display: flex; gap: 2px; }
+  .strip-h .nv b { width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: var(--ink-500); }
+  .strip-h .nv b svg.ic { width: 18px; height: 18px; }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .d { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0 8px; border-radius: 14px; }
+  .d .w { font-size: 12px; font-weight: 600; color: var(--ink-500); }
+  .d .n { font-size: 17px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; line-height: 22px; }
+  .d .s { width: 6px; height: 6px; border-radius: 50%; background: var(--navy); }
+  .d .s.open { background: none; box-shadow: inset 0 0 0 1.5px var(--ink-500); }
+  .d .s.rest { width: 8px; height: 2px; border-radius: 1px; background: var(--ink-400); margin: 2px 0; }
+  .d.on { background: var(--indigo); box-shadow: 0 4px 10px -2px rgb(69 39 198 / 40%); }
+  .d.on .w, .d.on .n { color: #fff; }
+  .d.on .s { background: #fff; opacity: .55; box-shadow: none; }
+  .hero { margin-top: 12px; border-radius: 22px; padding: 18px 18px 16px; color: #fff; background: radial-gradient(140% 120% at 100% 0%, #3B2A9A 0%, var(--navy) 55%); box-shadow: 0 10px 24px -10px rgb(26 18 72 / 55%); position: relative; overflow: hidden; }
+  .hero::after { content: ""; position: absolute; right: -40px; top: -40px; width: 160px; height: 160px; border-radius: 50%; border: 22px solid rgb(255 255 255 / 4%); }
+  .hero .eb { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 8px; border-radius: 13px; background: rgb(255 255 255 / 12%); font-size: 13px; font-weight: 600; color: #fff; }
+  .hero .eb svg.ic { width: 15px; height: 15px; }
+  .hero h2 { font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: -0.015em; margin-top: 12px; }
+  .hero .items { margin-top: 6px; font-size: 16px; line-height: 24px; color: rgb(255 255 255 / 84%); }
+  .hero .kc { margin-top: 10px; display: flex; gap: 14px; font-size: 14px; color: rgb(255 255 255 / 72%); font-variant-numeric: tabular-nums; }
+  .hero .kc b { color: #fff; font-weight: 700; }
+  .hero .btns { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; position: relative; z-index: 1; }
+  .hero .mbtn.light { width: 100%; background: #fff; color: var(--navy); }
+  .hero .mbtn.ghost { width: 100%; height: 44px; background: none; color: #fff; }
+  .wo { padding: 16px; }
+  .wo-top { display: flex; align-items: center; justify-content: space-between; }
+  .wo h3 { margin-top: 10px; }
+  .wo .sub { font-size: 14px; line-height: 20px; color: var(--ink-500); margin-top: 2px; }
+  .ex { margin: 12px 0 14px; border-top: 1px solid var(--border); }
+  .ex div { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 16px; line-height: 22px; color: var(--ink-700); }
+  .ex div span { font-size: 14px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
+  .ex div.more { color: var(--ink-500); font-size: 14px; border-bottom: 0; padding-bottom: 0; }
+  .wo .acts { display: flex; gap: 8px; align-items: center; }
+  .nutri { padding: 16px; }
+  .rings { display: flex; align-items: center; gap: 14px; }
+  .big-ring { position: relative; width: 112px; height: 112px; flex: none; }
+  .big-ring svg, .sm-ring svg { transform: rotate(-90deg); display: block; }
+  .big-ring .c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .big-ring .c b { font-size: 24px; line-height: 28px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .big-ring .c span { font-size: 12px; line-height: 16px; color: var(--ink-500); font-weight: 500; }
+  .smalls { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .sm { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .sm-ring { width: 52px; height: 52px; }
+  .sm b { font-size: 14px; line-height: 18px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sm span { font-size: 12px; line-height: 14px; color: var(--ink-500); font-weight: 500; margin-top: -4px; }
+  .meals-h { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 2px; }
+  .meal { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); }
+  .meal:first-of-type { border-top: 0; }
+  .meal .mi { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--page-mobile); color: var(--ink-500); }
+  .meal .mi svg.ic { width: 20px; height: 20px; }
+  .meal.logged .mi { background: var(--pos-bg); color: var(--pos); }
+  .meal.next .mi { background: var(--lavender); color: var(--indigo); }
+  .meal .nm { font-size: 16px; line-height: 22px; font-weight: 600; color: var(--navy); }
+  .meal .nm small { font-size: 14px; font-weight: 500; color: var(--ink-500); margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .meal .it { font-size: 14px; line-height: 20px; color: var(--ink-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meal .rt { text-align: right; }
+  .meal .rt .k { font-size: 14px; font-weight: 600; color: var(--ink-700); font-variant-numeric: tabular-nums; }
+  .meal .rt .st { margin-top: 3px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .meal .rt .st svg.ic { width: 13px; height: 13px; stroke-width: 2; }
+  .st.pos { color: var(--pos); } .st.sel { color: var(--indigo); } .st.neu { color: var(--ink-500); }
+  .wkc { padding: 16px; }
+  .dots { display: grid; grid-template-columns: repeat(7, 1fr); margin: 4px 0 14px; }
+  .dots div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-500); }
+  .dots i { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .dots i.done { background: var(--navy); color: #fff; }
+  .dots i.part { background: conic-gradient(var(--navy) 0 50%, var(--lavender) 50% 100%); }
+  .dots i.rest::before { content: ""; width: 10px; height: 2px; border-radius: 1px; background: var(--ink-400); }
+  .dots i.today { box-shadow: inset 0 0 0 2px var(--indigo); }
+  .dots i svg.ic { width: 14px; height: 14px; stroke-width: 2.5; }
+  .counts { display: flex; gap: 10px; }
+  .counts div { flex: 1; padding: 10px 12px; border-radius: 14px; background: var(--page-mobile); }
+  .counts b { display: block; font-size: 20px; line-height: 26px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .counts b small { font-size: 14px; font-weight: 500; color: var(--ink-500); }
+  .counts span { font-size: 14px; color: var(--ink-500); }
+  .coach { padding: 16px; }
+  .coach .who { display: flex; align-items: center; gap: 10px; }
+  .coach .who b { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .coach .who span { font-size: 12px; color: var(--ink-500); display: block; }
+  .coach .ud2 { width: 8px; height: 8px; border-radius: 50%; background: var(--indigo); margin-left: auto; }
+  .coach p { font-size: 16px; line-height: 24px; color: var(--ink-700); margin-top: 10px; }
+  .coach .ctx { margin-top: 10px; font-size: 14px; color: var(--indigo); font-weight: 600; display: inline-flex; gap: 4px; align-items: center; }
+  .signal { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-top: 10px; font-size: 14px; color: var(--ink-700); }
+  .signal svg.ic { width: 18px; height: 18px; color: var(--pos); }
+</style>
+<div class="wrap">
+  <div class="appbar">
+    <div class="ttl"><b>Today</b> · Sun 18 Oct</div>
+    <div class="r">
+      <span class="iconbtn" aria-label="All changes saved"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 15-5.5 5.5L9 18"/><path d="M5.516 16.07A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 3.501 7.327"/></svg></span>
+      <span class="iconbtn" aria-label="Notifications, 1 unread"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg><span class="ud"></span></span>
+    </div>
+  </div>
+  <div class="greet"><h1 class="m-display">Good morning, Aarav</h1><p>Here's your day.</p></div>
+
+  <div class="mcard strip">
+    <div class="strip-h"><span>Mon 12 – Sun 18 Oct</span><span class="nv"><b aria-label="Previous week"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></b><b aria-label="Next week"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></b></span></div>
+    <div class="days">
+      <div class="d"><span class="w">Mon</span><span class="n">12</span><span class="s"></span></div>
+      <div class="d"><span class="w">Tue</span><span class="n">13</span><span class="s"></span></div>
+      <div class="d"><span class="w">Wed</span><span class="n">14</span><span class="s"></span></div>
+      <div class="d"><span class="w">Thu</span><span class="n">15</span><span class="s open"></span></div>
+      <div class="d"><span class="w">Fri</span><span class="n">16</span><span class="s"></span></div>
+      <div class="d"><span class="w">Sat</span><span class="n">17</span><span class="s open"></span></div>
+      <div class="d on"><span class="w">Sun</span><span class="n">18</span><span class="s"></span></div>
+    </div>
+  </div>
+
+  <section class="hero">
+    <span class="eb"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>Next up · in 30 min</span>
+    <h2>Breakfast · 8:00 am</h2>
+    <div class="items">Vegetable poha, 1 plate · Curd, 1 katori</div>
+    <div class="kc"><span><b>420</b> kcal</span><span>P <b>16</b> g</span><span>C <b>62</b> g</span><span>F <b>12</b> g</span></div>
+    <div class="btns"><button class="mbtn light"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Eaten as planned</button><button class="mbtn ghost">Something different</button></div>
+  </section>
+
+  <div class="sec-h"><h2 class="m-h3">Today's workout</h2><a href="#">See workout<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a></div>
+  <section class="mcard wo">
+    <div class="wo-top"><span class="chip neu"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Planned · 6:30 pm</span><span class="m-cap muted">Week 4 of 8</span></div>
+    <h3 class="m-h2">Lower body B</h3>
+    <div class="sub">6 exercises · about 50 min</div>
+    <div class="ex">
+      <div>Goblet squat<span>3 × 12 · 12 kg</span></div>
+      <div>Romanian deadlift<span>3 × 10 · 20 kg</span></div>
+      <div>Walking lunges<span>3 × 10 each leg</span></div>
+      <div class="more">+ 3 more exercises</div>
+    </div>
+    <button class="mbtn primary block"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z"/><circle cx="12" cy="12" r="10"/></svg>Start workout</button>
+  </section>
+
+  <div class="sec-h"><h2 class="m-h3">Nutrition</h2><a href="#">Diet<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a></div>
+  <section class="mcard nutri">
+    <div class="rings">
+      <div class="big-ring">
+        <svg width="112" height="112" viewBox="0 0 112 112"><circle cx="56" cy="56" r="48" fill="none" stroke="var(--ring-track)" stroke-width="10"/><circle cx="56" cy="56" r="48" fill="none" stroke="var(--ring-kcal)" stroke-width="10" stroke-linecap="round" stroke-dasharray="8.2 302"/></svg>
+        <div class="c"><b>50</b><span>of 1,850 kcal</span></div>
+      </div>
+      <div class="smalls">
+        <div class="sm"><div class="sm-ring"><svg width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="21" fill="none" stroke="var(--ring-track)" stroke-width="7"/><circle cx="26" cy="26" r="21" fill="none" stroke="var(--ring-protein)" stroke-width="7" stroke-linecap="round" stroke-dasharray="2.4 132"/></svg></div><b>2 / 110 g</b><span>Protein</span></div>
+        <div class="sm"><div class="sm-ring"><svg width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="21" fill="none" stroke="var(--ring-track)" stroke-width="7"/><circle cx="26" cy="26" r="21" fill="none" stroke="var(--ring-carbs)" stroke-width="7" stroke-linecap="round" stroke-dasharray="1.9 132"/></svg></div><b>3 / 210 g</b><span>Carbs</span></div>
+        <div class="sm"><div class="sm-ring"><svg width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="21" fill="none" stroke="var(--ring-track)" stroke-width="7"/><circle cx="26" cy="26" r="21" fill="none" stroke="var(--ring-fat)" stroke-width="7" stroke-linecap="round" stroke-dasharray="8.8 132"/></svg></div><b>4 / 60 g</b><span>Fat</span></div>
+      </div>
+    </div>
+    <div class="meals-h"><span class="m-label strong">Meals</span><span class="m-cap muted">1 of 5 logged</span></div>
+    <div class="meal logged"><span class="mi"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/></svg></span><div style="min-width:0"><div class="nm">Early morning</div><div class="it">6:30 am · Soaked almonds</div></div><div class="rt"><div class="k">50 kcal</div><div class="st pos"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Logged</div></div></div>
+    <div class="meal next"><span class="mi"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg></span><div style="min-width:0"><div class="nm">Breakfast</div><div class="it">8:00 am · Poha, curd</div></div><div class="rt"><div class="k">420 kcal</div><div class="st sel"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Up next</div></div></div>
+    <div class="meal"><span class="mi"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span><div style="min-width:0"><div class="nm">Lunch</div><div class="it">1:00 pm · Roti, dal, sabzi</div></div><div class="rt"><div class="k">560 kcal</div><div class="st neu">Later</div></div></div>
+    <div class="meal"><span class="mi"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/></svg></span><div style="min-width:0"><div class="nm">Evening snack</div><div class="it">5:00 pm · Roasted chana, chai</div></div><div class="rt"><div class="k">180 kcal</div><div class="st neu">Later</div></div></div>
+    <div class="meal"><span class="mi"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg></span><div style="min-width:0"><div class="nm">Dinner</div><div class="it">8:00 pm · Paneer bhurji, roti</div></div><div class="rt"><div class="k">640 kcal</div><div class="st neu">Later</div></div></div>
+  </section>
+
+  <div class="sec-h"><h2 class="m-h3">This week</h2></div>
+  <section class="mcard wkc">
+    <div class="dots">
+      <div><i class="done"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></i>M</div>
+      <div><i class="rest"></i>T</div>
+      <div><i class="done"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></i>W</div>
+      <div><i class="rest"></i>T</div>
+      <div><i class="done"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></i>F</div>
+      <div><i class="rest"></i>S</div>
+      <div><i class="today"></i>S</div>
+    </div>
+    <div class="counts">
+      <div><b>3 <small>of 4</small></b><span>workouts</span></div>
+      <div><b>29 <small>of 31</small></b><span>meals logged</span></div>
+    </div>
+  </section>
+
+  <div class="sec-h"><h2 class="m-h3">From your coach</h2></div>
+  <section class="mcard coach">
+    <div class="who"><span class="av md c1">RV</span><div><b>From Rahul</b><span>Yesterday, 8:10 pm</span></div><span class="ud2" aria-label="Unread"></span></div>
+    <p>Lovely week, Aarav. If the last set of goblet squats feels easy today, go up to 14 kg.</p>
+    <a class="ctx" href="#">About: Lower body B<svg class="ic" style="width:16px;height:16px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a>
+  </section>
+  <div class="mcard signal"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/></svg>Rahul reviewed your check-in · Tue</div>
+</div>
+</div><nav class="tabbar" aria-label="Tabs">
+  <a class="tab on" href="#"><span class="pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Today</a>
+  <a class="tab" href="#"><span class="pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z"/><path d="m2.5 21.5 1.4-1.4"/><path d="m20.1 3.9 1.4-1.4"/><path d="M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z"/><path d="m9.6 14.4 4.8-4.8"/></svg></span>Workout</a>
+  <a class="tab" href="#"><span class="pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></span>Diet</a>
+  <a class="tab" href="#"><span class="pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg></span>Progress</a>
+  <a class="tab" href="#"><span class="pill"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span>More</a>
+</nav>
+<div class="home-ind" data-chrome></div></div></body></html>
