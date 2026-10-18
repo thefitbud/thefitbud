@@ -16,5 +16,10 @@ export function useOnline(): boolean {
     };
   }, []);
 
+  useEffect(() => {
+    document.body.classList.toggle("is-offline", !online);
+    return () => document.body.classList.remove("is-offline");
+  }, [online]);
+
   return online;
 }

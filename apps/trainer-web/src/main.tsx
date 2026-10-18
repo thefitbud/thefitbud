@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { ConfigProvider } from "./lib/config";
 import "./styles.css";
+import "./styles/shell.css";
 import "./styles/home.css";
 import "./styles/clients.css";
 import "./styles/workspace.css";

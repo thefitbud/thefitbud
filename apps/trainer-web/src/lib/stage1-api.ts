@@ -39,10 +39,28 @@ export type Stage1ApiClient = FitBudApiClient & {
   }>;
   updateTrainerProfile: (body: UpdateTrainerProfileRequest) => Promise<unknown>;
   getAttentionGroups: () => Promise<import("@fitbud/contracts").AttentionGroupsResponse>;
+  getActivityFeed: (query?: {
+    cursor?: string;
+    limit?: number;
+    rid?: string;
+    since?: string;
+    types?: string;
+  }) => Promise<{
+    events: Array<{
+      id: string;
+      traineeDisplayName: string | null;
+      summary: string;
+      occurredAt: string;
+      traineeLocalTime: string | null;
+    }>;
+    nextCursor: string | null;
+  }>;
   getReengagementCandidates: () => Promise<
     import("@fitbud/contracts").ReengagementCandidatesResponse
   >;
-  listCoachAsks: (query?: { status?: string }) => Promise<unknown>;
+  listCoachAsks: (query?: { status?: string }) => Promise<{
+    items: import("@fitbud/contracts").CoachAsk[];
+  }>;
   answerCoachAsk: (
     askId: string,
     body: AnswerCoachAskRequest,

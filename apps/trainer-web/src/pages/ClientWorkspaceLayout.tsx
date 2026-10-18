@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, Outlet, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ClientWorkspace } from "@fitbud/contracts";
+import { ForbiddenState } from "../components/StatePanels";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader";
 import {
   WorkspaceModals,
@@ -18,6 +19,7 @@ export function ClientWorkspaceLayout() {
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
   const [submittedCheckins, setSubmittedCheckins] = useState(0);
   const [modal, setModal] = useState<WorkspaceModal>(null);
 
@@ -34,6 +36,7 @@ export function ClientWorkspaceLayout() {
     setWorkspaceLoading(true);
     setWorkspaceError(null);
     setNotFound(false);
+    setForbidden(false);
 
     void (async () => {
       try {
@@ -53,7 +56,10 @@ export function ClientWorkspaceLayout() {
       } catch (err) {
         if (cancelled) return;
         setWorkspace(null);
-        if (err instanceof ApiClientError && err.status === 404) {
+        if (err instanceof ApiClientError && err.status === 403) {
+          setForbidden(true);
+          setWorkspaceError(null);
+        } else if (err instanceof ApiClientError && err.status === 404) {
           setNotFound(true);
           setWorkspaceError(null);
         } else {
@@ -73,12 +79,25 @@ export function ClientWorkspaceLayout() {
     };
   }, [relationshipId, refreshEpoch]);
 
+  if (forbidden) {
+    return (
+      <section className="page centered-status" data-testid="screen-TW-33">
+        <ForbiddenState />
+      </section>
+    );
+  }
+
   if (notFound) {
     return (
-      <section className="page centered-status">
-        <h1>Client not found</h1>
-        <p className="lede">This coaching relationship doesn&apos;t exist or you don&apos;t have access.</p>
-        <Link className="button-primary" to="/clients">Back to clients</Link>
+      <section className="page centered-status" data-testid="screen-TW-33">
+        <h1>We couldn&apos;t find that page</h1>
+        <p className="lede">
+          This coaching relationship doesn&apos;t exist or you don&apos;t have
+          access.
+        </p>
+        <Link className="button-primary" to="/">
+          Home
+        </Link>
       </section>
     );
   }

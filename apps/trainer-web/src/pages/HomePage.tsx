@@ -1,10 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import {
+  CalendarDays,
+  ClipboardCheck,
+  Info,
+  OctagonAlert,
+  Sun,
+} from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   formatCivilDate,
+  formatInstant,
   formatLocalDate,
-  formatPersonName,
+  formatRelative,
   labelFor,
 } from "@fitbud/core";
 import type {
@@ -12,33 +27,70 @@ import type {
   CoachAsk,
   ReengagementCandidatesResponse,
   SubscriptionAttentionItem,
+  TrainerCheckinInboxItem,
 } from "@fitbud/contracts";
-
-type AttentionGroup = AttentionGroupsResponse["groups"][number];
-type ReengagementCandidate =
-  ReengagementCandidatesResponse["items"][number];
 import { useAuth } from "../auth/AuthProvider";
+import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
+import { CoachAskDrawer } from "../components/CoachAskDrawer";
+import { OverflowMenu } from "../components/OverflowMenu";
+import { StatusChip } from "../components/StatusChip";
 import { ErrorState, LoadingBlock } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
-import { formatAgeMinutes } from "../lib/format";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 
+type AttentionGroup = AttentionGroupsResponse["groups"][number];
+type AttentionItem = AttentionGroup["items"][number];
+type ReengagementCandidate = ReengagementCandidatesResponse["items"][number];
+type ActivityEvent = {
+  id: string;
+  traineeDisplayName: string | null;
+  summary: string;
+  occurredAt: string;
+  traineeLocalTime: string | null;
+};
+
 const ATTENTION_CAP = 8;
+const SECTION_CAP = 5;
+
+type FilterKey = "all" | "attention" | "checkins" | "renewals";
 
 function severityRank(severity: "critical" | "attention"): number {
   return severity === "critical" ? 0 : 1;
 }
 
-function pickPrimaryItem(group: AttentionGroup) {
-  const sorted = [...group.items].sort((a, b) => {
+function pickPrimaryItem(group: AttentionGroup): AttentionItem | undefined {
+  const open = group.items.filter(
+    (i) => i.status === "detected" || i.status === "active",
+  );
+  const pool = open.length > 0 ? open : group.items;
+  return [...pool].sort((a, b) => {
     const sev = severityRank(a.severity) - severityRank(b.severity);
     if (sev !== 0) return sev;
     return b.ageMinutes - a.ageMinutes;
-  });
-  return sorted[0];
+  })[0];
+}
+
+function oldestOpenAge(group: AttentionGroup): number {
+  const open = group.items.filter(
+    (i) => i.status === "detected" || i.status === "active",
+  );
+  if (open.length === 0) return group.items[0]?.ageMinutes ?? 0;
+  return Math.max(...open.map((i) => i.ageMinutes));
+}
+
+/** Mockup age copy: "since 5 d" / "since 1 h". */
+function formatSinceAge(ageMinutes: number): string {
+  const m = Math.max(0, ageMinutes);
+  if (m < 60) return `since ${m} min`;
+  if (m < 24 * 60) {
+    const h = Math.round(m / 60);
+    return `since ${h} h`;
+  }
+  const d = Math.round(m / (24 * 60));
+  return `since ${d} d`;
 }
 
 function initials(name: string): string {
@@ -50,6 +102,30 @@ function initials(name: string): string {
     .join("");
 }
 
+function avatarClass(name: string): string {
+  const n = name.charCodeAt(0) + (name.charCodeAt(1) || 0);
+  return `home-av c${(n % 8) + 1}`;
+}
+
+function issueLine(group: AttentionGroup, primary: AttentionItem): {
+  text: string;
+  more: number;
+  title: string;
+} {
+  const open = group.items.filter(
+    (i) => i.status === "detected" || i.status === "active",
+  );
+  const items = open.length > 0 ? open : group.items;
+  const text =
+    primary.summary?.trim() ||
+    labelFor("exception_type", primary.type);
+  const more = Math.max(0, items.length - 1);
+  const title = items
+    .map((i) => i.summary || labelFor("exception_type", i.type))
+    .join("; ");
+  return { text, more, title };
+}
+
 export function HomePage() {
   const { me } = useAuth();
   const timeZone =
@@ -57,49 +133,165 @@ export function HomePage() {
     Intl.DateTimeFormat().resolvedOptions().timeZone ??
     "UTC";
   const todayLabel = formatCivilDate(formatLocalDate(new Date(), timeZone));
-  const trainerFullName = formatPersonName(me?.trainerProfile?.displayName);
-  const trainerName = trainerFullName.split(/\s+/)[0] ?? trainerFullName;
   const [params, setParams] = useSearchParams();
   const drawerExceptionId = params.get("exception");
   const drawerAskId = params.get("ask");
+  const showAllParam = params.get("all") === "1";
+  const groupParam = params.get("group");
 
   const [groups, setGroups] = useState<AttentionGroup[]>([]);
   const [coachAsks, setCoachAsks] = useState<CoachAsk[]>([]);
   const [reengage, setReengage] = useState<ReengagementCandidate[]>([]);
   const [renewals, setRenewals] = useState<SubscriptionAttentionItem[]>([]);
+  const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [gettingStarted, setGettingStarted] = useState<
+    Array<{
+      id: string;
+      kind: "intake" | "invite";
+      name: string;
+      subtitle: string;
+      href?: string;
+      inviteId?: string;
+    }>
+  >([]);
   const [nameByRid, setNameByRid] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showAllAttention, setShowAllAttention] = useState(false);
+  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>(
+    {},
+  );
+  const [filter, setFilter] = useState<FilterKey>(
+    groupParam === "attention"
+      ? "attention"
+      : groupParam === "checkins"
+        ? "checkins"
+        : groupParam === "renewals"
+          ? "renewals"
+          : "all",
+  );
+  const [showAllAttention, setShowAllAttention] = useState(showAllParam);
+  const [reviewedOpen, setReviewedOpen] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(0);
+  const [toast, setToast] = useState<{
+    message: string;
+    undo?: () => void;
+  } | null>(null);
+  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const undoTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSectionErrors({});
+    const nextErrors: Record<string, string> = {};
     try {
-      const [attention, asks, candidates, renewalList, clients] =
-        await Promise.all([
-          stage1Api.getAttentionGroups(),
-          stage1Api.listCoachAsks({ status: "open" }) as Promise<{
-            items: CoachAsk[];
-          }>,
-          stage1Api.getReengagementCandidates(),
-          apiClient.listSubscriptionAttention(),
-          apiClient.listClients({ limit: 50 }),
-        ]);
-      setGroups(attention.groups);
-      setCoachAsks(asks.items);
-      setReengage(candidates.items);
-      setRenewals(renewalList.items);
-      const names = new Map<string, string>();
-      for (const row of clients.items) {
-        const rid = row.relationshipId;
-        const label = row.traineeDisplayName;
-        if (rid && label) names.set(rid, label);
+      const results = await Promise.allSettled([
+        stage1Api.getAttentionGroups(),
+        stage1Api.listCoachAsks({ status: "open" }) as Promise<{
+          items: CoachAsk[];
+        }>,
+        stage1Api.getReengagementCandidates(),
+        apiClient.listSubscriptionAttention(),
+        apiClient.listTrainerCheckinInbox(),
+        apiClient.listClients({ limit: 100 }),
+        apiClient.listInvitations(),
+        stage1Api.getActivityFeed({ limit: 8 }) as Promise<{
+          events: ActivityEvent[];
+        }>,
+      ]);
+
+      const attention =
+        results[0].status === "fulfilled" ? results[0].value : null;
+      if (!attention) {
+        nextErrors.attention = "Couldn't load needs attention";
+        setGroups([]);
+      } else {
+        setGroups(attention.groups);
       }
-      for (const g of attention.groups) {
-        names.set(g.relationshipId, g.traineeDisplayName);
+
+      if (results[1].status === "fulfilled") {
+        setCoachAsks(results[1].value.items);
+      } else {
+        nextErrors.asks = "Couldn't load asked-coach items";
+        setCoachAsks([]);
+      }
+
+      if (results[2].status === "fulfilled") {
+        setReengage(results[2].value.items);
+      } else {
+        setReengage([]);
+      }
+
+      if (results[3].status === "fulfilled") {
+        setRenewals(results[3].value.items);
+      } else {
+        nextErrors.renewals = "Couldn't load renewals";
+        setRenewals([]);
+      }
+
+      if (results[4].status === "fulfilled") {
+        setCheckins(
+          results[4].value.items.filter(
+            (i) => i.checkin.status === "submitted",
+          ),
+        );
+      } else {
+        nextErrors.checkins = "Couldn't load check-ins";
+        setCheckins([]);
+      }
+
+      const names = new Map<string, string>();
+      const started: typeof gettingStarted = [];
+      if (results[5].status === "fulfilled") {
+        for (const row of results[5].value.items) {
+          if (row.relationshipId && row.traineeDisplayName) {
+            names.set(row.relationshipId, row.traineeDisplayName);
+          }
+          if (row.status === "onboarding_submitted") {
+            started.push({
+              id: `intake-${row.relationshipId}`,
+              kind: "intake",
+              name: row.traineeDisplayName,
+              subtitle: "Intake submitted",
+              href: `/clients/${row.relationshipId}/onboarding`,
+            });
+          }
+        }
+      }
+      if (results[6].status === "fulfilled") {
+        for (const inv of results[6].value.items) {
+          if (inv.status !== "pending") continue;
+          started.push({
+            id: `invite-${inv.id}`,
+            kind: "invite",
+            name: inv.recipientDisplayName || inv.recipientEmail || "Invite",
+            subtitle: inv.createdAt
+              ? `Invite sent ${formatCivilDate(formatLocalDate(new Date(inv.createdAt), timeZone))} · not accepted yet`
+              : "Invite not accepted yet",
+            inviteId: inv.id,
+          });
+        }
+      }
+      setGettingStarted(started.slice(0, SECTION_CAP));
+
+      if (attention) {
+        for (const g of attention.groups) {
+          names.set(g.relationshipId, g.traineeDisplayName);
+        }
       }
       setNameByRid(names);
+
+      if (results[7].status === "fulfilled") {
+        setActivity(results[7].value.events.slice(0, 6));
+      } else {
+        setActivity([]);
+      }
+
+      setSectionErrors(nextErrors);
+      if (!attention && Object.keys(nextErrors).length > 0) {
+        setError("Could not load your home feed.");
+      }
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -109,7 +301,7 @@ export function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [timeZone]);
 
   useEffect(() => {
     void load();
@@ -119,38 +311,57 @@ export function HomePage() {
     void load();
   });
 
-  const sortedGroups = useMemo(() => {
-    return [...groups].sort((a, b) => {
-      const aItem = pickPrimaryItem(a);
-      const bItem = pickPrimaryItem(b);
-      if (!aItem || !bItem) return 0;
-      const sev = severityRank(aItem.severity) - severityRank(bItem.severity);
-      if (sev !== 0) return sev;
-      return bItem.ageMinutes - aItem.ageMinutes;
-    });
+  const openGroups = useMemo(() => {
+    return groups
+      .map((g) => ({
+        group: g,
+        primary: pickPrimaryItem(g),
+        openItems: g.items.filter(
+          (i) => i.status === "detected" || i.status === "active",
+        ),
+      }))
+      .filter((row) => row.primary && row.openItems.length > 0)
+      .sort((a, b) => {
+        const sev =
+          severityRank(a.primary!.severity) - severityRank(b.primary!.severity);
+        if (sev !== 0) return sev;
+        const age = oldestOpenAge(b.group) - oldestOpenAge(a.group);
+        if (age !== 0) return age;
+        return a.group.traineeDisplayName.localeCompare(
+          b.group.traineeDisplayName,
+        );
+      });
   }, [groups]);
 
-  const visibleGroups = showAllAttention
-    ? sortedGroups
-    : sortedGroups.slice(0, ATTENTION_CAP);
-
-  const acknowledgedGroups = useMemo(
+  const reviewedGroups = useMemo(
     () =>
       groups
         .map((g) => ({
           group: g,
-          items: g.items.filter(
-            (i: AttentionGroup["items"][number]) => i.status === "acknowledged",
-          ),
+          items: g.items.filter((i) => i.status === "acknowledged"),
         }))
         .filter((g) => g.items.length > 0),
     [groups],
   );
 
+  const visibleOpen = showAllAttention
+    ? openGroups
+    : openGroups.slice(0, ATTENTION_CAP);
+
   function openException(id: string) {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("exception", id);
+      next.delete("ask");
+      return next;
+    });
+  }
+
+  function openAsk(id: string) {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("ask", id);
+      next.delete("exception");
       return next;
     });
   }
@@ -164,218 +375,736 @@ export function HomePage() {
     });
   }
 
-  async function markAskAnswered(askId: string) {
-    await stage1Api.answerCoachAsk(askId, {}, createIdempotencyKey());
-    await load();
-    closeDrawer();
+  function showToast(message: string, undo?: () => void) {
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    setToast({ message, undo });
+    undoTimer.current = window.setTimeout(() => setToast(null), 5000);
   }
+
+  async function acknowledgeFromOverflow(
+    exceptionId: string,
+    relationshipId: string,
+  ) {
+    const key = createIdempotencyKey();
+    // Optimistic: delay POST 5s for Undo (TW-05).
+    let cancelled = false;
+    showToast("Marked reviewed", () => {
+      cancelled = true;
+      setToast(null);
+      void load();
+    });
+    // Move visually by refetch after delay unless undone
+    window.setTimeout(() => {
+      if (cancelled) return;
+      void apiClient
+        .acknowledgeException(exceptionId, { note: null }, key)
+        .then(() => load())
+        .catch(() => load());
+    }, 5000);
+    // Immediate optimistic UI: remove from open by soft-filtering locally
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.relationshipId !== relationshipId
+          ? g
+          : {
+              ...g,
+              items: g.items.map((i) =>
+                i.id === exceptionId
+                  ? { ...i, status: "acknowledged" as const }
+                  : i,
+              ),
+            },
+      ),
+    );
+  }
+
+  async function nudgeClient(relationshipId: string, exceptionId: string) {
+    try {
+      const detail = await apiClient.getException(exceptionId);
+      const activityType =
+        detail.sourceEntityType === "workout_assignment"
+          ? "workout"
+          : detail.sourceEntityType === "meal_assignment"
+            ? "meal"
+            : "checkin";
+      await apiClient.nudgeActivity(relationshipId, {
+        activityType,
+        activityId: detail.sourceEntityId,
+      });
+      showToast("Nudge queued");
+    } catch {
+      showToast("Could not nudge right now");
+    }
+  }
+
+  function onGridKey(ev: ReactKeyboardEvent<HTMLDivElement>) {
+    const max = visibleOpen.length - 1;
+    if (max < 0) return;
+    const key = ev.key.toLowerCase();
+    if (key === "arrowdown" || key === "j") {
+      ev.preventDefault();
+      setFocusIdx((i) => Math.min(max, i + 1));
+    } else if (key === "arrowup" || key === "k") {
+      ev.preventDefault();
+      setFocusIdx((i) => Math.max(0, i - 1));
+    } else if (key === "home") {
+      ev.preventDefault();
+      setFocusIdx(0);
+    } else if (key === "end") {
+      ev.preventDefault();
+      setFocusIdx(max);
+    } else if (key === "enter") {
+      ev.preventDefault();
+      const row = visibleOpen[focusIdx];
+      if (row?.primary) openException(row.primary.id);
+    } else if (key === "a") {
+      ev.preventDefault();
+      const row = visibleOpen[focusIdx];
+      if (row?.primary) {
+        void acknowledgeFromOverflow(row.primary.id, row.group.relationshipId);
+      }
+    } else if (key === "o") {
+      ev.preventDefault();
+      const row = visibleOpen[focusIdx];
+      if (row) {
+        window.location.assign(`/clients/${row.group.relationshipId}`);
+      }
+    } else if (key === "n") {
+      ev.preventDefault();
+      const row = visibleOpen[focusIdx];
+      if (row?.primary) {
+        void nudgeClient(row.group.relationshipId, row.primary.id);
+      }
+    } else if (key === "escape" && drawerExceptionId) {
+      closeDrawer();
+      rowRefs.current[focusIdx]?.focus();
+    }
+  }
+
+  useEffect(() => {
+    rowRefs.current[focusIdx]?.focus();
+  }, [focusIdx]);
+
+  const attentionCount = openGroups.length;
+  const checkinCount = checkins.length;
+  const renewalCount = renewals.length;
+  const firstNames = openGroups
+    .slice(0, 2)
+    .map((r) => r.group.traineeDisplayName.split(" ")[0])
+    .filter(Boolean);
+  const summary =
+    attentionCount === 0
+      ? "You're all caught up. Nothing needs your attention right now."
+      : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
+          firstNames.length
+            ? ` ${firstNames.join(" and ")} first.`
+            : ""
+        }`;
+
+  const showAttention = filter === "all" || filter === "attention";
+  const showCheckinsRail = filter === "all" || filter === "checkins";
+  const showRenewalsRail = filter === "all" || filter === "renewals";
 
   const allClear =
     !loading &&
     !error &&
-    sortedGroups.length === 0 &&
+    openGroups.length === 0 &&
     coachAsks.length === 0 &&
     reengage.length === 0 &&
-    renewals.length === 0;
+    renewals.length === 0 &&
+    checkins.length === 0 &&
+    gettingStarted.length === 0 &&
+    reviewedGroups.length === 0;
 
   return (
     <div className="home-triage" data-testid="screen-TW-04">
-      <header className="page-header">
+      <header className="home-hdr">
         <div>
-          <h1>Today</h1>
-          <p className="lede muted">{todayLabel}</p>
-          {trainerName ? (
-            <p className="muted">Hi, {trainerName}</p>
-          ) : null}
-          <p className="lede">
-            One row per client. Review the most important item first.
-          </p>
+          <div className="home-eyebrow">
+            <Sun size={14} strokeWidth={1.75} aria-hidden />
+            {todayLabel}
+          </div>
+          <h1 className="home-title">Today</h1>
+          <p className="home-summary">{summary}</p>
+        </div>
+        <div className="home-tiles" role="group" aria-label="Filter by">
+          <button
+            type="button"
+            className={`home-tile${filter === "attention" ? " is-active" : ""}`}
+            onClick={() =>
+              setFilter((f) => (f === "attention" ? "all" : "attention"))
+            }
+          >
+            <span
+              className="home-tile-icon"
+              style={{ background: "#FEF2F2", color: "#B91C1C" }}
+            >
+              <OctagonAlert size={18} strokeWidth={1.75} aria-hidden />
+            </span>
+            <span>
+              <span className="home-tile-lbl">Needs attention</span>
+              <span className="home-tile-num">{attentionCount}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`home-tile${filter === "checkins" ? " is-active" : ""}`}
+            onClick={() =>
+              setFilter((f) => (f === "checkins" ? "all" : "checkins"))
+            }
+          >
+            <span
+              className="home-tile-icon"
+              style={{ background: "#EFF6FF", color: "#1D4ED8" }}
+            >
+              <ClipboardCheck size={18} strokeWidth={1.75} aria-hidden />
+            </span>
+            <span>
+              <span className="home-tile-lbl">Check-ins to review</span>
+              <span className="home-tile-num">{checkinCount}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`home-tile${filter === "renewals" ? " is-active" : ""}`}
+            onClick={() =>
+              setFilter((f) => (f === "renewals" ? "all" : "renewals"))
+            }
+          >
+            <span
+              className="home-tile-icon"
+              style={{ background: "#FFFBEB", color: "#B45309" }}
+            >
+              <CalendarDays size={18} strokeWidth={1.75} aria-hidden />
+            </span>
+            <span>
+              <span className="home-tile-lbl">Renewals due</span>
+              <span className="home-tile-num">{renewalCount}</span>
+            </span>
+          </button>
         </div>
       </header>
 
-      {loading ? <LoadingBlock label="Loading needs attention…" /> : null}
+      {loading ? <LoadingBlock label="Loading…" /> : null}
       {error ? (
         <ErrorState message={error} onRetry={() => void load()} />
       ) : null}
 
       {allClear ? (
-        <div className="state-panel is-empty">
-          <h2>All clear</h2>
-          <p>No clients need you right now. Normal activity stays quiet.</p>
+        <div className="home-card" style={{ padding: 24 }}>
+          <h2 className="home-title" style={{ fontSize: 18 }}>
+            All clear
+          </h2>
+          <p className="home-summary">
+            You&apos;re all caught up. Nothing needs your attention right now.
+          </p>
           <Link className="button-primary" to="/clients/add">
             Invite a client
           </Link>
         </div>
       ) : null}
 
-      {sortedGroups.length > 0 ? (
-        <section aria-labelledby="needs-attention-heading">
-          <div className="section-head">
-            <h2 id="needs-attention-heading">Needs attention</h2>
-          </div>
-          <ul className="attention-rows" role="list">
-            {visibleGroups.map((group) => {
-              const primary = pickPrimaryItem(group);
-              if (!primary) return null;
-              const chip = `${primary.severity === "critical" ? "Critical" : "Attention"} · ${formatAgeMinutes(primary.ageMinutes)}`;
-              return (
-                <li key={group.relationshipId} className="attention-row">
-                  <span className="avatar" aria-hidden="true">
-                    {initials(group.traineeDisplayName)}
-                  </span>
-                  <div className="attention-row-main">
-                    <p className="attention-row-name">{group.traineeDisplayName}</p>
-                    <p className="attention-row-issue">
-                      {labelFor("exception_type", primary.type)}
-                    </p>
-                  </div>
-                  <span className={`severity-chip is-${primary.severity}`}>
-                    {chip}
-                  </span>
-                  <button
-                    type="button"
-                    className="button-primary button-compact"
-                    onClick={() => openException(primary.id)}
-                  >
-                    Review
+      <div className="home-grid">
+        <div className="home-col">
+          {showAttention && openGroups.length > 0 ? (
+            <section className="home-card" aria-labelledby="na">
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="na">Needs attention</h2>
+                  <span className="home-count">{attentionCount}</span>
+                </div>
+                <span
+                  className="home-sort"
+                  title="Sorted by severity, then how long it's been open."
+                >
+                  <Info size={14} strokeWidth={1.75} aria-hidden />
+                  Sorted by severity, then age
+                </span>
+              </div>
+              {sectionErrors.attention ? (
+                <p className="form-error" role="alert">
+                  {sectionErrors.attention} ·{" "}
+                  <button type="button" className="text-link" onClick={() => void load()}>
+                    Retry
                   </button>
-                </li>
-              );
-            })}
-          </ul>
-          {sortedGroups.length > ATTENTION_CAP && !showAllAttention ? (
-            <button
-              type="button"
-              className="text-link"
-              onClick={() => setShowAllAttention(true)}
-            >
-              View all ({sortedGroups.length})
-            </button>
+                </p>
+              ) : null}
+              <div
+                className="home-rows"
+                role="grid"
+                aria-label="Needs attention"
+                tabIndex={0}
+                onKeyDown={onGridKey}
+              >
+                {visibleOpen.map((row, idx) => {
+                  const { group, primary } = row;
+                  if (!primary) return null;
+                  const issue = issueLine(group, primary);
+                  const age = formatSinceAge(oldestOpenAge(group));
+                  const absTitle = `Open since ${formatRelative(
+                    new Date(
+                      Date.now() - oldestOpenAge(group) * 60_000,
+                    ).toISOString(),
+                  )}`;
+                  return (
+                    <div
+                      key={group.relationshipId}
+                      className={`home-row${focusIdx === idx ? " is-focused" : ""}`}
+                      role="row"
+                      tabIndex={-1}
+                      ref={(el) => {
+                        rowRefs.current[idx] = el;
+                      }}
+                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, open ${age.replace("since ", "")}. Review button.`}
+                    >
+                      <div className="home-who" role="gridcell">
+                        <span className={avatarClass(group.traineeDisplayName)}>
+                          {initials(group.traineeDisplayName)}
+                        </span>
+                        <b>{group.traineeDisplayName}</b>
+                      </div>
+                      <div
+                        className="home-issue"
+                        role="gridcell"
+                        title={issue.title}
+                      >
+                        <span className="home-issue-txt">{issue.text}</span>
+                        {issue.more > 0 ? (
+                          <span className="home-more">+{issue.more} more</span>
+                        ) : null}
+                      </div>
+                      <div role="gridcell">
+                        <StatusChip kind="severity" value={primary.severity} />
+                      </div>
+                      <div className="home-age" role="gridcell" title={absTitle}>
+                        {age}
+                      </div>
+                      <div role="gridcell">
+                        <Button
+                          variant="tinted"
+                          className="button-sm"
+                          onClick={() => openException(primary.id)}
+                        >
+                          Review
+                        </Button>
+                      </div>
+                      <div role="gridcell">
+                        <OverflowMenu
+                          label={`More actions for ${group.traineeDisplayName}`}
+                          items={[
+                            {
+                              id: "ack",
+                              label: "Acknowledge",
+                              onSelect: () =>
+                                void acknowledgeFromOverflow(
+                                  primary.id,
+                                  group.relationshipId,
+                                ),
+                            },
+                            {
+                              id: "nudge",
+                              label: "Nudge",
+                              onSelect: () =>
+                                void nudgeClient(
+                                  group.relationshipId,
+                                  primary.id,
+                                ),
+                            },
+                            {
+                              id: "open",
+                              label: "Open client",
+                              onSelect: () =>
+                                window.location.assign(
+                                  `/clients/${group.relationshipId}`,
+                                ),
+                            },
+                            {
+                              id: "wa",
+                              label: "WhatsApp",
+                              onSelect: () => {
+                                const digits = (
+                                  group.clientWhatsappE164 ?? ""
+                                ).replace(/\D/g, "");
+                                if (!digits) {
+                                  showToast("No WhatsApp number on file");
+                                  return;
+                                }
+                                window.open(
+                                  `https://wa.me/${digits}`,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
+                              },
+                            },
+                          ]}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {openGroups.length > ATTENTION_CAP ? (
+                <div className="home-foot">
+                  <span className="muted">
+                    Showing {visibleOpen.length} of {openGroups.length} clients
+                  </span>
+                  {!showAllAttention ? (
+                    <button
+                      type="button"
+                      className="link"
+                      onClick={() => setShowAllAttention(true)}
+                    >
+                      View all ({openGroups.length}) →
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
           ) : null}
-        </section>
-      ) : null}
 
-      {acknowledgedGroups.length > 0 ? (
-        <section aria-labelledby="ack-heading">
-          <h2 id="ack-heading">Acknowledged</h2>
-          <ul className="attention-rows">
-            {acknowledgedGroups.map(({ group, items }) => (
-              <li key={group.relationshipId} className="attention-row is-muted">
-                <span className="avatar">{initials(group.traineeDisplayName)}</span>
-                <div className="attention-row-main">
-                  <p className="attention-row-name">{group.traineeDisplayName}</p>
-                  <p className="attention-row-issue">{items[0]?.summary}</p>
+          {filter === "all" && coachAsks.length > 0 ? (
+            <section
+              className="home-card"
+              aria-labelledby="asks-heading"
+              data-testid="screen-TW-32-section"
+            >
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="asks-heading">Asked you on WhatsApp</h2>
+                  <span className="home-count">{coachAsks.length}</span>
                 </div>
-                <button
-                  type="button"
-                  className="button-secondary button-compact"
-                  onClick={() => items[0] && openException(items[0].id)}
-                >
-                  Resolve
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+              </div>
+              <div className="home-list">
+                {coachAsks.slice(0, SECTION_CAP).map((ask) => {
+                  const name = nameByRid.get(ask.relationshipId) ?? "Client";
+                  return (
+                    <div key={ask.id} className="home-li">
+                      <span className={avatarClass(name)}>
+                        {initials(name)}
+                      </span>
+                      <div className="home-li-tx">
+                        <b>
+                          {name} asked about{" "}
+                          {labelFor("coach_ask_item_type", ask.itemType) ||
+                            "an item"}
+                          <span className="home-topic">
+                            {labelFor("coach_ask_topic", ask.topic)}
+                          </span>
+                        </b>
+                        <span>Opened WhatsApp from their log</span>
+                      </div>
+                      <StatusChip
+                        kind="ask"
+                        value="open"
+                        label={`Asked coach · ${formatRelative(ask.askedAt).replace(/ ago$/, "")}`}
+                      />
+                      <Button
+                        variant="tinted"
+                        className="button-sm"
+                        onClick={() => openAsk(ask.id)}
+                      >
+                        Mark answered
+                      </Button>
+                      <OverflowMenu
+                        items={[
+                          {
+                            id: "open",
+                            label: "Open item",
+                            onSelect: () => openAsk(ask.id),
+                          },
+                        ]}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
-      {coachAsks.length > 0 ? (
-        <section aria-labelledby="asks-heading" data-testid="screen-TW-32">
-          <h2 id="asks-heading">Asked you on WhatsApp</h2>
-          <ul className="attention-rows">
-            {coachAsks.map((ask) => (
-              <li key={ask.id} className="attention-row">
-                <div className="attention-row-main">
-                  <p className="attention-row-name">
-                    {nameByRid.get(ask.relationshipId) ?? "Client"}
-                  </p>
-                  <p className="attention-row-issue">
-                    Asked about {labelFor("coach_ask_topic", ask.topic)}
-                  </p>
+          {filter === "all" && reviewedGroups.length > 0 ? (
+            <section className="home-card">
+              <button
+                type="button"
+                className="home-collapsed"
+                aria-expanded={reviewedOpen}
+                onClick={() => setReviewedOpen((v) => !v)}
+              >
+                <span aria-hidden>{reviewedOpen ? "▾" : "▸"}</span>
+                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                  Reviewed, still open
+                </h2>
+                <span className="home-count">{reviewedGroups.length}</span>
+                <span className="muted" style={{ fontSize: 13 }}>
+                  {reviewedGroups.length} reviewed item
+                  {reviewedGroups.length === 1 ? "" : "s"} still open
+                </span>
+              </button>
+              {reviewedOpen ? (
+                <div className="home-list">
+                  {reviewedGroups.slice(0, SECTION_CAP).map(({ group, items }) => (
+                    <div key={group.relationshipId} className="home-li">
+                      <span className={avatarClass(group.traineeDisplayName)}>
+                        {initials(group.traineeDisplayName)}
+                      </span>
+                      <div className="home-li-tx">
+                        <b>{group.traineeDisplayName}</b>
+                        <span>
+                          Acknowledged ·{" "}
+                          {items[0]?.summary ||
+                            labelFor("exception_type", items[0]!.type)}
+                        </span>
+                      </div>
+                      <Button
+                        variant="tinted"
+                        className="button-sm"
+                        onClick={() => items[0] && openException(items[0].id)}
+                      >
+                        Resolve
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-                <button
-                  type="button"
-                  className="button-primary button-compact"
-                  onClick={() => void markAskAnswered(ask.id)}
-                >
-                  Mark answered
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+              ) : null}
+            </section>
+          ) : null}
 
-      {reengage.length > 0 ? (
-        <section aria-labelledby="reengage-heading">
-          <h2 id="reengage-heading">Re-engage</h2>
-          <ul className="attention-rows">
-            {reengage.map((item) => (
-              <li key={item.relationshipId} className="attention-row">
-                <div className="attention-row-main">
-                  <p className="attention-row-name">{item.traineeDisplayName}</p>
-                  <p className="attention-row-issue">
-                    No logs recently · reminders unanswered
-                  </p>
+          {filter === "all" && gettingStarted.length > 0 ? (
+            <section className="home-card" aria-labelledby="gs">
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="gs">Getting started</h2>
+                  <span className="home-count">{gettingStarted.length}</span>
                 </div>
-                <a
-                  className="button-secondary button-compact"
-                  href={item.waMeUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  WhatsApp
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+              </div>
+              <div className="home-list">
+                {gettingStarted.map((row) => (
+                  <div key={row.id} className="home-li">
+                    <span className={avatarClass(row.name)}>
+                      {initials(row.name)}
+                    </span>
+                    <div className="home-li-tx">
+                      <b>{row.name}</b>
+                      <span>{row.subtitle}</span>
+                    </div>
+                    <StatusChip
+                      kind="lifecycle"
+                      value={
+                        row.kind === "intake"
+                          ? "onboarding_submitted"
+                          : "invited"
+                      }
+                      label={
+                        row.kind === "intake" ? "Awaiting review" : "Invited"
+                      }
+                    />
+                    {row.kind === "intake" && row.href ? (
+                      <Link className="button-tinted button-sm" to={row.href}>
+                        Review intake
+                      </Link>
+                    ) : (
+                      <Button variant="tinted" className="button-sm">
+                        Resend invite
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
-      {renewals.length > 0 ? (
-        <section aria-labelledby="renewal-heading">
-          <h2 id="renewal-heading">Renewals</h2>
-          <ul className="attention-rows">
-            {renewals.map((item) => (
-              <li key={item.coachingRelationshipId} className="attention-row">
-                <div className="attention-row-main">
-                  <p className="attention-row-name">
-                    {nameByRid.get(item.coachingRelationshipId) ??
-                      item.planName}
-                  </p>
-                  <p className="attention-row-issue">
-                    Renewal {labelFor("renewal_state", item.renewalState)} ·{" "}
-                    {formatCivilDate(item.renewsOn)}
-                  </p>
+          {filter === "all" && reengage.length > 0 ? (
+            <section className="home-card" aria-labelledby="re">
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="re">Re-engage on WhatsApp</h2>
+                  <span className="home-count">
+                    {Math.min(reengage.length, SECTION_CAP)}
+                  </span>
                 </div>
-                <Link
-                  className="button-secondary button-compact"
-                  to={`/clients/${item.coachingRelationshipId}/configure`}
-                >
-                  Open settings
+              </div>
+              <div className="home-list">
+                {reengage.slice(0, SECTION_CAP).map((item) => (
+                  <div key={item.relationshipId} className="home-li">
+                    <span className={avatarClass(item.traineeDisplayName)}>
+                      {initials(item.traineeDisplayName)}
+                    </span>
+                    <div className="home-li-tx">
+                      <b>{item.traineeDisplayName}</b>
+                      <span>No logs recently · reminders unanswered</span>
+                    </div>
+                    <a
+                      className="button-secondary button-sm"
+                      href={item.waMeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() =>
+                        showToast("Opened WhatsApp · today")
+                      }
+                    >
+                      Open WhatsApp
+                    </a>
+                  </div>
+                ))}
+              </div>
+              <div className="home-note">
+                <Info size={14} strokeWidth={1.75} aria-hidden />
+                Opens WhatsApp with a message written as you. You can edit it,
+                and you press Send.
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        <div className="home-col home-rail">
+          {showCheckinsRail && checkins.length > 0 ? (
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-card-ttl h3">
+                  <h2>Check-ins to review</h2>
+                  <span className="home-count">{checkinCount}</span>
+                </div>
+                <Link className="link" to="/checkins" style={{ fontSize: 13 }}>
+                  All
                 </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+              </div>
+              <div className="home-list">
+                {checkins.slice(0, SECTION_CAP).map((row) => {
+                  const name =
+                    nameByRid.get(row.coachingRelationshipId) ?? "Client";
+                  return (
+                    <div key={row.checkin.id} className="home-li">
+                      <span className={avatarClass(name)}>
+                        {initials(name)}
+                      </span>
+                      <div className="home-li-tx">
+                        <b>{name}</b>
+                        <span>
+                          Submitted{" "}
+                          {row.checkin.submittedAt
+                            ? formatRelative(row.checkin.submittedAt)
+                            : "recently"}
+                        </span>
+                      </div>
+                      <Link
+                        className="button-tinted button-sm"
+                        to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
+                      >
+                        Review
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {showRenewalsRail && renewals.length > 0 ? (
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-card-ttl h3">
+                  <h2>Renewals</h2>
+                  <span className="home-count">{renewalCount}</span>
+                </div>
+              </div>
+              <div className="home-list">
+                {renewals.slice(0, SECTION_CAP).map((item) => {
+                  const name =
+                    nameByRid.get(item.coachingRelationshipId) ??
+                    item.planName;
+                  return (
+                    <div key={item.coachingRelationshipId} className="home-li">
+                      <div className="home-li-tx">
+                        <b>{name}</b>
+                        <span>
+                          {item.renewalState === "expired" ? "Ended" : "Due"}{" "}
+                          {formatCivilDate(item.renewsOn)}
+                        </span>
+                      </div>
+                      <StatusChip
+                        kind="renewal"
+                        value={item.renewalState}
+                        label={labelFor("renewal_state", item.renewalState)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="home-foot" style={{ padding: "10px 16px" }}>
+                <span className="muted">Open settings to renew</span>
+                {renewals[0] ? (
+                  <Link
+                    className="link"
+                    to={`/clients/${renewals[0].coachingRelationshipId}/configure`}
+                  >
+                    Open settings
+                  </Link>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {filter === "all" && activity.length > 0 ? (
+            <section className="home-card">
+              <div className="home-card-h">
+                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                  Recent activity
+                </h2>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Client time
+                </span>
+              </div>
+              <div className="home-feed">
+                {activity.map((ev) => (
+                  <div key={ev.id} className="home-ev">
+                    <span className="home-ev-dot" />
+                    <span>
+                      <b>{ev.traineeDisplayName ?? "Client"}</b> {ev.summary}
+                      <span className="home-ev-when">
+                        {ev.traineeLocalTime ||
+                          formatInstant(ev.occurredAt, timeZone)}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
 
       {drawerExceptionId ? (
         <ExceptionDrawer
           exceptionId={drawerExceptionId}
-          onClose={closeDrawer}
+          onClose={() => {
+            closeDrawer();
+            rowRefs.current[focusIdx]?.focus();
+          }}
           onChanged={() => void load()}
         />
       ) : null}
 
       {drawerAskId ? (
-        <div className="drawer-backdrop" onClick={closeDrawer}>
-          <aside className="drawer-panel" data-testid="screen-TW-32" onClick={(e) => e.stopPropagation()}>
-            <p>Coach ask {drawerAskId}</p>
-            <button type="button" onClick={() => void markAskAnswered(drawerAskId)}>
-              Mark answered
+        <CoachAskDrawer
+          askId={drawerAskId}
+          clientName={
+            nameByRid.get(
+              coachAsks.find((a) => a.id === drawerAskId)?.relationshipId ??
+                "",
+            ) ?? "Client"
+          }
+          onClose={closeDrawer}
+          onChanged={() => void load()}
+        />
+      ) : null}
+
+      {toast ? (
+        <div className="home-toast" role="status">
+          <span>{toast.message}</span>
+          {toast.undo ? (
+            <button type="button" onClick={toast.undo}>
+              Undo
             </button>
-          </aside>
+          ) : null}
         </div>
       ) : null}
     </div>
