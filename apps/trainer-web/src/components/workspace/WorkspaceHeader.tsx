@@ -1,6 +1,6 @@
 import { Link, NavLink } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
-import { formatCivilDate } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { clientWhatsappHref } from "../../lib/whatsapp";
 import { resolveTraineeTimezone } from "../../lib/trainee-timezone";
@@ -9,23 +9,15 @@ import { primaryActionFor } from "./primaryAction";
 import type { WorkspaceModal } from "./WorkspaceModals";
 
 function adherenceLabel(state: string): string {
-  switch (state) {
-    case "on_track":
-      return "On track";
-    case "needs_attention":
-      return "Needs attention";
-    case "no_recent_data":
-      return "No recent data";
-    default:
-      return "Not available";
-  }
+  return labelFor("adherence_state", state) || "Not available";
 }
 
 function statusLabel(status: string): string {
-  return status
-    .split("_")
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join(" ");
+  return (
+    labelFor("onboarding_status", status) ||
+    labelFor("relationship_status", status) ||
+    labelFor("invitation_status", status)
+  );
 }
 
 export function WorkspaceHeader({

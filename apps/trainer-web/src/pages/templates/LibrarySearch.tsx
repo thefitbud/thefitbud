@@ -6,6 +6,7 @@ import type {
   MealPrescription,
   WorkoutDay,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { PLAN_COMPOSITION_LIMITS } from "../../components/plan-composition";
 import { useCursorPage, useDebounced } from "./useCursorPage";
@@ -17,18 +18,7 @@ const DIFFICULTIES: ExerciseDifficulty[] = [
 ];
 
 function difficultyLabel(value: ExerciseDifficulty): string {
-  switch (value) {
-    case "beginner":
-      return "Beginner";
-    case "intermediate":
-      return "Intermediate";
-    case "advanced":
-      return "Advanced";
-    default: {
-      const _exhaustive: never = value;
-      return _exhaustive;
-    }
-  }
+  return labelFor("exercise_difficulty", value);
 }
 
 export function ExerciseSearchPane({
@@ -235,7 +225,9 @@ export function FoodSearchPane({
             <li key={item.id}>
               <p className="templates-name">{item.name}</p>
               <p className="muted">
-                {item.classification?.replaceAll("_", " ") ?? "Needs classification"}
+                {item.classification
+                  ? labelFor("food_classification", item.classification)
+                  : "Needs classification"}
                 {item.basis === "per_100_g"
                   ? " · per 100 g"
                   : item.basis === "per_100_ml"

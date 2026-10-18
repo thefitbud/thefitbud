@@ -6,6 +6,7 @@ import {
   type ClientDirectoryItem,
   type OnboardingStatus,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 
 export const CLIENT_STATUS_FILTERS = onboardingStatusSchema.options;
 export const CLIENT_ADHERENCE_FILTERS = adherenceStateSchema.options;
@@ -34,24 +35,7 @@ export function emptyClientDirectoryFilters(): ClientDirectoryFilters {
 }
 
 export function onboardingStatusLabel(status: OnboardingStatus): string {
-  switch (status) {
-    case "invited":
-      return "Invited";
-    case "onboarding_pending":
-      return "Onboarding pending";
-    case "onboarding_submitted":
-      return "Onboarding submitted";
-    case "coaching_ready":
-      return "Coaching ready";
-    case "active":
-      return "Active";
-    case "ended":
-      return "Ended";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+  return labelFor("onboarding_status", status);
 }
 
 export function primaryActionForStatus(status: OnboardingStatus): {
@@ -78,39 +62,11 @@ export function primaryActionForStatus(status: OnboardingStatus): {
 }
 
 export function adherenceStateLabel(state: AdherenceState): string {
-  switch (state) {
-    case "on_track":
-      return "On track";
-    case "needs_attention":
-      return "Needs attention";
-    case "no_recent_data":
-      return "No recent data";
-    case "not_available":
-      return "Not available";
-    default: {
-      const _exhaustive: never = state;
-      return _exhaustive;
-    }
-  }
+  return labelFor("adherence_state", state);
 }
 
 export function checkinStatusLabel(status: CheckinStatus): string {
-  switch (status) {
-    case "scheduled":
-      return "Scheduled";
-    case "due":
-      return "Due";
-    case "submitted":
-      return "Submitted";
-    case "reviewed":
-      return "Reviewed";
-    case "overdue":
-      return "Overdue";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+  return labelFor("checkin_status", status);
 }
 
 /**

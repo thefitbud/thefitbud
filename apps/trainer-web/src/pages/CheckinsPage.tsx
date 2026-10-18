@@ -24,9 +24,19 @@ function relationshipLabel(
   return names.get(coachingRelationshipId) ?? "Client";
 }
 
-function relationshipInitials(coachingRelationshipId: string): string {
-  const compact = coachingRelationshipId.replace(/[^A-Za-z0-9]/g, "");
-  return compact.length >= 2 ? compact.slice(0, 2).toUpperCase() : "CL";
+function relationshipInitials(name: string): string {
+  const words = name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.replace(/[^A-Za-z0-9]/g, ""))
+    .filter(Boolean);
+  const first = words[0];
+  const second = words[1];
+  if (first && second) {
+    return `${first.charAt(0)}${second.charAt(0)}`.toUpperCase() || "CL";
+  }
+  const compact = words[0] ?? "";
+  return (compact.slice(0, 2) || "CL").toUpperCase();
 }
 
 function countStatus(
@@ -303,10 +313,10 @@ function CheckinRow({
       <td>
         <div className="roster-person">
           <span className="avatar" aria-hidden="true">
-            {relationshipInitials(item.coachingRelationshipId)}
+            {relationshipInitials(label)}
           </span>
           <div className="roster-person-copy">
-            <p className="client-name" title={item.coachingRelationshipId}>
+            <p className="client-name">
               <span>{label}</span>
             </p>
           </div>

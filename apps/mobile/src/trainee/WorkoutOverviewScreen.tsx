@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import { labelFor } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import type { WorkoutAssignment } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
@@ -47,7 +47,7 @@ export function WorkoutOverviewScreen({
       {assignment ? (
         <View style={styles.stack}>
           <Text style={styles.meta}>
-            {assignment.localDate} ·{" "}
+            {formatCivilDate(assignment.localDate)} ·{" "}
             {labelFor("workout_assignment_status", assignment.status)}
           </Text>
           {assignment.workoutDay.exercises.map((exercise) => (

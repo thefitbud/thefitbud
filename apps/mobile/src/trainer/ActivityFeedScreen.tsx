@@ -169,12 +169,25 @@ export function ActivityFeedScreen({ relationshipId, header }: Props) {
                         accessibilityRole="button"
                         style={styles.actionBtnAlt}
                         onPress={() => {
-                          void import("./whatsapp").then(
-                            ({ openContextualWhatsApp }) =>
-                              openContextualWhatsApp({
-                                draftText: `Hi — saw your update: ${event.summary}`,
-                              }),
-                          );
+                          void (async () => {
+                            const { openContextualWhatsApp } = await import(
+                              "./whatsapp"
+                            );
+                            let phone: string | null = null;
+                            try {
+                              const workspace = await api.getClientWorkspace(
+                                event.relationshipId,
+                              );
+                              phone =
+                                workspace.header.clientWhatsappE164 ?? null;
+                            } catch {
+                              phone = null;
+                            }
+                            await openContextualWhatsApp({
+                              phoneE164: phone,
+                              draftText: "Hi — saw your FitBud update.",
+                            });
+                          })();
                         }}
                       >
                         <Text style={styles.actionTextAlt}>Nudge</Text>

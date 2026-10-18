@@ -5,6 +5,7 @@ import type {
   Invitation,
   OnboardingStatus,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 
 export type ClientDirectoryRow = {
   key: string;
@@ -19,24 +20,7 @@ export type ClientDirectoryRow = {
 };
 
 export function onboardingStatusLabel(status: OnboardingStatus): string {
-  switch (status) {
-    case "invited":
-      return "Invited";
-    case "onboarding_pending":
-      return "Onboarding pending";
-    case "onboarding_submitted":
-      return "Onboarding submitted";
-    case "coaching_ready":
-      return "Coaching ready";
-    case "active":
-      return "Active";
-    case "ended":
-      return "Ended";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+  return labelFor("onboarding_status", status);
 }
 
 function invitationDisplayName(invitation: Invitation): string {

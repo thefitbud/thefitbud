@@ -118,7 +118,7 @@ export function AttentionTab({
 
   return (
     <Screen
-      title="Today"
+      title="Attention"
       subtitle="Who needs you, and why."
       refreshing={loading}
       onRefresh={() => {
@@ -159,7 +159,8 @@ export function AttentionTab({
                 }}
                 onNudge={() => {
                   void openContextualWhatsApp({
-                    draftText: `Hi — gentle nudge from FitBud: ${card.primary.summary}`,
+                    phoneE164: card.clientWhatsappE164,
+                    draftText: "Hi — gentle nudge from FitBud.",
                   });
                 }}
               >
@@ -167,17 +168,14 @@ export function AttentionTab({
                 <View style={styles.cardHeader}>
                   <Text style={styles.who}>{card.traineeDisplayName}</Text>
                   <StatusChip
-                    label={card.primary.severity}
-                    tone={
-                      card.primary.severity === "critical"
-                        ? "warning"
-                        : "attention"
-                    }
+                    kind="severity"
+                    value={card.primary.severity}
                   />
                 </View>
-                <Text style={styles.summary}>{card.primary.summary}</Text>
+                <Text style={styles.summary}>
+                  {typeLabel(card.primary.type)}
+                </Text>
                 <Text style={styles.meta}>
-                  {typeLabel(card.primary.type)} ·{" "}
                   {formatAttentionAge(card.primary.ageMinutes)}
                   {card.itemCount > 1 ? ` · +${card.itemCount - 1} more` : ""}
                 </Text>
@@ -200,7 +198,8 @@ export function AttentionTab({
                     style={styles.swipeActionAlt}
                     onPress={() => {
                       void openContextualWhatsApp({
-                        draftText: `Hi — gentle nudge from FitBud: ${card.primary.summary}`,
+                        phoneE164: card.clientWhatsappE164,
+                        draftText: "Hi — gentle nudge from FitBud.",
                       });
                     }}
                   >
@@ -345,7 +344,6 @@ const styles = StyleSheet.create({
     color: colors.indigo,
     fontSize: 13,
     fontWeight: "500",
-    textTransform: "capitalize",
   },
   summary: {
     color: colors.midGrey,

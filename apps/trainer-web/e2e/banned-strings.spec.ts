@@ -2,8 +2,9 @@
  * Banned-strings check (Batch 0 / 01-product-rules §B).
  * Reads docs/spec/banned-strings.json and scans rendered UI text.
  *
- * Run against trainer web (:5173) and, when EXPO_WEB_URL is set, Expo web (:8081).
- * Screen batches clear remaining hits; Batch 0 reports the current failure list.
+ * Batch 0 cleans a subset of screens — those hard-fail on error hits.
+ * Remaining screens (Home, roster, workspace, mobile Today/Attention) are
+ * report-only until their screen batches.
  */
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -41,7 +42,19 @@ const banned = JSON.parse(readFileSync(SPEC_PATH, "utf8")) as BannedSpec;
 const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
 const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
-const EXPO_WEB_URL = process.env.EXPO_WEB_URL; // e.g. http://127.0.0.1:8081
+const EXPO_WEB_URL = process.env.EXPO_WEB_URL;
+
+/** Screens Batch 0 already cleaned — error hits fail the suite. */
+const WEB_HARD_FAIL_ROUTES = new Set(["/sign-in"]);
+const MOBILE_HARD_FAIL_ROUTES = new Set([
+  "mobile/sign-in",
+  "mobile/Workout",
+  "mobile/Progress",
+  "mobile/Notifications",
+  "mobile/Clients",
+  "mobile/More",
+  "mobile/Waiting",
+]);
 
 type Hit = {
   id: string;
@@ -72,7 +85,10 @@ function scanText(
   const hits: Hit[] = [];
   for (const pattern of banned.patterns) {
     if (pattern.scope !== "both" && pattern.scope !== scope) continue;
-    const re = new RegExp(pattern.regex, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+    const re = new RegExp(
+      pattern.regex,
+      pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`,
+    );
     const matches = text.match(re);
     if (!matches) continue;
     for (const match of matches.slice(0, 5)) {
@@ -96,7 +112,6 @@ async function scanRoleChecks(
   const hits: Hit[] = [];
   for (const check of banned.roleChecks) {
     if (check.scope !== "both" && check.scope !== scope) continue;
-    // Only the documented refresh role check is automated here.
     if (!check.locator.includes("refresh")) continue;
     const count = await page
       .getByRole("button", { name: /^\s*refresh\s*$/i })
@@ -112,6 +127,22 @@ async function scanRoleChecks(
     }
   }
   return hits;
+}
+
+function partitionHits(
+  hits: Hit[],
+  hardFailRoutes: Set<string>,
+): { hard: Hit[]; report: Hit[] } {
+  const hard: Hit[] = [];
+  const report: Hit[] = [];
+  for (const hit of hits) {
+    if (hit.severity === "error" && hardFailRoutes.has(hit.route)) {
+      hard.push(hit);
+    } else {
+      report.push(hit);
+    }
+  }
+  return { hard, report };
 }
 
 async function signInTrainerWeb(page: Page) {
@@ -142,13 +173,17 @@ async function resolveClientWorkspacePath(page: Page): Promise<string> {
 }
 
 test.describe("banned-strings · trainer web", () => {
-  test("Home, roster, client workspace", async ({ page }) => {
+  test("sign-in hard-fail + Home/roster/workspace report", async ({ page }) => {
     test.setTimeout(180_000);
-    await signInTrainerWeb(page);
 
-    const routes = ["/", "/clients", await resolveClientWorkspacePath(page)];
     const allHits: Hit[] = [];
 
+    await page.goto("/sign-in");
+    await page.waitForTimeout(500);
+    allHits.push(...scanText(await collectText(page), "/sign-in", "web"));
+
+    await signInTrainerWeb(page);
+    const routes = ["/", "/clients", await resolveClientWorkspacePath(page)];
     for (const route of routes) {
       await page.goto(route);
       await page.waitForTimeout(800);
@@ -159,37 +194,53 @@ test.describe("banned-strings · trainer web", () => {
 
     const errors = allHits.filter((h) => h.severity === "error");
     const warns = allHits.filter((h) => h.severity === "warn");
+    const { hard, report } = partitionHits(allHits, WEB_HARD_FAIL_ROUTES);
 
-    // Always print the report — Batch 0 expects remaining hits listed.
     console.log(
       JSON.stringify(
         {
           app: "trainer-web",
+          hardFailErrors: hard.filter((h) => h.severity === "error"),
+          reportOnlyErrors: report.filter((h) => h.severity === "error"),
+          warns,
           errorCount: errors.length,
           warnCount: warns.length,
-          errors,
-          warns,
         },
         null,
         2,
       ),
     );
 
-    // Soft assertion: do not fail CI in Batch 0 — screen batches clear hits.
-    // Expose counts via attach for BATCH-0.md.
     await test.info().attach("banned-strings-web.json", {
-      body: Buffer.from(JSON.stringify({ errors, warns }, null, 2)),
+      body: Buffer.from(
+        JSON.stringify(
+          {
+            hardFail: hard,
+            reportOnly: report.filter((h) => h.severity === "error"),
+            warns,
+          },
+          null,
+          2,
+        ),
+      ),
       contentType: "application/json",
     });
-    expect(errors.length, `banned-string errors still present (expected until screen batches): ${errors.map((e) => `${e.route}:${e.id}=${e.match}`).join("; ")}`).toBeGreaterThanOrEqual(0);
+
+    const hardErrors = hard.filter((h) => h.severity === "error");
+    expect(
+      hardErrors,
+      hardErrors.map((e) => `${e.route}:${e.id}=${e.match}`).join("; "),
+    ).toEqual([]);
   });
 });
 
 test.describe("banned-strings · Expo web", () => {
   test.skip(!EXPO_WEB_URL, "Set EXPO_WEB_URL to run mobile Expo web checks");
 
-  test("Today + trainer Attention", async ({ page }) => {
-    test.setTimeout(180_000);
+  test("cleaned screens hard-fail; Today/Attention report", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
     const base = EXPO_WEB_URL!;
 
     type CaptureBridge = {
@@ -213,7 +264,11 @@ test.describe("banned-strings · Expo web", () => {
       await page.evaluate(async (id) => {
         const bridge = (globalThis as { __fitbudCapture?: CaptureBridge })
           .__fitbudCapture;
-        if (!bridge) throw new Error("capture bridge missing — set EXPO_PUBLIC_SCREEN_CAPTURE=1");
+        if (!bridge) {
+          throw new Error(
+            "capture bridge missing — set EXPO_PUBLIC_SCREEN_CAPTURE=1",
+          );
+        }
         await bridge.navigate(id);
       }, screenId);
       await page.waitForTimeout(1500);
@@ -224,34 +279,89 @@ test.describe("banned-strings · Expo web", () => {
       };
     }
 
-    await waitForCaptureBridge();
     const allHits: Hit[] = [];
 
-    const today = await captureScreen("TR-06", "mobile/Today");
-    allHits.push(...today.textHits, ...today.roleHits);
+    // Sign-in (no capture bridge required).
+    await page.goto(base, { waitUntil: "networkidle" });
+    await page.waitForTimeout(800);
+    allHits.push(
+      ...scanText(await collectText(page), "mobile/sign-in", "mobile"),
+    );
 
-    const attention = await captureScreen("TM-01", "mobile/Attention");
-    allHits.push(...attention.textHits, ...attention.roleHits);
+    await waitForCaptureBridge();
+
+    // Cleaned trainee screens
+    for (const [id, route] of [
+      ["TR-10", "mobile/Workout"],
+      ["TR-13", "mobile/Progress"],
+      ["TR-15", "mobile/Notifications"],
+    ] as const) {
+      const result = await captureScreen(id, route);
+      allHits.push(...result.textHits, ...result.roleHits);
+    }
+
+    // Cleaned trainer screens
+    for (const [id, route] of [
+      ["TM-02", "mobile/Clients"],
+      ["TM-07", "mobile/More"],
+    ] as const) {
+      const result = await captureScreen(id, route);
+      allHits.push(...result.textHits, ...result.roleHits);
+    }
+
+    // Waiting review (sneha)
+    {
+      const result = await captureScreen("TR-04", "mobile/Waiting");
+      allHits.push(...result.textHits, ...result.roleHits);
+    }
+
+    // Report-only until screen batches
+    for (const [id, route] of [
+      ["TR-06", "mobile/Today"],
+      ["TM-01", "mobile/Attention"],
+    ] as const) {
+      const result = await captureScreen(id, route);
+      allHits.push(...result.textHits, ...result.roleHits);
+    }
 
     const errors = allHits.filter((h) => h.severity === "error");
     const warns = allHits.filter((h) => h.severity === "warn");
+    const { hard, report } = partitionHits(allHits, MOBILE_HARD_FAIL_ROUTES);
+
     console.log(
       JSON.stringify(
         {
           app: "expo-web",
+          hardFailErrors: hard.filter((h) => h.severity === "error"),
+          reportOnlyErrors: report.filter((h) => h.severity === "error"),
+          warns,
           errorCount: errors.length,
           warnCount: warns.length,
-          errors,
-          warns,
         },
         null,
         2,
       ),
     );
+
     await test.info().attach("banned-strings-mobile.json", {
-      body: Buffer.from(JSON.stringify({ errors, warns }, null, 2)),
+      body: Buffer.from(
+        JSON.stringify(
+          {
+            hardFail: hard,
+            reportOnly: report.filter((h) => h.severity === "error"),
+            warns,
+          },
+          null,
+          2,
+        ),
+      ),
       contentType: "application/json",
     });
-    expect(errors.length).toBeGreaterThanOrEqual(0);
+
+    const hardErrors = hard.filter((h) => h.severity === "error");
+    expect(
+      hardErrors,
+      hardErrors.map((e) => `${e.route}:${e.id}=${e.match}`).join("; "),
+    ).toEqual([]);
   });
 });

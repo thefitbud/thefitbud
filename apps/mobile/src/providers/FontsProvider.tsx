@@ -52,12 +52,11 @@ function NativeFontsProvider({ children }: { children: ReactNode }) {
   return children;
 }
 
+/**
+ * Load Satoshi TTFs on every platform (including Expo web). CSS @font-face alone
+ * leaves RN-web Text faces "unloaded"; expo-font registers usable families.
+ */
 export function FontsProvider({ children }: { children: ReactNode }) {
   useWebFontStylesheets();
-
-  if (Platform.OS === "web") {
-    return children;
-  }
-
   return <NativeFontsProvider>{children}</NativeFontsProvider>;
 }

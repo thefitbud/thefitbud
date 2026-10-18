@@ -30,6 +30,9 @@ export function ExceptionReviewScreen({
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +40,14 @@ export function ExceptionReviewScreen({
     try {
       const result = await api.getException(exceptionId);
       setDetail(result);
+      try {
+        const workspace = await api.getClientWorkspace(
+          result.coachingRelationshipId,
+        );
+        setClientWhatsappE164(workspace.header.clientWhatsappE164 ?? null);
+      } catch {
+        setClientWhatsappE164(null);
+      }
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -185,7 +196,8 @@ export function ExceptionReviewScreen({
             variant="ghost"
             onPress={() => {
               void openContextualWhatsApp({
-                draftText: "Following up from FitBud",
+                phoneE164: clientWhatsappE164,
+                draftText: "Following up from FitBud.",
               });
             }}
           />

@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState, type FormEvent, type ReactNode, type SVGProps } from "react";
-import { formatCivilDate, formatLocalDate } from "@fitbud/core";
+import { formatCivilDate, formatLocalDate, formatPersonName } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { useConfig } from "../lib/config";
 import { apiClient } from "../lib/api";
@@ -8,7 +8,7 @@ import { stage1Api } from "../lib/stage1-api";
 import { BrandMark } from "../components/BrandMark";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { email, signOut } = useAuth();
+  const { email, me, signOut } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
   const navigate = useNavigate();
@@ -49,7 +49,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     navigate(next ? `/clients?q=${encodeURIComponent(next)}` : "/clients");
   }
 
-  const displayName = trainerName(email);
+  const displayName =
+    formatPersonName(me?.trainerProfile?.displayName) ||
+    formatPersonName(email?.split("@")[0]?.replace(/[._-]+/g, " ")) ||
+    "Trainer";
   const today = formatCivilDate(
     formatLocalDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
   );
@@ -62,7 +65,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="side-nav">
         <div className="brand-lockup">
           <span className="brand-glyph" aria-hidden="true">
-            <BrandMark size={28} />
+            <BrandMark size={28} variant="inverse" />
           </span>
           <span className="brand-copy">
             <span className="brand-mark">FitBud</span>
@@ -162,16 +165,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
     </div>
   );
-}
-
-function trainerName(email: string | null): string {
-  const local = email?.split("@")[0]?.trim();
-  if (!local) return "Trainer";
-  return local
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function initials(name: string): string {

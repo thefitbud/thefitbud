@@ -75,8 +75,8 @@ export function ClientCheckinsPage() {
       );
       setMessage(
         result.created
-          ? `Scheduled check-in for ${result.checkin.localDate}.`
-          : `Check-in for ${result.checkin.localDate} already exists.`,
+          ? `Scheduled check-in for ${formatCivilDate(result.checkin.localDate)}.`
+          : `Check-in for ${formatCivilDate(result.checkin.localDate)} already exists.`,
       );
       await load();
     } catch (err) {

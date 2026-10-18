@@ -8,7 +8,7 @@ import type {
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { LinkedMedia } from "../components/LinkedMedia";
-import { labelFor } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { formatObservedAt } from "../components/MeasurementTrend";
 
 export function CheckinReviewPage() {
@@ -90,8 +90,8 @@ export function CheckinReviewPage() {
       );
       setMessage(
         result.created
-          ? `Next check-in scheduled for ${result.checkin.localDate}.`
-          : `Next check-in already exists for ${result.checkin.localDate}.`,
+          ? `Next check-in scheduled for ${formatCivilDate(result.checkin.localDate)}.`
+          : `Next check-in already exists for ${formatCivilDate(result.checkin.localDate)}.`,
       );
       await load();
     } catch (err) {
@@ -230,7 +230,7 @@ export function CheckinReviewPage() {
               </span>
             </div>
             <p className="workspace-summary">
-              Due {context.checkin.localDate}
+              Due {formatCivilDate(context.checkin.localDate)}
             </p>
             {context.checkin.answers ? (
               <dl className="detail-list">

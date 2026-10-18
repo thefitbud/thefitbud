@@ -76,11 +76,11 @@
     },
     {
       "id": "negative-relative-time",
-      "regex": "(?:^|[\\s(·])(?:in\\s+)?-\\d+\\s?(?:s|sec|secs|m|min|mins|minutes?|h|hr|hrs|hours?|d|days?|w|wk|wks|weeks?)\\b",
+      "regex": "(?:^|[\\s(·A-Za-z])(?:in\\s+)?-\\d+\\s?(?:s|sec|secs|m|min|mins|minutes?|h|hr|hrs|hours?|d|days?|w|wk|wks|weeks?)(?:\\s+ago)?\\b",
       "flags": "i",
       "scope": "both",
       "severity": "error",
-      "why": "Negative relative time. Clamp to 'just now'."
+      "why": "Negative relative time (including Dinner-7h ago). Clamp to 'just now'."
     },
     {
       "id": "us-numeric-date",

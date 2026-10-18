@@ -213,7 +213,7 @@ describe("Batch 0 API fixes", () => {
       data: { groups: Array<{ items: unknown[] }> };
     };
     for (const group of body.data.groups) {
-      expect(group.items.length).toBeLessThanOrEqual(12);
+      expect(group.items.length).toBeLessThanOrEqual(10);
     }
   });
 
@@ -316,6 +316,101 @@ describe("Batch 0 API fixes", () => {
       data: { header: { clientWhatsappE164: string | null } };
     };
     expect(body.data.header.clientWhatsappE164).toMatch(/^\+\d+/);
+  });
+
+  it("A4b: exception summaries are human labels, not raw types", async () => {
+    const res = await app.request(
+      "/exceptions/attention?groupBy=relationship&limit=50",
+      {
+        headers: {
+          Authorization: `Bearer ${trainerToken}`,
+          "x-fitbud-role": "trainer",
+        },
+      },
+      testEnv(),
+    );
+    const body = JSON.parse(await res.text()) as {
+      data: {
+        groups: Array<{
+          items: Array<{ type: string; summary: string; severity: string }>;
+        }>;
+      };
+    };
+    for (const group of body.data.groups) {
+      for (const item of group.items) {
+        expect(item.summary).not.toBe(item.type);
+        expect(item.summary).not.toMatch(/_/);
+      }
+    }
+  });
+
+  it("A4c: on-track Aarav is not critical and has no future meal logs", async () => {
+    const aaravRel = demoUuid("relationship", "rahul.coach", "aarav.ontrack");
+    const grouped = await app.request(
+      "/exceptions/attention?groupBy=relationship&limit=50",
+      {
+        headers: {
+          Authorization: `Bearer ${trainerToken}`,
+          "x-fitbud-role": "trainer",
+        },
+      },
+      testEnv(),
+    );
+    const attention = JSON.parse(await grouped.text()) as {
+      data: {
+        groups: Array<{
+          relationshipId: string;
+          items: Array<{ severity: string }>;
+        }>;
+      };
+    };
+    const aaravGroup = attention.data.groups.find(
+      (g) => g.relationshipId === aaravRel,
+    );
+    if (aaravGroup) {
+      expect(aaravGroup.items.some((i) => i.severity === "critical")).toBe(
+        false,
+      );
+    }
+
+    const aaravToken = await login("aarav.ontrack@demo.fitbud.test");
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const mealsRes = await app.request(
+      `/meals/relationships/${aaravRel}/assignments?fromDate=${today}&toDate=${today}`,
+      {
+        headers: {
+          Authorization: `Bearer ${aaravToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const mealsText = await mealsRes.text();
+    expect(mealsRes.status, mealsText).toBe(200);
+    const mealsBody = JSON.parse(mealsText) as {
+      data: {
+        items: Array<{
+          localDate: string;
+          mealName: string;
+          status: string;
+          windowStartsAt: string;
+        }>;
+      };
+    };
+    const now = Date.now();
+    for (const meal of mealsBody.data.items) {
+      if (Date.parse(meal.windowStartsAt) > now) {
+        expect(
+          meal.status,
+          `${meal.mealName} before slot start`,
+        ).not.toBe("confirmed");
+      }
+    }
   });
 });
 

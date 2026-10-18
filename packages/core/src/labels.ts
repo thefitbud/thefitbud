@@ -369,6 +369,11 @@ const LABELS = {
     active: "Active",
     archived: "Archived",
   },
+  renewal_state: {
+    upcoming: "Upcoming",
+    due: "Due",
+    expired: "Expired",
+  },
 } as const;
 
 export type LabelNamespace = keyof typeof LABELS;

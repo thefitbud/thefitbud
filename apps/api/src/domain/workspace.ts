@@ -27,6 +27,7 @@ import {
   deriveMealAssignmentStatus,
   deriveRenewalState,
   deriveWorkoutAssignmentStatus,
+  formatCivilDate,
   formatLocalDate,
 } from "@fitbud/core";
 import { deriveAdherenceForRelationships } from "./adherence";
@@ -351,7 +352,7 @@ async function listCheckinActivity(
       }),
       occurredAt: row.checkin.windowStartsAt,
       localDate: row.checkin.localDate,
-      title: `Check-in ${row.checkin.localDate}`,
+      title: `Check-in ${formatCivilDate(row.checkin.localDate)}`,
       planVersionId: null,
     });
   });

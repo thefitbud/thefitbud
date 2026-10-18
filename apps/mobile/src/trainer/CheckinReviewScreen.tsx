@@ -44,6 +44,9 @@ export function CheckinReviewScreen({
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
+    null,
+  );
 
   const resolvedRelationshipId =
     relationshipId || context?.checkin.coachingRelationshipId || "";
@@ -54,6 +57,16 @@ export function CheckinReviewScreen({
     try {
       const result = await api.getCheckinReviewContext(checkinId);
       setContext(result);
+      const rid =
+        relationshipId || result.checkin.coachingRelationshipId || "";
+      if (rid) {
+        try {
+          const workspace = await api.getClientWorkspace(rid);
+          setClientWhatsappE164(workspace.header.clientWhatsappE164 ?? null);
+        } catch {
+          setClientWhatsappE164(null);
+        }
+      }
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -63,7 +76,7 @@ export function CheckinReviewScreen({
     } finally {
       setLoading(false);
     }
-  }, [api, checkinId]);
+  }, [api, checkinId, relationshipId]);
 
   useEffect(() => {
     void load();
@@ -297,7 +310,8 @@ export function CheckinReviewScreen({
             variant="ghost"
             onPress={() => {
               void openContextualWhatsApp({
-                draftText: "Following up on your check-in",
+                phoneE164: clientWhatsappE164,
+                draftText: "Following up on your check-in.",
               });
             }}
           />

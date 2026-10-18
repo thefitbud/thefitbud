@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { AdherenceState, ClientDirectoryItem } from "@fitbud/contracts";
+import { formatCivilDate as coreFormatCivilDate } from "@fitbud/core";
 import { StatusBadge } from "../components/StatusBadge";
 import { apiClient } from "../lib/api";
 import {
@@ -30,24 +31,7 @@ const DIRECTORY_PAGE_LIMIT = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 
 function formatCivilDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return value;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return value;
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
+  return coreFormatCivilDate(value);
 }
 
 function initials(name: string): string {

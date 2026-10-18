@@ -51,6 +51,7 @@ import {
   deriveClientOnboardingStatus,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
+  labelFor,
   materializePlanContent,
   notificationInboxRoute,
 } from "@fitbud/core";
@@ -812,6 +813,9 @@ function requireIsoInstant(value: string): string {
 }
 
 export function mapException(row: ExceptionRow): Exception {
+  const typeLabel = labelFor("exception_type", row.type);
+  const summary =
+    !row.summary || row.summary === row.type ? typeLabel : row.summary;
   return {
     id: row.id,
     coachingRelationshipId: row.coachingRelationshipId,
@@ -821,7 +825,7 @@ export function mapException(row: ExceptionRow): Exception {
     ruleVersion: row.ruleVersion,
     sourceEntityType: row.sourceEntityType,
     sourceEntityId: row.sourceEntityId,
-    summary: row.summary,
+    summary,
     details: parseExceptionDetailsJson(row.detailsJson),
     detectedAt: requireIsoInstant(row.detectedAt),
     activatedAt: coerceIsoInstant(row.activatedAt),

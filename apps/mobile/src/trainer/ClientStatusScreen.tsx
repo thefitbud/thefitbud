@@ -58,6 +58,9 @@ export function ClientStatusScreen({
   >([]);
   const [traineeTimezone, setTraineeTimezone] = useState<string | null>(null);
   const [timezoneDiff, setTimezoneDiff] = useState<string | null>(null);
+  const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,6 +85,7 @@ export function ClientStatusScreen({
         s1.getActivityFeed({ limit: 5, rid: relationshipId }),
       ]);
       setTraineeTimezone(workspace.header.traineeTimezone);
+      setClientWhatsappE164(workspace.header.clientWhatsappE164 ?? null);
       setTimezoneDiff(
         formatTimeDiff(
           me?.timezone ?? "UTC",
@@ -307,7 +311,8 @@ export function ClientStatusScreen({
             variant="ghost"
             onPress={() => {
               void openContextualWhatsApp({
-                draftText: `Hi — quick note from FitBud about ${displayName}`,
+                phoneE164: clientWhatsappE164,
+                draftText: `Hi — quick note from FitBud about ${displayName}.`,
               });
             }}
           />

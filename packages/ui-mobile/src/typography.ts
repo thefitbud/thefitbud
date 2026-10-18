@@ -1,32 +1,27 @@
 import { Platform } from "react-native";
 import { fontFamily as brandFontStack } from "@fitbud/tokens";
 
-const webStack = brandFontStack;
+/**
+ * Use the expo-font registered family names on native and Expo web.
+ * Keep the CSS stack as a fallback for plain web CSS contexts.
+ */
+const registered = {
+  regular: "Satoshi-Regular",
+  medium: "Satoshi-Medium",
+  semiBold: "Satoshi-SemiBold",
+  bold: "Satoshi-Bold",
+  devanagari: "NotoSansDevanagari_400Regular",
+} as const;
 
-export const fontFamily = Platform.select({
-  web: webStack,
-  default: "Satoshi-Regular",
-});
-
-export const fontFamilyMedium = Platform.select({
-  web: webStack,
-  default: "Satoshi-Medium",
-});
-
-export const fontFamilySemiBold = Platform.select({
-  web: webStack,
-  default: "Satoshi-SemiBold",
-});
-
-export const fontFamilyBold = Platform.select({
-  web: webStack,
-  default: "Satoshi-Bold",
-});
+export const fontFamily = registered.regular;
+export const fontFamilyMedium = registered.medium;
+export const fontFamilySemiBold = registered.semiBold;
+export const fontFamilyBold = registered.bold;
 
 /** Hindi-ready body stack (Noto Sans Devanagari). */
 export const fontFamilyDevanagari = Platform.select({
-  web: webStack,
-  default: "NotoSansDevanagari_400Regular",
+  web: `${registered.devanagari}, ${brandFontStack}`,
+  default: registered.devanagari,
 });
 
 export const typeScale = {

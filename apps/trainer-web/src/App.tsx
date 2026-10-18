@@ -30,6 +30,7 @@ import { NotificationSettingsPage } from "./pages/settings/NotificationSettingsP
 import { ProfileSettingsPage } from "./pages/settings/ProfileSettingsPage";
 import { SettingsHelpPage } from "./pages/settings/SettingsHelpPage";
 import { SettingsLayout } from "./pages/settings/SettingsLayout";
+import { SpecimensPage } from "./pages/SpecimensPage";
 
 export function App() {
   return (
@@ -38,6 +39,7 @@ export function App() {
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-in/code" element={<CodeSignInPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/__specimens" element={<SpecimensPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<WelcomePage />} />
           <Route path="/" element={<HomePage />} />

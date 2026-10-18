@@ -6,11 +6,13 @@ import type {
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { addDays, localDateInTimezone } from "../lib/dates";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
@@ -18,44 +20,8 @@ import { scheduledAssignments } from "./scheduledAssignments";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
 import { openActiveWorkout, workoutStartError } from "./workoutSession";
 
-function localDateInTimezone(timeZone: string, instant = new Date()): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day}`;
-}
-
-function addDays(localDate: string, days: number): string {
-  const [y, m, d] = localDate.split("-").map(Number);
-  const next = new Date(Date.UTC(y!, m! - 1, d! + days));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
-}
-
 function statusLabel(status: WorkoutAssignment["status"]): string {
-  switch (status) {
-    case "assigned":
-      return "Assigned";
-    case "in_progress":
-      return "In progress";
-    case "paused":
-      return "Paused";
-    case "completed":
-      return "Completed";
-    case "modified":
-      return "Modified";
-    case "skipped":
-      return "Skipped";
-    case "missed":
-      return "Missed";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+  return labelFor("workout_assignment_status", status);
 }
 
 export function WorkoutTab({
@@ -326,7 +292,7 @@ export function WorkoutTab({
                 <View style={styles.rowMain}>
                   <Text style={styles.rowTitle}>{item.workoutDayName}</Text>
                   <Text style={styles.rowMeta}>
-                    {item.localDate} · {statusLabel(item.status)}
+                    {formatCivilDate(item.localDate)} · {statusLabel(item.status)}
                   </Text>
                 </View>
               </Pressable>

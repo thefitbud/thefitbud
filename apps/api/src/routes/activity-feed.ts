@@ -1,7 +1,7 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { NUTRIENT_SCALE, activityFeedResponseSchema } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { createDb } from "../db/client.js";
 import {
   checkins,
@@ -84,10 +84,10 @@ activityFeedRoutes.get(
         relationshipId: row.coachingRelationshipId,
         traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
         type: "meal",
-        subtype: row.outcome,
+        subtype: labelFor("meal_compliance_outcome", row.outcome),
         occurredAt: row.loggedAt,
         traineeLocalTime: null,
-        summary: `Meal ${row.outcome}`,
+        summary: `Meal ${labelFor("meal_compliance_outcome", row.outcome).toLowerCase()}`,
         kcal:
           row.kcalScaled == null
             ? null
@@ -107,10 +107,10 @@ activityFeedRoutes.get(
         relationshipId: row.coachingRelationshipId,
         traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
         type: "workout",
-        subtype: row.status,
+        subtype: labelFor("workout_execution_status", row.status),
         occurredAt: row.completedAt,
         traineeLocalTime: null,
-        summary: `Workout ${row.status}`,
+        summary: `Workout ${labelFor("workout_execution_status", row.status).toLowerCase()}`,
       });
     }
     const checkinRows = await db
@@ -126,10 +126,10 @@ activityFeedRoutes.get(
         relationshipId: row.coachingRelationshipId,
         traineeDisplayName: null,
         type: "checkin",
-        subtype: row.recordStatus,
+        subtype: labelFor("checkin_record_status", row.recordStatus),
         occurredAt: row.submittedAt,
-        traineeLocalTime: row.localDate,
-        summary: "Check-in submitted",
+        traineeLocalTime: null,
+        summary: `Check-in ${formatCivilDate(row.localDate)}`,
       });
     }
     const asks = await db

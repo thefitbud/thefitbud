@@ -130,7 +130,10 @@ export function ClientOverviewPage() {
                     )}
                   </span>
                   <span>{item.title}</span>
-                  <span className="muted">{formatRelative(item.occurredAt)}</span>
+                  <span className="muted">
+                    {" · "}
+                    {formatRelative(item.occurredAt)}
+                  </span>
                 </li>
               ))}
             </ul>

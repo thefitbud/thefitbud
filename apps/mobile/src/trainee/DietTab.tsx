@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import { NutritionRings, colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -24,24 +25,10 @@ import { scheduledAssignments } from "./scheduledAssignments";
 import { WebNutritionSummary } from "./web/WebTraineeChrome";
 
 function statusLabel(status: MealAssignment["status"]): string {
-  switch (status) {
-    case "pending":
-      return "Due";
-    case "confirmed":
-      return "As planned";
-    case "modified":
-      return "Changed";
-    case "skipped":
-      return "Skipped";
-    case "logged_later":
-      return "Logged late";
-    case "overdue":
-      return "Overdue";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+  if (status === "confirmed") return "As planned";
+  if (status === "pending") return "Due";
+  if (status === "modified") return "Changed";
+  return labelFor("meal_assignment_status", status);
 }
 
 function statusTone(

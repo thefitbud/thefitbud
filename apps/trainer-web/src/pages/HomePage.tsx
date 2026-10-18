@@ -57,7 +57,8 @@ export function HomePage() {
     Intl.DateTimeFormat().resolvedOptions().timeZone ??
     "UTC";
   const todayLabel = formatCivilDate(formatLocalDate(new Date(), timeZone));
-  const trainerName = formatPersonName(me?.trainerProfile?.displayName);
+  const trainerFullName = formatPersonName(me?.trainerProfile?.displayName);
+  const trainerName = trainerFullName.split(/\s+/)[0] ?? trainerFullName;
   const [params, setParams] = useSearchParams();
   const drawerExceptionId = params.get("exception");
   const drawerAskId = params.get("ask");
@@ -184,7 +185,7 @@ export function HomePage() {
           <h1>Today</h1>
           <p className="lede muted">{todayLabel}</p>
           {trainerName ? (
-            <p className="muted">{trainerName}</p>
+            <p className="muted">Hi, {trainerName}</p>
           ) : null}
           <p className="lede">
             One row per client. Review the most important item first.
@@ -224,7 +225,9 @@ export function HomePage() {
                   </span>
                   <div className="attention-row-main">
                     <p className="attention-row-name">{group.traineeDisplayName}</p>
-                    <p className="attention-row-issue">{primary.summary}</p>
+                    <p className="attention-row-issue">
+                      {labelFor("exception_type", primary.type)}
+                    </p>
                   </div>
                   <span className={`severity-chip is-${primary.severity}`}>
                     {chip}
@@ -341,7 +344,8 @@ export function HomePage() {
                       item.planName}
                   </p>
                   <p className="attention-row-issue">
-                    Renewal {item.renewalState} · {formatCivilDate(item.renewsOn)}
+                    Renewal {labelFor("renewal_state", item.renewalState)} ·{" "}
+                    {formatCivilDate(item.renewsOn)}
                   </p>
                 </div>
                 <Link
