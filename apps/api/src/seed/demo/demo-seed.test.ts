@@ -4,6 +4,8 @@ import {
   mealComplianceSummaryResponseSchema,
   meDayResponseSchema,
 } from "@fitbud/contracts";
+import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
+import { demoUuid } from "./ids.js";
 import { hashPassword } from "../../auth/password.js";
 import { app } from "../../index.js";
 import { setTestDbOverride, type Db } from "../../db/client.js";
@@ -386,6 +388,139 @@ describe("demo seed", () => {
     },
     180_000,
   );
+
+  it("seeds roster meta: profiles, staggered check-ins, plan shape, reminders", async () => {
+    const rows = (sql: string) => sqliteExec(sql)[0]?.values ?? [];
+    const traineeRel = (email: string) =>
+      String(
+        rows(
+          `SELECT cr.id FROM coaching_relationships cr
+           JOIN user_identities ui ON ui.user_id = cr.trainee_user_id
+           WHERE ui.email_norm = '${email}'`,
+        )[0]?.[0] ?? "",
+      );
+
+    expect(
+      rows(
+        `SELECT COUNT(*) FROM trainee_profiles tp
+         JOIN user_roles ur ON ur.user_id = tp.user_id AND ur.role = 'trainee'
+         WHERE tp.date_of_birth IS NULL OR tp.gender IS NULL`,
+      )[0]?.[0],
+    ).toBe(0);
+    const rohanProfile = rows(
+      `SELECT tp.date_of_birth, tp.gender FROM trainee_profiles tp
+       JOIN user_identities ui ON ui.user_id = tp.user_id
+       WHERE ui.email_norm = 'rohan.slipping@demo.fitbud.test'`,
+    )[0];
+    expect(rohanProfile?.[1]).toBe("Male");
+    const rohanAge =
+      Number(refDate.slice(0, 4)) - Number(String(rohanProfile?.[0]).slice(0, 4));
+    expect([29, 30]).toContain(rohanAge);
+
+    const longAnswer = String(
+      rows(
+        `SELECT answers_json FROM onboarding_form_responses r
+         JOIN coaching_relationships cr ON cr.id = r.coaching_relationship_id
+         JOIN user_identities ui ON ui.user_id = cr.trainee_user_id
+         WHERE ui.email_norm = 'sneha.review@demo.fitbud.test'`,
+      )[0]?.[0],
+    );
+    const answers = JSON.parse(longAnswer) as Record<string, string>;
+    expect(Object.keys(answers).sort()).toEqual(
+      ["goals", "limitations", "preferences", "relevant_history", "schedule"].sort(),
+    );
+    expect(answers.relevant_history!.split("\n").length).toBeGreaterThan(6);
+
+    const nextDates = rows(
+      `SELECT DISTINCT local_date FROM checkins WHERE record_status='draft' AND local_date > '${refDate}'`,
+    ).map((row) => String(row[0]));
+    expect(nextDates.length).toBeGreaterThanOrEqual(5);
+    const rohanNext = rows(
+      `SELECT local_date FROM checkins WHERE id = '${demoUuid("checkin", "rohan.slipping@demo.fitbud.test-next")}'`,
+    )[0]?.[0];
+    expect(new Date(`${String(rohanNext)}T12:00:00Z`).getUTCDay()).toBe(5);
+    const rohanRel = traineeRel("rohan.slipping@demo.fitbud.test");
+    expect(
+      Number(
+        rows(
+          `SELECT COUNT(*) FROM checkins c LEFT JOIN checkin_reviews r ON r.checkin_id = c.id
+           WHERE c.coaching_relationship_id = '${rohanRel}'
+             AND c.record_status = 'submitted' AND r.id IS NULL
+             AND strftime('%w', c.local_date) = '5'`,
+        )[0]?.[0],
+      ),
+    ).toBeGreaterThanOrEqual(1);
+
+    expect(
+      Number(
+        rows(
+          `SELECT COUNT(*) FROM notifications
+           WHERE coaching_relationship_id = '${rohanRel}' AND notification_type = 'meal_reminder'`,
+        )[0]?.[0],
+      ),
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      Number(
+        rows(
+          `SELECT COUNT(*) FROM notification_preferences WHERE quiet_hours_start IS NOT NULL`,
+        )[0]?.[0],
+      ),
+    ).toBeGreaterThanOrEqual(2);
+
+    expect(
+      rows(`SELECT title FROM plans WHERE coaching_relationship_id = '${rohanRel}'`)[0]?.[0],
+    ).toBe("Fat loss \u00b7 Phase 2");
+    const rohanStarted = String(
+      rows(`SELECT started_at FROM coaching_relationships WHERE id = '${rohanRel}'`)[0]?.[0],
+    ).slice(0, 10);
+    expect(
+      (Date.parse(`${refDate}T00:00:00Z`) - Date.parse(`${rohanStarted}T00:00:00Z`)) /
+        86_400_000,
+    ).toBeGreaterThanOrEqual(38);
+
+    const content = JSON.parse(
+      String(
+        rows(
+          `SELECT content_json FROM plan_versions WHERE status = 'effective' AND plan_id = (SELECT id FROM plans WHERE coaching_relationship_id = '${rohanRel}')`,
+        )[0]?.[0],
+      ),
+    ) as PlanContent;
+    expect(content.workoutDays.map((day) => day.weekday)).toEqual([1, 3, 5]);
+    let kcal = 0;
+    let protein = 0;
+    for (const meal of content.mealPrescriptions) {
+      for (const item of meal.items ?? []) {
+        kcal += (item.calculated.energyKcalScaled ?? 0) / NUTRIENT_SCALE;
+        protein += (item.calculated.proteinScaled ?? 0) / NUTRIENT_SCALE;
+      }
+    }
+    expect(kcal).toBeGreaterThan(1700);
+    expect(kcal).toBeLessThan(2000);
+    expect(protein).toBeGreaterThanOrEqual(90);
+    expect(protein).toBeLessThanOrEqual(140);
+
+    const mismatched = rows(
+      `SELECT cr.id, we.sessions_per_week FROM coaching_relationships cr
+       JOIN coaching_configurations cc ON cc.coaching_relationship_id = cr.id
+       JOIN workout_expectations we ON we.coaching_configuration_id = cc.id`,
+    ).filter((row) => Number(row[1]) !== 3);
+    expect(mismatched.length).toBe(0);
+
+    const rohanToken = await login("rahul.coach@demo.fitbud.test");
+    const responsiveness = await app.request(
+      `/notifications/relationships/${rohanRel}/responsiveness?days=14`,
+      {
+        headers: {
+          Authorization: `Bearer ${rohanToken}`,
+          "x-fitbud-role": "trainer",
+        },
+      },
+      testEnv(),
+    );
+    expect(responsiveness.status).toBe(200);
+    const respBody = (await responsiveness.json()) as { data: { label: string } };
+    expect(respBody.data.label).not.toBe("not_enough_data");
+  }, 120_000);
 
   it("does not reference wiped legacy library foods without seed_version", () => {
     const rows = sqliteExec(

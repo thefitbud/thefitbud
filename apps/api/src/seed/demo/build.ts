@@ -32,6 +32,34 @@ function titleCaseDemoName(raw: string): string {
     .join(" ");
 }
 
+type DemoTraineeBio = { age: number; birthMonthDay: string; gender: string };
+
+/** Realistic profile facts (header age/gender, pronouns). Birthdays are fixed month/day. */
+const DEMO_TRAINEE_BIO: Record<string, DemoTraineeBio> = {
+  "vikram.onboarding@demo.fitbud.test": { age: 33, birthMonthDay: "05-22", gender: "Male" },
+  "sneha.review@demo.fitbud.test": { age: 31, birthMonthDay: "08-09", gender: "Female" },
+  "aarav.ontrack@demo.fitbud.test": { age: 34, birthMonthDay: "02-17", gender: "Male" },
+  "rohan.slipping@demo.fitbud.test": { age: 29, birthMonthDay: "03-14", gender: "Male" },
+  "meera.ack@demo.fitbud.test": { age: 38, birthMonthDay: "11-03", gender: "Female" },
+  "farhan.paused@demo.fitbud.test": { age: 36, birthMonthDay: "01-28", gender: "Male" },
+  "ishita.pushoff@demo.fitbud.test": { age: 27, birthMonthDay: "06-30", gender: "Female" },
+  "kavya.ended@demo.fitbud.test": { age: 32, birthMonthDay: "09-12", gender: "Female" },
+  "nikhil.reactivate@demo.fitbud.test": { age: 41, birthMonthDay: "04-05", gender: "Male" },
+  "deepak.dubai@demo.fitbud.test": { age: 35, birthMonthDay: "07-19", gender: "Male" },
+  "arjun.attention@demo.fitbud.test": { age: 30, birthMonthDay: "10-02", gender: "Male" },
+  "neha.attention@demo.fitbud.test": { age: 28, birthMonthDay: "12-08", gender: "Female" },
+  "tanvi.attention@demo.fitbud.test": { age: 26, birthMonthDay: "03-25", gender: "Female" },
+  "lakshmi.foods@demo.fitbud.test": { age: 37, birthMonthDay: "09-01", gender: "Female" },
+  "karan.dual@demo.fitbud.test": { age: 33, birthMonthDay: "05-06", gender: "Male" },
+};
+
+function demoDateOfBirth(bio: DemoTraineeBio, refDate: string): string {
+  const refYear = Number(refDate.slice(0, 4));
+  const birthdayPassed = bio.birthMonthDay <= refDate.slice(5);
+  const year = refYear - bio.age - (birthdayPassed ? 0 : 1);
+  return `${year}-${bio.birthMonthDay}`;
+}
+
 function wipeAppData(): string {
   return `
 DELETE FROM reminder_states;
@@ -94,6 +122,8 @@ function insertUser(input: {
   phone?: string;
   passwordHash: string;
   now: string;
+  dateOfBirth?: string;
+  gender?: string;
 }): string {
   const userId = demoUuid("user", input.email);
   const firebaseUid = `demo-${input.email}`;
@@ -107,7 +137,7 @@ function insertUser(input: {
     );
   } else {
     lines.push(
-      `INSERT INTO trainee_profiles (id, user_id, display_name, date_of_birth, gender, created_at, updated_at) VALUES (${sqlQuote(profileId)}, ${sqlQuote(userId)}, ${sqlQuote(input.displayName)}, NULL, NULL, ${sqlQuote(input.now)}, ${sqlQuote(input.now)});`,
+      `INSERT INTO trainee_profiles (id, user_id, display_name, date_of_birth, gender, created_at, updated_at) VALUES (${sqlQuote(profileId)}, ${sqlQuote(userId)}, ${sqlQuote(input.displayName)}, ${input.dateOfBirth ? sqlQuote(input.dateOfBirth) : "NULL"}, ${input.gender ? sqlQuote(input.gender) : "NULL"}, ${sqlQuote(input.now)}, ${sqlQuote(input.now)});`,
     );
   }
   lines.push(
@@ -141,12 +171,16 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
           titleCaseDemoName(account.email.split("@")[0]!.replace(/\./g, " "));
     const timezone =
       account.email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
+    const bio =
+      account.role === "trainee" ? DEMO_TRAINEE_BIO[account.email] : undefined;
     parts.push(
       insertUser({
         email: account.email,
         role: account.role,
         displayName,
         timezone,
+        dateOfBirth: bio ? demoDateOfBirth(bio, refDate) : undefined,
+        gender: bio?.gender,
         phone: account.state === "first_run" ? undefined : phone,
         passwordHash: input.passwordHash,
         now,

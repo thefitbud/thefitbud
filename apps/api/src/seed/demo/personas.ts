@@ -19,6 +19,11 @@ export const DEMO_LIBRARY_FOOD_SLUGS = [
   "idli",
   "sambar",
   "oatmeal-cooked-with-water",
+  "scrambled-egg",
+  "safed-chana-curry-chole",
+  "afghani-chicken",
+  "rice-boiled-parboiled",
+  "mint-and-peanut-raita",
 ] as const;
 
 export const DEMO_LIBRARY_EXERCISE_SLUGS = [
@@ -202,57 +207,86 @@ const MEAL_PRESCRIPTION_IDS = {
   snack: demoUuid("meal-rx", "snack"),
 };
 
-const WORKOUT_DAY_ID = demoUuid("workout-day", "strength");
+const WORKOUT_DAY_IDS = {
+  monday: demoUuid("workout-day", "strength"),
+  wednesday: demoUuid("workout-day", "strength-wed"),
+  friday: demoUuid("workout-day", "strength-fri"),
+} as const;
 
+const WORKOUT_DAY_ID = WORKOUT_DAY_IDS.monday;
+
+/** Demo prescriptions: ~1,850 kcal and ~110 g protein per day (fat-loss shape). */
 export function buildStandardPlanContent(
   lib: DemoLibraryIndex,
   variant: "v1" | "v2" = "v2",
 ): PlanContent {
-  const breakfastFood =
+  const food = (slug: keyof DemoLibraryIndex["foods"], servings: number) => {
+    const entry = lib.foods[slug];
+    return foodSnapshotFromLibrary(
+      entry.item,
+      entry.defaultServingId,
+      Math.round(servings * NUTRIENT_SCALE),
+    );
+  };
+  const pushUp = lib.exercises["push-up"];
+  const squat = lib.exercises["back-squat-barbell"];
+  const exercise = (
+    key: string,
+    order: number,
+    ex: DemoLibraryExercise,
+    reps: number,
+  ) => ({
+    id: demoUuid("plan-exercise", key),
+    order,
+    name: ex.name,
+    instructions: null,
+    primaryMuscles: [],
+    secondaryMuscles: [],
+    equipment: [],
+    difficulty: null,
+    setTargets: [
+      {
+        id: demoUuid("set-target", `${key}-1`),
+        order: 1,
+        reps,
+        loadLabel: null,
+        rpe: null,
+      },
+    ],
+    sourceExerciseLibraryItemId: ex.id,
+  });
+  const breakfastItems =
     variant === "v1"
-      ? lib.foods["oatmeal-cooked-with-water"]
-      : lib.foods["chapati-roti"];
-  const lunchFood = lib.foods.poha;
-  const breakfastItem = foodSnapshotFromLibrary(
-    breakfastFood.item,
-    breakfastFood.defaultServingId,
-    NUTRIENT_SCALE,
-  );
-  const lunchItem = foodSnapshotFromLibrary(
-    lunchFood.item,
-    lunchFood.defaultServingId,
-    NUTRIENT_SCALE,
-  );
-  const exercise = lib.exercises["push-up"];
+      ? [food("oatmeal-cooked-with-water", 1), food("scrambled-egg", 2)]
+      : [food("scrambled-egg", 2), food("chapati-roti", 3)];
+  const everyDay = [0, 1, 2, 3, 4, 5, 6];
   return {
     workoutDays: [
       {
-        id: WORKOUT_DAY_ID,
+        id: WORKOUT_DAY_IDS.monday,
         order: 1,
-        name: "Strength",
+        name: "Upper body",
         weekday: 1,
         required: true,
+        exercises: [exercise("push-up", 1, pushUp, 10)],
+      },
+      {
+        id: WORKOUT_DAY_IDS.wednesday,
+        order: 2,
+        name: "Lower body",
+        weekday: 3,
+        required: true,
+        exercises: [exercise("back-squat", 1, squat, 8)],
+      },
+      {
+        id: WORKOUT_DAY_IDS.friday,
+        order: 3,
+        name: "Full body",
+        weekday: 5,
+        required: true,
         exercises: [
-          {
-            id: demoUuid("plan-exercise", "push-up"),
-            order: 1,
-            name: exercise.name,
-            instructions: null,
-            primaryMuscles: [],
-            secondaryMuscles: [],
-            equipment: [],
-            difficulty: null,
-            setTargets: [
-              {
-                id: demoUuid("set-target", "push-up-1"),
-                order: 1,
-                reps: 10,
-                loadLabel: null,
-                rpe: null,
-              },
-            ],
-            sourceExerciseLibraryItemId: exercise.id,
-          },
+          exercise("push-up-fri", 1, pushUp, 12),
+          exercise("back-squat-fri", 2, squat, 10),
         ],
       },
     ],
@@ -262,52 +296,60 @@ export function buildStandardPlanContent(
         order: 1,
         name: "Breakfast",
         mealType: "breakfast",
-        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        applicableWeekdays: everyDay,
         localTime: "08:00",
         scheduleHint: null,
         instructions: null,
         photoRequired: false,
         required: true,
-        items: [breakfastItem],
+        items: breakfastItems,
       },
       {
         id: MEAL_PRESCRIPTION_IDS.lunch,
         order: 2,
         name: "Lunch",
         mealType: "lunch",
-        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        applicableWeekdays: everyDay,
         localTime: "13:00",
         scheduleHint: null,
         instructions: null,
         photoRequired: false,
         required: true,
-        items: [lunchItem],
+        items: [
+          food("afghani-chicken", 1),
+          food("rice-boiled-parboiled", 0.7),
+          food("safed-chana-curry-chole", 0.5),
+        ],
       },
       {
         id: MEAL_PRESCRIPTION_IDS.dinner,
         order: 3,
         name: "Dinner",
         mealType: "dinner",
-        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        applicableWeekdays: everyDay,
         localTime: "20:00",
         scheduleHint: null,
         instructions: null,
         photoRequired: false,
         required: true,
-        items: [lunchItem],
+        items: [
+          food("afghani-chicken", 1),
+          food("chapati-roti", 2),
+          food("safed-chana-curry-chole", 1),
+        ],
       },
       {
         id: MEAL_PRESCRIPTION_IDS.snack,
         order: 4,
         name: "Snack",
         mealType: "snack",
-        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        applicableWeekdays: everyDay,
         localTime: "17:00",
         scheduleHint: null,
         instructions: null,
         photoRequired: false,
         required: false,
-        items: [],
+        items: [food("mint-and-peanut-raita", 1)],
       },
     ],
   };
@@ -315,4 +357,4 @@ export function buildStandardPlanContent(
 
 export const DEMO_CHECKIN_FORM_VERSION_ID = GLOBAL_CHECKIN_FORM_VERSION_ID;
 
-export { MEAL_PRESCRIPTION_IDS, WORKOUT_DAY_ID };
+export { MEAL_PRESCRIPTION_IDS, WORKOUT_DAY_ID, WORKOUT_DAY_IDS };

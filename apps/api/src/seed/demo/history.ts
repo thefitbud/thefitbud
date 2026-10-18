@@ -11,10 +11,7 @@ import {
   buildStandardPlanContent,
   type DemoLibraryIndex,
 } from "./personas.js";
-import {
-  MEAL_PRESCRIPTION_IDS,
-  WORKOUT_DAY_ID,
-} from "./personas.js";
+import { MEAL_PRESCRIPTION_IDS } from "./personas.js";
 import {
   addDaysFromLocalDate,
   demoUuid,
@@ -67,14 +64,43 @@ function demoGoalShort(traineeEmail: string, state: string): string {
   return "Stay consistent this month";
 }
 
-/** Next Sunday (civil) on or after refDate — matches weekly check-in cadence. */
-function nextWeeklyCheckinDate(refDate: string): string {
-  let cursor = refDate;
-  for (let i = 0; i < 8; i += 1) {
-    if (weekdayFromDate(cursor) === 0) return cursor;
+function demoPlanTitle(traineeEmail: string): string {
+  if (traineeEmail.startsWith("rohan.")) return "Fat loss \u00b7 Phase 2";
+  return "Coaching plan";
+}
+
+/** Rohan has been coached ~6 weeks; everyone else ~4. */
+function demoStartedAt(
+  traineeEmail: string,
+  refDate: string,
+  defaultStartedAt: string,
+): string {
+  if (traineeEmail.startsWith("rohan.")) {
+    return new Date(
+      Date.parse(`${refDate}T06:00:00.000Z`) - 40 * 86_400_000,
+    ).toISOString();
+  }
+  return defaultStartedAt;
+}
+
+/** First civil date strictly after refDate that falls on `weekday` (0 = Sunday). */
+function nextWeekdayAfter(refDate: string, weekday: number): string {
+  let cursor = addDaysFromLocalDate(refDate, 1);
+  for (let i = 0; i < 7; i += 1) {
+    if (weekdayFromDate(cursor) === weekday) return cursor;
     cursor = addDaysFromLocalDate(cursor, 1);
   }
-  return addDaysFromLocalDate(refDate, 7);
+  return cursor;
+}
+
+/** Most recent civil date strictly before refDate on `weekday`. */
+function previousWeekdayBefore(refDate: string, weekday: number): string {
+  let cursor = addDaysFromLocalDate(refDate, -1);
+  for (let i = 0; i < 7; i += 1) {
+    if (weekdayFromDate(cursor) === weekday) return cursor;
+    cursor = addDaysFromLocalDate(cursor, -1);
+  }
+  return cursor;
 }
 
 type HistoryInput = {
@@ -110,6 +136,28 @@ function buildTrainerTemplates(now: string, lib: DemoLibraryIndex): string {
   ].join("\n");
 }
 
+/** Keys match the Default onboarding form (goals, relevant_history, preferences, schedule, limitations). */
+const SNEHA_ONBOARDING_ANSWERS = {
+  goals:
+    "Lose about 6 kg over the next four months and feel less tired in the afternoons. I would also like to build enough strength to do a proper push-up and run 5 km without stopping.",
+  relevant_history: [
+    "I had a desk job for the last eight years and stopped exercising regularly after my second year at work.",
+    "In 2022 I joined a gym and trained four days a week for about five months, lost around 4 kg, then stopped after a knee strain and a stretch of heavy work travel.",
+    "Since then my weight has crept back up and my energy dips badly after lunch.",
+    "I was diagnosed with mild hypothyroidism in 2023 and take 50 mcg thyroxine every morning; my last TSH (February this year) was in range.",
+    "No diabetes or blood pressure issues. My mother has type 2 diabetes, so I want to be careful with sugar.",
+    "I have tried calorie counting apps twice and quit both times because logging every ingredient felt exhausting.",
+    "I also tried a keto-style diet for six weeks last year, lost 3 kg quickly, and regained it within a month once I started eating normally again.",
+    "Sleep is usually 6 hours on weekdays and 8 on weekends.",
+  ].join("\n\n"),
+  preferences:
+    "Vegetarian with eggs on weekends. I like simple Maharashtrian home food, hate bitter gourd, and prefer short 30-40 minute workouts at home or the society gym.",
+  schedule:
+    "Weekdays: up at 6:30 am, breakfast around 8, lunch at 1 pm at the office, dinner at 8:30 pm. I can train Monday, Wednesday and Friday at 7 am, or Saturday morning.",
+  limitations:
+    "Right knee gets sore with deep lunges and jumping. Occasional lower-back stiffness after long sitting. No other injuries.",
+};
+
 function buildOnboardingStack(input: {
   relId: string;
   traineeEmail: string;
@@ -128,8 +176,11 @@ function buildOnboardingStack(input: {
     return lines.join("\n");
   }
   if (input.state === "awaiting_review") {
+    const submittedAt = new Date(
+      Date.parse(input.now) - 2 * 86_400_000,
+    ).toISOString();
     lines.push(
-      `INSERT INTO onboarding_form_responses (id, coaching_relationship_id, onboarding_form_version_id, trainee_user_id, status, answers_json, version, submitted_at, created_at, updated_at) VALUES (${sqlQuote(responseId)}, ${sqlQuote(input.relId)}, ${formVersionSql}, ${sqlQuote(userId(input.traineeEmail))}, 'submitted', '{"goals":"Fat loss"}', 1, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
+      `INSERT INTO onboarding_form_responses (id, coaching_relationship_id, onboarding_form_version_id, trainee_user_id, status, answers_json, version, submitted_at, created_at, updated_at) VALUES (${sqlQuote(responseId)}, ${sqlQuote(input.relId)}, ${formVersionSql}, ${sqlQuote(userId(input.traineeEmail))}, 'submitted', ${jsonQuote(SNEHA_ONBOARDING_ANSWERS)}, 1, ${sqlQuote(submittedAt)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(submittedAt)});`,
     );
     return lines.join("\n");
   }
@@ -182,8 +233,9 @@ function buildPlanAndSubscription(input: {
         : input.state === "active_on_track"
           ? addDaysFromLocalDate(input.refDate, 20)
           : addDaysFromLocalDate(input.refDate, 25);
+  const planTitle = demoPlanTitle(input.traineeEmail);
   const lines = [
-    `INSERT INTO plans (id, coaching_relationship_id, title, created_at, updated_at) VALUES (${sqlQuote(planId)}, ${sqlQuote(input.relId)}, 'Coaching plan', ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
+    `INSERT INTO plans (id, coaching_relationship_id, title, created_at, updated_at) VALUES (${sqlQuote(planId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planTitle)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
     `INSERT INTO plan_versions (id, plan_id, version_number, status, record_version, content_json, creation_source, source_template_id, published_at, effective_from, effective_to, created_at, updated_at) VALUES (${sqlQuote(v1Id)}, ${sqlQuote(planId)}, 1, 'superseded', 0, ${jsonQuote(v1Content)}, 'blank', NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(`${startedLocal}T00:00:00.000Z`)}, ${sqlQuote(v2Effective)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
     `INSERT INTO plan_versions (id, plan_id, version_number, status, record_version, content_json, creation_source, source_template_id, published_at, effective_from, effective_to, created_at, updated_at) VALUES (${sqlQuote(v2Id)}, ${sqlQuote(planId)}, 2, 'effective', 0, ${jsonQuote(v2Content)}, 'previous_version', NULL, ${sqlQuote(v2Effective)}, ${sqlQuote(v2Effective)}, NULL, ${sqlQuote(v2Effective)}, ${sqlQuote(input.now)});`,
     `INSERT INTO subscription_versions (id, coaching_relationship_id, version_number, plan_name, payment_frequency, starts_on, renews_on, created_at) VALUES (${sqlQuote(demoUuid("subscription", input.relId))}, ${sqlQuote(input.relId)}, 1, 'Monthly coaching', 'monthly', ${sqlQuote(input.startedAt.slice(0, 10))}, ${sqlQuote(renewsOn)}, ${sqlQuote(input.startedAt)});`,
@@ -194,6 +246,22 @@ function buildPlanAndSubscription(input: {
     planVersionId: v2Id,
     content: v2Content,
   };
+}
+
+function mealMacros(meal: PlanContent["mealPrescriptions"][number]): {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+} {
+  const totals = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+  for (const item of meal.items ?? []) {
+    totals.kcal += item.calculated.energyKcalScaled ?? 0;
+    totals.protein += item.calculated.proteinScaled ?? 0;
+    totals.carbs += item.calculated.carbsScaled ?? 0;
+    totals.fat += item.calculated.fatScaled ?? 0;
+  }
+  return totals;
 }
 
 function weekdayFromDate(localDate: string): number {
@@ -217,7 +285,9 @@ function buildAssignmentsAndLogs(input: {
   const historyStart = addDaysFromLocalDate(input.refDate, -27);
   const adherenceStart = addDaysFromLocalDate(input.refDate, -13);
   const mealRx = input.content.mealPrescriptions;
-  const workoutDay = input.content.workoutDays[0]!;
+  const workoutDayByWeekday = new Map(
+    input.content.workoutDays.map((day) => [day.weekday, day] as const),
+  );
 
   for (let offset = 0; offset < 28; offset++) {
     const localDate = addDaysFromLocalDate(historyStart, offset);
@@ -258,19 +328,21 @@ function buildAssignmentsAndLogs(input: {
       );
       if (shouldLog === "confirm" && slotReached) {
         const complianceId = demoUuid("meal-compliance", assignmentId);
+        const macros = mealMacros(meal);
         const loggedAt = clampIsoToNow(
           // Log near the slot start, not the long window end (avoids future stamps).
           new Date(Date.parse(windowStart) + 30 * 60_000).toISOString(),
           input.now,
         );
         lines.push(
-          `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(complianceId)}, ${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, 'confirmed', 0, ${sqlQuote(loggedAt)}, NULL, NULL, 0, NULL, NULL, NULL, 400000000, 20000000, 50000000, 10000000, 0, 0, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)});`,
+          `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(complianceId)}, ${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, 'confirmed', 0, ${sqlQuote(loggedAt)}, NULL, NULL, 0, NULL, NULL, NULL, ${macros.kcal}, ${macros.protein}, ${macros.carbs}, ${macros.fat}, 0, 0, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)});`,
         );
       }
     }
 
     const dow = weekdayFromDate(localDate);
-    if (dow === 1 || dow === 3 || dow === 5) {
+    const workoutDay = workoutDayByWeekday.get(dow);
+    if (workoutDay) {
       const workoutAssignmentId = demoUuid(
         "workout-assignment",
         input.traineeEmail,
@@ -279,7 +351,7 @@ function buildAssignmentsAndLogs(input: {
       const wStart = localDayStartIso(localDate, "07:00", input.timezone);
       const wEnd = new Date(Date.parse(wStart) + 24 * 3_600_000).toISOString();
       lines.push(
-        `INSERT INTO workout_assignments (id, coaching_relationship_id, plan_id, plan_version_id, workout_day_id, workout_day_name, workout_day_json, local_date, window_starts_at, window_ends_at, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(WORKOUT_DAY_ID)}, ${sqlQuote(workoutDay.name)}, ${jsonQuote(workoutDay)}, ${sqlQuote(localDate)}, ${sqlQuote(wStart)}, ${sqlQuote(wEnd)}, 'scheduled', NULL, NULL, ${sqlQuote(wStart)}, ${sqlQuote(wStart)});`,
+        `INSERT INTO workout_assignments (id, coaching_relationship_id, plan_id, plan_version_id, workout_day_id, workout_day_name, workout_day_json, local_date, window_starts_at, window_ends_at, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(workoutDay.id)}, ${sqlQuote(workoutDay.name)}, ${jsonQuote(workoutDay)}, ${sqlQuote(localDate)}, ${sqlQuote(wStart)}, ${sqlQuote(wEnd)}, 'scheduled', NULL, NULL, ${sqlQuote(wStart)}, ${sqlQuote(wStart)});`,
       );
       const workoutLog = shouldLogWorkout(input.state, localDate, input.refDate, adherenceStart);
       if (workoutLog) {
@@ -604,20 +676,20 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "lakshmi-today"))}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("checkin-schedule", lakshmiRel))}, ${sqlQuote(refDate)}, ${sqlQuote(localDayStartIso(refDate, "09:00", "Asia/Kolkata"))}, ${sqlQuote(new Date(Date.parse(now) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
-  // Upcoming weekly check-in drafts so roster "Next check-in" is schedule-real.
-  const nextCheckinDate = nextWeeklyCheckinDate(addDaysFromLocalDate(refDate, 1));
-  const upcomingCheckinClients = [
-    "aarav.ontrack@demo.fitbud.test",
-    "rohan.slipping@demo.fitbud.test",
-    "meera.ack@demo.fitbud.test",
-    "farhan.paused@demo.fitbud.test",
-    "ishita.pushoff@demo.fitbud.test",
-    "deepak.dubai@demo.fitbud.test",
-    "arjun.attention@demo.fitbud.test",
-    "neha.attention@demo.fitbud.test",
-    "tanvi.attention@demo.fitbud.test",
+  // Upcoming weekly check-in drafts, staggered across the week (not all Sunday).
+  const upcomingCheckins = [
+    ["aarav.ontrack@demo.fitbud.test", 3],
+    ["rohan.slipping@demo.fitbud.test", 5],
+    ["meera.ack@demo.fitbud.test", 4],
+    ["farhan.paused@demo.fitbud.test", 2],
+    ["ishita.pushoff@demo.fitbud.test", 1],
+    ["deepak.dubai@demo.fitbud.test", 6],
+    ["arjun.attention@demo.fitbud.test", 3],
+    ["neha.attention@demo.fitbud.test", 4],
+    ["tanvi.attention@demo.fitbud.test", 0],
   ] as const;
-  for (const email of upcomingCheckinClients) {
+  for (const [email, weekday] of upcomingCheckins) {
+    const nextCheckinDate = nextWeekdayAfter(refDate, weekday);
     const trainer =
       email.startsWith("lakshmi.") || email.startsWith("karan.")
         ? "priya.coach@demo.fitbud.test"
@@ -626,6 +698,57 @@ function buildPersonaOverlays(input: HistoryInput): string {
     const timezone = email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", `${email}-next`))}, ${sqlQuote(relationship)}, ${sqlQuote(demoUuid("checkin-schedule", relationship))}, ${sqlQuote(nextCheckinDate)}, ${sqlQuote(localDayStartIso(nextCheckinDate, "09:00", timezone))}, ${sqlQuote(new Date(Date.parse(localDayStartIso(nextCheckinDate, "09:00", timezone)) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    );
+  }
+
+  // Rohan: latest weekly (Friday) check-in submitted and still awaiting review.
+  const rohanCheckinDate = previousWeekdayBefore(refDate, 5);
+  const rohanCheckinStart = localDayStartIso(rohanCheckinDate, "09:00", "Asia/Kolkata");
+  const rohanSubmittedAt = clampIsoToNow(
+    localDayStartIso(rohanCheckinDate, "19:40", "Asia/Kolkata"),
+    now,
+  );
+  lines.push(
+    `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Tired but okay. Missed two workouts this week.", notes: "Travel for work threw off lunches and I skipped Wednesday's session. Back on track from Monday." })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
+  );
+
+  // Rohan reminders (last 14d) so responsiveness has enough data.
+  const rohanReminders = [
+    [3, MEAL_PRESCRIPTION_IDS.breakfast, true],
+    [3, MEAL_PRESCRIPTION_IDS.dinner, false],
+    [2, MEAL_PRESCRIPTION_IDS.lunch, true],
+    [1, MEAL_PRESCRIPTION_IDS.lunch, false],
+    [1, MEAL_PRESCRIPTION_IDS.dinner, true],
+  ] as const;
+  rohanReminders.forEach(([daysAgo, slot, opened], index) => {
+    const day = addDaysFromLocalDate(refDate, -daysAgo);
+    const assignmentId = demoUuid("meal-assignment", "rohan.slipping@demo.fitbud.test", day, slot);
+    const slotTime =
+      slot === MEAL_PRESCRIPTION_IDS.breakfast
+        ? "08:00"
+        : slot === MEAL_PRESCRIPTION_IDS.lunch
+          ? "13:00"
+          : "20:00";
+    const sentAt = new Date(
+      Date.parse(localDayStartIso(day, slotTime, "Asia/Kolkata")) - 10 * 60_000,
+    ).toISOString();
+    const openedAt = opened
+      ? new Date(Date.parse(sentAt) + 4 * 60_000).toISOString()
+      : null;
+    lines.push(
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, opened_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", `rohan-reminder-${index}`))}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, ${sqlQuote(rohanRel)}, 'meal_reminder', 'meal_assignment', ${sqlQuote(assignmentId)}, ${opened ? "'read'" : "'delivered'"}, ${sqlQuote(`rohan-reminder-${index}`)}, ${sqlQuote(sentAt)}, ${openedAt ? sqlQuote(openedAt) : "NULL"}, ${openedAt ? sqlQuote(openedAt) : "NULL"}, '{"summary":"Meal reminder"}');`,
+    );
+  });
+
+  // Quiet hours stored per client (not only runtime defaults).
+  const quietHours = [
+    ["rohan.slipping@demo.fitbud.test", "22:00", "06:30"],
+    ["ishita.pushoff@demo.fitbud.test", "23:00", "07:00"],
+    ["deepak.dubai@demo.fitbud.test", "22:30", "06:00"],
+  ] as const;
+  for (const [email, start, end] of quietHours) {
+    lines.push(
+      `INSERT INTO notification_preferences (user_id, push_enabled, workout_reminder, meal_reminder, checkin_reminder, subscription_renewal_reminder, daily_summary_reminder, quiet_hours_start, quiet_hours_end, created_at, updated_at) VALUES (${sqlQuote(userId(email))}, 1, 1, 1, 1, 1, 1, ${sqlQuote(start)}, ${sqlQuote(end)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
   }
 
@@ -666,7 +789,7 @@ function foodSnapshotJson(lib: DemoLibraryIndex, slug: keyof DemoLibraryIndex["f
 export function buildDemoHistorySql(input: HistoryInput): string {
   const now = input.referenceInstant;
   const refDate = input.referenceDate;
-  const startedAt = new Date(
+  const defaultStartedAt = new Date(
     Date.parse(`${refDate}T06:00:00.000Z`) - 27 * 86_400_000,
   ).toISOString();
   const lines: string[] = [`-- history anchor ${refDate}`];
@@ -675,6 +798,7 @@ export function buildDemoHistorySql(input: HistoryInput): string {
 
   for (const account of DEMO_ACCOUNTS) {
     if (account.role !== "trainee" || !account.trainerEmail) continue;
+    const startedAt = demoStartedAt(account.email, refDate, defaultStartedAt);
     const ended =
       account.state === "ended" || account.state === "reactivation_pending";
     const endedAt = ended
