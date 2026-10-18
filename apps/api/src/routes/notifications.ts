@@ -734,6 +734,7 @@ notificationRoutes.post(
       trainerUserId: actor.userId,
       activityType: parsed.data.activityType,
       activityId: parsed.data.activityId,
+      now: c.env.AUTH_MODE === "test" ? parsed.data.now : undefined,
       queue: reminderQueueFromEnv(c.env),
       pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
       deliverInline: !c.env.REMINDER_QUEUE,

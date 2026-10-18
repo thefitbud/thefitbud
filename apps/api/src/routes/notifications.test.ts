@@ -666,13 +666,14 @@ describe("notifications and reminders (D4)", () => {
       (await scheduled.json()) as { data: { checkin: { id: string } } }
     ).data.checkin.id;
     const deliveryKey = `checkin_reminder:${checkinId}`;
+    const duringQuietNow = istWallClockToUtc(today, 3, 0);
 
     const first = await app.request(
       "/notifications/reminders/evaluate",
       {
         method: "POST",
         headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ now: duringQuietNow }),
       },
       testEnv(),
     );
@@ -691,7 +692,7 @@ describe("notifications and reminders (D4)", () => {
       {
         method: "POST",
         headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ now: duringQuietNow }),
       },
       testEnv(),
     );
@@ -721,7 +722,7 @@ describe("notifications and reminders (D4)", () => {
       {
         method: "POST",
         headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ now: istWallClockToUtc(today, 5, 0) }),
       },
       testEnv(),
     );
@@ -1225,13 +1226,13 @@ describe("notifications and reminders (D4)", () => {
       ((await traineeNudge.json()) as { error: { code: string } }).error.code,
     ).toBe("FORBIDDEN_ROLE");
 
-    async function nudge(activityId: string) {
+    async function nudge(activityId: string, now: string) {
       return app.request(
         `/notifications/relationships/${relationshipId}/nudges`,
         {
           method: "POST",
           headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
-          body: JSON.stringify({ activityType: "checkin", activityId }),
+          body: JSON.stringify({ activityType: "checkin", activityId, now }),
         },
         testEnv(),
       );
@@ -1254,7 +1255,8 @@ describe("notifications and reminders (D4)", () => {
       testEnv(),
     );
 
-    const first = await nudge(ids[0]!);
+    const outsideQuietNudgeNow = istWallClockToUtc(today, 9, 30);
+    const first = await nudge(ids[0]!, outsideQuietNudgeNow);
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as {
       data: { deduped: boolean; notification: { dedupeKey: string; state: string } };
@@ -1264,14 +1266,14 @@ describe("notifications and reminders (D4)", () => {
       activityNudgeDedupeKey(ids[0]!, today),
     );
     expect(firstBody.data.notification.state).toBe("delivered");
-    const repeated = await nudge(ids[0]!);
+    const repeated = await nudge(ids[0]!, outsideQuietNudgeNow);
     expect(repeated.status).toBe(200);
     expect(((await repeated.json()) as { data: { deduped: boolean } }).data.deduped).toBe(
       true,
     );
-    expect((await nudge(ids[1]!)).status).toBe(200);
-    expect((await nudge(ids[2]!)).status).toBe(200);
-    const limited = await nudge(ids[3]!);
+    expect((await nudge(ids[1]!, outsideQuietNudgeNow)).status).toBe(200);
+    expect((await nudge(ids[2]!, outsideQuietNudgeNow)).status).toBe(200);
+    const limited = await nudge(ids[3]!, outsideQuietNudgeNow);
     expect(limited.status).toBe(429);
     expect(
       ((await limited.json()) as { error: { code: string } }).error.code,
@@ -1333,6 +1335,7 @@ describe("notifications and reminders (D4)", () => {
     const quietCheckinId = (
       (await quietScheduled.json()) as { data: { checkin: { id: string } } }
     ).data.checkin.id;
+    const duringQuietNudgeNow = istWallClockToUtc(quietToday, 23, 0);
     const quietNudge = await app.request(
       `/notifications/relationships/${quietRelationship}/nudges`,
       {
@@ -1341,6 +1344,7 @@ describe("notifications and reminders (D4)", () => {
         body: JSON.stringify({
           activityType: "checkin",
           activityId: quietCheckinId,
+          now: duringQuietNudgeNow,
         }),
       },
       testEnv(),
@@ -1394,7 +1398,7 @@ describe("notifications and reminders (D4)", () => {
       {
         method: "POST",
         headers: { Cookie: quietTrainer, "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ now: istWallClockToUtc(quietToday, 5, 0) }),
       },
       testEnv(),
     );

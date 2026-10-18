@@ -347,6 +347,8 @@ export type NudgeActivityType = z.infer<typeof nudgeActivityTypeSchema>;
 export const nudgeActivityRequestSchema = z.object({
   activityType: nudgeActivityTypeSchema,
   activityId: uuidSchema,
+  /** Test-only clock override (honored when AUTH_MODE=test). */
+  now: isoDateTimeSchema.optional(),
 });
 export type NudgeActivityRequest = z.infer<typeof nudgeActivityRequestSchema>;
 
