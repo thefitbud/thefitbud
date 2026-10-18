@@ -192,25 +192,46 @@ test.describe("banned-strings · Expo web", () => {
     test.setTimeout(180_000);
     const base = EXPO_WEB_URL!;
 
-    async function visit(path: string, account: string) {
-      const url = new URL(path, base);
-      url.searchParams.set("captureAccount", account);
-      await page.goto(url.toString());
-      await page.waitForTimeout(1500);
-      return collectText(page);
+    type CaptureBridge = {
+      navigate: (screenId: string) => Promise<void>;
+      ready?: boolean;
+    };
+
+    async function waitForCaptureBridge() {
+      await page.goto(base, { waitUntil: "networkidle" });
+      await page.waitForFunction(
+        () =>
+          Boolean(
+            (globalThis as { __fitbudCapture?: CaptureBridge }).__fitbudCapture
+              ?.ready,
+          ),
+        { timeout: 60_000 },
+      );
     }
 
+    async function captureScreen(screenId: string, route: string) {
+      await page.evaluate(async (id) => {
+        const bridge = (globalThis as { __fitbudCapture?: CaptureBridge })
+          .__fitbudCapture;
+        if (!bridge) throw new Error("capture bridge missing — set EXPO_PUBLIC_SCREEN_CAPTURE=1");
+        await bridge.navigate(id);
+      }, screenId);
+      await page.waitForTimeout(1500);
+      const text = await collectText(page);
+      return {
+        textHits: scanText(text, route, "mobile" as const),
+        roleHits: await scanRoleChecks(page, route, "mobile"),
+      };
+    }
+
+    await waitForCaptureBridge();
     const allHits: Hit[] = [];
 
-    const todayText = await visit("/", "aarav.ontrack@demo.fitbud.test");
-    allHits.push(...scanText(todayText, "mobile/Today", "mobile"));
-    allHits.push(...(await scanRoleChecks(page, "mobile/Today", "mobile")));
+    const today = await captureScreen("TR-06", "mobile/Today");
+    allHits.push(...today.textHits, ...today.roleHits);
 
-    const attentionText = await visit("/", "rahul.coach@demo.fitbud.test");
-    allHits.push(...scanText(attentionText, "mobile/Attention", "mobile"));
-    allHits.push(
-      ...(await scanRoleChecks(page, "mobile/Attention", "mobile")),
-    );
+    const attention = await captureScreen("TM-01", "mobile/Attention");
+    allHits.push(...attention.textHits, ...attention.roleHits);
 
     const errors = allHits.filter((h) => h.severity === "error");
     const warns = allHits.filter((h) => h.severity === "warn");

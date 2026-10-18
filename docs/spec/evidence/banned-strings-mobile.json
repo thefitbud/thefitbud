@@ -1,0 +1,22 @@
+{
+  "app": "expo-web",
+  "errorCount": 2,
+  "warnCount": 0,
+  "errors": [
+    {
+      "id": "iso-date",
+      "severity": "error",
+      "match": "2026-10-18",
+      "route": "mobile/Today",
+      "why": "Raw ISO date/timestamp. Use the packages/core formatter ('Thu 15 Oct')."
+    },
+    {
+      "id": "snake-case",
+      "severity": "error",
+      "match": "missed_workout",
+      "route": "mobile/Attention",
+      "why": "Raw enum (overdue_meal, portion_size, upper_back, steps_enabled). Map it through packages/core labels."
+    }
+  ],
+  "warns": []
+}
