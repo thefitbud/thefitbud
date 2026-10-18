@@ -44,8 +44,17 @@ const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
 const EXPO_WEB_URL = process.env.EXPO_WEB_URL;
 
-/** Screens Batch 0 already cleaned — error hits fail the suite. */
-const WEB_HARD_FAIL_ROUTES = new Set(["/sign-in"]);
+/** Screens Batch 0 + TW-A cleaned — error hits fail the suite. */
+const WEB_HARD_FAIL_ROUTES = new Set([
+  "/sign-in",
+  "/",
+  "/checkins",
+  "/templates",
+  "/settings",
+  "/not-a-real-route",
+  "/?exception",
+  "/?ask",
+]);
 const MOBILE_HARD_FAIL_ROUTES = new Set([
   "mobile/sign-in",
   "mobile/Workout",
@@ -173,7 +182,9 @@ async function resolveClientWorkspacePath(page: Page): Promise<string> {
 }
 
 test.describe("banned-strings · trainer web", () => {
-  test("sign-in hard-fail + Home/roster/workspace report", async ({ page }) => {
+  test("sign-in + TW-A routes hard-fail; roster/workspace report", async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
 
     const allHits: Hit[] = [];
@@ -183,13 +194,28 @@ test.describe("banned-strings · trainer web", () => {
     allHits.push(...scanText(await collectText(page), "/sign-in", "web"));
 
     await signInTrainerWeb(page);
-    const routes = ["/", "/clients", await resolveClientWorkspacePath(page)];
-    for (const route of routes) {
+    const hardRoutes = [
+      "/",
+      "/checkins",
+      "/templates",
+      "/settings",
+      "/?exception=95af751f-156c-44ac-a945-ec30870134ae",
+      "/?ask=b532e1ca-7fea-4563-8d50-4468bc66f586",
+      "/not-a-real-route",
+    ];
+    const reportRoutes = ["/clients", await resolveClientWorkspacePath(page)];
+    for (const route of [...hardRoutes, ...reportRoutes]) {
       await page.goto(route);
       await page.waitForTimeout(800);
+      const key =
+        route.startsWith("/?exception")
+          ? "/?exception"
+          : route.startsWith("/?ask")
+            ? "/?ask"
+            : route;
       const text = await collectText(page);
-      allHits.push(...scanText(text, route, "web"));
-      allHits.push(...(await scanRoleChecks(page, route, "web")));
+      allHits.push(...scanText(text, key, "web"));
+      allHits.push(...(await scanRoleChecks(page, key, "web")));
     }
 
     const errors = allHits.filter((h) => h.severity === "error");
