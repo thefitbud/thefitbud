@@ -1,8 +1,8 @@
 /* Generated from src/tokens.ts — run pnpm build in @fitbud/tokens */
 :root {
   --brand-indigo: #4527C6;
-  --brand-deep-navy: #1A1249;
-  --brand-coral: #FF5B7D;
+  --brand-deep-navy: #1A1248;
+  --brand-coral: #FF587D;
   --brand-soft-coral: #FFB0C3;
   --brand-pale-lavender: #EDEAFF;
   --brand-chalk: #FAF7F2;
@@ -32,7 +32,7 @@
   --semantic-destructive: #B91C1C;
 
   --ring-kcal: #4527C6;
-  --ring-protein: #1A1249;
+  --ring-protein: #1A1248;
   --ring-carbs: #7C6CF0;
   --ring-fat: #0E7490;
   --ring-track: #E6E8EB;

@@ -13,6 +13,11 @@ export const fontFamilyMedium = Platform.select({
   default: "Satoshi-Medium",
 });
 
+export const fontFamilySemiBold = Platform.select({
+  web: webStack,
+  default: "Satoshi-SemiBold",
+});
+
 export const fontFamilyBold = Platform.select({
   web: webStack,
   default: "Satoshi-Bold",
@@ -26,9 +31,9 @@ export const fontFamilyDevanagari = Platform.select({
 
 export const typeScale = {
   caption: 12,
-  body: 15,
+  body: 16,
   bodyLarge: 16,
   title: 18,
   headline: 24,
-  display: 30,
+  display: 28,
 } as const;

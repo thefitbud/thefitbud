@@ -4,8 +4,8 @@ export const tagline = "Progress, guided." as const;
 
 export const brand = {
   indigo: "#4527C6",
-  deepNavy: "#1A1249",
-  coral: "#FF5B7D",
+  deepNavy: "#1A1248",
+  coral: "#FF587D",
   softCoral: "#FFB0C3",
   paleLavender: "#EDEAFF",
   chalk: "#FAF7F2",

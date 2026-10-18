@@ -43,6 +43,6 @@ export const radii = {
 
 export const spacing = tokenSpacing;
 
-export const touchTargetMin = 44;
+export const touchTargetMin = 48;
 
 export const ringColors = tokenRings;
