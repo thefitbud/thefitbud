@@ -1146,7 +1146,7 @@ describe("meal assignment and compliance", () => {
       },
       testEnv(),
     );
-    expect(draftRes.status).toBe(200);
+    expect(draftRes.status).toBe(201);
     const next = (await draftRes.json()) as {
       data: { id: string; recordVersion: number };
     };
