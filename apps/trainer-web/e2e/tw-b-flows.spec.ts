@@ -135,6 +135,9 @@ test.describe("TW-B roster + invite", () => {
     await expect(page).toHaveURL(/q=rohan/);
     await expect(page.getByText(/Rohan/i).first()).toBeVisible();
 
+    // Clear search before Ended — q=rohan would hide Kavya/Nikhil.
+    await page.getByPlaceholder(/search clients/i).fill("");
+    await page.waitForTimeout(400);
     await page.getByRole("tab", { name: /^Ended$/i }).click();
     await expect(page).toHaveURL(/status=ended|segment=ended/);
     await expect(page.getByText(/Kavya|Nikhil/i).first()).toBeVisible({
@@ -142,7 +145,6 @@ test.describe("TW-B roster + invite", () => {
     });
 
     await page.getByRole("tab", { name: /^Current$/i }).click();
-    await page.getByPlaceholder(/search clients/i).fill("");
   });
 
   test("add client end-to-end creates share card", async ({ page }) => {
