@@ -30,7 +30,8 @@ export function ProgressTab({
 }: {
   relationship: CoachingRelationship;
 }) {
-  const { api, refreshSession } = useAuth();
+  const { api, me, refreshSession } = useAuth();
+  const timeZone = me?.timezone ?? "UTC";
   const sync = useSyncEngine();
   const [summary, setSummary] = useState<ProgressSummary | null>(null);
   const [weight, setWeight] = useState("");
@@ -240,7 +241,7 @@ export function ProgressTab({
                 {item.unit}
               </Text>
               <Text style={styles.rowMeta}>
-                {new Date(item.observedAt).toLocaleString()} · {item.source}
+                {formatInstant(item.observedAt, timeZone)} · {item.source}
               </Text>
             </View>
           ))}
@@ -256,7 +257,7 @@ export function ProgressTab({
                 {item.title ?? labelFor("progress_entry_type", item.entryType)}
               </Text>
               <Text style={styles.rowMeta}>
-                {new Date(item.observedAt).toLocaleString()}
+                {formatInstant(item.observedAt, timeZone)}
               </Text>
             </View>
           ))}
@@ -274,8 +275,8 @@ export function ProgressTab({
               </Text>
               <Text style={styles.rowMeta}>
                 {item.uploadedAt
-                  ? new Date(item.uploadedAt).toLocaleString()
-                  : item.createdAt}
+                  ? formatInstant(item.uploadedAt, timeZone)
+                  : formatInstant(item.createdAt, timeZone)}
               </Text>
             </View>
           ))}

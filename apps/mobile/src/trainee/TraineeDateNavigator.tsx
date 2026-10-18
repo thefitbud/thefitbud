@@ -117,7 +117,7 @@ export function TraineeDateNavigator({
         <Text style={styles.previewBanner}>
           {isFuture
             ? `Preview · ${formatHeadingDate(timeZone, selectedDate)}`
-            : `Viewing ${selectedDate} · read-only except late logging`}
+            : `Viewing ${formatHeadingDate(timeZone, selectedDate)} · read-only except late logging`}
           </Text>
         ) : null}
       <DateNavigator

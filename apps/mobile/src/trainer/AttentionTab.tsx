@@ -6,10 +6,9 @@ import type {
   CoachAsk,
   TrainerCheckinInboxItem,
 } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { formatCivilDate, formatRelative, labelFor } from "@fitbud/core";
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
-import { formatRelative } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
