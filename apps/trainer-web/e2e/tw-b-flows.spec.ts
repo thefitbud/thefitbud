@@ -80,7 +80,8 @@ test.describe("TW-B auth flows", () => {
     page,
     request,
   }) => {
-    // IP bucket is 30/15m. Use a dedicated CF-Connecting-IP so we don't lock e2e.
+    // Prove API IP bucket (30/15m) on a dedicated CF-Connecting-IP, then map
+    // 429 → UI copy without locking the browser's shared local IP.
     const identifier = `ratelimit.${Date.now()}@demo.fitbud.test`;
     const probeIp = `203.0.113.${(Date.now() % 200) + 20}`;
     let saw429 = false;
@@ -97,11 +98,17 @@ test.describe("TW-B auth flows", () => {
     expect(saw429).toBeTruthy();
     await page.goto("/sign-in");
     await page.route("**/auth/login", async (route) => {
-      const headers = {
-        ...route.request().headers(),
-        "cf-connecting-ip": probeIp,
-      };
-      await route.continue({ headers });
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "RATE_LIMITED",
+            message: "Too many attempts.",
+            requestId: "e2e-rate-limit",
+          },
+        }),
+      });
     });
     await page.getByRole("textbox", { name: /mobile number or email/i }).fill(identifier);
     await page.locator('input[name="password"]').fill("bad-password-xxx");

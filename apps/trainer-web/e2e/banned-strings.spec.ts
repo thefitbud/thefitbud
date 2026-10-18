@@ -182,7 +182,10 @@ async function resolveClientWorkspacePath(page: Page): Promise<string> {
     items?: Array<{ relationshipId?: string; id?: string }>;
   };
   const items = json.data?.items ?? json.items ?? [];
-  const id = items[0]?.relationshipId ?? items[0]?.id;
+  const withWorkspace = items.find(
+    (item) => typeof item.relationshipId === "string" && item.relationshipId,
+  );
+  const id = withWorkspace?.relationshipId ?? withWorkspace?.id;
   if (!id) throw new Error("no client for workspace banned-strings check");
   return `/clients/${id}`;
 }
