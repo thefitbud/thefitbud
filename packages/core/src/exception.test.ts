@@ -46,6 +46,8 @@ describe("exception lifecycle", () => {
     });
     expect(meal.type).toBe("overdue_meal");
     expect(meal.severity).toBe("critical");
+    expect(meal.summary).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(meal.details?.localDate).toBe("2026-09-26");
 
     const checkin = overdueCheckinCandidate({
       checkinId: "33333333-3333-4333-8333-333333333333",
@@ -54,6 +56,7 @@ describe("exception lifecycle", () => {
     });
     expect(checkin.type).toBe("overdue_checkin");
     expect(checkin.severity).toBe("attention");
+    expect(checkin.summary).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
   it("keeps acknowledged critical and attention exceptions in the roll-up open set", () => {

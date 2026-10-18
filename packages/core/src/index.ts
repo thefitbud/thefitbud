@@ -282,7 +282,29 @@ export {
 
 export { deriveAge } from "./profile.js";
 
-export { formatTimeDiff } from "./format.js";
+export {
+  formatCivilDate,
+  formatClockTime,
+  formatCount,
+  formatDateRange,
+  formatInstant,
+  formatKcal,
+  formatNumber,
+  formatPersonName,
+  formatRelative,
+  formatTimeDiff,
+  formatTimeRange,
+  formatWeight,
+  formatWindow,
+} from "./format.js";
+export {
+  LABELS,
+  allLabelEntries,
+  enumLabel,
+  labelFor,
+  sentenceCaseEnum,
+  type LabelNamespace,
+} from "./labels.js";
 export { routeForLinkKind, type LinkKind } from "./links.js";
 export { canLog, type LogDecision } from "./late-logging.js";
 export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";

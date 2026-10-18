@@ -109,6 +109,8 @@ export const workspaceHeaderSchema = z.object({
   traineeTimezone: z.string().min(1).max(64),
   hasCustomMealTimes: z.boolean(),
   trainerWhatsappE164: z.string().nullable(),
+  /** Client WhatsApp for trainer→client wa.me links. Null when unknown. */
+  clientWhatsappE164: z.string().nullable(),
 });
 export type WorkspaceHeader = z.infer<typeof workspaceHeaderSchema>;
 

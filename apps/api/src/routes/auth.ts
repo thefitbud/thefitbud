@@ -80,18 +80,28 @@ authRoutes.post("/session",
   }
 
   const db = createDb(c.env.DB);
-  const { userId } = await findOrCreateUserFromFirebase(
+  const { userId, created } = await findOrCreateUserFromFirebase(
     db,
     identity,
     parsed.data.timezone ?? "UTC",
   );
 
-  // Trainer web session exchange provisions trainer role + profile when missing.
-  await ensureRoleAndProfile(db, {
+  // Only provision a trainer role for brand-new accounts. Existing trainee-only
+  // accounts (e.g. sneha.review) must never be upgraded by signing into web.
+  const existingActor = await loadActorByUserId(db, {
     userId,
-    role: "trainer",
-    displayName: identity.email?.split("@")[0] || "Trainer",
+    surface: "trainer_web",
+    authMethod: "session",
+    requestedRole: null,
   });
+  const alreadyTrainer = existingActor?.permittedRoles.includes("trainer");
+  if (created || alreadyTrainer) {
+    await ensureRoleAndProfile(db, {
+      userId,
+      role: "trainer",
+      displayName: identity.email?.split("@")[0] || "Trainer",
+    });
+  }
 
   const actor = await loadActorByUserId(db, {
     userId,

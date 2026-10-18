@@ -117,11 +117,13 @@ exceptionRoutes.get(
       : 20;
 
     const now = nowIso();
+    const groupByRelationship = c.req.query("groupBy") === "relationship";
     const attention = await listAttentionExceptionsForTrainer(
       db,
       actor.userId,
       limit,
       now,
+      { groupByRelationship },
     );
 
     const profileRows = await db.select().from(traineeProfiles);
@@ -129,7 +131,7 @@ exceptionRoutes.get(
       profileRows.map((row) => [row.userId, row.displayName]),
     );
 
-    if (c.req.query("groupBy") === "relationship") {
+    if (groupByRelationship) {
       const grouped = new Map<
         string,
         {
@@ -147,10 +149,10 @@ exceptionRoutes.get(
       >();
       for (const item of attention) {
         const ex = mapException(item.exception);
-        const ageMinutes = Math.max(
-          0,
-          Math.floor((Date.parse(now) - Date.parse(ex.detectedAt)) / 60_000),
-        );
+        const detectedMs = Date.parse(ex.detectedAt);
+        const ageMinutes = Number.isFinite(detectedMs)
+          ? Math.max(0, Math.floor((Date.parse(now) - detectedMs) / 60_000))
+          : 0;
         const bucket = grouped.get(item.coachingRelationshipId) ?? {
           relationshipId: item.coachingRelationshipId,
           traineeDisplayName:
@@ -167,24 +169,42 @@ exceptionRoutes.get(
         });
         grouped.set(item.coachingRelationshipId, bucket);
       }
-      const groups = [...grouped.values()].map((group) => ({
-        ...group,
-        items: group.items.sort((a, b) => {
+      const groups = [...grouped.values()].map((group) => {
+        const items = group.items.sort((a, b) => {
           if (a.severity !== b.severity) {
             return a.severity === "critical" ? -1 : 1;
           }
           return b.ageMinutes - a.ageMinutes;
-        }),
-      }));
-      groups.sort((a, b) => {
-        const aCrit = a.items.some((i) => i.severity === "critical") ? 1 : 0;
-        const bCrit = b.items.some((i) => i.severity === "critical") ? 1 : 0;
-        if (aCrit !== bCrit) return bCrit - aCrit;
-        const aAge = a.items[0]?.ageMinutes ?? 0;
-        const bAge = b.items[0]?.ageMinutes ?? 0;
-        return bAge - aAge;
+        });
+        const mostSevere = items.some((i) => i.severity === "critical")
+          ? "critical"
+          : "attention";
+        const oldestDetectedAge = items.reduce(
+          (max, i) => Math.max(max, i.ageMinutes),
+          0,
+        );
+        return {
+          ...group,
+          items,
+          itemCount: items.length,
+          mostSevere,
+          oldestAgeMinutes: oldestDetectedAge,
+        };
       });
-      return ok(c, attentionGroupsResponseSchema.parse({ groups }));
+      groups.sort((a, b) => {
+        const aCrit = a.mostSevere === "critical" ? 1 : 0;
+        const bCrit = b.mostSevere === "critical" ? 1 : 0;
+        if (aCrit !== bCrit) return bCrit - aCrit;
+        if (a.oldestAgeMinutes !== b.oldestAgeMinutes) {
+          return b.oldestAgeMinutes - a.oldestAgeMinutes;
+        }
+        return a.traineeDisplayName.localeCompare(b.traineeDisplayName);
+      });
+      // `limit` counts groups (clients), not raw items.
+      return ok(
+        c,
+        attentionGroupsResponseSchema.parse({ groups: groups.slice(0, limit) }),
+      );
     }
 
     return ok(

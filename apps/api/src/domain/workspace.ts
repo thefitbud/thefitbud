@@ -50,6 +50,7 @@ import {
   trackingRequirements,
   traineeProfiles,
   trainerProfiles,
+  userIdentities,
   users,
   mealTimeOverrides,
   workoutAssignments,
@@ -594,6 +595,7 @@ export async function loadClientWorkspace(
     profile,
     traineeUser,
     trainerProfile,
+    clientIdentity,
     mealOverrides,
     onboardingStatus,
     configuration,
@@ -622,6 +624,11 @@ export async function loadClientWorkspace(
       .select({ whatsappE164: trainerProfiles.whatsappE164 })
       .from(trainerProfiles)
       .where(eq(trainerProfiles.userId, relationship.trainerUserId))
+      .limit(1),
+    db
+      .select({ mobileE164: userIdentities.mobileE164 })
+      .from(userIdentities)
+      .where(eq(userIdentities.userId, relationship.traineeUserId))
       .limit(1),
     db
       .select({ id: mealTimeOverrides.slotKey })
@@ -676,6 +683,7 @@ export async function loadClientWorkspace(
       traineeTimezone: traineeUser[0]?.timezone ?? "UTC",
       hasCustomMealTimes: mealOverrides.length > 0,
       trainerWhatsappE164: trainerProfile[0]?.whatsappE164 ?? null,
+      clientWhatsappE164: clientIdentity[0]?.mobileE164 ?? null,
     },
     overview: {
       openException,

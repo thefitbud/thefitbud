@@ -1,10 +1,13 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import {
+  ADHERENCE_WINDOW_DAYS,
   MVP_EXCEPTION_RULE_VERSION,
+  addDaysToLocalDate,
   canActivateException,
   deriveCheckinStatus,
   exceptionKey,
   filterNewExceptionCandidates,
+  formatLocalDate,
   isOpenExceptionStatus,
   mealAdherenceCandidate,
   overdueCheckinCandidate,
@@ -28,12 +31,23 @@ import { createId, nowIso } from "../lib/crypto";
 type Db = ReturnType<typeof createDb>;
 type ExceptionRow = typeof exceptions.$inferSelect;
 
+/** Look back a short window so detection volume stays realistic (~a few/client). */
+const DETECTION_LOOKBACK_DAYS = 3;
+
+function detectionWindowStartLocalDate(nowIsoValue: string): string {
+  const today = formatLocalDate(new Date(nowIsoValue), "UTC");
+  return addDaysToLocalDate(today, -(DETECTION_LOOKBACK_DAYS - 1));
+}
+
+void ADHERENCE_WINDOW_DAYS;
+
 async function collectCandidatesForRelationship(
   db: Db,
   relationshipId: string,
   now: string,
 ): Promise<ExceptionCandidate[]> {
   const candidates: ExceptionCandidate[] = [];
+  const windowStart = detectionWindowStartLocalDate(now);
 
   const workoutRows = await db
     .select({
@@ -49,6 +63,7 @@ async function collectCandidatesForRelationship(
       and(
         eq(workoutAssignments.coachingRelationshipId, relationshipId),
         eq(workoutAssignments.scheduleStatus, "scheduled"),
+        gte(workoutAssignments.localDate, windowStart),
       ),
     );
 
@@ -77,6 +92,7 @@ async function collectCandidatesForRelationship(
       and(
         eq(mealAssignments.coachingRelationshipId, relationshipId),
         eq(mealAssignments.scheduleStatus, "scheduled"),
+        gte(mealAssignments.localDate, windowStart),
       ),
     );
 
@@ -101,7 +117,12 @@ async function collectCandidatesForRelationship(
     })
     .from(checkins)
     .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-    .where(eq(checkins.coachingRelationshipId, relationshipId));
+    .where(
+      and(
+        eq(checkins.coachingRelationshipId, relationshipId),
+        gte(checkins.localDate, windowStart),
+      ),
+    );
 
   for (const row of checkinRows) {
     const status = deriveCheckinStatus({
@@ -294,6 +315,7 @@ export async function listAttentionExceptionsForTrainer(
   trainerUserId: string,
   limit: number,
   now = nowIso(),
+  options?: { groupByRelationship?: boolean },
 ): Promise<
   Array<{
     exception: ExceptionRow;
@@ -304,7 +326,12 @@ export async function listAttentionExceptionsForTrainer(
   const relationships = await db
     .select()
     .from(coachingRelationships)
-    .where(eq(coachingRelationships.trainerUserId, trainerUserId));
+    .where(
+      and(
+        eq(coachingRelationships.trainerUserId, trainerUserId),
+        eq(coachingRelationships.status, "active"),
+      ),
+    );
 
   for (const relationship of relationships) {
     await evaluateRelationshipExceptions(db, relationship.id, now);
@@ -314,6 +341,12 @@ export async function listAttentionExceptionsForTrainer(
 
   const relationshipIds = relationships.map((r) => r.id);
   const relationshipById = new Map(relationships.map((r) => [r.id, r]));
+
+  // When grouping by relationship, fetch enough rows to form groups; `limit`
+  // counts groups in the route handler, not raw exception rows.
+  const rowLimit = options?.groupByRelationship
+    ? Math.min(Math.max(limit, 1) * 40, 500)
+    : limit;
 
   const rows = await db
     .select()
@@ -325,7 +358,7 @@ export async function listAttentionExceptionsForTrainer(
       ),
     )
     .orderBy(desc(exceptions.detectedAt))
-    .limit(limit);
+    .limit(rowLimit);
 
   return rows.flatMap((exception) => {
     const relationship = relationshipById.get(exception.coachingRelationshipId);

@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
-import { activityFeedResponseSchema } from "@fitbud/contracts";
+import { NUTRIENT_SCALE, activityFeedResponseSchema } from "@fitbud/contracts";
 import { createDb } from "../db/client.js";
 import {
   checkins,
@@ -42,11 +42,15 @@ activityFeedRoutes.get(
     const limit = Math.min(Number(c.req.query("limit") ?? "30") || 30, 50);
     const rid = c.req.query("rid")?.trim();
     const db = createDb(c.env.DB);
-    const rels = await db
+    const allRels = await db
       .select()
       .from(coachingRelationships)
       .where(eq(coachingRelationships.trainerUserId, actor.userId));
-    const relIds = rid ? rels.filter((r) => r.id === rid).map((r) => r.id) : rels.map((r) => r.id);
+    // Ended relationships stay out of the active feed unless explicitly selected.
+    const rels = rid
+      ? allRels.filter((r) => r.id === rid)
+      : allRels.filter((r) => r.status === "active");
+    const relIds = rels.map((r) => r.id);
     if (relIds.length === 0) {
       return ok(c, activityFeedResponseSchema.parse({ events: [], nextCursor: null }));
     }
@@ -83,7 +87,10 @@ activityFeedRoutes.get(
         occurredAt: row.loggedAt,
         traineeLocalTime: null,
         summary: `Meal ${row.outcome}`,
-        kcal: row.kcalScaled,
+        kcal:
+          row.kcalScaled == null
+            ? null
+            : Math.round(row.kcalScaled / NUTRIENT_SCALE),
       });
     }
     const workouts = await db

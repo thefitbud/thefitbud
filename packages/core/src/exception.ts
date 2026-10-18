@@ -100,7 +100,7 @@ export function missedWorkoutCandidate(input: {
     severity: "critical",
     sourceEntityType: "workout_assignment",
     sourceEntityId: input.assignmentId,
-    summary: `Missed workout on ${input.localDate}`,
+    summary: "Missed workout",
     details: {
       localDate: input.localDate,
       windowEndsAt: input.windowEndsAt,
@@ -118,7 +118,7 @@ export function skippedWorkoutCandidate(input: {
     severity: "attention",
     sourceEntityType: "workout_assignment",
     sourceEntityId: input.assignmentId,
-    summary: `Skipped workout on ${input.localDate}`,
+    summary: "Skipped workout",
     details: {
       localDate: input.localDate,
       rule: "explicit_workout_skip",
@@ -137,7 +137,7 @@ export function overdueMealCandidate(input: {
     severity: "critical",
     sourceEntityType: "meal_assignment",
     sourceEntityId: input.assignmentId,
-    summary: `Required meal still unlogged: ${input.mealName} (${input.localDate})`,
+    summary: `Required meal still unlogged: ${input.mealName}`,
     details: {
       localDate: input.localDate,
       mealName: input.mealName,
@@ -158,7 +158,7 @@ export function skippedMealCandidate(input: {
     severity: "critical",
     sourceEntityType: "meal_assignment",
     sourceEntityId: input.assignmentId,
-    summary: `Skipped required meal: ${input.mealName} (${input.localDate})`,
+    summary: `Skipped required meal: ${input.mealName}`,
     details: {
       localDate: input.localDate,
       mealName: input.mealName,
@@ -180,7 +180,7 @@ export function mealDeviationCandidate(input: {
     severity: "attention",
     sourceEntityType: "meal_assignment",
     sourceEntityId: input.assignmentId,
-    summary: `Meal deviation: ${input.mealName} (${input.localDate})`,
+    summary: `Meal deviation: ${input.mealName}`,
     details: {
       localDate: input.localDate,
       mealName: input.mealName,
@@ -202,7 +202,7 @@ export function mealLoggedLaterCandidate(input: {
     severity: "attention",
     sourceEntityType: "meal_assignment",
     sourceEntityId: input.assignmentId,
-    summary: `Meal logged later: ${input.mealName} (${input.localDate})`,
+    summary: `Meal logged later: ${input.mealName}`,
     details: {
       localDate: input.localDate,
       mealName: input.mealName,
@@ -222,7 +222,7 @@ export function overdueCheckinCandidate(input: {
     severity: "attention",
     sourceEntityType: "checkin",
     sourceEntityId: input.checkinId,
-    summary: `Overdue check-in for ${input.localDate}`,
+    summary: "Overdue check-in",
     details: {
       localDate: input.localDate,
       windowEndsAt: input.windowEndsAt,

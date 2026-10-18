@@ -12,7 +12,7 @@ import {
   notifications,
   reminderStates,
   traineeProfiles,
-  trainerProfiles,
+  userIdentities,
 } from "../db/schema.js";
 
 export async function deriveResponsiveness(
@@ -146,12 +146,16 @@ export async function deriveReengagementCandidates(
     .where(inArray(traineeProfiles.userId, traineeIds));
   const nameByUser = new Map(profiles.map((p) => [p.userId, p.displayName]));
 
-  const trainerId = active[0]!.trainerUserId;
-  const [trainerProfile] = await db
-    .select()
-    .from(trainerProfiles)
-    .where(eq(trainerProfiles.userId, trainerId))
-    .limit(1);
+  const identities = await db
+    .select({
+      userId: userIdentities.userId,
+      mobileE164: userIdentities.mobileE164,
+    })
+    .from(userIdentities)
+    .where(inArray(userIdentities.userId, traineeIds));
+  const phoneByUser = new Map(
+    identities.map((row) => [row.userId, row.mobileE164]),
+  );
 
   const since48h = new Date(Date.parse(input.nowIso) - 48 * 86_400_000).toISOString();
   const items = [];
@@ -180,9 +184,10 @@ export async function deriveReengagementCandidates(
       .limit(10);
     if (recentReminders.length < 3) continue;
 
-    const waMeUrl = trainerProfile?.whatsappE164
+    const clientWhatsappE164 = phoneByUser.get(rel.traineeUserId) ?? null;
+    const waMeUrl = clientWhatsappE164
       ? whatsappHref({
-          phoneE164: trainerProfile.whatsappE164,
+          phoneE164: clientWhatsappE164,
           draftText:
             "Hi — checking in on your FitBud plan. Reply when you can log today.",
         })
@@ -191,6 +196,7 @@ export async function deriveReengagementCandidates(
       relationshipId: rel.id,
       traineeDisplayName: nameByUser.get(rel.traineeUserId) ?? "Client",
       waMeUrl,
+      clientWhatsappE164,
     });
   }
   return items;

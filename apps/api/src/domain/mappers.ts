@@ -786,6 +786,31 @@ function parseExceptionDetailsJson(
   return JSON.parse(detailsJson) as Record<string, unknown>;
 }
 
+/**
+ * Coerce date-only (`YYYY-MM-DD`) or partial timestamps into full ISO instants
+ * so Zod `datetime({ offset: true })` accepts seed/legacy rows.
+ */
+export function coerceIsoInstant(
+  value: string | null | undefined,
+): string | null {
+  if (value == null || value === "") return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `${value}T00:00:00.000Z`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value)) {
+    return `${value}${value.includes("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? "" : "Z"}`;
+  }
+  const parsed = Date.parse(value);
+  if (Number.isFinite(parsed)) {
+    return new Date(parsed).toISOString();
+  }
+  return value;
+}
+
+function requireIsoInstant(value: string): string {
+  return coerceIsoInstant(value) ?? value;
+}
+
 export function mapException(row: ExceptionRow): Exception {
   return {
     id: row.id,
@@ -798,12 +823,12 @@ export function mapException(row: ExceptionRow): Exception {
     sourceEntityId: row.sourceEntityId,
     summary: row.summary,
     details: parseExceptionDetailsJson(row.detailsJson),
-    detectedAt: row.detectedAt,
-    activatedAt: row.activatedAt,
-    acknowledgedAt: row.acknowledgedAt,
-    resolvedAt: row.resolvedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    detectedAt: requireIsoInstant(row.detectedAt),
+    activatedAt: coerceIsoInstant(row.activatedAt),
+    acknowledgedAt: coerceIsoInstant(row.acknowledgedAt),
+    resolvedAt: coerceIsoInstant(row.resolvedAt),
+    createdAt: requireIsoInstant(row.createdAt),
+    updatedAt: requireIsoInstant(row.updatedAt),
   };
 }
 

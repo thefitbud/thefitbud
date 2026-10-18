@@ -64,6 +64,9 @@ export const attentionGroupSchema = z.object({
   relationshipId: uuidSchema,
   traineeDisplayName: z.string(),
   items: z.array(attentionGroupItemSchema),
+  itemCount: z.number().int().nonnegative().optional(),
+  mostSevere: exceptionSeveritySchema.optional(),
+  oldestAgeMinutes: z.number().int().nonnegative().optional(),
 });
 export type AttentionGroup = z.infer<typeof attentionGroupSchema>;
 
@@ -110,6 +113,8 @@ export const reengagementCandidateSchema = z.object({
   relationshipId: uuidSchema,
   traineeDisplayName: z.string(),
   waMeUrl: z.string().url(),
+  /** Client WhatsApp used to build waMeUrl. Null when the button should be disabled. */
+  clientWhatsappE164: z.string().nullable().optional(),
 });
 export type ReengagementCandidate = z.infer<typeof reengagementCandidateSchema>;
 

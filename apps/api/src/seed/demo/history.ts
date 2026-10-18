@@ -27,6 +27,11 @@ function relId(trainerEmail: string, traineeEmail: string): string {
   );
 }
 
+/** Never seed activity timestamps after "now". */
+function clampIsoToNow(iso: string, nowIso: string): string {
+  return Date.parse(iso) > Date.parse(nowIso) ? nowIso : iso;
+}
+
 function userId(email: string): string {
   return demoUuid("user", email);
 }
@@ -204,8 +209,9 @@ function buildAssignmentsAndLogs(input: {
       const shouldLog = shouldLogMeal(input.state, localDate, input.refDate, meal.name, adherenceStart);
       if (shouldLog === "confirm") {
         const complianceId = demoUuid("meal-compliance", assignmentId);
+        const loggedAt = clampIsoToNow(windowEnd, input.now);
         lines.push(
-          `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(complianceId)}, ${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, 'confirmed', 0, ${sqlQuote(windowEnd)}, NULL, NULL, 0, NULL, NULL, NULL, 400000000, 20000000, 50000000, 10000000, 0, 0, ${sqlQuote(windowEnd)}, ${sqlQuote(windowEnd)}, ${sqlQuote(windowEnd)});`,
+          `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(complianceId)}, ${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, 'confirmed', 0, ${sqlQuote(loggedAt)}, NULL, NULL, 0, NULL, NULL, NULL, 400000000, 20000000, 50000000, 10000000, 0, 0, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)});`,
         );
       }
     }
@@ -225,8 +231,12 @@ function buildAssignmentsAndLogs(input: {
       const workoutLog = shouldLogWorkout(input.state, localDate, input.refDate, adherenceStart);
       if (workoutLog) {
         const execId = demoUuid("workout-execution", workoutAssignmentId);
+        const completedAt = clampIsoToNow(
+          new Date(Date.parse(wStart) + 60 * 60_000).toISOString(),
+          input.now,
+        );
         lines.push(
-          `INSERT INTO workout_executions (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, status, record_version, started_at, paused_at, completed_at, session_rpe, require_session_rpe, logged_late, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(execId)}, ${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, ${sqlQuote(workoutLog)}, 0, ${sqlQuote(wStart)}, NULL, ${sqlQuote(wEnd)}, NULL, 0, 0, ${sqlQuote(wEnd)}, ${sqlQuote(wStart)}, ${sqlQuote(wEnd)});`,
+          `INSERT INTO workout_executions (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, status, record_version, started_at, paused_at, completed_at, session_rpe, require_session_rpe, logged_late, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(execId)}, ${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, ${sqlQuote(workoutLog)}, 0, ${sqlQuote(wStart)}, NULL, ${sqlQuote(completedAt)}, NULL, 0, 0, ${sqlQuote(completedAt)}, ${sqlQuote(wStart)}, ${sqlQuote(completedAt)});`,
         );
       }
     }
@@ -235,15 +245,16 @@ function buildAssignmentsAndLogs(input: {
       const checkinId = demoUuid("checkin", input.traineeEmail, localDate);
       const cStart = localDayStartIso(localDate, "09:00", input.timezone);
       const cEnd = new Date(Date.parse(cStart) + 48 * 3_600_000).toISOString();
+      const submittedAt = clampIsoToNow(cEnd, input.now);
       const submitted =
         input.state !== "food_deviations" ||
         localDate < input.refDate;
       lines.push(
-        `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("checkin-schedule", input.relId))}, ${sqlQuote(localDate)}, ${sqlQuote(cStart)}, ${sqlQuote(cEnd)}, ${submitted ? "'submitted'" : "'draft'"}, 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${submitted ? `'{"wellbeing":"OK"}'` : "NULL"}, ${submitted ? sqlQuote(cEnd) : "NULL"}, ${sqlQuote(cStart)}, ${sqlQuote(cStart)});`,
+        `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("checkin-schedule", input.relId))}, ${sqlQuote(localDate)}, ${sqlQuote(cStart)}, ${sqlQuote(cEnd)}, ${submitted ? "'submitted'" : "'draft'"}, 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${submitted ? `'{"wellbeing":"OK"}'` : "NULL"}, ${submitted ? sqlQuote(submittedAt) : "NULL"}, ${sqlQuote(cStart)}, ${sqlQuote(cStart)});`,
       );
       if (submitted && input.state === "active_on_track") {
         lines.push(
-          `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", checkinId))}, ${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(userId(input.trainerEmail))}, 'acknowledged', NULL, ${sqlQuote(cEnd)}, ${sqlQuote(cEnd)});`,
+          `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", checkinId))}, ${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(userId(input.trainerEmail))}, 'acknowledged', NULL, ${sqlQuote(submittedAt)}, ${sqlQuote(submittedAt)});`,
         );
       }
       if (submitted && input.state === "dual_role") {
@@ -266,8 +277,16 @@ function shouldLogMeal(
   if (state === "reminders_paused") {
     return localDate < adherenceStart ? "confirm" : false;
   }
-  if (state === "slipping" || state === "acknowledged" || state === "notifications_off") {
-    return false;
+  // Slipping / acknowledged / push-off: leave only the last few days unlogged
+  // so exception volume stays realistic (~a few open items per client).
+  if (
+    state === "slipping" ||
+    state === "acknowledged" ||
+    state === "notifications_off"
+  ) {
+    const missFrom = addDaysFromLocalDate(refDate, -2);
+    if (localDate >= missFrom) return false;
+    return mealName !== "Snack" ? "confirm" : false;
   }
   if (state === "food_deviations") {
     if (mealName === "Lunch" && localDate === refDate) return false;
@@ -292,7 +311,9 @@ function shouldLogWorkout(
     return localDate < adherenceStart ? "completed" : false;
   }
   if (state === "slipping" || state === "acknowledged") {
-    return false;
+    const missFrom = addDaysFromLocalDate(refDate, -2);
+    if (localDate >= missFrom) return false;
+    return "completed";
   }
   if (localDate >= adherenceStart && localDate <= refDate) {
     return "completed";
@@ -334,14 +355,28 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const meeraRel = relId("rahul.coach@demo.fitbud.test", "meera.ack@demo.fitbud.test");
   const ackMealId = demoUuid("meal-assignment", "meera.ack@demo.fitbud.test", addDaysFromLocalDate(refDate, -2), MEAL_PRESCRIPTION_IDS.lunch);
   const ackExceptionId = demoUuid("exception", "meera-ack-meal");
+  const meeraDetected = new Date(
+    Date.parse(`${addDaysFromLocalDate(refDate, -2)}T09:00:00.000Z`),
+  ).toISOString();
+  const meeraAcked = new Date(
+    Date.parse(`${addDaysFromLocalDate(refDate, -1)}T10:00:00.000Z`),
+  ).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, acknowledged_at, created_at, updated_at) VALUES (${sqlQuote(ackExceptionId)}, ${sqlQuote(meeraRel)}, 'overdue_meal', 'critical', 'acknowledged', 'demo-v1', 'meal_assignment', ${sqlQuote(ackMealId)}, 'Missed lunch', ${sqlQuote(addDaysFromLocalDate(refDate, -2))}, ${sqlQuote(addDaysFromLocalDate(refDate, -1))}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO exception_actions (id, exception_id, trainer_user_id, action, note, created_at) VALUES (${sqlQuote(demoUuid("exception-action", "meera-ack"))}, ${sqlQuote(ackExceptionId)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledge', 'Watching', ${sqlQuote(addDaysFromLocalDate(refDate, -1))});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, acknowledged_at, created_at, updated_at) VALUES (${sqlQuote(ackExceptionId)}, ${sqlQuote(meeraRel)}, 'overdue_meal', 'critical', 'acknowledged', 'demo-v1', 'meal_assignment', ${sqlQuote(ackMealId)}, 'Missed lunch', ${sqlQuote(meeraDetected)}, ${sqlQuote(meeraAcked)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exception_actions (id, exception_id, trainer_user_id, action, note, created_at) VALUES (${sqlQuote(demoUuid("exception-action", "meera-ack"))}, ${sqlQuote(ackExceptionId)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledge', 'Watching', ${sqlQuote(meeraAcked)});`,
   );
   const resolvedMealId = demoUuid("meal-assignment", "meera.ack@demo.fitbud.test", addDaysFromLocalDate(refDate, -5), MEAL_PRESCRIPTION_IDS.breakfast);
   const resolvedExceptionId = demoUuid("exception", "meera-resolved");
+  const resolvedDetected = new Date(
+    Date.parse(`${addDaysFromLocalDate(refDate, -5)}T09:00:00.000Z`),
+  ).toISOString();
+  const resolvedAt = new Date(
+    Date.parse(`${addDaysFromLocalDate(refDate, -4)}T11:00:00.000Z`),
+  ).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(resolvedExceptionId)}, ${sqlQuote(meeraRel)}, 'skipped_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(resolvedMealId)}, 'Skipped breakfast', ${sqlQuote(addDaysFromLocalDate(refDate, -5))}, ${sqlQuote(addDaysFromLocalDate(refDate, -4))}, 'client_logged_later', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(resolvedExceptionId)}, ${sqlQuote(meeraRel)}, 'skipped_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(resolvedMealId)}, 'Skipped breakfast', ${sqlQuote(resolvedDetected)}, ${sqlQuote(resolvedAt)}, 'client_logged_later', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    // Overlay replaces any auto-seeded compliance so late-log flags stay accurate.
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(resolvedMealId)};`,
     `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", resolvedMealId))}, ${sqlQuote(resolvedMealId)}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("plan-version", meeraRel, "v2"))}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'confirmed', 0, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, NULL, 'Client logged later', 0, NULL, NULL, NULL, 300000000, 15000000, 40000000, 8000000, 1, 1, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, ${sqlQuote(now)});`,
   );
 
@@ -379,6 +414,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const lakshmiLunchId = demoUuid("meal-assignment", "lakshmi.foods@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
   lines.push(
     `INSERT INTO trainee_custom_foods (id, trainee_user_id, relationship_id, name, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, serving_label, created_at) VALUES (${sqlQuote(demoUuid("custom-food", "lakshmi-thali"))}, ${sqlQuote(userId("lakshmi.foods@demo.fitbud.test"))}, ${sqlQuote(lakshmiRel)}, 'Office canteen thali', 650000000, 25000000, 90000000, 20000000, '1 plate', ${sqlQuote(now)});`,
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(lakshmiLunchId)};`,
     `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", lakshmiLunchId))}, ${sqlQuote(lakshmiLunchId)}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("plan-version", lakshmiRel, "v2"))}, ${sqlQuote(userId("lakshmi.foods@demo.fitbud.test"))}, 'modified', 0, ${sqlQuote(now)}, 'logged_foods', 'Idli + sambar instead of poha', 0, NULL, NULL, ${jsonQuote([idliItem, sambarItem])}, 500000000, 20000000, 80000000, 10000000, 0, 0, ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "lakshmi-deviation"))}, ${sqlQuote(lakshmiRel)}, 'meal_deviation', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(lakshmiLunchId)}, 'Logged different foods', ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
@@ -392,8 +428,11 @@ function buildPersonaOverlays(input: HistoryInput): string {
   );
 
   const kavyaRel = relId("rahul.coach@demo.fitbud.test", "kavya.ended@demo.fitbud.test");
+  const kavyaDetected = new Date(
+    Date.parse(`${addDaysFromLocalDate(refDate, -11)}T08:00:00.000Z`),
+  ).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, closed_reason, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "kavya-ended"))}, ${sqlQuote(kavyaRel)}, 'missed_workout', 'critical', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "kavya.ended@demo.fitbud.test", addDaysFromLocalDate(refDate, -12)))}, 'Missed workout', ${sqlQuote(addDaysFromLocalDate(refDate, -11))}, 'coaching_ended', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, closed_reason, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "kavya-ended"))}, ${sqlQuote(kavyaRel)}, 'missed_workout', 'critical', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "kavya.ended@demo.fitbud.test", addDaysFromLocalDate(refDate, -12)))}, 'Missed workout', ${sqlQuote(kavyaDetected)}, 'coaching_ended', ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
   const pendingHash = sha256HexSync(DEMO_ANITA_PENDING_INVITE_TOKEN);

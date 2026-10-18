@@ -1212,6 +1212,7 @@ checkinRoutes.get(
 
     const now = nowIso();
     const items = rows
+      .filter((row) => row.relationship.status !== "ended")
       .map((row) => ({
         checkin: mapCheckin(row.checkin, row.review ?? null, now),
         coachingRelationshipId: row.relationship.id,
