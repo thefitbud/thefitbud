@@ -6,7 +6,12 @@ import {
   type HistoryItem,
   type HistoryItemKind,
 } from "@fitbud/contracts";
-import { formatInstant, labelFor, sentenceCaseEnum } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatInstant,
+  labelFor,
+  sentenceCaseEnum,
+} from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
@@ -15,6 +20,13 @@ import type { WorkspaceOutletContext } from "./workspaceContext";
 function parseKind(value: string | null): HistoryItemKind | undefined {
   const parsed = historyItemKindSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
+}
+
+/** Replace civil ISO dates embedded in API summary/title strings. */
+function humanizeCivilDates(text: string): string {
+  return text.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (match) =>
+    formatCivilDate(match),
+  );
 }
 
 export function ClientHistoryPage() {
@@ -227,8 +239,12 @@ export function ClientHistoryPage() {
                     </span>
                   ) : null}
                 </div>
-                <strong className="history-title">{item.title}</strong>
-                <p className="muted history-summary">{item.summary}</p>
+                <strong className="history-title">
+                  {humanizeCivilDates(item.title)}
+                </strong>
+                <p className="muted history-summary">
+                  {humanizeCivilDates(item.summary)}
+                </p>
               </li>
             ))}
           </ol>

@@ -122,10 +122,12 @@ workspaceRoutes.get(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
-    const start =
-      c.req.query("start")?.trim() ??
-      new Date().toISOString().slice(0, 10);
     const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const today = formatLocalDate(new Date(nowIso()), timeZone);
+    const weekday = weekdayFromLocalDate(today); // 0 Sun … 6 Sat
+    const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+    const start =
+      c.req.query("start")?.trim() || addDaysToLocalDate(today, mondayOffset);
     const model = await buildWeekReadModel(db, {
       relationshipId: relationship.id,
       start,

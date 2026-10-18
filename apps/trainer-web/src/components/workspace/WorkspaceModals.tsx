@@ -12,12 +12,14 @@ export type WorkspaceModal =
 export function WorkspaceModals({
   relationshipId,
   traineeName,
+  ended = false,
   modal,
   onClose,
   onChanged,
 }: {
   relationshipId: string;
   traineeName: string;
+  ended?: boolean;
   modal: WorkspaceModal;
   onClose: () => void;
   onChanged: () => void;
@@ -25,6 +27,9 @@ export function WorkspaceModals({
   if (!modal) return null;
 
   if (modal.type === "note") {
+    if (ended) {
+      return null;
+    }
     return (
       <div className="drawer-backdrop" onClick={onClose}>
         <aside className="drawer-panel" data-testid="screen-TW-34" onClick={(e) => e.stopPropagation()}>

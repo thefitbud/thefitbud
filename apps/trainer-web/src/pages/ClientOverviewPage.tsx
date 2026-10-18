@@ -3,12 +3,14 @@ import { Link, useOutletContext, useParams, useSearchParams } from "react-router
 import type { TrainerNote, WeekReadModel } from "@fitbud/contracts";
 import {
   formatCivilDate,
+  formatInstant,
   formatKcal,
   formatNumber,
   formatRelative,
   labelFor,
 } from "@fitbud/core";
 import { AlertOctagon, AlertTriangle } from "lucide-react";
+import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
 import { MeasurementTrend } from "../components/MeasurementTrend";
@@ -114,6 +116,8 @@ export function ClientOverviewPage() {
   const drawerId = params.get("exception");
   const { workspace, openWorkspaceModal } =
     useOutletContext<WorkspaceOutletContext>();
+  const { me } = useAuth();
+  const viewerTz = me?.timezone ?? "Asia/Kolkata";
   const [week, setWeek] = useState<WeekReadModel | null>(null);
   const [notes, setNotes] = useState<TrainerNote[]>([]);
   const [weekError, setWeekError] = useState(false);
@@ -245,6 +249,7 @@ export function ClientOverviewPage() {
                     <div className="ov-dd">{dayNum(day.date)}</div>
                     <div
                       className={`ov-wk is-${day.state}`}
+                      role="img"
                       title={labelFor("week_day_state", day.state)}
                       aria-label={labelFor("week_day_state", day.state)}
                     />
@@ -405,7 +410,7 @@ export function ClientOverviewPage() {
                   />
                   <time
                     className="ov-when"
-                    title={item.occurredAt}
+                    title={formatInstant(item.occurredAt, viewerTz)}
                     dateTime={item.occurredAt}
                   >
                     {formatRelative(item.occurredAt)}
@@ -540,13 +545,15 @@ export function ClientOverviewPage() {
         <section className="ov-card ov-side">
           <div className="ov-side-h">
             <h3>Coach notes</h3>
-            <button
-              type="button"
-              className="text-link"
-              onClick={() => openWorkspaceModal({ type: "note" })}
-            >
-              Add note
-            </button>
+            {header.onboardingStatus !== "ended" ? (
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => openWorkspaceModal({ type: "note" })}
+              >
+                Add note
+              </button>
+            ) : null}
           </div>
           {notes.length === 0 ? (
             <p className="muted">No notes yet</p>

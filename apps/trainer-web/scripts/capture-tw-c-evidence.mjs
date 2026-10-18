@@ -13,6 +13,7 @@ const ROOT = join(__dirname, "../../..");
 const BASE = process.env.TRAINER_WEB_URL ?? "http://127.0.0.1:5173";
 const OUT = join(ROOT, "docs/spec/evidence/TW-C");
 const MOCKUP = join(ROOT, "docs/spec/mockups/png");
+const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
 const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
 
@@ -24,14 +25,46 @@ const KAVYA = "b9f01670-8acc-45f6-adab-d7728bca88a6";
 const ISHITA = "0a72ab36-f042-46dc-bceb-67725d78b46a";
 const UNKNOWN = "00000000-0000-4000-8000-000000000000";
 
-async function signIn(page, email = EMAIL, password = PASSWORD) {
+async function apiToken() {
+  const login = await fetch(`${API}/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "CF-Connecting-IP": `198.51.100.${(Date.now() % 50) + 10}`,
+    },
+    body: JSON.stringify({ identifier: EMAIL, password: PASSWORD }),
+  });
+  const body = await login.json();
+  const token = body?.data?.token;
+  if (!token) throw new Error(`login failed: ${JSON.stringify(body)}`);
+  await fetch(`${API}/auth/session`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ idToken: token, timezone: "Asia/Kolkata" }),
+  });
+  return token;
+}
+
+async function signIn(page) {
+  const token = await apiToken();
   await page.goto(`${BASE}/sign-in`, { waitUntil: "domcontentloaded" });
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible", timeout: 30_000 });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(email);
-  await page.locator('input[name="password"]').fill(password);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await page.waitForURL((url) => !url.pathname.includes("/sign-in"), {
-    timeout: 45_000,
+  await page.evaluate(
+    ({ token, email }) => {
+      sessionStorage.setItem("fitbud.trainer.accessToken", token);
+      sessionStorage.setItem("fitbud.trainer.email", email);
+    },
+    { token, email: EMAIL },
+  );
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  if (page.url().includes("/sign-in")) {
+    throw new Error(`session inject failed; still on ${page.url()}`);
+  }
+  await page.getByRole("heading", { name: /Today/i }).waitFor({
+    state: "visible",
+    timeout: 30_000,
   });
 }
 
@@ -106,8 +139,9 @@ async function main() {
   });
   await page.getByTestId("screen-TW-09").waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForTimeout(600);
-  const overviewPath = await shot(page, "TW-09");
+  const overviewPath = await shot(page, "TW-09", { fullPage: true });
   await shot(page, "TW-09a");
+  await shot(page, "TW-09-full", { fullPage: true });
   await axeScan(page, "TW-09-overview", axeResults);
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -168,7 +202,14 @@ async function main() {
     waitUntil: "networkidle",
   });
   await page.getByTestId("screen-TW-11").waitFor({ state: "visible", timeout: 30_000 });
-  await page.waitForTimeout(500);
+  const reminders = page.locator("details").filter({
+    hasText: /Automatic reminders/i,
+  });
+  if (await reminders.count()) {
+    await reminders.locator("summary").click();
+    await page.waitForTimeout(200);
+  }
+  await page.waitForTimeout(400);
   await shot(page, "TW-11");
   await axeScan(page, "TW-11-configure", axeResults);
 

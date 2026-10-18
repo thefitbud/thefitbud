@@ -147,13 +147,13 @@ export function WorkspaceHeader({
       label: "Reminder settings for this client",
       onSelect: () => onOpenModal({ type: "responsiveness" }),
     },
-    {
-      id: "note",
-      label: "Add note",
-      onSelect: () => onOpenModal({ type: "note" }),
-    },
     ...(!ended
       ? [
+          {
+            id: "note",
+            label: "Add note",
+            onSelect: () => onOpenModal({ type: "note" }),
+          },
           {
             id: "end",
             label: "End coaching",
@@ -246,40 +246,32 @@ export function WorkspaceHeader({
             <OverflowMenu items={overflowItems} />
           </div>
         </div>
-        <nav className="wsh-tabs" aria-label="Client sections" role="tablist">
+        <nav className="wsh-tabs" aria-label="Client sections">
           <NavLink
             to={`/clients/${relationshipId}/overview`}
             className={tabClass}
             end
-            role="tab"
           >
             Overview
           </NavLink>
-          <NavLink
-            to={`/clients/${relationshipId}/plan`}
-            className={tabClass}
-            role="tab"
-          >
+          <NavLink to={`/clients/${relationshipId}/plan`} className={tabClass}>
             Plan
           </NavLink>
           <NavLink
             to={`/clients/${relationshipId}/activity`}
             className={tabClass}
-            role="tab"
           >
             Activity
           </NavLink>
           <NavLink
             to={`/clients/${relationshipId}/progress`}
             className={tabClass}
-            role="tab"
           >
             Progress
           </NavLink>
           <NavLink
             to={`/clients/${relationshipId}/check-ins`}
             className={tabClass}
-            role="tab"
           >
             Check-ins
             {submittedCheckinCount > 0 ? (
@@ -289,7 +281,6 @@ export function WorkspaceHeader({
           <NavLink
             to={`/clients/${relationshipId}/history`}
             className={tabClass}
-            role="tab"
           >
             History
           </NavLink>

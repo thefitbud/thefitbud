@@ -147,6 +147,7 @@ export function ClientWorkspaceLayout() {
       <WorkspaceModals
         relationshipId={relationshipId}
         traineeName={workspace.header.traineeDisplayName}
+        ended={workspace.header.onboardingStatus === "ended"}
         modal={modal}
         onClose={() => setModal(null)}
         onChanged={reloadWorkspace}

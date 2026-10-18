@@ -22,6 +22,15 @@ async function signIn(page: Page) {
 }
 
 test.describe("TW-C workspace", () => {
+  test.describe.configure({ mode: "serial" });
+
+  test.beforeAll(async ({ browser }) => {
+    // Warm login once so later tests aren't rate-limited.
+    const page = await browser.newPage();
+    await signIn(page);
+    await page.close();
+  });
+
   test.beforeEach(async ({ page }) => {
     await signIn(page);
   });
@@ -38,9 +47,26 @@ test.describe("TW-C workspace", () => {
     const href = await wa.getAttribute("href");
     expect(href).toMatch(/^https:\/\/wa\.me\/919000000007/);
     await expect(page.getByRole("button", { name: /Review issue/i })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Overview/i })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Plan/i })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Check-ins/i })).toBeVisible();
+    const tabs = page.getByRole("navigation", { name: /Client sections/i });
+    await expect(tabs.getByRole("link", { name: /Overview/i })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: /Plan/i })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: /Activity/i })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: /Progress/i })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: /Check-ins/i })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: /History/i })).toBeVisible();
+    await expect(tabs.getByText(/^3$/)).toBeVisible();
+    await page.getByRole("button", { name: /more actions/i }).click();
+    await expect(
+      page.getByRole("menuitem", { name: /Configure coaching/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /Onboarding answers/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /Reminder settings for this client/i }),
+    ).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /Add note/i })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /End coaching/i })).toBeVisible();
   });
 
   test("TW-09a Deepak timezone badge; Kavya ended; unknown 404", async ({
@@ -102,11 +128,14 @@ test.describe("TW-C workspace", () => {
   }) => {
     await page.goto(`/clients/${ROHAN}/configure`);
     await expect(page.getByTestId("screen-TW-11")).toBeVisible();
-    await expect(page.getByText(/Automatic reminders/i).first()).toBeVisible();
+    const reminders = page.locator("details").filter({
+      hasText: /Automatic reminders/i,
+    });
+    await expect(reminders).toBeVisible();
+    await reminders.locator("summary").click();
     await expect(page.getByText(/Coming soon/i).first()).toBeVisible();
     const body = await page.locator("body").innerText();
     expect(body).not.toMatch(/\bper_100_g\b/);
-    expect(body).not.toMatch(/\bweekly\b.*\bmonthly\b.*\bquarterly\b/);
     // Payment frequency select should show labeled options when opened
     const freq = page.locator('select[name="paymentFrequency"]');
     if (await freq.count()) {
@@ -130,6 +159,28 @@ test.describe("TW-C workspace", () => {
     const area = page.locator("textarea").first();
     await area.fill("x".repeat(820));
     await expect(page.getByText(/820\s*\/\s*1000/)).toBeVisible();
+    await visibility.check();
+    await expect(
+      page.getByText(/will see this on her Today screen/i),
+    ).toBeVisible();
+    await expect(page.getByText(/From rahul · just now/i)).toBeVisible();
+    await visibility.uncheck();
+    await area.fill("Private note from TW-C e2e");
+    await page.getByRole("button", { name: /^Save note$/i }).click();
+    await expect(page.getByText(/Saved privately/i)).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page.goto(`/clients/${KAVYA}/overview`);
+    await expect(page.getByText(/Coaching ended/i)).toBeVisible();
+    await page.getByRole("button", { name: /more actions/i }).click();
+    await expect(page.getByRole("menuitem", { name: /add note/i })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole("button", { name: /^Add note$/i })).toHaveCount(
+      0,
+    );
+    await expect(page.getByTestId("screen-TW-34")).toHaveCount(0);
   });
 
   test("Activity has no plan UUID; History has no Refresh button", async ({

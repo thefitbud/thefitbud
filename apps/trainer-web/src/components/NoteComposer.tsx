@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { ApiClientError } from "@fitbud/api-client";
 import { labelFor } from "@fitbud/core";
 type TrainerNoteVisibility = "private" | "client";
+import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { Button } from "./Button";
@@ -28,6 +29,7 @@ export function NoteComposer({
   onSaved?: () => void;
   onClose?: () => void;
 }) {
+  const { me } = useAuth();
   const [body, setBody] = useState("");
   const [visibility, setVisibility] =
     useState<TrainerNoteVisibility>("private");
@@ -39,6 +41,13 @@ export function NoteComposer({
     const raw = (traineeName ?? "Client").trim().split(/\s+/)[0];
     return raw || "Client";
   }, [traineeName]);
+
+  const trainerFirstName = useMemo(() => {
+    const raw = (me?.trainerProfile?.displayName ?? "Coach")
+      .trim()
+      .split(/\s+/)[0];
+    return (raw || "Coach").toLowerCase();
+  }, [me?.trainerProfile?.displayName]);
 
   if (readOnly) {
     return (
@@ -125,7 +134,7 @@ export function NoteComposer({
             {firstName} will see this on her Today screen and get a notification.
           </p>
           <span className="note-preview-chip" aria-hidden="true">
-            From you · just now
+            From {trainerFirstName} · just now
           </span>
         </div>
       ) : (
