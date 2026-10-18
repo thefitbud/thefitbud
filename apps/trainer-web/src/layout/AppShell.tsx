@@ -9,6 +9,7 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -29,6 +30,10 @@ import { useConfig } from "../lib/config";
 import { apiClient } from "../lib/api";
 import { stage1Api } from "../lib/stage1-api";
 import { BrandMark } from "../components/BrandMark";
+import {
+  getShellClientTitle,
+  subscribeShellClientTitle,
+} from "../lib/shell-title";
 
 type PaletteHit = {
   relationshipId: string;
@@ -39,7 +44,7 @@ type PaletteHit = {
 const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = [
   { match: (p) => p === "/", title: "Home" },
   { match: (p) => p.startsWith("/clients/add"), title: "Add client" },
-  { match: (p) => p.startsWith("/clients/"), title: "Client" },
+  { match: (p) => p.startsWith("/clients/"), title: "Clients" },
   { match: (p) => p.startsWith("/clients"), title: "Clients" },
   { match: (p) => p.startsWith("/checkins"), title: "Check-ins" },
   { match: (p) => p.startsWith("/templates"), title: "Templates" },
@@ -47,7 +52,10 @@ const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = 
   { match: (p) => p.startsWith("/invitations"), title: "Invitation" },
 ];
 
-function pageTitleFor(pathname: string): string {
+function pageTitleFor(pathname: string, clientTitle: string | null): string {
+  if (pathname.startsWith("/clients/") && !pathname.startsWith("/clients/add")) {
+    return clientTitle?.trim() || "Clients";
+  }
   return PAGE_TITLES.find((row) => row.match(pathname))?.title ?? "FitBud";
 }
 
@@ -81,7 +89,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
   const navigate = useNavigate();
   const location = useLocation();
-  const pageTitle = pageTitleFor(location.pathname);
+  const clientTitle = useSyncExternalStore(
+    subscribeShellClientTitle,
+    getShellClientTitle,
+    getShellClientTitle,
+  );
+  const pageTitle = pageTitleFor(location.pathname, clientTitle);
 
   const [attentionCount, setAttentionCount] = useState<number | null>(null);
   const [checkinBadge, setCheckinBadge] = useState<number | null>(null);

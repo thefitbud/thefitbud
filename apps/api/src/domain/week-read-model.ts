@@ -1,16 +1,17 @@
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import {
-  NUTRIENT_SCALE,
   type WeekDayState,
   type WeekReadModel,
   type WeekTodayNutrition,
 } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
+  dayMacrosFromScaledItems,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
   formatLocalDate,
   mealsOnDates,
+  unscaleNutrient,
 } from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
@@ -23,11 +24,6 @@ import {
 } from "../db/schema.js";
 import { parsePlanContentJson } from "./mappers.js";
 
-function unscaleNutrient(scaled: number | null | undefined): number {
-  if (scaled == null) return 0;
-  return Math.round(scaled / NUTRIENT_SCALE);
-}
-
 function macrosFromPrescriptionItems(
   items: Array<{
     calculated?: {
@@ -38,39 +34,8 @@ function macrosFromPrescriptionItems(
       partial: boolean;
     } | null;
   }>,
-): {
-  kcal: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
-  unknown: boolean;
-} {
-  let kcal = 0;
-  let proteinG = 0;
-  let carbsG = 0;
-  let fatG = 0;
-  let unknown = false;
-  for (const item of items) {
-    const calculated = item.calculated ?? null;
-    if (!calculated) {
-      unknown = true;
-      continue;
-    }
-    if (calculated.partial) unknown = true;
-    if (
-      calculated.energyKcalScaled == null ||
-      calculated.proteinScaled == null ||
-      calculated.carbsScaled == null ||
-      calculated.fatScaled == null
-    ) {
-      unknown = true;
-    }
-    kcal += unscaleNutrient(calculated.energyKcalScaled);
-    proteinG += unscaleNutrient(calculated.proteinScaled);
-    carbsG += unscaleNutrient(calculated.carbsScaled);
-    fatG += unscaleNutrient(calculated.fatScaled);
-  }
-  return { kcal, proteinG, carbsG, fatG, unknown };
+) {
+  return dayMacrosFromScaledItems(items.map((item) => item.calculated ?? null));
 }
 
 async function loadAssignedTodayNutrition(
@@ -97,19 +62,15 @@ async function loadAssignedTodayNutrition(
   const placed = mealsOnDates(content.mealPrescriptions, [today]);
   if (placed.length === 0) return null;
 
-  let kcal = 0;
-  let proteinG = 0;
-  let carbsG = 0;
-  let fatG = 0;
-  for (const { meal } of placed) {
-    const part = macrosFromPrescriptionItems(meal.items ?? []);
-    if (part.unknown) return null;
-    kcal += part.kcal;
-    proteinG += part.proteinG;
-    carbsG += part.carbsG;
-    fatG += part.fatG;
-  }
-  return { kcal, proteinG, carbsG, fatG };
+  const allItems = placed.flatMap(({ meal }) => meal.items ?? []);
+  const part = macrosFromPrescriptionItems(allItems);
+  if (part.unknown) return null;
+  return {
+    kcal: part.kcal,
+    proteinG: part.proteinG,
+    carbsG: part.carbsG,
+    fatG: part.fatG,
+  };
 }
 
 function loggedTodayNutrition(

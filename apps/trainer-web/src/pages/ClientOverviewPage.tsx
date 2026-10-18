@@ -161,6 +161,9 @@ export function ClientOverviewPage() {
 
   const [noteBusyId, setNoteBusyId] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const [notePendingDelete, setNotePendingDelete] = useState<TrainerNote | null>(
+    null,
+  );
   const [notesLoadError, setNotesLoadError] = useState<{
     message: string;
     requestId: string | null;
@@ -205,8 +208,10 @@ export function ClientOverviewPage() {
     }
   }
 
-  async function deleteNote(note: TrainerNote) {
-    if (!window.confirm("Delete this note? This cannot be undone.")) return;
+  async function confirmDeleteNote() {
+    const note = notePendingDelete;
+    if (!note) return;
+    setNotePendingDelete(null);
     setNoteBusyId(note.id);
     setNoteError(null);
     try {
@@ -433,14 +438,19 @@ export function ClientOverviewPage() {
                 </div>
                 <div className="ov-stat">
                   <div className="ov-stat-v">
-                    {overview.nextCheckin
-                      ? formatCivilDate(overview.nextCheckin.localDate, {
-                          includeWeekday: true,
-                        }).split(" ")[0]
-                      : "—"}
+                    {overview.pendingReviewCheckin
+                      ? formatCivilDate(
+                          overview.pendingReviewCheckin.localDate,
+                          { includeWeekday: true },
+                        ).split(" ")[0]
+                      : overview.nextCheckin
+                        ? formatCivilDate(overview.nextCheckin.localDate, {
+                            includeWeekday: true,
+                          }).split(" ")[0]
+                        : "—"}
                   </div>
                   <div className="ov-stat-l">
-                    {overview.nextCheckin?.status === "submitted"
+                    {overview.pendingReviewCheckin
                       ? "Check-in submitted"
                       : overview.nextCheckin
                         ? "Next check-in"
@@ -583,26 +593,34 @@ export function ClientOverviewPage() {
       </div>
 
       <aside className="overview-side">
-        {overview.nextCheckin ? (
+        {overview.pendingReviewCheckin || overview.nextCheckin ? (
           <section className="ov-card ov-side">
-            <div className="ov-side-h">
-              <h3>Check-in</h3>
-              <Link
-                className="text-link"
-                to={`/clients/${relationshipId}/check-ins/${overview.nextCheckin.id}`}
-              >
-                Open
-              </Link>
-            </div>
-            <div className="ov-big">
-              {labelFor("checkin_status", overview.nextCheckin.status)} check-in
-            </div>
-            <div className="ov-sub">
-              {formatCivilDate(overview.nextCheckin.localDate)}
-              {overview.nextCheckin.status === "submitted"
-                ? " · waiting for your review"
-                : ""}
-            </div>
+            {(() => {
+              const checkin =
+                overview.pendingReviewCheckin ?? overview.nextCheckin!;
+              return (
+                <>
+                  <div className="ov-side-h">
+                    <h3>Check-in</h3>
+                    <Link
+                      className="text-link"
+                      to={`/clients/${relationshipId}/check-ins/${checkin.id}`}
+                    >
+                      Open
+                    </Link>
+                  </div>
+                  <div className="ov-big">
+                    {labelFor("checkin_status", checkin.status)} check-in
+                  </div>
+                  <div className="ov-sub">
+                    {formatCivilDate(checkin.localDate)}
+                    {checkin.status === "submitted"
+                      ? " · waiting for your review"
+                      : ""}
+                  </div>
+                </>
+              );
+            })()}
           </section>
         ) : null}
 
@@ -785,7 +803,7 @@ export function ClientOverviewPage() {
                         type="button"
                         className="text-link"
                         disabled={!online || noteBusyId === note.id}
-                        onClick={() => void deleteNote(note)}
+                        onClick={() => setNotePendingDelete(note)}
                       >
                         Delete
                       </button>
@@ -797,6 +815,41 @@ export function ClientOverviewPage() {
           )}
         </section>
       </aside>
+
+      {notePendingDelete ? (
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onClick={() => setNotePendingDelete(null)}
+        >
+          <dialog
+            className="modal-card"
+            open
+            aria-labelledby="delete-note-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-note-title">Delete this note?</h2>
+            <p className="muted">This cannot be undone.</p>
+            <div className="button-row">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setNotePendingDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={!online}
+                onClick={() => void confirmDeleteNote()}
+              >
+                Delete note
+              </Button>
+            </div>
+          </dialog>
+        </div>
+      ) : null}
 
       {drawerId ? (
         <ExceptionDrawer

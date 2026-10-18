@@ -28,6 +28,7 @@ import {
   formatCivilDate,
   labelFor,
   planConsistencyWarnings,
+  possessivePronoun,
 } from "@fitbud/core";
 import { Button } from "../components/Button";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
@@ -82,12 +83,6 @@ function firstNameOf(displayName: string): string {
   return displayName.trim().split(/\s+/)[0] || "Client";
 }
 
-function possessivePronoun(gender: string | null | undefined): string {
-  const g = (gender ?? "").trim().toLowerCase();
-  if (g === "female" || g === "woman" || g === "f") return "her";
-  if (g === "male" || g === "man" || g === "m") return "his";
-  return "their";
-}
 
 function objectPronoun(gender: string | null | undefined): string {
   const g = (gender ?? "").trim().toLowerCase();

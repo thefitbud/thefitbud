@@ -72,6 +72,7 @@ export {
   LibraryPrescriptionError,
   aggregateNutrients,
   calculateServingNutrients,
+  dayMacrosFromScaledItems,
   displayNutrients,
   foodSnapshotFromLibrary,
   formatScaledQuantity,
@@ -79,8 +80,12 @@ export {
   materializeFoodSnapshot,
   materializePlanContent,
   scaleNutrient,
+  unscaleNutrient,
+  type DayMacroTotals,
   type DisplayNutrients,
 } from "./nutrition.js";
+
+export { possessivePronoun } from "./pronouns.js";
 
 export {
   checkinWindowForLocalDate,

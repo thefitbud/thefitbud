@@ -1,5 +1,6 @@
 import type { MealAssignment, MeDayResponse } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
+import { dayMacrosFromScaledItems, unscaleNutrient } from "@fitbud/core";
 import type { RingDatum } from "@fitbud/ui-mobile";
 
 type MacroTotals = {
@@ -10,33 +11,18 @@ type MacroTotals = {
   unknown: boolean;
 };
 
-function scaledToUnit(value: number | null | undefined): number {
-  if (value == null) return 0;
-  return Math.round(value / NUTRIENT_SCALE);
-}
-
 export function nutrientsFromMealPrescription(meal: MealAssignment): MacroTotals {
-  let kcal = 0;
-  let protein = 0;
-  let carbs = 0;
-  let fat = 0;
-  let unknown = false;
-
-  for (const item of meal.prescription.items) {
-    const calculated =
-      "calculated" in item && item.calculated ? item.calculated : null;
-    if (!calculated) {
-      unknown = true;
-      continue;
-    }
-    if (calculated.partial) unknown = true;
-    kcal += scaledToUnit(calculated.energyKcalScaled);
-    protein += scaledToUnit(calculated.proteinScaled);
-    carbs += scaledToUnit(calculated.carbsScaled);
-    fat += scaledToUnit(calculated.fatScaled);
-  }
-
-  return { kcal, protein, carbs, fat, unknown };
+  const items = meal.prescription.items.map((item) =>
+    "calculated" in item && item.calculated ? item.calculated : null,
+  );
+  const totals = dayMacrosFromScaledItems(items);
+  return {
+    kcal: totals.kcal,
+    protein: totals.proteinG,
+    carbs: totals.carbsG,
+    fat: totals.fatG,
+    unknown: totals.unknown,
+  };
 }
 
 function isLoggedMeal(status: MealAssignment["status"]): boolean {
@@ -53,37 +39,38 @@ export function dayNutritionFromMeals(
   meals: MealAssignment[],
   dayTotals?: MeDayResponse["totals"] | null,
 ): { assigned: MacroTotals; logged: MacroTotals } {
-  const assigned = meals.reduce<MacroTotals>(
-    (acc, meal) => {
-      const part = nutrientsFromMealPrescription(meal);
-      return {
-        kcal: acc.kcal + part.kcal,
-        protein: acc.protein + part.protein,
-        carbs: acc.carbs + part.carbs,
-        fat: acc.fat + part.fat,
-        unknown: acc.unknown || part.unknown,
-      };
-    },
-    { kcal: 0, protein: 0, carbs: 0, fat: 0, unknown: false },
+  const assignedItems = meals.flatMap((meal) =>
+    meal.prescription.items.map((item) =>
+      "calculated" in item && item.calculated ? item.calculated : null,
+    ),
   );
+  const assignedTotals = dayMacrosFromScaledItems(assignedItems);
+  const assigned: MacroTotals = {
+    kcal: assignedTotals.kcal,
+    protein: assignedTotals.proteinG,
+    carbs: assignedTotals.carbsG,
+    fat: assignedTotals.fatG,
+    unknown: assignedTotals.unknown,
+  };
 
-  const loggedFromMeals = meals.reduce<MacroTotals>(
-    (acc, meal) => {
-      if (!isLoggedMeal(meal.status)) return acc;
-      const part = nutrientsFromMealPrescription(meal);
-      return {
-        kcal: acc.kcal + part.kcal,
-        protein: acc.protein + part.protein,
-        carbs: acc.carbs + part.carbs,
-        fat: acc.fat + part.fat,
-        unknown: acc.unknown || part.unknown,
-      };
-    },
-    { kcal: 0, protein: 0, carbs: 0, fat: 0, unknown: false },
-  );
+  const loggedItems = meals
+    .filter((meal) => isLoggedMeal(meal.status))
+    .flatMap((meal) =>
+      meal.prescription.items.map((item) =>
+        "calculated" in item && item.calculated ? item.calculated : null,
+      ),
+    );
+  const loggedTotals = dayMacrosFromScaledItems(loggedItems);
+  const loggedFromMeals: MacroTotals = {
+    kcal: loggedTotals.kcal,
+    protein: loggedTotals.proteinG,
+    carbs: loggedTotals.carbsG,
+    fat: loggedTotals.fatG,
+    unknown: loggedTotals.unknown,
+  };
 
   if (dayTotals?.kcalScaled != null) {
-    loggedFromMeals.kcal = Math.round(dayTotals.kcalScaled / NUTRIENT_SCALE);
+    loggedFromMeals.kcal = unscaleNutrient(dayTotals.kcalScaled);
   }
 
   return { assigned, logged: loggedFromMeals };

@@ -117,6 +117,68 @@ export type DisplayNutrients = {
   partial: boolean;
 };
 
+/** Round a single scaled nutrient to a whole display unit (kcal / grams). */
+export function unscaleNutrient(scaled: number | null | undefined): number {
+  if (scaled == null) return 0;
+  return Math.round(scaled / NUTRIENT_SCALE);
+}
+
+export type DayMacroTotals = {
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  unknown: boolean;
+};
+
+/**
+ * Sum scaled nutrients first, then unscale once.
+ * Avoids ±1g drift from rounding each item before summing.
+ */
+export function dayMacrosFromScaledItems(
+  items: ReadonlyArray<{
+    energyKcalScaled?: number | null;
+    proteinScaled?: number | null;
+    carbsScaled?: number | null;
+    fatScaled?: number | null;
+    partial?: boolean;
+  } | null | undefined>,
+): DayMacroTotals {
+  let kcalScaled = 0;
+  let proteinScaled = 0;
+  let carbsScaled = 0;
+  let fatScaled = 0;
+  let unknown = false;
+
+  for (const item of items) {
+    if (!item) {
+      unknown = true;
+      continue;
+    }
+    if (item.partial) unknown = true;
+    if (
+      item.energyKcalScaled == null ||
+      item.proteinScaled == null ||
+      item.carbsScaled == null ||
+      item.fatScaled == null
+    ) {
+      unknown = true;
+    }
+    kcalScaled += item.energyKcalScaled ?? 0;
+    proteinScaled += item.proteinScaled ?? 0;
+    carbsScaled += item.carbsScaled ?? 0;
+    fatScaled += item.fatScaled ?? 0;
+  }
+
+  return {
+    kcal: unscaleNutrient(kcalScaled),
+    proteinG: unscaleNutrient(proteinScaled),
+    carbsG: unscaleNutrient(carbsScaled),
+    fatG: unscaleNutrient(fatScaled),
+    unknown,
+  };
+}
+
 /** Round only an already aggregated result: nearest kcal, one decimal gram. */
 export function displayNutrients(values: CalculatedNutrients): DisplayNutrients {
   return {

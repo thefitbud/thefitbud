@@ -15,6 +15,7 @@ import {
   type WorkspaceModal,
 } from "../components/workspace/WorkspaceModals";
 import { apiClient } from "../lib/api";
+import { setShellClientTitle } from "../lib/shell-title";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
@@ -40,6 +41,12 @@ export function ClientWorkspaceLayout() {
   }, []);
 
   useRealtimeHints(apiClient, relationshipId || null, reloadWorkspace);
+
+  useEffect(() => {
+    const name = workspace?.header.traineeDisplayName ?? null;
+    setShellClientTitle(name);
+    return () => setShellClientTitle(null);
+  }, [workspace?.header.traineeDisplayName]);
 
   useEffect(() => {
     if (!relationshipId) return;
@@ -171,6 +178,7 @@ export function ClientWorkspaceLayout() {
       <WorkspaceModals
         relationshipId={relationshipId}
         traineeName={workspace.header.traineeDisplayName}
+        traineeGender={workspace.header.traineeProfile.gender}
         ended={ended}
         modal={modal}
         onClose={() => setModal(null)}

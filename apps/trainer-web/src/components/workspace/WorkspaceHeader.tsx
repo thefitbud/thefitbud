@@ -50,11 +50,11 @@ export function WorkspaceHeader({
   const configurationActive =
     workspace.configuration.configuration?.status === "active";
   const reviewCheckin =
-    workspace.overview.nextCheckin?.status === "submitted" ||
-    workspace.overview.nextCheckin?.status === "due" ||
+    workspace.overview.pendingReviewCheckin ??
+    (workspace.overview.nextCheckin?.status === "due" ||
     workspace.overview.nextCheckin?.status === "overdue"
       ? workspace.overview.nextCheckin
-      : null;
+      : null);
 
   const primary = primaryActionFor({
     relationshipId,
@@ -96,13 +96,18 @@ export function WorkspaceHeader({
   if (weekNumber != null) {
     metaNodes.push({ key: "week", node: <span>Week {weekNumber}</span> });
   }
-  if (workspace.overview.nextCheckin) {
+  const nextScheduled = workspace.overview.nextCheckin;
+  if (
+    !ended &&
+    nextScheduled &&
+    nextScheduled.status !== "submitted" &&
+    nextScheduled.status !== "reviewed"
+  ) {
     metaNodes.push({
       key: "checkin",
       node: (
         <span>
-          Next check-in{" "}
-          {formatCivilDate(workspace.overview.nextCheckin.localDate)}
+          Next check-in {formatCivilDate(nextScheduled.localDate)}
         </span>
       ),
     });

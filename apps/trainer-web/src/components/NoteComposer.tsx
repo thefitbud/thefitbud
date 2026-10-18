@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TrainerNote } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { labelFor, possessivePronoun } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { stage1Api } from "../lib/stage1-api";
@@ -16,6 +16,7 @@ const COUNTER_FROM = 800;
 export function NoteComposer({
   relationshipId,
   traineeName,
+  traineeGender,
   subjectType,
   subjectId,
   checkinId,
@@ -26,6 +27,8 @@ export function NoteComposer({
 }: {
   relationshipId: string;
   traineeName?: string;
+  /** Client gender / pronoun field; fallback possessive is "their". */
+  traineeGender?: string | null;
   subjectType?: string;
   subjectId?: string;
   checkinId?: string;
@@ -48,6 +51,8 @@ export function NoteComposer({
     const raw = (traineeName ?? "Client").trim().split(/\s+/)[0];
     return raw || "Client";
   }, [traineeName]);
+
+  const pronoun = possessivePronoun(traineeGender);
 
   const trainerFirstName = useMemo(() => {
     const raw = (me?.trainerProfile?.displayName ?? "Coach")
@@ -150,8 +155,8 @@ export function NoteComposer({
         <div className="note-visible-preview">
           <p className="muted">
             {isEdit && note?.visibility === "client"
-              ? `${firstName} can see this on their Today screen.`
-              : `${firstName} will see this on their Today screen and get a notification.`}
+              ? `${firstName} can see this on ${pronoun} Today screen.`
+              : `${firstName} will see this on ${pronoun} Today screen and get a notification.`}
           </p>
           <span className="note-preview-chip" aria-hidden="true">
             From {trainerFirstName} · just now

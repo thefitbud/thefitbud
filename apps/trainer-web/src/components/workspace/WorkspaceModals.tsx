@@ -13,6 +13,7 @@ export type WorkspaceModal =
 export function WorkspaceModals({
   relationshipId,
   traineeName,
+  traineeGender,
   ended = false,
   modal,
   onClose,
@@ -20,6 +21,7 @@ export function WorkspaceModals({
 }: {
   relationshipId: string;
   traineeName: string;
+  traineeGender?: string | null;
   ended?: boolean;
   modal: WorkspaceModal;
   onClose: () => void;
@@ -45,6 +47,7 @@ export function WorkspaceModals({
           <NoteComposer
             relationshipId={relationshipId}
             traineeName={traineeName}
+            traineeGender={traineeGender}
             note={modal.note}
             onSaved={onChanged}
             onClose={onClose}

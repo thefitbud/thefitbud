@@ -531,7 +531,10 @@ describe("demo seed", () => {
     expect(rows[0]?.values[0]?.[0]).toBe(0);
   });
 
-  it("trainer week todayNutrition kcal matches trainee /me/day for Rohan and Aarav", async () => {
+  it("trainer week todayNutrition macros match trainee assigned+logged for Rohan and Aarav", async () => {
+    const { dayMacrosFromScaledItems, unscaleNutrient } = await import(
+      "@fitbud/core"
+    );
     const trainerToken = await login("rahul.coach@demo.fitbud.test");
     const traineeRel = (email: string) => {
       const rows = sqliteExec(
@@ -564,13 +567,24 @@ describe("demo seed", () => {
         data: {
           todayNutrition: {
             date: string;
-            logged: { kcal: number };
-            assigned: { kcal: number } | null;
+            logged: {
+              kcal: number;
+              proteinG: number;
+              carbsG: number;
+              fatG: number;
+            };
+            assigned: {
+              kcal: number;
+              proteinG: number;
+              carbsG: number;
+              fatG: number;
+            } | null;
           };
         };
       };
       const today = weekBody.data.todayNutrition.date;
-      const trainerLogged = weekBody.data.todayNutrition.logged.kcal;
+      const trainerLogged = weekBody.data.todayNutrition.logged;
+      const trainerAssigned = weekBody.data.todayNutrition.assigned;
 
       const traineeToken = await login(email);
       const dayRes = await app.request(`/me/day/${today}`, {
@@ -583,13 +597,56 @@ describe("demo seed", () => {
       const dayBody = (await dayRes.json()) as {
         data: { totals: { kcalScaled: number } };
       };
-      const traineeLogged = Math.round(
-        dayBody.data.totals.kcalScaled / NUTRIENT_SCALE,
-      );
+      const traineeLoggedKcal = unscaleNutrient(dayBody.data.totals.kcalScaled);
       expect(
-        traineeLogged,
-        `${email}: trainer week logged ${trainerLogged} vs trainee /me/day ${traineeLogged}`,
-      ).toBe(trainerLogged);
+        traineeLoggedKcal,
+        `${email}: trainer week logged kcal ${trainerLogged.kcal} vs trainee /me/day ${traineeLoggedKcal}`,
+      ).toBe(trainerLogged.kcal);
+
+      const mealsRes = await app.request(
+        `/meals/relationships/${rel}/assignments?fromDate=${today}&toDate=${today}`,
+        {
+          headers: {
+            Authorization: `Bearer ${traineeToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      expect(mealsRes.status, await mealsRes.clone().text()).toBe(200);
+      const mealsBody = (await mealsRes.json()) as {
+        data: {
+          items: Array<{
+            status: string;
+            prescription: {
+              items: Array<{
+                calculated?: {
+                  energyKcalScaled: number | null;
+                  proteinScaled: number | null;
+                  carbsScaled: number | null;
+                  fatScaled: number | null;
+                  partial?: boolean;
+                } | null;
+              }>;
+            };
+          }>;
+        };
+      };
+      const assignedItems = mealsBody.data.items.flatMap((meal) =>
+        meal.prescription.items.map((item) => item.calculated ?? null),
+      );
+      const traineeAssigned = dayMacrosFromScaledItems(assignedItems);
+      if (trainerAssigned) {
+        expect(
+          traineeAssigned.proteinG,
+          `${email}: assigned protein trainer ${trainerAssigned.proteinG} vs trainee ${traineeAssigned.proteinG}`,
+        ).toBe(trainerAssigned.proteinG);
+        expect(
+          traineeAssigned.fatG,
+          `${email}: assigned fat trainer ${trainerAssigned.fatG} vs trainee ${traineeAssigned.fatG}`,
+        ).toBe(trainerAssigned.fatG);
+        expect(traineeAssigned.kcal).toBe(trainerAssigned.kcal);
+      }
     }
   }, 120_000);
 });

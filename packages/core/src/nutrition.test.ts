@@ -9,9 +9,11 @@ import {
 import {
   aggregateNutrients,
   calculateServingNutrients,
+  dayMacrosFromScaledItems,
   displayNutrients,
   foodSnapshotFromLibrary,
   LibraryPrescriptionError,
+  unscaleNutrient,
 } from "./nutrition.js";
 
 const canonical: NutrientVector = {

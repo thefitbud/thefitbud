@@ -10,6 +10,7 @@ import {
   formatCivilDate,
   formatOnboardingAnswer,
   formatRelative,
+  possessivePronoun,
 } from "@fitbud/core";
 import { Button } from "../components/Button";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
@@ -24,13 +25,6 @@ type AnswerRow = {
   text: string;
   chips: string[] | null;
 };
-
-function possessivePronoun(gender: string | null | undefined): string {
-  const g = (gender ?? "").trim().toLowerCase();
-  if (g === "female" || g === "woman" || g === "f") return "her";
-  if (g === "male" || g === "man" || g === "m") return "his";
-  return "their";
-}
 
 function firstNameOf(displayName: string): string {
   return displayName.trim().split(/\s+/)[0] || "Client";
