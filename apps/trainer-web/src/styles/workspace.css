@@ -1008,13 +1008,15 @@
   flex: none;
 }
 
-.wsh-meta-item .status-chip {
-  white-space: nowrap;
-}
-
+/* Renewal chip: no separator bullet (avoids a stray • when the chip wraps). */
+.wsh-meta-item:has(.status-chip)::before,
 .wsh-meta-item .status-chip::before {
   display: none;
   content: none;
+}
+
+.wsh-meta-item .status-chip {
+  white-space: nowrap;
 }
 
 .wsh-meta a {

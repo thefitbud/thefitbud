@@ -497,7 +497,7 @@ export function AssignPlanModal({
               checked={notifyClient}
               onChange={(event) => setNotifyClient(event.target.checked)}
             />
-            <span>Notify {first}</span>
+            <span>Notify client</span>
           </label>
         </div>
 
