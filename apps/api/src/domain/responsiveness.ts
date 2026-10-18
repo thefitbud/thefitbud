@@ -157,7 +157,10 @@ export async function deriveReengagementCandidates(
     identities.map((row) => [row.userId, row.mobileE164]),
   );
 
-  const since48h = new Date(Date.parse(input.nowIso) - 48 * 86_400_000).toISOString();
+  // 48 hours = 2 * day-ms (86_400_000 is one day, not one hour).
+  const since48h = new Date(
+    Date.parse(input.nowIso) - 2 * 86_400_000,
+  ).toISOString();
   const items = [];
   for (const rel of active) {
     const recentLog = await db

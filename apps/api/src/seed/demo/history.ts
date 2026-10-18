@@ -456,6 +456,29 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `DELETE FROM workout_executions WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND assignment_id IN (SELECT id FROM workout_assignments WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND local_date >= ${sqlQuote(adherenceStart)});`,
     `DELETE FROM checkins WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND local_date >= ${sqlQuote(adherenceStart)};`,
   );
+  // Pre-seed Farhan exceptions with realistic ages (not detected_at=now).
+  const farhanMealSlots = [
+    MEAL_PRESCRIPTION_IDS.breakfast,
+    MEAL_PRESCRIPTION_IDS.lunch,
+    MEAL_PRESCRIPTION_IDS.dinner,
+    MEAL_PRESCRIPTION_IDS.snack,
+  ] as const;
+  for (let dayOffset = 0; dayOffset <= 2; dayOffset += 1) {
+    const day = addDaysFromLocalDate(refDate, -dayOffset);
+    const ageHours = 18 + dayOffset * 24;
+    const detected = new Date(Date.parse(now) - ageHours * 3_600_000).toISOString();
+    for (const slot of farhanMealSlots) {
+      const mealId = demoUuid(
+        "meal-assignment",
+        "farhan.paused@demo.fitbud.test",
+        day,
+        slot,
+      );
+      lines.push(
+        `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `farhan-${day}-${slot}`))}, ${sqlQuote(farhanRel)}, 'overdue_meal', 'critical', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(mealId)}, 'Required meal still unlogged', ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      );
+    }
+  }
   // Re-engage eligibility: no logs in 48h (above) + ≥3 reminders in 48h.
   const reengageAt = new Date(Date.parse(now) - 6 * 3_600_000).toISOString();
   for (let i = 0; i < 3; i += 1) {
@@ -464,7 +487,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
   }
 
-  // Deepak + Aarav: one Attention-severity open item each (mix with Criticals).
+  // Deepak + Aarav + attention_hole clients: Attention-severity open items so
+  // Home shows a mix of Critical and Attention across ~8 clients.
   const deepakRel = relId("rahul.coach@demo.fitbud.test", "deepak.dubai@demo.fitbud.test");
   const deepakWorkoutId = demoUuid(
     "workout-assignment",
@@ -476,22 +500,54 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "deepak-skipped-workout"))}, ${sqlQuote(deepakRel)}, 'skipped_workout', 'attention', 'active', 'demo-v1', 'workout_assignment', ${sqlQuote(deepakWorkoutId)}, 'Skipped workout', ${sqlQuote(deepakDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
   const aaravRelForEx = relId("rahul.coach@demo.fitbud.test", "aarav.ontrack@demo.fitbud.test");
+  // Use today dinner assignment id but keep outcome skipped so evaluate cannot
+  // clear the Attention item (on-track meals are otherwise confirmed).
   const aaravMealId = demoUuid(
     "meal-assignment",
     "aarav.ontrack@demo.fitbud.test",
-    addDaysFromLocalDate(refDate, -1),
-    MEAL_PRESCRIPTION_IDS.snack,
+    refDate,
+    MEAL_PRESCRIPTION_IDS.dinner,
   );
   const aaravDetected = new Date(Date.parse(now) - 12 * 3_600_000).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "aarav-skipped-meal"))}, ${sqlQuote(aaravRelForEx)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(aaravMealId)}, 'Skipped snack', ${sqlQuote(aaravDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(aaravMealId)};`,
+    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", aaravMealId))}, ${sqlQuote(aaravMealId)}, ${sqlQuote(aaravRelForEx)}, ${sqlQuote(demoUuid("plan-version", aaravRelForEx, "v2"))}, ${sqlQuote(userId("aarav.ontrack@demo.fitbud.test"))}, 'skipped', 0, ${sqlQuote(now)}, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "aarav-skipped-meal"))}, ${sqlQuote(aaravRelForEx)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(aaravMealId)}, 'Skipped dinner', ${sqlQuote(aaravDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
+
+  for (const [email, key] of [
+    ["arjun.attention@demo.fitbud.test", "arjun"],
+    ["neha.attention@demo.fitbud.test", "neha"],
+    ["tanvi.attention@demo.fitbud.test", "tanvi"],
+  ] as const) {
+    const holeRel = relId("rahul.coach@demo.fitbud.test", email);
+    const holeMealId = demoUuid(
+      "meal-assignment",
+      email,
+      addDaysFromLocalDate(refDate, -1),
+      MEAL_PRESCRIPTION_IDS.lunch,
+    );
+    const holeDetected = new Date(Date.parse(now) - 20 * 3_600_000).toISOString();
+    lines.push(
+      `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(holeMealId)};`,
+      `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", holeMealId))}, ${sqlQuote(holeMealId)}, ${sqlQuote(holeRel)}, ${sqlQuote(demoUuid("plan-version", holeRel, "v2"))}, ${sqlQuote(userId(email))}, 'skipped', 0, ${sqlQuote(now)}, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `${key}-skipped-lunch`))}, ${sqlQuote(holeRel)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(holeMealId)}, 'Skipped lunch', ${sqlQuote(holeDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    );
+  }
 
   const ishitaRel = relId("rahul.coach@demo.fitbud.test", "ishita.pushoff@demo.fitbud.test");
   const ishitaMealId = demoUuid("meal-assignment", "ishita.pushoff@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
+  const ishitaDinnerId = demoUuid(
+    "meal-assignment",
+    "ishita.pushoff@demo.fitbud.test",
+    addDaysFromLocalDate(refDate, -1),
+    MEAL_PRESCRIPTION_IDS.dinner,
+  );
+  const ishitaDetected = new Date(Date.parse(now) - 16 * 3_600_000).toISOString();
   lines.push(
     `INSERT INTO device_tokens (id, user_id, platform, provider, token, installation_id, status, last_seen_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("device-token", "ishita"))}, ${sqlQuote(userId("ishita.pushoff@demo.fitbud.test"))}, 'android', 'fcm', 'demo-ishita-revoked', 'demo-ishita-install', 'revoked', ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     `INSERT INTO coach_asks (id, relationship_id, trainee_user_id, item_type, item_id, topic, asked_at, last_asked_at, ask_count, status) VALUES (${sqlQuote(demoUuid("coach_ask", "ishita"))}, ${sqlQuote(ishitaRel)}, ${sqlQuote(userId("ishita.pushoff@demo.fitbud.test"))}, 'meal_assignment', ${sqlQuote(ishitaMealId)}, 'portion_size', ${sqlQuote(now)}, ${sqlQuote(now)}, 2, 'open');`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "ishita-dinner"))}, ${sqlQuote(ishitaRel)}, 'overdue_meal', 'critical', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(ishitaDinnerId)}, 'Missed dinner', ${sqlQuote(ishitaDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
   const nikhilRel = relId("rahul.coach@demo.fitbud.test", "nikhil.reactivate@demo.fitbud.test");
