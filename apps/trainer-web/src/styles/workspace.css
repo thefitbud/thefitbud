@@ -1688,6 +1688,32 @@
   }
 }
 
+@media (max-width: 900px) {
+  .wsh-r1 {
+    flex-wrap: wrap;
+  }
+
+  .wsh-acts {
+    width: 100%;
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    padding-top: 0.75rem;
+    overflow-x: visible;
+  }
+
+  .workspace-shell {
+    overflow-x: hidden;
+  }
+
+  .wsh,
+  .wsh-in,
+  .wsh-id,
+  .wsh-name-row {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 720px) {
   .wsh-r1 {
     flex-wrap: wrap;

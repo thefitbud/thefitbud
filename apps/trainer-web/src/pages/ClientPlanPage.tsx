@@ -3,6 +3,7 @@ import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from 
 import { ApiClientError } from "@fitbud/api-client";
 import {
   planVersionStatusSchema,
+  type DietAdjustmentScope,
   type PlanContent,
   type PlanTemplateSummary,
   type PlanVersionStatus,
@@ -23,7 +24,7 @@ import { publishIssues } from "../components/builder/validation";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
 import { AssignPlanModal } from "../components/plan/AssignPlanModal";
-import { createBlankPlanContent, sortedByOrder } from "../components/plan-composition";
+import { createBlankPlanContent, sortedMealsByTime } from "../components/plan-composition";
 import { EmptyState, ErrorState, LoadingBlock } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
@@ -85,7 +86,7 @@ function MealTimesPanel({
   traineeFirstName: string;
   timezone: string;
 }) {
-  const meals = sortedByOrder(content.mealPrescriptions);
+  const meals = sortedMealsByTime(content.mealPrescriptions);
   if (meals.length === 0) return null;
   return (
     <section className="plan-card meal-times" aria-labelledby="meal-times-heading">
@@ -395,6 +396,8 @@ export function ClientPlanPage() {
   const [draft, setDraft] = useState<DraftRef | null>(null);
   const [draftEpoch, setDraftEpoch] = useState(0);
   const [acknowledged, setAcknowledged] = useState<string | null>(null);
+  const [dietScope, setDietScope] = useState<DietAdjustmentScope | null>(null);
+  const [discardConfirm, setDiscardConfirm] = useState(false);
   const [picker, setPicker] = useState<null | "replace" | "start">(null);
   const [assign, setAssign] = useState<AssignTarget | null>(null);
   const [acting, setActing] = useState(false);
@@ -475,15 +478,19 @@ export function ClientPlanPage() {
     apiClient
       .getPlanConsistency(effectivePlan.id, effectiveVersion.id)
       .then((result) => {
-        if (!cancelled) setAcknowledged(result.acknowledged ? result.fingerprint : null);
+        if (cancelled) return;
+        setAcknowledged(result.acknowledged ? result.fingerprint : null);
+        setDietScope(result.dietAdjustmentScope ?? null);
       })
       .catch(() => {
-        if (!cancelled) setAcknowledged(null);
+        if (cancelled) return;
+        setAcknowledged(null);
+        setDietScope(null);
       });
     return () => {
       cancelled = true;
     };
-  }, [effectivePlan, effectiveVersion]);
+  }, [effectivePlan, effectiveVersion, refreshEpoch, draftEpoch]);
 
   function fail(err: unknown, fallback: string) {
     setError(err instanceof ApiClientError ? err.message : fallback);
@@ -560,6 +567,7 @@ export function ClientPlanPage() {
     if (!draft) return;
     setActing(true);
     setError(null);
+    setDiscardConfirm(false);
     try {
       await apiClient.discardPlanDraft(draft.planId, draft.versionId);
       setDraft(null);
@@ -682,6 +690,11 @@ export function ClientPlanPage() {
                 Effective since {effectiveFromLabel ?? "—"} · v{effectiveVersion.versionNumber} ·{" "}
                 {effectiveToLabel ? `ends ${effectiveToLabel}` : "ongoing"}
               </p>
+              {dietScope === "today_only" ? (
+                <p className="muted" data-testid="today-only-note">
+                  Tomorrow&apos;s meals follow the previous version.
+                </p>
+              ) : null}
             </div>
             {!ended ? (
               <div className="current-plan-actions">
@@ -763,7 +776,7 @@ export function ClientPlanPage() {
               type="button"
               className="button-ghost"
               disabled={!canEdit}
-              onClick={() => void discardDraft()}
+              onClick={() => setDiscardConfirm(true)}
             >
               Discard
             </button>
@@ -789,6 +802,41 @@ export function ClientPlanPage() {
 
       {effectivePlan ? (
         <VersionsTable relationshipId={relationshipId} refreshEpoch={refreshEpoch} timezone={timezone} />
+      ) : null}
+
+      {discardConfirm && draft ? (
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onClick={() => setDiscardConfirm(false)}
+        >
+          <dialog
+            className="modal-card"
+            open
+            aria-labelledby="discard-draft-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="discard-draft-title">Discard draft v{draft.versionNumber}?</h2>
+            <p className="muted">This cannot be undone.</p>
+            <div className="button-row">
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setDiscardConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button-primary"
+                disabled={acting}
+                onClick={() => void discardDraft()}
+              >
+                Discard draft
+              </button>
+            </div>
+          </dialog>
+        </div>
       ) : null}
 
       {picker ? (

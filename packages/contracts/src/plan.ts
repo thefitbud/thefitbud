@@ -315,6 +315,8 @@ export const planConsistencyResponseSchema = z.object({
   fingerprint: z.string(),
   acknowledged: z.boolean(),
   warnings: z.array(consistencyWarningSchema),
+  /** Present when this version was published with a diet adjustment scope. */
+  dietAdjustmentScope: dietAdjustmentScopeSchema.nullable().optional(),
 });
 export type PlanConsistencyResponse = z.infer<
   typeof planConsistencyResponseSchema

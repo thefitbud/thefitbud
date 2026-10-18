@@ -50,6 +50,21 @@ export function sortedByOrder<T extends { order: number }>(items: T[]): T[] {
   return [...items].sort((left, right) => left.order - right.order);
 }
 
+/** Meals by local time, then name, then order. Untimed meals sort last. */
+export function sortedMealsByTime<
+  T extends { localTime?: string | null; name?: string; order?: number },
+>(items: readonly T[]): T[] {
+  return [...items].sort((left, right) => {
+    const leftTime = left.localTime?.trim() || "99:99";
+    const rightTime = right.localTime?.trim() || "99:99";
+    if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+    const leftName = left.name?.trim() ?? "";
+    const rightName = right.name?.trim() ?? "";
+    if (leftName !== rightName) return leftName.localeCompare(rightName);
+    return (left.order ?? 0) - (right.order ?? 0);
+  });
+}
+
 export function clonePlanContent(content: PlanContent): PlanContent {
   return {
     workoutDays: content.workoutDays.map((day) => ({

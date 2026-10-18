@@ -85,7 +85,7 @@ export function useBuilderDraft({
         } else {
           setSaveState({
             kind: "error",
-            message: err instanceof Error ? err.message : "Couldn't save.",
+            message: "Couldn't save your latest change.",
           });
         }
         return false;

@@ -17,8 +17,53 @@ const DIFFICULTIES: ExerciseDifficulty[] = [
   "advanced",
 ];
 
+const MUSCLE_OPTIONS = [
+  "chest",
+  "upper_back",
+  "lower_back",
+  "lats",
+  "shoulders",
+  "front_delts",
+  "rear_delts",
+  "side_delts",
+  "biceps",
+  "triceps",
+  "forearms",
+  "core",
+  "abs",
+  "glutes",
+  "quads",
+  "hamstrings",
+  "calves",
+  "full_body",
+  "legs",
+  "back",
+] as const;
+
+const EQUIPMENT_OPTIONS = [
+  "barbell",
+  "dumbbell",
+  "kettlebell",
+  "machine",
+  "cable",
+  "bodyweight",
+  "band",
+  "smith_machine",
+  "medicine_ball",
+  "other",
+  "none",
+] as const;
+
 function difficultyLabel(value: ExerciseDifficulty): string {
   return labelFor("exercise_difficulty", value);
+}
+
+function muscleLabel(value: string): string {
+  return labelFor("body_part", value);
+}
+
+function equipmentLabel(value: string): string {
+  return labelFor("equipment", value);
 }
 
 export type LibraryPaneChrome = {
@@ -101,21 +146,31 @@ export function ExerciseSearchPane({
       </label>
       <label className="field">
         <span>Muscle group</span>
-        <input
+        <select
           value={muscleGroup}
           onChange={(event) => setMuscleGroup(event.target.value)}
-          placeholder="Exact match"
-          autoComplete="off"
-        />
+        >
+          <option value="">Any muscle</option>
+          {MUSCLE_OPTIONS.map((value) => (
+            <option key={value} value={value}>
+              {muscleLabel(value)}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="field">
         <span>Equipment</span>
-        <input
+        <select
           value={equipment}
           onChange={(event) => setEquipment(event.target.value)}
-          placeholder="Exact match"
-          autoComplete="off"
-        />
+        >
+          <option value="">Any equipment</option>
+          {EQUIPMENT_OPTIONS.map((value) => (
+            <option key={value} value={value}>
+              {equipmentLabel(value)}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="field">
         <span>Difficulty</span>
@@ -173,10 +228,10 @@ export function ExerciseSearchPane({
                   {item.ownership === "global" ? "Global" : "Yours"}
                   {item.difficulty ? ` · ${difficultyLabel(item.difficulty)}` : ""}
                   {item.primaryMuscles.length > 0
-                    ? ` · ${item.primaryMuscles.join(", ")}`
+                    ? ` · ${item.primaryMuscles.map(muscleLabel).join(", ")}`
                     : ""}
                   {compact && item.secondaryMuscles.length > 0
-                    ? ` · also ${item.secondaryMuscles.join(", ")}`
+                    ? ` · also ${item.secondaryMuscles.map(muscleLabel).join(", ")}`
                     : ""}
                 </p>
               </div>

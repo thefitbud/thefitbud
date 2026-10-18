@@ -32,6 +32,7 @@ async function discardDraftIfAny(page: Page) {
   const discard = page.getByRole("button", { name: /^discard$/i });
   if (await discard.isVisible({ timeout: 3_000 }).catch(() => false)) {
     await discard.click();
+    await page.getByRole("button", { name: /^discard draft$/i }).click();
     await expect(page.getByTestId("draft-banner")).toBeHidden();
   }
 }
@@ -138,6 +139,7 @@ test.describe("TW-D plan and builders", () => {
 
     await page.goto(`/clients/${ROHAN}/plan`);
     await page.getByRole("button", { name: /^discard$/i }).click();
+    await page.getByRole("button", { name: /^discard draft$/i }).click();
     await expect(page.getByTestId("draft-banner")).toBeHidden();
   });
 

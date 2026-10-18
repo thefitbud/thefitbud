@@ -67,7 +67,10 @@ export function WorkspaceModals({
               ×
             </button>
           </header>
-          <ResponsivenessPanel relationshipId={relationshipId} />
+          <ResponsivenessPanel
+            relationshipId={relationshipId}
+            gender={traineeGender}
+          />
         </aside>
       </div>
     );

@@ -92,7 +92,10 @@ type Hit = {
   why: string;
 };
 
-function collectText(page: Page): Promise<string> {
+async function collectText(page: Page): Promise<{
+  text: string;
+  foodNames: string[];
+}> {
   return page.evaluate(() => {
     const chunks: string[] = [document.body?.innerText ?? ""];
     document.querySelectorAll("[title],[aria-label],[placeholder]").forEach((el) => {
@@ -101,14 +104,26 @@ function collectText(page: Page): Promise<string> {
         if (v) chunks.push(v);
       }
     });
-    return chunks.join("\n");
+    const foodNames = Array.from(
+      document.querySelectorAll(
+        ".food-name, .lib-row-copy .templates-name, [data-food-name]",
+      ),
+    )
+      .map((el) => (el.textContent ?? "").trim())
+      .filter(Boolean);
+    return { text: chunks.join("\n"), foodNames };
   });
+}
+
+function matchInsideFoodName(match: string, foodNames: string[]): boolean {
+  return foodNames.some((name) => name.includes(match));
 }
 
 function scanText(
   text: string,
   route: string,
   scope: "web" | "mobile",
+  foodNames: string[] = [],
 ): Hit[] {
   const hits: Hit[] = [];
   for (const pattern of banned.patterns) {
@@ -120,6 +135,12 @@ function scanText(
     const matches = text.match(re);
     if (!matches) continue;
     for (const match of matches.slice(0, 5)) {
+      if (
+        pattern.id === "percent" &&
+        matchInsideFoodName(match, foodNames)
+      ) {
+        continue;
+      }
       hits.push({
         id: pattern.id,
         severity: pattern.severity,
@@ -212,7 +233,10 @@ test.describe("banned-strings · trainer web", () => {
     for (const route of ["/sign-in", "/sign-in/code", "/forgot-password"]) {
       await page.goto(route);
       await page.waitForTimeout(500);
-      allHits.push(...scanText(await collectText(page), route, "web"));
+      const collected = await collectText(page);
+      allHits.push(
+        ...scanText(collected.text, route, "web", collected.foodNames),
+      );
       allHits.push(...(await scanRoleChecks(page, route, "web")));
     }
 
@@ -249,8 +273,10 @@ test.describe("banned-strings · trainer web", () => {
             : route.startsWith("/welcome")
               ? "/welcome"
               : route;
-      const text = await collectText(page);
-      allHits.push(...scanText(text, key, "web"));
+      const collected = await collectText(page);
+      allHits.push(
+        ...scanText(collected.text, key, "web", collected.foodNames),
+      );
       allHits.push(...(await scanRoleChecks(page, key, "web")));
     }
 
@@ -334,9 +360,14 @@ test.describe("banned-strings · Expo web", () => {
         await bridge.navigate(id);
       }, screenId);
       await page.waitForTimeout(1500);
-      const text = await collectText(page);
+      const collected = await collectText(page);
       return {
-        textHits: scanText(text, route, "mobile" as const),
+        textHits: scanText(
+          collected.text,
+          route,
+          "mobile" as const,
+          collected.foodNames,
+        ),
         roleHits: await scanRoleChecks(page, route, "mobile"),
       };
     }
@@ -346,9 +377,17 @@ test.describe("banned-strings · Expo web", () => {
     // Sign-in (no capture bridge required).
     await page.goto(base, { waitUntil: "networkidle" });
     await page.waitForTimeout(800);
-    allHits.push(
-      ...scanText(await collectText(page), "mobile/sign-in", "mobile"),
-    );
+    {
+      const collected = await collectText(page);
+      allHits.push(
+        ...scanText(
+          collected.text,
+          "mobile/sign-in",
+          "mobile",
+          collected.foodNames,
+        ),
+      );
+    }
 
     await waitForCaptureBridge();
 

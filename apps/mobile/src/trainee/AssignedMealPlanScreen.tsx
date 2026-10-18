@@ -4,6 +4,7 @@ import { Text } from "../components/Text";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { sortMealsByTime } from "./scheduledAssignments";
 
 type Props = {
   effectivePlan: EffectivePlanResponse | null;
@@ -11,7 +12,9 @@ type Props = {
 };
 
 export function AssignedMealPlanScreen({ effectivePlan, onBack }: Props) {
-  const meals = effectivePlan?.version?.content.mealPrescriptions ?? [];
+  const meals = sortMealsByTime(
+    effectivePlan?.version?.content.mealPrescriptions ?? [],
+  );
   const title = effectivePlan?.plan?.title ?? "Your meal plan";
 
   return (

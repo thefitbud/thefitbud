@@ -38,6 +38,7 @@ import {
   removeSetTarget,
   removeWorkoutDay,
   sortedByOrder,
+  sortedMealsByTime,
   updateExercise,
   updateFoodItem,
   updateMeal,
@@ -147,7 +148,7 @@ export function PlanCompositionEditor({
 
 function PlanCompositionReadOnly({ content }: { content: PlanContent }) {
   const days = sortedByOrder(content.workoutDays);
-  const meals = sortedByOrder(content.mealPrescriptions);
+  const meals = sortedMealsByTime(content.mealPrescriptions);
 
   return (
     <div className="plan-comp">
@@ -270,7 +271,7 @@ function PlanCompositionFields({
   renderMealLibrary?: (meal: MealPrescription | null) => ReactNode;
 }) {
   const days = sortedByOrder(content.workoutDays);
-  const meals = sortedByOrder(content.mealPrescriptions);
+  const meals = sortedMealsByTime(content.mealPrescriptions);
   const [dayId, setDayId] = useState(days[0]?.id ?? "");
   const [mealId, setMealId] = useState(meals[0]?.id ?? "");
 

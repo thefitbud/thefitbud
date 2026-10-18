@@ -11,6 +11,7 @@ import {
   addFoodItemFromLibrary,
   addSetTarget,
   sortedByOrder,
+  sortedMealsByTime,
 } from "../plan-composition";
 import { BuilderLayout, useBuilderMode } from "./BuilderLayout";
 import { DaysPane } from "./DaysPane";
@@ -83,7 +84,7 @@ function ReadOnlySummary({ content }: { content: PlanContent }) {
         <section>
           <h3>Meals</h3>
           <ul>
-            {sortedByOrder(content.mealPrescriptions).map((meal) => (
+            {sortedMealsByTime(content.mealPrescriptions).map((meal) => (
               <li key={meal.id}>
                 <strong>{meal.name}</strong>
                 {meal.localTime ? ` · ${formatHhMmTime(meal.localTime)}` : ""} ·{" "}
@@ -168,7 +169,7 @@ export function PlanBuilder({
     [content.workoutDays],
   );
   const activeDay = days.find((day) => day.id === selectedDayId) ?? days[0] ?? null;
-  const meals = sortedByOrder(content.mealPrescriptions);
+  const meals = sortedMealsByTime(content.mealPrescriptions);
   const activeMeal = meals.find((meal) => meal.id === selectedMealId) ?? meals[0] ?? null;
   const editable = !readOnly && mode !== "small";
   const overlay = mode === "narrow";
@@ -260,6 +261,10 @@ export function PlanBuilder({
           ← {backLabel}
         </Link>
         <div className="builder-titleline">
+          <h1 className="sr-only">
+            {tab === "workout" ? "Workout builder" : "Nutrition builder"}
+            {title.trim() ? ` · ${title.trim()}` : ""}
+          </h1>
           <label className="field builder-title-field">
             <span className="sr-only">Plan title</span>
             <input
@@ -351,7 +356,7 @@ export function PlanBuilder({
       ) : null}
       {saveState.kind === "error" ? (
         <p className="builder-banner is-attention" role="alert">
-          Couldn&apos;t save your latest change. {saveState.message}{" "}
+          Couldn&apos;t save your latest change.{" "}
           <button type="button" className="button-link" onClick={retrySave}>
             Retry
           </button>

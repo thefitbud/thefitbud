@@ -22,6 +22,7 @@ import {
   removeFoodItem,
   removeMeal,
   sortedByOrder,
+  sortedMealsByTime,
   updateFoodItem,
   updateMeal,
 } from "../plan-composition";
@@ -512,7 +513,7 @@ export function MealsPane({
   showLibraryToggle?: boolean;
 }) {
   const [manualFor, setManualFor] = useState<string | null>(null);
-  const meals = sortedByOrder(content.mealPrescriptions);
+  const meals = sortedMealsByTime(content.mealPrescriptions);
   const visible = meals.filter((meal) => appliesOn(meal, selectedDay));
   const previousCount = useRef(meals.length);
   useEffect(() => {

@@ -1917,12 +1917,15 @@
 
 .set-table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .set-table {
   width: 100%;
+  min-width: 48rem;
   border-collapse: collapse;
   font-size: 0.875rem;
+  table-layout: fixed;
 }
 
 .set-table th {
@@ -1936,16 +1939,52 @@
 
 .set-table td {
   padding: 0.25rem;
+  vertical-align: middle;
+}
+
+.set-table th:nth-child(1),
+.set-table td:nth-child(1) {
+  width: 2.5rem;
+}
+
+.set-table th:nth-child(2),
+.set-table td:nth-child(2),
+.set-table th:nth-child(4),
+.set-table td:nth-child(4),
+.set-table th:nth-child(5),
+.set-table td:nth-child(5) {
+  width: 4.5rem;
+}
+
+.set-table th:nth-child(3),
+.set-table td:nth-child(3) {
+  width: 7rem;
+}
+
+.set-table th:nth-child(6),
+.set-table td:nth-child(6) {
+  width: 8rem;
+}
+
+.set-table th:nth-child(7),
+.set-table td:nth-child(7) {
+  width: 9.5rem;
 }
 
 .set-table input,
 .set-table select {
   width: 100%;
-  min-width: 3.5rem;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 0.375rem 0.5rem;
   border: 1px solid var(--border-strong, #d9dce8);
   border-radius: 8px;
   background: #fff;
+}
+
+.set-table td:nth-child(3) input,
+.set-table td:nth-child(6) input {
+  min-width: 5.5rem;
 }
 
 .set-num {
@@ -1957,6 +1996,7 @@
 .set-actions {
   white-space: nowrap;
   text-align: right;
+  overflow: visible;
 }
 
 /* meals */
@@ -1988,8 +2028,14 @@
 
 .meal-head {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(5.5rem, 1fr);
   gap: 0.5rem;
+}
+
+.meal-head input[type="time"] {
+  min-width: 5.5rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .meal-foot {

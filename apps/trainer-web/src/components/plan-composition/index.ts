@@ -30,6 +30,7 @@ export {
   removeSetTarget,
   removeWorkoutDay,
   sortedByOrder,
+  sortedMealsByTime,
   updateExercise,
   updateFoodItem,
   updateMeal,

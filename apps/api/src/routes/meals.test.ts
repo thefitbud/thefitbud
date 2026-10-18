@@ -1093,4 +1093,138 @@ describe("meal assignment and compliance", () => {
     );
     expect(history.status).toBe(200);
   });
+
+  it("recreates unlogged meal slots after publish when today is partially logged", async () => {
+    const { trainerCookie, traineeToken, relationshipId, planId, today } =
+      await reachEffectiveMealPlan("partial-today");
+    const listed = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${today}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const before = (
+      (await listed.json()) as {
+        data: {
+          items: Array<{ id: string; mealName: string; planVersionId: string }>;
+        };
+      }
+    ).data.items;
+    expect(before.length).toBe(2);
+    const breakfast = before.find((item) => item.mealName === "Breakfast")!;
+    const lunchBefore = before.find((item) => item.mealName === "Lunch")!;
+    const effectiveVersionId = breakfast.planVersionId;
+
+    const confirm = await app.request(
+      `/meals/assignments/${breakfast.id}/confirm`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "confirm-partial-today",
+        },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(confirm.status).toBe(200);
+
+    const draftRes = await app.request(
+      `/plans/${planId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-draft-partial-today",
+        },
+        body: JSON.stringify({
+          sourceVersionId: effectiveVersionId,
+          asAdjustment: true,
+        }),
+      },
+      testEnv(),
+    );
+    expect(draftRes.status).toBe(200);
+    const next = (await draftRes.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+
+    const dry = await app.request(
+      `/plans/${planId}/versions/${next.data.id}/assign`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "assign-partial-dry",
+        },
+        body: JSON.stringify({
+          window: 7,
+          effectiveFrom: new Date().toISOString(),
+          dietChangeScope: "today_onward",
+          dryRun: true,
+          notifyClient: false,
+        }),
+      },
+      testEnv(),
+    );
+    expect(dry.status).toBe(200);
+    const dryBody = (await dry.json()) as {
+      data: {
+        replaced: { workouts: number; meals: number };
+        created: { workouts: number; meals: number };
+      };
+    };
+    expect(dryBody.data.replaced.meals).toBeGreaterThan(0);
+    expect(dryBody.data.created.meals).toBeGreaterThan(0);
+
+    const assigned = await app.request(
+      `/plans/${planId}/versions/${next.data.id}/assign`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "assign-partial-real",
+        },
+        body: JSON.stringify({
+          window: 7,
+          effectiveFrom: new Date().toISOString(),
+          dietChangeScope: "today_onward",
+          dryRun: false,
+          notifyClient: false,
+        }),
+      },
+      testEnv(),
+    );
+    expect(assigned.status).toBe(200);
+
+    const after = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${today}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const afterItems = (
+      (await after.json()) as {
+        data: {
+          items: Array<{
+            id: string;
+            mealName: string;
+            planVersionId: string;
+            compliance: { outcome: string } | null;
+          }>;
+        };
+      }
+    ).data.items;
+    expect(afterItems.length).toBe(2);
+    const keptBreakfast = afterItems.find((item) => item.mealName === "Breakfast");
+    const lunch = afterItems.find((item) => item.mealName === "Lunch");
+    expect(keptBreakfast?.id).toBe(breakfast.id);
+    expect(keptBreakfast?.compliance).not.toBeNull();
+    expect(lunch).toBeTruthy();
+    expect(lunch!.id).not.toBe(lunchBefore.id);
+    expect(lunch!.planVersionId).toBe(next.data.id);
+  });
 });

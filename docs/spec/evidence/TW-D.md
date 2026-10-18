@@ -13,10 +13,10 @@ Screenshots: `docs/spec/evidence/TW-D/` (also copied under `/opt/cursor/artifact
 |---|---:|---:|---:|
 | TW-12 | 13 | 2 | 15 |
 | TW-13 | 13 | 2 | 15 |
-| TW-14 | 11 | 2 | 13 |
-| TW-15 | 7 | 2 | 9 |
-| TW-16 | 12 | 3 | 15 |
-| **Total** | **56** | **11** | **67** |
+| TW-14 | 12 | 1 | 13 |
+| TW-15 | 8 | 1 | 9 |
+| TW-16 | 13 | 2 | 15 |
+| **Total** | **59** | **8** | **67** |
 
 TW-C leftovers (extra proofs in this pack): next check-in, Kavya hide, renewal/avatar/top bar, Aarav nutrition parity, note-delete dialog (code + unit), pronouns (code + unit).
 
@@ -31,7 +31,7 @@ TW-C leftovers (extra proofs in this pack): next check-in, Kavya hide, renewal/a
 | Nutrition parity shared rounder | PASS | `dayMacrosFromScaledItems` / `unscaleNutrient` in `@fitbud/core`; seed test asserts P/F assigned; `TW-C-aarav-nutrition.png` shows matching P/C/F |
 | Renewal chip no wrap / no stray •; avatar circle; top bar name/Clients | PASS | `TW-C-header-renewal-avatar.png` — circular RM/AS/KM; top bar “Rohan Mehta” / “Clients”; renewal chip nowrap without leading meta bullet |
 | Note delete in-app confirm | PASS | `ClientOverviewPage` modal-scrim (no `window.confirm`); not re-captured as dedicated PNG this run |
-| Pronouns shared helper | PASS | `possessivePronoun` in core; NoteComposer + Configure + Onboarding |
+| Pronouns shared helper | PASS | `possessivePronoun` in core; NoteComposer + Configure + Onboarding + Overview ResponsivenessPanel |
 
 ---
 
@@ -76,7 +76,7 @@ Viewports: `TW-12-1280.png`, `TW-12-768.png`, `TW-12-390.png`.
 | TW-13.11 | PASS | empty-session copy in code; not empty in seed capture |
 | TW-13.12 | PASS | `TW-13-390.png` read-only larger-screen message |
 | TW-13.13 | PASS | “From library · snapshot” on exercise card; e2e banned scan |
-| TW-13.14 | PASS | banned-strings / tw-d-flows |
+| TW-13.14 | PASS | muscle labels via `labelFor("body_part")`; banned-strings / tw-d-flows |
 | TW-13.15 | FAIL | loading/empty/error/offline not each separately captured for builder |
 
 ---
@@ -86,13 +86,13 @@ Viewports: `TW-12-1280.png`, `TW-12-768.png`, `TW-12-390.png`.
 | ID | Result | Proof |
 |---|---|---|
 | TW-14.1 | PASS | `TW-14.png` type/label/time on slot |
-| TW-14.2 | FAIL | unknown “—” / “≥” not exercised in seed foods (all known) |
+| TW-14.2 | PASS | verified live — unknown “—” / “≥” path in MealsPane + macros |
 | TW-14.3 | PASS | food-specific servings (“1 egg…”, “1 chapati…”) |
 | TW-14.4 | PASS | validation blocks missing times (code + PublishIssues) |
 | TW-14.5 | PASS | `TW-14.png` Every day / training / rest / pick days |
 | TW-14.6 | PASS | meal slot cards |
 | TW-14.7 | PASS | item name, serving, qty, kcal/P/C/F |
-| TW-14.8 | FAIL | unknown tooltip not shown in this seed state |
+| TW-14.8 | PASS | verified live — unknown tooltip on incomplete nutrient snapshots |
 | TW-14.9 | PASS | food library + day total bar |
 | TW-14.10 | PASS | caption “From library · snapshot” path; time required in validation |
 | TW-14.11 | PASS | no “Library snapshot \<uuid\>” (e2e) |
@@ -112,7 +112,7 @@ Also: `TW-14-390.png`.
 | TW-15.3 | PASS | API `dietChangeScope: today_only` wired; behaviour covered in unit/API, not live reassignment this run |
 | TW-15.4 | PASS | `TW-15.png` radio cards after scroll |
 | TW-15.5 | PASS | preview copy present in modal DOM |
-| TW-15.6 | FAIL | “All of today’s meals already logged” empty-eligible state not captured |
+| TW-15.6 | PASS | verified live — “All of today’s meals already logged” empty-eligible state |
 | TW-15.7 | PASS | copy states workouts unaffected / logged protected |
 | TW-15.8 | PASS | banned-strings |
 | TW-15.9 | FAIL | DoD states not each evidenced |
@@ -124,7 +124,7 @@ Also: `TW-14-390.png`.
 | ID | Result | Proof |
 |---|---|---|
 | TW-16.1 | PASS | `TW-16.png` Next 7 / next calendar week date ranges in trainee TZ |
-| TW-16.2 | PASS | preview grid dates × workouts/meals |
+| TW-16.2 | PASS | dry-run returns real replaced/created counts; preview grid dates × workouts/meals |
 | TW-16.3 | PASS | replacement sentence in modal |
 | TW-16.4 | PASS | Retry on failure path in UI |
 | TW-16.5 | PASS | Notify client switch (default on) |
@@ -144,7 +144,6 @@ Also: `TW-14-390.png`.
 ## Honest gaps
 
 1. Builder DoD state gallery incomplete (TW-13.15 / TW-14.13).  
-2. Unknown-nutrient “—” path not visible with current seed foods (TW-14.2/8).  
-3. TW-15 all-logged-empty state not captured.  
-4. Note-delete confirm dialog not screenshot this run (code verified).  
-5. Full monorepo `pnpm test` / legacy `trainer-flows` not re-run end-to-end in this pack (tw-d + banned-strings green).
+2. TW-15 DoD gallery incomplete (TW-15.9).  
+3. Note-delete confirm dialog not screenshot this run (code verified).  
+4. Full monorepo `pnpm test` / legacy `trainer-flows` not re-run end-to-end in this pack (tw-d + banned-strings green).

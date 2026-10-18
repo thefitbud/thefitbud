@@ -1713,6 +1713,7 @@ async function loadPlanConsistency(
       fingerprint.length > 0 &&
       policy?.consistencyAckFingerprint === fingerprint,
     warnings,
+    dietAdjustmentScope: policy?.dietAdjustmentScope ?? null,
   });
 }
 

@@ -1,4 +1,5 @@
 import type { PlanContent, WorkoutDay } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import {
   addSetTarget,
   duplicateExercise,
@@ -122,7 +123,7 @@ export function SessionEditor({
                 </label>
                 {exercise.primaryMuscles.map((muscle) => (
                   <span key={muscle} className="muscle-chip">
-                    {muscle}
+                    {labelFor("body_part", muscle)}
                   </span>
                 ))}
                 {readOnly ? null : (

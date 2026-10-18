@@ -5,10 +5,12 @@ import {
   formatCivilDate,
   formatInstant,
   formatKcal,
+  formatLocalDate,
   formatNumber,
   formatRelative,
   labelFor,
 } from "@fitbud/core";
+import { resolveTraineeTimezone } from "../lib/trainee-timezone";
 import { AlertOctagon, AlertTriangle, Check, X } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import { useAuth } from "../auth/AuthProvider";
@@ -638,8 +640,15 @@ export function ClientOverviewPage() {
             <div className="ov-big">{plan.plan.title}</div>
             <div className="ov-sub">
               Effective since{" "}
-              {formatCivilDate(version.effectiveFrom ?? "")} · Version{" "}
-              {version.versionNumber}
+              {version.effectiveFrom
+                ? formatCivilDate(
+                    formatLocalDate(
+                      new Date(version.effectiveFrom),
+                      resolveTraineeTimezone(header).timezone,
+                    ),
+                  )
+                : "—"}{" "}
+              · Version {version.versionNumber}
             </div>
             {header.hasCustomMealTimes ? (
               <div className="ov-sub">Custom meal times</div>
@@ -686,7 +695,11 @@ export function ClientOverviewPage() {
               Details
             </button>
           </div>
-          <ResponsivenessPanel relationshipId={relationshipId} compact />
+          <ResponsivenessPanel
+            relationshipId={relationshipId}
+            compact
+            gender={header.traineeProfile.gender}
+          />
         </section>
 
         <section className="ov-card ov-side">

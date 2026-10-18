@@ -8,7 +8,6 @@ import {
   localDateTimeToUtcIso,
   localDatesInRange,
   mealsOnDates,
-  workoutSchedulesMatch,
   workoutSessionsOnDates,
 } from "@fitbud/core";
 import { ApiClientError } from "@fitbud/api-client";
@@ -35,7 +34,12 @@ type Replacement = { workouts: number; meals: number };
 type DryRun =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; dates: string[] };
+  | {
+      status: "ready";
+      dates: string[];
+      replaced: Replacement;
+      created: Replacement;
+    };
 
 function cityOf(timezone: string): string {
   return (timezone.split("/").pop() ?? timezone).replace(/_/g, " ");
@@ -92,7 +96,6 @@ export function AssignPlanModal({
   const [dietScope, setDietScope] = useState<DietAdjustmentScope>("today_onward");
   const [notifyClient, setNotifyClient] = useState(true);
   const [dryRun, setDryRun] = useState<DryRun>({ status: "loading" });
-  const [replacement, setReplacement] = useState<Replacement | null>(null);
   const [todayMeals, setTodayMeals] = useState<TodayMealsPreview>({ status: "loading" });
   const [todayMealsEpoch, setTodayMealsEpoch] = useState(0);
   const [dryRunEpoch, setDryRunEpoch] = useState(0);
@@ -164,14 +167,23 @@ export function AssignPlanModal({
       stage1Api
         .assignPlanVersion(planId, versionId, payload(true), createIdempotencyKey())
         .then((result) => {
-          if (!cancelled) setDryRun({ status: "ready", dates: result.dates });
+          if (!cancelled) {
+            setDryRun({
+              status: "ready",
+              dates: result.dates,
+              replaced: result.replaced,
+              created: result.created,
+            });
+          }
         })
         .catch((err: unknown) => {
           if (cancelled) return;
           setDryRun({
             status: "error",
             message:
-              err instanceof ApiClientError ? err.message : "Couldn't check this schedule.",
+              err instanceof ApiClientError
+                ? err.message
+                : "Couldn't check this schedule.",
           });
         });
     }, 350);
@@ -182,54 +194,8 @@ export function AssignPlanModal({
     // payload is derived from `signature`; re-run only when the request changes.
   }, [signature, formError, ended, online, planId, versionId, dryRunEpoch]);
 
-  const replaceFrom = useMemo(() => {
-    const dates = effectiveDates;
-    if (dates.length === 0) return null;
-    return { from: dates[0]!, to: dates[dates.length - 1]! };
-  }, [effectiveDates]);
-  const replaceSignature = replaceFrom ? `${replaceFrom.from}:${replaceFrom.to}` : "";
-
-  useEffect(() => {
-    if (!activePlan || !replaceFrom) {
-      setReplacement(null);
-      return;
-    }
-    let cancelled = false;
-    const workoutsChange = !workoutSchedulesMatch(
-      activePlan.content.workoutDays,
-      content.workoutDays,
-    );
-    void Promise.all([
-      workoutsChange
-        ? stage1Api.listWorkoutAssignments(relationshipId, {
-            fromDate: replaceFrom.from,
-            toDate: replaceFrom.to,
-          })
-        : Promise.resolve(null),
-      stage1Api.listMealAssignments(relationshipId, {
-        fromDate: replaceFrom.from,
-        toDate: replaceFrom.to,
-      }),
-    ])
-      .then(([workouts, meals]) => {
-        if (cancelled) return;
-        setReplacement({
-          workouts: (workouts?.items ?? []).filter(
-            (item) => item.execution == null && item.scheduleStatus === "scheduled",
-          ).length,
-          meals: meals.items.filter(
-            (item) => item.compliance == null && item.scheduleStatus === "scheduled",
-          ).length,
-        });
-      })
-      .catch(() => {
-        if (!cancelled) setReplacement(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // content identity changes only on edit; re-evaluate when range changes.
-  }, [relationshipId, replaceSignature, activePlan, nutritionOnly]);
+  const replacement =
+    dryRun.status === "ready" ? dryRun.replaced : null;
 
   useEffect(() => {
     if (!nutritionOnly) return;
@@ -455,7 +421,12 @@ export function AssignPlanModal({
             {grid.length === 0 ? (
               <p className="muted">No dates fall inside this window.</p>
             ) : (
-              <div className="assign-grid" role="table" aria-label="Scheduled dates">
+              <div
+                className="assign-grid"
+                role="table"
+                aria-label="Schedule preview by date"
+                tabIndex={0}
+              >
                 {grid.map((row) => (
                   <div className="assign-grid-row" role="row" key={row.date}>
                     <span role="cell" className="assign-grid-date">

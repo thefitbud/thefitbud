@@ -112,7 +112,7 @@
       "flags": "",
       "scope": "both",
       "severity": "error",
-      "why": "No % scores, adherence or completion rates."
+      "why": "No % scores, adherence or completion rates. Library food names (e.g. 'Milk, 1% fat') are excluded by the scanner."
     },
     {
       "id": "streak",

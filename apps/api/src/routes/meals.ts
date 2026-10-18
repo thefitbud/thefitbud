@@ -327,12 +327,23 @@ mealRoutes.post(
       now,
     });
 
+    const generated = createdRows
+      .map((row) => mapMealAssignment(row, null, now))
+      .sort((left, right) => {
+        if (left.localDate !== right.localDate) {
+          return left.localDate.localeCompare(right.localDate);
+        }
+        const leftTime =
+          left.prescription.localTime?.trim() || left.windowStartsAt;
+        const rightTime =
+          right.prescription.localTime?.trim() || right.windowStartsAt;
+        if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+        return left.mealName.localeCompare(right.mealName);
+      });
     const responseBody = {
       data: generateMealAssignmentsResponseSchema.parse({
-        created: createdRows.length,
-        assignments: createdRows.map((row) =>
-          mapMealAssignment(row, null, now),
-        ),
+        created: generated.length,
+        assignments: generated,
       }),
     };
     await saveIdempotencyRecord(db, {
@@ -423,12 +434,27 @@ mealRoutes.get(
       );
 
     const now = nowIso();
+    const items = rows
+      .map((row) =>
+        mapMealAssignment(row.assignment, row.compliance ?? null, now),
+      )
+      .sort((left, right) => {
+        if (left.localDate !== right.localDate) {
+          return left.localDate.localeCompare(right.localDate);
+        }
+        const leftTime =
+          left.prescription.localTime?.trim() || left.windowStartsAt;
+        const rightTime =
+          right.prescription.localTime?.trim() || right.windowStartsAt;
+        if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+        const byName = left.mealName.localeCompare(right.mealName);
+        if (byName !== 0) return byName;
+        return left.id.localeCompare(right.id);
+      });
     return ok(
       c,
       mealAssignmentListResponseSchema.parse({
-        items: rows.map((row) =>
-          mapMealAssignment(row.assignment, row.compliance ?? null, now),
-        ),
+        items,
         nextCursor: null,
       }),
     );

@@ -1,20 +1,28 @@
 import { useEffect, useState } from "react";
 import type { ResponsivenessResponse } from "@fitbud/contracts";
-import { formatHhMmTime } from "@fitbud/core";
+import { formatHhMmTime, possessivePronoun } from "@fitbud/core";
 import { stage1Api } from "../../lib/stage1-api";
 import { LoadingBlock } from "../StatePanels";
 
-const LABEL_COPY: Record<
-  ResponsivenessResponse["label"],
-  string
-> = {
-  logs_on_own: "Logs on their own · rarely needs reminders",
-  responds: "Responds to reminders",
-  often_misses: "Often misses reminders",
-  reminders_paused: "Reminders paused",
-  notifications_off: "Notifications off",
-  not_enough_data: "Not enough data yet",
-};
+function labelCopy(
+  label: ResponsivenessResponse["label"],
+  pronoun: string,
+): string {
+  switch (label) {
+    case "logs_on_own":
+      return `Logs on ${pronoun} own · rarely needs reminders`;
+    case "responds":
+      return "Responds to reminders";
+    case "often_misses":
+      return "Often misses reminders";
+    case "reminders_paused":
+      return "Reminders paused";
+    case "notifications_off":
+      return "Notifications off";
+    case "not_enough_data":
+      return "Not enough data yet";
+  }
+}
 
 export function quietHoursText(
   data: Pick<ResponsivenessResponse, "quietHoursStart" | "quietHoursEnd">,
@@ -23,7 +31,10 @@ export function quietHoursText(
   return `${formatHhMmTime(data.quietHoursStart)} – ${formatHhMmTime(data.quietHoursEnd)}`;
 }
 
-function compactHeadline(data: ResponsivenessResponse): string {
+function compactHeadline(
+  data: ResponsivenessResponse,
+  pronoun: string,
+): string {
   const { sent, opened } = data.counts;
   switch (data.label) {
     case "responds":
@@ -33,19 +44,22 @@ function compactHeadline(data: ResponsivenessResponse): string {
     case "not_enough_data":
       return sent > 0
         ? `Not enough data yet · ${sent} sent`
-        : LABEL_COPY.not_enough_data;
+        : labelCopy("not_enough_data", pronoun);
     default:
-      return LABEL_COPY[data.label];
+      return labelCopy(data.label, pronoun);
   }
 }
 
 export function ResponsivenessPanel({
   relationshipId,
   compact = false,
+  gender,
 }: {
   relationshipId: string;
   compact?: boolean;
+  gender?: string | null;
 }) {
+  const pronoun = possessivePronoun(gender);
   const [data, setData] = useState<ResponsivenessResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +85,7 @@ export function ResponsivenessPanel({
   }
   if (!data) return <LoadingBlock label="Loading reminder responsiveness…" />;
 
-  const summary = LABEL_COPY[data.label];
+  const summary = labelCopy(data.label, pronoun);
 
   const quiet = quietHoursText(data);
   const subParts = [
@@ -87,7 +101,7 @@ export function ResponsivenessPanel({
   if (compact) {
     return (
       <div className="responsiveness-line">
-        <div className="ov-big">{compactHeadline(data)}</div>
+        <div className="ov-big">{compactHeadline(data, pronoun)}</div>
         <div className="ov-sub">{subParts.join(" · ")}</div>
       </div>
     );

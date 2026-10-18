@@ -253,6 +253,7 @@ export async function insertMealAssignments(
     .select({
       planVersionId: mealAssignments.planVersionId,
       mealPrescriptionId: mealAssignments.mealPrescriptionId,
+      mealName: mealAssignments.mealName,
       localDate: mealAssignments.localDate,
       scheduleStatus: mealAssignments.scheduleStatus,
     })
@@ -269,20 +270,24 @@ export async function insertMealAssignments(
       .filter((row) => row.planVersionId === input.planVersionId)
       .map((row) => `${row.mealPrescriptionId}:${row.localDate}`),
   );
-  const blockedDates = new Set(
+  // Kept (logged) meals from another version stay scheduled after supersede.
+  // Block only that slot (by name+date), not the whole day, so unlogged slots
+  // can be recreated from the new version.
+  const keptSlotKeys = new Set(
     existing
       .filter(
         (row) =>
           row.scheduleStatus === "scheduled" &&
           row.planVersionId !== input.planVersionId,
       )
-      .map((row) => row.localDate),
+      .map((row) => `${row.mealName.trim().toLowerCase()}:${row.localDate}`),
   );
   const placed = mealsOnDates(input.content.mealPrescriptions, input.dates);
   const rows: MealAssignmentRow[] = [];
   for (const placement of placed) {
     const key = `${placement.meal.id}:${placement.localDate}`;
-    if (sameVersionKeys.has(key) || blockedDates.has(placement.localDate)) {
+    const slotKey = `${placement.meal.name.trim().toLowerCase()}:${placement.localDate}`;
+    if (sameVersionKeys.has(key) || keptSlotKeys.has(slotKey)) {
       continue;
     }
     const window = mealWindowForLocalDate({

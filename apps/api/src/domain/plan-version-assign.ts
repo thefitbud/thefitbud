@@ -15,6 +15,8 @@ import {
   clipInclusiveLocalRange,
   formatLocalDate,
   localDatesInRange,
+  mealsOnDates,
+  workoutSessionsOnDates,
   workoutSchedulesMatch,
 } from "@fitbud/core";
 import type { MealPrescription } from "@fitbud/contracts";
@@ -22,9 +24,11 @@ import type { Db } from "../db/client";
 import {
   coachingConfigurations,
   mealAssignments,
+  mealCompliance,
   nutritionExpectations,
   planVersions,
   workoutAssignments,
+  workoutExecutions,
   workoutExpectations,
 } from "../db/schema";
 import { parsePlanContentJson } from "./mappers";
@@ -146,6 +150,174 @@ async function countSupersededInRange(
       ),
     );
   return { workouts: workouts.length, meals: meals.length };
+}
+
+/** Non-mutating: how many unstarted scheduled rows would be replaced in this window. */
+async function countWouldReplaceInRange(
+  db: Db,
+  input: {
+    relationshipId: string;
+    dates: readonly string[];
+    includeWorkouts: boolean;
+    includeMeals: boolean;
+  },
+): Promise<{ workouts: number; meals: number }> {
+  if (input.dates.length === 0) {
+    return { workouts: 0, meals: 0 };
+  }
+  const minDate = [...input.dates].sort()[0]!;
+  const maxDate = [...input.dates].sort().at(-1)!;
+  let workouts = 0;
+  let meals = 0;
+  if (input.includeWorkouts) {
+    const rows = await db
+      .select({
+        id: workoutAssignments.id,
+        executionId: workoutExecutions.id,
+      })
+      .from(workoutAssignments)
+      .leftJoin(
+        workoutExecutions,
+        eq(workoutExecutions.assignmentId, workoutAssignments.id),
+      )
+      .where(
+        and(
+          eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+          eq(workoutAssignments.scheduleStatus, "scheduled"),
+          gte(workoutAssignments.localDate, minDate),
+          lte(workoutAssignments.localDate, maxDate),
+        ),
+      );
+    workouts = rows.filter((row) => row.executionId == null).length;
+  }
+  if (input.includeMeals) {
+    const rows = await db
+      .select({
+        id: mealAssignments.id,
+        complianceId: mealCompliance.id,
+      })
+      .from(mealAssignments)
+      .leftJoin(
+        mealCompliance,
+        eq(mealCompliance.assignmentId, mealAssignments.id),
+      )
+      .where(
+        and(
+          eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
+          gte(mealAssignments.localDate, minDate),
+          lte(mealAssignments.localDate, maxDate),
+        ),
+      );
+    meals = rows.filter((row) => row.complianceId == null).length;
+  }
+  return { workouts, meals };
+}
+
+/** Non-mutating: how many new assignment rows insert* would create. */
+async function countWouldCreate(
+  db: Db,
+  input: {
+    relationshipId: string;
+    planVersionId: string;
+    content: PlanContent;
+    dates: readonly string[];
+    includeWorkouts: boolean;
+    includeMeals: boolean;
+  },
+): Promise<{ workouts: number; meals: number }> {
+  if (input.dates.length === 0) {
+    return { workouts: 0, meals: 0 };
+  }
+  let workouts = 0;
+  let meals = 0;
+  if (input.includeWorkouts && input.content.workoutDays.length > 0) {
+    const existing = await db
+      .select({
+        planVersionId: workoutAssignments.planVersionId,
+        workoutDayId: workoutAssignments.workoutDayId,
+        localDate: workoutAssignments.localDate,
+        scheduleStatus: workoutAssignments.scheduleStatus,
+      })
+      .from(workoutAssignments)
+      .where(
+        and(
+          eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+          gte(workoutAssignments.localDate, input.dates[0]!),
+          lte(
+            workoutAssignments.localDate,
+            input.dates[input.dates.length - 1]!,
+          ),
+        ),
+      );
+    const sameKeys = new Set(
+      existing
+        .filter((row) => row.planVersionId === input.planVersionId)
+        .map((row) => `${row.workoutDayId}:${row.localDate}`),
+    );
+    const blockedDates = new Set(
+      existing
+        .filter(
+          (row) =>
+            row.scheduleStatus === "scheduled" &&
+            row.planVersionId !== input.planVersionId,
+        )
+        .map((row) => row.localDate),
+    );
+    for (const placement of workoutSessionsOnDates(
+      input.content.workoutDays,
+      input.dates,
+    )) {
+      const key = `${placement.day.id}:${placement.localDate}`;
+      if (sameKeys.has(key) || blockedDates.has(placement.localDate)) continue;
+      workouts += 1;
+    }
+  }
+  if (input.includeMeals && input.content.mealPrescriptions.length > 0) {
+    const existing = await db
+      .select({
+        planVersionId: mealAssignments.planVersionId,
+        mealPrescriptionId: mealAssignments.mealPrescriptionId,
+        mealName: mealAssignments.mealName,
+        localDate: mealAssignments.localDate,
+        scheduleStatus: mealAssignments.scheduleStatus,
+      })
+      .from(mealAssignments)
+      .where(
+        and(
+          eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+          gte(mealAssignments.localDate, input.dates[0]!),
+          lte(
+            mealAssignments.localDate,
+            input.dates[input.dates.length - 1]!,
+          ),
+        ),
+      );
+    const sameKeys = new Set(
+      existing
+        .filter((row) => row.planVersionId === input.planVersionId)
+        .map((row) => `${row.mealPrescriptionId}:${row.localDate}`),
+    );
+    const keptSlots = new Set(
+      existing
+        .filter(
+          (row) =>
+            row.scheduleStatus === "scheduled" &&
+            row.planVersionId !== input.planVersionId,
+        )
+        .map((row) => `${row.mealName.trim().toLowerCase()}:${row.localDate}`),
+    );
+    for (const placement of mealsOnDates(
+      input.content.mealPrescriptions,
+      input.dates,
+    )) {
+      const key = `${placement.meal.id}:${placement.localDate}`;
+      const slot = `${placement.meal.name.trim().toLowerCase()}:${placement.localDate}`;
+      if (sameKeys.has(key) || keptSlots.has(slot)) continue;
+      meals += 1;
+    }
+  }
+  return { workouts, meals };
 }
 
 async function loadActiveWorkoutHours(
@@ -293,15 +465,33 @@ export async function assignPlanVersion(
     timeZone,
   });
 
+  const content = parsePlanContentJson(version.contentJson);
+  const hours = await loadActiveWorkoutHours(db, input.relationshipId);
+  const nutrition = await loadActiveNutrition(db, input.relationshipId);
+  const includeWorkouts = hours != null && content.workoutDays.length > 0;
+  const includeMeals =
+    Boolean(nutrition) && content.mealPrescriptions.length > 0;
+
   if (input.dryRun) {
-    return {
-      replaced: { workouts: 0, meals: 0 },
-      created: { workouts: 0, meals: 0 },
-      dates,
-    };
+    const [replaced, created] = await Promise.all([
+      countWouldReplaceInRange(db, {
+        relationshipId: input.relationshipId,
+        dates,
+        includeWorkouts,
+        includeMeals,
+      }),
+      countWouldCreate(db, {
+        relationshipId: input.relationshipId,
+        planVersionId: version.id,
+        content,
+        dates,
+        includeWorkouts,
+        includeMeals,
+      }),
+    ]);
+    return { replaced, created, dates };
   }
 
-  const content = parsePlanContentJson(version.contentJson);
   const replaced = await countSupersededInRange(db, {
     relationshipId: input.relationshipId,
     dates,
@@ -310,7 +500,6 @@ export async function assignPlanVersion(
 
   let workoutsCreated = 0;
   let mealsCreated = 0;
-  const hours = await loadActiveWorkoutHours(db, input.relationshipId);
   if (hours != null && content.workoutDays.length > 0) {
     const created = await insertWorkoutAssignments(db, {
       relationshipId: input.relationshipId,
@@ -324,7 +513,6 @@ export async function assignPlanVersion(
     });
     workoutsCreated = created.length;
   }
-  const nutrition = await loadActiveNutrition(db, input.relationshipId);
   if (nutrition && content.mealPrescriptions.length > 0) {
     const policy = await loadAssignmentPolicy(db, version.id);
     if (

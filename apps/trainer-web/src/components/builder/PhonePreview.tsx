@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { PlanContent } from "@fitbud/contracts";
 import { formatHhMmTime } from "@fitbud/core";
-import { sortedByOrder } from "../plan-composition";
+import { sortedByOrder, sortedMealsByTime } from "../plan-composition";
 import { WEEK_ORDER, weekdayShort } from "./weekdays";
 
 function setSummary(reps: number | null, load: string | null): string {
@@ -22,7 +22,7 @@ export function PhonePreview({
   );
   const [weekday, setWeekday] = useState<number>(firstWithSession ?? 1);
   const sessions = content.workoutDays.filter((day) => day.weekday === weekday);
-  const meals = sortedByOrder(content.mealPrescriptions).filter((meal) =>
+  const meals = sortedMealsByTime(content.mealPrescriptions).filter((meal) =>
     (meal.applicableWeekdays ?? []).includes(weekday),
   );
   return (

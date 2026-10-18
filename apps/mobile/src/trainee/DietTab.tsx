@@ -22,7 +22,10 @@ import {
   mealKcalFromDayTotals,
 } from "./mealHelpers";
 import { buildNutritionRings } from "./nutrition";
-import { scheduledAssignments } from "./scheduledAssignments";
+import {
+  scheduledAssignments,
+  sortMealsByTime,
+} from "./scheduledAssignments";
 import { WebNutritionSummary } from "./web/WebTraineeChrome";
 
 function statusLabel(status: MealAssignment["status"]): string {
@@ -83,7 +86,7 @@ export function DietTab({
         s1.getMeDay(selectedDate).catch(() => null),
         api.listExceptions(relationship.id).catch(() => ({ items: [] })),
       ]);
-      setAssignments(scheduledAssignments(listed.items));
+      setAssignments(sortMealsByTime(scheduledAssignments(listed.items)));
       setDayTotals(day);
       setUnresolvedExceptions(
         exceptions.items.filter(
