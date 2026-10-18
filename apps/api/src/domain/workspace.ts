@@ -558,28 +558,8 @@ async function loadOpenException(db: Db, relationshipId: string) {
   });
 }
 
+/** Next scheduled check-in only (draft). Never past submitted / awaiting review. */
 async function loadNextCheckin(db: Db, relationshipId: string, nowIso: string) {
-  // Prefer a submitted check-in awaiting review over the next scheduled draft.
-  const submitted = await db
-    .select({
-      checkin: checkins,
-      review: checkinReviews,
-    })
-    .from(checkins)
-    .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-    .where(
-      and(
-        eq(checkins.coachingRelationshipId, relationshipId),
-        eq(checkins.recordStatus, "submitted"),
-        isNull(checkinReviews.id),
-      ),
-    )
-    .orderBy(desc(checkins.submittedAt), desc(checkins.localDate))
-    .limit(1);
-  if (submitted[0]) {
-    return mapCheckin(submitted[0].checkin, null, nowIso);
-  }
-
   const rows = await db
     .select({
       checkin: checkins,
@@ -599,6 +579,32 @@ async function loadNextCheckin(db: Db, relationshipId: string, nowIso: string) {
   const row = rows[0];
   if (!row) return null;
   return mapCheckin(row.checkin, null, nowIso);
+}
+
+/** Submitted check-in awaiting trainer review (for CTA / overview card). */
+async function loadPendingReviewCheckin(
+  db: Db,
+  relationshipId: string,
+  nowIso: string,
+) {
+  const submitted = await db
+    .select({
+      checkin: checkins,
+      review: checkinReviews,
+    })
+    .from(checkins)
+    .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+    .where(
+      and(
+        eq(checkins.coachingRelationshipId, relationshipId),
+        eq(checkins.recordStatus, "submitted"),
+        isNull(checkinReviews.id),
+      ),
+    )
+    .orderBy(desc(checkins.submittedAt), desc(checkins.localDate))
+    .limit(1);
+  if (!submitted[0]) return null;
+  return mapCheckin(submitted[0].checkin, null, nowIso);
 }
 
 async function loadProgressSummary(db: Db, relationshipId: string) {
@@ -651,6 +657,7 @@ export async function loadClientWorkspace(
     subscription,
     openException,
     nextCheckin,
+    pendingReviewCheckin,
     recentActivity,
     progress,
   ] = await Promise.all([
@@ -679,7 +686,12 @@ export async function loadClientWorkspace(
       .where(eq(userIdentities.userId, relationship.traineeUserId))
       .limit(1),
     db
-      .select({ id: mealTimeOverrides.slotKey })
+      .select({
+        id: mealTimeOverrides.slotKey,
+        dayPattern: mealTimeOverrides.dayPattern,
+        time: mealTimeOverrides.time,
+        updatedAt: mealTimeOverrides.updatedAt,
+      })
       .from(mealTimeOverrides)
       .where(eq(mealTimeOverrides.relationshipId, relationship.id)),
     onboardingStatusForRelationship(db, relationship),
@@ -693,6 +705,7 @@ export async function loadClientWorkspace(
     ),
     loadOpenException(db, relationship.id),
     loadNextCheckin(db, relationship.id, nowIso),
+    loadPendingReviewCheckin(db, relationship.id, nowIso),
     loadRecentActivity(db, relationship.id, nowIso),
     loadProgressSummary(db, relationship.id),
   ]);
@@ -732,12 +745,19 @@ export async function loadClientWorkspace(
       },
       traineeTimezone: traineeUser[0]?.timezone ?? "UTC",
       hasCustomMealTimes: mealOverrides.length > 0,
+      mealTimeOverrides: mealOverrides.map((row) => ({
+        slotKey: row.id,
+        dayPattern: row.dayPattern,
+        time: row.time,
+        updatedAt: row.updatedAt,
+      })),
       trainerWhatsappE164: trainerProfile[0]?.whatsappE164 ?? null,
       clientWhatsappE164: clientIdentity[0]?.mobileE164 ?? null,
     },
     overview: {
       openException,
       nextCheckin,
+      pendingReviewCheckin,
       recentActivity,
       progress,
     },

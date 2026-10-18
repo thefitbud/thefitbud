@@ -216,6 +216,39 @@ describe("plans and versions", () => {
     expect(response.status).toBe(401);
   });
 
+  it("discards a draft but never a published version", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("c2");
+    const created = await app.request(
+      `/plans/relationships/${relationshipId}`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "plan-discard-1",
+        },
+        body: JSON.stringify({ title: "Scratch", content: sampleContent() }),
+      },
+      testEnv(),
+    );
+    const body = (await created.json()) as {
+      data: { plan: { id: string }; version: { id: string; recordVersion: number } };
+    };
+    const { plan, version } = body.data;
+    const discard = await app.request(
+      `/plans/${plan.id}/versions/${version.id}`,
+      { method: "DELETE", headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(discard.status).toBe(200);
+    const gone = await app.request(
+      `/plans/${plan.id}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(gone.status).toBe(404);
+  });
+
   it("creates, previews, publishes, rejects immutable edits, and supersedes", async () => {
     const { trainerCookie, traineeToken, relationshipId } =
       await reachCoachingReady("c2");

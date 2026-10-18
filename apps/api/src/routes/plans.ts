@@ -6,6 +6,7 @@ import {
 } from "../openapi/document";
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 import {
   acknowledgePlanConsistencyRequestSchema,
   createPlanDraftFromVersionRequestSchema,
@@ -54,6 +55,7 @@ import {
   coachingConfigurations,
   coachingRelationships,
   nutritionExpectations,
+  planAssignmentPolicies,
   plans,
   planTemplates,
   planVersions,
@@ -1140,6 +1142,62 @@ planRoutes.put(
   },
 );
 
+planRoutes.delete(
+  "/:planId/versions/:versionId",
+  operation({
+    tag: "Plans",
+    summary: "Discard a draft plan version.",
+    description:
+      "Deletes a draft plan version. Published, scheduled, effective, and superseded versions are immutable. A plan with no remaining versions is removed too.",
+    roles: ["trainer"],
+    response: z.object({ deleted: z.literal(true) }),
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const planId = c.req.param("planId");
+    const versionId = c.req.param("versionId");
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, planId, actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const writable = await requireWritableRelationship(c, db, owned.relationship.id);
+    if (!writable.ok) {
+      return writable.response;
+    }
+    const versions = await db
+      .select()
+      .from(planVersions)
+      .where(eq(planVersions.planId, planId));
+    const version = versions.find((row) => row.id === versionId);
+    if (!version) {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
+    if (version.status !== "draft") {
+      return fail(
+        c,
+        409,
+        "PLAN_VERSION_IMMUTABLE",
+        "Only draft plan versions can be discarded.",
+      );
+    }
+    await db
+      .delete(planAssignmentPolicies)
+      .where(eq(planAssignmentPolicies.planVersionId, versionId));
+    await db.delete(planVersions).where(eq(planVersions.id, versionId));
+    if (versions.length === 1) {
+      await db.delete(plans).where(eq(plans.id, planId));
+    }
+    return ok(c, { deleted: true as const });
+  },
+);
+
 planRoutes.post(
   "/:planId/versions/:versionId/preview",
   operation({
@@ -1886,6 +1944,7 @@ planRoutes.post(
       if (message === "PLAN_VERSION_NOT_FOUND") {
         return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
       }
+      console.error("plan assign failed", error);
       return fail(c, 422, "GENERATION_FAILED", "Couldn't create this week's schedule · Retry");
     }
   },

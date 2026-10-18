@@ -137,7 +137,7 @@ export async function loadAssignmentPolicy(
   };
 }
 
-const WORKOUT_INSERT_CHUNK = 7;
+const WORKOUT_INSERT_CHUNK = 6;
 
 export async function insertWorkoutAssignments(
   db: Db,
@@ -227,7 +227,7 @@ export async function insertWorkoutAssignments(
   return rows;
 }
 
-const MEAL_INSERT_CHUNK = 7;
+const MEAL_INSERT_CHUNK = 6;
 
 export async function insertMealAssignments(
   db: Db,

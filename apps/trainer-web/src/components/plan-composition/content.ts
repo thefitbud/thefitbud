@@ -369,7 +369,9 @@ export function updateSetTarget(
   dayId: string,
   exerciseId: string,
   setId: string,
-  patch: Partial<Pick<WorkoutSetTarget, "reps" | "loadLabel" | "rpe">>,
+  patch: Partial<
+    Pick<WorkoutSetTarget, "reps" | "loadLabel" | "rpe" | "restSeconds" | "notes">
+  >,
 ): PlanContent {
   return mapExercise(content, dayId, exerciseId, (exercise) => ({
     ...exercise,
@@ -377,6 +379,69 @@ export function updateSetTarget(
       target.id === setId ? { ...target, ...patch } : target,
     ),
   }));
+}
+
+export function duplicateSetTarget(
+  content: PlanContent,
+  dayId: string,
+  exerciseId: string,
+  setId: string,
+): PlanContent {
+  return mapExercise(content, dayId, exerciseId, (exercise) => {
+    if (exercise.setTargets.length >= PLAN_COMPOSITION_LIMITS.setsPerExercise) {
+      return exercise;
+    }
+    const sets = sortedByOrder(exercise.setTargets);
+    const index = sets.findIndex((target) => target.id === setId);
+    const source = sets[index];
+    if (!source) return exercise;
+    const next = sets.slice();
+    next.splice(index + 1, 0, { ...source, id: newId() });
+    return { ...exercise, setTargets: withOrder(next) };
+  });
+}
+
+export function updateWorkoutDay(
+  content: PlanContent,
+  dayId: string,
+  patch: Partial<Pick<WorkoutDay, "name" | "instructions">>,
+): PlanContent {
+  return mapDay(content, dayId, (day) => ({ ...day, ...patch }));
+}
+
+/** Move a session onto a weekday. A session already there swaps to the old weekday. */
+export function moveSessionToWeekday(
+  content: PlanContent,
+  dayId: string,
+  weekday: number,
+): PlanContent {
+  const moving = content.workoutDays.find((day) => day.id === dayId);
+  if (!moving || moving.weekday === weekday) return content;
+  const previous = moving.weekday ?? null;
+  return {
+    ...content,
+    workoutDays: content.workoutDays.map((day) => {
+      if (day.id === dayId) return { ...day, weekday };
+      if (day.weekday === weekday) return { ...day, weekday: previous };
+      return day;
+    }),
+  };
+}
+
+export function addWorkoutDayOnWeekday(
+  content: PlanContent,
+  weekday: number,
+): PlanContent {
+  if (content.workoutDays.length >= PLAN_COMPOSITION_LIMITS.workoutDays) {
+    return content;
+  }
+  return {
+    ...content,
+    workoutDays: withOrder([
+      ...sortedByOrder(content.workoutDays),
+      createWorkoutDay(content.workoutDays.length + 1, weekday),
+    ]),
+  };
 }
 
 export function addMeal(content: PlanContent): PlanContent {

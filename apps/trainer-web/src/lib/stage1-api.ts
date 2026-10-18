@@ -95,7 +95,7 @@ export type Stage1ApiClient = FitBudApiClient & {
     versionId: string,
     body: AssignPlanVersionRequest,
     idempotencyKey: string,
-  ) => Promise<unknown>;
+  ) => Promise<import("@fitbud/contracts").AssignPlanVersionResponse>;
   getPlanVersionDiff: (
     planId: string,
     versionId: string,

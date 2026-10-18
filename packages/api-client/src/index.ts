@@ -845,6 +845,15 @@ export class FitBudApiClient {
     );
   }
 
+  async discardPlanDraft(planId: string, versionId: string): Promise<void> {
+    await this.request(
+      "DELETE",
+      `/plans/${planId}/versions/${versionId}`,
+      undefined,
+      { auth: true },
+    );
+  }
+
   async previewPlanVersion(
     planId: string,
     versionId: string,

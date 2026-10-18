@@ -112,6 +112,17 @@ export const workspaceHeaderSchema = z.object({
   traineeProfile: workspaceTraineeProfileSchema,
   traineeTimezone: z.string().min(1).max(64),
   hasCustomMealTimes: z.boolean(),
+  /** Client-set meal time overrides (read-only for trainers). */
+  mealTimeOverrides: z
+    .array(
+      z.object({
+        slotKey: z.string(),
+        dayPattern: z.string(),
+        time: z.string(),
+        updatedAt: z.string().optional(),
+      }),
+    )
+    .optional(),
   trainerWhatsappE164: z.string().nullable(),
   /** Client WhatsApp for trainer→client wa.me links. Null when unknown. */
   clientWhatsappE164: z.string().nullable(),
@@ -120,7 +131,10 @@ export type WorkspaceHeader = z.infer<typeof workspaceHeaderSchema>;
 
 export const workspaceOverviewSchema = z.object({
   openException: activeExceptionSummarySchema.nullable(),
+  /** Next scheduled (draft) check-in — never a past submitted one. */
   nextCheckin: checkinSchema.nullable(),
+  /** Submitted check-in awaiting review, if any. */
+  pendingReviewCheckin: checkinSchema.nullable().optional(),
   recentActivity: z.array(workspaceActivityItemSchema).max(5),
   progress: progressSummarySchema,
 });

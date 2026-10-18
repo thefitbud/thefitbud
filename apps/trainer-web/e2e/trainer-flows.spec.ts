@@ -119,7 +119,7 @@ test("apply a workout template from the library", async ({ page }) => {
   await page.getByTestId("screen-TW-13").waitFor();
   await page.goto(`/clients/${aarav.relationshipId}/plan`);
   await page.getByTestId("screen-TW-12").waitFor();
-  await expect(page.getByRole("button", { name: /edit draft/i })).toBeVisible({
+  await expect(page.getByRole("link", { name: /continue editing/i })).toBeVisible({
     timeout: 30_000,
   });
 });

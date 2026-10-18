@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import type {
   ExerciseDifficulty,
   ExerciseLibraryItem,
@@ -21,13 +21,29 @@ function difficultyLabel(value: ExerciseDifficulty): string {
   return labelFor("exercise_difficulty", value);
 }
 
+export type LibraryPaneChrome = {
+  /** Drawer layout: no long help copy, "Add to session" / "Add to meal" wording. */
+  compact?: boolean;
+  searchRef?: RefObject<HTMLInputElement>;
+};
+
+function InitialThumb({ name }: { name: string }) {
+  return (
+    <span className="lib-thumb" aria-hidden="true">
+      {name.trim().charAt(0).toUpperCase() || "·"}
+    </span>
+  );
+}
+
 export function ExerciseSearchPane({
   day,
   onAdd,
+  compact = false,
+  searchRef,
 }: {
   day: WorkoutDay | null;
   onAdd: (item: ExerciseLibraryItem) => void;
-}) {
+} & LibraryPaneChrome) {
   const [q, setQ] = useState("");
   const [muscleGroup, setMuscleGroup] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -55,19 +71,31 @@ export function ExerciseSearchPane({
     day != null && day.exercises.length >= PLAN_COMPOSITION_LIMITS.exercisesPerDay;
 
   return (
-    <div className="templates-library-pane">
-      <h4>Exercise library</h4>
-      <p className="muted">
-        Add copies the name, instructions, and muscles into the selected day.
-        Set targets are entered on the draft. The draft keeps a snapshot, not a live link.
-      </p>
+    <div className={compact ? "templates-library-pane is-compact" : "templates-library-pane"}>
+      {compact ? null : (
+        <>
+          <h4>Exercise library</h4>
+          <p className="muted">
+            Add copies the name, instructions, and muscles into the selected day.
+            Set targets are entered on the draft. The draft keeps a snapshot, not a live link.
+          </p>
+        </>
+      )}
       <label className="field">
         <span>Name</span>
         <input
+          ref={searchRef}
           type="search"
           value={q}
           onChange={(event) => setQ(event.target.value)}
-          placeholder="Search by name"
+          onKeyDown={(event) => {
+            const first = page.items[0];
+            if (event.key === "Enter" && first && day && !atLimit) {
+              event.preventDefault();
+              onAdd(first);
+            }
+          }}
+          placeholder={compact ? "Search exercises (press /)" : "Search by name"}
           autoComplete="off"
         />
       </label>
@@ -105,7 +133,13 @@ export function ExerciseSearchPane({
           ))}
         </select>
       </label>
-      {!day ? <p className="muted">Select a day before adding an exercise.</p> : null}
+      {!day ? (
+        <p className="muted">
+          {compact
+            ? "Select a session before adding an exercise."
+            : "Select a day before adding an exercise."}
+        </p>
+      ) : null}
       {atLimit ? (
         <p className="muted">This day already has the maximum number of exercises.</p>
       ) : null}
@@ -127,23 +161,32 @@ export function ExerciseSearchPane({
         </p>
       ) : (
         <ul className="templates-search-list">
-          {page.items.map((item) => (
-            <li key={item.id}>
-              <p className="templates-name">{item.name}</p>
-              <p className="muted">
-                {item.ownership === "global" ? "Global" : "Yours"}
-                {item.difficulty ? ` · ${difficultyLabel(item.difficulty)}` : ""}
-                {item.primaryMuscles.length > 0
-                  ? ` · ${item.primaryMuscles.join(", ")}`
-                  : ""}
-              </p>
+          {page.items.map((item, index) => (
+            <li
+              key={item.id}
+              className={compact && index === 0 ? "lib-row is-highlighted" : compact ? "lib-row" : undefined}
+            >
+              {compact ? <InitialThumb name={item.name} /> : null}
+              <div className="lib-row-copy">
+                <p className="templates-name">{item.name}</p>
+                <p className="muted">
+                  {item.ownership === "global" ? "Global" : "Yours"}
+                  {item.difficulty ? ` · ${difficultyLabel(item.difficulty)}` : ""}
+                  {item.primaryMuscles.length > 0
+                    ? ` · ${item.primaryMuscles.join(", ")}`
+                    : ""}
+                  {compact && item.secondaryMuscles.length > 0
+                    ? ` · also ${item.secondaryMuscles.join(", ")}`
+                    : ""}
+                </p>
+              </div>
               <button
                 type="button"
-                className="button-secondary"
+                className={compact ? "button-tinted button-sm" : "button-secondary"}
                 disabled={!day || atLimit}
                 onClick={() => onAdd(item)}
               >
-                Add to day
+                {compact ? "Add to session" : "Add to day"}
               </button>
             </li>
           ))}
@@ -163,13 +206,59 @@ export function ExerciseSearchPane({
   );
 }
 
+function FoodRow({
+  item,
+  disabled,
+  onAdd,
+}: {
+  item: FoodLibraryItem;
+  disabled: boolean;
+  onAdd: (item: FoodLibraryItem, servingId: string) => void;
+}) {
+  const servings = item.servings.filter((serving) => serving.conversionScaled != null);
+  const [servingId, setServingId] = useState(servings[0]?.id ?? "");
+  return (
+    <li className="lib-row">
+      <InitialThumb name={item.name} />
+      <div className="lib-row-copy">
+        <p className="templates-name">{item.name}</p>
+        {servings.length === 0 ? (
+          <p className="muted">Add a serving conversion before prescribing this food.</p>
+        ) : (
+          <select
+            aria-label={`Serving for ${item.name}`}
+            value={servingId}
+            onChange={(event) => setServingId(event.target.value)}
+          >
+            {servings.map((serving) => (
+              <option key={serving.id} value={serving.id}>
+                {serving.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <button
+        type="button"
+        className="button-tinted button-sm"
+        disabled={disabled || servings.length === 0 || !servingId}
+        onClick={() => onAdd(item, servingId)}
+      >
+        Add to meal
+      </button>
+    </li>
+  );
+}
+
 export function FoodSearchPane({
   meal,
   onAdd,
+  compact = false,
+  searchRef,
 }: {
   meal: MealPrescription | null;
   onAdd: (item: FoodLibraryItem, servingId: string) => void;
-}) {
+} & LibraryPaneChrome) {
   const [q, setQ] = useState("");
   const nameQuery = useDebounced(q);
   const page = useCursorPage(nameQuery.trim(), (cursor) =>
@@ -183,19 +272,24 @@ export function FoodSearchPane({
     meal != null && (meal.items ?? []).length >= PLAN_COMPOSITION_LIMITS.itemsPerMeal;
 
   return (
-    <div className="templates-library-pane">
-      <h4>Food library</h4>
-      <p className="muted">
-        Add copies a serving and quantity into the selected meal. Nutrition is
-        calculated from the food's canonical basis and stored on the snapshot.
-      </p>
+    <div className={compact ? "templates-library-pane is-compact" : "templates-library-pane"}>
+      {compact ? null : (
+        <>
+          <h4>Food library</h4>
+          <p className="muted">
+            Add copies a serving and quantity into the selected meal. Nutrition is
+            calculated from the food's canonical basis and stored on the snapshot.
+          </p>
+        </>
+      )}
       <label className="field">
         <span>Name</span>
         <input
+          ref={searchRef}
           type="search"
           value={q}
           onChange={(event) => setQ(event.target.value)}
-          placeholder="Search foods"
+          placeholder={compact ? "Search foods (press /)" : "Search foods"}
           autoComplete="off"
         />
       </label>
@@ -221,7 +315,15 @@ export function FoodSearchPane({
         </p>
       ) : (
         <ul className="templates-search-list">
-          {page.items.map((item) => (
+          {page.items.map((item) =>
+            compact ? (
+              <FoodRow
+                key={item.id}
+                item={item}
+                disabled={!meal || atLimit}
+                onAdd={onAdd}
+              />
+            ) : (
             <li key={item.id}>
               <p className="templates-name">{item.name}</p>
               <p className="muted">
@@ -254,7 +356,8 @@ export function FoodSearchPane({
                   ))
               )}
             </li>
-          ))}
+            ),
+          )}
         </ul>
       )}
       {page.nextCursor ? (

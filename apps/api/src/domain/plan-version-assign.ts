@@ -59,13 +59,14 @@ function assignDateRange(input: {
   version: PlanVersionRow;
   timeZone: string;
 }): string[] {
-  const startLocal = formatLocalDate(
-    new Date(input.request.effectiveFrom),
-    input.timeZone,
-  );
-  const endLocal = input.request.effectiveTo
-    ? formatLocalDate(new Date(input.request.effectiveTo), input.timeZone)
-    : addDaysToLocalDate(startLocal, input.request.window - 1);
+  const startLocal =
+    input.request.windowFrom ??
+    formatLocalDate(new Date(input.request.effectiveFrom), input.timeZone);
+  const endLocal =
+    input.request.windowTo ??
+    (input.request.effectiveTo
+      ? formatLocalDate(new Date(input.request.effectiveTo), input.timeZone)
+      : addDaysToLocalDate(startLocal, input.request.window - 1));
   const range = clipInclusiveLocalRange(
     { fromDate: startLocal, toDate: endLocal },
     effectiveLocalBounds(input.version, input.timeZone),
@@ -225,7 +226,13 @@ export async function assignPlanVersion(
   const dietScope = input.request.dietChangeScope ?? "today_onward";
   let previousVersions: PlanVersionRow[] = [];
 
-  if (version.status === "draft") {
+  if (input.dryRun && version.status === "draft") {
+    version = {
+      ...version,
+      effectiveFrom: input.request.effectiveFrom,
+      effectiveTo: input.request.effectiveTo ?? null,
+    };
+  } else if (version.status === "draft") {
     previousVersions = await supersedeEffectiveVersions(
       db,
       input.planId,
@@ -252,16 +259,14 @@ export async function assignPlanVersion(
       throw new Error("PLAN_VERSION_PERSIST_FAILED");
     }
     version = updated;
-    if (!input.dryRun) {
-      await reconcilePublishedPlan(db, {
-        relationshipId: input.relationshipId,
-        traineeUserId: input.traineeUserId,
-        newVersion: version,
-        previousVersions,
-        dietScope,
-        now,
-      });
-    }
+    await reconcilePublishedPlan(db, {
+      relationshipId: input.relationshipId,
+      traineeUserId: input.traineeUserId,
+      newVersion: version,
+      previousVersions,
+      dietScope,
+      now,
+    });
   }
 
   const existingPolicy = await loadAssignmentPolicy(db, version.id);

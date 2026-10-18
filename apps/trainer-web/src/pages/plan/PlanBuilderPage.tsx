@@ -1,169 +1,191 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type { PlanContent, PlanVersion, WorkoutDay } from "@fitbud/contracts";
-import {
-  PlanCompositionEditor,
-  addExerciseFromLibrary,
-  addFoodItemFromLibrary,
-  clonePlanContent,
-  isEditablePlanStatus,
-  planContentError,
-} from "../../components/plan-composition";
+import type { ClientWorkspace, PlanContent, PlanVersion } from "@fitbud/contracts";
+import { PlanBuilder, type BuilderTab } from "../../components/builder/PlanBuilder";
+import type { PublishIssues } from "../../components/builder/validation";
 import { AssignPlanModal } from "../../components/plan/AssignPlanModal";
-import { ExerciseSearchPane, FoodSearchPane } from "../templates/LibrarySearch";
+import { ErrorState, LoadingBlock } from "../../components/StatePanels";
+import { isEditablePlanStatus } from "../../components/plan-composition";
+import { useAuth } from "../../auth/AuthProvider";
+import { useOnline } from "../../hooks/useOnline";
 import { apiClient } from "../../lib/api";
+import { createIdempotencyKey } from "../../lib/idempotency";
+import { resolveTraineeTimezone } from "../../lib/trainee-timezone";
+import "../../styles/plan.css";
+
+type Loaded = {
+  planTitle: string;
+  version: PlanVersion;
+  workspace: ClientWorkspace;
+};
 
 export function PlanBuilderPage() {
-  const { relationshipId, planId, versionId } = useParams();
-  const [params] = useSearchParams();
+  const { relationshipId = "", planId = "", versionId = "" } = useParams();
+  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const tab = params.get("tab") ?? "workout";
-  const [version, setVersion] = useState<PlanVersion | null>(null);
-  const [planTitle, setPlanTitle] = useState("");
-  const [content, setContent] = useState<PlanContent | null>(null);
-  const [activeDay] = useState<WorkoutDay | null>(null);
-  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
-  const [showAssign, setShowAssign] = useState(false);
+  const { me } = useAuth();
+  const online = useOnline();
+  const tab: BuilderTab = params.get("tab") === "nutrition" ? "nutrition" : "workout";
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<{
+    title: string;
+    content: PlanContent;
+    issues: PublishIssues;
+  } | null>(null);
+  const recordVersion = useRef(0);
+  const planPath = `/clients/${relationshipId}/plan`;
 
   const load = useCallback(async () => {
-    if (!planId || !versionId) return;
-    const [plan, v] = await Promise.all([
-      apiClient.getPlan(planId),
-      apiClient.getPlanVersion(planId, versionId),
-    ]);
-    setVersion(v);
-    setPlanTitle(plan.plan.title);
-    setContent(clonePlanContent(v.content));
-    if (!isEditablePlanStatus(v.status)) {
-      setError("Create a new version to edit this plan.");
+    setError(null);
+    setLoaded(null);
+    try {
+      const [plan, version, workspace] = await Promise.all([
+        apiClient.getPlan(planId),
+        apiClient.getPlanVersion(planId, versionId),
+        apiClient.getClientWorkspace(relationshipId),
+      ]);
+      recordVersion.current = version.recordVersion;
+      setLoaded({ planTitle: plan.plan.title, version, workspace });
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Couldn't load this draft.");
     }
-  }, [planId, versionId]);
+  }, [planId, versionId, relationshipId]);
 
   useEffect(() => {
-    void load().catch((err: unknown) => {
-      setError(err instanceof ApiClientError ? err.message : "Could not load draft.");
-    });
+    void load();
   }, [load]);
 
-  async function save() {
-    if (!planId || !versionId || !content || !version) return;
-    const validation = planContentError(content);
-    if (validation) {
-      setError(validation);
-      return;
-    }
-    setSaveState("saving");
-    setError(null);
-    try {
+  const save = useCallback(
+    async (title: string, content: PlanContent) => {
       const updated = await apiClient.updatePlanDraft(planId, versionId, {
-        title: planTitle,
+        expectedRecordVersion: recordVersion.current,
+        title,
         content,
-        expectedRecordVersion: version.recordVersion,
       });
-      setVersion(updated);
-      setSaveState("saved");
-    } catch (err) {
-      setSaveState("error");
-      setError(err instanceof ApiClientError ? err.message : "Could not save.");
-    }
-  }
+      recordVersion.current = updated.recordVersion;
+    },
+    [planId, versionId],
+  );
 
   if (!planId || !versionId || !relationshipId) {
-    return <p className="form-error">Missing plan route parameters.</p>;
+    return <ErrorState message="This plan link is incomplete." screenId="TW-13" />;
+  }
+  if (error) {
+    return (
+      <section className="page plan-builder-page" data-testid="screen-TW-13">
+        <ErrorState message={error} onRetry={() => void load()} screenId="TW-13" />
+      </section>
+    );
+  }
+  if (!loaded) {
+    return (
+      <section className="page plan-builder-page" data-testid="screen-TW-13">
+        <LoadingBlock label="Loading the plan builder…" />
+      </section>
+    );
   }
 
-  const sections = tab === "nutrition" ? "nutrition" : tab === "workout" ? "workout" : "both";
+  const { version, workspace, planTitle } = loaded;
+  const header = workspace.header;
+  const traineeTimezone = resolveTraineeTimezone(header).timezone;
+  const configuration = workspace.configuration.configuration;
+  const ended = header.onboardingStatus === "ended";
+  const editable = isEditablePlanStatus(version.status);
+  const effective = workspace.plan;
+  const activePlan =
+    effective.plan && effective.version && effective.version.id !== version.id
+      ? {
+          title: effective.plan.title,
+          versionNumber: effective.version.versionNumber,
+          content: effective.version.content,
+        }
+      : null;
+
+  function isNutritionOnly(content: PlanContent): boolean {
+    if (!activePlan) return false;
+    const sameWorkouts =
+      JSON.stringify(activePlan.content.workoutDays) === JSON.stringify(content.workoutDays);
+    if (!sameWorkouts) return false;
+    return (
+      tab === "nutrition" ||
+      JSON.stringify(activePlan.content.mealPrescriptions) !==
+        JSON.stringify(content.mealPrescriptions)
+    );
+  }
 
   return (
-    <section
-      className="page plan-builder-page"
-      data-testid={tab === "nutrition" ? "screen-TW-14" : "screen-TW-13"}
-    >
-      <header className="builder-topbar">
-        <div>
-          <Link to={`/clients/${relationshipId}/plan`}>← Back to plan</Link>
-          <h1>
-            {planTitle} · Draft v{version?.versionNumber ?? "…"}
-          </h1>
-          <p className="muted">
-            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Couldn't save"}
-          </p>
-        </div>
-        <div className="button-row">
-          <button type="button" className="button-secondary" onClick={() => void save()}>
-            Save now
-          </button>
-          <button
-            type="button"
-            className="button-primary"
-            disabled={!content || Boolean(error)}
-            onClick={() => setShowAssign(true)}
-          >
-            Publish…
-          </button>
-        </div>
-      </header>
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {content ? (
-        <div className="builder-layout">
-          <aside className="builder-pane builder-days">
-            <h2>Days</h2>
-            <p className="muted">Mon–Sun sessions</p>
-          </aside>
-          <div className="builder-pane builder-main">
-            <PlanCompositionEditor
-              content={content}
-              onChange={setContent}
-              sections={sections}
-              allowDuplicate
-              renderWorkoutLibrary={(day) => (
-                <ExerciseSearchPane
-                  day={day ?? activeDay}
-                  onAdd={(item) => {
-                    const targetDay = day ?? activeDay;
-                    if (!targetDay) return;
-                    setContent((current) =>
-                      current
-                        ? addExerciseFromLibrary(current, targetDay.id, item)
-                        : current,
-                    );
-                  }}
-                />
-              )}
-              renderMealLibrary={(meal) => (
-                <FoodSearchPane
-                  meal={meal}
-                  onAdd={(item, servingId) => {
-                    if (!meal) return;
-                    setContent((current) =>
-                      current
-                        ? addFoodItemFromLibrary(current, meal.id, item, servingId)
-                        : current,
-                    );
-                  }}
-                />
-              )}
-            />
-          </div>
-          <aside className="builder-pane builder-library">
-            <h2>Library</h2>
-            <p className="muted">Search v2 foods and exercises in the centre panels.</p>
-          </aside>
-        </div>
-      ) : (
-        <p className="muted">Loading builder…</p>
-      )}
-      {showAssign && version ? (
+    <>
+      <PlanBuilder
+        key={`${versionId}`}
+        backTo={planPath}
+        backLabel="Back to plan"
+        initialTitle={planTitle}
+        initialContent={version.content}
+        statusLabel={`Draft v${version.versionNumber}`}
+        tab={tab}
+        onTabChange={(next) => setParams({ tab: next }, { replace: true })}
+        save={save}
+        readOnly={!editable || ended}
+        readOnlyNote={
+          !editable ? (
+            <>
+              Create a new version to edit this plan.{" "}
+              <Link to={planPath}>Back to plan</Link>
+            </>
+          ) : ended ? (
+            "Coaching has ended. This plan is read-only."
+          ) : undefined
+        }
+        online={online}
+        clientName={header.traineeDisplayName}
+        expectations={
+          configuration
+            ? {
+                sessionsPerWeek: configuration.workout.sessionsPerWeek,
+                mealsPerDay: configuration.nutrition.mealsPerDay,
+                photoRequirement: configuration.nutrition.photoRequirement,
+              }
+            : null
+        }
+        loadPreview={async () => (await apiClient.previewPlanVersion(planId, versionId)).content}
+        onPublish={(args) => setPublishing(args)}
+        screenId={tab === "nutrition" ? "screen-TW-14" : "screen-TW-13"}
+      />
+      {publishing ? (
         <AssignPlanModal
+          relationshipId={relationshipId}
           planId={planId}
           versionId={versionId}
-          nutritionOnly={tab === "nutrition"}
-          onClose={() => setShowAssign(false)}
-          onAssigned={() => navigate(`/clients/${relationshipId}/plan`)}
+          content={publishing.content}
+          traineeName={header.traineeDisplayName}
+          traineeTimezone={traineeTimezone}
+          trainerTimezone={me?.timezone ?? null}
+          activePlan={activePlan}
+          nutritionOnly={isNutritionOnly(publishing.content)}
+          issues={publishing.issues}
+          ended={ended}
+          online={online}
+          onClose={() => setPublishing(null)}
+          onAssigned={() => {
+            if (version.creationSource === "adjustment") {
+              void apiClient
+                .createIntervention(
+                  relationshipId,
+                  {
+                    kind: "plan_adjustment",
+                    summary: `Published plan adjustment v${version.versionNumber}`,
+                    resultingPlanVersionId: versionId,
+                  },
+                  createIdempotencyKey(),
+                )
+                .catch(() => undefined);
+            }
+            navigate(planPath);
+          }}
         />
       ) : null}
-    </section>
+    </>
   );
 }

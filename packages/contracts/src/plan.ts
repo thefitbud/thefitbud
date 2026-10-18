@@ -33,6 +33,8 @@ export const workoutSetTargetSchema = z.object({
   reps: z.number().int().min(1).max(100).nullable(),
   loadLabel: z.string().trim().max(80).nullable(),
   rpe: z.number().min(1).max(10).nullable(),
+  restSeconds: z.number().int().min(0).max(3600).nullable().optional(),
+  notes: z.string().trim().max(200).nullable().optional(),
 });
 export type WorkoutSetTarget = z.infer<typeof workoutSetTargetSchema>;
 
@@ -62,6 +64,8 @@ export const workoutDaySchema = z.object({
   name: z.string().trim().min(1).max(120),
   weekday: weekdaySchema.nullable().optional(),
   required: z.boolean().optional().default(true),
+  /** Session-level coaching note shown above the exercises. */
+  instructions: z.string().trim().max(2000).nullable().optional(),
   exercises: z.array(workoutExerciseSchema).max(40),
 });
 export type WorkoutDay = z.infer<typeof workoutDaySchema>;
@@ -327,6 +331,9 @@ export const assignPlanVersionRequestSchema = z.object({
   window: z.number().int().min(1).max(35),
   effectiveFrom: isoDateTimeSchema,
   effectiveTo: isoDateTimeSchema.optional(),
+  /** Trainee-local civil dates for the first schedule window. Defaults to effectiveFrom + window days. */
+  windowFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  windowTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dietChangeScope: z.enum(["today_onward", "today_only"]).optional(),
   notifyClient: z.boolean().optional(),
   dryRun: z.boolean().optional(),
