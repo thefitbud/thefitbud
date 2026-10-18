@@ -9,6 +9,7 @@ import {
   checkinReviewContextSchema,
   checkinSchema,
   createTrainerNoteRequestSchema,
+  deleteTrainerNoteResponseSchema,
   patchTrainerNoteRequestSchema,
   localDateSchema,
   recordCheckinReviewRequestSchema,
@@ -1149,13 +1150,35 @@ checkinRoutes.patch(
       return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
     }
 
-    const updated = await setTrainerNoteVisibility(db, {
-      noteId,
-      relationshipId: relationship.id,
-      trainerUserId: actor.userId,
-      visibility: parsed.data.visibility,
-      skipPush: Boolean(existingNote.checkinId),
-    });
+    if (existingNote.trainerUserId !== actor.userId) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    if (parsed.data.body !== undefined && parsed.data.body !== existingNote.body) {
+      await db
+        .update(trainerNotes)
+        .set({ body: parsed.data.body, updatedAt: nowIso() })
+        .where(eq(trainerNotes.id, noteId));
+    }
+
+    let updated: typeof trainerNotes.$inferSelect | null | undefined =
+      existingNote;
+    if (parsed.data.visibility !== undefined) {
+      updated = await setTrainerNoteVisibility(db, {
+        noteId,
+        relationshipId: relationship.id,
+        trainerUserId: actor.userId,
+        visibility: parsed.data.visibility,
+        skipPush: Boolean(existingNote.checkinId),
+      });
+    } else if (parsed.data.body !== undefined) {
+      const refreshed = await db
+        .select()
+        .from(trainerNotes)
+        .where(eq(trainerNotes.id, noteId))
+        .limit(1);
+      updated = refreshed[0];
+    }
     if (!updated) {
       return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
     }
@@ -1173,6 +1196,61 @@ checkinRoutes.patch(
       expiresAt: addDaysIso(7),
     });
     return c.json(responseBody, 200);
+  },
+);
+
+checkinRoutes.delete(
+  "/relationships/:relationshipId/notes/:noteId",
+  operation({
+    tag: "Checkins",
+    summary: "Delete a trainer note",
+    description:
+      "Permanently deletes a trainer note owned by the caller. Blocked when coaching has ended.",
+    roles: ["trainer"],
+    response: deleteTrainerNoteResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const ended = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (ended) return ended;
+
+    const noteId = c.req.param("noteId");
+    const rows = await db
+      .select()
+      .from(trainerNotes)
+      .where(
+        and(
+          eq(trainerNotes.id, noteId),
+          eq(trainerNotes.coachingRelationshipId, relationship.id),
+          eq(trainerNotes.trainerUserId, actor.userId),
+        ),
+      )
+      .limit(1);
+    if (!rows[0]) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    await db.delete(trainerNotes).where(eq(trainerNotes.id, noteId));
+    return ok(
+      c,
+      deleteTrainerNoteResponseSchema.parse({ id: noteId, deleted: true }),
+    );
   },
 );
 

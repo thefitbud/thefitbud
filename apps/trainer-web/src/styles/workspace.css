@@ -159,7 +159,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #98a0b3;
+  color: var(--ink-500, #5b616b);
 }
 
 .workspace-toolbar,
@@ -1428,6 +1428,13 @@
   margin-top: 0.5rem;
   font-size: 0.75rem;
   color: var(--ink-500, #5b616b);
+}
+
+.ov-note-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 0.8125rem;
 }
 
 .note-vis-badge {

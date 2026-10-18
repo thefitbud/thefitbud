@@ -108,6 +108,7 @@ import {
   forkCheckinFormTemplateRequestSchema,
   confirmMealRequestSchema,
   createTrainerNoteRequestSchema,
+  deleteTrainerNoteResponseSchema,
   createMeasurementRequestSchema,
   createProgressEntryRequestSchema,
   createUploadTargetRequestSchema,
@@ -183,6 +184,7 @@ import {
   type CreateFoodLibraryItemRequest,
   type CreateProgressEntryRequest,
   type CreateTrainerNoteRequest,
+  type DeleteTrainerNoteResponse,
   type CreateUploadTargetRequest,
   type CreateUploadTargetResponse,
   type CreateWebSessionRequest,
@@ -1621,6 +1623,18 @@ export class FitBudApiClient {
       `/checkins/relationships/${relationshipId}/notes`,
       trainerNoteSchema,
       { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async deleteTrainerNote(
+    relationshipId: string,
+    noteId: string,
+  ): Promise<DeleteTrainerNoteResponse> {
+    return this.request(
+      "DELETE",
+      `/checkins/relationships/${relationshipId}/notes/${noteId}`,
+      deleteTrainerNoteResponseSchema,
+      { auth: true },
     );
   }
 

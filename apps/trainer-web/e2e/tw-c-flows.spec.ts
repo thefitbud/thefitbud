@@ -161,7 +161,7 @@ test.describe("TW-C workspace", () => {
     await expect(page.getByText(/820\s*\/\s*1000/)).toBeVisible();
     await visibility.check();
     await expect(
-      page.getByText(/will see this on her Today screen/i),
+      page.getByText(/will see this on their Today screen/i),
     ).toBeVisible();
     await expect(page.getByText(/From rahul · just now/i)).toBeVisible();
     await visibility.uncheck();

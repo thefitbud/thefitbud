@@ -309,11 +309,24 @@ export type CreateTrainerNoteRequest = z.infer<
   typeof createTrainerNoteRequestSchema
 >;
 
-export const patchTrainerNoteRequestSchema = z.object({
-  visibility: trainerNoteVisibilitySchema,
-});
+export const patchTrainerNoteRequestSchema = z
+  .object({
+    body: z.string().trim().min(1).max(4000).optional(),
+    visibility: trainerNoteVisibilitySchema.optional(),
+  })
+  .refine((value) => value.body !== undefined || value.visibility !== undefined, {
+    message: "Provide body and/or visibility.",
+  });
 export type PatchTrainerNoteRequest = z.infer<
   typeof patchTrainerNoteRequestSchema
+>;
+
+export const deleteTrainerNoteResponseSchema = z.object({
+  id: uuidSchema,
+  deleted: z.literal(true),
+});
+export type DeleteTrainerNoteResponse = z.infer<
+  typeof deleteTrainerNoteResponseSchema
 >;
 
 export const trainerNoteListResponseSchema = cursorPageSchema(trainerNoteSchema);

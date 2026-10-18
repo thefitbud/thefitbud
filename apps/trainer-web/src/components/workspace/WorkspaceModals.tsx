@@ -1,9 +1,10 @@
+import type { TrainerNote } from "@fitbud/contracts";
 import { NoteComposer } from "../NoteComposer";
 import { CoachingLifecycleModals } from "../coaching/CoachingLifecycleModals";
 import { ResponsivenessPanel } from "./ResponsivenessPanel";
 
 export type WorkspaceModal =
-  | { type: "note" }
+  | { type: "note"; note?: TrainerNote }
   | { type: "end" }
   | { type: "reactivate" }
   | { type: "responsiveness" }
@@ -34,7 +35,9 @@ export function WorkspaceModals({
       <div className="drawer-backdrop" onClick={onClose}>
         <aside className="drawer-panel" data-testid="screen-TW-34" onClick={(e) => e.stopPropagation()}>
           <header className="drawer-head">
-            <h2>Add note for {traineeName}</h2>
+            <h2>
+              {modal.note ? "Edit note" : "Add note"} for {traineeName}
+            </h2>
             <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
               ×
             </button>
@@ -42,6 +45,7 @@ export function WorkspaceModals({
           <NoteComposer
             relationshipId={relationshipId}
             traineeName={traineeName}
+            note={modal.note}
             onSaved={onChanged}
             onClose={onClose}
           />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import type { TrainerNote, WeekReadModel } from "@fitbud/contracts";
 import {
@@ -10,6 +10,7 @@ import {
   labelFor,
 } from "@fitbud/core";
 import { AlertOctagon, AlertTriangle } from "lucide-react";
+import { ApiClientError } from "@fitbud/api-client";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
@@ -17,6 +18,7 @@ import { MeasurementTrend } from "../components/MeasurementTrend";
 import { StatusChip } from "../components/StatusChip";
 import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel";
 import { apiClient } from "../lib/api";
+import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
@@ -114,13 +116,60 @@ export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const drawerId = params.get("exception");
-  const { workspace, openWorkspaceModal } =
+  const { workspace, openWorkspaceModal, refreshEpoch } =
     useOutletContext<WorkspaceOutletContext>();
   const { me } = useAuth();
   const viewerTz = me?.timezone ?? "Asia/Kolkata";
   const [week, setWeek] = useState<WeekReadModel | null>(null);
   const [notes, setNotes] = useState<TrainerNote[]>([]);
   const [weekError, setWeekError] = useState(false);
+
+  const [noteBusyId, setNoteBusyId] = useState<string | null>(null);
+  const [noteError, setNoteError] = useState<string | null>(null);
+
+  const loadNotes = useCallback(() => {
+    if (!relationshipId) return;
+    void apiClient
+      .listTrainerNotes(relationshipId)
+      .then((res) => setNotes(res.items.slice(0, 3)))
+      .catch(() => setNotes([]));
+  }, [relationshipId]);
+
+  async function makeNotePrivate(note: TrainerNote) {
+    setNoteBusyId(note.id);
+    setNoteError(null);
+    try {
+      await stage1Api.patchTrainerNote(
+        relationshipId,
+        note.id,
+        { visibility: "private" },
+        createIdempotencyKey(),
+      );
+      loadNotes();
+    } catch (err) {
+      setNoteError(
+        err instanceof ApiClientError ? err.message : "Could not update note.",
+      );
+    } finally {
+      setNoteBusyId(null);
+    }
+  }
+
+  async function deleteNote(note: TrainerNote) {
+    if (!window.confirm("Delete this note? This cannot be undone.")) return;
+    setNoteBusyId(note.id);
+    setNoteError(null);
+    try {
+      await apiClient.deleteTrainerNote(relationshipId, note.id);
+      loadNotes();
+    } catch (err) {
+      setNoteError(
+        err instanceof ApiClientError ? err.message : "Could not delete note.",
+      );
+    } finally {
+      setNoteBusyId(null);
+    }
+  }
 
   useEffect(() => {
     if (!relationshipId) return;
@@ -133,11 +182,8 @@ export function ClientOverviewPage() {
         setWeek(null);
         setWeekError(true);
       });
-    void apiClient
-      .listTrainerNotes(relationshipId)
-      .then((res) => setNotes(res.items.slice(0, 3)))
-      .catch(() => setNotes([]));
-  }, [relationshipId]);
+    loadNotes();
+  }, [relationshipId, refreshEpoch, loadNotes]);
 
   if (!workspace) {
     return (
@@ -555,6 +601,11 @@ export function ClientOverviewPage() {
               </button>
             ) : null}
           </div>
+          {noteError ? (
+            <p className="form-error" role="alert">
+              {noteError}
+            </p>
+          ) : null}
           {notes.length === 0 ? (
             <p className="muted">No notes yet</p>
           ) : (
@@ -572,6 +623,36 @@ export function ClientOverviewPage() {
                       {formatRelative(note.createdAt)}
                     </time>
                   </div>
+                  {header.onboardingStatus !== "ended" ? (
+                    <div className="ov-note-actions">
+                      <button
+                        type="button"
+                        className="text-link"
+                        disabled={noteBusyId === note.id}
+                        onClick={() => openWorkspaceModal({ type: "note", note })}
+                      >
+                        Edit
+                      </button>
+                      {note.visibility === "client" ? (
+                        <button
+                          type="button"
+                          className="text-link"
+                          disabled={noteBusyId === note.id}
+                          onClick={() => void makeNotePrivate(note)}
+                        >
+                          Make private
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="text-link"
+                        disabled={noteBusyId === note.id}
+                        onClick={() => void deleteNote(note)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

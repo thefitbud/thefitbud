@@ -43,6 +43,53 @@ async function createTrainerSession(email: string) {
   return { cookie: setCookie!.split(";")[0]! };
 }
 
+async function setupPair(suffix: string) {
+  const trainer = await createTrainerSession(`notes-coach-${suffix}@example.com`);
+  const created = await app.request(
+    "/invitations",
+    {
+      method: "POST",
+      headers: {
+        Cookie: trainer.cookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": `inv-${suffix}`,
+      },
+      body: JSON.stringify({
+        recipientEmail: `notes-trainee-${suffix}@example.com`,
+      }),
+    },
+    testEnv(),
+  );
+  const createdBody = (await created.json()) as { data: { token: string } };
+  const traineeToken = createTestIdToken(
+    `notes-trainee-${suffix}`,
+    `notes-trainee-${suffix}@example.com`,
+  );
+  const accept = await app.request(
+    "/invitations/accept",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${traineeToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        token: createdBody.data.token,
+        timezone: "Asia/Kolkata",
+      }),
+    },
+    testEnv(),
+  );
+  const acceptBody = (await accept.json()) as {
+    data: { relationship: { id: string } };
+  };
+  return {
+    trainer,
+    traineeToken,
+    relationshipId: acceptBody.data.relationship.id,
+  };
+}
+
 describe("TW-C trainer note visibility", () => {
   let close: (() => void) | undefined;
 
@@ -193,5 +240,211 @@ describe("TW-C trainer note visibility", () => {
     expect(
       afterBody.data.items.some((n) => n.id === privateBody.data.id),
     ).toBe(false);
+  });
+
+  it("create, edit body, share, make private, and DELETE lifecycle", async () => {
+    const { trainer, traineeToken, relationshipId } = await setupPair("life");
+    const base = `/checkins/relationships/${relationshipId}/notes`;
+    const trainerHeaders = (key: string) => ({
+      Cookie: trainer.cookie,
+      "Content-Type": "application/json",
+      "Idempotency-Key": key,
+    });
+    const traineeNotes = async () => {
+      const res = await app.request(
+        "/me/coach-notes",
+        {
+          headers: {
+            Authorization: `Bearer ${traineeToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      expect(res.status).toBe(200);
+      return ((await res.json()) as {
+        data: { items: Array<{ id: string; body: string }> };
+      }).data.items;
+    };
+
+    const created = await app.request(
+      base,
+      {
+        method: "POST",
+        headers: trainerHeaders("life-create"),
+        body: JSON.stringify({ body: "Lifecycle note", visibility: "private" }),
+      },
+      testEnv(),
+    );
+    expect(created.status).toBe(200);
+    const note = ((await created.json()) as {
+      data: { id: string; visibility: string };
+    }).data;
+    expect(note.visibility).toBe("private");
+    expect(await traineeNotes()).toEqual([]);
+
+    const edited = await app.request(
+      `${base}/${note.id}`,
+      {
+        method: "PATCH",
+        headers: trainerHeaders("life-edit"),
+        body: JSON.stringify({ body: "Lifecycle note edited" }),
+      },
+      testEnv(),
+    );
+    expect(edited.status).toBe(200);
+    const editedBody = (await edited.json()) as {
+      data: { body: string; visibility: string };
+    };
+    expect(editedBody.data.body).toBe("Lifecycle note edited");
+    expect(editedBody.data.visibility).toBe("private");
+    expect(await traineeNotes()).toEqual([]);
+
+    const shared = await app.request(
+      `${base}/${note.id}`,
+      {
+        method: "PATCH",
+        headers: trainerHeaders("life-share"),
+        body: JSON.stringify({ visibility: "client", body: "Shared body" }),
+      },
+      testEnv(),
+    );
+    expect(shared.status).toBe(200);
+    const visible = await traineeNotes();
+    expect(visible.map((n) => n.body)).toEqual(["Shared body"]);
+
+    const emptyPatch = await app.request(
+      `${base}/${note.id}`,
+      {
+        method: "PATCH",
+        headers: trainerHeaders("life-empty"),
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(emptyPatch.status).toBe(400);
+
+    const priv = await app.request(
+      `${base}/${note.id}`,
+      {
+        method: "PATCH",
+        headers: trainerHeaders("life-private"),
+        body: JSON.stringify({ visibility: "private" }),
+      },
+      testEnv(),
+    );
+    expect(priv.status).toBe(200);
+    expect(await traineeNotes()).toEqual([]);
+
+    await app.request(
+      `${base}/${note.id}`,
+      {
+        method: "PATCH",
+        headers: trainerHeaders("life-reshare"),
+        body: JSON.stringify({ visibility: "client" }),
+      },
+      testEnv(),
+    );
+    expect(await traineeNotes()).toHaveLength(1);
+
+    const del = await app.request(
+      `${base}/${note.id}`,
+      { method: "DELETE", headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    expect(del.status).toBe(200);
+    expect(await traineeNotes()).toEqual([]);
+
+    const list = await app.request(
+      base,
+      { headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    const listBody = (await list.json()) as { data: { items: unknown[] } };
+    expect(listBody.data.items).toHaveLength(0);
+
+    const again = await app.request(
+      `${base}/${note.id}`,
+      { method: "DELETE", headers: { Cookie: trainer.cookie } },
+      testEnv(),
+    );
+    expect(again.status).toBe(404);
+  });
+
+  it("DELETE enforces trainer ownership and blocks ended relationships", async () => {
+    const owner = await setupPair("own");
+    const other = await createTrainerSession("notes-other-coach@example.com");
+    const base = `/checkins/relationships/${owner.relationshipId}/notes`;
+    const created = await app.request(
+      base,
+      {
+        method: "POST",
+        headers: {
+          Cookie: owner.trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "own-create",
+        },
+        body: JSON.stringify({ body: "Owned note" }),
+      },
+      testEnv(),
+    );
+    const noteId = ((await created.json()) as { data: { id: string } }).data.id;
+
+    const foreign = await app.request(
+      `${base}/${noteId}`,
+      { method: "DELETE", headers: { Cookie: other.cookie } },
+      testEnv(),
+    );
+    expect(foreign.status).toBe(404);
+
+    const traineeAttempt = await app.request(
+      `${base}/${noteId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${owner.traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    expect([401, 403]).toContain(traineeAttempt.status);
+
+    const ended = await app.request(
+      `/relationships/${owner.relationshipId}/end`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: owner.trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "own-end",
+        },
+        body: JSON.stringify({ reason: "other" }),
+      },
+      testEnv(),
+    );
+    expect(ended.status).toBe(200);
+
+    const blocked = await app.request(
+      `${base}/${noteId}`,
+      { method: "DELETE", headers: { Cookie: owner.trainer.cookie } },
+      testEnv(),
+    );
+    expect(blocked.status).toBeGreaterThanOrEqual(400);
+    expect(blocked.status).not.toBe(200);
+    const blockedPatch = await app.request(
+      `${base}/${noteId}`,
+      {
+        method: "PATCH",
+        headers: {
+          Cookie: owner.trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "own-patch-ended",
+        },
+        body: JSON.stringify({ body: "nope" }),
+      },
+      testEnv(),
+    );
+    expect(blockedPatch.status).toBeGreaterThanOrEqual(400);
   });
 });

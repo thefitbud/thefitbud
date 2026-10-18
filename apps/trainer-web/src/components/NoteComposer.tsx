@@ -1,11 +1,14 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { ApiClientError } from "@fitbud/api-client";
+import type { TrainerNote } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
-type TrainerNoteVisibility = "private" | "client";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
+import { stage1Api } from "../lib/stage1-api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { Button } from "./Button";
+
+type TrainerNoteVisibility = "private" | "client";
 
 const MAX_CHARS = 1000;
 const COUNTER_FROM = 800;
@@ -16,6 +19,7 @@ export function NoteComposer({
   subjectType,
   subjectId,
   checkinId,
+  note,
   readOnly = false,
   onSaved,
   onClose,
@@ -25,14 +29,17 @@ export function NoteComposer({
   subjectType?: string;
   subjectId?: string;
   checkinId?: string;
+  note?: TrainerNote;
   readOnly?: boolean;
   onSaved?: () => void;
   onClose?: () => void;
 }) {
   const { me } = useAuth();
-  const [body, setBody] = useState("");
-  const [visibility, setVisibility] =
-    useState<TrainerNoteVisibility>("private");
+  const isEdit = Boolean(note);
+  const [body, setBody] = useState(note?.body ?? "");
+  const [visibility, setVisibility] = useState<TrainerNoteVisibility>(
+    note?.visibility === "client" ? "client" : "private",
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -64,24 +71,35 @@ export function NoteComposer({
     setSubmitting(true);
     setError(null);
     try {
-      await apiClient.createTrainerNote(
-        relationshipId,
-        {
-          body: trimmed,
-          visibility,
-          subjectType: subjectType ?? null,
-          subjectId: subjectId ?? undefined,
-          checkinId: checkinId ?? null,
-        },
-        createIdempotencyKey(),
-      );
+      if (note) {
+        await stage1Api.patchTrainerNote(
+          relationshipId,
+          note.id,
+          { body: trimmed, visibility },
+          createIdempotencyKey(),
+        );
+      } else {
+        await apiClient.createTrainerNote(
+          relationshipId,
+          {
+            body: trimmed,
+            visibility,
+            subjectType: subjectType ?? null,
+            subjectId: subjectId ?? undefined,
+            checkinId: checkinId ?? null,
+          },
+          createIdempotencyKey(),
+        );
+      }
       const message =
         visibility === "client"
           ? `Shared with ${firstName}`
           : "Saved privately";
       setToast(message);
-      setBody("");
-      setVisibility("private");
+      if (!isEdit) {
+        setBody("");
+        setVisibility("private");
+      }
       onSaved?.();
       window.setTimeout(() => {
         setToast(null);
@@ -131,7 +149,9 @@ export function NoteComposer({
       {visibility === "client" ? (
         <div className="note-visible-preview">
           <p className="muted">
-            {firstName} will see this on her Today screen and get a notification.
+            {isEdit && note?.visibility === "client"
+              ? `${firstName} can see this on their Today screen.`
+              : `${firstName} will see this on their Today screen and get a notification.`}
           </p>
           <span className="note-preview-chip" aria-hidden="true">
             From {trainerFirstName} · just now
@@ -162,7 +182,7 @@ export function NoteComposer({
           </Button>
         ) : null}
         <Button type="submit" variant="primary" disabled={submitting}>
-          {submitting ? "Saving…" : "Save note"}
+          {submitting ? "Saving…" : isEdit ? "Save changes" : "Save note"}
         </Button>
       </div>
     </form>
