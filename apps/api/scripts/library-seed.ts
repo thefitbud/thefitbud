@@ -2,10 +2,10 @@
 /**
  * Load library v2 into local D1 (.wrangler/state). Refuses --remote.
  */
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runCommandSync } from "./lib/run-command.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, "..");
@@ -30,7 +30,7 @@ function runFile(rel: string): void {
     process.exit(1);
   }
   console.log(`→ ${rel}`);
-  const result = spawnSync(
+  runCommandSync(
     "pnpm",
     [
       "exec",
@@ -44,11 +44,8 @@ function runFile(rel: string): void {
       "--file",
       file,
     ],
-    { cwd: apiRoot, stdio: "inherit", env: process.env },
+    { cwd: apiRoot },
   );
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
 }
 
 const remote = process.argv.includes("--remote");

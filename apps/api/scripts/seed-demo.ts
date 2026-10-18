@@ -3,6 +3,7 @@
  * Demo world seed (T24). Writes SQL and applies to local D1.
  */
 import { spawnSync } from "node:child_process";
+import { failedSpawnExitCode, spawnOptions } from "./lib/run-command.js";
 import { readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,22 +58,19 @@ const sql = buildDemoSeedSql({ referenceInstant, passwordHash, libraryIndex });
 writeFileSync(outFile, sql, "utf8");
 console.log(`Wrote ${outFile} (${sql.length} bytes)`);
 
-const result = spawnSync(
-  "pnpm",
-  [
-    "exec",
-    "wrangler",
-    "d1",
-    "execute",
-    "fitbud",
-    "--local",
-    "--persist-to",
-    ".wrangler/state",
-    "--file",
-    outFile,
-  ],
-  { cwd: apiRoot, stdio: "inherit" },
-);
+const wranglerArgs = [
+  "exec",
+  "wrangler",
+  "d1",
+  "execute",
+  "fitbud",
+  "--local",
+  "--persist-to",
+  ".wrangler/state",
+  "--file",
+  outFile,
+];
+const result = spawnSync("pnpm", wranglerArgs, spawnOptions({ cwd: apiRoot }));
 
 console.log("\nDemo accounts (@demo.fitbud.test, password FitBud-demo-2026):");
 for (const account of DEMO_ACCOUNTS) {
@@ -80,4 +78,5 @@ for (const account of DEMO_ACCOUNTS) {
 }
 console.log(`\nPending invite token (anita.invite@demo.fitbud.test): ${DEMO_PENDING_INVITE_TOKEN}`);
 
-process.exit(result.status ?? 1);
+const exitCode = failedSpawnExitCode(result, "pnpm", wranglerArgs);
+process.exit(exitCode ?? 0);

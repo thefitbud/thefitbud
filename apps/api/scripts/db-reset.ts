@@ -5,7 +5,7 @@
 import { rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { runCommandSync } from "./lib/run-command.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, "..");
@@ -18,10 +18,7 @@ if (!allowed.endsWith(`${path.sep}.wrangler${path.sep}state${path.sep}v3${path.s
 }
 
 function run(command: string, args: string[]) {
-  const result = spawnSync(command, args, { cwd: apiRoot, stdio: "inherit" });
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
+  runCommandSync(command, args, { cwd: apiRoot });
 }
 
 run("tsx", ["scripts/ensure-dev-vars.ts"]);
