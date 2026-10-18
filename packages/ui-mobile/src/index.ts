@@ -6,6 +6,7 @@ export {
   fontFamilyDevanagari,
   fontFamilyMedium,
   fontFamilySemiBold,
+  textStyles,
   typeScale,
 } from "./typography.js";
 export { NutritionRings, type RingDatum } from "./NutritionRings.js";

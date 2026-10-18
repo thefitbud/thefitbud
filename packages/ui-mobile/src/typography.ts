@@ -32,3 +32,42 @@ export const typeScale = {
   headline: 24,
   display: 28,
 } as const;
+
+/** Shared text styles — product screens must use these so Satoshi actually renders. */
+export const textStyles = {
+  display: {
+    fontFamily: fontFamilyBold,
+    fontSize: typeScale.display,
+    fontWeight: "700" as const,
+  },
+  headline: {
+    fontFamily: fontFamilyBold,
+    fontSize: typeScale.headline,
+    fontWeight: "700" as const,
+  },
+  title: {
+    fontFamily: fontFamilySemiBold,
+    fontSize: typeScale.title,
+    fontWeight: "600" as const,
+  },
+  body: {
+    fontFamily,
+    fontSize: typeScale.body,
+    fontWeight: "400" as const,
+  },
+  bodyMedium: {
+    fontFamily: fontFamilyMedium,
+    fontSize: typeScale.body,
+    fontWeight: "500" as const,
+  },
+  label: {
+    fontFamily: fontFamilyMedium,
+    fontSize: 14,
+    fontWeight: "500" as const,
+  },
+  caption: {
+    fontFamily: fontFamilyMedium,
+    fontSize: typeScale.caption,
+    fontWeight: "500" as const,
+  },
+} as const;

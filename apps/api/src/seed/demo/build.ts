@@ -21,7 +21,7 @@ function kolkataLocalDate(instant: string): string {
   }).format(new Date(instant));
 }
 
-/** Title-case seed display names ("ishita pushoff" → "Ishita Pushoff"). */
+/** Title-case fallback when an account has no explicit displayName. */
 function titleCaseDemoName(raw: string): string {
   return raw
     .trim()
@@ -134,9 +134,9 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
       continue;
     }
     const phone = `+9190000000${String(phoneIndex++).padStart(2, "0")}`;
-    const displayName = titleCaseDemoName(
-      account.email.split("@")[0]!.replace(/\./g, " "),
-    );
+    const displayName =
+      account.displayName ||
+      titleCaseDemoName(account.email.split("@")[0]!.replace(/\./g, " "));
     const timezone =
       account.email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
     parts.push(

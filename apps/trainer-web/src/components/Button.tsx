@@ -5,6 +5,7 @@ export type ButtonVariant =
   | "secondary"
   | "tertiary"
   | "destructive"
+  | "tinted"
   | "whatsapp";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -13,7 +14,8 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 /**
- * Shared trainer-web button hierarchy (foundations §1.6.1 / §1.6.3).
+ * Shared trainer-web button hierarchy (foundations §1.6.1 / §1.6.3 + decision 24).
+ * tinted = lavender fill / indigo text for repeated per-row actions.
  * whatsapp = neutral secondary with WhatsApp glyph styling via class.
  */
 export function Button({
@@ -28,9 +30,11 @@ export function Button({
       ? "button-primary"
       : variant === "secondary" || variant === "whatsapp"
         ? "button-secondary"
-        : variant === "tertiary"
-          ? "button-ghost"
-          : "button-destructive";
+        : variant === "tinted"
+          ? "button-tinted"
+          : variant === "tertiary"
+            ? "button-ghost"
+            : "button-destructive";
   return (
     <button
       type={type}

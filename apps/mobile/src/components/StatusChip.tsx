@@ -7,7 +7,7 @@ import {
   Info,
 } from "lucide-react-native";
 import { labelFor, sentenceCaseEnum, type LabelNamespace } from "@fitbud/core";
-import { radii, semanticColors, spacing } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold, radii, semanticColors, spacing } from "@fitbud/ui-mobile";
 
 export type StatusChipKind =
   | "lifecycle"
@@ -123,6 +123,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   label: {
+    fontFamily: fontFamilySemiBold,
     fontSize: 12,
     fontWeight: "600",
   },

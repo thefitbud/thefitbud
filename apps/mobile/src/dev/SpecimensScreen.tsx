@@ -20,6 +20,7 @@ export function SpecimensScreen() {
         <View style={styles.row}>
           <Button label="Primary" variant="primary" onPress={() => undefined} />
           <Button label="Secondary" variant="secondary" onPress={() => undefined} />
+          <Button label="Tinted" variant="tinted" onPress={() => undefined} />
           <Button label="Tertiary" variant="tertiary" onPress={() => undefined} />
           <Button label="Destructive" variant="destructive" onPress={() => undefined} />
           <OverflowMenu

@@ -47,8 +47,8 @@ describe("formatRelative", () => {
 
 describe("formatPersonName", () => {
   it("title-cases lowercase demo names", () => {
-    expect(formatPersonName("ishita pushoff")).toBe("Ishita Pushoff");
-    expect(formatPersonName("rahul coach")).toBe("Rahul Coach");
+    expect(formatPersonName("ishita banerjee")).toBe("Ishita Banerjee");
+    expect(formatPersonName("rahul verma")).toBe("Rahul Verma");
   });
 
   it("keeps existing capitals such as McKenzie", () => {

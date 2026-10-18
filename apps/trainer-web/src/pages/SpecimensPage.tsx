@@ -22,6 +22,7 @@ export function SpecimensPage() {
         <div className="specimen-row">
           <Button variant="primary">Primary</Button>
           <Button variant="secondary">Secondary</Button>
+          <Button variant="tinted">Tinted</Button>
           <Button variant="tertiary">Tertiary</Button>
           <Button variant="destructive">Destructive</Button>
           <Button variant="whatsapp">WhatsApp</Button>

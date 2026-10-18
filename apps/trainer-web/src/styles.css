@@ -361,17 +361,22 @@ input {
 
 .button-primary,
 .button-secondary,
+.button-tinted,
 .button-ghost,
+.button-destructive,
 .button-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  min-height: 2.75rem;
-  padding: 0.625rem 1rem;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
   border-radius: 10px;
   border: 1px solid transparent;
+  font-family: var(--font-family, Satoshi, "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif);
+  font-size: 0.875rem;
   font-weight: 600;
+  line-height: 1;
   text-decoration: none;
   cursor: pointer;
 }
@@ -379,7 +384,7 @@ input {
 .button-primary {
   background: var(--indigo);
   color: var(--white);
-  border-radius: 999px;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 18%), inset 0 1px 0 rgb(255 255 255 / 12%);
 }
 
 .button-primary:hover,
@@ -390,49 +395,65 @@ input {
 }
 
 .button-secondary:focus-visible,
-.button-ghost:focus-visible {
+.button-tinted:focus-visible,
+.button-ghost:focus-visible,
+.button-destructive:focus-visible {
   outline: 2px solid var(--indigo);
   outline-offset: 2px;
 }
 
 .button-primary:disabled,
-.button-secondary:disabled {
+.button-secondary:disabled,
+.button-tinted:disabled,
+.button-destructive:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   filter: none;
 }
 
 .button-secondary {
-  background: var(--pale-lavender);
-  color: var(--deep-navy);
-  border-color: transparent;
+  background: var(--white);
+  color: var(--ink-700, var(--deep-navy));
+  border-color: var(--border-strong, #d9dce8);
+  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
 }
 
 .button-secondary:hover,
-.button-secondary:focus-visible,
-.button-ghost:hover,
-.button-ghost:focus-visible {
+.button-secondary:focus-visible {
+  background: var(--hover, #f7f8fc);
+}
+
+.button-tinted {
+  background: var(--pale-lavender, #edeaff);
+  color: var(--indigo);
+}
+
+.button-tinted:hover,
+.button-tinted:focus-visible {
   background: #e4dffc;
-  outline: 2px solid var(--indigo);
-  outline-offset: 1px;
 }
 
 .button-ghost {
   background: transparent;
-  color: var(--mid-grey);
-  border-color: var(--border);
+  color: var(--indigo);
+  border-color: transparent;
+}
+
+.button-ghost:hover,
+.button-ghost:focus-visible {
+  background: var(--pale-lavender, #edeaff);
 }
 
 .button-destructive {
-  background: var(--semantic-destructive, #b91c1c);
-  color: var(--white);
+  background: #b91c1c;
+  color: #fff;
   border-color: transparent;
 }
 
 .button-destructive:hover,
 .button-destructive:focus-visible {
   filter: brightness(1.05);
-  outline: 2px solid var(--semantic-destructive, #b91c1c);
+  outline: 2px solid #b91c1c;
   outline-offset: 2px;
 }
 
@@ -440,6 +461,13 @@ input {
   background: var(--white);
   border-color: var(--ink-200, var(--light-grey));
   color: var(--deep-navy);
+}
+
+.button-sm {
+  min-height: 1.875rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  border-radius: 8px;
 }
 
 .button-link {

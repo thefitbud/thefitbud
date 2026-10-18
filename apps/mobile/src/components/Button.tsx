@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import {
   colors,
+  fontFamilySemiBold,
   radii,
   semanticColors,
   spacing,
@@ -19,6 +20,7 @@ export type ButtonVariant =
   | "secondary"
   | "tertiary"
   | "destructive"
+  | "tinted"
   | "whatsapp"
   /** @deprecated Alias of tertiary — kept for existing call sites. */
   | "ghost";
@@ -31,7 +33,7 @@ type Props = PressableProps & {
 
 /**
  * Mobile button hierarchy. Replaces PrimaryButton variants and adds
- * tertiary / destructive / whatsapp (neutral secondary).
+ * tertiary / destructive / tinted / whatsapp (neutral secondary).
  */
 export function Button({
   label,
@@ -59,6 +61,7 @@ export function Button({
         resolved === "primary" && styles.primary,
         resolved === "secondary" && styles.secondary,
         resolved === "whatsapp" && styles.whatsapp,
+        resolved === "tinted" && styles.tinted,
         resolved === "tertiary" && styles.tertiary,
         resolved === "destructive" && styles.destructive,
         pressed && !isDisabled && styles.pressed,
@@ -77,6 +80,7 @@ export function Button({
                 styles.labelOnFill,
               (resolved === "secondary" || resolved === "whatsapp") &&
                 styles.labelSecondary,
+              resolved === "tinted" && styles.labelTinted,
               resolved === "tertiary" && styles.labelTertiary,
             ]}
           >
@@ -118,6 +122,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.lightGrey,
   },
+  tinted: {
+    backgroundColor: colors.paleLavender,
+  },
   tertiary: {
     backgroundColor: "transparent",
   },
@@ -131,6 +138,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   label: {
+    fontFamily: fontFamilySemiBold,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -139,6 +147,9 @@ const styles = StyleSheet.create({
   },
   labelSecondary: {
     color: colors.deepNavy,
+  },
+  labelTinted: {
+    color: colors.indigo,
   },
   labelTertiary: {
     color: colors.indigo,
