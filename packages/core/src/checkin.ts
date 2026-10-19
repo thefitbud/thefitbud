@@ -189,11 +189,25 @@ function isBlankCheckinFieldAnswer(
   value: unknown,
 ): boolean {
   if (value == null) return true;
-  if (field.type === "short_text" || field.type === "long_text") {
+  if (
+    field.type === "short_text" ||
+    field.type === "long_text" ||
+    field.type === "single_choice"
+  ) {
     return typeof value !== "string" || value.trim().length === 0;
   }
-  if (field.type === "measurement") {
-    return typeof value !== "number" || !Number.isFinite(value) || value <= 0;
+  if (field.type === "multiple_choice") {
+    return !Array.isArray(value) || value.length === 0;
+  }
+  if (field.type === "yes_no") {
+    return typeof value !== "boolean";
+  }
+  if (
+    field.type === "measurement" ||
+    field.type === "number" ||
+    field.type === "scale_1_5"
+  ) {
+    return typeof value !== "number" || !Number.isFinite(value);
   }
   if (field.type === "photo_intent") {
     return typeof value !== "object";

@@ -29,6 +29,9 @@ export type FieldDraft = {
   helpText: string;
   maxLength: string;
   options: FieldOptionDraft[];
+  /** Surface in trainer "Worth noting" (TW-10 / TW-24). */
+  highlight: boolean;
+  unit: string;
 };
 
 export function fieldTypeLabel(type: OnboardingFieldType): string {
@@ -81,6 +84,8 @@ export function blankField(): FieldDraft {
     helpText: "",
     maxLength: "",
     options: [newOption()],
+    highlight: false,
+    unit: "",
   };
 }
 
@@ -138,6 +143,8 @@ export function draftsFromFields(fields: OnboardingFieldDefinition[]): FieldDraf
       helpText: field.helpText ?? "",
       maxLength,
       options: optionDrafts(field),
+      highlight: field.highlight === true,
+      unit: field.type === "number" ? (field.unit ?? "") : "",
     };
   });
 }
@@ -145,15 +152,17 @@ export function draftsFromFields(fields: OnboardingFieldDefinition[]): FieldDraf
 export function withFieldType(field: FieldDraft, type: BuilderFieldType): FieldDraft {
   if (field.type === type) return field;
   const keepOptions = isChoiceType(field.type) && isChoiceType(type);
+  const options = isChoiceType(type)
+    ? keepOptions && field.options.length >= 2
+      ? field.options
+      : [newOption(), newOption()]
+    : field.options;
   return {
     ...field,
     type,
     maxLength: isTextType(type) ? field.maxLength : "",
-    options: isChoiceType(type)
-      ? keepOptions && field.options.length > 0
-        ? field.options
-        : [newOption()]
-      : field.options,
+    unit: type === "number" ? field.unit : "",
+    options,
   };
 }
 
@@ -186,30 +195,46 @@ export function buildFields(
       required: draft.required,
       ...(helpText ? { helpText } : {}),
     };
+    const withHighlight = {
+      ...base,
+      ...(draft.highlight ? { highlight: true as const } : {}),
+    };
     if (isChoiceType(draft.type)) {
       const options = draft.options
         .map((option) => ({ id: option.id, label: option.label.trim() }))
         .filter((option) => option.label.length > 0);
-      if (options.length === 0) {
-        return { ok: false, error: `“${label}” needs at least one option.` };
+      if (options.length < 2) {
+        return {
+          ok: false,
+          error: `“${label}” needs at least 2 options.`,
+        };
       }
       if (new Set(options.map((option) => option.id)).size !== options.length) {
         return { ok: false, error: `“${label}” has duplicate option ids.` };
       }
       fields.push(
         draft.type === "multiple_choice"
-          ? { ...base, type: "multiple_choice", options }
-          : { ...base, type: "single_choice", options },
+          ? { ...withHighlight, type: "multiple_choice", options }
+          : { ...withHighlight, type: "single_choice", options },
       );
       continue;
     }
-    if (draft.type === "number" || draft.type === "yes_no") {
-      fields.push({ ...base, type: draft.type });
+    if (draft.type === "yes_no") {
+      fields.push({ ...withHighlight, type: "yes_no" });
+      continue;
+    }
+    if (draft.type === "number") {
+      const unit = draft.unit.trim();
+      fields.push({
+        ...withHighlight,
+        type: "number",
+        ...(unit ? { unit } : {}),
+      });
       continue;
     }
     const rawMax = draft.maxLength.trim();
     if (rawMax === "") {
-      fields.push({ ...base, type: draft.type });
+      fields.push({ ...withHighlight, type: draft.type });
       continue;
     }
     const maxLength = Number(rawMax);
@@ -219,7 +244,7 @@ export function buildFields(
         error: `Max length for “${label}” must be a whole number from 1 to 10000.`,
       };
     }
-    fields.push({ ...base, type: draft.type, maxLength });
+    fields.push({ ...withHighlight, type: draft.type, maxLength });
   }
   const parsed = parseOnboardingFormFields(fields);
   if (!parsed.ok) {

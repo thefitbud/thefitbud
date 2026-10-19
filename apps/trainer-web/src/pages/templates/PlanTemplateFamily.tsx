@@ -49,9 +49,9 @@ function mismatchMessage(templateType: PlanTemplateType): string {
     case "workout":
       return "A workout template needs at least one day and no meals.";
     case "nutrition":
-      return "A nutrition template needs at least one meal and no workout days.";
+      return "A diet template needs at least one meal and no workout days.";
     case "combined":
-      return "A combined template needs at least one workout day and one meal.";
+      return "A full plan template needs at least one workout day and one meal.";
     default: {
       const _exhaustive: never = templateType;
       return _exhaustive;

@@ -100,6 +100,7 @@ import {
   completeWorkoutRequestSchema,
   checkinFormTemplateDetailSchema,
   checkinFormTemplateListResponseSchema,
+  checkinFormVersionSchema,
   checkinListResponseSchema,
   checkinReviewContextSchema,
   checkinSchema,
@@ -162,6 +163,7 @@ import {
   type ConfirmMealRequest,
   type CheckinFormTemplateDetail,
   type CheckinFormTemplateListResponse,
+  type CheckinFormVersion,
   type ConfigureConfigurationRequest,
   type CopyConfigurationDraftRequest,
   type CreateCheckinFormTemplateRequest,
@@ -1526,6 +1528,15 @@ export class FitBudApiClient {
       "GET",
       `/checkins/${checkinId}/review-context`,
       checkinReviewContextSchema,
+      { auth: true },
+    );
+  }
+
+  async getCheckinForm(checkinId: string): Promise<CheckinFormVersion> {
+    return this.request(
+      "GET",
+      `/checkins/${checkinId}/form`,
+      checkinFormVersionSchema,
       { auth: true },
     );
   }

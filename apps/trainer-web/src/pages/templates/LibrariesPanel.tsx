@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { Link, useParams } from "react-router-dom";
 import type {
   ExerciseDifficulty,
   ExerciseLibraryItem,
@@ -6,137 +7,60 @@ import type {
   FoodLibraryItem,
   NutritionBasis,
 } from "@fitbud/contracts";
-import { NUTRIENT_SCALE, scaleDecimal } from "@fitbud/contracts";
+import { NUTRIENT_SCALE } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
+import { Button } from "../../components/Button";
+import { OverflowMenu } from "../../components/OverflowMenu";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+} from "../../components/StatePanels";
+import { useOnline } from "../../hooks/useOnline";
 import { apiClient } from "../../lib/api";
+import { LibraryThumb } from "./LibraryThumb";
 import { errorText } from "./shared";
 import { useCursorPage, useDebounced } from "./useCursorPage";
+
+const PAGE_SIZE = 25;
+
+const MUSCLE_OPTIONS = [
+  "chest",
+  "upper_back",
+  "lower_back",
+  "lats",
+  "shoulders",
+  "biceps",
+  "triceps",
+  "core",
+  "glutes",
+  "quads",
+  "hamstrings",
+  "calves",
+  "full_body",
+  "legs",
+  "back",
+] as const;
+
+const EQUIPMENT_OPTIONS = [
+  "barbell",
+  "dumbbell",
+  "kettlebell",
+  "machine",
+  "cable",
+  "bodyweight",
+  "band",
+  "smith_machine",
+  "medicine_ball",
+  "other",
+  "none",
+] as const;
 
 const DIFFICULTIES: ExerciseDifficulty[] = [
   "beginner",
   "intermediate",
   "advanced",
 ];
-
-function difficultyLabel(value: ExerciseDifficulty): string {
-  switch (value) {
-    case "beginner":
-      return "Beginner";
-    case "intermediate":
-      return "Intermediate";
-    case "advanced":
-      return "Advanced";
-    default: {
-      const _exhaustive: never = value;
-      return _exhaustive;
-    }
-  }
-}
-
-function ownershipLabel(ownership: "global" | "trainer"): string {
-  return ownership === "global" ? "Global" : "Yours";
-}
-
-function LabelEntry({
-  label,
-  values,
-  onChange,
-}: {
-  label: string;
-  values: string[];
-  onChange: (values: string[]) => void;
-}) {
-  const [draft, setDraft] = useState("");
-
-  function add() {
-    const next = draft.trim();
-    if (!next || next.length > 80 || values.length >= 12) return;
-    if (values.some((value) => value.toLowerCase() === next.toLowerCase())) {
-      setDraft("");
-      return;
-    }
-    onChange([...values, next]);
-    setDraft("");
-  }
-
-  return (
-    <fieldset className="templates-options">
-      <legend>{label}</legend>
-      {values.length === 0 ? <p className="muted">None yet.</p> : null}
-      <ul className="templates-label-list">
-        {values.map((value) => (
-          <li key={value}>
-            <span>{value}</span>
-            <button
-              type="button"
-              className="button-ghost"
-              onClick={() => onChange(values.filter((item) => item !== value))}
-            >
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="templates-option-row">
-        <label className="field">
-          <span className="sr-only">Add {label.toLowerCase()}</span>
-          <input
-            value={draft}
-            maxLength={80}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                add();
-              }
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          className="button-secondary"
-          disabled={values.length >= 12 || draft.trim() === ""}
-          onClick={add}
-        >
-          Add
-        </button>
-      </div>
-    </fieldset>
-  );
-}
-
-type ExerciseForm = {
-  id: string | null;
-  name: string;
-  instructions: string;
-  primaryMuscles: string[];
-  secondaryMuscles: string[];
-  equipment: string[];
-  difficulty: ExerciseDifficulty | "";
-};
-
-function emptyExerciseForm(): ExerciseForm {
-  return {
-    id: null,
-    name: "",
-    instructions: "",
-    primaryMuscles: [],
-    secondaryMuscles: [],
-    equipment: [],
-    difficulty: "",
-  };
-}
-
-function exerciseFormFrom(item: ExerciseLibraryItem): ExerciseForm {
-  return {
-    id: item.id,
-    name: item.name,
-    instructions: item.instructions ?? "",
-    primaryMuscles: [...item.primaryMuscles],
-    secondaryMuscles: [...item.secondaryMuscles],
-    equipment: [...item.equipment],
-    difficulty: item.difficulty ?? "",
-  };
-}
 
 const FOOD_CLASSIFICATIONS: FoodClassification[] = [
   "raw_ingredient",
@@ -148,13 +72,13 @@ const FOOD_CLASSIFICATIONS: FoodClassification[] = [
 function classificationLabel(value: FoodClassification): string {
   switch (value) {
     case "raw_ingredient":
-      return "Raw ingredient";
+      return "Raw";
     case "generic_food":
-      return "Generic food";
+      return "Generic";
     case "prepared_food":
-      return "Prepared food";
+      return "Prepared";
     case "branded_product":
-      return "Branded product";
+      return "Branded";
     default: {
       const _exhaustive: never = value;
       return _exhaustive;
@@ -162,393 +86,466 @@ function classificationLabel(value: FoodClassification): string {
   }
 }
 
-type ServingForm = {
-  label: string;
-  unit: string;
-  conversion: string;
-};
-
-type FoodForm = {
-  id: string | null;
-  name: string;
-  classification: FoodClassification | "";
-  basis: NutritionBasis | "";
-  energyKcal: string;
-  proteinGrams: string;
-  carbsGrams: string;
-  fatGrams: string;
-  servings: ServingForm[];
-  description: string;
-  notes: string;
-};
-
-function emptyServing(): ServingForm {
-  return { label: "", unit: "", conversion: "" };
+function basisLabel(value: NutritionBasis): string {
+  return value === "per_100g" ? "per 100 g" : "per 100 ml";
 }
 
-function scaledField(value: number | null): string {
-  if (value == null) return "";
-  const whole = Math.trunc(value / NUTRIENT_SCALE);
-  const fraction = value % NUTRIENT_SCALE;
-  if (fraction === 0) return String(whole);
-  return `${whole}.${String(fraction).padStart(6, "0").replace(/0+$/, "")}`;
+function scaledDisplay(value: number | null): string {
+  if (value == null) return "—";
+  const whole = value / NUTRIENT_SCALE;
+  return Number.isInteger(whole) ? String(whole) : whole.toFixed(1);
 }
 
-function emptyFoodForm(): FoodForm {
-  return {
-    id: null,
-    name: "",
-    classification: "",
-    basis: "",
-    energyKcal: "",
-    proteinGrams: "",
-    carbsGrams: "",
-    fatGrams: "",
-    servings: [emptyServing()],
-    description: "",
-    notes: "",
-  };
-}
-
-function foodFormFrom(item: FoodLibraryItem): FoodForm {
-  return {
-    id: item.id,
-    name: item.name,
-    classification: item.classification ?? "",
-    basis: item.basis ?? "",
-    energyKcal: scaledField(item.energyKcalScaled),
-    proteinGrams: scaledField(item.proteinScaled),
-    carbsGrams: scaledField(item.carbsScaled),
-    fatGrams: scaledField(item.fatScaled),
-    servings:
-      item.servings.length > 0
-        ? item.servings.map((serving) => ({
-            label: serving.label,
-            unit: serving.unit,
-            conversion: scaledField(serving.conversionScaled),
-          }))
-        : [emptyServing()],
-    description: item.description ?? "",
-    notes: item.notes ?? "",
-  };
-}
-
-function optionalDecimal(
-  value: string,
-  label: string,
-  max: number,
-): number | null | string {
-  if (value.trim() === "") return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
-    return `${label} must be from 0 to ${max}. Leave it blank when it is unknown.`;
-  }
-  try {
-    scaleDecimal(parsed);
-  } catch (error) {
-    return error instanceof Error ? error.message : `${label} is not a valid number.`;
-  }
-  return parsed;
-}
-
-function nullableText(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
+function joinLabels(values: string[], namespace: "body_part" | "equipment"): string {
+  if (values.length === 0) return "—";
+  return values.map((value) => labelFor(namespace, value)).join(", ");
 }
 
 export function LibrariesPanel() {
+  const { segment } = useParams();
+  const initial =
+    segment === "foods" ? "foods" : ("exercises" as "exercises" | "foods");
+  const [tab, setTab] = useState<"exercises" | "foods">(initial);
+
   return (
-    <div className="templates-library-grid" data-testid="screen-TW-26">
-      <ExerciseLibrary />
-      <FoodLibrary />
+    <div className="templates-tab-panel" data-testid="screen-TW-26">
+      <header className="templates-tab-header">
+        <h2 className="templates-tab-title">Libraries</h2>
+        <p className="lede">
+          Exercises and foods used in plan builders. Global items are read-only.
+        </p>
+      </header>
+      <div className="segment" role="group" aria-label="Library type">
+        <Link
+          to="/templates/libraries/exercises"
+          className={tab === "exercises" ? "segment-btn is-on" : "segment-btn"}
+          onClick={() => setTab("exercises")}
+        >
+          Exercises
+        </Link>
+        <Link
+          to="/templates/libraries/foods"
+          className={tab === "foods" ? "segment-btn is-on" : "segment-btn"}
+          onClick={() => setTab("foods")}
+        >
+          Foods
+        </Link>
+      </div>
+      {tab === "exercises" ? <ExerciseLibrary /> : <FoodLibrary />}
     </div>
   );
 }
 
 function ExerciseLibrary() {
+  const online = useOnline();
   const [q, setQ] = useState("");
   const [muscleGroup, setMuscleGroup] = useState("");
   const [equipment, setEquipment] = useState("");
   const [difficulty, setDifficulty] = useState<ExerciseDifficulty | "">("");
   const nameQuery = useDebounced(q);
-  const muscleQuery = useDebounced(muscleGroup);
-  const equipmentQuery = useDebounced(equipment);
-  const queryKey = JSON.stringify({
-    q: nameQuery.trim(),
-    muscleGroup: muscleQuery.trim(),
-    equipment: equipmentQuery.trim(),
-    difficulty,
-  });
-  const page = useCursorPage(queryKey, (cursor) =>
-    apiClient.listExerciseLibrary({
-      cursor,
-      limit: 50,
-      q: nameQuery.trim() || undefined,
-      muscleGroup: muscleQuery.trim() || undefined,
-      equipment: equipmentQuery.trim() || undefined,
-      difficulty: difficulty || undefined,
+  const page = useCursorPage(
+    JSON.stringify({
+      q: nameQuery.trim(),
+      muscleGroup,
+      equipment,
+      difficulty,
     }),
+    (cursor) =>
+      apiClient.listExerciseLibrary({
+        cursor,
+        limit: PAGE_SIZE,
+        q: nameQuery.trim() || undefined,
+        muscleGroup: muscleGroup || undefined,
+        equipment: equipment || undefined,
+        difficulty: difficulty || undefined,
+      }),
   );
-  const [form, setForm] = useState<ExerciseForm | null>(null);
-  const [readOnly, setReadOnly] = useState<ExerciseLibraryItem | null>(null);
-  const [pendingDelete, setPendingDelete] = useState(false);
+  const [form, setForm] = useState<{
+    id: string | null;
+    name: string;
+    instructions: string;
+    primaryMuscles: string[];
+    secondaryMuscles: string[];
+    equipment: string[];
+    difficulty: ExerciseDifficulty | "";
+  } | null>(null);
+  const [archiveTarget, setArchiveTarget] =
+    useState<ExerciseLibraryItem | null>(null);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  function select(item: ExerciseLibraryItem) {
-    setError(null);
-    setMessage(null);
-    setPendingDelete(false);
-    if (item.ownership === "global") {
-      setReadOnly(item);
-      setForm(null);
-      return;
-    }
-    setReadOnly(null);
-    setForm(exerciseFormFrom(item));
-  }
+  const emptySearch = Boolean(nameQuery.trim()) && page.items.length === 0;
 
-  async function onSubmit(event: FormEvent) {
+  async function save(event: FormEvent) {
     event.preventDefault();
     if (!form) return;
     setActing(true);
     setError(null);
-    setMessage(null);
-    const body = {
-      name: form.name.trim(),
-      instructions: nullableText(form.instructions),
-      primaryMuscles: form.primaryMuscles,
-      secondaryMuscles: form.secondaryMuscles,
-      equipment: form.equipment,
-      difficulty: form.difficulty === "" ? null : form.difficulty,
-    };
     try {
+      const body = {
+        name: form.name.trim(),
+        instructions: form.instructions.trim() || null,
+        primaryMuscles: form.primaryMuscles,
+        secondaryMuscles: form.secondaryMuscles,
+        equipment: form.equipment,
+        difficulty: form.difficulty || null,
+      };
       if (form.id) {
         await apiClient.updateExerciseLibraryItem(form.id, body);
-        setMessage("Exercise updated. Templates that already copied it stay unchanged.");
+        setMessage("Exercise updated.");
       } else {
         await apiClient.createExerciseLibraryItem(body);
-        setMessage("Exercise added to your library.");
-        setForm(emptyExerciseForm());
+        setMessage("Exercise created.");
       }
+      setForm(null);
       page.reload();
     } catch (err) {
-      setError(errorText(err, "Could not save this exercise."));
+      setError(errorText(err, "Could not save exercise."));
     } finally {
       setActing(false);
     }
   }
 
-  async function onDelete() {
-    if (!form?.id) return;
+  async function duplicate(item: ExerciseLibraryItem) {
     setActing(true);
     setError(null);
-    setMessage(null);
     try {
-      await apiClient.deleteExerciseLibraryItem(form.id);
-      setForm(null);
-      setPendingDelete(false);
-      setMessage("Exercise archived. Plans that already copied it stay unchanged.");
+      await apiClient.createExerciseLibraryItem({
+        name: `${item.name} (mine)`,
+        instructions: item.instructions,
+        primaryMuscles: item.primaryMuscles,
+        secondaryMuscles: item.secondaryMuscles,
+        equipment: item.equipment,
+        difficulty: item.difficulty,
+      });
+      setMessage("Duplicated to mine.");
       page.reload();
     } catch (err) {
-      setError(errorText(err, "Could not delete this exercise."));
+      setError(errorText(err, "Could not duplicate."));
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function confirmArchive() {
+    if (!archiveTarget) return;
+    setActing(true);
+    setError(null);
+    try {
+      await apiClient.deleteExerciseLibraryItem(archiveTarget.id);
+      setArchiveTarget(null);
+      setMessage("Archived.");
+      page.reload();
+    } catch (err) {
+      setError(errorText(err, "Could not archive. It may be referenced."));
     } finally {
       setActing(false);
     }
   }
 
   return (
-    <section className="templates-card" aria-labelledby="exercise-lib-heading">
-      <header className="templates-card-header">
-        <div>
-          <h2 id="exercise-lib-heading">Exercise library</h2>
-          <p className="muted">
-            Global rows are read-only. Create, update, and archive apply to
-            exercises you own. Reps and load belong on the plan, not here.
-          </p>
-        </div>
-      </header>
-      <div className="templates-library-filters">
+    <div className="library-panel">
+      {!online ? (
+        <ErrorState
+          kind="network"
+          screenId="TW-26"
+          title="You're offline"
+          message="Reconnect to browse the library."
+        />
+      ) : null}
+      <div className="library-toolbar">
         <label className="field">
-          <span>Name</span>
+          <span className="sr-only">Search exercises</span>
           <input
             type="search"
+            placeholder="Search exercises"
             value={q}
             onChange={(event) => setQ(event.target.value)}
-            placeholder="Search by name"
-            autoComplete="off"
           />
         </label>
         <label className="field">
-          <span>Muscle group</span>
-          <input
+          <span className="sr-only">Muscle</span>
+          <select
             value={muscleGroup}
             onChange={(event) => setMuscleGroup(event.target.value)}
-            placeholder="Exact match"
-            autoComplete="off"
-          />
+          >
+            <option value="">All muscles</option>
+            {MUSCLE_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {labelFor("body_part", value)}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="field">
-          <span>Equipment</span>
-          <input
+          <span className="sr-only">Equipment</span>
+          <select
             value={equipment}
             onChange={(event) => setEquipment(event.target.value)}
-            placeholder="Exact match"
-            autoComplete="off"
-          />
+          >
+            <option value="">All equipment</option>
+            {EQUIPMENT_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {labelFor("equipment", value)}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="field">
-          <span>Difficulty</span>
+          <span className="sr-only">Difficulty</span>
           <select
             value={difficulty}
             onChange={(event) =>
               setDifficulty(event.target.value as ExerciseDifficulty | "")
             }
           >
-            <option value="">Any difficulty</option>
+            <option value="">All levels</option>
             {DIFFICULTIES.map((value) => (
               <option key={value} value={value}>
-                {difficultyLabel(value)}
+                {labelFor("exercise_difficulty", value)}
               </option>
             ))}
           </select>
         </label>
+        <Button
+          variant="primary"
+          onClick={() =>
+            setForm({
+              id: null,
+              name: "",
+              instructions: "",
+              primaryMuscles: [],
+              secondaryMuscles: [],
+              equipment: [],
+              difficulty: "",
+            })
+          }
+        >
+          New exercise
+        </Button>
       </div>
-      {page.error ? (
-        <p className="form-error" role="alert">
-          {page.error}{" "}
-          <button type="button" className="button-link" onClick={page.reload}>
-            Retry
-          </button>
+
+      {error || page.error ? (
+        <ErrorState
+          message={error ?? page.error ?? "Could not load exercises."}
+          onRetry={page.reload}
+          screenId="TW-26"
+        />
+      ) : null}
+      {message ? (
+        <p className="form-success" role="status">
+          {message}
         </p>
       ) : null}
-      <div className="templates-table-scroll">
-        <table className="templates-table" aria-label="Exercise library">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Ownership</th>
-              <th scope="col">Difficulty</th>
-              <th scope="col">Primary muscles</th>
-              <th scope="col">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {page.loading ? (
+
+      {page.loading && page.items.length === 0 ? (
+        <LoadingBlock label="Loading exercises…" />
+      ) : null}
+
+      {!page.loading && emptySearch ? (
+        <EmptyState
+          title={`No exercises match '${nameQuery.trim()}'. Create it?`}
+          action={
+            <Button
+              variant="primary"
+              onClick={() =>
+                setForm({
+                  id: null,
+                  name: nameQuery.trim(),
+                  instructions: "",
+                  primaryMuscles: [],
+                  secondaryMuscles: [],
+                  equipment: [],
+                  difficulty: "",
+                })
+              }
+            >
+              Create exercise
+            </Button>
+          }
+        />
+      ) : null}
+
+      {page.items.length > 0 ? (
+        <div className="library-table-wrap" tabIndex={0}>
+          <table className="library-table">
+            <thead>
               <tr>
-                <td colSpan={5} className="templates-empty">
-                  Loading exercises…
-                </td>
+                <th scope="col">Name</th>
+                <th scope="col">Primary muscles</th>
+                <th scope="col">Secondary</th>
+                <th scope="col">Equipment</th>
+                <th scope="col">Difficulty</th>
+                <th scope="col">Media</th>
+                <th scope="col">Owner</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
-            ) : page.items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="templates-empty" role="status">
-                  No exercises match these filters.
-                </td>
-              </tr>
-            ) : (
-              page.items.map((item) => (
+            </thead>
+            <tbody>
+              {page.items.map((item) => (
                 <tr key={item.id}>
                   <td>
-                    <span className="templates-name">{item.name}</span>
-                    <span className="muted templates-sub">
-                      {item.secondaryMuscles.length > 0
-                        ? `Secondary: ${item.secondaryMuscles.join(", ")}`
-                        : "No secondary muscles"}
-                      {item.equipment.length > 0
-                        ? ` · ${item.equipment.join(", ")}`
-                        : ""}
-                    </span>
+                    <div className="library-name-cell">
+                      <LibraryThumb name={item.name} kind="exercise" />
+                      <span>{item.name}</span>
+                    </div>
                   </td>
-                  <td>{ownershipLabel(item.ownership)}</td>
-                  <td>{item.difficulty ? difficultyLabel(item.difficulty) : "—"}</td>
+                  <td>{joinLabels(item.primaryMuscles, "body_part")}</td>
+                  <td>{joinLabels(item.secondaryMuscles, "body_part")}</td>
+                  <td>{joinLabels(item.equipment, "equipment")}</td>
                   <td>
-                    {item.primaryMuscles.length > 0
-                      ? item.primaryMuscles.join(", ")
+                    {item.difficulty
+                      ? labelFor("exercise_difficulty", item.difficulty)
                       : "—"}
                   </td>
+                  <td>—</td>
                   <td>
-                    <button
-                      type="button"
-                      className="button-ghost"
-                      onClick={() => select(item)}
-                    >
-                      {item.ownership === "global" ? "View" : "Edit"}
-                    </button>
+                    {item.ownership === "global" ? "FitBud" : "Mine"}
+                  </td>
+                  <td>
+                    <OverflowMenu
+                      label={`Actions for ${item.name}`}
+                      items={
+                        item.ownership === "global"
+                          ? [
+                              {
+                                id: "dup",
+                                label: "Duplicate to mine",
+                                onSelect: () => void duplicate(item),
+                              },
+                            ]
+                          : [
+                              {
+                                id: "edit",
+                                label: "Edit",
+                                onSelect: () =>
+                                  setForm({
+                                    id: item.id,
+                                    name: item.name,
+                                    instructions: item.instructions ?? "",
+                                    primaryMuscles: [...item.primaryMuscles],
+                                    secondaryMuscles: [
+                                      ...item.secondaryMuscles,
+                                    ],
+                                    equipment: [...item.equipment],
+                                    difficulty: item.difficulty ?? "",
+                                  }),
+                              },
+                              {
+                                id: "archive",
+                                label: "Archive",
+                                destructive: true,
+                                onSelect: () => setArchiveTarget(item),
+                              },
+                            ]
+                      }
+                    />
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
       {page.nextCursor ? (
-        <button
-          type="button"
-          className="button-ghost templates-more"
+        <Button
+          variant="secondary"
           disabled={page.loadingMore}
           onClick={page.loadMore}
         >
-          {page.loadingMore ? "Loading…" : "Load more exercises"}
-        </button>
+          {page.loadingMore ? "Loading…" : "Load more"}
+        </Button>
       ) : null}
-      <div className="templates-library-editor">
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {message ? <p className="form-success">{message}</p> : null}
-        <button
-          type="button"
-          className="button-secondary"
-          onClick={() => {
-            setReadOnly(null);
-            setForm(emptyExerciseForm());
-            setPendingDelete(false);
-            setError(null);
-          }}
-        >
-          New exercise
-        </button>
-        {readOnly ? (
-          <ExerciseReadOnly item={readOnly} />
-        ) : form ? (
-          <form className="templates-form" onSubmit={(event) => void onSubmit(event)}>
-            <h3>{form.id ? "Edit exercise" : "New exercise"}</h3>
+
+      {form ? (
+        <div className="modal-scrim" role="presentation" onClick={() => setForm(null)}>
+          <form
+            className="modal-card library-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={form.id ? "Edit exercise" : "Create exercise"}
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => void save(event)}
+          >
+            <h2>{form.id ? "Edit exercise" : "New exercise"}</h2>
             <label className="field">
               <span>Name</span>
               <input
                 value={form.name}
+                required
                 maxLength={120}
                 onChange={(event) =>
                   setForm({ ...form, name: event.target.value })
                 }
-                required
               />
             </label>
-            <LabelEntry
-              label="Primary muscles"
-              values={form.primaryMuscles}
-              onChange={(primaryMuscles) => setForm({ ...form, primaryMuscles })}
-            />
-            <LabelEntry
-              label="Secondary muscles"
-              values={form.secondaryMuscles}
-              onChange={(secondaryMuscles) =>
-                setForm({ ...form, secondaryMuscles })
-              }
-            />
-            <LabelEntry
-              label="Equipment"
-              values={form.equipment}
-              onChange={(equipmentLabels) =>
-                setForm({ ...form, equipment: equipmentLabels })
-              }
-            />
+            <label className="field">
+              <span>Primary muscles</span>
+              <select
+                multiple
+                value={form.primaryMuscles}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    primaryMuscles: [...event.target.selectedOptions].map(
+                      (option) => option.value,
+                    ),
+                  })
+                }
+              >
+                {MUSCLE_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {labelFor("body_part", value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Secondary muscles</span>
+              <select
+                multiple
+                value={form.secondaryMuscles}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    secondaryMuscles: [...event.target.selectedOptions].map(
+                      (option) => option.value,
+                    ),
+                  })
+                }
+              >
+                {MUSCLE_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {labelFor("body_part", value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Equipment</span>
+              <select
+                multiple
+                value={form.equipment}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    equipment: [...event.target.selectedOptions].map(
+                      (option) => option.value,
+                    ),
+                  })
+                }
+              >
+                {EQUIPMENT_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {labelFor("equipment", value)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="field">
               <span>Difficulty</span>
               <select
@@ -560,10 +557,10 @@ function ExerciseLibrary() {
                   })
                 }
               >
-                <option value="">Not set</option>
+                <option value="">None</option>
                 {DIFFICULTIES.map((value) => (
                   <option key={value} value={value}>
-                    {difficultyLabel(value)}
+                    {labelFor("exercise_difficulty", value)}
                   </option>
                 ))}
               </select>
@@ -571,335 +568,427 @@ function ExerciseLibrary() {
             <label className="field">
               <span>Instructions</span>
               <textarea
+                rows={4}
                 value={form.instructions}
-                maxLength={2000}
-                rows={3}
                 onChange={(event) =>
                   setForm({ ...form, instructions: event.target.value })
                 }
               />
             </label>
-            <div className="field-row">
-              <button type="submit" className="button-primary" disabled={acting}>
-                {acting ? "Saving…" : form.id ? "Update exercise" : "Create exercise"}
-              </button>
-              {form.id ? (
-                pendingDelete ? (
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    disabled={acting}
-                    onClick={() => {
-                      void onDelete();
-                    }}
-                  >
-                    Confirm archive
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    onClick={() => setPendingDelete(true)}
-                  >
-                    Archive
-                  </button>
-                )
-              ) : null}
+            <label className="field">
+              <span>Media link</span>
+              <input type="url" placeholder="https://" />
+            </label>
+            <div className="button-row">
+              <Button variant="primary" disabled={acting} type="submit">
+                {acting ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                variant="tertiary"
+                type="button"
+                onClick={() => setForm(null)}
+              >
+                Cancel
+              </Button>
             </div>
           </form>
-        ) : (
-          <p className="muted">Select an exercise, or create one you own.</p>
-        )}
-      </div>
-    </section>
-  );
-}
+        </div>
+      ) : null}
 
-function ExerciseReadOnly({ item }: { item: ExerciseLibraryItem }) {
-  return (
-    <div className="templates-readonly">
-      <h3>{item.name}</h3>
-      <p className="muted">Global exercise. Read-only.</p>
-      <dl className="templates-facts">
-        <div>
-          <dt>Primary muscles</dt>
-          <dd>{item.primaryMuscles.join(", ") || "—"}</dd>
+      {archiveTarget ? (
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onClick={() => setArchiveTarget(null)}
+        >
+          <dialog
+            open
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Archive exercise?</h2>
+            <p>
+              Archive <em>{archiveTarget.name}</em>? Referenced items are
+              archived, not deleted.
+            </p>
+            <div className="button-row">
+              <Button
+                variant="destructive"
+                disabled={acting}
+                onClick={() => void confirmArchive()}
+              >
+                Archive
+              </Button>
+              <Button
+                variant="tertiary"
+                onClick={() => setArchiveTarget(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </dialog>
         </div>
-        <div>
-          <dt>Secondary muscles</dt>
-          <dd>{item.secondaryMuscles.join(", ") || "—"}</dd>
-        </div>
-        <div>
-          <dt>Equipment</dt>
-          <dd>{item.equipment.join(", ") || "—"}</dd>
-        </div>
-        <div>
-          <dt>Difficulty</dt>
-          <dd>{item.difficulty ? difficultyLabel(item.difficulty) : "—"}</dd>
-        </div>
-        <div>
-          <dt>Instructions</dt>
-          <dd>{item.instructions ?? "—"}</dd>
-        </div>
-      </dl>
+      ) : null}
     </div>
   );
 }
 
 function FoodLibrary() {
+  const online = useOnline();
   const [q, setQ] = useState("");
   const nameQuery = useDebounced(q);
-  const page = useCursorPage(nameQuery.trim(), (cursor) =>
+  const page = useCursorPage(`foods-${nameQuery}`, (cursor) =>
     apiClient.listFoodLibrary({
       cursor,
-      limit: 50,
+      limit: PAGE_SIZE,
       q: nameQuery.trim() || undefined,
     }),
   );
-  const [form, setForm] = useState<FoodForm | null>(null);
-  const [readOnly, setReadOnly] = useState<FoodLibraryItem | null>(null);
-  const [pendingDelete, setPendingDelete] = useState(false);
+  const [form, setForm] = useState<{
+    id: string | null;
+    name: string;
+    classification: FoodClassification | "";
+    basis: NutritionBasis | "";
+    energyKcal: string;
+    proteinGrams: string;
+    carbsGrams: string;
+    fatGrams: string;
+    servings: Array<{ label: string; unit: string; conversion: string }>;
+    aliases: string;
+    description: string;
+  } | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<FoodLibraryItem | null>(
+    null,
+  );
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  function select(item: FoodLibraryItem) {
-    setError(null);
-    setMessage(null);
-    setPendingDelete(false);
-    if (item.ownership === "global") {
-      setReadOnly(item);
-      setForm(null);
-      return;
-    }
-    setReadOnly(null);
-    setForm(foodFormFrom(item));
-  }
+  const emptySearch = Boolean(nameQuery.trim()) && page.items.length === 0;
 
-  async function onSubmit(event: FormEvent) {
+  async function save(event: FormEvent) {
     event.preventDefault();
-    if (!form) return;
-    if (form.classification === "" || form.basis === "") {
-      setError("Choose a classification and a nutrition basis.");
-      return;
-    }
-    const energyKcal = optionalDecimal(form.energyKcal, "Energy", 2000);
-    const proteinGrams = optionalDecimal(form.proteinGrams, "Protein", 100);
-    const carbsGrams = optionalDecimal(form.carbsGrams, "Carbs", 100);
-    const fatGrams = optionalDecimal(form.fatGrams, "Fat", 100);
-    if (
-      typeof energyKcal === "string" ||
-      typeof proteinGrams === "string" ||
-      typeof carbsGrams === "string" ||
-      typeof fatGrams === "string"
-    ) {
-      const problem = [energyKcal, proteinGrams, carbsGrams, fatGrams].find(
-        (value): value is string => typeof value === "string",
-      );
-      setError(problem ?? "Check the nutrition numbers.");
-      return;
-    }
-    const servings: { label: string; unit: string; conversion: number }[] = [];
-    for (const serving of form.servings) {
-      const conversion = optionalDecimal(serving.conversion, "Serving amount", 5000);
-      if (typeof conversion === "string") {
-        setError(conversion);
-        return;
-      }
-      if (
-        serving.label.trim() === "" ||
-        serving.unit.trim() === "" ||
-        conversion == null ||
-        conversion <= 0
-      ) {
-        setError("Each serving needs a label, a unit, and a positive conversion.");
-        return;
-      }
-      servings.push({
-        label: serving.label.trim(),
-        unit: serving.unit.trim(),
-        conversion,
-      });
-    }
+    if (!form || !form.classification || !form.basis) return;
     setActing(true);
     setError(null);
-    setMessage(null);
-    const body = {
-      name: form.name.trim(),
-      classification: form.classification,
-      basis: form.basis,
-      energyKcal,
-      proteinGrams,
-      carbsGrams,
-      fatGrams,
-      servings,
-      description: nullableText(form.description),
-      notes: nullableText(form.notes),
-    };
     try {
+      const servings = form.servings
+        .filter((s) => s.label.trim() && s.unit.trim() && s.conversion.trim())
+        .map((s) => ({
+          label: s.label.trim(),
+          unit: s.unit.trim(),
+          conversion: Number(s.conversion),
+        }));
+      if (servings.length === 0) {
+        setError("Add at least one serving.");
+        setActing(false);
+        return;
+      }
+      const aliasNote = form.aliases.trim()
+        ? `Aliases: ${form.aliases.trim()}`
+        : null;
+      const body = {
+        name: form.name.trim(),
+        classification: form.classification,
+        basis: form.basis,
+        energyKcal:
+          form.energyKcal.trim() === "" ? null : Number(form.energyKcal),
+        proteinGrams:
+          form.proteinGrams.trim() === "" ? null : Number(form.proteinGrams),
+        carbsGrams:
+          form.carbsGrams.trim() === "" ? null : Number(form.carbsGrams),
+        fatGrams: form.fatGrams.trim() === "" ? null : Number(form.fatGrams),
+        servings,
+        description: form.description.trim() || null,
+        notes: aliasNote,
+      };
       if (form.id) {
         await apiClient.updateFoodLibraryItem(form.id, body);
-        setMessage("Food updated. Meal snapshots that already copied it stay unchanged.");
+        setMessage("Food updated.");
       } else {
         await apiClient.createFoodLibraryItem(body);
-        setMessage("Food added to your library.");
-        setForm(emptyFoodForm());
+        setMessage("Food created.");
       }
+      setForm(null);
       page.reload();
     } catch (err) {
-      setError(errorText(err, "Could not save this food."));
+      setError(errorText(err, "Could not save food."));
     } finally {
       setActing(false);
     }
   }
 
-  async function onDelete() {
-    if (!form?.id) return;
+  async function duplicate(item: FoodLibraryItem) {
+    if (!item.classification || !item.basis || item.servings.length === 0) {
+      setError("This food is missing classification or servings.");
+      return;
+    }
     setActing(true);
-    setError(null);
-    setMessage(null);
     try {
-      await apiClient.deleteFoodLibraryItem(form.id);
-      setForm(null);
-      setPendingDelete(false);
-      setMessage("Food archived. Meal snapshots that already copied it stay unchanged.");
+      await apiClient.createFoodLibraryItem({
+        name: `${item.name} (mine)`,
+        classification: item.classification,
+        basis: item.basis,
+        energyKcal:
+          item.energyKcalScaled == null
+            ? null
+            : item.energyKcalScaled / NUTRIENT_SCALE,
+        proteinGrams:
+          item.proteinScaled == null
+            ? null
+            : item.proteinScaled / NUTRIENT_SCALE,
+        carbsGrams:
+          item.carbsScaled == null ? null : item.carbsScaled / NUTRIENT_SCALE,
+        fatGrams:
+          item.fatScaled == null ? null : item.fatScaled / NUTRIENT_SCALE,
+        servings: item.servings.map((serving) => ({
+          label: serving.label,
+          unit: serving.unit,
+          conversion:
+            (serving.conversionScaled ?? NUTRIENT_SCALE) / NUTRIENT_SCALE,
+        })),
+        description: item.description,
+        notes: item.notes,
+      });
+      setMessage("Duplicated to mine.");
       page.reload();
     } catch (err) {
-      setError(errorText(err, "Could not delete this food."));
+      setError(errorText(err, "Could not duplicate."));
     } finally {
       setActing(false);
     }
   }
+
+  async function confirmArchive() {
+    if (!archiveTarget) return;
+    setActing(true);
+    try {
+      await apiClient.deleteFoodLibraryItem(archiveTarget.id);
+      setArchiveTarget(null);
+      setMessage("Archived.");
+      page.reload();
+    } catch (err) {
+      setError(errorText(err, "Could not archive. It may be referenced."));
+    } finally {
+      setActing(false);
+    }
+  }
+
+  const customLoggedHint = useMemo(
+    () =>
+      "Logged by clients, not in library — open a client workspace to review custom foods.",
+    [],
+  );
 
   return (
-    <section className="templates-card" aria-labelledby="food-lib-heading">
-      <header className="templates-card-header">
-        <div>
-          <h2 id="food-lib-heading">Food library</h2>
-          <p className="muted">
-            Global rows are read-only. Nutrition is stored per 100 g or per 100 ml.
-            Servings convert to that basis. Blank nutrients stay unknown.
-          </p>
-        </div>
-      </header>
-      <div className="templates-library-filters">
+    <div className="library-panel">
+      {!online ? (
+        <ErrorState
+          kind="network"
+          screenId="TW-26"
+          title="You're offline"
+          message="Reconnect to browse the library."
+        />
+      ) : null}
+      <div className="library-toolbar">
         <label className="field">
-          <span>Name</span>
+          <span className="sr-only">Search foods</span>
           <input
             type="search"
+            placeholder="Search foods"
             value={q}
             onChange={(event) => setQ(event.target.value)}
-            placeholder="Search foods"
-            autoComplete="off"
           />
         </label>
+        <Button
+          variant="primary"
+          onClick={() =>
+            setForm({
+              id: null,
+              name: "",
+              classification: "generic_food",
+              basis: "per_100g",
+              energyKcal: "",
+              proteinGrams: "",
+              carbsGrams: "",
+              fatGrams: "",
+              servings: [{ label: "1 katori", unit: "g", conversion: "150" }],
+              aliases: "",
+              description: "",
+            })
+          }
+        >
+          New food
+        </Button>
       </div>
-      {page.error ? (
-        <p className="form-error" role="alert">
-          {page.error}{" "}
-          <button type="button" className="button-link" onClick={page.reload}>
-            Retry
-          </button>
+      <p className="muted">{customLoggedHint}</p>
+
+      {error || page.error ? (
+        <ErrorState
+          message={error ?? page.error ?? "Could not load foods."}
+          onRetry={page.reload}
+          screenId="TW-26"
+        />
+      ) : null}
+      {message ? (
+        <p className="form-success" role="status">
+          {message}
         </p>
       ) : null}
-      <div className="templates-table-scroll">
-        <table className="templates-table" aria-label="Food library">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Basis</th>
-              <th scope="col">Servings</th>
-              <th scope="col">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {page.loading ? (
+
+      {page.loading && page.items.length === 0 ? (
+        <LoadingBlock label="Loading foods…" />
+      ) : null}
+
+      {!page.loading && emptySearch ? (
+        <EmptyState title={`No foods match '${nameQuery.trim()}'.`} />
+      ) : null}
+
+      {page.items.length > 0 ? (
+        <div className="library-table-wrap" tabIndex={0}>
+          <table className="library-table">
+            <thead>
               <tr>
-                <td colSpan={4} className="templates-empty">
-                  Loading foods…
-                </td>
+                <th scope="col">Name</th>
+                <th scope="col">Classification</th>
+                <th scope="col">Basis</th>
+                <th scope="col">kcal</th>
+                <th scope="col">P</th>
+                <th scope="col">C</th>
+                <th scope="col">F</th>
+                <th scope="col">Servings</th>
+                <th scope="col">Owner</th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
-            ) : page.items.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="templates-empty" role="status">
-                  No foods match that search.
-                </td>
-              </tr>
-            ) : (
-              page.items.map((item) => (
+            </thead>
+            <tbody>
+              {page.items.map((item) => (
                 <tr key={item.id}>
                   <td>
-                    <span className="templates-name">{item.name}</span>
-                    <span className="muted templates-sub">
-                      {ownershipLabel(item.ownership)}
-                    </span>
+                    <div className="library-name-cell">
+                      <LibraryThumb name={item.name} kind="food" />
+                      <span>{item.name}</span>
+                    </div>
                   </td>
                   <td>
-                    {item.basis === "per_100_g"
-                      ? "per 100 g"
-                      : item.basis === "per_100_ml"
-                        ? "per 100 ml"
-                        : "—"}
+                    {item.classification
+                      ? classificationLabel(item.classification)
+                      : "—"}
                   </td>
-                  <td>{item.servings.map((serving) => serving.label).join(", ") || "—"}</td>
+                  <td>{item.basis ? basisLabel(item.basis) : "—"}</td>
+                  <td>{scaledDisplay(item.energyKcalScaled)}</td>
+                  <td>{scaledDisplay(item.proteinScaled)}</td>
+                  <td>{scaledDisplay(item.carbsScaled)}</td>
+                  <td>{scaledDisplay(item.fatScaled)}</td>
+                  <td>{item.servings.length}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="button-ghost"
-                      onClick={() => select(item)}
-                    >
-                      {item.ownership === "global" ? "View" : "Edit"}
-                    </button>
+                    {item.ownership === "global" ? "FitBud" : "Mine"}
+                  </td>
+                  <td>
+                    <OverflowMenu
+                      label={`Actions for ${item.name}`}
+                      items={
+                        item.ownership === "global"
+                          ? [
+                              {
+                                id: "dup",
+                                label: "Duplicate to mine",
+                                onSelect: () => void duplicate(item),
+                              },
+                            ]
+                          : [
+                              {
+                                id: "edit",
+                                label: "Edit",
+                                onSelect: () =>
+                                  setForm({
+                                    id: item.id,
+                                    name: item.name,
+                                    classification: item.classification ?? "",
+                                    basis: item.basis ?? "",
+                                    energyKcal: scaledDisplay(
+                                      item.energyKcalScaled,
+                                    ).replace("—", ""),
+                                    proteinGrams: scaledDisplay(
+                                      item.proteinScaled,
+                                    ).replace("—", ""),
+                                    carbsGrams: scaledDisplay(
+                                      item.carbsScaled,
+                                    ).replace("—", ""),
+                                    fatGrams: scaledDisplay(
+                                      item.fatScaled,
+                                    ).replace("—", ""),
+                                    servings:
+                                      item.servings.length > 0
+                                        ? item.servings.map((s) => ({
+                                            label: s.label,
+                                            unit: s.unit,
+                                            conversion: String(
+                                              (s.conversionScaled ??
+                                                NUTRIENT_SCALE) /
+                                                NUTRIENT_SCALE,
+                                            ),
+                                          }))
+                                        : [
+                                            {
+                                              label: "1 katori",
+                                              unit: "g",
+                                              conversion: "150",
+                                            },
+                                          ],
+                                    aliases: (item.notes ?? "")
+                                      .replace(/^Aliases:\s*/i, ""),
+                                    description: item.description ?? "",
+                                  }),
+                              },
+                              {
+                                id: "archive",
+                                label: "Archive",
+                                destructive: true,
+                                onSelect: () => setArchiveTarget(item),
+                              },
+                            ]
+                      }
+                    />
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
       {page.nextCursor ? (
-        <button
-          type="button"
-          className="button-ghost templates-more"
+        <Button
+          variant="secondary"
           disabled={page.loadingMore}
           onClick={page.loadMore}
         >
-          {page.loadingMore ? "Loading…" : "Load more foods"}
-        </button>
+          {page.loadingMore ? "Loading…" : "Load more"}
+        </Button>
       ) : null}
-      <div className="templates-library-editor">
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {message ? <p className="form-success">{message}</p> : null}
-        <button
-          type="button"
-          className="button-secondary"
-          onClick={() => {
-            setReadOnly(null);
-            setForm(emptyFoodForm());
-            setPendingDelete(false);
-            setError(null);
-          }}
-        >
-          New food
-        </button>
-        {readOnly ? (
-          <FoodReadOnly item={readOnly} />
-        ) : form ? (
-          <form className="templates-form" onSubmit={(event) => void onSubmit(event)}>
-            <h3>{form.id ? "Edit food" : "New food"}</h3>
+
+      {form ? (
+        <div className="modal-scrim" role="presentation" onClick={() => setForm(null)}>
+          <form
+            className="modal-card library-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={form.id ? "Edit food" : "Create food"}
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => void save(event)}
+          >
+            <h2>{form.id ? "Edit food" : "New food"}</h2>
             <label className="field">
               <span>Name</span>
               <input
                 value={form.name}
-                maxLength={120}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
                 required
+                onChange={(event) =>
+                  setForm({ ...form, name: event.target.value })
+                }
               />
             </label>
             <label className="field">
@@ -910,11 +999,11 @@ function FoodLibrary() {
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    classification: event.target.value as FoodClassification | "",
+                    classification: event.target
+                      .value as FoodClassification,
                   })
                 }
               >
-                <option value="">Choose classification</option>
                 {FOOD_CLASSIFICATIONS.map((value) => (
                   <option key={value} value={value}>
                     {classificationLabel(value)}
@@ -923,275 +1012,161 @@ function FoodLibrary() {
               </select>
             </label>
             <label className="field">
-              <span>Nutrition basis</span>
+              <span>Basis</span>
               <select
                 value={form.basis}
                 required
                 onChange={(event) =>
                   setForm({
                     ...form,
-                    basis: event.target.value as NutritionBasis | "",
+                    basis: event.target.value as NutritionBasis,
                   })
                 }
               >
-                <option value="">Choose basis</option>
-                <option value="per_100_g">Per 100 g</option>
-                <option value="per_100_ml">Per 100 ml</option>
+                <option value="per_100g">per 100 g</option>
+                <option value="per_100ml">per 100 ml</option>
               </select>
             </label>
-            <div className="field-row">
-              <label className="field">
-                <span>Energy (kcal per basis)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={2000}
-                  step="0.1"
-                  value={form.energyKcal}
-                  onChange={(event) =>
-                    setForm({ ...form, energyKcal: event.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Protein (g)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={2000}
-                  step="0.1"
-                  value={form.proteinGrams}
-                  onChange={(event) =>
-                    setForm({ ...form, proteinGrams: event.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Carbs (g)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={2000}
-                  step="0.1"
-                  value={form.carbsGrams}
-                  onChange={(event) =>
-                    setForm({ ...form, carbsGrams: event.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Fat (g)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={2000}
-                  step="0.1"
-                  value={form.fatGrams}
-                  onChange={(event) =>
-                    setForm({ ...form, fatGrams: event.target.value })
-                  }
-                />
-              </label>
+            <div className="library-macro-grid">
+              {(
+                [
+                  ["energyKcal", "kcal"],
+                  ["proteinGrams", "Protein"],
+                  ["carbsGrams", "Carbs"],
+                  ["fatGrams", "Fat"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="field">
+                  <span>{label}</span>
+                  <input
+                    inputMode="decimal"
+                    value={form[key]}
+                    placeholder="—"
+                    onChange={(event) =>
+                      setForm({ ...form, [key]: event.target.value })
+                    }
+                  />
+                </label>
+              ))}
             </div>
             <fieldset className="templates-options">
               <legend>Servings</legend>
               {form.servings.map((serving, index) => (
-                <div className="field-row" key={index}>
-                  <label className="field">
-                    <span>Label</span>
-                    <input
-                      value={serving.label}
-                      maxLength={120}
-                      onChange={(event) => {
-                        const servings = form.servings.slice();
-                        const current = servings[index];
-                        if (!current) return;
-                        servings[index] = { ...current, label: event.target.value };
-                        setForm({ ...form, servings });
-                      }}
-                      required
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Unit</span>
-                    <input
-                      value={serving.unit}
-                      maxLength={40}
-                      onChange={(event) => {
-                        const servings = form.servings.slice();
-                        const current = servings[index];
-                        if (!current) return;
-                        servings[index] = { ...current, unit: event.target.value };
-                        setForm({ ...form, servings });
-                      }}
-                      required
-                    />
-                  </label>
-                  <label className="field">
-                    <span>{form.basis === "per_100_ml" ? "Millilitres" : "Grams"}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.1"
-                      value={serving.conversion}
-                      onChange={(event) => {
-                        const servings = form.servings.slice();
-                        const current = servings[index];
-                        if (!current) return;
-                        servings[index] = {
-                          ...current,
-                          conversion: event.target.value,
-                        };
-                        setForm({ ...form, servings });
-                      }}
-                      required
-                    />
-                  </label>
-                  {form.servings.length > 1 ? (
-                    <button
-                      type="button"
-                      className="button-ghost"
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          servings: form.servings.filter((_, itemIndex) => itemIndex !== index),
-                        })
-                      }
-                    >
-                      Remove serving
-                    </button>
-                  ) : null}
+                <div key={index} className="templates-option-row">
+                  <input
+                    placeholder="1 katori"
+                    value={serving.label}
+                    onChange={(event) => {
+                      const servings = [...form.servings];
+                      servings[index] = {
+                        ...serving,
+                        label: event.target.value,
+                      };
+                      setForm({ ...form, servings });
+                    }}
+                  />
+                  <input
+                    placeholder="g"
+                    value={serving.unit}
+                    onChange={(event) => {
+                      const servings = [...form.servings];
+                      servings[index] = {
+                        ...serving,
+                        unit: event.target.value,
+                      };
+                      setForm({ ...form, servings });
+                    }}
+                  />
+                  <input
+                    placeholder="150"
+                    value={serving.conversion}
+                    onChange={(event) => {
+                      const servings = [...form.servings];
+                      servings[index] = {
+                        ...serving,
+                        conversion: event.target.value,
+                      };
+                      setForm({ ...form, servings });
+                    }}
+                  />
                 </div>
               ))}
-              <button
+              <Button
+                variant="secondary"
                 type="button"
-                className="button-secondary"
-                disabled={form.servings.length >= 12}
                 onClick={() =>
-                  setForm({ ...form, servings: [...form.servings, emptyServing()] })
+                  setForm({
+                    ...form,
+                    servings: [
+                      ...form.servings,
+                      { label: "", unit: "g", conversion: "" },
+                    ],
+                  })
                 }
               >
                 Add serving
-              </button>
+              </Button>
             </fieldset>
             <label className="field">
-              <span>Description</span>
-              <textarea
-                value={form.description}
-                maxLength={2000}
-                rows={2}
+              <span>Aliases</span>
+              <input
+                value={form.aliases}
+                placeholder="dal, daal, dhal, paruppu"
                 onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
+                  setForm({ ...form, aliases: event.target.value })
                 }
               />
             </label>
-            <label className="field">
-              <span>Notes</span>
-              <textarea
-                value={form.notes}
-                maxLength={2000}
-                rows={2}
-                onChange={(event) => setForm({ ...form, notes: event.target.value })}
-              />
-            </label>
-            <div className="field-row">
-              <button type="submit" className="button-primary" disabled={acting}>
-                {acting ? "Saving…" : form.id ? "Update food" : "Create food"}
-              </button>
-              {form.id ? (
-                pendingDelete ? (
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    disabled={acting}
-                    onClick={() => {
-                      void onDelete();
-                    }}
-                  >
-                    Confirm archive
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    onClick={() => setPendingDelete(true)}
-                  >
-                    Archive
-                  </button>
-                )
-              ) : null}
+            <div className="button-row">
+              <Button variant="primary" disabled={acting} type="submit">
+                {acting ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                variant="tertiary"
+                type="button"
+                onClick={() => setForm(null)}
+              >
+                Cancel
+              </Button>
             </div>
           </form>
-        ) : (
-          <p className="muted">Select a food, or create one you own.</p>
-        )}
-      </div>
-    </section>
-  );
-}
+        </div>
+      ) : null}
 
-function FoodReadOnly({ item }: { item: FoodLibraryItem }) {
-  return (
-    <div className="templates-readonly">
-      <h3>{item.name}</h3>
-      <p className="muted">Global food. Read-only.</p>
-      <dl className="templates-facts">
-        <div>
-          <dt>Classification</dt>
-          <dd>
-            {item.classification ? classificationLabel(item.classification) : "—"}
-          </dd>
+      {archiveTarget ? (
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onClick={() => setArchiveTarget(null)}
+        >
+          <dialog
+            open
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Archive food?</h2>
+            <p>
+              Archive <em>{archiveTarget.name}</em>? Referenced items are
+              archived, not deleted.
+            </p>
+            <div className="button-row">
+              <Button
+                variant="destructive"
+                disabled={acting}
+                onClick={() => void confirmArchive()}
+              >
+                Archive
+              </Button>
+              <Button
+                variant="tertiary"
+                onClick={() => setArchiveTarget(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </dialog>
         </div>
-        <div>
-          <dt>Basis</dt>
-          <dd>
-            {item.basis === "per_100_g"
-              ? "per 100 g"
-              : item.basis === "per_100_ml"
-                ? "per 100 ml"
-                : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt>Energy (kcal)</dt>
-          <dd>{scaledField(item.energyKcalScaled) || "Unknown"}</dd>
-        </div>
-        <div>
-          <dt>Protein (g)</dt>
-          <dd>{scaledField(item.proteinScaled) || "Unknown"}</dd>
-        </div>
-        <div>
-          <dt>Carbs (g)</dt>
-          <dd>{scaledField(item.carbsScaled) || "Unknown"}</dd>
-        </div>
-        <div>
-          <dt>Fat (g)</dt>
-          <dd>{scaledField(item.fatScaled) || "Unknown"}</dd>
-        </div>
-        <div>
-          <dt>Servings</dt>
-          <dd>
-            {item.servings
-              .map(
-                (serving) =>
-                  `${serving.label} (${serving.unit}${
-                    serving.conversionScaled == null
-                      ? ", no conversion"
-                      : `, ${scaledField(serving.conversionScaled)}`
-                  })`,
-              )
-              .join("; ") || "—"}
-          </dd>
-        </div>
-        <div>
-          <dt>Description</dt>
-          <dd>{item.description ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>Notes</dt>
-          <dd>{item.notes ?? "—"}</dd>
-        </div>
-      </dl>
+      ) : null}
     </div>
   );
 }

@@ -44,6 +44,11 @@ const checkinFieldBaseSchema = z.object({
  * Check-in form fields. Separate from onboarding fields.
  * `measurement` records a progress measurement type such as body_weight_kg.
  */
+const checkinChoiceOptionSchema = z.object({
+  id: z.string().min(1).max(200),
+  label: z.string().min(1).max(200),
+});
+
 export const checkinFieldDefinitionSchema = z.discriminatedUnion("type", [
   checkinFieldBaseSchema.extend({
     type: z.literal("short_text"),
@@ -54,11 +59,35 @@ export const checkinFieldDefinitionSchema = z.discriminatedUnion("type", [
     maxLength: z.number().int().min(1).max(10000).optional(),
   }),
   checkinFieldBaseSchema.extend({
+    type: z.literal("single_choice"),
+    options: z.array(checkinChoiceOptionSchema).min(1).max(50),
+  }),
+  checkinFieldBaseSchema.extend({
+    type: z.literal("multiple_choice"),
+    options: z.array(checkinChoiceOptionSchema).min(1).max(50),
+  }),
+  checkinFieldBaseSchema.extend({
+    type: z.literal("number"),
+    unit: z.string().min(1).max(32).optional(),
+  }),
+  checkinFieldBaseSchema.extend({
+    type: z.literal("yes_no"),
+  }),
+  checkinFieldBaseSchema.extend({
     type: z.literal("measurement"),
     measurementType: measurementTypeSchema,
+    /** Optional display unit for custom metrics (measurementType "other"). */
+    unit: z.string().min(1).max(32).optional(),
   }),
   checkinFieldBaseSchema.extend({
     type: z.literal("photo_intent"),
+    /** Slot hint: front | side | back | any. */
+    photoSlot: z.enum(["front", "side", "back", "any"]).optional(),
+  }),
+  checkinFieldBaseSchema.extend({
+    type: z.literal("scale_1_5"),
+    lowLabel: z.string().min(1).max(80).optional(),
+    highLabel: z.string().min(1).max(80).optional(),
   }),
 ]);
 export type CheckinFieldDefinition = z.infer<typeof checkinFieldDefinitionSchema>;
@@ -94,6 +123,8 @@ export type CheckinFormDefinition = z.infer<typeof checkinFormDefinitionSchema>;
 const checkinFieldAnswerSchema = z.union([
   z.string().max(10000),
   z.number().finite(),
+  z.boolean(),
+  z.array(z.string().min(1).max(200)).max(50),
   checkinPhotoIntentSchema,
 ]);
 

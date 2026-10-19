@@ -5,6 +5,7 @@ import {
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import {
+  checkinFormVersionSchema,
   checkinListResponseSchema,
   checkinReviewContextSchema,
   checkinSchema,
@@ -1604,6 +1605,53 @@ checkinRoutes.get(
           : null,
       }),
     );
+  },
+);
+
+checkinRoutes.get(
+  "/:checkinId/form",
+  operation({
+    tag: "Checkins",
+    summary: "Pinned check-in form fields for the trainee UI.",
+    description:
+      "Returns the immutable form version pinned on this check-in so the trainee app can render the questions.",
+    roles: ["trainee", "trainer"],
+    response: checkinFormVersionSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee", "trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const loaded = await loadCheckinWithReview(db, c.req.param("checkinId"));
+    if (!loaded) {
+      return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
+    }
+    const relationship = await loadAccessibleRelationship(
+      db,
+      loaded.checkin.coachingRelationshipId,
+      actor,
+    );
+    if (!relationship) {
+      return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
+    }
+    const pinned = await loadPinnedCheckinForm(
+      db,
+      loaded.checkin.checkinFormVersionId,
+    );
+    if (!pinned) {
+      return fail(
+        c,
+        500,
+        "CHECKIN_FORM_MISSING",
+        "Pinned check-in form version is missing.",
+      );
+    }
+    return ok(c, mapCheckinFormVersion(pinned.version));
   },
 );
 

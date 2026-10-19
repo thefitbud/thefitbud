@@ -1960,9 +1960,11 @@ button.link:hover {
 
 .templates-hub-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.35rem;
   margin-bottom: 1rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .hub-tab {

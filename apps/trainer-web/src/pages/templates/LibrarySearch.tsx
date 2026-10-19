@@ -10,6 +10,7 @@ import { labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { PLAN_COMPOSITION_LIMITS } from "../../components/plan-composition";
 import { useCursorPage, useDebounced } from "./useCursorPage";
+import { LibraryThumb } from "./LibraryThumb";
 
 const DIFFICULTIES: ExerciseDifficulty[] = [
   "beginner",
@@ -73,11 +74,7 @@ export type LibraryPaneChrome = {
 };
 
 function InitialThumb({ name }: { name: string }) {
-  return (
-    <span className="lib-thumb" aria-hidden="true">
-      {name.trim().charAt(0).toUpperCase() || "·"}
-    </span>
-  );
+  return <LibraryThumb name={name} kind="exercise" />;
 }
 
 export function ExerciseSearchPane({

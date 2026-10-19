@@ -2,7 +2,17 @@ import { useSearchParams } from "react-router-dom";
 
 export type TemplateScope = "all" | "bases" | "mine";
 
-export function TemplateScopeToolbar() {
+export function TemplateScopeToolbar({
+  counts,
+  newLabel,
+  onNew,
+  searchPlaceholder = "Search templates",
+}: {
+  counts?: { all: number; bases: number; mine: number };
+  newLabel?: string;
+  onNew?: () => void;
+  searchPlaceholder?: string;
+}) {
   const [params, setParams] = useSearchParams();
   const scope = (params.get("scope") as TemplateScope) || "all";
   const q = params.get("q") ?? "";
@@ -26,11 +36,11 @@ export function TemplateScopeToolbar() {
       <div className="segment" role="group" aria-label="Template scope">
         {(
           [
-            ["all", "All"],
-            ["bases", "FitBud bases"],
-            ["mine", "Mine"],
+            ["all", "All", counts?.all],
+            ["bases", "FitBud bases", counts?.bases],
+            ["mine", "Mine", counts?.mine],
           ] as const
-        ).map(([value, label]) => (
+        ).map(([value, label, count]) => (
           <button
             key={value}
             type="button"
@@ -39,6 +49,9 @@ export function TemplateScopeToolbar() {
             onClick={() => setScope(value)}
           >
             {label}
+            {typeof count === "number" ? (
+              <span className="scope-count">{count}</span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -46,11 +59,16 @@ export function TemplateScopeToolbar() {
         <span className="sr-only">Search templates</span>
         <input
           type="search"
-          placeholder="Search templates"
+          placeholder={searchPlaceholder}
           value={q}
           onChange={(e) => setQuery(e.target.value)}
         />
       </label>
+      {newLabel && onNew ? (
+        <button type="button" className="button-primary" onClick={onNew}>
+          {newLabel}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -65,7 +83,9 @@ export function filterByScope<T extends { ownership: "global" | "trainer" }>(
   items: T[],
   scope: TemplateScope,
 ): T[] {
-  if (scope === "bases") return items.filter((item) => item.ownership === "global");
-  if (scope === "mine") return items.filter((item) => item.ownership === "trainer");
+  if (scope === "bases")
+    return items.filter((item) => item.ownership === "global");
+  if (scope === "mine")
+    return items.filter((item) => item.ownership === "trainer");
   return items;
 }

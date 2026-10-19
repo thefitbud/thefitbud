@@ -6,7 +6,6 @@ import { OnboardingTemplates } from "./templates/OnboardingTemplates";
 import { OnboardingTemplateBuilderPage } from "./templates/OnboardingTemplateBuilderPage";
 import { CheckinTemplateBuilderPage } from "./templates/CheckinTemplateBuilderPage";
 import { PlanTemplateEditorPage } from "./templates/PlanTemplateEditorPage";
-import { TemplateScopeToolbar } from "./templates/TemplateScopeToolbar";
 
 const TABS = [
   { slug: "workouts", label: "Workouts" },
@@ -17,6 +16,15 @@ const TABS = [
   { slug: "libraries", label: "Libraries" },
 ] as const;
 
+const LEGACY_FAMILY: Record<string, string> = {
+  workout: "workouts",
+  nutrition: "diets",
+  combined: "full-plans",
+  onboarding: "onboarding",
+  libraries: "libraries",
+  checkins: "checkins",
+};
+
 export function TemplatesHub() {
   return (
     <Routes>
@@ -26,34 +34,50 @@ export function TemplatesHub() {
       <Route path="workouts/:templateId" element={<PlanTemplateEditorPage />} />
       <Route path="diets/:templateId" element={<PlanTemplateEditorPage />} />
       <Route path="full-plans/:templateId" element={<PlanTemplateEditorPage />} />
-      <Route
-        path=":type"
-        element={
-          <>
-            <nav className="templates-hub-tabs" aria-label="Template types">
-              {TABS.map((tab) => (
-                <NavLink
-                  key={tab.slug}
-                  to={`/templates/${tab.slug}`}
-                  className={({ isActive }) =>
-                    isActive ? "hub-tab is-active" : "hub-tab"
-                  }
-                  end
-                >
-                  {tab.label}
-                </NavLink>
-              ))}
-            </nav>
-            <TemplatesTabContent />
-          </>
-        }
-      />
+      <Route path="libraries/:segment" element={<LibrariesPanel />} />
+      <Route path=":type" element={<TemplatesHubChrome />} />
     </Routes>
   );
 }
 
-function TemplatesTabContent() {
+function TemplatesHubChrome() {
   const { type = "workouts" } = useParams();
+  if (type && LEGACY_FAMILY[type] && LEGACY_FAMILY[type] !== type) {
+    return <Navigate to={`/templates/${LEGACY_FAMILY[type]}`} replace />;
+  }
+
+  return (
+    <section className="page templates-hub" data-testid="screen-TW-23-hub">
+      <header className="page-header">
+        <h1>Templates</h1>
+        <p className="lede">
+          Reusable workouts, diets, forms, and your exercise and food libraries.
+        </p>
+      </header>
+      <nav
+        className="templates-hub-tabs"
+        aria-label="Template types"
+        tabIndex={0}
+      >
+        {TABS.map((tab) => (
+          <NavLink
+            key={tab.slug}
+            to={`/templates/${tab.slug}`}
+            className={({ isActive }) =>
+              isActive ? "hub-tab is-active" : "hub-tab"
+            }
+            end
+          >
+            {tab.label}
+          </NavLink>
+        ))}
+      </nav>
+      <TemplatesTabContent type={type} />
+    </section>
+  );
+}
+
+function TemplatesTabContent({ type }: { type: string }) {
   if (type === "libraries") {
     return <LibrariesPanel />;
   }
@@ -61,16 +85,7 @@ function TemplatesTabContent() {
     return <CheckinTemplatesPanel />;
   }
   if (type === "onboarding") {
-    return (
-      <section className="page templates-page" data-testid="screen-TW-24">
-        <header className="page-header">
-          <h1>Onboarding forms</h1>
-          <p className="lede">Intake forms for new clients.</p>
-        </header>
-        <TemplateScopeToolbar />
-        <OnboardingTemplates />
-      </section>
-    );
+    return <OnboardingTemplates />;
   }
   const family =
     type === "diets"
