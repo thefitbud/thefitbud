@@ -74,8 +74,16 @@ export function CheckinReviewPage() {
     Intl.DateTimeFormat().resolvedOptions().timeZone ??
     "UTC";
   const clientWa = workspace?.header.clientWhatsappE164 ?? null;
-  const nextId = searchParams.get("next");
   const fromInbox = searchParams.get("from") === "inbox";
+  const queue = (searchParams.get("queue") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const queueIndex = checkinId ? queue.indexOf(checkinId) : -1;
+  const nextId =
+    searchParams.get("next") ??
+    (queueIndex >= 0 ? queue[queueIndex + 1] : undefined) ??
+    null;
 
   const load = useCallback(async () => {
     if (!checkinId) return;
@@ -257,7 +265,7 @@ export function CheckinReviewPage() {
           {fromInbox && nextId && relationshipId ? (
             <Link
               className="button-secondary"
-              to={`/clients/${relationshipId}/check-ins/${nextId}?from=inbox`}
+              to={`/clients/${relationshipId}/check-ins/${nextId}?from=inbox&queue=${encodeURIComponent(queue.join(","))}`}
             >
               Next ›
             </Link>
@@ -480,9 +488,9 @@ export function CheckinReviewPage() {
             </aside>
           </div>
 
-          <div className="review-action-bar" data-testid="review-action-bar">
+          <div className="checkin-review-bar" data-testid="review-action-bar">
             {alreadyReviewed ? (
-              <div className="review-action-bar-inner">
+              <>
                 <p>
                   Reviewed ·{" "}
                   {labelFor(
@@ -491,14 +499,16 @@ export function CheckinReviewPage() {
                   )}{" "}
                   · {formatCivilDate(context.checkin.review!.createdAt.slice(0, 10))}
                 </p>
-                <Button variant="secondary" onClick={() => setEditing(true)}>
-                  Edit review
-                </Button>
-              </div>
+                <div className="review-bar-actions">
+                  <Button variant="secondary" onClick={() => setEditing(true)}>
+                    Edit review
+                  </Button>
+                </div>
+              </>
             ) : (
-              <div className="review-action-bar-inner">
+              <>
                 <div
-                  className="activity-type-segments"
+                  className="segment"
                   role="group"
                   aria-label="Outcome"
                 >
@@ -508,7 +518,7 @@ export function CheckinReviewPage() {
                       type="button"
                       className={
                         outcome === opt.value
-                          ? "segment-btn is-selected"
+                          ? "segment-btn is-on"
                           : "segment-btn"
                       }
                       aria-pressed={outcome === opt.value}
@@ -536,7 +546,7 @@ export function CheckinReviewPage() {
                   />
                   Visible to client
                 </label>
-                <div className="review-action-buttons">
+                <div className="review-bar-actions">
                   <Button
                     variant="primary"
                     disabled={acting || !online}
@@ -587,7 +597,7 @@ export function CheckinReviewPage() {
                     ]}
                   />
                 </div>
-              </div>
+              </>
             )}
           </div>
         </>
