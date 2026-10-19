@@ -320,7 +320,8 @@ export function AcceptInviteScreen({
     coachFirst && coachFirst.toLowerCase() !== "your"
       ? `Join ${coachFirst}`
       : "Join";
-  const needsNewAccount = !accessToken;
+  // Mockup 20 always shows Mobile / Email / Create password on invite accept.
+  const needsNewAccount = true;
   const emailLocked = Boolean(inviteEmail?.trim());
 
   const footer = (

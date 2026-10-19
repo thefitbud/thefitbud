@@ -798,7 +798,25 @@ function buildPersonaOverlays(input: HistoryInput): string {
   );
   lines.push(
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Tired but okay. Missed two workouts this week.", notes: "Travel for work threw off lunches and I skipped Wednesday's session. Back on track from Monday." })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
+    `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledged', 'Solid effort this week — lock in sleep and we will rebuild training next.', ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanSubmittedAt)});`,
   );
+
+  // Rohan waist for Progress measurements row (TR-13).
+  {
+    const waistDate = previousWeekdayBefore(refDate, 5);
+    const waistAt = clampIsoToNow(
+      localDayStartIso(waistDate, "08:25", "Asia/Kolkata"),
+      now,
+    );
+    const startWaistAt = clampIsoToNow(
+      localDayStartIso(addDaysFromLocalDate(waistDate, -49), "08:25", "Asia/Kolkata"),
+      now,
+    );
+    lines.push(
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "start"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 97, 'cm', ${sqlQuote(startWaistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(startWaistAt)}, ${sqlQuote(startWaistAt)});`,
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "latest"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 94, 'cm', ${sqlQuote(waistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(waistAt)}, ${sqlQuote(waistAt)});`,
+    );
+  }
 
   // Rohan: weigh-in series for Progress chart (TR-13).
   for (let weeksAgo = 0; weeksAgo < 8; weeksAgo += 1) {
@@ -816,6 +834,28 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
     lines.push(
       `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(measurementId)}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'body_weight_kg', ${weightKg}, 'kg', ${sqlQuote(observedAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(observedAt)}, ${sqlQuote(observedAt)});`,
+    );
+  }
+
+
+  // Rohan inbox mix (TR-15): coach note, check-in review, workout — not only meals.
+  {
+    const coachNoteAt = clampIsoToNow(
+      localDayStartIso(refDate, "01:08", "Asia/Kolkata"),
+      now,
+    );
+    const workoutAt = clampIsoToNow(
+      localDayStartIso(addDaysFromLocalDate(refDate, -1), "18:40", "Asia/Kolkata"),
+      now,
+    );
+    const checkinAt = clampIsoToNow(
+      localDayStartIso(rohanCheckinDate, "20:05", "Asia/Kolkata"),
+      now,
+    );
+    lines.push(
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", "rohan-inbox-mixed-note"))}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, ${sqlQuote(rohanRel)}, 'trainer_note_shared', 'checkin', ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, 'delivered', ${sqlQuote("rohan-inbox-mixed-note")}, ${sqlQuote(coachNoteAt)}, NULL, ${jsonQuote({ summary: "About your check-in" })});`,
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", "rohan-inbox-mixed-checkin"))}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, ${sqlQuote(rohanRel)}, 'checkin_reviewed', 'checkin', ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, 'delivered', ${sqlQuote("checkin_reviewed:" + demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(checkinAt)}, NULL, ${jsonQuote({ summary: "Acknowledged" })});`,
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", "rohan-inbox-mixed-workout"))}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, ${sqlQuote(rohanRel)}, 'workout_reminder', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", refDate))}, 'delivered', ${sqlQuote("rohan-inbox-mixed-workout")}, ${sqlQuote(workoutAt)}, NULL, ${jsonQuote({ summary: "Lower body B is planned for this evening" })});`,
     );
   }
 

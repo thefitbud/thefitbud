@@ -132,7 +132,15 @@ export async function navigateCaptureScreen(
         ? "lakshmi.foods@demo.fitbud.test"
         : id === "TR-08"
           ? "deepak.dubai@demo.fitbud.test"
-          : "aarav.ontrack@demo.fitbud.test";
+          : id === "TR-10" ||
+              id === "TR-10B" ||
+              id === "TR-11" ||
+              id === "TR-11B" ||
+              id === "TR-12" ||
+              id === "TR-13" ||
+              id === "TR-15"
+            ? "rohan.slipping@demo.fitbud.test"
+            : "aarav.ontrack@demo.fitbud.test";
     await authNav?.signInWithPassword(traineeEmail, "FitBud-demo-2026");
     await wait(2500);
   }
@@ -173,6 +181,11 @@ export async function navigateCaptureScreen(
     case "TR-10":
       await traineeNav?.ensureWorkoutDay();
       traineeNav?.setTab("workout");
+      await wait(1200);
+      break;
+    case "TR-10B":
+      await traineeNav?.ensureWorkoutDay();
+      traineeNav?.setTab("workout");
       await wait(800);
       await traineeNav?.openWorkoutOverview();
       break;
@@ -204,6 +217,8 @@ export async function navigateCaptureScreen(
       traineeNav?.openOverlay({ screen: "quiet_hours" });
       break;
     case "TR-18":
+      traineeNav?.setTab("diet");
+      await wait(900);
       traineeNav?.openOverlay({
         screen: "ask_coach",
         itemType: "meal_assignment",

@@ -1,11 +1,18 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
+  mealPrescriptionSchema,
   mealTimesResponseSchema,
   updateMealTimesRequestSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client.js";
-import { coachingRelationships, mealTimeOverrides } from "../db/schema.js";
+import {
+  coachingRelationships,
+  mealAssignments,
+  mealTimeOverrides,
+  users,
+} from "../db/schema.js";
+import { formatLocalDate } from "@fitbud/core";
 import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
 import { applyMealTimeOverrideUpdate } from "../domain/meal-times-update.js";
@@ -63,12 +70,76 @@ meMealTimeRoutes.get(
       .select()
       .from(mealTimeOverrides)
       .where(eq(mealTimeOverrides.relationshipId, rel.id));
-    const slots = overrides.map((row) => ({
-      slotKey: row.slotKey,
-      label: row.slotKey,
-      planTime: row.time,
-      overrideTime: row.time,
-    }));
+    const overrideBySlot = new Map(
+      overrides.map((row) => [row.slotKey, row] as const),
+    );
+
+    const [trainee] = await db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, actor.userId))
+      .limit(1);
+    const timeZone = trainee?.timezone ?? "UTC";
+    const today = formatLocalDate(new Date(), timeZone);
+
+    const assignments = await db
+      .select()
+      .from(mealAssignments)
+      .where(
+        and(
+          eq(mealAssignments.coachingRelationshipId, rel.id),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
+          gte(mealAssignments.localDate, today),
+          lte(mealAssignments.localDate, today),
+        ),
+      )
+      .limit(20);
+
+    const slotsByKey = new Map<
+      string,
+      {
+        slotKey: string;
+        label: string;
+        planTime: string;
+        overrideTime: string | null;
+      }
+    >();
+    for (const assignment of assignments) {
+      let parsed;
+      try {
+        parsed = mealPrescriptionSchema.safeParse(
+          JSON.parse(assignment.mealPrescriptionJson),
+        );
+      } catch {
+        continue;
+      }
+      if (!parsed.success) continue;
+      const slotKey =
+        parsed.data.mealType ??
+        parsed.data.name.toLowerCase().replace(/\s+/g, "_");
+      if (slotsByKey.has(slotKey)) continue;
+      const override = overrideBySlot.get(slotKey);
+      const planTime = parsed.data.localTime ?? "08:00";
+      slotsByKey.set(slotKey, {
+        slotKey,
+        label: parsed.data.name,
+        planTime,
+        overrideTime: override?.time ?? null,
+      });
+    }
+    // Overrides without a same-day assignment still surface.
+    for (const row of overrides) {
+      if (slotsByKey.has(row.slotKey)) continue;
+      slotsByKey.set(row.slotKey, {
+        slotKey: row.slotKey,
+        label: row.slotKey,
+        planTime: row.time,
+        overrideTime: row.time,
+      });
+    }
+    const slots = [...slotsByKey.values()].sort((a, b) =>
+      a.planTime.localeCompare(b.planTime),
+    );
     return ok(
       c,
       mealTimesResponseSchema.parse({

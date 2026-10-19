@@ -579,25 +579,43 @@ export function CheckinScreen({
 
   const saveDraft = useCallback(async () => {
     if (!form || !canEditCheckin(checkin.status)) return;
+    // Serialize drafts so overlapping blur+debounce saves cannot share a stale etag.
+    if (draftInFlight.current) {
+      await draftInFlight.current;
+    }
     const expected = recordVersionRef.current;
+    const answers = answersToPayload(fields, valuesRef.current);
+    const pushDraft = (etag: number) =>
+      enqueueAndPush(sync, {
+        recordId: checkin.id,
+        operation: "checkin.save_draft",
+        expectedServerVersion: etag,
+        payload: {
+          checkinId: checkin.id,
+          body: {
+            expectedVersion: etag,
+            answers,
+          },
+        },
+      });
     const run = (async () => {
       try {
-        const answers = answersToPayload(fields, valuesRef.current);
-        const { results } = await enqueueAndPush(sync, {
-          recordId: checkin.id,
-          operation: "checkin.save_draft",
-          expectedServerVersion: expected,
-          payload: {
-            checkinId: checkin.id,
-            body: {
-              expectedVersion: expected,
-              answers,
-            },
-          },
-        });
+        let { results } = await pushDraft(expected);
+        const conflicted = results.some(
+          (item) => item.error?.code === "CHECKIN_VERSION_CONFLICT",
+        );
+        if (conflicted) {
+          try {
+            const fresh = await api.getCheckin(checkin.id);
+            recordVersionRef.current = fresh.recordVersion;
+            setRecordVersion(fresh.recordVersion);
+            ({ results } = await pushDraft(fresh.recordVersion));
+          } catch {
+            // fall through to surface message
+          }
+        }
         const syncMsg = messageFromSyncResults(results, coach);
         if (syncMsg) {
-          // Stale etag after overlapping saves — refetch authoritative version.
           if (
             results.some(
               (item) => item.error?.code === "CHECKIN_VERSION_CONFLICT",
@@ -620,6 +638,7 @@ export function CheckinScreen({
           recordVersionRef.current = result.serverVersion;
           setRecordVersion(result.serverVersion);
         }
+        setError(null);
         setOffline(false);
         setDraftSavedAt(new Date());
       } catch {
@@ -639,6 +658,14 @@ export function CheckinScreen({
     draftTimer.current = setTimeout(() => {
       void saveDraft();
     }, 600);
+  }
+
+  function flushDraftSave() {
+    if (draftTimer.current) {
+      clearTimeout(draftTimer.current);
+      draftTimer.current = null;
+    }
+    void saveDraft();
   }
 
   useEffect(() => {
@@ -803,22 +830,33 @@ export function CheckinScreen({
     );
   }
 
-  if (checkin.status === "reviewed" && checkin.review) {
-    const reviewedOn = formatCivilDate(
-      localDateInTimezone(timeZone, new Date(checkin.review.createdAt)),
-      { includeWeekday: true },
-    );
+  if (checkin.review || checkin.status === "reviewed") {
+    const review = checkin.review;
+    const reviewedOn = review
+      ? formatCivilDate(
+          localDateInTimezone(timeZone, new Date(review.createdAt)),
+          { includeWeekday: true },
+        )
+      : null;
     return (
-      <Screen chrome="app" title="Check-in" subtitle={`${coach} reviewed this · ${reviewedOn}`}>
+      <Screen
+        chrome="app"
+        title="Check-in"
+        subtitle={
+          reviewedOn
+            ? `${coach} reviewed this · ${reviewedOn}`
+            : `${coach} reviewed this`
+        }
+      >
         {error ? <ErrorBanner message={error} /> : null}
         <View style={styles.banner}>
           <Text style={styles.bannerTitle} accessibilityRole="header">
-            {outcomeCopy(checkin.review.outcome, coach)}
+            {review ? outcomeCopy(review.outcome, coach) : "Acknowledged"}
           </Text>
-          {checkin.review.notes ? (
+          {review?.notes ? (
             <View style={styles.coachNote}>
               <Text style={styles.coachNoteLabel}>Note from {coach}</Text>
-              <Text style={styles.bannerBody}>{checkin.review.notes}</Text>
+              <Text style={styles.bannerBody}>{review.notes}</Text>
             </View>
           ) : null}
         </View>
@@ -1034,7 +1072,7 @@ export function CheckinScreen({
                       scheduleDraftSave();
                     }}
                     onBlur={() => {
-                      void saveDraft();
+                      flushDraftSave();
                     }}
                   />
                 ))

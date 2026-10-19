@@ -672,10 +672,12 @@ export function WorkoutTab({
             <Text style={styles.wheroTitle}>{focusAssignment.workoutDayName}</Text>
             <View style={styles.wheroMeta}>
               <Text style={styles.wheroMetaText}>
-                <Text style={styles.wheroMetaB}>{exerciseCount}</Text> exercises
+                <Text style={styles.wheroMetaB}>{exerciseCount}</Text>
+                {exerciseCount === 1 ? " exercise" : " exercises"}
               </Text>
               <Text style={styles.wheroMetaText}>
-                <Text style={styles.wheroMetaB}>{setCount}</Text> sets
+                <Text style={styles.wheroMetaB}>{setCount}</Text>
+                {setCount === 1 ? " set" : " sets"}
               </Text>
               {duration != null ? (
                 <Text style={styles.wheroMetaText}>

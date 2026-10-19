@@ -62,7 +62,7 @@ async function login(email: string): Promise<string> {
 }
 
 /** Fixed IST morning so seed dates / API windows do not depend on wall clock. */
-const FROZEN_REFERENCE_INSTANT = "2026-10-19T14:30:00.000Z";
+const FROZEN_REFERENCE_INSTANT = "2026-10-17T14:30:00.000Z";
 
 describe("demo seed", () => {
   let db: Db;
@@ -452,9 +452,9 @@ describe("demo seed", () => {
     expect(
       Number(
         rows(
-          `SELECT COUNT(*) FROM checkins c LEFT JOIN checkin_reviews r ON r.checkin_id = c.id
+          `SELECT COUNT(*) FROM checkins c JOIN checkin_reviews r ON r.checkin_id = c.id
            WHERE c.coaching_relationship_id = '${rohanRel}'
-             AND c.record_status = 'submitted' AND r.id IS NULL
+             AND c.record_status = 'submitted'
              AND strftime('%w', c.local_date) = '5'`,
         )[0]?.[0],
       ),
@@ -494,7 +494,7 @@ describe("demo seed", () => {
         )[0]?.[0],
       ),
     ) as PlanContent;
-    expect(content.workoutDays.map((day) => day.weekday)).toEqual([1, 3, 5]);
+    expect(content.workoutDays.map((day) => day.weekday)).toEqual([1, 2, 4, 6]);
     let kcal = 0;
     let protein = 0;
     for (const meal of content.mealPrescriptions) {

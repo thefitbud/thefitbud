@@ -24,7 +24,7 @@ import { colors, radii, semanticColors, spacing, touchTargetMin } from "@fitbud/
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
-import { addDays } from "../lib/dates";
+import { addDays, localDateInTimezone } from "../lib/dates";
 import { stage1Api } from "../lib/stage1Api";
 import {
   formatRelativeTime,
@@ -104,19 +104,24 @@ function notificationDetail(
   }
 }
 
-function timePrefix(iso: string, today: string, now = new Date()): string {
-  const day = iso.slice(0, 10);
+function timePrefix(
+  iso: string,
+  today: string,
+  now = new Date(),
+  timeZone = "Asia/Kolkata",
+): string {
+  // Compare trainee-local calendar days — never UTC date from the ISO prefix.
+  const day = localDateInTimezone(timeZone, new Date(iso));
   if (day === today) {
-    const rel = formatRelativeTime(iso, now);
-    // Same calendar day: prefer "Just now" / "N min ago" / "N h ago".
-    return rel;
+    return formatRelativeTime(iso, now);
   }
   const yesterday = addDays(today, -1);
   if (day === yesterday) return "Yesterday";
-  const d = new Date(`${day}T12:00:00`);
-  const weekday = new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(
-    d,
-  );
+  const d = new Date(`${day}T12:00:00Z`);
+  const weekday = new Intl.DateTimeFormat("en-IN", {
+    weekday: "short",
+    timeZone: "UTC",
+  }).format(d);
   if (day.slice(0, 7) === today.slice(0, 7)) return weekday;
   return formatRelativeTime(iso, now);
 }
@@ -211,10 +216,7 @@ export function NotificationsScreen({
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const today = useMemo(
-    () =>
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: me?.timezone ?? "UTC",
-      }).format(new Date()),
+    () => localDateInTimezone(me?.timezone ?? "Asia/Kolkata"),
     [me?.timezone],
   );
 
@@ -330,7 +332,12 @@ export function NotificationsScreen({
     const unread = item.readAt == null;
     const suppressed = item.state === "suppressed";
     const { Icon, tone } = iconForType(item.type);
-    const prefix = timePrefix(item.createdAt, today);
+    const prefix = timePrefix(
+      item.createdAt,
+      today,
+      new Date(),
+      me?.timezone ?? "Asia/Kolkata",
+    );
     const detail = notificationDetail(item, coachFirst);
     return (
       <Pressable

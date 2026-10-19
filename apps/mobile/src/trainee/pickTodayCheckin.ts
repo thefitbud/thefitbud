@@ -23,14 +23,15 @@ export function pickTodayCheckin(
     });
   if (actionable[0]) return actionable[0];
 
+  // A review payload means the coach already replied — never show "Waiting".
   const submitted = items
-    .filter((item) => item.status === "submitted")
+    .filter((item) => item.status === "submitted" && !item.review)
     .slice()
     .sort((a, b) => b.localDate.localeCompare(a.localDate));
   if (submitted[0]) return submitted[0];
 
   const reviewed = items
-    .filter((item) => item.status === "reviewed" && item.review)
+    .filter((item) => Boolean(item.review))
     .slice()
     .sort((a, b) => b.localDate.localeCompare(a.localDate));
   if (reviewed[0]) return reviewed[0];

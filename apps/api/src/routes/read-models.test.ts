@@ -109,7 +109,7 @@ function collectPercentKeys(value: unknown, keys: Set<string>): void {
   }
 }
 
-const FROZEN_REFERENCE_INSTANT = "2026-10-19T14:30:00.000Z";
+const FROZEN_REFERENCE_INSTANT = "2026-10-17T14:30:00.000Z";
 
 describe("read models", () => {
   let db: Db;

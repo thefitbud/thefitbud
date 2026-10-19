@@ -68,7 +68,7 @@ function isSleepField(field: OnboardingFieldDefinition): boolean {
 }
 
 export function IntakeScreen({ relationshipId }: Props) {
-  const { api, refreshSession, signOut } = useAuth();
+  const { api, refreshSession } = useAuth();
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>({});
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({});
@@ -367,8 +367,7 @@ export function IntakeScreen({ relationshipId }: Props) {
       <M2Screen>
         {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
         <Button label="Retry" onPress={() => void load()} />
-        <Button label="Sign out" variant="tertiary" onPress={signOut} />
-      </M2Screen>
+</M2Screen>
     );
   }
 
@@ -433,9 +432,7 @@ export function IntakeScreen({ relationshipId }: Props) {
           <Text style={styles.saveDraftText}>Save draft</Text>
         </Pressable>
       ) : null}
-
-      <Button label="Sign out" variant="tertiary" onPress={signOut} />
-    </M2Screen>
+</M2Screen>
   );
 }
 

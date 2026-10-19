@@ -359,12 +359,19 @@ export function TraineeShell({
         }
       },
       async openWorkoutOverview() {
+        const from = addDays(today, -7);
         const listed = await api.listWorkoutAssignments(relationship.id, {
-          fromDate: today,
-          toDate: today,
+          fromDate: from,
+          toDate: addDays(today, 7),
         });
-        const workout = scheduledAssignments(listed.items)[0];
+        const scheduled = scheduledAssignments(listed.items);
+        const workout =
+          scheduled.find((item) => /lower body b/i.test(item.workoutDayName)) ??
+          scheduled.find((item) => item.localDate === selectedDate) ??
+          scheduled.find((item) => item.localDate === today) ??
+          scheduled[0];
         if (workout) {
+          setSelectedDate(workout.localDate);
           openOverlay({
             screen: "workout_overview",
             assignmentId: workout.id,
@@ -384,11 +391,15 @@ export function TraineeShell({
         const from = addDays(today, -21);
         const listed = await api.listWorkoutAssignments(relationship.id, {
           fromDate: from,
-          toDate: today,
+          toDate: addDays(today, 14),
         });
-        const workout = scheduledAssignments(listed.items).find(
+        const scheduled = scheduledAssignments(listed.items).filter(
           (item) => item.workoutDay.exercises.length > 0,
         );
+        const workout =
+          scheduled.find((item) => /lower body b/i.test(item.workoutDayName)) ??
+          scheduled.find((item) => item.localDate === today) ??
+          scheduled[0];
         if (workout?.localDate) {
           setSelectedDate(workout.localDate);
         }
@@ -491,7 +502,7 @@ export function TraineeShell({
       },
     });
     return () => registerTraineeCaptureNav(null);
-  }, [api, openOverlay, relationship.id, signOut, today]);
+  }, [api, openOverlay, relationship.id, selectedDate, signOut, today]);
 
   useEffect(() => {
     if (!pendingNotificationLink) return;

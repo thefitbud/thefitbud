@@ -76,6 +76,23 @@ describe("pickTodayCheckin", () => {
     ).toBe("next");
   });
 
+  it("treats submitted+review as reviewed (never Waiting)", () => {
+    const reviewedViaPayload = stub({
+      id: "submitted-with-review",
+      localDate: "2026-10-16",
+      status: "submitted",
+      review: reviewStub("submitted-with-review"),
+    });
+    const scheduled = stub({
+      id: "next",
+      localDate: "2026-10-23",
+      status: "scheduled",
+    });
+    expect(pickTodayCheckin([scheduled, reviewedViaPayload])?.id).toBe(
+      "submitted-with-review",
+    );
+  });
+
   it("when both reviewed and scheduled exist, returns reviewed (reply) not scheduled", () => {
     const reviewed = stub({
       id: "reviewed",

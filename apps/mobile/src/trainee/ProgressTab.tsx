@@ -890,32 +890,34 @@ export function ProgressTab({
         <Text style={styles.muted}>Check-ins appear here after you submit.</Text>
       )}
 
-      {photosByDate.length > 0 ? (
-        <>
-          <View style={styles.sh}>
-            <Text style={styles.shTitle}>Photos</Text>
-            {media.length >= 2 ? (
-              <Pressable accessibilityRole="button">
-                <Text style={styles.shLink}>Compare</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <View style={styles.ph3}>
-            {photosByDate.slice(0, 2).map(([day]) => (
-              <View key={day} style={styles.phDone}>
-                <PersonStanding
-                  size={64}
-                  color="rgba(26, 18, 72, 0.28)"
-                  strokeWidth={1.75}
-                />
-                <Text style={styles.phLabel}>
-                  {formatCivilDate(day, { includeWeekday: true })}
-                </Text>
-              </View>
-            ))}
+      <View style={styles.sh}>
+        <Text style={styles.shTitle}>Photos</Text>
+        {media.length >= 2 ? (
+          <Pressable accessibilityRole="button">
+            <Text style={styles.shLink}>Compare</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={styles.ph3}>
+        {photosByDate.length > 0 ? (
+          photosByDate.slice(0, 2).map(([day]) => (
+            <View key={day} style={styles.phDone}>
+              <PersonStanding
+                size={64}
+                color="rgba(26, 18, 72, 0.28)"
+                strokeWidth={1.75}
+              />
+              <Text style={styles.phLabel}>
+                {formatCivilDate(day, { includeWeekday: true })}
+              </Text>
+            </View>
+          ))
+        ) : (
+          (["Front", "Side"] as const).map((label) => (
             <Pressable
+              key={label}
               accessibilityRole="button"
-              accessibilityLabel="Add photos"
+              accessibilityLabel={`Add ${label} photo`}
               style={styles.phEmpty}
               disabled={acting}
               onPress={() => {
@@ -923,11 +925,25 @@ export function ProgressTab({
               }}
             >
               <Camera size={24} color={colors.indigo} strokeWidth={1.75} />
-              <Text style={styles.phEmptyTitle}>Add photos</Text>
+              <Text style={styles.phEmptyTitle}>{label}</Text>
             </Pressable>
-          </View>
-        </>
-      ) : null}
+          ))
+        )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add photos"
+          style={styles.phEmpty}
+          disabled={acting}
+          onPress={() => {
+            void addProgressPhoto();
+          }}
+        >
+          <Camera size={24} color={colors.indigo} strokeWidth={1.75} />
+          <Text style={styles.phEmptyTitle}>
+            {photosByDate.length > 0 ? "Add photos" : "Back"}
+          </Text>
+        </Pressable>
+      </View>
 
       <BottomSheet
         visible={logOpen}
