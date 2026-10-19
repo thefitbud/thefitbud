@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MealAssignment } from "@fitbud/contracts";
-import { canLogMealOnDate } from "./mealHelpers";
+import { canLogMealOnDate, canShowMealLogActions } from "./mealHelpers";
 
 function meal(partial: Partial<MealAssignment> & Pick<MealAssignment, "id">): MealAssignment {
   const { id, prescription: prescriptionOverride, ...rest } = partial;
@@ -90,6 +90,37 @@ describe("canLogMealOnDate", () => {
           },
         }),
         unresolvedExceptionCount: 3,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("canShowMealLogActions", () => {
+  it("hides actions until lock state is known", () => {
+    expect(
+      canShowMealLogActions({
+        lockStateKnown: false,
+        selectedDate: "2026-10-17",
+        today: "2026-10-17",
+        meal: meal({ id: "e", status: "pending" }),
+        unresolvedExceptionCount: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("hides actions for locked meals once lock state is known", () => {
+    expect(
+      canShowMealLogActions({
+        lockStateKnown: true,
+        selectedDate: "2026-10-17",
+        today: "2026-10-17",
+        meal: meal({
+          id: "f",
+          status: "pending",
+          loggingLocked: true,
+          loggingLockReason: "exception_resolved",
+        }),
+        unresolvedExceptionCount: 1,
       }),
     ).toBe(false);
   });

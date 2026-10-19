@@ -12,7 +12,7 @@ import {
  * invalidateRelationshipDayData runs after logging.
  */
 export function useTraineeDayCache<T>(input: {
-  kind: "meals" | "day" | "week" | "exceptions";
+  kind: "meals" | "day" | "week" | "exceptions" | "workouts";
   relationshipId: string;
   date?: string;
   load: () => Promise<T>;

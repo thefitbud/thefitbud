@@ -121,20 +121,36 @@ relationshipRoutes.get(
             .select({
               userId: trainerProfiles.userId,
               displayName: trainerProfiles.displayName,
+              whatsappE164: trainerProfiles.whatsappE164,
             })
             .from(trainerProfiles)
             .where(inArray(trainerProfiles.userId, trainerIds));
-    const nameByTrainer = new Map(
-      profiles.map((row) => [row.userId, row.displayName] as const),
+    const profileByTrainer = new Map(
+      profiles.map(
+        (row) =>
+          [
+            row.userId,
+            {
+              displayName: row.displayName,
+              whatsappE164: row.whatsappE164,
+            },
+          ] as const,
+      ),
     );
     return ok(
       c,
       relationshipListResponseSchema.parse({
-        items: page.items.map((row) =>
-          mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending", {
-            trainerDisplayName: nameByTrainer.get(row.trainerUserId) ?? null,
-          }),
-        ),
+        items: page.items.map((row) => {
+          const profile = profileByTrainer.get(row.trainerUserId);
+          return mapRelationship(
+            row,
+            statuses.get(row.id) ?? "onboarding_pending",
+            {
+              trainerDisplayName: profile?.displayName ?? null,
+              trainerWhatsappE164: profile?.whatsappE164 ?? null,
+            },
+          );
+        }),
         nextCursor: page.nextCursor,
       }),
     );
@@ -173,12 +189,16 @@ relationshipRoutes.get(
 
     const statuses = await deriveOnboardingStatusForRelationships(db, [row]);
     const [trainerProfile] = await db
-      .select({ displayName: trainerProfiles.displayName })
+      .select({
+        displayName: trainerProfiles.displayName,
+        whatsappE164: trainerProfiles.whatsappE164,
+      })
       .from(trainerProfiles)
       .where(eq(trainerProfiles.userId, row.trainerUserId))
       .limit(1);
     const base = mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending", {
       trainerDisplayName: trainerProfile?.displayName ?? null,
+      trainerWhatsappE164: trainerProfile?.whatsappE164 ?? null,
     });
     let pendingReactivation: {
       requestId: string;

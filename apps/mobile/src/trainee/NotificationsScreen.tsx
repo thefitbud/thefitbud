@@ -1,9 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import {
+  Bell,
+  CalendarCheck,
+  ClipboardList,
+  MessageCircle,
+  Pause,
+  RefreshCw,
+  Sun,
+  Utensils,
+  Dumbbell,
+  AlertCircle,
+  Clock,
+  Settings,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
-import type { Notification } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import type { Notification, NotificationType } from "@fitbud/contracts";
+import { colors, radii, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -13,12 +27,15 @@ import {
   formatRelativeTime,
   notificationRowBody,
   notificationRowTitle,
-  notificationTypeIcon,
 } from "../notifications/copy";
 import {
   deepLinkFromNotification,
   type NotificationDeepLink,
 } from "../notifications/routing";
+import { getCached, setCached, subscribe } from "./dataCache";
+
+const CACHE_KEY = "notifications:inbox";
+const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type Props = {
   onBack: () => void;
@@ -30,6 +47,52 @@ function isToday(iso: string, today: string): boolean {
   return iso.slice(0, 10) === today;
 }
 
+function withinRetention(iso: string, now = Date.now()): boolean {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  return now - t <= RETENTION_MS;
+}
+
+function iconForType(type: NotificationType) {
+  switch (type) {
+    case "meal_reminder":
+      return Utensils;
+    case "workout_reminder":
+      return Dumbbell;
+    case "checkin_reminder":
+      return CalendarCheck;
+    case "daily_summary":
+      return Sun;
+    case "activity_nudge":
+    case "trainer_note_shared":
+    case "coach_answered":
+    case "checkin_reviewed":
+    case "trainer_ask_coach":
+      return MessageCircle;
+    case "plan_published":
+      return ClipboardList;
+    case "reminders_paused":
+      return Pause;
+    case "relationship_ended":
+    case "reactivation_requested":
+      return RefreshCw;
+    case "subscription_renewal_reminder":
+    case "trainer_renewal":
+      return Bell;
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+      return ClipboardList;
+    case "trainer_critical_digest":
+      return AlertCircle;
+    case "trainer_meal_times_changed":
+      return Clock;
+    case "admin_whatsapp_budget":
+      return Settings;
+    default:
+      return Bell;
+  }
+}
+
 export function NotificationsScreen({
   onBack,
   onOpenSettings,
@@ -37,48 +100,79 @@ export function NotificationsScreen({
 }: Props) {
   const { api, refreshSession } = useAuth();
   const s1 = stage1Api(api);
-  const [items, setItems] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Notification[]>(
+    () => getCached<Notification[]>(CACHE_KEY) ?? [],
+  );
+  const [loading, setLoading] = useState(items.length === 0);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const page = await api.listNotifications();
-      setItems(page.items);
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load notifications.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [api]);
+  const load = useCallback(
+    async (opts?: { soft?: boolean }) => {
+      if (!opts?.soft) setLoading(true);
+      setError(null);
+      try {
+        const page = await api.listNotifications();
+        const filtered = page.items.filter((item) =>
+          withinRetention(item.createdAt),
+        );
+        setItems(filtered);
+        setCached(CACHE_KEY, filtered);
+        setOffline(false);
+      } catch (err) {
+        setOffline(true);
+        const cached = getCached<Notification[]>(CACHE_KEY);
+        if (cached && cached.length > 0) {
+          setItems(cached.filter((item) => withinRetention(item.createdAt)));
+        } else {
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : "Could not load notifications.",
+          );
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [api],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    return subscribe(CACHE_KEY, () => {
+      const next = getCached<Notification[]>(CACHE_KEY);
+      if (next) setItems(next.filter((item) => withinRetention(item.createdAt)));
+    });
+  }, []);
+
+  const retained = useMemo(
+    () => items.filter((item) => withinRetention(item.createdAt)),
+    [items],
+  );
+
   const { todayItems, earlierItems } = useMemo(() => {
     const todayRows: Notification[] = [];
     const earlier: Notification[] = [];
-    for (const item of items) {
+    for (const item of retained) {
       if (isToday(item.createdAt, today)) todayRows.push(item);
       else earlier.push(item);
     }
     return { todayItems: todayRows, earlierItems: earlier };
-  }, [items, today]);
+  }, [retained, today]);
 
   async function openItem(item: Notification) {
     if (item.readAt == null) {
       try {
         await s1.markNotificationRead(item.id);
-        setItems((prev) =>
-          prev.map((row) =>
+        setItems((prev) => {
+          const next = prev.map((row) =>
             row.id === item.id
               ? {
                   ...row,
@@ -86,8 +180,10 @@ export function NotificationsScreen({
                   readAt: new Date().toISOString(),
                 }
               : row,
-          ),
-        );
+          );
+          setCached(CACHE_KEY, next);
+          return next;
+        });
       } catch {
         // Still navigate if mark-read fails offline.
       }
@@ -97,77 +193,124 @@ export function NotificationsScreen({
   }
 
   async function markAllRead() {
-    for (const item of items) {
-      if (item.readAt != null) continue;
+    const unread = retained.filter((item) => item.readAt == null);
+    for (const item of unread) {
       try {
         await s1.markNotificationRead(item.id);
       } catch {
         break;
       }
     }
-    await load();
+    setItems((prev) => {
+      const next = prev.map((row) =>
+        row.readAt == null
+          ? {
+              ...row,
+              state: "read" as const,
+              readAt: new Date().toISOString(),
+            }
+          : row,
+      );
+      setCached(CACHE_KEY, next);
+      return next;
+    });
+    await load({ soft: true });
   }
 
   function renderSection(title: string, rows: Notification[]) {
     if (rows.length === 0) return null;
     return (
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {rows.map((item) => (
-          <Pressable
-            key={item.id}
-            style={[styles.row, item.readAt == null ? styles.unread : null]}
-            onPress={() => {
-              void openItem(item);
-            }}
-          >
-            <View style={styles.rowTop}>
-              <Text style={styles.icon}>{notificationTypeIcon(item.type)}</Text>
-              <Text style={styles.title}>{notificationRowTitle(item)}</Text>
-              {item.readAt == null ? <View style={styles.dot} /> : null}
-            </View>
-            <Text style={styles.body}>{notificationRowBody(item)}</Text>
-            <Text style={styles.meta}>{formatRelativeTime(item.createdAt)}</Text>
-          </Pressable>
-        ))}
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          {title}
+        </Text>
+        {rows.map((item) => {
+          const Icon = iconForType(item.type);
+          return (
+            <Pressable
+              key={item.id}
+              accessibilityRole="button"
+              accessibilityLabel={notificationRowTitle(item)}
+              style={[styles.row, item.readAt == null ? styles.unread : null]}
+              onPress={() => {
+                void openItem(item);
+              }}
+            >
+              <View style={styles.rowTop}>
+                <Icon size={20} color={colors.indigo} strokeWidth={2} />
+                <Text style={styles.title}>{notificationRowTitle(item)}</Text>
+                {item.readAt == null ? <View style={styles.dot} /> : null}
+              </View>
+              <Text style={styles.body}>{notificationRowBody(item)}</Text>
+              <Text style={styles.meta}>
+                {formatRelativeTime(item.createdAt)}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     );
   }
 
   return (
     <Screen
+      chrome="app"
       title="Notifications"
-      subtitle="In-app inbox from FitBud."
-      refreshing={loading}
+      subtitle="Reminders and coach updates"
+      refreshing={refreshing || loading}
       onRefresh={() => {
+        setRefreshing(true);
         void refreshSession?.();
-        void load();
+        void load({ soft: true });
       }}
     >
       {error ? <ErrorBanner message={error} /> : null}
-      <PrimaryButton
-        label="Mark all read"
-        variant="secondary"
-        disabled={items.every((item) => item.readAt != null)}
+      {offline ? (
+        <Text style={styles.offline}>Showing saved notifications</Text>
+      ) : null}
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Mark all read"
+        style={styles.markAll}
+        disabled={retained.every((item) => item.readAt != null)}
         onPress={() => {
           void markAllRead();
         }}
-      />
-      {loading && items.length === 0 ? (
-        <Text style={styles.muted}>Loading…</Text>
-      ) : items.length === 0 ? (
-        <Text style={styles.muted}>No notifications yet.</Text>
+      >
+        <Text
+          style={[
+            styles.markAllLabel,
+            retained.every((item) => item.readAt != null)
+              ? styles.markAllDisabled
+              : null,
+          ]}
+        >
+          Mark all read
+        </Text>
+      </Pressable>
+
+      {loading && retained.length === 0 ? (
+        <Text style={styles.muted} accessibilityLabel="Loading notifications">
+          Loading…
+        </Text>
+      ) : retained.length === 0 ? (
+        <Text style={styles.empty}>No notifications yet.</Text>
       ) : (
         <View style={styles.list}>
           {renderSection("Today", todayItems)}
           {renderSection("Earlier", earlierItems)}
         </View>
       )}
-      <PrimaryButton
-        label="Notification settings"
-        variant="secondary"
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Notification settings"
+        style={styles.settingsLink}
         onPress={onOpenSettings}
-      />
+      >
+        <Text style={styles.settingsLabel}>Notification settings</Text>
+      </Pressable>
       <PrimaryButton label="Done" variant="ghost" onPress={onBack} />
     </Screen>
   );
@@ -178,6 +321,30 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 15,
     marginTop: spacing.lg,
+  },
+  empty: {
+    color: colors.midGrey,
+    fontSize: 16,
+    marginTop: spacing.xl,
+  },
+  offline: {
+    color: colors.midGrey,
+    fontSize: 13,
+    marginBottom: spacing.sm,
+  },
+  markAll: {
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    minHeight: touchTargetMin,
+    marginBottom: spacing.sm,
+  },
+  markAllLabel: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  markAllDisabled: {
+    color: colors.midGrey,
   },
   list: {
     gap: spacing.lg,
@@ -194,8 +361,9 @@ const styles = StyleSheet.create({
   },
   row: {
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: radii.card,
     gap: spacing.xs,
+    minHeight: touchTargetMin,
     padding: spacing.md,
   },
   unread: {
@@ -206,10 +374,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: spacing.sm,
-    justifyContent: "space-between",
-  },
-  icon: {
-    fontSize: 18,
   },
   dot: {
     backgroundColor: colors.indigo,
@@ -230,5 +394,15 @@ const styles = StyleSheet.create({
   meta: {
     color: colors.midGrey,
     fontSize: 12,
+  },
+  settingsLink: {
+    justifyContent: "center",
+    marginTop: spacing.xl,
+    minHeight: touchTargetMin,
+  },
+  settingsLabel: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

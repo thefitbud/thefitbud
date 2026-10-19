@@ -206,6 +206,8 @@ export async function navigateCaptureScreen(
         screen: "ask_coach",
         itemType: "meal_assignment",
         itemId: "00000000-0000-4000-8000-000000000001",
+        itemLabel: "Lunch",
+        dateLabel: "Tue 13 Oct",
         topic: "Lunch",
       });
       break;

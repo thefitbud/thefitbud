@@ -108,40 +108,80 @@ export function TraineeShell({
 
   const handleNotificationNavigate = useCallback(
     (link: NotificationDeepLink) => {
+      const route = link.route;
+      if (route.type === "unavailable") {
+        setOverlay({ screen: "deep_link", reason: route.reason });
+        return;
+      }
+      if (route.type === "workout_overview" || route.type === "workout_active") {
+        setTab("workout");
+        setOverlay({
+          screen: "workout_overview",
+          assignmentId: route.assignmentId,
+        });
+        return;
+      }
+      if (route.type === "meal") {
+        setTab("diet");
+        setOverlay({
+          screen: "something_different",
+          assignmentId: route.assignmentId,
+        });
+        return;
+      }
+      if (route.type === "checkin") {
+        setTab("today");
+        void (async () => {
+          try {
+            const list = await api.listCheckins(relationship.id);
+            const match = list.items.find(
+              (item) => item.id === route.checkinId,
+            );
+            if (match) setActiveCheckin(match);
+            else
+              setOverlay({
+                screen: "deep_link",
+                reason: "This check-in isn't available anymore.",
+              });
+          } catch {
+            setOverlay({
+              screen: "deep_link",
+              reason: "This check-in isn't available anymore.",
+            });
+          }
+        })();
+        return;
+      }
+      if (route.type === "note") {
+        setTab("today");
+        setOverlay(null);
+        return;
+      }
+      if (route.type === "reactivate") {
+        setTab("today");
+        setOverlay({ screen: "ended" });
+        return;
+      }
+      if (route.type === "reminders") {
+        setTab("more");
+        setOverlay({ screen: "reminder_settings" });
+        return;
+      }
+      if (route.type === "tab") {
+        setTab(route.tab);
+        return;
+      }
       setTab(
         link.tab === "workout"
           ? "workout"
           : link.tab === "diet"
             ? "diet"
-            : "today",
+            : link.tab === "progress"
+              ? "progress"
+              : link.tab === "more"
+                ? "more"
+                : "today",
       );
-      if (link.domainEntityType === "meal_assignment") {
-        setOverlay({
-          screen: "something_different",
-          assignmentId: link.domainEntityId,
-        });
-        return;
-      }
-      if (link.domainEntityType === "workout_assignment") {
-        setOverlay({
-          screen: "workout_overview",
-          assignmentId: link.domainEntityId,
-        });
-        return;
-      }
-      if (link.domainEntityType === "checkin") {
-        void (async () => {
-          try {
-            const list = await api.listCheckins(relationship.id);
-            const match = list.items.find(
-              (item) => item.id === link.domainEntityId,
-            );
-            if (match) setActiveCheckin(match);
-          } catch {
-            // ignore
-          }
-        })();
-      }
     },
     [api, relationship.id],
   );
@@ -391,6 +431,10 @@ export function TraineeShell({
         onClose={() => setOverlay(null)}
         onOpen={openOverlay}
         onSignOut={signOut}
+        onGoToday={() => {
+          setOverlay(null);
+          setTab("today");
+        }}
         onNotificationNavigate={handleNotificationNavigate}
         onCoachingResumed={handleCoachingResumed}
       />
@@ -475,6 +519,11 @@ export function TraineeShell({
           }}
           onOpen={openOverlay}
           onSignOut={signOut}
+          onGoToday={() => {
+            invalidateRelationshipDayData(relationship.id);
+            setOverlay(null);
+            setTab("today");
+          }}
           onNotificationNavigate={handleNotificationNavigate}
         />
       ) : null}

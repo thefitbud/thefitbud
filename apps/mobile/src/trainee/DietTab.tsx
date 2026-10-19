@@ -22,7 +22,7 @@ import {
   skipMealAssignment,
 } from "./mealActions";
 import {
-  canLogMealOnDate,
+  canShowMealLogActions,
   cleanFoodLabel,
   mealKcalFromDayTotals,
   mealLockCopy,
@@ -72,6 +72,8 @@ export function DietTab({
   const sync = useSyncEngine();
   const [assignments, setAssignments] = useState<MealAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  /** False until listMealAssignments returns derived loggingLocked flags. */
+  const [lockStateKnown, setLockStateKnown] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
@@ -93,6 +95,7 @@ export function DietTab({
 
   const load = useCallback(async () => {
     setError(null);
+    setLockStateKnown(false);
     try {
       const [listed, day] = await Promise.all([
         api.listMealAssignments(relationship.id, {
@@ -104,8 +107,10 @@ export function DietTab({
       setAssignments(sortMealsByTime(scheduledAssignments(listed.items)));
       setDayTotals(day);
       setOffline(false);
+      setLockStateKnown(true);
     } catch (err) {
       setOffline(true);
+      setLockStateKnown(false);
       setError(
         err instanceof ApiClientError
           ? err.message
@@ -243,15 +248,16 @@ export function DietTab({
             </View>
           ) : (
             assignments.map((meal) => {
-              const lockCopy = mealLockCopy(meal, coachName);
-              const canLog =
-                !lockCopy &&
-                canLogMealOnDate({
-                  selectedDate,
-                  today,
-                  meal,
-                  unresolvedExceptionCount: unresolvedExceptions,
-                });
+              const lockCopy = lockStateKnown
+                ? mealLockCopy(meal, coachName)
+                : null;
+              const canLog = canShowMealLogActions({
+                lockStateKnown,
+                selectedDate,
+                today,
+                meal,
+                unresolvedExceptionCount: unresolvedExceptions,
+              });
               const kcal = mealKcalFromDayTotals(
                 meal,
                 dayTotals?.totals.perMeal,

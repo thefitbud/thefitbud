@@ -39,7 +39,7 @@ import { TodayCheckinCard } from "./CheckinScreen";
 import { TraineeDateNavigator } from "./TraineeDateNavigator";
 import { confirmMealAssignment, MealSyncError } from "./mealActions";
 import {
-  canLogMealOnDate,
+  canShowMealLogActions,
   cleanFoodLabel,
   mealKcalFromDayTotals,
   mealLockCopy,
@@ -167,6 +167,8 @@ export function TodayTab({
   const [meals, setMeals] = useState<MealAssignment[]>([]);
   const [checkin, setCheckin] = useState<Checkin | null>(null);
   const [loading, setLoading] = useState(true);
+  /** False until listMealAssignments returns derived loggingLocked flags. */
+  const [lockStateKnown, setLockStateKnown] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineHint, setOfflineHint] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -186,6 +188,7 @@ export function TodayTab({
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLockStateKnown(false);
     setError(null);
     try {
       const weekStart = startOfWeekMonday(selectedDate);
@@ -216,11 +219,13 @@ export function TodayTab({
       setMeals(sortMealsByTime(scheduledAssignments(mealList.items)));
       setCheckin(pickTodayCheckin(checkins.items));
       setOfflineHint(false);
+      setLockStateKnown(true);
     } catch {
       setError("Couldn't refresh · pull to try again.");
       setOfflineHint(true);
       setWorkout(null);
       setMeals([]);
+      setLockStateKnown(false);
     } finally {
       setLoading(false);
     }
@@ -262,7 +267,8 @@ export function TodayTab({
   );
 
   const lateLoggableCount = meals.filter((meal) =>
-    canLogMealOnDate({
+    canShowMealLogActions({
+      lockStateKnown,
       selectedDate,
       today,
       meal,
@@ -414,6 +420,9 @@ export function TodayTab({
                   );
                 })()}
                 {(() => {
+                  if (!lockStateKnown) {
+                    return null;
+                  }
                   const lockCopy = mealLockCopy(hero.meal, coachName);
                   if (lockCopy) {
                     return (
@@ -421,7 +430,8 @@ export function TodayTab({
                     );
                   }
                   if (
-                    !canLogMealOnDate({
+                    !canShowMealLogActions({
+                      lockStateKnown,
                       selectedDate,
                       today,
                       meal: hero.meal,
@@ -621,7 +631,9 @@ export function TodayTab({
                     meal,
                     dayTotals?.totals.perMeal,
                   );
-                  const lockCopy = mealLockCopy(meal, coachName);
+                  const lockCopy = lockStateKnown
+                    ? mealLockCopy(meal, coachName)
+                    : null;
                   return (
                     <View key={meal.id} style={styles.mealRow}>
                       <View style={styles.mealMain}>

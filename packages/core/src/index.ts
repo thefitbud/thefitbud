@@ -274,7 +274,12 @@ export {
   isAuthorizedRealtimeChannel,
 } from "./realtime.js";
 
-export { normalizeWhatsappE164, whatsappHref } from "./whatsapp.js";
+export {
+  askCoachGoLink,
+  buildAskCoachMessage,
+  normalizeWhatsappE164,
+  whatsappHref,
+} from "./whatsapp.js";
 
 export {
   ADHERENCE_WINDOW_DAYS,

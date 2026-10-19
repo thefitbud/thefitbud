@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { createDb } from "../db/client.js";
 import { clientInvitations, trainerProfiles } from "../db/schema.js";
 import { nowIso, sha256Hex } from "../lib/crypto.js";
+import { operation } from "../openapi/document.js";
 import type { Env, Variables } from "../types.js";
 
 /**
@@ -22,7 +23,31 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-inviteLandingRoutes.get("/:token", async (c) => {
+inviteLandingRoutes.get(
+  "/:token",
+  operation({
+    tag: "Invitations",
+    summary: "Invite deep-link landing page",
+    description:
+      "Public HTML landing for APP_HOST/i/{token} (TR-02). Resolves the invite token, shows coach context, and deep-links into the FitBud app or Expo web. Not an authenticated JSON API.",
+    security: "public",
+    defaultErrors: false,
+    html: true,
+    successDescription: "HTML invite landing page.",
+    parameters: [
+      {
+        name: "token",
+        in: "path",
+        required: true,
+        description: "Raw invite token from the email or WhatsApp link.",
+        schema: { type: "string", minLength: 8 },
+      },
+    ],
+    errors: [
+      { status: 404, description: "Invite token missing, unknown, or invalid." },
+    ],
+  }),
+  async (c) => {
   const token = c.req.param("token")?.trim() ?? "";
   if (!token || token.length < 8) {
     return c.html(
@@ -111,4 +136,5 @@ inviteLandingRoutes.get("/:token", async (c) => {
 </html>`,
     invitation ? 200 : 404,
   );
-});
+  },
+);

@@ -28,6 +28,22 @@ export function isMealLoggingLocked(meal: MealAssignment): boolean {
   return meal.loggingLocked === true;
 }
 
+/**
+ * Log actions must wait until the meal list (with derived lock flags) has
+ * finished loading. Sync payloads omit locks and default to unlocked — showing
+ * "Eaten as planned" in that window is a product bug.
+ */
+export function canShowMealLogActions(input: {
+  lockStateKnown: boolean;
+  selectedDate: string;
+  today: string;
+  meal: MealAssignment;
+  unresolvedExceptionCount: number;
+}): boolean {
+  if (!input.lockStateKnown) return false;
+  return canLogMealOnDate(input);
+}
+
 /** Plain-words reason when a meal can't be logged. */
 export function mealLockCopy(
   meal: MealAssignment,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { Check } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -7,22 +8,79 @@ import type {
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
-import { formatCivilDate, labelFor } from "@fitbud/core";
+import { formatCivilDate } from "@fitbud/core";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
+import { BottomSheet } from "../components/BottomSheet";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { OverflowMenu } from "../components/OverflowMenu";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
-import { addDays, localDateInTimezone } from "../lib/dates";
+import {
+  addDays,
+  localDateInTimezone,
+  startOfWeekMonday,
+  weekDatesFrom,
+  weekdayShort,
+} from "../lib/dates";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
+import {
+  cacheKey,
+  getCached,
+  invalidateRelationshipDayData,
+  setCached,
+  subscribe,
+  subscribeAll,
+} from "./dataCache";
 import { scheduledAssignments } from "./scheduledAssignments";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
-import { openActiveWorkout, workoutStartError } from "./workoutSession";
+import { estimateDurationMinutesFromDay } from "./workoutDuration";
+import {
+  openActiveWorkout,
+  restSecondsBySetTargetId,
+  workoutStartError,
+} from "./workoutSession";
 
-function statusLabel(status: WorkoutAssignment["status"]): string {
-  return labelFor("workout_assignment_status", status);
+const TARGET = 44;
+const SKIP_REASONS = [
+  "Sick",
+  "Travelling",
+  "No time",
+  "Injury",
+  "Other",
+] as const;
+
+function exerciseLine(
+  exercise: WorkoutAssignment["workoutDay"]["exercises"][number],
+): string {
+  const sets = exercise.setTargets.length;
+  const first = exercise.setTargets[0];
+  const reps = first?.reps != null ? String(first.reps) : "?";
+  const load = first?.loadLabel?.trim();
+  return load ? `${sets}×${reps} · ${load}` : `${sets}×${reps}`;
+}
+
+function continueCaption(
+  assignment: WorkoutAssignment,
+  lastProgress?: { done: number; total: number } | null,
+): string | null {
+  if (
+    assignment.status !== "in_progress" &&
+    assignment.status !== "paused"
+  ) {
+    return null;
+  }
+  const total =
+    lastProgress?.total ?? assignment.workoutDay.exercises.length;
+  if (lastProgress && lastProgress.total > 0) {
+    return `Paused at ${lastProgress.done} of ${lastProgress.total} exercises`;
+  }
+  if (assignment.status === "paused" && total > 0) {
+    return `Paused · ${total} exercises`;
+  }
+  return null;
 }
 
 export function WorkoutTab({
@@ -31,52 +89,118 @@ export function WorkoutTab({
   onOpenOverlay,
   autoStartToday = false,
   onAutoStartConsumed,
+  coachName: coachNameProp,
 }: {
   relationship: CoachingRelationship;
   selectedDate?: string;
   onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
   autoStartToday?: boolean;
   onAutoStartConsumed?: () => void;
+  /** Optional override; defaults to relationship.trainerDisplayName. */
+  coachName?: string;
 }) {
   const { api, me, refreshSession } = useAuth();
   const sync = useSyncEngine();
   const [assignments, setAssignments] = useState<WorkoutAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
   const [activeExecution, setActiveExecution] =
     useState<WorkoutExecution | null>(null);
+  const [activeAssignment, setActiveAssignment] =
+    useState<WorkoutAssignment | null>(null);
   const [summaryExecution, setSummaryExecution] =
     useState<WorkoutExecution | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [skipTarget, setSkipTarget] = useState<WorkoutAssignment | null>(null);
+  const [skipReason, setSkipReason] = useState<string | null>(null);
+  const [closedMissedIds, setClosedMissedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [pausedProgress, setPausedProgress] = useState<{
+    assignmentId: string;
+    done: number;
+    total: number;
+  } | null>(null);
+
+  const coachName =
+    coachNameProp?.trim() ||
+    relationship.trainerDisplayName?.split(/\s+/)[0] ||
+    "Your coach";
 
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
   const focusDate = selectedDate ?? today;
-  const rangeEnd = useMemo(() => addDays(focusDate, 7), [focusDate]);
+  const weekStart = useMemo(
+    () => startOfWeekMonday(focusDate),
+    [focusDate],
+  );
+  const weekDates = useMemo(() => weekDatesFrom(weekStart), [weekStart]);
+  const rangeEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const workoutsCacheKey = cacheKey(
+    "workouts",
+    relationship.id,
+    weekStart,
+    rangeEnd,
+  );
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const listed = await api.listWorkoutAssignments(relationship.id, {
-        fromDate: focusDate,
+        fromDate: weekStart,
         toDate: rangeEnd,
       });
-      setAssignments(scheduledAssignments(listed.items));
+      const next = scheduledAssignments(
+        listed.items as WorkoutAssignment[],
+      );
+      setAssignments(next);
+      setCached(workoutsCacheKey, next);
+      setOffline(false);
     } catch (err) {
+      setOffline(true);
+      const cached = getCached<WorkoutAssignment[]>(workoutsCacheKey);
+      if (cached) setAssignments(cached);
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not load workouts.",
+          : "Couldn't refresh workouts. Pull to try again.",
       );
     } finally {
       setLoading(false);
     }
-  }, [api, relationship.id, focusDate, rangeEnd]);
+  }, [api, relationship.id, weekStart, rangeEnd, workoutsCacheKey]);
 
   useEffect(() => {
+    const cached = getCached<WorkoutAssignment[]>(workoutsCacheKey);
+    if (cached) {
+      setAssignments(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     void load();
+  }, [load, workoutsCacheKey]);
+
+  useEffect(() => {
+    return subscribe(workoutsCacheKey, () => {
+      void load();
+    });
+  }, [workoutsCacheKey, load]);
+
+  useEffect(() => {
+    return subscribeAll(() => {
+      void load();
+    });
   }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    void refreshSession?.();
+    await load();
+    setRefreshing(false);
+  }, [load, refreshSession]);
 
   useEffect(() => {
     if (!autoStartToday || loading) return;
@@ -92,6 +216,7 @@ export function WorkoutTab({
       setError(null);
       try {
         const execution = await openActiveWorkout(api, sync, todayAssignment);
+        setActiveAssignment(todayAssignment);
         setActiveExecution(execution);
       } catch (err) {
         setError(workoutStartError(err));
@@ -111,17 +236,118 @@ export function WorkoutTab({
     onAutoStartConsumed,
   ]);
 
-  const todayAssignment = assignments.find(
-    (item) => item.localDate === focusDate,
-  );
-  const upcoming = assignments.filter((item) => item.localDate !== focusDate);
+  const byDate = useMemo(() => {
+    const map = new Map<string, WorkoutAssignment>();
+    for (const item of assignments) {
+      if (!map.has(item.localDate)) map.set(item.localDate, item);
+    }
+    return map;
+  }, [assignments]);
+
+  const todayAssignment = byDate.get(focusDate) ?? null;
+
+  const weekCompleted = assignments.filter(
+    (item) =>
+      item.status === "completed" ||
+      item.status === "modified" ||
+      (item.execution?.status === "completed" ||
+        item.execution?.status === "modified"),
+  ).length;
+  const weekTotal = assignments.filter(
+    (item) => item.workoutDay.required !== false,
+  ).length;
+
+  const lateLoggable = useMemo(() => {
+    return assignments
+      .filter(
+        (item) =>
+          item.status === "missed" &&
+          item.localDate < today &&
+          item.workoutDay.required !== false &&
+          !closedMissedIds.has(item.id),
+      )
+      .slice(0, 3);
+  }, [assignments, today, closedMissedIds]);
+
+  const closedMissed = useMemo(() => {
+    return assignments.filter(
+      (item) =>
+        item.status === "missed" &&
+        item.workoutDay.required !== false &&
+        closedMissedIds.has(item.id),
+    );
+  }, [assignments, closedMissedIds]);
+
+  async function startOrContinue(assignment: WorkoutAssignment) {
+    setActingId(assignment.id);
+    setError(null);
+    try {
+      const execution = await openActiveWorkout(api, sync, assignment);
+      setActiveAssignment(assignment);
+      setActiveExecution(execution);
+      invalidateRelationshipDayData(relationship.id);
+    } catch (err) {
+      const message = workoutStartError(err);
+      const locked =
+        err instanceof ApiClientError &&
+        (err.code === "LOCKED" ||
+          /closed|resolved|locked/i.test(err.message));
+      if (locked || /closed|resolved|locked/i.test(message)) {
+        setClosedMissedIds((prev) => new Set(prev).add(assignment.id));
+      }
+      setError(message);
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function confirmSkip(reason: string | null) {
+    if (!skipTarget) return;
+    const assignment = skipTarget;
+    setActingId(`skip-${assignment.id}`);
+    setError(null);
+    try {
+      await enqueueAndPush(sync, {
+        recordId: assignment.id,
+        operation: "workout.skip",
+        payload: {
+          assignmentId: assignment.id,
+          reason: reason ?? null,
+        },
+      });
+      invalidateRelationshipDayData(relationship.id);
+      setSkipTarget(null);
+      setSkipReason(null);
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not skip workout.",
+      );
+    } finally {
+      setActingId(null);
+    }
+  }
 
   if (summaryExecution) {
+    const alreadyCounted = assignments.some(
+      (item) =>
+        item.execution?.id === summaryExecution.id &&
+        (item.status === "completed" || item.status === "modified"),
+    );
+    const summaryWeekCompleted = weekCompleted + (alreadyCounted ? 0 : 1);
     return (
       <WorkoutSummaryScreen
         execution={summaryExecution}
+        coachName={coachName}
+        weekCompleted={summaryWeekCompleted}
+        weekTotal={weekTotal > 0 ? weekTotal : undefined}
+        offline={offline}
         onDone={() => {
           setSummaryExecution(null);
+          setActiveAssignment(null);
+          invalidateRelationshipDayData(relationship.id);
           void load();
         }}
       />
@@ -132,191 +358,421 @@ export function WorkoutTab({
     return (
       <ActiveWorkoutScreen
         execution={activeExecution}
-        onChange={setActiveExecution}
+        sessionName={
+          activeAssignment?.workoutDayName ??
+          todayAssignment?.workoutDayName
+        }
+        restSecondsBySetTargetId={
+          activeAssignment
+            ? restSecondsBySetTargetId(activeAssignment)
+            : todayAssignment
+              ? restSecondsBySetTargetId(todayAssignment)
+              : {}
+        }
+        onChange={(next) => {
+          setActiveExecution(next);
+          if (activeAssignment) {
+            const total = next.exercises.length;
+            const done = next.exercises.filter((ex) =>
+              ex.sets.every((set) => set.status !== "pending"),
+            ).length;
+            setPausedProgress({
+              assignmentId: activeAssignment.id,
+              done,
+              total,
+            });
+          }
+        }}
+        onAskCoach={
+          onOpenOverlay && activeAssignment
+            ? () =>
+                onOpenOverlay({
+                  screen: "ask_coach",
+                  itemType: "workout_assignment",
+                  itemId: activeAssignment.id,
+                  itemLabel: activeAssignment.workoutDayName,
+                  dateLabel: formatCivilDate(activeAssignment.localDate),
+                  topic: activeAssignment.workoutDayName,
+                })
+            : undefined
+        }
         onFinished={(execution) => {
           setActiveExecution(null);
+          setPausedProgress(null);
           setSummaryExecution(execution);
         }}
         onExit={() => {
           setActiveExecution(null);
+          setActiveAssignment(null);
+          invalidateRelationshipDayData(relationship.id);
           void load();
         }}
       />
     );
   }
 
+  const duration =
+    todayAssignment != null
+      ? estimateDurationMinutesFromDay(todayAssignment.workoutDay)
+      : null;
+
+  const pausedCaption =
+    todayAssignment != null
+      ? continueCaption(
+          todayAssignment,
+          pausedProgress?.assignmentId === todayAssignment.id
+            ? pausedProgress
+            : null,
+        )
+      : null;
+  const continueLabel = pausedCaption
+    ? `Continue · ${pausedCaption}`
+    : "Continue";
+
   return (
     <Screen
       chrome="app"
       title="Workout"
       showHeader={false}
-      refreshing={loading}
+      refreshing={refreshing}
       onRefresh={() => {
-        void refreshSession?.();
-        void load();
+        void onRefresh();
       }}
     >
       {error ? <ErrorBanner message={error} /> : null}
-      {loading ? (
-        <Text style={styles.muted}>Loading assignments…</Text>
-      ) : (
-        <View style={styles.stack}>
-          <View style={styles.banner}>
-            {todayAssignment ? (
-              <>
-                <Text style={styles.kicker}>Today</Text>
-                <Text style={styles.bannerTitle}>
-                  {todayAssignment.workoutDayName}
-                </Text>
-                <Text style={styles.bannerBody}>
-                  {statusLabel(todayAssignment.status)} ·{" "}
-                  {todayAssignment.workoutDay.exercises.length === 1
-                    ? "1 exercise"
-                    : `${todayAssignment.workoutDay.exercises.length} exercises`}
-                </Text>
-                {todayAssignment.workoutDay.exercises.map((exercise) => (
-                  <View key={exercise.id} style={styles.exerciseRow}>
-                    <Text style={styles.rowTitle}>{exercise.name}</Text>
-                    <Text style={styles.rowMeta}>
-                      {exercise.setTargets.length} sets
-                      {exercise.setTargets[0]?.reps
-                        ? ` · ${exercise.setTargets[0].reps} reps`
-                        : ""}
-                      {exercise.setTargets[0]?.loadLabel
-                        ? ` · ${exercise.setTargets[0].loadLabel}`
-                        : ""}
-                    </Text>
-                  </View>
-                ))}
-                {onOpenOverlay ? (
-                  <PrimaryButton
-                    label="See workout overview"
-                    variant="secondary"
-                    onPress={() => {
-                      onOpenOverlay({
-                        screen: "workout_overview",
-                        assignmentId: todayAssignment.id,
-                      });
-                    }}
-                  />
-                ) : null}
-                {todayAssignment.status === "assigned" ||
-                todayAssignment.status === "missed" ? (
-                  <PrimaryButton
-                    label="Start Workout"
-                    loading={actingId === todayAssignment.id}
-                    onPress={() => {
-                      void (async () => {
-                        setActingId(todayAssignment.id);
-                        setError(null);
-                        try {
-                          const execution = await openActiveWorkout(
-                            api,
-                            sync,
-                            todayAssignment,
-                          );
-                          setActiveExecution(execution);
-                        } catch (err) {
-                          setError(workoutStartError(err));
-                        } finally {
-                          setActingId(null);
-                        }
-                      })();
-                    }}
-                  />
-                ) : null}
-                {todayAssignment.execution &&
-                (todayAssignment.status === "in_progress" ||
-                  todayAssignment.status === "paused") ? (
-                  <PrimaryButton
-                    label="Continue Workout"
-                    onPress={() => {
-                      void (async () => {
-                        setError(null);
-                        try {
-                          const execution = await api.getWorkoutExecution(
-                            todayAssignment.execution!.id,
-                          );
-                          setActiveExecution(execution);
-                        } catch (err) {
-                          setError(
-                            err instanceof ApiClientError
-                              ? err.message
-                              : "Could not open workout.",
-                          );
-                        }
-                      })();
-                    }}
-                  />
-                ) : null}
-                {todayAssignment.status === "assigned" ? (
-                  <PrimaryButton
-                    label="Skip workout"
-                    variant="ghost"
-                    onPress={() => {
-                      void (async () => {
-                        setActingId(`skip-${todayAssignment.id}`);
-                        setError(null);
-                        try {
-                          await enqueueAndPush(sync, {
-                            recordId: todayAssignment.id,
-                            operation: "workout.skip",
-                            payload: { assignmentId: todayAssignment.id },
-                          });
-                          await load();
-                        } catch (err) {
-                          setError(
-                            err instanceof ApiClientError
-                              ? err.message
-                              : "Could not skip workout.",
-                          );
-                        } finally {
-                          setActingId(null);
-                        }
-                      })();
-                    }}
-                  />
-                ) : null}
-              </>
-            ) : (
-              <Text style={styles.bannerBody}>
-                No workout assigned for today. Upcoming sessions appear below
-                when your plan and schedule place them.
-              </Text>
-            )}
-          </View>
+      {offline ? (
+        <Text style={styles.offline}>Saved on phone · Not sent yet</Text>
+      ) : null}
 
-          <Text style={styles.sectionTitle}>Upcoming</Text>
-          {upcoming.length === 0 ? (
-            <Text style={styles.muted}>No upcoming assignments in range.</Text>
-          ) : (
-            upcoming.map((item) => (
-              <Pressable key={item.id} style={styles.row}>
-                <View style={styles.rowMain}>
-                  <Text style={styles.rowTitle}>{item.workoutDayName}</Text>
-                  <Text style={styles.rowMeta}>
-                    {formatCivilDate(item.localDate)} · {statusLabel(item.status)}
-                  </Text>
-                </View>
-              </Pressable>
-            ))
-          )}
+      <View style={styles.weekStrip} accessibilityRole="summary">
+        {weekDates.map((date) => {
+          const assignment = byDate.get(date);
+          const isToday = date === today;
+          let caption = "Rest";
+          if (assignment) {
+            if (
+              assignment.status === "completed" ||
+              assignment.status === "modified"
+            ) {
+              caption = "✓";
+            } else {
+              caption = assignment.workoutDayName;
+            }
+          }
+          return (
+            <View
+              key={date}
+              style={[styles.weekDay, isToday ? styles.weekDayToday : null]}
+            >
+              <Text style={styles.weekDow}>
+                {weekdayShort(timeZone, date)}
+              </Text>
+              {caption === "✓" ? (
+                <Check color={colors.success} size={16} />
+              ) : (
+                <Text
+                  style={styles.weekCaption}
+                  numberOfLines={2}
+                >
+                  {caption}
+                </Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+
+      {lateLoggable.map((item) => (
+        <View key={`late-${item.id}`} style={styles.lateBanner}>
+          <Text style={styles.lateBody}>
+            {weekdayShort(timeZone, item.localDate)}'s workout wasn't logged. If
+            you did it, log it now.
+          </Text>
+          <PrimaryButton
+            label="Log it"
+            variant="tinted"
+            loading={actingId === item.id}
+            onPress={() => {
+              void startOrContinue(item);
+            }}
+          />
+        </View>
+      ))}
+
+      {closedMissed.map((item) => (
+        <View key={`closed-${item.id}`} style={styles.closedBanner}>
+          <Text style={styles.closedBody}>
+            Missed · closed by {coachName}
+          </Text>
+        </View>
+      ))}
+
+      {loading && assignments.length === 0 ? (
+        <Text style={styles.muted}>Loading workouts…</Text>
+      ) : todayAssignment ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionHeader}>
+            <Text style={styles.kicker} accessibilityRole="header">
+              Today
+            </Text>
+            <OverflowMenu
+              label="Workout options"
+              items={[
+                ...(todayAssignment.status === "assigned"
+                  ? [
+                      {
+                        id: "not-today",
+                        label: "Not today",
+                        onSelect: () => {
+                          setSkipReason(null);
+                          setSkipTarget(todayAssignment);
+                        },
+                      },
+                    ]
+                  : []),
+                ...(onOpenOverlay
+                  ? [
+                      {
+                        id: "ask",
+                        label: "Ask coach",
+                        onSelect: () =>
+                          onOpenOverlay({
+                            screen: "ask_coach",
+                            itemType: "workout_assignment",
+                            itemId: todayAssignment.id,
+                            itemLabel: todayAssignment.workoutDayName,
+                            dateLabel: formatCivilDate(todayAssignment.localDate),
+                            topic: todayAssignment.workoutDayName,
+                          }),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </View>
+          <Text style={styles.bannerTitle} accessibilityRole="header">
+            {todayAssignment.workoutDayName}
+          </Text>
+          {duration != null ? (
+            <Text style={styles.bannerBody}>About {duration} min</Text>
+          ) : null}
+          {todayAssignment.workoutDay.instructions?.trim() ? (
+            <Text style={styles.trainerNote}>
+              {todayAssignment.workoutDay.instructions}
+            </Text>
+          ) : null}
+
+          {todayAssignment.workoutDay.exercises.map((exercise) => (
+            <View key={exercise.id} style={styles.exerciseRow}>
+              <Text style={styles.rowTitle}>{exercise.name}</Text>
+              <Text style={styles.rowMeta}>{exerciseLine(exercise)}</Text>
+            </View>
+          ))}
+
+          {onOpenOverlay ? (
+            <PrimaryButton
+              label="See workout overview"
+              variant="secondary"
+              onPress={() => {
+                onOpenOverlay({
+                  screen: "workout_overview",
+                  assignmentId: todayAssignment.id,
+                });
+              }}
+            />
+          ) : null}
+
+          {todayAssignment.status === "completed" ||
+          todayAssignment.status === "modified" ? (
+            <PrimaryButton
+              label="View summary"
+              onPress={() => {
+                void (async () => {
+                  if (!todayAssignment.execution) return;
+                  setActingId(todayAssignment.id);
+                  try {
+                    const execution = await api.getWorkoutExecution(
+                      todayAssignment.execution.id,
+                    );
+                    setSummaryExecution(execution);
+                  } catch (err) {
+                    setError(
+                      err instanceof ApiClientError
+                        ? err.message
+                        : "Could not open summary.",
+                    );
+                  } finally {
+                    setActingId(null);
+                  }
+                })();
+              }}
+            />
+          ) : null}
+
+          {todayAssignment.status === "assigned" ||
+          todayAssignment.status === "missed" ? (
+            <PrimaryButton
+              label="Start workout"
+              loading={actingId === todayAssignment.id}
+              onPress={() => {
+                void startOrContinue(todayAssignment);
+              }}
+            />
+          ) : null}
+
+          {todayAssignment.execution &&
+          (todayAssignment.status === "in_progress" ||
+            todayAssignment.status === "paused") ? (
+            <PrimaryButton
+              label={continueLabel}
+              loading={actingId === todayAssignment.id}
+              onPress={() => {
+                void startOrContinue(todayAssignment);
+              }}
+            />
+          ) : null}
+
+          {todayAssignment.status === "missed" &&
+          !closedMissedIds.has(todayAssignment.id) &&
+          todayAssignment.workoutDay.required !== false ? (
+            <Text style={styles.missedHint}>
+              Missed · you can still log it
+            </Text>
+          ) : null}
+        </View>
+      ) : assignments.length === 0 ? (
+        <View style={styles.sessionCard}>
+          <Text style={styles.bannerTitle} accessibilityRole="header">
+            No plan yet
+          </Text>
+          <Text style={styles.bannerBody}>
+            Workouts appear here when {coachName} publishes your plan.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.sessionCard}>
+          <Text style={styles.bannerTitle} accessibilityRole="header">
+            Rest day
+          </Text>
+          <Text style={styles.bannerBody}>
+            No workout planned for this day. Enjoy the recovery.
+          </Text>
         </View>
       )}
+
+      <BottomSheet
+        visible={skipTarget != null}
+        title="Not today"
+        subtitle="Tell your coach why (optional)"
+        onDismiss={() => {
+          setSkipTarget(null);
+          setSkipReason(null);
+        }}
+      >
+        <View style={styles.reasonRow}>
+          {SKIP_REASONS.map((reason) => (
+            <Pressable
+              key={reason}
+              accessibilityRole="button"
+              accessibilityState={{ selected: skipReason === reason }}
+              onPress={() => setSkipReason(reason)}
+              style={[
+                styles.reasonChip,
+                skipReason === reason ? styles.reasonChipActive : null,
+              ]}
+            >
+              <Text
+                style={
+                  skipReason === reason
+                    ? styles.reasonChipTextActive
+                    : styles.reasonChipText
+                }
+              >
+                {reason}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <PrimaryButton
+          label="Skip workout"
+          loading={actingId?.startsWith("skip-") ?? false}
+          onPress={() => {
+            void confirmSkip(skipReason);
+          }}
+        />
+        <PrimaryButton
+          label="Cancel"
+          variant="ghost"
+          onPress={() => {
+            setSkipTarget(null);
+            setSkipReason(null);
+          }}
+        />
+      </BottomSheet>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.lg,
-    paddingTop: spacing.md,
+  weekStrip: {
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginBottom: spacing.lg,
   },
-  banner: {
+  weekDay: {
+    alignItems: "center",
+    flex: 1,
+    gap: 4,
+    minHeight: TARGET + 8,
+  },
+  weekDayToday: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: radii.control,
+    paddingVertical: spacing.xs,
+  },
+  weekDow: {
+    color: colors.midGrey,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  weekCaption: {
+    color: colors.deepNavy,
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  lateBanner: {
+    backgroundColor: colors.softCoral,
+    borderRadius: radii.card,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+  },
+  lateBody: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  closedBanner: {
     backgroundColor: colors.white,
     borderRadius: radii.card,
-    padding: spacing.xl,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+  },
+  closedBody: {
+    color: colors.midGrey,
+    fontSize: 14,
+  },
+  sessionCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.card,
     gap: spacing.sm,
+    padding: spacing.xl,
+  },
+  sessionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   kicker: {
     color: colors.indigo,
@@ -334,28 +790,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  sectionTitle: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  muted: {
-    color: colors.midGrey,
+  trainerNote: {
+    color: colors.darkGrey,
     fontSize: 15,
+    lineHeight: 22,
   },
   exerciseRow: {
     borderTopColor: colors.lightGrey,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.xs,
+    minHeight: TARGET,
     paddingTop: spacing.sm,
-  },
-  row: {
-    backgroundColor: colors.white,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-  },
-  rowMain: {
-    gap: spacing.xs,
   },
   rowTitle: {
     color: colors.nearBlack,
@@ -365,5 +810,42 @@ const styles = StyleSheet.create({
   rowMeta: {
     color: colors.midGrey,
     fontSize: 13,
+  },
+  missedHint: {
+    color: colors.midGrey,
+    fontSize: 13,
+  },
+  muted: {
+    color: colors.midGrey,
+    fontSize: 15,
+  },
+  offline: {
+    color: colors.midGrey,
+    fontSize: 13,
+    marginBottom: spacing.sm,
+  },
+  reasonRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  reasonChip: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: radii.control,
+    minHeight: TARGET,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  reasonChipActive: {
+    backgroundColor: colors.indigo,
+  },
+  reasonChipText: {
+    color: colors.deepNavy,
+    fontWeight: "600",
+  },
+  reasonChipTextActive: {
+    color: colors.white,
+    fontWeight: "700",
   },
 });

@@ -170,7 +170,10 @@ export function mapInvitation(
 export function mapRelationship(
   row: RelationshipRow,
   onboardingStatus: OnboardingStatus,
-  extras?: { trainerDisplayName?: string | null },
+  extras?: {
+    trainerDisplayName?: string | null;
+    trainerWhatsappE164?: string | null;
+  },
 ): CoachingRelationship {
   return {
     id: row.id,
@@ -184,6 +187,7 @@ export function mapRelationship(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     trainerDisplayName: extras?.trainerDisplayName ?? null,
+    trainerWhatsappE164: extras?.trainerWhatsappE164 ?? null,
   };
 }
 

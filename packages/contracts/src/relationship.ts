@@ -117,6 +117,8 @@ export const coachingRelationshipSchema = z.object({
   updatedAt: isoDateTimeSchema,
   /** Trainer's display name when available (trainee-facing reads). */
   trainerDisplayName: z.string().min(1).max(120).nullable().optional(),
+  /** Trainer WhatsApp E.164 digits (no +) for TR-18 Ask coach; null when unset. */
+  trainerWhatsappE164: z.string().min(10).max(15).nullable().optional(),
   /** Present on relationship read when a trainee reactivation request is pending. */
   pendingReactivation: pendingReactivationSchema.nullable().optional(),
 });

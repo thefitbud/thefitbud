@@ -7,6 +7,7 @@ import type {
 
 type CoachAskItemType = CreateCoachAskRequest["itemType"];
 import type { CoachingRelationship } from "@fitbud/contracts";
+import { formatCivilDate } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { BottomSheet } from "../components/BottomSheet";
 import { addDays, localDateInTimezone } from "../lib/dates";
@@ -46,7 +47,9 @@ export type TraineeOverlay =
       screen: "ask_coach";
       itemType: CoachAskItemType;
       itemId: string;
-      topic: string;
+      itemLabel: string;
+      dateLabel: string;
+      topic?: string;
     }
   | { screen: "ended" }
   | { screen: "deep_link"; reason?: string }
@@ -67,6 +70,7 @@ type Props = {
   onClose: () => void;
   onOpen: TraineeOverlayOpener;
   onSignOut: () => void;
+  onGoToday?: () => void;
   onNotificationNavigate?: (link: NotificationDeepLink) => void;
   onCoachingResumed?: (relationship: CoachingRelationship) => void;
 };
@@ -79,9 +83,11 @@ export function TraineeOverlayHost({
   onClose,
   onOpen,
   onSignOut,
+  onGoToday,
   onNotificationNavigate,
   onCoachingResumed,
 }: Props) {
+  const goToday = onGoToday ?? onClose;
   const { api, me } = useAuth();
   const coachName =
     relationship.trainerDisplayName?.trim() ||
@@ -171,7 +177,7 @@ export function TraineeOverlayHost({
             >
               <DeepLinkUnavailableScreen
                 reason="Could not load this meal."
-                onBack={onClose}
+                onGoToday={goToday}
               />
             </BottomSheet>
           );
@@ -179,7 +185,7 @@ export function TraineeOverlayHost({
         return (
           <DeepLinkUnavailableScreen
             reason="Could not load this meal."
-            onBack={onClose}
+            onGoToday={goToday}
           />
         );
       }
@@ -203,6 +209,8 @@ export function TraineeOverlayHost({
                   screen: "ask_coach",
                   itemType: "meal_assignment",
                   itemId: mealAssignment.id,
+                  itemLabel: mealAssignment.mealName,
+                  dateLabel: formatCivilDate(mealAssignment.localDate),
                   topic: mealAssignment.mealName,
                 })
               }
@@ -232,6 +240,8 @@ export function TraineeOverlayHost({
               screen: "ask_coach",
               itemType: "workout_assignment",
               itemId: assignment.id,
+              itemLabel: assignment.workoutDayName,
+              dateLabel: formatCivilDate(assignment.localDate),
               topic: assignment.workoutDayName,
             })
           }
@@ -240,9 +250,11 @@ export function TraineeOverlayHost({
     case "ask_coach":
       return (
         <AskCoachSheet
-          relationshipId={relationship.id}
+          relationship={relationship}
           itemType={overlay.itemType}
           itemId={overlay.itemId}
+          itemLabel={overlay.itemLabel}
+          dateLabel={overlay.dateLabel}
           topic={overlay.topic}
           onDone={onClose}
           onCancel={onClose}
@@ -262,7 +274,10 @@ export function TraineeOverlayHost({
       );
     case "deep_link":
       return (
-        <DeepLinkUnavailableScreen reason={overlay.reason} onBack={onClose} />
+        <DeepLinkUnavailableScreen
+          reason={overlay.reason}
+          onGoToday={goToday}
+        />
       );
     case "profile":
       return (

@@ -1,5 +1,5 @@
 /**
- * Shared trainee day/meal query cache with invalidation.
+ * Shared trainee day/meal/workout query cache with invalidation.
  * Today and Diet (and overlays) read the same entries so logging updates both.
  */
 type Listener = () => void;
@@ -14,7 +14,7 @@ const listeners = new Map<string, Set<Listener>>();
 const globalListeners = new Set<Listener>();
 
 export function cacheKey(
-  kind: "meals" | "day" | "week" | "exceptions",
+  kind: "meals" | "day" | "week" | "exceptions" | "workouts",
   ...parts: string[]
 ): string {
   return [kind, ...parts].join(":");
@@ -37,12 +37,18 @@ export function invalidate(...keys: string[]): void {
   for (const listener of globalListeners) listener();
 }
 
-/** Invalidate all meal/day data for a relationship (any date). */
+/** Invalidate all meal/day/workout data for a relationship (any date). */
 export function invalidateRelationshipDayData(relationshipId: string): void {
   const prefixMeals = `meals:${relationshipId}:`;
+  const prefixWorkouts = `workouts:${relationshipId}:`;
   const prefixDay = "day:";
   for (const key of [...store.keys()]) {
-    if (key.startsWith(prefixMeals) || key.startsWith(prefixDay) || key.startsWith("week:")) {
+    if (
+      key.startsWith(prefixMeals) ||
+      key.startsWith(prefixWorkouts) ||
+      key.startsWith(prefixDay) ||
+      key.startsWith("week:")
+    ) {
       store.delete(key);
       notify(key);
     }
