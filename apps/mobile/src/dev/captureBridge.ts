@@ -9,6 +9,8 @@ export type TraineeCaptureNav = {
   openCheckin: (checkin: Checkin) => void;
   startTodayWorkout: () => Promise<void>;
   openSomethingDifferent: () => Promise<void>;
+  /** Opens food library search for a today's meal (mockup 09 / TR-26). */
+  openFoodSearch: () => Promise<void>;
   openWorkoutOverview: () => Promise<void>;
   openTodayCheckin: () => Promise<void>;
   closeOverlay: () => void;
@@ -238,7 +240,8 @@ export async function navigateCaptureScreen(
       traineeNav?.openOverlay({ screen: "steps_settings" });
       break;
     case "TR-26":
-      await traineeNav?.openSomethingDifferent();
+      await traineeNav?.openFoodSearch();
+      await wait(1200);
       break;
     case "TM-01":
       trainerNav?.setTab("attention");

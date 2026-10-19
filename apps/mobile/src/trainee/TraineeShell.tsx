@@ -341,6 +341,23 @@ export function TraineeShell({
           });
         }
       },
+      async openFoodSearch() {
+        const listed = await api.listMealAssignments(relationship.id, {
+          fromDate: today,
+          toDate: today,
+        });
+        const scheduled = scheduledAssignments(listed.items);
+        const meal =
+          scheduled.find(
+            (item) => item.status === "pending" || item.status === "overdue",
+          ) ?? scheduled[0];
+        if (meal) {
+          openOverlay({
+            screen: "food_search",
+            assignmentId: meal.id,
+          });
+        }
+      },
       async openWorkoutOverview() {
         const listed = await api.listWorkoutAssignments(relationship.id, {
           fromDate: today,

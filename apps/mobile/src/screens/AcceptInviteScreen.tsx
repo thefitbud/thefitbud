@@ -112,6 +112,17 @@ export function AcceptInviteScreen({
         setShowCodeEntry(false);
       }
       if (!cancelled && fromLink.email) setInviteEmail(fromLink.email);
+      // Demo / capture: seed pending invite so hero shows the coach name.
+      if (
+        !cancelled &&
+        !fromLink.token &&
+        !token &&
+        process.env.EXPO_PUBLIC_SCREEN_CAPTURE === "1"
+      ) {
+        setToken("fitbud-demo-anita-invite-pending");
+        setInviteEmail("anita.invite@demo.fitbud.test");
+        setShowCodeEntry(false);
+      }
     })();
     const sub = Linking.addEventListener("url", (event) => {
       const fromLink = inviteParamsFromUrl(event.url);
@@ -304,8 +315,12 @@ export function AcceptInviteScreen({
 
   const displayError = localError ?? errorMessage;
   const coachDisplay = trainerName ?? "Your coach";
-  const coachFirst = trainerName?.split(/\s+/)[0];
-  const joinLabel = coachFirst ? `Join ${coachFirst}` : "Join";
+  const coachFirst =
+    (trainerName ?? coachDisplay).trim().split(/\s+/)[0] || null;
+  const joinLabel =
+    coachFirst && coachFirst.toLowerCase() !== "your"
+      ? `Join ${coachFirst}`
+      : "Join";
   const needsNewAccount = !accessToken;
   const emailLocked = Boolean(inviteEmail?.trim());
 

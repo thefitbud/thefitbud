@@ -51,7 +51,7 @@ export function outcomeCopy(
 ): string {
   switch (outcome) {
     case "acknowledged":
-      return "Reviewed";
+      return "Acknowledged";
     case "needs_follow_up":
       return `${coach} will follow up`;
     case "adjust_coaching":

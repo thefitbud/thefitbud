@@ -144,8 +144,11 @@ export function WorkoutOverviewScreen({
       ? assignmentDayEyebrow(assignment, timeZone, today)
       : null;
 
+  // Always pin a bottom bar on the day detail: Start/Continue when actionable,
+  // otherwise a muted Done so the layout matches mockup 10b (not a blank footer).
   const showStart =
     assignment != null && onStart != null && canStartWorkout(assignment);
+  const showFooterBar = assignment != null && onStart != null;
 
   const menuItems =
     assignment && onAskCoach
@@ -158,18 +161,34 @@ export function WorkoutOverviewScreen({
         ]
       : [];
 
-  const footer = showStart ? (
+  const footer = showFooterBar ? (
     <View style={styles.abar}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={startButtonLabel(assignment!)}
-        disabled={startLoading}
-        onPress={() => onStart!(assignment!)}
-        style={[styles.startBtn, startLoading ? styles.startBtnDisabled : null]}
-      >
-        <Play color={colors.white} size={20} fill={colors.white} />
-        <Text style={styles.startBtnText}>{startButtonLabel(assignment!)}</Text>
-      </Pressable>
+      {showStart ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={startButtonLabel(assignment!)}
+          disabled={startLoading}
+          onPress={() => onStart!(assignment!)}
+          style={[
+            styles.startBtn,
+            startLoading ? styles.startBtnDisabled : null,
+          ]}
+        >
+          <Play color={colors.white} size={20} fill={colors.white} />
+          <Text style={styles.startBtnText}>
+            {startButtonLabel(assignment!)}
+          </Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to workout week"
+          onPress={onBack}
+          style={styles.startBtn}
+        >
+          <Text style={styles.startBtnText}>Back to week</Text>
+        </Pressable>
+      )}
     </View>
   ) : null;
 
