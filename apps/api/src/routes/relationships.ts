@@ -179,6 +179,7 @@ relationshipRoutes.get(
         pendingReactivation = {
           requestId: pending.id,
           expiresAt: pending.expiresAt,
+          sentAt: pending.createdAt,
           intakeUpdateRequested: pending.intakeUpdateRequested,
         };
       }

@@ -789,6 +789,12 @@
   padding: 0 0.25rem;
 }
 
+@media (pointer: coarse) {
+  .drag-handle {
+    display: none;
+  }
+}
+
 .form-phone-preview {
   position: sticky;
   top: 1rem;

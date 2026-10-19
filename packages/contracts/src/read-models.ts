@@ -135,6 +135,28 @@ export const responsivenessLabelSchema = z.enum([
 ]);
 export type ResponsivenessLabel = z.infer<typeof responsivenessLabelSchema>;
 
+export const responsivenessCategoryCountsSchema = z.object({
+  sent: z.number().int().nonnegative(),
+  /** Null when open/read tracking is unavailable for this category. */
+  opened: z.number().int().nonnegative().nullable(),
+  loggedAfter: z.number().int().nonnegative(),
+  loggedOnOwn: z.number().int().nonnegative(),
+  notLogged: z.number().int().nonnegative(),
+  suppressed: z.number().int().nonnegative(),
+});
+export type ResponsivenessCategoryCounts = z.infer<
+  typeof responsivenessCategoryCountsSchema
+>;
+
+export const responsivenessCategoriesSchema = z.object({
+  workouts: responsivenessCategoryCountsSchema,
+  meals: responsivenessCategoryCountsSchema,
+  checkins: responsivenessCategoryCountsSchema,
+});
+export type ResponsivenessCategories = z.infer<
+  typeof responsivenessCategoriesSchema
+>;
+
 export const responsivenessResponseSchema = z.object({
   label: responsivenessLabelSchema,
   counts: z.object({
@@ -143,6 +165,10 @@ export const responsivenessResponseSchema = z.object({
     loggedAfter: z.number().int().nonnegative(),
     loggedBefore: z.number().int().nonnegative(),
   }),
+  categories: responsivenessCategoriesSchema.optional(),
+  pausedUntil: z.string().nullable().optional(),
+  preferredWorkoutTime: z.string().nullable().optional(),
+  preferredWorkoutTimeSource: z.enum(["set", "learned"]).nullable().optional(),
   /** Client push preference (notification_preferences). */
   pushEnabled: z.boolean().optional(),
   /** Client quiet hours (HH:mm) when set. */

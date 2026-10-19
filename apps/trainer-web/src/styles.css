@@ -461,17 +461,35 @@ body.is-offline .button-destructive {
   background: var(--pale-lavender, #edeaff);
 }
 
-.button-destructive {
+.button-destructive,
+.button-danger {
   background: #b91c1c;
   color: #fff;
   border-color: transparent;
 }
 
 .button-destructive:hover,
-.button-destructive:focus-visible {
+.button-destructive:focus-visible,
+.button-danger:hover,
+.button-danger:focus-visible {
   filter: brightness(1.05);
   outline: 2px solid #b91c1c;
   outline-offset: 2px;
+}
+
+@media (max-width: 1024px), (pointer: coarse) {
+  .shell-nav-link,
+  .shell-search,
+  .shell-bell,
+  .overflow-menu-trigger,
+  .button-primary,
+  .button-secondary,
+  .button-tinted,
+  .button-ghost,
+  .button-destructive,
+  .button-danger {
+    min-height: 44px;
+  }
 }
 
 .button-whatsapp {

@@ -76,7 +76,7 @@ function errorMessage(err: unknown, fallback: string): string {
 export function ClientsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseClientDirectoryFilters(searchParams);
-  const isNarrow = useMediaQuery("(max-width: 767px)");
+  const isNarrow = useMediaQuery("(max-width: 1023px)");
   const [queryForRequest, setQueryForRequest] = useState(filters.q);
   const [items, setItems] = useState<ClientDirectoryItem[]>([]);
   const [facets, setFacets] = useState<{

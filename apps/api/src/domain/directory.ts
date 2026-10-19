@@ -240,6 +240,7 @@ export async function loadClientDirectory(
         adherenceByRelationship.get(relationship.id) ?? "not_available",
       renewalState: renewal?.renewalState ?? null,
       renewsOn: renewal?.renewsOn ?? null,
+      endedAt: relationship.endedAt ?? null,
       updatedAt: relationship.updatedAt,
       email: invitation?.recipientEmail ?? null,
     } as DirectoryRow & { email: string | null });
@@ -340,6 +341,7 @@ export async function loadClientDirectory(
       adherenceState: item.adherenceState,
       renewalState: item.renewalState,
       renewsOn: item.renewsOn,
+      endedAt: item.endedAt ?? undefined,
       updatedAt: item.updatedAt,
     })),
     facets,

@@ -1,16 +1,23 @@
 import { useEffect, useState } from "react";
-import type { ResponsivenessResponse } from "@fitbud/contracts";
-import { formatHhMmTime, possessivePronoun } from "@fitbud/core";
+import type {
+  ResponsivenessCategoryCounts,
+  ResponsivenessResponse,
+} from "@fitbud/contracts";
+import {
+  formatCivilDate,
+  formatHhMmTime,
+  possessivePronoun,
+} from "@fitbud/core";
 import { stage1Api } from "../../lib/stage1-api";
+import { clientWhatsappHref } from "../../lib/whatsapp";
 import { LoadingBlock } from "../StatePanels";
 
-function labelCopy(
+function labelTitle(
   label: ResponsivenessResponse["label"],
-  pronoun: string,
 ): string {
   switch (label) {
     case "logs_on_own":
-      return `Logs on ${pronoun} own · rarely needs reminders`;
+      return "Logs on own";
     case "responds":
       return "Responds to reminders";
     case "often_misses":
@@ -20,7 +27,32 @@ function labelCopy(
     case "notifications_off":
       return "Notifications off";
     case "not_enough_data":
-      return "Not enough data yet";
+      return "Not enough data";
+  }
+}
+
+function summaryCounts(
+  data: ResponsivenessResponse,
+  pronoun: string,
+): string {
+  const { sent, opened, loggedAfter, loggedBefore } = data.counts;
+  switch (data.label) {
+    case "logs_on_own":
+      return `Logged ${loggedBefore} of ${Math.max(sent, loggedBefore + loggedAfter)} before a reminder`;
+    case "responds":
+      return `Logged ${loggedAfter} of ${sent} after a reminder · ${opened} opened`;
+    case "often_misses":
+      return `${sent} reminders sent · ${opened} opened · ${loggedAfter} logged after`;
+    case "reminders_paused":
+      return data.pausedUntil
+        ? `Paused until ${formatCivilDate(data.pausedUntil.slice(0, 10))}`
+        : "Paused for this client";
+    case "notifications_off":
+      return sent > 0 ? `${sent} sent · push off` : "Push notifications off";
+    case "not_enough_data":
+      return sent > 0 ? `${sent} sent · need more history` : "Fewer than 5 reminders in 14 days";
+    default:
+      return labelTitle(data.label);
   }
 }
 
@@ -31,33 +63,66 @@ export function quietHoursText(
   return `${formatHhMmTime(data.quietHoursStart)} – ${formatHhMmTime(data.quietHoursEnd)}`;
 }
 
-function compactHeadline(
+export function compactHeadline(
   data: ResponsivenessResponse,
   pronoun: string,
 ): string {
-  const { sent, opened } = data.counts;
-  switch (data.label) {
-    case "responds":
-      return `Responds to ${opened} of ${sent} reminders`;
-    case "often_misses":
-      return `Often misses reminders · ${opened} of ${sent} opened`;
-    case "not_enough_data":
-      return sent > 0
-        ? `Not enough data yet · ${sent} sent`
-        : labelCopy("not_enough_data", pronoun);
-    default:
-      return labelCopy(data.label, pronoun);
-  }
+  return `${labelTitle(data.label)} · ${summaryCounts(data, pronoun)}`;
+}
+
+function formatOpened(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return String(value);
+}
+
+function CategoryTable({
+  title,
+  row,
+}: {
+  title: string;
+  row: ResponsivenessCategoryCounts;
+}) {
+  return (
+    <div className="responsiveness-category">
+      <h4>{title}</h4>
+      <table className="responsiveness-table">
+        <thead>
+          <tr>
+            <th scope="col">Sent</th>
+            <th scope="col">Opened</th>
+            <th scope="col">Logged after</th>
+            <th scope="col">Logged on own</th>
+            <th scope="col">Not logged</th>
+            <th scope="col">Suppressed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{row.sent}</td>
+            <td>{formatOpened(row.opened)}</td>
+            <td>{row.loggedAfter}</td>
+            <td>{row.loggedOnOwn}</td>
+            <td>{row.notLogged}</td>
+            <td>{row.suppressed}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function ResponsivenessPanel({
   relationshipId,
   compact = false,
   gender,
+  traineeFirstName = "Client",
+  clientWhatsappE164,
 }: {
   relationshipId: string;
   compact?: boolean;
   gender?: string | null;
+  traineeFirstName?: string;
+  clientWhatsappE164?: string | null;
 }) {
   const pronoun = possessivePronoun(gender);
   const [data, setData] = useState<ResponsivenessResponse | null>(null);
@@ -81,51 +146,87 @@ export function ResponsivenessPanel({
   }, [relationshipId]);
 
   if (error) {
-    return <p className="muted">{error}</p>;
+    return (
+      <p className="form-error" role="alert">
+        {error}
+      </p>
+    );
   }
   if (!data) return <LoadingBlock label="Loading reminder responsiveness…" />;
 
-  const summary = labelCopy(data.label, pronoun);
-
   const quiet = quietHoursText(data);
-  const subParts = [
-    "Last 14 days",
-    data.pushEnabled === undefined
-      ? null
-      : data.pushEnabled
-        ? "push on"
-        : "push off",
-    quiet ? `quiet hours ${quiet}` : null,
-  ].filter(Boolean);
+  const preferred =
+    data.preferredWorkoutTime && data.preferredWorkoutTimeSource
+      ? `~${formatHhMmTime(data.preferredWorkoutTime)}, ${data.preferredWorkoutTimeSource}`
+      : data.preferredWorkoutTime
+        ? `~${formatHhMmTime(data.preferredWorkoutTime)}`
+        : null;
+
+  const waSuggestHref =
+    data.label === "notifications_off"
+      ? clientWhatsappHref({
+          phoneE164: clientWhatsappE164,
+          name: traineeFirstName,
+          onboardingStatus: "active",
+        })
+      : null;
 
   if (compact) {
     return (
       <div className="responsiveness-line">
         <div className="ov-big">{compactHeadline(data, pronoun)}</div>
-        <div className="ov-sub">{subParts.join(" · ")}</div>
+        <div className="ov-sub">Last 14 days{quiet ? ` · Quiet hours ${quiet}` : ""}</div>
+        {data.label === "notifications_off" ? (
+          <p className="ov-sub muted">
+            Ask {traineeFirstName} to turn on notifications · WhatsApp
+          </p>
+        ) : null}
       </div>
     );
   }
 
   return (
     <div className="responsiveness-panel">
-      <h3>Reminder responsiveness</h3>
-      <p>{summary}</p>
-      <p className="muted">{subParts.join(" · ")}</p>
-      <dl className="detail-list compact">
-        <div>
-          <dt>Sent</dt>
-          <dd>{data.counts.sent}</dd>
+      <p className="responsiveness-summary">
+        <strong>{labelTitle(data.label)}</strong>
+        <span className="muted"> · {summaryCounts(data, pronoun)}</span>
+      </p>
+      {data.label === "notifications_off" ? (
+        <p className="muted">
+          {waSuggestHref ? (
+            <a href={waSuggestHref} target="_blank" rel="noreferrer">
+              Ask {traineeFirstName} to turn on notifications · WhatsApp
+            </a>
+          ) : (
+            <>Ask {traineeFirstName} to turn on notifications · WhatsApp</>
+          )}
+        </p>
+      ) : null}
+      {quiet ? (
+        <p className="muted">
+          Quiet hours · {quiet}
+        </p>
+      ) : null}
+      {preferred ? (
+        <p className="muted">Preferred workout time · {preferred}</p>
+      ) : null}
+
+      {data.categories ? (
+        <div className="responsiveness-categories">
+          <CategoryTable title="Workouts" row={data.categories.workouts} />
+          <CategoryTable title="Meals" row={data.categories.meals} />
+          <CategoryTable title="Check-ins" row={data.categories.checkins} />
         </div>
-        <div>
-          <dt>Opened</dt>
-          <dd>{data.counts.opened}</dd>
-        </div>
-        <div>
-          <dt>Logged after reminder</dt>
-          <dd>{data.counts.loggedAfter}</dd>
-        </div>
-      </dl>
+      ) : null}
+
+      <p className="responsiveness-wa-block muted">
+        WhatsApp reminders · <strong>Coming soon</strong>
+      </p>
+
+      <p className="responsiveness-footer muted">
+        Reminders are timed by FitBud and respect {traineeFirstName}&apos;s settings
+        and meal times. You can switch categories on or off in Configure.
+      </p>
     </div>
   );
 }

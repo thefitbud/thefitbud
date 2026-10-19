@@ -1,17 +1,27 @@
 import { useState } from "react";
+import { possessivePronoun } from "@fitbud/core";
 import { stage1Api } from "../../lib/stage1-api";
 import { createIdempotencyKey } from "../../lib/idempotency";
+
+function firstName(full: string): string {
+  return full.trim().split(/\s+/)[0] ?? full;
+}
 
 export function CoachingLifecycleModals({
   mode,
   relationshipId,
   traineeName,
+  traineeGender,
+  lastPlanTitle,
   onClose,
   onChanged,
 }: {
   mode: "end" | "reactivate";
   relationshipId: string;
   traineeName: string;
+  traineeGender?: string | null;
+  /** Last effective plan title for reactivation copy. */
+  lastPlanTitle?: string | null;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -20,6 +30,12 @@ export function CoachingLifecycleModals({
   const [intakeUpdate, setIntakeUpdate] = useState(false);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const given = firstName(traineeName);
+  const possessive = possessivePronoun(traineeGender);
+  const planRef = lastPlanTitle?.trim()
+    ? `Her last plan (${lastPlanTitle.trim()}) is ready to re-assign.`
+    : "Her last plan is ready to re-assign when you publish one.";
 
   async function confirmEnd() {
     if (confirmName.trim() !== traineeName.trim()) {
@@ -71,9 +87,9 @@ export function CoachingLifecycleModals({
         <dialog className="modal-card" open>
           <h2>End coaching with {traineeName}?</h2>
           <p className="muted">
-            {traineeName.split(" ")[0]} keeps their account and history. You&apos;ll
-            both have read-only access. Plans, reminders and nudges stop today. You
-            can reactivate later.
+            {given} keeps {possessive} account and history. You&apos;ll both have
+            read-only access. Plans, reminders and nudges stop today. You can
+            reactivate later.
           </p>
           <label className="field">
             <span>Reason (private, optional)</span>
@@ -115,17 +131,25 @@ export function CoachingLifecycleModals({
     <div className="drawer-backdrop" role="presentation">
       <dialog className="modal-card" open>
         <h2>Reactivate coaching with {traineeName}?</h2>
-        <p>
-          Her history, your notes, intake answers, configuration and check-in
-          schedule come back. Reminders restart only after you assign a plan.
-        </p>
+        <div className="modal-copy-block">
+          <p>
+            <strong>What comes back.</strong> {possessive === "their" ? "Their" : possessive === "her" ? "Her" : "His"}{" "}
+            history, your notes, {possessive} intake answers, coaching
+            configuration and check-in schedule. {planRef}
+          </p>
+          <p>
+            <strong>What doesn&apos;t.</strong> Reminders and check-ins start again
+            only after you assign a plan and pick a start date. Exceptions that
+            were open when coaching ended stay closed.
+          </p>
+        </div>
         <label className="switch-row">
           <input
             type="checkbox"
             checked={intakeUpdate}
             onChange={(e) => setIntakeUpdate(e.target.checked)}
           />
-          Ask {traineeName.split(" ")[0]} to update intake
+          Ask {given} to update {possessive} intake
         </label>
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         <div className="button-row">

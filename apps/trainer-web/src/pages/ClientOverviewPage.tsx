@@ -23,6 +23,7 @@ import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
+import { isWorkspaceReadOnly } from "../hooks/useWorkspaceReadOnly";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -252,7 +253,7 @@ export function ClientOverviewPage() {
 
   const { header, overview, plan } = workspace;
   const version = plan.version;
-  const ended = header.onboardingStatus === "ended";
+  const ended = isWorkspaceReadOnly(workspace);
   const coachingReady =
     ended ||
     header.onboardingStatus === "active" ||
@@ -699,6 +700,8 @@ export function ClientOverviewPage() {
             relationshipId={relationshipId}
             compact
             gender={header.traineeProfile.gender}
+            traineeFirstName={firstName}
+            clientWhatsappE164={header.clientWhatsappE164}
           />
         </section>
 

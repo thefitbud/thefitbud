@@ -172,6 +172,7 @@ export function ClientWorkspaceLayout() {
         relationshipId={relationshipId}
         submittedCheckinCount={submittedCheckins}
         onOpenModal={setModal}
+        onWorkspaceChanged={reloadWorkspace}
         online={online}
       />
       <Outlet context={outletContext} />
@@ -179,6 +180,8 @@ export function ClientWorkspaceLayout() {
         relationshipId={relationshipId}
         traineeName={workspace.header.traineeDisplayName}
         traineeGender={workspace.header.traineeProfile.gender}
+        lastPlanTitle={workspace.header.effectivePlan?.title ?? null}
+        clientWhatsappE164={workspace.header.clientWhatsappE164}
         ended={ended}
         modal={modal}
         onClose={() => setModal(null)}

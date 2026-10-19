@@ -54,6 +54,7 @@ import {
   userIdentities,
   users,
   mealTimeOverrides,
+  reactivationRequests,
   workoutAssignments,
   workoutExecutions,
   workoutExpectations,
@@ -660,6 +661,7 @@ export async function loadClientWorkspace(
     pendingReviewCheckin,
     recentActivity,
     progress,
+    pendingReactivationRow,
   ] = await Promise.all([
     db
       .select({
@@ -708,6 +710,19 @@ export async function loadClientWorkspace(
     loadPendingReviewCheckin(db, relationship.id, nowIso),
     loadRecentActivity(db, relationship.id, nowIso),
     loadProgressSummary(db, relationship.id),
+    relationship.status === "ended"
+      ? db
+          .select()
+          .from(reactivationRequests)
+          .where(
+            and(
+              eq(reactivationRequests.relationshipId, relationship.id),
+              eq(reactivationRequests.status, "pending"),
+              gt(reactivationRequests.expiresAt, nowIso),
+            ),
+          )
+          .limit(1)
+      : Promise.resolve([]),
   ]);
 
   const trainee = profile[0];
@@ -753,6 +768,16 @@ export async function loadClientWorkspace(
       })),
       trainerWhatsappE164: trainerProfile[0]?.whatsappE164 ?? null,
       clientWhatsappE164: clientIdentity[0]?.mobileE164 ?? null,
+      endedAt: relationship.endedAt ?? null,
+      pendingReactivation: pendingReactivationRow[0]
+        ? {
+            requestId: pendingReactivationRow[0].id,
+            expiresAt: pendingReactivationRow[0].expiresAt,
+            sentAt: pendingReactivationRow[0].createdAt,
+            intakeUpdateRequested:
+              pendingReactivationRow[0].intakeUpdateRequested,
+          }
+        : null,
     },
     overview: {
       openException,

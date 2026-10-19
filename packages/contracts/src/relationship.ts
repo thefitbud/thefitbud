@@ -98,6 +98,8 @@ export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequestSche
 export const pendingReactivationSchema = z.object({
   requestId: uuidSchema,
   expiresAt: isoDateTimeSchema,
+  /** When the trainer sent the reactivation request. */
+  sentAt: isoDateTimeSchema.optional(),
   intakeUpdateRequested: z.boolean(),
 });
 export type PendingReactivation = z.infer<typeof pendingReactivationSchema>;

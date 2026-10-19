@@ -29,6 +29,8 @@ export const clientDirectoryItemSchema = z.object({
   /** Same derivation as Home Renewals (`deriveRenewalState`). */
   renewalState: renewalStateSchema.nullable(),
   renewsOn: localDateSchema.nullable(),
+  /** When coaching ended (ISO instant), for ended roster chips. */
+  endedAt: isoDateTimeSchema.nullable().optional(),
   updatedAt: isoDateTimeSchema,
 });
 export type ClientDirectoryItem = z.infer<typeof clientDirectoryItemSchema>;

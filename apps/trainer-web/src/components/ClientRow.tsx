@@ -107,6 +107,11 @@ export function ClientRow({
         </div>
         <div className="client-card-chips">
           <StatusChip kind="lifecycle" value={item.status} />
+          {item.status === "ended" && item.endedAt ? (
+            <span className="status-chip status-chip-xs">
+              Ended {formatCivilDate(item.endedAt.slice(0, 10))}
+            </span>
+          ) : null}
           <StatusChip kind="adherence" value={item.adherenceState} />
           {item.renewalState &&
           (item.renewalState === "upcoming" ||
@@ -145,7 +150,14 @@ export function ClientRow({
         </div>
       </td>
       <td>
-        <StatusChip kind="lifecycle" value={item.status} />
+        <div className="roster-status-cell">
+          <StatusChip kind="lifecycle" value={item.status} />
+          {item.status === "ended" && item.endedAt ? (
+            <span className="status-chip status-chip-xs">
+              Ended {formatCivilDate(item.endedAt.slice(0, 10))}
+            </span>
+          ) : null}
+        </div>
       </td>
       <td>
         <StatusChip kind="adherence" value={item.adherenceState} />

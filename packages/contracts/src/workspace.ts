@@ -7,7 +7,10 @@ import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { mealAssignmentStatusSchema } from "./meal.js";
 import { effectivePlanResponseSchema } from "./plan.js";
 import { progressSummarySchema } from "./progress.js";
-import { onboardingStatusSchema } from "./relationship.js";
+import {
+  onboardingStatusSchema,
+  pendingReactivationSchema,
+} from "./relationship.js";
 import { renewalStateSchema, subscriptionSchema } from "./subscription.js";
 import { localDateSchema, workoutAssignmentStatusSchema } from "./workout.js";
 
@@ -126,6 +129,10 @@ export const workspaceHeaderSchema = z.object({
   trainerWhatsappE164: z.string().nullable(),
   /** Client WhatsApp for trainer→client wa.me links. Null when unknown. */
   clientWhatsappE164: z.string().nullable(),
+  /** When coaching ended (ISO instant). */
+  endedAt: isoDateTimeSchema.nullable().optional(),
+  /** Pending trainee confirmation for reactivation (ended relationships only). */
+  pendingReactivation: pendingReactivationSchema.nullable().optional(),
 });
 export type WorkspaceHeader = z.infer<typeof workspaceHeaderSchema>;
 

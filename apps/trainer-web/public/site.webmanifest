@@ -1,6 +1,9 @@
 {
   "name": "FitBud",
   "short_name": "FitBud",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -13,6 +16,6 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#1A1249",
+  "theme_color": "#1A1248",
   "background_color": "#FAF7F2"
 }

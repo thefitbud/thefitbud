@@ -14,6 +14,8 @@ export function WorkspaceModals({
   relationshipId,
   traineeName,
   traineeGender,
+  lastPlanTitle,
+  clientWhatsappE164,
   ended = false,
   modal,
   onClose,
@@ -22,6 +24,8 @@ export function WorkspaceModals({
   relationshipId: string;
   traineeName: string;
   traineeGender?: string | null;
+  lastPlanTitle?: string | null;
+  clientWhatsappE164?: string | null;
   ended?: boolean;
   modal: WorkspaceModal;
   onClose: () => void;
@@ -70,6 +74,8 @@ export function WorkspaceModals({
           <ResponsivenessPanel
             relationshipId={relationshipId}
             gender={traineeGender}
+            traineeFirstName={traineeName.trim().split(/\s+/)[0] ?? traineeName}
+            clientWhatsappE164={clientWhatsappE164}
           />
         </aside>
       </div>
@@ -82,6 +88,7 @@ export function WorkspaceModals({
         mode="end"
         relationshipId={relationshipId}
         traineeName={traineeName}
+        traineeGender={traineeGender}
         onClose={onClose}
         onChanged={onChanged}
       />
@@ -93,6 +100,8 @@ export function WorkspaceModals({
       mode="reactivate"
       relationshipId={relationshipId}
       traineeName={traineeName}
+      traineeGender={traineeGender}
+      lastPlanTitle={lastPlanTitle}
       onClose={onClose}
       onChanged={onChanged}
     />

@@ -1997,3 +1997,60 @@
   flex-wrap: wrap;
   gap: 0.35rem;
 }
+
+.wsh-ended-banner {
+  padding: 0 0 0.75rem;
+}
+
+.wsh-pending-actions {
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.roster-status-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.responsiveness-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.responsiveness-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.responsiveness-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.responsiveness-table th,
+.responsiveness-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border, #e7e9f2);
+  text-align: left;
+}
+
+.responsiveness-table th {
+  font-weight: 600;
+  color: var(--mid-grey, #5b616b);
+}
+
+.responsiveness-wa-block {
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #f7f8fc;
+}
+
+.responsiveness-footer {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}

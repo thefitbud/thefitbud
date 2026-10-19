@@ -1,14 +1,16 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
-import { formatCivilDate, labelFor } from "@fitbud/core";
+import { formatCivilDate, formatRelative, labelFor } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { Button } from "../Button";
 import { OverflowMenu } from "../OverflowMenu";
 import { StatusChip } from "../StatusChip";
 import { WhatsAppGlyph } from "../WhatsAppGlyph";
-import { clientWhatsappHref } from "../../lib/whatsapp";
+import { clientWhatsappHref, whatsappHref } from "../../lib/whatsapp";
+import { cancelReactivation } from "../../lib/http-api";
+import { createIdempotencyKey } from "../../lib/idempotency";
 import { resolveTraineeTimezone } from "../../lib/trainee-timezone";
 import { TimezoneBadge } from "./TimezoneBadge";
 import { primaryActionFor } from "./primaryAction";
@@ -34,12 +36,14 @@ export function WorkspaceHeader({
   relationshipId,
   submittedCheckinCount,
   onOpenModal,
+  onWorkspaceChanged,
   online = true,
 }: {
   workspace: ClientWorkspace;
   relationshipId: string;
   submittedCheckinCount: number;
   onOpenModal: (modal: WorkspaceModal) => void;
+  onWorkspaceChanged?: () => void;
   online?: boolean;
 }) {
   const { me } = useAuth();
@@ -47,6 +51,9 @@ export function WorkspaceHeader({
   const [, setParams] = useSearchParams();
   const header = workspace.header;
   const ended = header.onboardingStatus === "ended";
+  const pendingReactivation = header.pendingReactivation ?? null;
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const configurationActive =
     workspace.configuration.configuration?.status === "active";
   const reviewCheckin =
@@ -63,7 +70,30 @@ export function WorkspaceHeader({
     reviewCheckin: reviewCheckin as Checkin | null,
     openExceptionId: workspace.overview.openException?.id ?? null,
     ended,
+    reactivationPending: Boolean(pendingReactivation),
   });
+
+  const remindHref = header.clientWhatsappE164
+    ? whatsappHref({
+        phoneE164: header.clientWhatsappE164,
+        draftText: `Hi ${header.traineeDisplayName.split(/\s+/)[0] ?? "there"} — please confirm the reactivation request in FitBud when you can.`,
+      })
+    : null;
+
+  async function cancelPendingReactivation() {
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      await cancelReactivation(relationshipId, createIdempotencyKey());
+      onWorkspaceChanged?.();
+    } catch (err) {
+      setCancelError(
+        err instanceof Error ? err.message : "Could not cancel the request.",
+      );
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   const whatsappHrefValue = clientWhatsappHref({
     phoneE164: header.clientWhatsappE164,
@@ -195,9 +225,52 @@ export function WorkspaceHeader({
   return (
     <header className="wsh" data-testid="screen-TW-09a">
       {ended ? (
-        <p className="banner-neutral" role="status" data-testid="screen-TW-30">
-          Coaching ended. This workspace is read-only except reactivation.
-        </p>
+        <div className="wsh-ended-banner" data-testid="screen-TW-30">
+          {pendingReactivation ? (
+            <>
+              <p className="banner-neutral" role="status">
+                Waiting for {header.traineeDisplayName.split(/\s+/)[0] ?? header.traineeDisplayName} to confirm
+                {pendingReactivation.sentAt
+                  ? ` · sent ${formatRelative(pendingReactivation.sentAt)}`
+                  : null}
+              </p>
+              <div className="wsh-pending-actions button-row">
+                {remindHref ? (
+                  <a
+                    className="button-secondary button-whatsapp"
+                    href={remindHref}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <WhatsAppGlyph />
+                    Remind on WhatsApp
+                  </a>
+                ) : (
+                  <button type="button" className="button-secondary" disabled>
+                    Remind on WhatsApp
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={!online || cancelBusy}
+                  onClick={() => void cancelPendingReactivation()}
+                >
+                  Cancel request
+                </button>
+              </div>
+              {cancelError ? (
+                <p className="form-error" role="alert">
+                  {cancelError}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="banner-neutral" role="status">
+              Coaching ended. This workspace is read-only except reactivation.
+            </p>
+          )}
+        </div>
       ) : null}
       <div className="wsh-in">
         <nav className="wsh-crumb" aria-label="Breadcrumb">
@@ -264,7 +337,7 @@ export function WorkspaceHeader({
                 Message on WhatsApp
               </button>
             )}
-            {ended ? (
+            {ended && !pendingReactivation ? (
               <Button
                 variant="primary"
                 disabled={!online}

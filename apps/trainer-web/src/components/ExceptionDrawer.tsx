@@ -19,6 +19,7 @@ import { OverflowMenu } from "./OverflowMenu";
 import { useOnlineStatus } from "./OfflineBanner";
 import { StatusChip } from "./StatusChip";
 import { LoadingBlock } from "./StatePanels";
+import { compactHeadline } from "./workspace/ResponsivenessPanel";
 
 const OUTCOMES = [
   { id: "talked", label: "Talked to client" },
@@ -192,15 +193,9 @@ export function ExceptionDrawer({
           result.coachingRelationshipId,
           14,
         );
+        setReminderLine(compactHeadline(resp, "their"));
         if (resp.label === "reminders_paused") {
-          setReminderLine("Reminders paused by client");
           setNudgePaused(true);
-        } else if (resp.label === "notifications_off") {
-          setReminderLine("Client has notifications off");
-        } else if (resp.counts.sent > 0) {
-          setReminderLine(
-            `Reminder sent · opened ${resp.counts.opened} of ${resp.counts.sent}`,
-          );
         }
       } catch {
         setReminderLine(null);

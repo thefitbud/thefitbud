@@ -83,7 +83,7 @@ export function primaryActionForStatus(
     case "active":
       return { label: "Open", href: "overview" };
     case "ended":
-      return { label: "Open", href: "overview" };
+      return { label: "Reactivate", href: "overview" };
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
