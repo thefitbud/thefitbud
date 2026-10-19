@@ -6,6 +6,7 @@ import { test, expect, type Page } from "@playwright/test";
 const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
+const AARAV = "30e514e1-e3f4-4dac-ae4b-5f45e72c3df6";
 const DEEPAK = "f2a64fdb-96ad-46f3-a95e-99151b4a25f1";
 const CHECKIN = "744e2975-255c-4469-9f9a-6da0a853c8f2";
 
@@ -34,11 +35,24 @@ test.describe("TW-E activity, progress, check-ins", () => {
   });
 
   test("TW-18 progress: metric tabs and trend controls", async ({ page }) => {
-    await page.goto(`/clients/${ROHAN}/progress`);
+    await page.goto(`/clients/${AARAV}/progress`);
     await expect(page.getByTestId("screen-TW-18")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Progress", level: 1 })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Weight" })).toBeVisible();
     await expect(page.getByRole("button", { name: "12 w" })).toBeVisible();
+  });
+
+  test("TW-18 progress: empty weigh-ins copy", async ({ page }) => {
+    await page.goto(`/clients/${ROHAN}/progress`);
+    await expect(page.getByTestId("screen-TW-18")).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "No weigh-ins yet. Weight is collected in check-ins.",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /Open check-in settings/i }),
+    ).toBeVisible();
   });
 
   test("TW-19 client check-ins: schedule control", async ({ page }) => {
@@ -65,12 +79,13 @@ test.describe("TW-E activity, progress, check-ins", () => {
   test("TW-22 inbox: tabs and default to review", async ({ page }) => {
     await page.goto("/checkins");
     await expect(page.getByTestId("screen-TW-22")).toBeVisible();
-    await expect(page.getByRole("tab", { name: /To review/i })).toHaveAttribute(
+    await expect(page.locator('[data-filter="submitted"]')).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect(page.getByRole("tab", { name: /^Due$/i })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /^Overdue$/i })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /^Reviewed$/i })).toBeVisible();
+    await expect(page.locator('[data-filter="due"]')).toBeVisible();
+    await expect(page.locator('[data-filter="overdue"]')).toBeVisible();
+    await expect(page.locator('[data-filter="reviewed"]')).toBeVisible();
   });
 });
+

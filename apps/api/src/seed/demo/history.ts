@@ -381,6 +381,26 @@ function buildAssignmentsAndLogs(input: {
         lines.push(
           `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", checkinId))}, ${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(userId(input.trainerEmail))}, 'acknowledged', NULL, ${sqlQuote(submittedAt)}, ${sqlQuote(submittedAt)});`,
         );
+        // TW-18: Aarav needs a weigh-in series so Progress can show a chart.
+        const dayOffset = Math.round(
+          (Date.parse(`${input.refDate}T12:00:00.000Z`) -
+            Date.parse(`${localDate}T12:00:00.000Z`)) /
+            86_400_000,
+        );
+        const weightKg = Number((76.8 - dayOffset * 0.05).toFixed(1));
+        const observedAt = clampIsoToNow(
+          localDayStartIso(localDate, "08:30", input.timezone),
+          input.now,
+        );
+        lines.push(
+          `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "weight", checkinId))}, ${sqlQuote(input.relId)}, ${sqlQuote(trainee)}, 'body_weight_kg', ${weightKg}, 'kg', ${sqlQuote(observedAt)}, 'checkin', ${sqlQuote(checkinId)}, NULL, 0, ${sqlQuote(observedAt)}, ${sqlQuote(observedAt)});`,
+        );
+        if (dayOffset % 14 === 0) {
+          const waist = Number((84 - dayOffset * 0.03).toFixed(1));
+          lines.push(
+            `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "waist", checkinId))}, ${sqlQuote(input.relId)}, ${sqlQuote(trainee)}, 'waist_cm', ${waist}, 'cm', ${sqlQuote(observedAt)}, 'checkin', ${sqlQuote(checkinId)}, NULL, 0, ${sqlQuote(observedAt)}, ${sqlQuote(observedAt)});`,
+          );
+        }
       }
       if (submitted && input.state === "dual_role") {
         lines.push(

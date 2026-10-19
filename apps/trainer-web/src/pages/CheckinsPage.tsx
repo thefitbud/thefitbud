@@ -211,7 +211,7 @@ export function CheckinsPage() {
               data-filter={apiTabParam(value)}
               onClick={() => setTab(value)}
             >
-              {label}
+              {label}{" "}
               <span className="segment-count">{counts[value]}</span>
             </button>
           ))}
