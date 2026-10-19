@@ -160,6 +160,7 @@ relationshipRoutes.get(
     let pendingReactivation: {
       requestId: string;
       expiresAt: string;
+      sentAt?: string;
       intakeUpdateRequested: boolean;
     } | null = null;
     if (row.status === "ended") {

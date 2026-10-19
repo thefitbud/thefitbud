@@ -753,6 +753,8 @@ export {
   clientFacetsSchema,
   responsivenessResponseSchema,
   responsivenessLabelSchema,
+  responsivenessCategoryCountsSchema,
+  responsivenessCategoriesSchema,
   reengagementCandidatesResponseSchema,
   resolveExceptionOutcomeSchema,
   type MeDayResponse,
@@ -765,5 +767,7 @@ export {
   type ClientFacets,
   type ResponsivenessResponse,
   type ResponsivenessLabel,
+  type ResponsivenessCategoryCounts,
+  type ResponsivenessCategories,
   type ReengagementCandidatesResponse,
 } from "./read-models.js";
