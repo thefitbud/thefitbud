@@ -25,5 +25,5 @@
       "backgroundColor": "#FAF7F2"
     }
   },
-  "plugins": ["expo-dev-client"]
+  "plugins": ["./plugins/withLiveActivity", "expo-dev-client"]
 }

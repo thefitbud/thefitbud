@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { brand, ink } from "@fitbud/tokens";
 import {
   fontFamilyBold,
@@ -17,8 +17,29 @@ import {
 } from "../../notifications/actions";
 import { scheduleMealSnoozeNotification } from "../../notifications/nativeActions";
 import { mealPushCopy } from "../../notifications/copy";
+import {
+  DEMO_LIVE_ACTIVITY,
+  formatKg,
+  reduceLiveActivity,
+  setLogFromState,
+  type LiveActivityState,
+} from "../../notifications/liveActivity";
 
-const REST_START_SECONDS = 90;
+import appIcon from "../../../../../packages/brand/app/icon.png";
+
+function AppIcon({ size }: { size: number }) {
+  return (
+    <Image
+      source={appIcon}
+      accessibilityLabel="FitBud"
+      style={{
+        borderRadius: Math.round(size * 0.22),
+        height: size,
+        width: size,
+      }}
+    />
+  );
+}
 
 export function DevBuildNote() {
   return (
@@ -112,9 +133,7 @@ export function MealNotificationCard({
 
   return (
     <View style={styles.noteCard} accessibilityLabel="Meal notification">
-      <View style={styles.mark}>
-        <Text style={styles.markText}>F</Text>
-      </View>
+      <AppIcon size={38} />
       <View style={styles.noteBody}>
         <View style={styles.noteTop}>
           <Text style={styles.appName}>FitBud</Text>
@@ -134,154 +153,289 @@ export function MealNotificationCard({
   );
 }
 
-export function LiveActivityPreview() {
-  const [left, setLeft] = useState(58);
-  const [done, setDone] = useState(false);
+function useLiveActivity(onNotice?: (message: string) => void) {
+  const [state, setState] = useState<LiveActivityState>(DEMO_LIVE_ACTIVITY);
 
   useEffect(() => {
-    if (done) return;
+    if (state.phase !== "rest") return;
     const timer = setInterval(() => {
-      setLeft((current) => {
-        if (current <= 1) {
-          setDone(true);
-          return 0;
-        }
-        return current - 1;
-      });
+      setState((current) => reduceLiveActivity(current, { type: "tick" }));
     }, 1000);
     return () => clearInterval(timer);
-  }, [done]);
+  }, [state.phase]);
 
-  const widthPct = Math.max(8, Math.round((left / REST_START_SECONDS) * 100));
+  function send(event: Parameters<typeof reduceLiveActivity>[1]) {
+    setState((current) => {
+      const next = reduceLiveActivity(current, event);
+      if (event.type === "log_set" && next.phase === "rest") {
+        const entry = setLogFromState(current, "Romanian deadlift");
+        onNotice?.(
+          `Set ${entry.setIndex} logged · ${formatKg(entry.kilograms)} kg × ${entry.reps}. The lock screen needs a dev build.`,
+        );
+      }
+      return next;
+    });
+  }
 
+  return { state, send };
+}
+
+function Stepper({
+  label,
+  value,
+  lessLabel,
+  moreLabel,
+  onLess,
+  onMore,
+}: {
+  label: string;
+  value: string;
+  lessLabel: string;
+  moreLabel: string;
+  onLess: () => void;
+  onMore: () => void;
+}) {
   return (
-    <View style={styles.live} accessibilityLabel="Workout in progress">
-      <View style={styles.liveHead}>
-        <View style={styles.markSm}>
-          <Text style={styles.markSmText}>F</Text>
-        </View>
-        <Text style={[styles.liveKicker, styles.liveTitle]}>
-          Lower body B · 2 of 6
-        </Text>
-        <Text style={styles.liveKicker}>Rest</Text>
+    <View style={styles.stepper}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={lessLabel}
+        onPress={onLess}
+        style={styles.stepBtn}
+      >
+        <Text style={styles.stepBtnText}>−</Text>
+      </Pressable>
+      <View style={styles.stepValue}>
+        <Text style={styles.stepLabel}>{label}</Text>
+        <Text style={styles.stepNumber}>{value}</Text>
       </View>
-      <View style={styles.liveRow}>
-        <View style={styles.liveCopy}>
-          <Text style={styles.exercise}>Romanian deadlift</Text>
-          <Text style={styles.setLine}>Set 2 of 3 done · 22.5 kg × 10</Text>
-        </View>
-        <View style={styles.restCol}>
-          <Text style={styles.restLabel}>{done ? "Next" : "Rest left"}</Text>
-          <Text style={styles.restValue}>{done ? "Go" : `${left} s`}</Text>
-        </View>
-      </View>
-      <View style={styles.barTrack}>
-        <View style={[styles.barFill, { width: `${widthPct}%` }]} />
-      </View>
-      <Text style={styles.nextLine}>
-        {done ? "Set 3 · Go" : "Next: set 3 · 22.5 kg × 10"}
-      </Text>
-      <View style={styles.liveActions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={LIVE_ACTIVITY_ACTIONS[0]}
-          disabled={done}
-          onPress={() => setLeft((current) => current + 30)}
-          style={styles.liveBtn}
-        >
-          <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[0]}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={LIVE_ACTIVITY_ACTIONS[1]}
-          disabled={done}
-          onPress={() => {
-            setLeft(0);
-            setDone(true);
-          }}
-          style={[styles.liveBtn, styles.liveBtnPrimary]}
-        >
-          <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[1]}</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={moreLabel}
+        onPress={onMore}
+        style={styles.stepBtn}
+      >
+        <Text style={styles.stepBtnText}>+</Text>
+      </Pressable>
     </View>
   );
 }
 
-export function DynamicIslandPreview() {
-  const [seconds, setSeconds] = useState(41);
-  const [done, setDone] = useState(false);
+export function LiveActivityPreview({
+  onNotice,
+}: {
+  onNotice?: (message: string) => void;
+}) {
+  const { state, send } = useLiveActivity(onNotice);
+  const widthPct = Math.max(8, Math.round((state.restLeft / 90) * 100));
+  const logging = state.phase === "logging";
 
-  useEffect(() => {
-    if (done) return;
-    const timer = setInterval(() => {
-      setSeconds((current) => {
-        if (current <= 1) {
-          setDone(true);
-          return 0;
-        }
-        return current - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [done]);
+  return (
+    <View
+      style={styles.live}
+      accessibilityLabel={logging ? "Workout in progress" : "Resting"}
+    >
+      <View style={styles.liveHead}>
+        <AppIcon size={22} />
+        <Text style={[styles.liveKicker, styles.liveTitle]}>
+          Lower body B · exercise 2 of 6
+        </Text>
+        <Text style={styles.liveKicker}>{logging ? "7 min" : "8 min"}</Text>
+      </View>
+      {logging ? (
+        <>
+          <Text style={styles.exercise}>Romanian deadlift</Text>
+          <Text style={styles.setLine}>Set 2 of 3 · Prev 20 kg × 10</Text>
+          <View style={styles.stepRow}>
+            <Stepper
+              label="Weight"
+              value={`${formatKg(state.kilograms)} kg`}
+              lessLabel="Less weight"
+              moreLabel="More weight"
+              onLess={() => send({ type: "weight", direction: -1 })}
+              onMore={() => send({ type: "weight", direction: 1 })}
+            />
+            <Stepper
+              label="Reps"
+              value={String(state.reps)}
+              lessLabel="Fewer reps"
+              moreLabel="More reps"
+              onLess={() => send({ type: "reps", direction: -1 })}
+              onMore={() => send({ type: "reps", direction: 1 })}
+            />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Log set ${state.setIndex}`}
+            onPress={() => send({ type: "log_set" })}
+            style={styles.logSet}
+          >
+            <Text style={styles.logSetText}>Log set {state.setIndex}</Text>
+          </Pressable>
+          <Text style={styles.nextLineCenter}>
+            Then 58 s rest · set 3 · 22.5 kg × 10
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Adjust in app"
+            onPress={() =>
+              onNotice?.("Open the active workout to type a value.")
+            }
+            style={styles.adjustLink}
+          >
+            <Text style={styles.adjustText}>Adjust in app</Text>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          <View style={styles.liveRow}>
+            <View style={styles.liveCopy}>
+              <Text style={styles.exercise}>Romanian deadlift</Text>
+              <Text style={styles.setLine}>
+                {state.phase === "go"
+                  ? "Set 3 · Go"
+                  : `Set ${state.setIndex} logged · ${formatKg(state.kilograms)} kg × ${state.reps}`}
+              </Text>
+            </View>
+            <View style={styles.restCol}>
+              <Text style={styles.restLabel}>
+                {state.phase === "go" ? "Next" : "Rest left"}
+              </Text>
+              <Text style={styles.restValue}>
+                {state.phase === "go" ? "Go" : `${state.restLeft} s`}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.barTrack}>
+            <View style={[styles.barFill, { width: `${widthPct}%` }]} />
+          </View>
+          {state.phase === "rest" ? (
+            <View style={styles.liveActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={LIVE_ACTIVITY_ACTIONS[0]}
+                onPress={() => send({ type: "add_rest" })}
+                style={styles.liveBtn}
+              >
+                <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[0]}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={LIVE_ACTIVITY_ACTIONS[1]}
+                onPress={() => send({ type: "skip_rest" })}
+                style={[styles.liveBtn, styles.liveBtnPrimary]}
+              >
+                <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[1]}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <Text style={styles.nextLine}>Next: set 3 of 3 · 22.5 kg × 10</Text>
+          <Text style={styles.adjustText}>After set 3: Step-ups · 3 sets · 14 kg</Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+export function DynamicIslandPreview({
+  onNotice,
+}: {
+  onNotice?: (message: string) => void;
+}) {
+  const { state, send } = useLiveActivity(onNotice);
+  const logging = state.phase === "logging";
 
   return (
     <View accessibilityLabel="Expanded Live Activity">
       <View style={styles.island}>
         <View style={styles.liveHead}>
-          <View style={styles.markSm}>
-            <Text style={styles.markSmText}>F</Text>
-          </View>
+          <AppIcon size={22} />
           <Text style={[styles.liveKicker, styles.liveTitle]}>
-            Lower body B · 2 of 6
+            Lower body B · exercise 2 of 6
           </Text>
-          <Text style={styles.liveKicker}>Rest</Text>
+          <Text style={styles.liveKicker}>{logging ? "7 min" : "8 min"}</Text>
         </View>
-        <View style={styles.islandRow}>
-          <View style={styles.liveCopy}>
+        {logging ? (
+          <>
             <Text style={styles.islandExercise}>Romanian deadlift</Text>
             <Text style={styles.islandSet}>
-              Set 2 of 3 done · next 22.5 kg × 10
+              Set 2 of 3 · {formatKg(state.kilograms)} kg × {state.reps}
             </Text>
-          </View>
-          <Text style={styles.islandTime}>{done ? "Go" : `${seconds} s`}</Text>
-        </View>
-        <View style={styles.liveActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={LIVE_ACTIVITY_ACTIONS[0]}
-            disabled={done}
-            onPress={() => setSeconds((current) => current + 30)}
-            style={[styles.liveBtn, styles.islandBtn]}
-          >
-            <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[0]}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={LIVE_ACTIVITY_ACTIONS[1]}
-            disabled={done}
-            onPress={() => {
-              setSeconds(0);
-              setDone(true);
-            }}
-            style={[styles.liveBtn, styles.liveBtnPrimary]}
-          >
-            <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[1]}</Text>
-          </Pressable>
-        </View>
+            <View style={styles.liveActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Adjust in app"
+                onPress={() =>
+                  onNotice?.("Open the active workout to type a value.")
+                }
+                style={[styles.liveBtn, styles.islandBtn]}
+              >
+                <Text style={styles.liveBtnText}>Adjust in app</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Log set"
+                onPress={() => send({ type: "log_set" })}
+                style={[styles.liveBtn, styles.liveBtnPrimary]}
+              >
+                <Text style={styles.liveBtnText}>Log set</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.islandRow}>
+              <View style={styles.liveCopy}>
+                <Text style={styles.islandExercise}>Romanian deadlift</Text>
+                <Text style={styles.islandSet}>
+                  {state.phase === "go"
+                    ? "Set 3 · Go"
+                    : `Set ${state.setIndex} logged · ${formatKg(state.kilograms)} kg × ${state.reps}`}
+                </Text>
+              </View>
+              <Text style={styles.islandTime}>
+                {state.phase === "go" ? "Go" : `${state.restLeft} s`}
+              </Text>
+            </View>
+            {state.phase === "rest" ? (
+              <View style={styles.liveActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={LIVE_ACTIVITY_ACTIONS[0]}
+                  onPress={() => send({ type: "add_rest" })}
+                  style={[styles.liveBtn, styles.islandBtn]}
+                >
+                  <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[0]}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={LIVE_ACTIVITY_ACTIONS[1]}
+                  onPress={() => send({ type: "skip_rest" })}
+                  style={[styles.liveBtn, styles.liveBtnPrimary]}
+                >
+                  <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[1]}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </>
+        )}
       </View>
       <View style={styles.compactWrap}>
         <Text style={styles.compactLabel}>Compact</Text>
         <View style={styles.compact}>
-          <View style={styles.markSm}>
-            <Text style={styles.markSmText}>F</Text>
-          </View>
-          <Text style={styles.compactTime}>{done ? "Go" : `${seconds} s`}</Text>
+          <AppIcon size={22} />
+          <Text style={styles.compactTime}>
+            {state.phase === "logging"
+              ? `Set ${state.setIndex}`
+              : state.phase === "go"
+                ? "Go"
+                : `${state.restLeft} s`}
+          </Text>
         </View>
         <Text style={styles.compactHint}>
-          Long-press the island to expand it. Tapping it opens the active
-          workout. When the rest ends, it shows Set 3 · Go.
+          Compact shows the set, and during rest it shows the countdown.
+          Long-press expands it. After Log set it switches to Rest left 58 s
+          with +30 s and Skip.
         </Text>
       </View>
     </View>
@@ -299,9 +453,7 @@ export function LockMessageCard({
 }) {
   return (
     <View style={styles.noteCard}>
-      <View style={styles.mark}>
-        <Text style={styles.markText}>F</Text>
-      </View>
+      <AppIcon size={38} />
       <View style={styles.noteBody}>
         <View style={styles.noteTop}>
           <Text style={styles.appName}>FitBud</Text>
@@ -315,7 +467,6 @@ export function LockMessageCard({
 }
 
 export function InAppBanner({
-  mark,
   kicker,
   title,
   body,
@@ -325,7 +476,6 @@ export function InAppBanner({
   onSecondary,
   floating = false,
 }: {
-  mark: string;
   kicker: string;
   title: string;
   body: string;
@@ -340,9 +490,7 @@ export function InAppBanner({
       accessibilityRole="summary"
       style={[styles.banner, floating ? styles.bannerFloat : null]}
     >
-      <View style={styles.mark}>
-        <Text style={styles.markText}>{mark}</Text>
-      </View>
+      <AppIcon size={38} />
       <View style={styles.bannerBody}>
         <View style={styles.noteTop}>
           <Text style={styles.bannerKicker}>{kicker}</Text>
@@ -543,6 +691,71 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontFamily: fontFamilyBold,
     fontSize: 15,
+  },
+  stepRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  stepper: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 16,
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 4,
+  },
+  stepBtn: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 12,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  stepBtnText: {
+    color: "#fff",
+    fontFamily: fontFamilyBold,
+    fontSize: 24,
+  },
+  stepValue: { alignItems: "center", flex: 1 },
+  stepLabel: {
+    color: "#CFC6FF",
+    fontFamily: fontFamilySemiBold,
+    fontSize: 11,
+  },
+  stepNumber: {
+    color: "#fff",
+    fontFamily: fontFamilyBold,
+    fontSize: 18,
+  },
+  logSet: {
+    alignItems: "center",
+    backgroundColor: brand.indigo,
+    borderRadius: 28,
+    height: 56,
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  logSetText: {
+    color: "#fff",
+    fontFamily: fontFamilyBold,
+    fontSize: 18,
+  },
+  nextLineCenter: {
+    color: "#fff",
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: "center",
+  },
+  adjustLink: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+  },
+  adjustText: {
+    color: "#CFC6FF",
+    fontFamily: fontFamilySemiBold,
+    fontSize: 14,
+    marginTop: 2,
+    textAlign: "center",
   },
   island: {
     backgroundColor: "#000",

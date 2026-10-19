@@ -91,7 +91,6 @@ export function ForegroundBanner({
     return (
       <InAppBanner
         floating
-        mark="F"
         kicker={copy.kicker}
         title={copy.title}
         body={copy.body}
@@ -127,7 +126,6 @@ export function ForegroundBanner({
     return (
       <InAppBanner
         floating
-        mark={copy.mark}
         kicker={copy.kicker}
         title={copy.title}
         body={copy.body}

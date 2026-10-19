@@ -211,7 +211,6 @@ export function WidgetTipsScreen({
       <Text style={styles.section}>While the app is open</Text>
       {meal && showMealBanner ? (
         <InAppBanner
-          mark="F"
           kicker={mealBanner.kicker}
           title={mealBanner.title}
           body={mealBanner.body}
@@ -249,7 +248,6 @@ export function WidgetTipsScreen({
       ) : null}
       {showNoteBanner ? (
         <InAppBanner
-          mark={coachNote.mark}
           kicker={coachNote.kicker}
           title={coachNote.title}
           body={coachNote.body}
@@ -272,8 +270,8 @@ export function WidgetTipsScreen({
       <LockMessageCard title={note.title} body={note.body} whenLabel="12 min ago" />
 
       <Text style={styles.section}>Workout on the lock screen</Text>
-      <LiveActivityPreview />
-      <DynamicIslandPreview />
+      <LiveActivityPreview onNotice={setToast} />
+      <DynamicIslandPreview onNotice={setToast} />
       <DevBuildNote />
 
       {toast ? (

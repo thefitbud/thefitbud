@@ -98,3 +98,16 @@ Story: trainee **Rohan Mehta** (coach Rahul Verma), the same numbers as his web 
 - 29/29b in-app banners over Today (a banner is shown only while the app is open): meal reminder and coach note ("Tap to read it on Today"; note text never shown). Today behind is the static 7:30 demo, so its next-up card differs from the banner's Lunch (cosmetic).
 - 30 lock screen: P-CHK "Weekly check-in is ready" plus P-NOTE "Rahul has a note for you!". Text only, no % or streaks, nothing auto-sent; wording from 05-notifications.md.
 - New CSS: html/l3.css. Banner buttons are 44 pt tinted/primary pairs. The lock-screen clock has no am/pm, as on iOS (check.mjs 24h warning is expected).
+
+## Set 4b · Live Activity logging and real app icon (19 Oct 2026)
+Refs: Figma trainee_04 (weight and reps steppers plus a check; its "WhatsApp Live Sync" claims are dropped); Hevy (Live Activity marks a set done, rest timer ±15 s, Skip); Apple docs (iOS 17+ interactive Live Activities allow Button and Toggle via LiveActivityIntent only, no text fields; the device must be unlocked, so the first tap asks for Face ID).
+Feasibility per control:
+- Log set (27, 27b): feasible. A Button with a LiveActivityIntent writes the set to the shared outbox using the prefilled plan values. The Live Activity then switches to the rest state (27c).
+- Weight − / + (27): feasible. A button intent changes the draft value by one step (2.5 kg) and refreshes the activity. Values can only be stepped, not typed.
+- Reps − / + (27): feasible. A button intent changes the draft by 1 rep.
+- Adjust in app (27, 27b): feasible. A Link or widgetURL deep-links to /workout/:id/active. This is the only way to type a value, because text fields aren't allowed.
+- +30 s and Skip rest (27c, 27b rest): feasible. They are button intents that move or end the timer. The countdown itself uses a system timer (Text(timerInterval:)), so there are no per-second pushes.
+- Next set or exercise preview (27, 27c): feasible. It is plain state in ActivityKit content, updated by each intent.
+- Compact Dynamic Island (27b): feasible. It is a leading icon and trailing text; it has no buttons, since buttons exist only in the expanded view.
+- Not shown, because it is not feasible: typing a value, RPE entry, a note, or photo capture. These go through Adjust in app.
+- App icon: packages/brand/app/icon.png (1024 square, four dots with a coral ring), copied to html/assets/app-icon.png, rounded to 22% in 27–30.

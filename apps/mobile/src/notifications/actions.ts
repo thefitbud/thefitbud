@@ -24,7 +24,7 @@ export const IN_APP_NOTE_ACTIONS = ["Read", "Later"] as const;
 export const LIVE_ACTIVITY_ACTIONS = ["+30 s", "Skip rest"] as const;
 
 export const DEV_BUILD_NOTE =
-  "The Live Activity needs a dev build. The Dynamic Island needs a dev build. The lock screen needs a dev build.";
+  "The Live Activity needs a dev build. The Dynamic Island needs a dev build. The lock screen needs a dev build. Log set uses a LiveActivityIntent in that build. iOS asks for Face ID on the first tap and does not open the app.";
 
 const SNOOZE_KEY = "fitbud.mealSnooze.v1";
 const HIDE_KEY = "fitbud.hideLockDetails";

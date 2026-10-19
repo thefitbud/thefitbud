@@ -3,9 +3,9 @@
 Branch: `cursor/mc-trainee-settings-1568`  
 Base: `cursor/mb-trainee-workout-progress-c688`  
 Stack: API `:8787` + Expo web `:8081` (`EXPO_PUBLIC_SCREEN_CAPTURE=1`) · viewport 393×852, plus 360×800 for More and Reminders  
-Meal notifications use Open and Snooze 30 min inside the card. Live Activity, Dynamic Island, and the lock screen need a dev build. The in-app previews are not the system UI.
+Meal notifications use Open and Snooze 30 min inside the card, with the FitBud app icon. The Live Activity preview can log a set, then rest. The real ActivityKit target needs a dev build.
 
-Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 85. API, core, contracts, api-client, and trainer-web were not re-run (last counts 230, 126, 22, 7, 24).
+Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 87. API, core, contracts, api-client, and trainer-web were not re-run (last counts 230, 126, 22, 7, 24).
 
 ## Summary counts
 
@@ -78,7 +78,7 @@ Mockups 27, 27b, 29, 29b, and 30 are in `docs/spec/mockups-v2`. Meal push action
 |---|---|---|
 | TR-21.1 | FAIL | `TR-21--rohan.png` shows “Next: Breakfast · 8:00 am”. That is an in-app preview. The home-screen widget needs a dev build. |
 | TR-21.2 | PASS | Rohan: Eaten as planned, then “Saved on this phone.” (`TR-21--confirmed.png`). Same outbox path as Diet. The lock-screen button needs a dev build. |
-| TR-21.3 | FAIL | The preview counts down and Skip rest shows “Set 3 · Go” (`TR-21--rest-skipped.png`). The Live Activity needs a dev build. |
+| TR-21.3 | FAIL | The preview steps weight, logs set 2 at 25 kg × 10, then rests (`TR-21--live.png`, `TR-21--logged.png`). Skip rest shows “Set 3 · Go”. ActivityKit and the LiveActivityIntent in `apps/mobile/targets/FitBudLiveActivity` need a dev build. iOS asks for Face ID on the first lock-screen tap and does not open the app. |
 | TR-21.4 | PASS | Captured text has no “placeholder” and no screen id. |
 | TR-21.5 | PASS | Banned-string scan on the captured text was empty. |
 | TR-21.6 | FAIL | Aarav empty state is “Nothing left today” (`TR-21.png`). Loading, error, offline, and signed-out were not captured. |
