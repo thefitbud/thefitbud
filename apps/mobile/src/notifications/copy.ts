@@ -40,10 +40,6 @@ export function mealPushCopy(
   };
 }
 
-export function mealExpandedLine(mealLabel: string, clock: string): string {
-  return `${mealLabel} · ${clock}`;
-}
-
 export function checkinPushCopy(coachName?: string | null): {
   title: string;
   body: string;

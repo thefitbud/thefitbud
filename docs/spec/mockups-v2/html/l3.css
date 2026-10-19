@@ -147,3 +147,7 @@
 .a6 a:first-child{border-top:0;font-weight:600;color:var(--indigo)}
 .blurbg{position:absolute;inset:0;background:rgba(26,18,72,.35);backdrop-filter:blur(14px)}
 .ib5 .act{display:flex;align-items:center;gap:4px}
+.n7{flex-direction:column;align-items:stretch;gap:0}
+.n7 .r{display:flex;align-items:center;gap:10px}
+.n7 .bb{display:flex;gap:8px;margin-top:10px}
+.n7 .bb a{flex:1;height:44px;border-radius:14px;background:rgba(60,60,67,.12);display:grid;place-items:center;font-size:15px;font-weight:600;color:#000;text-decoration:none}

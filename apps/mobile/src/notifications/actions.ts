@@ -29,7 +29,7 @@ export const MEAL_NOTIFICATION_ACTIONS = [
 ] as const;
 
 export const DEV_BUILD_NOTE =
-  "The Live Activity needs a dev build. The Dynamic Island needs a dev build. The lock screen needs a dev build. The Android workout notification needs a dev build. Log set uses a LiveActivityIntent in that build and moves to the next set. iOS asks for Face ID on the first tap and does not open the app. Snooze re-sends once from a dev build, and a time inside quiet hours waits until they end.";
+  "The Live Activity needs a dev build. The Dynamic Island needs a dev build. The lock screen needs a dev build. The Android workout notification needs a dev build. Log set uses a LiveActivityIntent in that build and moves to the next set. iOS asks for Face ID on the first tap and does not open the app. The Open and Snooze buttons inside the meal card need a dev build. Snooze re-sends once from that build, and a time inside quiet hours waits until they end.";
 
 export type QuietHoursInput = {
   start: string | null;

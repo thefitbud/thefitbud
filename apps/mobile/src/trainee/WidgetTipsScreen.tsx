@@ -214,26 +214,14 @@ export function WidgetTipsScreen({
 
       <Text style={styles.section}>Meal notification</Text>
       {meal ? (
-        <>
-          <MealNotificationCard
-            mealId={meal.id}
-            mealLabel={mealLabel}
-            hideDetails={hideDetails}
-            quiet={quiet}
-            onOpen={openMeal}
-            onSnoozed={setToast}
-          />
-          <MealNotificationCard
-            expanded
-            mealId={meal.id}
-            mealLabel={mealLabel}
-            mealTime={clock}
-            hideDetails={hideDetails}
-            quiet={quiet}
-            onOpen={openMeal}
-            onSnoozed={setToast}
-          />
-        </>
+        <MealNotificationCard
+          mealId={meal.id}
+          mealLabel={mealLabel}
+          hideDetails={hideDetails}
+          quiet={quiet}
+          onOpen={openMeal}
+          onSnoozed={setToast}
+        />
       ) : (
         <Text style={styles.muted}>Nothing left to log.</Text>
       )}

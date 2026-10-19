@@ -12,7 +12,7 @@ import {
   type QuietHoursInput,
 } from "../../notifications/actions";
 import { scheduleMealSnoozeNotification } from "../../notifications/nativeActions";
-import { mealExpandedLine, mealPushCopy } from "../../notifications/copy";
+import { mealPushCopy } from "../../notifications/copy";
 import {
   DEMO_LIVE_ACTIVITY,
   currentValueLine,
@@ -56,7 +56,6 @@ export function MealInlineButtons({
   mealId,
   title,
   body,
-  expanded = false,
   quiet,
   onOpen,
   onSnoozed,
@@ -64,7 +63,6 @@ export function MealInlineButtons({
   mealId: string;
   title: string;
   body: string;
-  expanded?: boolean;
   quiet?: QuietHoursInput | null;
   onOpen: () => void;
   onSnoozed: (message: string) => void;
@@ -97,7 +95,7 @@ export function MealInlineButtons({
         onPress={onOpen}
         style={styles.actionRow}
       >
-        <Text style={expanded ? styles.actionPrimaryText : styles.actionText}>
+        <Text style={styles.actionText}>
           {MEAL_NOTIFICATION_ACTIONS[0].buttonTitle}
         </Text>
       </Pressable>
@@ -109,7 +107,7 @@ export function MealInlineButtons({
         onPress={() => {
           void snooze();
         }}
-        style={[styles.actionRow, styles.actionDivider, snoozed ? styles.actionDisabled : null]}
+        style={[styles.actionRow, snoozed ? styles.actionDisabled : null]}
       >
         <Text style={styles.actionText}>
           {MEAL_NOTIFICATION_ACTIONS[1].buttonTitle}
@@ -124,8 +122,6 @@ export function MealNotificationCard({
   mealLabel,
   hideDetails,
   whenLabel = "now",
-  expanded = false,
-  mealTime,
   quiet,
   onOpen,
   onSnoozed,
@@ -134,35 +130,23 @@ export function MealNotificationCard({
   mealLabel: string;
   hideDetails: boolean;
   whenLabel?: string;
-  expanded?: boolean;
-  mealTime?: string;
   quiet?: QuietHoursInput | null;
   onOpen: () => void;
   onSnoozed: (message: string) => void;
 }) {
   const copy = mealPushCopy(mealLabel, hideDetails);
-  const detail =
-    expanded && mealTime && !hideDetails
-      ? mealExpandedLine(mealLabel, mealTime)
-      : null;
 
   return (
-    <View accessibilityLabel="Meal notification">
-      <View style={expanded ? styles.mealExpanded : styles.noteCard}>
+    <View accessibilityLabel="Meal notification" style={styles.mealCard}>
+      <View style={styles.mealTop}>
         <AppIcon size={38} />
-        <View style={styles.noteBody}>
-          <View style={styles.noteTop}>
-            <Text style={styles.noteTitle}>{copy.title}</Text>
-            <Text style={styles.when}>{whenLabel}</Text>
-          </View>
-          {detail ? <Text style={styles.mealDetail}>{detail}</Text> : null}
-        </View>
+        <Text style={styles.noteTitle}>{copy.title}</Text>
+        <Text style={styles.when}>{whenLabel}</Text>
       </View>
       <MealInlineButtons
         mealId={mealId}
         title={copy.title}
         body={copy.body}
-        expanded={expanded}
         quiet={quiet}
         onOpen={onOpen}
         onSnoozed={onSnoozed}
@@ -494,15 +478,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
-  mealExpanded: {
-    alignItems: "center",
+  mealCard: {
     backgroundColor: "#F2F1F7",
-    borderRadius: 22,
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 20,
+    paddingBottom: 11,
+    paddingLeft: 11,
+    paddingRight: 14,
+    paddingTop: 11,
   },
+  mealTop: { alignItems: "center", flexDirection: "row", gap: 10 },
   noteBody: { flex: 1, minWidth: 0 },
   noteTop: {
     alignItems: "flex-start",
@@ -524,7 +508,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
-  mealDetail: { color: "#3D3D44", fontSize: 13, marginTop: 2 },
   noteCopy: {
     color: ink[700],
     fontSize: 15,
@@ -532,26 +515,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   actionStack: {
-    backgroundColor: "#F2F1F7",
-    borderRadius: 14,
-    marginTop: 6,
-    overflow: "hidden",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
   },
   actionRow: {
-    height: 48,
+    alignItems: "center",
+    backgroundColor: "rgba(60,60,67,0.12)",
+    borderRadius: 14,
+    flex: 1,
+    height: 44,
     justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  actionDivider: {
-    borderTopColor: "rgba(60,60,67,0.18)",
-    borderTopWidth: 1,
+    paddingHorizontal: 8,
   },
   actionDisabled: { opacity: 0.45 },
-  actionText: { color: "#000", fontSize: 16 },
-  actionPrimaryText: {
-    color: brand.indigo,
+  actionText: {
+    color: "#000",
     fontFamily: fontFamilySemiBold,
-    fontSize: 16,
+    fontSize: 15,
   },
   live: {
     backgroundColor: "rgba(242,241,247,0.96)",
