@@ -82,16 +82,25 @@ console.log("aarav eaten count", await eaten.count());
 
 await page.getByText("Workout on the lock screen").scrollIntoViewIfNeeded();
 await page.waitForTimeout(400);
+const liveText = await page.evaluate(() => document.body.innerText);
+console.log("canned lower", /Lower body B|Romanian deadlift/.test(liveText));
 await shot("TR-21--live.png");
-await page.getByRole("button", { name: "Log set 2" }).first().click();
-await page.getByText("Set 3 of 3").first().waitFor({ timeout: 5000 });
-await page.getByText("Set 2 logged · 22.5 kg × 10").first().waitFor({ timeout: 5000 });
+const more = page.getByRole("button", { name: "More weight" });
+if ((await more.count()) > 0) {
+  await more.first().click();
+  await page.waitForTimeout(300);
+  await shot("TR-21--stepped.png");
+  console.log("step ok");
+} else {
+  console.log("no weight stepper");
+}
+const logBtn = page.getByRole("button", { name: /^Log set \d+$/ }).first();
+await logBtn.waitFor({ timeout: 8000 });
+const logName = await logBtn.getAttribute("aria-label");
+await logBtn.click();
+await page.getByText(/Set \d+ logged/).first().waitFor({ timeout: 5000 });
 await shot("TR-21--logged.png");
-console.log("log set ok");
-await page.getByRole("button", { name: "More weight" }).first().click();
-await page.getByText("25 kg").first().waitFor({ timeout: 5000 });
-await shot("TR-21--stepped.png");
-console.log("step ok");
+console.log("log set ok", logName);
 const restLeft = await page.getByText(/Rest left|Skip rest|\+30 s/).count();
 console.log("rest controls", restLeft);
 

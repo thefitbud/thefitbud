@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import {
+  Check,
+  CloudOff,
+  Dumbbell,
+  Stethoscope,
+  Utensils,
+} from "lucide-react-native";
 import { brand, ink, semantic } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { BottomSheet } from "../../components/BottomSheet";
 import { ErrorBanner } from "../../components/ErrorBanner";
-import { useAuth } from "../../auth/AuthProvider";
 import { useConfig } from "../../providers/ConfigProvider";
 import {
   buildSupportMailto,
@@ -19,7 +25,7 @@ import {
   lastSyncedLabel,
 } from "../../sync/outboxCopy";
 import type { OutboxEntry } from "../../sync/engine";
-import { M2Button, M2Group, M2Note, M2Page, M2Row } from "./m2";
+import { M2Button, M2Group, M2Hero, M2Note, M2Page, M2Row } from "./m2";
 
 type Props = {
   onBack: () => void;
@@ -28,7 +34,6 @@ type Props = {
 
 export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
   const sync = useSyncEngine();
-  const { me } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
   const first = coachName.split(/\s+/)[0] || "your coach";
@@ -92,9 +97,13 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
     await syncNow();
   }
 
-  const deviceHint = me?.userId
-    ? `Device ${me.userId.slice(0, 8)}`
-    : "This phone";
+  const quiet =
+    waiting.length === 0 && failed.length === 0 && !offline;
+  const heroTitle = offline
+    ? `Offline · ${waiting.length} waiting`
+    : quiet
+      ? "All saved"
+      : `${waiting.length} waiting`;
 
   return (
     <M2Page
@@ -116,11 +125,19 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
           Loading…
         </Text>
       ) : null}
-      <Text style={styles.synced}>{lastSyncedLabel(syncedAt)}</Text>
+      <M2Hero
+        tone={quiet ? "ok" : "wait"}
+        icon={
+          quiet ? (
+            <Check color={brand.indigo} size={22} strokeWidth={2} />
+          ) : (
+            <CloudOff color={ink[700]} size={22} strokeWidth={1.75} />
+          )
+        }
+        title={heroTitle}
+        subtitle={lastSyncedLabel(syncedAt)}
+      />
 
-      <Text style={styles.section}>
-        Waiting to send ({waiting.length})
-      </Text>
       {waiting.length === 0 ? (
         <Text style={styles.muted}>Nothing waiting.</Text>
       ) : (
@@ -128,6 +145,7 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
           {waiting.map((row) => (
             <M2Row
               key={row.mutationId}
+              icon={queueIcon(row.operation)}
               label={describeOutboxEntry(row)}
               showChevron={false}
             />
@@ -164,19 +182,17 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
         }}
       />
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Diagnostics"
-        onPress={() => setDiagOpen((open) => !open)}
-        style={styles.linkHit}
-      >
-        <Text style={styles.link}>
-          {diagOpen ? "Hide diagnostics" : "Diagnostics"}
-        </Text>
-      </Pressable>
+      <M2Group>
+        <M2Row
+          icon={<Stethoscope color={brand.indigo} size={18} strokeWidth={1.75} />}
+          label="Diagnostics"
+          hint="FitBud on this phone"
+          onPress={() => setDiagOpen((open) => !open)}
+        />
+      </M2Group>
       {diagOpen ? (
         <M2Note>
-          {`FitBud mobile · ${deviceHint}. Email support includes this screen.`}
+          FitBud on this phone. Email support includes this screen.
         </M2Note>
       ) : null}
       <M2Button
@@ -211,13 +227,18 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
   );
 }
 
+function queueIcon(operation: string) {
+  if (operation.startsWith("meal.")) {
+    return <Utensils color={brand.indigo} size={18} strokeWidth={1.75} />;
+  }
+  if (operation.startsWith("workout.")) {
+    return <Dumbbell color={brand.indigo} size={18} strokeWidth={1.75} />;
+  }
+  return <CloudOff color={ink[700]} size={18} strokeWidth={1.75} />;
+}
+
 const styles = StyleSheet.create({
   muted: { color: ink[500], fontSize: 15 },
-  synced: {
-    color: brand.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-  },
   section: {
     color: ink[700],
     fontFamily: fontFamilySemiBold,
@@ -235,7 +256,5 @@ const styles = StyleSheet.create({
   },
   failTitle: { color: ink[900], fontSize: 15, lineHeight: 21 },
   failWhy: { color: semantic.critical.text, fontSize: 14, lineHeight: 20 },
-  linkHit: { justifyContent: "center", minHeight: 44 },
-  link: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 16 },
   mail: { color: brand.deepNavy, fontSize: 16 },
 });

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Flag } from "lucide-react-native";
 import type { CoachingRelationship, PendingReactivation } from "@fitbud/contracts";
+import { formatCivilDate, formatLocalDate } from "@fitbud/core";
+import { brand, ink } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { messageFromError, useAuth } from "../auth/AuthProvider";
-import { CoachingEndedBanner } from "./CoachingEndedBanner";
+import { M2Button, M2Group, M2Hero, M2Page, M2Row } from "./settings/m2";
 
 type Props = {
   relationship: CoachingRelationship;
@@ -16,6 +18,11 @@ type Props = {
   onSignOut: () => void;
   onCoachingResumed: (relationship: CoachingRelationship) => void;
 };
+
+function endedOn(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  return formatCivilDate(formatLocalDate(new Date(iso), "Asia/Kolkata"));
+}
 
 export function EndedCoachingScreen({
   relationship,
@@ -79,123 +86,132 @@ export function EndedCoachingScreen({
   };
 
   const trainerLabel = coachName.trim() || "Your coach";
+  const when = endedOn(relationship.endedAt);
 
   return (
-    <Screen
-      title="Coaching ended"
+    <M2Page
+      title="Coaching"
       subtitle="Your history stays in FitBud. A new coach always starts fresh."
       refreshing={loading}
       onRefresh={() => {
         void refreshPending();
       }}
     >
-      <View style={styles.stack}>
-        <CoachingEndedBanner
-          coachName={trainerLabel}
-          endedAt={relationship.endedAt}
-        />
+      <M2Hero
+        icon={<Flag color={brand.indigo} size={22} strokeWidth={1.75} />}
+        title="Coaching ended"
+        subtitle={
+          when
+            ? `With ${trainerLabel} on ${when}. Your history is still here.`
+            : `With ${trainerLabel}. Your history is still here.`
+        }
+      />
 
-        {error ? <ErrorBanner message={error} /> : null}
+      {error ? <ErrorBanner message={error} /> : null}
 
-        {expired ? (
-          <Text style={styles.body}>
-            This request has expired. Ask {trainerLabel} to send a new one.
+      {expired ? (
+        <Text style={styles.body}>
+          This request has expired. Ask {trainerLabel} to send a new one.
+        </Text>
+      ) : null}
+
+      {showReactivationCard ? (
+        <View style={styles.reactivationCard}>
+          <Text style={styles.reactivationTitle}>
+            {trainerLabel} wants to restart coaching with you
           </Text>
-        ) : null}
-
-        {showReactivationCard ? (
-          <View style={styles.reactivationCard}>
-            <Text style={styles.reactivationTitle}>
-              {trainerLabel} wants to restart coaching with you
-            </Text>
+          <Text style={styles.body}>
+            Your history and settings stay as they are. {trainerLabel} will
+            send your plan when coaching picks up again.
+          </Text>
+          {pending?.intakeUpdateRequested ? (
             <Text style={styles.body}>
-              Your history and settings stay as they are. {trainerLabel} will
-              send your plan when coaching picks up again.
+              You may be asked to refresh your intake answers next.
             </Text>
-            {pending?.intakeUpdateRequested ? (
-              <Text style={styles.body}>
-                You may be asked to refresh your intake answers next.
-              </Text>
-            ) : null}
-            <PrimaryButton
-              label="Restart coaching"
-              loading={confirming}
-              onPress={() => {
-                void handleConfirm();
-              }}
-            />
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setCardDismissed(true)}
-              disabled={confirming}
-            >
-              <Text style={styles.notNow}>Not now</Text>
-            </Pressable>
-          </View>
-        ) : null}
+          ) : null}
+          <M2Button
+            label={confirming ? "Restarting…" : "Restart coaching"}
+            disabled={confirming}
+            onPress={() => {
+              void handleConfirm();
+            }}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setCardDismissed(true)}
+            disabled={confirming}
+          >
+            <Text style={styles.notNow}>Not now</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
-        {!showReactivationCard && !loading && pending === null && cardDismissed ? (
-          <Text style={styles.body}>
-            You can come back anytime before the request expires if you change
-            your mind.
-          </Text>
-        ) : null}
+      {!showReactivationCard && !loading && pending === null && cardDismissed ? (
+        <Text style={styles.body}>
+          You can come back anytime before the request expires if you change
+          your mind.
+        </Text>
+      ) : null}
 
-        <Text style={styles.body}>
-          This coaching relationship has ended. You can still browse past logs
-          and check-ins. If the same coach restarts with you, your workspace
-          can be restored.
-        </Text>
-        <Text style={styles.body}>
-          Got an invite from a new coach? Open the link, or enter a code.
-        </Text>
+      <Text style={styles.body}>
+        You can still browse past logs and check-ins. If the same coach
+        restarts with you, your workspace can be restored.
+      </Text>
+      <Text style={styles.body}>
+        Got an invite from a new coach? Open the link, or enter a code.
+      </Text>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Invite code</Text>
         <TextInput
           accessibilityLabel="Invite code"
           value={inviteCode}
           onChangeText={setInviteCode}
           autoCapitalize="none"
-          placeholder="Invite code"
+          placeholder="Code from your coach"
+          placeholderTextColor={ink[500]}
           style={styles.code}
         />
-        <PrimaryButton
-          label="Use this code"
-          loading={joining}
-          variant="secondary"
-          onPress={() => {
-            const token = inviteCode.trim();
-            if (!token) {
-              setError("Enter the code from your new coach.");
-              return;
-            }
-            setJoining(true);
-            setError(null);
-            void api
-              .acceptInvitation({
-                token,
-                timezone:
-                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-              })
-              .then(() => {
-                setError(null);
-                setInviteCode("");
-              })
-              .catch((err) => setError(messageFromError(err)))
-              .finally(() => setJoining(false));
-          }}
-        />
-        <PrimaryButton label="Past coaching" onPress={onOpenHistory} />
-        <PrimaryButton label="Sign out" variant="ghost" onPress={onSignOut} />
       </View>
-    </Screen>
+      <M2Button
+        label={joining ? "Checking…" : "Use this code"}
+        disabled={joining}
+        onPress={() => {
+          const token = inviteCode.trim();
+          if (!token) {
+            setError("Enter the code from your new coach.");
+            return;
+          }
+          setJoining(true);
+          setError(null);
+          void api
+            .acceptInvitation({
+              token,
+              timezone:
+                Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            })
+            .then(() => {
+              setError(null);
+              setInviteCode("");
+            })
+            .catch((err) => setError(messageFromError(err)))
+            .finally(() => setJoining(false));
+        }}
+      />
+      <M2Group>
+        <M2Row
+          label="Past coaching"
+          hint="Browse past logs"
+          onPress={onOpenHistory}
+        />
+      </M2Group>
+      <M2Button label="Sign out" variant="secondary" onPress={onSignOut} />
+    </M2Page>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.lg,
-  },
   body: {
-    color: colors.darkGrey,
+    color: ink[700],
     fontSize: 15,
     lineHeight: 22,
   },
@@ -207,8 +223,8 @@ const styles = StyleSheet.create({
   },
   reactivationTitle: {
     color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
     fontSize: 17,
-    fontWeight: "600",
     lineHeight: 24,
   },
   notNow: {
@@ -217,6 +233,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     minHeight: 44,
     textAlign: "center",
+  },
+  field: { gap: 6 },
+  fieldLabel: {
+    color: ink[700],
+    fontFamily: fontFamilySemiBold,
+    fontSize: 13,
   },
   code: {
     backgroundColor: colors.white,

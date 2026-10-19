@@ -1,92 +1,149 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
+import type { MealAssignment, WorkoutAssignment } from "@fitbud/contracts";
+import { formatCivilDate, formatLocalDate, formatPersonName, labelFor } from "@fitbud/core";
+import { ink } from "@fitbud/tokens";
 import { Text } from "../../components/Text";
-import type { CoachingRelationship } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-
-import { CoachingEndedBanner } from "../CoachingEndedBanner";
+import { addDays } from "../../lib/dates";
+import { M2Group, M2Page, M2Row } from "./m2";
 
 type Props = {
   onBack: () => void;
-  showEndedBanner?: boolean;
+  relationshipId?: string;
   coachName?: string;
   endedAt?: string | null;
 };
 
+type LogRow = {
+  id: string;
+  label: string;
+  hint: string;
+};
+
+function civilFromIso(iso: string | null | undefined): string {
+  if (!iso) return "Date unknown";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return formatCivilDate(iso);
+  return formatCivilDate(formatLocalDate(new Date(iso), "Asia/Kolkata"));
+}
+
+function mealStatus(status: MealAssignment["status"]): string {
+  if (status === "confirmed" || status === "logged_later") return "Logged";
+  if (status === "skipped") return "Skipped";
+  if (status === "modified") return "Changed";
+  return labelFor("meal_assignment_status", status);
+}
+
+function workoutStatus(status: WorkoutAssignment["status"]): string {
+  if (status === "completed") return "Done";
+  if (status === "skipped") return "Skipped";
+  if (status === "missed") return "Missed";
+  return labelFor("workout_assignment_status", status);
+}
+
 export function PastCoachingScreen({
   onBack,
-  showEndedBanner = false,
+  relationshipId,
   coachName = "Your coach",
   endedAt,
 }: Props) {
   const { api } = useAuth();
-  const [items, setItems] = useState<CoachingRelationship[]>([]);
+  const [rows, setRows] = useState<LogRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const page = await api.listRelationships({ limit: 50 });
-    setItems(page.items.filter((row) => row.status === "ended"));
-  }, [api]);
+    setError(null);
+    try {
+      const page = await api.listRelationships({ limit: 50 });
+      const ended = page.items.filter((row) => row.status === "ended");
+      const focus =
+        ended.find((row) => row.id === relationshipId) ?? ended[0] ?? null;
+      const endDate = focus?.endedAt
+        ? formatLocalDate(new Date(focus.endedAt), "Asia/Kolkata")
+        : formatLocalDate(new Date(), "Asia/Kolkata");
+      const fromDate = addDays(endDate, -90);
+      const logs: LogRow[] = ended.map((item) => ({
+        id: `rel-${item.id}`,
+        label: formatPersonName(item.trainerDisplayName) || coachName,
+        hint: civilFromIso(item.endedAt),
+      }));
+      if (focus) {
+        const [meals, workouts] = await Promise.all([
+          api
+            .listMealAssignments(focus.id, { fromDate, toDate: endDate })
+            .catch(() => ({ items: [] as MealAssignment[] })),
+          api
+            .listWorkoutAssignments(focus.id, { fromDate, toDate: endDate })
+            .catch(() => ({ items: [] as WorkoutAssignment[] })),
+        ]);
+        for (const meal of meals.items) {
+          logs.push({
+            id: `meal-${meal.id}`,
+            label: meal.mealName,
+            hint: `${civilFromIso(meal.localDate)} · ${mealStatus(meal.status)}`,
+          });
+        }
+        for (const workout of workouts.items) {
+          logs.push({
+            id: `workout-${workout.id}`,
+            label: workout.workoutDayName,
+            hint: `${civilFromIso(workout.localDate)} · ${workoutStatus(workout.status)}`,
+          });
+        }
+      }
+      setRows(logs);
+    } catch {
+      setError("Could not load past coaching.");
+    } finally {
+      setLoading(false);
+    }
+  }, [api, coachName, relationshipId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   return (
-    <Screen title="Past coaching" subtitle="Ended relationships stay on your account.">
-      <View style={styles.stack}>
-        {showEndedBanner ? (
-          <CoachingEndedBanner coachName={coachName} endedAt={endedAt} />
-        ) : null}
-        {items.length === 0 ? (
-          <Text style={styles.muted}>No ended coaching yet.</Text>
-        ) : (
-          <View style={styles.list}>
-          {items.map((item) => (
-            <View key={item.id} style={styles.card}>
-              <Text style={styles.title}>Coaching ended</Text>
-              <Text style={styles.meta}>
-                {item.endedAt
-                  ? new Date(item.endedAt).toLocaleDateString("en-IN")
-                  : "Date unknown"}
-              </Text>
-            </View>
+    <M2Page
+      title="Past coaching"
+      subtitle={
+        endedAt
+          ? `Logs through ${civilFromIso(endedAt)} stay on your account. Read-only.`
+          : "Past relationships stay on your account. Logs are read-only."
+      }
+      onBack={onBack}
+      refreshing={loading}
+      onRefresh={() => {
+        setLoading(true);
+        void load();
+      }}
+    >
+      {error ? <Text style={styles.muted}>{error}</Text> : null}
+      {loading ? (
+        <Text accessibilityLabel="Loading past coaching" style={styles.muted}>
+          Loading…
+        </Text>
+      ) : null}
+      {!loading && rows.length === 0 ? (
+        <Text style={styles.muted}>No ended coaching yet.</Text>
+      ) : null}
+      {rows.length > 0 ? (
+        <M2Group>
+          {rows.slice(0, 40).map((row) => (
+            <M2Row
+              key={row.id}
+              label={row.label}
+              hint={row.hint}
+              showChevron={false}
+            />
           ))}
-          </View>
-        )}
-      </View>
-      <PrimaryButton label="Back" variant="ghost" onPress={onBack} />
-    </Screen>
+        </M2Group>
+      ) : null}
+    </M2Page>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  muted: {
-    color: colors.midGrey,
-    fontSize: 15,
-  },
-  list: {
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    gap: spacing.xs,
-    padding: spacing.lg,
-  },
-  title: {
-    color: colors.deepNavy,
-    fontWeight: "600",
-  },
-  meta: {
-    color: colors.midGrey,
-    fontSize: 13,
-  },
+  muted: { color: ink[500], fontSize: 15, lineHeight: 21 },
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { Utensils } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import { brand, ink } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
@@ -13,7 +14,7 @@ import {
   shiftQuarterHour,
   validateMealTimes,
 } from "./clock";
-import { M2Button, M2Note, M2Page } from "./m2";
+import { M2Button, M2Note, M2Page, M2Segmented, M2Stepper } from "./m2";
 
 type Props = {
   onBack: () => void;
@@ -172,60 +173,54 @@ export function MealTimesScreen({ onBack, coachName = "Your coach" }: Props) {
             const pattern = patterns[slot.slotKey] ?? "all";
             return (
               <View key={slot.slotKey} style={styles.card}>
-                <Text style={styles.label}>{slot.label}</Text>
-                <Text style={styles.clock}>{clockLabel(time)}</Text>
+                <View style={styles.head}>
+                  <View style={styles.tile}>
+                    <Utensils color={brand.indigo} size={18} strokeWidth={1.75} />
+                  </View>
+                  <View style={styles.headText}>
+                    <Text style={styles.label}>{slot.label}</Text>
+                  </View>
+                </View>
                 {changed ? (
                   <Text style={styles.plan}>plan {clockLabel(slot.planTime)}</Text>
                 ) : null}
                 <Text style={styles.reminder}>
                   Reminder about {clockLabel(mealReminderClock(time) ?? time)}
                 </Text>
-                <View style={styles.row}>
-                  <M2Button
-                    label="Earlier"
-                    variant="secondary"
-                    onPress={() =>
-                      setTimes((prev) => ({
-                        ...prev,
-                        [slot.slotKey]: shiftQuarterHour(time, -15, {
-                          min: "05:00",
-                          max: "22:00",
-                        }),
-                      }))
-                    }
-                  />
-                  <M2Button
-                    label="Later"
-                    variant="secondary"
-                    onPress={() =>
-                      setTimes((prev) => ({
-                        ...prev,
-                        [slot.slotKey]: shiftQuarterHour(time, 15, {
-                          min: "05:00",
-                          max: "22:00",
-                        }),
-                      }))
-                    }
-                  />
-                </View>
-                <View style={styles.patterns}>
-                  {(
-                    [
-                      ["all", "Every day"],
-                      ["weekdays", "Weekdays"],
-                      ["weekends", "Weekends"],
-                    ] as const
-                  ).map(([id, name]) => (
-                    <M2Button
-                      key={id}
-                      label={name}
-                      variant={pattern === id ? "primary" : "secondary"}
-                      onPress={() =>
-                        setPatterns((prev) => ({ ...prev, [slot.slotKey]: id }))
-                      }
-                    />
-                  ))}
-                </View>
+                <M2Stepper
+                  value={clockLabel(time)}
+                  lessLabel={`Earlier ${slot.label}`}
+                  moreLabel={`Later ${slot.label}`}
+                  onDecrement={() =>
+                    setTimes((prev) => ({
+                      ...prev,
+                      [slot.slotKey]: shiftQuarterHour(time, -15, {
+                        min: "05:00",
+                        max: "22:00",
+                      }),
+                    }))
+                  }
+                  onIncrement={() =>
+                    setTimes((prev) => ({
+                      ...prev,
+                      [slot.slotKey]: shiftQuarterHour(time, 15, {
+                        min: "05:00",
+                        max: "22:00",
+                      }),
+                    }))
+                  }
+                />
+                <M2Segmented
+                  value={pattern}
+                  options={[
+                    { id: "all", label: "Every day" },
+                    { id: "weekdays", label: "Weekdays" },
+                    { id: "weekends", label: "Weekends" },
+                  ]}
+                  onChange={(id) =>
+                    setPatterns((prev) => ({ ...prev, [slot.slotKey]: id }))
+                  }
+                />
                 {changed ? (
                   <M2Button
                     label="Reset to plan"
@@ -256,22 +251,30 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     gap: 8,
-    padding: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
+  head: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  tile: {
+    alignItems: "center",
+    backgroundColor: brand.paleLavender,
+    borderRadius: 11,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  headText: { flex: 1 },
   label: {
     color: ink[900],
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
-  clock: {
-    color: brand.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 28,
-  },
   plan: { color: ink[500], fontSize: 13 },
-  reminder: { color: ink[500], fontSize: 14 },
-  row: { flexDirection: "row", gap: 8 },
-  patterns: { gap: 8 },
+  reminder: { color: ink[500], fontSize: 13 },
   warn: { color: "#9A3412", fontSize: 14, lineHeight: 20 },
   toast: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 14 },
 });

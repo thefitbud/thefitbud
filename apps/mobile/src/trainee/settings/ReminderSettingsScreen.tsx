@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Bell, ClipboardCheck, Dumbbell, Moon, SunMedium, Utensils } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { NotificationPreferences, ReminderStatus } from "@fitbud/contracts";
 import { formatCivilDate, formatHhMmTime, formatLocalDate } from "@fitbud/core";
@@ -14,7 +15,16 @@ import { isWhatsAppAutomationEnabled } from "../../lib/config";
 import { stage1Api } from "../../lib/stage1Api";
 import { ensureAndroidNotificationChannels } from "../../notifications/androidChannels";
 import { clockLabel, shiftQuarterHour } from "./clock";
-import { M2Button, M2Group, M2Note, M2Page, M2Row, M2SwitchRow } from "./m2";
+import {
+  M2Button,
+  M2Group,
+  M2Note,
+  M2Page,
+  M2Row,
+  M2Stepper,
+  M2SubRow,
+  M2SwitchRow,
+} from "./m2";
 
 type CategoryKey = "workoutReminder" | "mealReminder" | "checkinReminder" | "dailySummaryReminder";
 
@@ -146,10 +156,10 @@ export function ReminderSettingsScreen({
   const workoutTime = prefs?.preferredWorkoutTime ?? "18:00";
   const learned = !prefs?.preferredWorkoutTime;
   const switchesDisabled = permissionOff || !prefs?.pushEnabled;
-  const mealLine =
-    changedMeals > 0
-      ? `Using your meal times (${changedMeals} changed)`
-      : "Using your plan's meal times";
+  const mealLabel =
+    changedMeals > 0 ? "Using your meal times" : "Using your plan's meal times";
+  const mealHint =
+    changedMeals > 0 ? `(${changedMeals} changed)` : undefined;
 
   function categoryOff(key: CategoryKey): boolean {
     if (!status) return false;
@@ -158,12 +168,6 @@ export function ReminderSettingsScreen({
     if (key === "checkinReminder") return status.trainerDisabled.checkinReminder;
     return false;
   }
-
-  const statusLine = permissionOff
-    ? "Off in phone settings"
-    : prefs?.pushEnabled
-      ? "Notifications: On"
-      : "Notifications: Off";
 
   return (
     <M2Page
@@ -191,9 +195,9 @@ export function ReminderSettingsScreen({
         </Text>
       ) : null}
 
-      <View style={styles.statusCard}>
-        <Text style={styles.status}>{statusLine}</Text>
-        {permissionOff ? (
+      {permissionOff ? (
+        <View style={styles.statusCard}>
+          <Text style={styles.status}>Off in phone settings</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Turn on in Settings"
@@ -204,8 +208,11 @@ export function ReminderSettingsScreen({
           >
             <Text style={styles.link}>Turn on in Settings</Text>
           </Pressable>
-        ) : (
+        </View>
+      ) : (
+        <M2Group>
           <M2SwitchRow
+            icon={<Bell color={brand.indigo} size={18} strokeWidth={1.75} />}
             label="Notifications"
             value={prefs?.pushEnabled ?? false}
             disabled={!prefs}
@@ -216,8 +223,8 @@ export function ReminderSettingsScreen({
               }));
             }}
           />
-        )}
-      </View>
+        </M2Group>
+      )}
 
       {paused ? (
         <View style={styles.pause}>
@@ -236,6 +243,7 @@ export function ReminderSettingsScreen({
 
       <M2Group>
         <M2SwitchRow
+          icon={<Dumbbell color={brand.indigo} size={18} strokeWidth={1.75} />}
           label="Workout reminder"
           hint={
             categoryOff("workoutReminder")
@@ -256,15 +264,16 @@ export function ReminderSettingsScreen({
             );
           }}
         />
-        <M2Row
-          label={learned ? "Learn from my workouts" : "Change workout time"}
-          value={learned ? undefined : clockLabel(workoutTime)}
+        <M2SubRow
+          label="Learn from my workouts"
+          value={learned ? "On" : clockLabel(workoutTime)}
           onPress={() => {
             setDraftTime(workoutTime);
             setTimeOpen(true);
           }}
         />
         <M2SwitchRow
+          icon={<Utensils color={brand.indigo} size={18} strokeWidth={1.75} />}
           label="Meal reminders"
           hint="About 40 min after each meal time, if it isn't logged."
           value={Boolean(prefs?.categories.mealReminder) && !categoryOff("mealReminder")}
@@ -277,11 +286,14 @@ export function ReminderSettingsScreen({
           }}
         />
         <M2Row
-          label={mealLine}
+          icon={<Utensils color={brand.indigo} size={18} strokeWidth={1.75} />}
+          label={mealLabel}
+          hint={mealHint}
           value="Change"
           onPress={onOpenMealTimes}
         />
         <M2SwitchRow
+          icon={<ClipboardCheck color={brand.indigo} size={18} strokeWidth={1.75} />}
           label="Check-in reminders"
           hint={
             categoryOff("checkinReminder")
@@ -301,6 +313,7 @@ export function ReminderSettingsScreen({
           }}
         />
         <M2SwitchRow
+          icon={<SunMedium color={brand.indigo} size={18} strokeWidth={1.75} />}
           label="Daily summary"
           hint="One evening note if anything's left, by 9:30 pm."
           value={Boolean(prefs?.categories.dailySummaryReminder)}
@@ -327,6 +340,7 @@ export function ReminderSettingsScreen({
 
       <M2Group>
         <M2Row
+          icon={<Moon color={brand.indigo} size={18} strokeWidth={1.75} />}
           label="Quiet hours"
           value={
             prefs?.quietHoursStart && prefs.quietHoursEnd
@@ -364,19 +378,13 @@ export function ReminderSettingsScreen({
         subtitle="We'll remind you about an hour after this if it isn't logged."
         onDismiss={() => setTimeOpen(false)}
       >
-        <Text style={styles.clock}>{clockLabel(draftTime)}</Text>
-        <View style={styles.stepRow}>
-          <M2Button
-            label="Earlier"
-            variant="secondary"
-            onPress={() => setDraftTime((value) => shiftQuarterHour(value, -15))}
-          />
-          <M2Button
-            label="Later"
-            variant="secondary"
-            onPress={() => setDraftTime((value) => shiftQuarterHour(value, 15))}
-          />
-        </View>
+        <M2Stepper
+          value={clockLabel(draftTime)}
+          lessLabel="Earlier"
+          moreLabel="Later"
+          onDecrement={() => setDraftTime((value) => shiftQuarterHour(value, -15))}
+          onIncrement={() => setDraftTime((value) => shiftQuarterHour(value, 15))}
+        />
         <M2Button
           label="Save this time"
           onPress={() => {

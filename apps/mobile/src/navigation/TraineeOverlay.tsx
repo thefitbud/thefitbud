@@ -297,7 +297,7 @@ export function TraineeOverlayHost({
       return (
         <PastCoachingScreen
           onBack={onClose}
-          showEndedBanner={relationship.status === "ended"}
+          relationshipId={relationship.id}
           coachName={coachName}
           endedAt={relationship.endedAt}
         />

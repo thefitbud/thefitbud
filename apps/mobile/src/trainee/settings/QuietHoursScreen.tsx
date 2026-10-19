@@ -8,15 +8,15 @@ import { ErrorBanner } from "../../components/ErrorBanner";
 import { QuietHoursPreviewBar } from "../../components/QuietHoursPreviewBar";
 import { useAuth } from "../../auth/AuthProvider";
 import { clockLabel, shiftQuarterHour, validateQuietHours } from "./clock";
-import { M2Button, M2Note, M2Page } from "./m2";
+import { M2Button, M2Page, M2Radio, M2Stepper } from "./m2";
 
 type Props = {
   onBack: () => void;
 };
 
-const PRESETS: Array<{ id: string; label: string; start: string; end: string }> = [
-  { id: "night", label: "Night 10 pm–7 am", start: "22:00", end: "07:00" },
-  { id: "late", label: "Late night 11 pm–6 am", start: "23:00", end: "06:00" },
+const PRESETS: Array<{ id: string; label: string; hint: string; start: string; end: string }> = [
+  { id: "night", label: "Night", hint: "10:00 pm – 7:00 am", start: "22:00", end: "07:00" },
+  { id: "late", label: "Late night", hint: "11:00 pm – 6:00 am", start: "23:00", end: "06:00" },
 ];
 
 export function QuietHoursScreen({ onBack }: Props) {
@@ -119,19 +119,16 @@ export function QuietHoursScreen({ onBack }: Props) {
         </Text>
       ) : (
         <>
-          <M2Note>
-            No notifications during these hours. Reminders that would fall here
-            are skipped, not saved for later. Your coach can't override this.
-          </M2Note>
           <QuietHoursPreviewBar quietStart={start} quietEnd={end} />
           <View style={styles.presets}>
             {PRESETS.map((preset) => {
               const on = !custom && start === preset.start && end === preset.end;
               return (
-                <M2Button
+                <M2Radio
                   key={preset.id}
                   label={preset.label}
-                  variant={on ? "primary" : "secondary"}
+                  hint={preset.hint}
+                  selected={on}
                   onPress={() => {
                     setCustom(false);
                     setStart(preset.start);
@@ -141,9 +138,10 @@ export function QuietHoursScreen({ onBack }: Props) {
                 />
               );
             })}
-            <M2Button
+            <M2Radio
               label="Custom"
-              variant={custom ? "primary" : "secondary"}
+              hint="Pick your own start and end"
+              selected={custom}
               onPress={() => setCustom(true)}
             />
           </View>
@@ -166,7 +164,9 @@ export function QuietHoursScreen({ onBack }: Props) {
             />
           </View>
           {validation ? <Text style={styles.warn}>{validation}</Text> : null}
-          <Text style={styles.rule}>FitBud never sends reminders after 10 pm.</Text>
+          <Text style={styles.rule}>
+            FitBud never sends reminders after {clockLabel(start)}.
+          </Text>
           {toast ? (
             <Text accessibilityLiveRegion="polite" style={styles.toast}>
               {toast}
@@ -190,19 +190,13 @@ function TimeStepper({
   return (
     <View style={styles.step}>
       <Text style={styles.stepLabel}>{label}</Text>
-      <Text style={styles.clock}>{clockLabel(value)}</Text>
-      <View style={styles.row}>
-        <M2Button
-          label="Earlier"
-          variant="secondary"
-          onPress={() => onChange(shiftQuarterHour(value, -15))}
-        />
-        <M2Button
-          label="Later"
-          variant="secondary"
-          onPress={() => onChange(shiftQuarterHour(value, 15))}
-        />
-      </View>
+      <M2Stepper
+        value={clockLabel(value)}
+        lessLabel={`Earlier ${label}`}
+        moreLabel={`Later ${label}`}
+        onDecrement={() => onChange(shiftQuarterHour(value, -15))}
+        onIncrement={() => onChange(shiftQuarterHour(value, 15))}
+      />
     </View>
   );
 }
@@ -224,12 +218,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilySemiBold,
     fontSize: 13,
   },
-  clock: {
-    color: brand.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 28,
-  },
-  row: { flexDirection: "row", gap: 8 },
   warn: { color: "#9A3412", fontSize: 14, lineHeight: 20 },
   rule: { color: ink[700], fontSize: 14, lineHeight: 20 },
   toast: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 14 },

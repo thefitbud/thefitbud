@@ -4,7 +4,6 @@ import { brand, ink } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import {
-  DEV_BUILD_NOTE,
   MEAL_NOTIFICATION_ACTIONS,
   isMealSnoozed,
   snoozeMeal,
@@ -14,7 +13,6 @@ import {
 import { scheduleMealSnoozeNotification } from "../../notifications/nativeActions";
 import { mealPushCopy } from "../../notifications/copy";
 import {
-  DEMO_LIVE_ACTIVITY,
   currentValueLine,
   formatKg,
   loggedSetLine,
@@ -24,11 +22,9 @@ import {
   type LiveActivityEvent,
   type LiveActivityState,
 } from "../../notifications/liveActivity";
+import type { WorkoutPreviewPlan } from "../../notifications/workoutPlan";
 
 import appIcon from "../../../../../packages/brand/app/icon.png";
-
-const EXERCISE = "Romanian deadlift";
-const WORKOUT = "Lower body B";
 
 function AppIcon({ size }: { size: number }) {
   return (
@@ -46,8 +42,8 @@ function AppIcon({ size }: { size: number }) {
 
 export function DevBuildNote() {
   return (
-    <Text style={styles.devNote} accessibilityRole="text">
-      {DEV_BUILD_NOTE}
+    <Text style={styles.devLine} accessibilityRole="text">
+      The lock screen needs a dev build.
     </Text>
   );
 }
@@ -155,15 +151,46 @@ export function MealNotificationCard({
   );
 }
 
-function useWorkout(onNotice?: (message: string) => void) {
-  const [state, setState] = useState<LiveActivityState>(DEMO_LIVE_ACTIVITY);
+function valueLine(state: LiveActivityState, bodyweight: boolean): string {
+  if (bodyweight && state.kilograms === 0) return `${state.reps} reps`;
+  return currentValueLine(state);
+}
+
+function progressLine(state: LiveActivityState, bodyweight: boolean): string {
+  if (!state.loggedSet && state.setIndex === 1) {
+    return `Set ${state.setIndex} of ${state.setCount}`;
+  }
+  if (bodyweight && state.lastKg === 0) {
+    return `Set ${state.setIndex} of ${state.setCount} · Last: ${state.lastReps} reps`;
+  }
+  return setProgressLine(state);
+}
+
+function loggedLine(state: LiveActivityState, bodyweight: boolean): string | null {
+  if (!state.loggedSet) return null;
+  if (bodyweight && state.loggedSet.kilograms === 0) {
+    return `Set ${state.loggedSet.setIndex} logged · ${state.loggedSet.reps} reps`;
+  }
+  return loggedSetLine(state);
+}
+
+function useWorkout(
+  initial: LiveActivityState,
+  exerciseName: string,
+  onNotice?: (message: string) => void,
+) {
+  const [state, setState] = useState<LiveActivityState>(initial);
 
   function send(event: LiveActivityEvent) {
     setState((current) => {
       if (event.type === "log_set" && !current.finished) {
-        const entry = setLogFromState(current, EXERCISE);
+        const entry = setLogFromState(current, exerciseName);
+        const detail =
+          entry.kilograms === 0
+            ? `${entry.reps} reps`
+            : `${formatKg(entry.kilograms)} kg × ${entry.reps}`;
         onNotice?.(
-          `Set ${entry.setIndex} logged · ${formatKg(entry.kilograms)} kg × ${entry.reps}. The lock screen needs a dev build.`,
+          `Set ${entry.setIndex} logged · ${detail}. The lock screen needs a dev build.`,
         );
       }
       return reduceLiveActivity(current, event);
@@ -221,26 +248,32 @@ function Stepper({
 
 function LockCard({
   state,
+  workoutName,
+  exerciseName,
+  bodyweight,
   onLog,
   onOpen,
 }: {
   state: LiveActivityState;
+  workoutName: string;
+  exerciseName: string;
+  bodyweight: boolean;
   onLog: () => void;
   onOpen: () => void;
 }) {
-  const logged = loggedSetLine(state);
+  const logged = loggedLine(state, bodyweight);
   return (
     <View style={styles.live} accessibilityLabel="Workout in progress">
       <View style={styles.liveHead}>
         <AppIcon size={22} />
-        <Text style={styles.kicker}>FitBud · {WORKOUT}</Text>
+        <Text style={styles.kicker}>FitBud · {workoutName}</Text>
         <Text style={styles.whenDark}>now</Text>
       </View>
-      <Text style={styles.exercise}>{EXERCISE}</Text>
-      <Text style={styles.sub}>{setProgressLine(state)}</Text>
+      <Text style={styles.exercise}>{exerciseName}</Text>
+      <Text style={styles.sub}>{progressLine(state, bodyweight)}</Text>
       {logged ? <Text style={styles.logged}>{logged}</Text> : null}
       <View style={styles.valueRow}>
-        <Text style={styles.value}>{currentValueLine(state)}</Text>
+        <Text style={styles.value}>{valueLine(state, bodyweight)}</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open"
@@ -265,20 +298,31 @@ function LockCard({
 }
 
 export function WorkoutNotificationPreviews({
+  plan,
   onNotice,
 }: {
+  plan: WorkoutPreviewPlan;
   onNotice?: (message: string) => void;
 }) {
-  const { state, send, open } = useWorkout(onNotice);
-  const logged = loggedSetLine(state);
+  const { state, send, open } = useWorkout(
+    plan.state,
+    plan.exerciseName,
+    onNotice,
+  );
+  const logged = loggedLine(state, plan.bodyweight);
   const prior =
     logged ??
-    `Set ${state.setIndex - 1} logged · ${formatKg(state.lastKg)} kg × ${state.lastReps}`;
+    (plan.bodyweight
+      ? `Set 1 of ${state.setCount}`
+      : `Set ${Math.max(1, state.setIndex - 1)} logged · ${formatKg(state.lastKg)} kg × ${state.lastReps}`);
 
   return (
     <View style={styles.stack}>
       <LockCard
         state={state}
+        workoutName={plan.workoutName}
+        exerciseName={plan.exerciseName}
+        bodyweight={plan.bodyweight}
         onLog={() => send({ type: "log_set" })}
         onOpen={open}
       />
@@ -291,11 +335,11 @@ export function WorkoutNotificationPreviews({
       <View style={styles.live} accessibilityLabel="Expanded Live Activity">
         <View style={styles.liveHead}>
           <AppIcon size={22} />
-          <Text style={styles.kicker}>FitBud · {WORKOUT}</Text>
+          <Text style={styles.kicker}>FitBud · {plan.workoutName}</Text>
           <Text style={styles.whenDark}>now</Text>
         </View>
-        <Text style={styles.exercise}>{EXERCISE}</Text>
-        <Text style={styles.sub}>{setProgressLine(state)}</Text>
+        <Text style={styles.exercise}>{plan.exerciseName}</Text>
+        <Text style={styles.sub}>{progressLine(state, plan.bodyweight)}</Text>
         {logged ? <Text style={styles.logged}>{logged}</Text> : null}
         {state.finished ? null : (
           <>
@@ -344,11 +388,15 @@ export function WorkoutNotificationPreviews({
           <Text style={styles.androidKicker}>FitBud · Workout · now</Text>
         </View>
         <Text style={styles.androidTitle}>
-          {EXERCISE} · Set {state.setIndex} of {state.setCount}
+          {plan.exerciseName} · Set {state.setIndex} of {state.setCount}
         </Text>
-        <Text style={styles.androidSub}>
-          Last: {formatKg(state.lastKg)} kg × {state.lastReps}
-        </Text>
+        {state.loggedSet || state.setIndex > 1 ? (
+          <Text style={styles.androidSub}>
+            {plan.bodyweight && state.lastKg === 0
+              ? `Last: ${state.lastReps} reps`
+              : `Last: ${formatKg(state.lastKg)} kg × ${state.lastReps}`}
+          </Text>
+        ) : null}
         {state.finished ? null : (
           <>
             <View style={styles.stepRow}>
@@ -432,18 +480,24 @@ export function InAppBanner({
   openLabel,
   onOpen,
   floating = false,
+  top,
 }: {
   title: string;
   openLabel: string;
   onOpen: () => void;
   floating?: boolean;
+  top?: number;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={openLabel}
       onPress={onOpen}
-      style={[styles.banner, floating ? styles.bannerFloat : null]}
+      style={[
+        styles.banner,
+        floating ? styles.bannerFloat : null,
+        floating && top != null ? { top } : null,
+      ]}
     >
       <AppIcon size={38} />
       <View style={styles.bannerBody}>
@@ -459,15 +513,10 @@ export function InAppBanner({
 
 const styles = StyleSheet.create({
   stack: { gap: 12 },
-  devNote: {
-    backgroundColor: brand.paleLavender,
-    borderColor: "#E4DEFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    color: ink[700],
-    fontSize: 14,
-    lineHeight: 20,
-    padding: 14,
+  devLine: {
+    color: ink[500],
+    fontSize: 13,
+    lineHeight: 18,
   },
   noteCard: {
     alignItems: "center",

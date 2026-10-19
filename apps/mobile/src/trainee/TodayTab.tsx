@@ -12,6 +12,7 @@ import {
   formatClockTime,
   formatKcal,
   formatNumber,
+  formatPersonName,
   labelFor,
 } from "@fitbud/core";
 import {
@@ -312,13 +313,8 @@ export function TodayTab({
   const displayName = useMemo(() => {
     const email = me?.email ?? "";
     const local = email.split("@")[0] ?? "";
-    if (local.startsWith("aarav")) return "Aarav";
-    if (local.startsWith("rohan")) return "Rohan";
-    if (local.startsWith("meera")) return "Meera";
-    if (local.startsWith("deepak")) return "Deepak";
-    if (local.startsWith("lakshmi")) return "Lakshmi";
-    if (local) return local.split(".")[0] ?? "there";
-    return "there";
+    const first = local.split(".")[0] ?? "";
+    return formatPersonName(first) || "there";
   }, [me?.email]);
 
   const workoutExercises = workout?.workoutDay.exercises ?? [];

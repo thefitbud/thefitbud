@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { MealAssignment } from "@fitbud/contracts";
-import { formatHhMmTime } from "@fitbud/core";
+import { formatCivilDate, formatHhMmTime, formatPersonName } from "@fitbud/core";
 import { brand, ink } from "@fitbud/tokens";
-import { fontFamilySemiBold, radii } from "@fitbud/ui-mobile";
+import { fontFamilyBold, fontFamilySemiBold, radii } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
-import { localDateInTimezone } from "../lib/dates";
+import { addDays, localDateInTimezone } from "../lib/dates";
 import {
   quietWindow,
   readHideLockDetails,
@@ -19,9 +19,16 @@ import {
   inAppMealBannerCopy,
   noteBannerCopy,
 } from "../notifications/copy";
+import {
+  nextOpenPlanDay,
+  nextWorkoutAssignment,
+  planFromAssignment,
+  planFromWorkoutDay,
+  type WorkoutPreviewPlan,
+} from "../notifications/workoutPlan";
 import { confirmMealAssignment } from "./mealActions";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { M2Button, M2Note, M2Page, M2SwitchRow } from "./settings/m2";
+import { M2Button, M2Page, M2SwitchRow } from "./settings/m2";
 import {
   DevBuildNote,
   InAppBanner,
@@ -62,6 +69,9 @@ export function WidgetTipsScreen({
   const [quiet, setQuiet] = useState<QuietHoursInput>(() =>
     quietWindow(me?.timezone ?? "Asia/Kolkata"),
   );
+  const [plan, setPlan] = useState<WorkoutPreviewPlan | null>(null);
+  const [planReady, setPlanReady] = useState(false);
+  const planSet = useRef(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -81,14 +91,46 @@ export function WidgetTipsScreen({
       if (!relationship) {
         setMeal(null);
         setRelationshipId(null);
+        setPlanReady(true);
         return;
       }
       setRelationshipId(relationship.id);
-      const today = localDateInTimezone(me?.timezone ?? "Asia/Kolkata");
-      const listed = await api.listMealAssignments(relationship.id, {
-        fromDate: today,
-        toDate: today,
-      });
+      const zone = me?.timezone ?? "Asia/Kolkata";
+      const today = localDateInTimezone(zone);
+      const [listed, workouts] = await Promise.all([
+        api.listMealAssignments(relationship.id, {
+          fromDate: today,
+          toDate: today,
+        }),
+        api
+          .listWorkoutAssignments(relationship.id, {
+            fromDate: today,
+            toDate: addDays(today, 7),
+          })
+          .catch(() => ({ items: [] })),
+      ]);
+      if (!planSet.current) {
+        const next = nextWorkoutAssignment(workouts.items);
+        let built = next ? planFromAssignment(next) : null;
+        if (!built) {
+          const effective = await api
+            .getEffectivePlan(relationship.id)
+            .catch(() => null);
+          const days = effective?.version?.content.workoutDays ?? [];
+          const finished = new Set(
+            workouts.items
+              .filter((item) =>
+                ["completed", "skipped", "missed"].includes(item.status),
+              )
+              .map((item) => item.localDate),
+          );
+          const day = nextOpenPlanDay(days, today, finished);
+          built = day ? planFromWorkoutDay(day) : null;
+        }
+        planSet.current = true;
+        setPlan(built);
+        setPlanReady(true);
+      }
       const open = listed.items.find(
         (item) => item.status === "pending" || item.status === "overdue",
       );
@@ -116,6 +158,7 @@ export function WidgetTipsScreen({
       setError("Could not load the next item.");
       setStale(true);
     } finally {
+      setPlanReady(true);
       setLoading(false);
     }
   }, [api, me?.timezone]);
@@ -145,6 +188,19 @@ export function WidgetTipsScreen({
     else onOpenDiet?.();
   }
 
+  const zone = me?.timezone ?? "Asia/Kolkata";
+  const lockDate = formatCivilDate(localDateInTimezone(zone));
+  const lockTime = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+    .format(new Date())
+    .replace(/\s*[AP]M$/i, "");
+  const firstName =
+    formatPersonName(me?.email?.split("@")[0]?.split(".")[0] ?? "") || "there";
+
   return (
     <M2Page
       title="Lock-screen widget"
@@ -166,6 +222,80 @@ export function WidgetTipsScreen({
         <Text style={styles.muted}>You're offline. Pull to try again.</Text>
       ) : null}
       {stale ? <Text style={styles.muted}>Updated 1 h ago</Text> : null}
+
+      <View style={styles.lock} accessibilityLabel="Lock screen">
+        <Text style={styles.lockDate}>{lockDate}</Text>
+        <Text style={styles.lockClock}>{lockTime}</Text>
+        <View style={styles.lockStack}>
+          <Text style={styles.lockCaption}>Workout on the lock screen</Text>
+          {plan ? (
+            <WorkoutNotificationPreviews plan={plan} onNotice={setToast} />
+          ) : (
+            <Text style={styles.onLock}>
+              {planReady ? "No workout planned." : "Loading…"}
+            </Text>
+          )}
+          <Text style={styles.lockCaption}>Meal notification</Text>
+          {meal ? (
+            <MealNotificationCard
+              mealId={meal.id}
+              mealLabel={mealLabel}
+              hideDetails={hideDetails}
+              quiet={quiet}
+              onOpen={openMeal}
+              onSnoozed={setToast}
+            />
+          ) : (
+            <Text style={styles.onLock}>Nothing left to log.</Text>
+          )}
+          <Text style={styles.lockCaption}>Check-in and coach note</Text>
+          <LockMessageCard
+            title={checkin.title}
+            body={checkin.body}
+            whenLabel="now"
+          />
+          <LockMessageCard
+            title={note.title}
+            body={note.body}
+            whenLabel="12 min ago"
+          />
+        </View>
+      </View>
+
+      <View style={styles.today} accessibilityLabel="Today">
+        <Text style={styles.snapGreeting}>{firstName}</Text>
+        <Text style={styles.snapSub}>Here's your day.</Text>
+        <Text style={styles.snapLine}>{title}</Text>
+        {total > 0 ? (
+          <Text style={styles.snapLine}>
+            {loggedCount} of {total} meals logged
+          </Text>
+        ) : null}
+        {meal && showMealBanner ? (
+          <InAppBanner
+            floating
+            top={12}
+            title={mealBanner.title}
+            openLabel={`Open ${mealLabel}`}
+            onOpen={() => {
+              setShowMealBanner(false);
+              openMeal();
+            }}
+          />
+        ) : null}
+        {showNoteBanner ? (
+          <InAppBanner
+            floating
+            top={meal && showMealBanner ? 86 : 12}
+            title={coachNote.title}
+            openLabel="Open"
+            onOpen={() => {
+              setShowNoteBanner(false);
+              onGoToday?.();
+            }}
+          />
+        ) : null}
+      </View>
 
       <View style={styles.preview} accessibilityLabel="Widget preview">
         <Text style={styles.previewKicker}>FitBud</Text>
@@ -212,52 +342,6 @@ export function WidgetTipsScreen({
         }}
       />
 
-      <Text style={styles.section}>Meal notification</Text>
-      {meal ? (
-        <MealNotificationCard
-          mealId={meal.id}
-          mealLabel={mealLabel}
-          hideDetails={hideDetails}
-          quiet={quiet}
-          onOpen={openMeal}
-          onSnoozed={setToast}
-        />
-      ) : (
-        <Text style={styles.muted}>Nothing left to log.</Text>
-      )}
-
-      <Text style={styles.section}>While the app is open</Text>
-      {meal && showMealBanner ? (
-        <InAppBanner
-          title={mealBanner.title}
-          openLabel={`Open ${mealLabel}`}
-          onOpen={() => {
-            setShowMealBanner(false);
-            openMeal();
-          }}
-        />
-      ) : null}
-      {showNoteBanner ? (
-        <InAppBanner
-          title={coachNote.title}
-          openLabel="Open"
-          onOpen={() => {
-            setShowNoteBanner(false);
-            onGoToday?.();
-          }}
-        />
-      ) : null}
-
-      <Text style={styles.section}>Check-in and coach note</Text>
-      <LockMessageCard
-        title={checkin.title}
-        body={checkin.body}
-        whenLabel="now"
-      />
-      <LockMessageCard title={note.title} body={note.body} whenLabel="12 min ago" />
-
-      <Text style={styles.section}>Workout on the lock screen</Text>
-      <WorkoutNotificationPreviews onNotice={setToast} />
       <DevBuildNote />
 
       {toast ? (
@@ -265,23 +349,62 @@ export function WidgetTipsScreen({
           {toast}
         </Text>
       ) : null}
-      <M2Note>
-        Confirm from this page saves through the same outbox as the app. The
-        phone widget itself is added from the home screen.
-      </M2Note>
     </M2Page>
   );
 }
 
 const styles = StyleSheet.create({
+  lock: {
+    backgroundColor: "#1A1248",
+    borderRadius: 28,
+    overflow: "hidden",
+    paddingBottom: 20,
+    paddingTop: 28,
+  },
+  lockDate: {
+    color: "#fff",
+    fontFamily: fontFamilySemiBold,
+    fontSize: 18,
+    textAlign: "center",
+  },
+  lockClock: {
+    color: "#fff",
+    fontFamily: fontFamilyBold,
+    fontSize: 72,
+    letterSpacing: -1,
+    lineHeight: 76,
+    textAlign: "center",
+  },
+  lockStack: {
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 16,
+  },
+  lockCaption: {
+    color: "rgba(255,255,255,0.72)",
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+  },
+  onLock: { color: "#fff", fontSize: 15 },
+  today: {
+    backgroundColor: "#F4F2FB",
+    borderRadius: 24,
+    minHeight: 220,
+    overflow: "hidden",
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 168,
+    position: "relative",
+  },
+  snapGreeting: {
+    color: brand.deepNavy,
+    fontFamily: fontFamilyBold,
+    fontSize: 28,
+  },
+  snapSub: { color: ink[500], fontSize: 15, marginBottom: 8 },
+  snapLine: { color: ink[700], fontSize: 15, lineHeight: 21 },
   muted: { color: ink[500], fontSize: 15 },
   warn: { color: "#9A3412", fontSize: 14 },
-  section: {
-    color: ink[500],
-    fontFamily: fontFamilySemiBold,
-    fontSize: 13,
-    marginTop: 8,
-  },
   preview: {
     backgroundColor: "#fff",
     borderColor: "#E7E9F2",

@@ -120,12 +120,14 @@ export function M2Row({
 }
 
 export function M2SwitchRow({
+  icon,
   label,
   hint,
   value,
   disabled,
   onValueChange,
 }: {
+  icon?: ReactNode;
   label: string;
   hint?: string;
   value: boolean;
@@ -134,6 +136,7 @@ export function M2SwitchRow({
 }) {
   return (
     <View style={[styles.row, disabled ? styles.dim : null]}>
+      {icon ? <View style={styles.tile}>{icon}</View> : null}
       <View style={styles.tx}>
         <Text style={styles.label}>{label}</Text>
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
@@ -146,6 +149,159 @@ export function M2SwitchRow({
         trackColor={{ false: ink[200], true: brand.indigo }}
         thumbColor={colors.white}
       />
+    </View>
+  );
+}
+
+/** Indented row under a parent switch (m2 sub-row). */
+export function M2SubRow({
+  label,
+  value,
+  onPress,
+}: {
+  label: string;
+  value?: string;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.row, styles.subRow]}
+    >
+      <View style={styles.tx}>
+        <Text style={styles.subLabel}>{label}</Text>
+      </View>
+      {value ? <Text style={styles.val}>{value}</Text> : null}
+      {onPress ? (
+        <ChevronRight color={ink[500]} size={18} strokeWidth={2} />
+      ) : null}
+    </Pressable>
+  );
+}
+
+/** Preset row from mockup 23 (`.radc`). */
+export function M2Radio({
+  label,
+  hint,
+  selected,
+  onPress,
+}: {
+  label: string;
+  hint?: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={hint ? `${label}, ${hint}` : label}
+      onPress={onPress}
+      style={[styles.radio, selected ? styles.radioOn : null]}
+    >
+      <View style={[styles.radioDot, selected ? styles.radioDotOn : null]} />
+      <View style={styles.tx}>
+        <Text style={[styles.radioLabel, selected ? styles.radioLabelOn : null]}>
+          {label}
+        </Text>
+        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+/** Circular − / + from m2 `.rstp`. */
+export function M2Stepper({
+  value,
+  lessLabel,
+  moreLabel,
+  onDecrement,
+  onIncrement,
+}: {
+  value: string;
+  lessLabel: string;
+  moreLabel: string;
+  onDecrement: () => void;
+  onIncrement: () => void;
+}) {
+  return (
+    <View style={styles.rstp}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={lessLabel}
+        onPress={onDecrement}
+        style={styles.rstpBtn}
+      >
+        <Text style={styles.rstpGlyph}>−</Text>
+      </Pressable>
+      <Text style={styles.rstpValue}>{value}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={moreLabel}
+        onPress={onIncrement}
+        style={styles.rstpBtn}
+      >
+        <Text style={styles.rstpGlyph}>+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Every day / Weekdays / Weekends (m2 `.segc`). */
+export function M2Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: ReadonlyArray<{ id: T; label: string }>;
+  value: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <View style={styles.seg}>
+      {options.map((option) => {
+        const on = option.id === value;
+        return (
+          <Pressable
+            key={option.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={option.label}
+            onPress={() => onChange(option.id)}
+            style={[styles.segItem, on ? styles.segOn : null]}
+          >
+            <Text style={[styles.segText, on ? styles.segTextOn : null]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function M2Hero({
+  icon,
+  title,
+  subtitle,
+  tone = "ok",
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle?: string;
+  tone?: "ok" | "wait";
+}) {
+  return (
+    <View style={styles.hero}>
+      <View style={[styles.heroTile, tone === "wait" ? styles.tileNeutral : null]}>
+        {icon}
+      </View>
+      <View style={styles.tx}>
+        <Text style={styles.heroTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.hint}>{subtitle}</Text> : null}
+      </View>
     </View>
   );
 }
@@ -308,6 +464,124 @@ const styles = StyleSheet.create({
   val: {
     color: ink[500],
     fontSize: 15,
+  },
+  subRow: {
+    paddingLeft: 58,
+  },
+  subLabel: {
+    color: ink[700],
+    fontFamily: fontFamilyMedium,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  radio: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: "#D9D6E6",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 56,
+    paddingHorizontal: 14,
+  },
+  radioOn: {
+    backgroundColor: brand.paleLavender,
+    borderColor: brand.indigo,
+  },
+  radioDot: {
+    borderColor: "#D9D6E6",
+    borderRadius: 11,
+    borderWidth: 2,
+    height: 22,
+    width: 22,
+  },
+  radioDotOn: {
+    borderColor: brand.indigo,
+    borderWidth: 6,
+  },
+  radioLabel: {
+    color: ink[700],
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
+  },
+  radioLabelOn: {
+    color: brand.deepNavy,
+  },
+  rstp: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  rstpBtn: {
+    alignItems: "center",
+    backgroundColor: brand.paleLavender,
+    borderRadius: 26,
+    height: 52,
+    justifyContent: "center",
+    width: 52,
+  },
+  rstpGlyph: {
+    color: brand.indigo,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  rstpValue: {
+    color: brand.deepNavy,
+    flex: 1,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 22,
+    textAlign: "center",
+  },
+  seg: {
+    backgroundColor: "#ECEAF4",
+    borderRadius: 14,
+    flexDirection: "row",
+    padding: 2,
+  },
+  segItem: {
+    alignItems: "center",
+    borderRadius: 12,
+    flex: 1,
+    height: 44,
+    justifyContent: "center",
+  },
+  segOn: {
+    backgroundColor: colors.white,
+  },
+  segText: {
+    color: ink[500],
+    fontFamily: fontFamilySemiBold,
+    fontSize: 14,
+  },
+  segTextOn: {
+    color: brand.deepNavy,
+  },
+  hero: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: surface.border,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+  },
+  heroTile: {
+    alignItems: "center",
+    backgroundColor: brand.paleLavender,
+    borderRadius: 14,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  heroTitle: {
+    color: brand.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 18,
+    lineHeight: 24,
   },
   dim: {
     opacity: 0.45,

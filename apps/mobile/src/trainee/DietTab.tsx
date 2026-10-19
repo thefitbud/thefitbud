@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
@@ -87,6 +87,9 @@ export function DietTab({
     assignmentId: string;
     mealName: string;
   } | null>(null);
+  const optimisticStatus = useRef(
+    new Map<string, MealAssignment["status"]>(),
+  );
   const coachName =
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
@@ -104,7 +107,41 @@ export function DietTab({
         }),
         s1.getMeDay(selectedDate).catch(() => null),
       ]);
-      setAssignments(sortMealsByTime(scheduledAssignments(listed.items)));
+      const scheduled = sortMealsByTime(scheduledAssignments(listed.items));
+      let pendingIds = new Set<string>();
+      try {
+        const outbox = await sync.store.listOutbox();
+        pendingIds = new Set(
+          outbox
+            .filter(
+              (row) =>
+                (row.status === "pending" || row.status === "in_flight") &&
+                (row.operation === "meal.confirm" ||
+                  row.operation === "meal.skip"),
+            )
+            .map((row) => row.recordId),
+        );
+      } catch {
+        pendingIds = new Set(optimisticStatus.current.keys());
+      }
+      setAssignments(
+        scheduled.map((meal) => {
+          const next = optimisticStatus.current.get(meal.id);
+          if (!next) return meal;
+          if (isMealLoggedForCount(meal.status)) {
+            optimisticStatus.current.delete(meal.id);
+            return meal;
+          }
+          if (
+            pendingIds.has(meal.id) &&
+            (meal.status === "pending" || meal.status === "overdue")
+          ) {
+            return { ...meal, status: next };
+          }
+          optimisticStatus.current.delete(meal.id);
+          return meal;
+        }),
+      );
       setDayTotals(day);
       setOffline(false);
       setLockStateKnown(true);
@@ -119,7 +156,7 @@ export function DietTab({
     } finally {
       setLoading(false);
     }
-  }, [api, relationship.id, selectedDate, s1]);
+  }, [api, relationship.id, selectedDate, s1, sync]);
 
   useEffect(() => {
     setLoading(true);
@@ -143,9 +180,17 @@ export function DietTab({
     [assignments, dayTotals],
   );
 
+  function applyOptimistic(id: string, status: MealAssignment["status"]) {
+    optimisticStatus.current.set(id, status);
+    setAssignments((current) =>
+      current.map((meal) => (meal.id === id ? { ...meal, status } : meal)),
+    );
+  }
+
   async function confirmMeal(assignment: MealAssignment) {
     setActingId(assignment.id);
     setError(null);
+    applyOptimistic(assignment.id, "confirmed");
     try {
       await confirmMealAssignment(
         api,
@@ -164,6 +209,14 @@ export function DietTab({
             ? err.message
             : "Could not confirm meal.",
       );
+      optimisticStatus.current.delete(assignment.id);
+      setAssignments((current) =>
+        current.map((meal) =>
+          meal.id === assignment.id
+            ? { ...meal, status: assignment.status }
+            : meal,
+        ),
+      );
     } finally {
       setActingId(null);
     }
@@ -172,6 +225,7 @@ export function DietTab({
   async function skipMeal(assignment: MealAssignment) {
     setActingId(assignment.id);
     setError(null);
+    applyOptimistic(assignment.id, "skipped");
     try {
       await skipMealAssignment(
         sync,
@@ -192,6 +246,14 @@ export function DietTab({
           : err instanceof ApiClientError
             ? err.message
             : "Could not skip meal.",
+      );
+      optimisticStatus.current.delete(assignment.id);
+      setAssignments((current) =>
+        current.map((meal) =>
+          meal.id === assignment.id
+            ? { ...meal, status: assignment.status }
+            : meal,
+        ),
       );
     } finally {
       setActingId(null);
