@@ -1,4 +1,13 @@
-import { MEAL_REMINDER_SNOOZE_MINUTES } from "@fitbud/core";
+import {
+  DEFAULT_QUIET_HOURS_END,
+  DEFAULT_QUIET_HOURS_START,
+  MEAL_REMINDER_SNOOZE_MINUTES,
+  addDaysToLocalDate,
+  formatLocalDate,
+  isWithinQuietHours,
+  localDateTimeToUtcIso,
+  localTimeHhMm,
+} from "@fitbud/core";
 
 /**
  * Expo category ids cannot contain ":" or "-".
@@ -19,12 +28,70 @@ export const MEAL_NOTIFICATION_ACTIONS = [
   },
 ] as const;
 
-export const IN_APP_MEAL_ACTIONS = ["Eaten as planned", "Open"] as const;
-export const IN_APP_NOTE_ACTIONS = ["Read", "Later"] as const;
-export const LIVE_ACTIVITY_ACTIONS = ["+30 s", "Skip rest"] as const;
-
 export const DEV_BUILD_NOTE =
-  "The Live Activity needs a dev build. The Dynamic Island needs a dev build. The lock screen needs a dev build. Log set uses a LiveActivityIntent in that build. iOS asks for Face ID on the first tap and does not open the app.";
+  "The Live Activity needs a dev build. The Dynamic Island needs a dev build. The lock screen needs a dev build. The Android workout notification needs a dev build. Log set uses a LiveActivityIntent in that build and moves to the next set. iOS asks for Face ID on the first tap and does not open the app. Snooze re-sends once from a dev build, and a time inside quiet hours waits until they end.";
+
+export type QuietHoursInput = {
+  start: string | null;
+  end: string | null;
+  timeZone: string;
+};
+
+export function quietWindow(
+  timeZone: string,
+  start?: string | null,
+  end?: string | null,
+): QuietHoursInput {
+  return {
+    start: start ?? DEFAULT_QUIET_HOURS_START,
+    end: end ?? DEFAULT_QUIET_HOURS_END,
+    timeZone,
+  };
+}
+
+/** 30 minutes on, or the end of quiet hours when that instant falls inside them. */
+export function snoozeFireAt(now: Date, quiet?: QuietHoursInput | null): Date {
+  const plus = new Date(now.getTime() + MEAL_REMINDER_SNOOZE_MINUTES * 60_000);
+  const start = quiet?.start || DEFAULT_QUIET_HOURS_START;
+  const end = quiet?.end || DEFAULT_QUIET_HOURS_END;
+  const timeZone = quiet?.timeZone || "Asia/Kolkata";
+  const local = localTimeHhMm(plus.toISOString(), timeZone);
+  if (
+    !local ||
+    !isWithinQuietHours({
+      localTimeHhMm: local,
+      quietHoursStart: start,
+      quietHoursEnd: end,
+    })
+  ) {
+    return plus;
+  }
+  const [hour, minute] = end.split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return plus;
+  const localDate = formatLocalDate(plus, timeZone);
+  let endAt = new Date(
+    localDateTimeToUtcIso(localDate, timeZone, hour, minute, 0),
+  );
+  if (endAt.getTime() <= plus.getTime()) {
+    endAt = new Date(
+      localDateTimeToUtcIso(
+        addDaysToLocalDate(localDate, 1),
+        timeZone,
+        hour,
+        minute,
+        0,
+      ),
+    );
+  }
+  return endAt;
+}
+
+export function snoozeNotice(now: Date, until: Date): string {
+  const extra =
+    until.getTime() - now.getTime() - MEAL_REMINDER_SNOOZE_MINUTES * 60_000;
+  if (extra > 60_000) return "Snoozed until quiet hours end.";
+  return "Snoozed for 30 minutes.";
+}
 
 const SNOOZE_KEY = "fitbud.mealSnooze.v1";
 const HIDE_KEY = "fitbud.hideLockDetails";
@@ -88,12 +155,11 @@ export function isMealSnoozed(mealId: string, now = new Date()): boolean {
 export function snoozeMeal(
   mealId: string,
   now = new Date(),
+  quiet?: QuietHoursInput | null,
 ): { ok: true; until: Date } | { ok: false } {
   const existing = readSnoozes();
   if (existing[mealId]) return { ok: false };
-  const until = new Date(
-    now.getTime() + MEAL_REMINDER_SNOOZE_MINUTES * 60_000,
-  );
+  const until = snoozeFireAt(now, quiet);
   writeRaw(
     SNOOZE_KEY,
     JSON.stringify({ ...existing, [mealId]: { until: until.toISOString() } }),

@@ -28,6 +28,10 @@ import {
   notificationRowBody,
   notificationRowTitle,
 } from "../notifications/copy";
+import {
+  quietWindow,
+  type QuietHoursInput,
+} from "../notifications/actions";
 import { MealInlineButtons } from "./notifications/Surfaces";
 import {
   deepLinkFromNotification,
@@ -101,7 +105,7 @@ export function NotificationsScreen({
   onOpenSettings,
   onNavigate,
 }: Props) {
-  const { api, refreshSession } = useAuth();
+  const { api, me, refreshSession } = useAuth();
   const s1 = stage1Api(api);
   const [items, setItems] = useState<Notification[]>(
     () => getCached<Notification[]>(CACHE_KEY) ?? [],
@@ -111,6 +115,9 @@ export function NotificationsScreen({
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [quiet, setQuiet] = useState<QuietHoursInput>(() =>
+    quietWindow(me?.timezone ?? "Asia/Kolkata"),
+  );
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const load = useCallback(
@@ -148,6 +155,28 @@ export function NotificationsScreen({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .getNotificationPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
+        setQuiet(
+          quietWindow(
+            me?.timezone ?? "Asia/Kolkata",
+            prefs.quietHoursStart,
+            prefs.quietHoursEnd,
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setQuiet(quietWindow(me?.timezone ?? "Asia/Kolkata"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, me?.timezone]);
 
   useEffect(() => {
     return subscribe(CACHE_KEY, () => {
@@ -264,6 +293,7 @@ export function NotificationsScreen({
                   mealId={item.domainEntityId}
                   title={title}
                   body={body}
+                  quiet={quiet}
                   onOpen={() => {
                     void openItem(item);
                   }}

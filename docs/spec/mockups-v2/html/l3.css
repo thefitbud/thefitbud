@@ -85,3 +85,65 @@
 .la .lnk{display:flex;align-items:center;justify-content:center;height:44px;margin-top:2px;font-size:14px;color:#CFC6FF;font-weight:600;text-decoration:none}
 .la .done{display:flex;align-items:center;gap:6px;font-size:15px;margin-top:3px}
 .di-e .logb{flex:1.4;background:var(--indigo)}
+/* set 5 · minimal native-style */
+.n5{background:rgba(242,241,247,.9);backdrop-filter:blur(20px);color:#000;border-radius:20px;padding:11px 14px 11px 11px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 14px rgb(0 0 0/18%);font-family:-apple-system,"SF Pro Text",var(--font)}
+.n5 .bd{flex:1;min-width:0}
+.n5 .t1{display:flex;justify-content:space-between;font-size:15px;font-weight:600}
+.n5 .t1 span{font-weight:400;font-size:13px;color:#4a4a52}
+.n5 .t2{font-size:15px;color:#1c1c1e;margin-top:1px}
+.a5{background:rgba(242,241,247,.9);border-radius:14px;overflow:hidden;margin-top:6px;font-family:-apple-system,"SF Pro Text",var(--font)}
+.a5 a{display:flex;align-items:center;height:48px;padding:0 16px;font-size:16px;color:#000;text-decoration:none;border-top:1px solid rgba(60,60,67,.18)}
+.a5 a:first-child{border-top:0}
+.la5{background:rgba(242,241,247,.92);color:#000;border-radius:22px;padding:14px;box-shadow:0 4px 14px rgb(0 0 0/18%);font-family:-apple-system,"SF Pro Text",var(--font)}
+.la5 .h{display:flex;align-items:center;gap:8px;font-size:13px;color:#4a4a52;font-weight:600}
+.la5 .ex{font-size:19px;font-weight:700;margin-top:8px;font-family:var(--font)}
+.la5 .st{font-size:16px;margin-top:2px;color:#1c1c1e}
+.la5 .st b{font-weight:700}
+.la5 .ok{font-size:13px;color:#3d3d44;margin-top:6px}
+.la5 .bt{display:flex;gap:8px;margin-top:12px}
+.la5 .bt a{height:50px;border-radius:25px;display:grid;place-items:center;font-size:16px;font-weight:700;text-decoration:none}
+.la5 .bt .s{flex:1;background:rgba(60,60,67,.12);color:#000}
+.la5 .bt .p{flex:2;background:var(--indigo);color:#fff}
+.ncl{position:absolute;top:58px;left:0;right:0;text-align:center;color:#fff}
+.ncl .d{font-size:17px;font-weight:600}.ncl .c{font-size:64px;font-weight:700;line-height:1.05;font-family:-apple-system,"SF Pro Display",var(--font)}
+.nc-h{font-size:20px;font-weight:700;color:#fff;margin:0 4px 4px}
+.pill5{position:absolute;top:11px;left:50%;margin-left:-84px;width:168px;height:36px;border-radius:20px;background:#000;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 8px;color:#fff;z-index:31;font-size:14px;font-weight:600}
+.ib5{position:absolute;z-index:50;top:56px;left:10px;right:10px;background:rgba(250,249,253,.97);border-radius:20px;padding:10px 10px 10px 11px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 28px rgb(26 18 72/24%);font-family:-apple-system,"SF Pro Text",var(--font)}
+.ib5 .bd{flex:1;min-width:0;font-size:15px;color:#000}
+.ib5 .bd b{display:block;font-size:13px;font-weight:600;color:#4a4a52}
+.ib5 .act{height:44px;padding:0 16px;border-radius:22px;background:var(--indigo);color:#fff;font-size:15px;font-weight:700;display:grid;place-items:center;text-decoration:none}
+.ib5 .chev{width:44px;height:44px;display:grid;place-items:center;color:#4a4a52;font-size:22px;text-decoration:none}
+.ib5 .bd{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.ib5 .act{padding:0 14px;font-size:14px;white-space:nowrap}
+/* set 6 */
+.w6{background:rgba(242,241,247,.93);color:#000;border-radius:22px;padding:13px 14px 14px;box-shadow:0 4px 14px rgb(0 0 0/18%);font-family:-apple-system,"SF Pro Text",var(--font)}
+.w6 .h{display:flex;align-items:center;gap:8px;font-size:13px;color:#3d3d44;font-weight:600}
+.w6 .h .t{flex:1}
+.w6 .ex{font-size:18px;font-weight:700;margin-top:8px;font-family:var(--font)}
+.w6 .sub{font-size:14px;color:#3d3d44;margin-top:1px}
+.w6 .row{display:flex;align-items:center;gap:10px;margin-top:10px}
+.w6 .val{flex:1;font-size:26px;font-weight:700;letter-spacing:-.01em;font-family:var(--font)}
+.w6 .val i{font-style:normal;font-size:15px;font-weight:600;color:#3d3d44;margin:0 4px 0 2px}
+.w6 .ck{width:56px;height:56px;border-radius:28px;background:var(--indigo);display:grid;place-items:center;flex:none}
+.w6 .op{height:44px;padding:0 16px;border-radius:22px;background:rgba(60,60,67,.12);display:grid;place-items:center;font-size:15px;font-weight:700;color:#000;text-decoration:none}
+.w6 .ok{font-size:13px;color:#3d3d44;margin-top:8px;display:flex;align-items:center;gap:6px}
+.w6 .st2{display:flex;gap:8px;margin-top:10px}
+.w6 .st2 .g{flex:1;display:flex;align-items:center;justify-content:space-between;background:rgba(60,60,67,.08);border-radius:14px;padding:3px}
+.w6 .st2 a{width:44px;height:44px;border-radius:12px;background:#fff;display:grid;place-items:center;font-size:22px;font-weight:600;color:#000;text-decoration:none}
+.w6 .st2 b{font-size:20px;font-family:var(--font)}.w6 .st2 b i{font-style:normal;font-size:13px;font-weight:600;color:#3d3d44;margin-left:2px}
+.w6 .bt{display:flex;gap:8px;margin-top:10px}
+.w6 .bt a{height:50px;border-radius:25px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:16px;font-weight:700;text-decoration:none}
+.w6 .bt .s{flex:1;background:rgba(60,60,67,.12);color:#000}.w6 .bt .p{flex:2;background:var(--indigo);color:#fff}
+.n6 .t2{font-size:14px;color:#3d3d44;margin-top:1px}
+.x6{background:rgba(242,241,247,.95);border-radius:22px;overflow:hidden;font-family:-apple-system,"SF Pro Text",var(--font);color:#000}
+.x6 .hd{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(60,60,67,.15)}
+.x6 .hd b{font-size:15px}.x6 .hd span{font-size:13px;color:#3d3d44}
+.x6 ul{list-style:none;margin:0;padding:8px 16px 4px}
+.x6 li{display:flex;justify-content:space-between;font-size:15px;padding:7px 0;border-bottom:1px solid rgba(60,60,67,.1)}
+.x6 li:last-child{border-bottom:0}.x6 li span{color:#3d3d44}
+.x6 .tot{padding:4px 16px 12px;font-size:13px;color:#3d3d44}
+.a6{background:rgba(242,241,247,.95);border-radius:14px;overflow:hidden;margin-top:8px;font-family:-apple-system,"SF Pro Text",var(--font)}
+.a6 a{display:flex;align-items:center;justify-content:space-between;height:50px;padding:0 16px;font-size:16px;color:#000;text-decoration:none;border-top:1px solid rgba(60,60,67,.18)}
+.a6 a:first-child{border-top:0;font-weight:600;color:var(--indigo)}
+.blurbg{position:absolute;inset:0;background:rgba(26,18,72,.35);backdrop-filter:blur(14px)}
+.ib5 .act{display:flex;align-items:center;gap:4px}

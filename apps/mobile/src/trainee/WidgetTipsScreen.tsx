@@ -7,7 +7,12 @@ import { fontFamilySemiBold, radii } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
 import { localDateInTimezone } from "../lib/dates";
-import { readHideLockDetails, writeHideLockDetails } from "../notifications/actions";
+import {
+  quietWindow,
+  readHideLockDetails,
+  writeHideLockDetails,
+  type QuietHoursInput,
+} from "../notifications/actions";
 import {
   checkinPushCopy,
   notePushCopy,
@@ -19,13 +24,10 @@ import { useSyncEngine } from "../sync/SyncProvider";
 import { M2Button, M2Note, M2Page, M2SwitchRow } from "./settings/m2";
 import {
   DevBuildNote,
-  DynamicIslandPreview,
-  IN_APP_MEAL_ACTIONS,
-  IN_APP_NOTE_ACTIONS,
   InAppBanner,
-  LiveActivityPreview,
   LockMessageCard,
   MealNotificationCard,
+  WorkoutNotificationPreviews,
 } from "./notifications/Surfaces";
 
 type Props = {
@@ -57,6 +59,9 @@ export function WidgetTipsScreen({
   const [stale, setStale] = useState(false);
   const [showMealBanner, setShowMealBanner] = useState(true);
   const [showNoteBanner, setShowNoteBanner] = useState(true);
+  const [quiet, setQuiet] = useState<QuietHoursInput>(() =>
+    quietWindow(me?.timezone ?? "Asia/Kolkata"),
+  );
 
   const load = useCallback(async () => {
     setError(null);
@@ -95,6 +100,18 @@ export function WidgetTipsScreen({
       setTotal(listed.items.length);
       setOffline(false);
       setStale(false);
+      try {
+        const prefs = await api.getNotificationPreferences();
+        setQuiet(
+          quietWindow(
+            me?.timezone ?? "Asia/Kolkata",
+            prefs.quietHoursStart,
+            prefs.quietHoursEnd,
+          ),
+        );
+      } catch {
+        setQuiet(quietWindow(me?.timezone ?? "Asia/Kolkata"));
+      }
     } catch {
       setError("Could not load the next item.");
       setStale(true);
@@ -197,13 +214,26 @@ export function WidgetTipsScreen({
 
       <Text style={styles.section}>Meal notification</Text>
       {meal ? (
-        <MealNotificationCard
-          mealId={meal.id}
-          mealLabel={mealLabel}
-          hideDetails={hideDetails}
-          onOpen={openMeal}
-          onSnoozed={setToast}
-        />
+        <>
+          <MealNotificationCard
+            mealId={meal.id}
+            mealLabel={mealLabel}
+            hideDetails={hideDetails}
+            quiet={quiet}
+            onOpen={openMeal}
+            onSnoozed={setToast}
+          />
+          <MealNotificationCard
+            expanded
+            mealId={meal.id}
+            mealLabel={mealLabel}
+            mealTime={clock}
+            hideDetails={hideDetails}
+            quiet={quiet}
+            onOpen={openMeal}
+            onSnoozed={setToast}
+          />
+        </>
       ) : (
         <Text style={styles.muted}>Nothing left to log.</Text>
       )}
@@ -211,36 +241,9 @@ export function WidgetTipsScreen({
       <Text style={styles.section}>While the app is open</Text>
       {meal && showMealBanner ? (
         <InAppBanner
-          kicker={mealBanner.kicker}
           title={mealBanner.title}
-          body={mealBanner.body}
-          primaryLabel={IN_APP_MEAL_ACTIONS[0]}
-          secondaryLabel={IN_APP_MEAL_ACTIONS[1]}
-          onPrimary={() => {
-            if (!relationshipId) {
-              setShowMealBanner(false);
-              return;
-            }
-            void (async () => {
-              try {
-                await confirmMealAssignment(
-                  api,
-                  sync,
-                  relationshipId,
-                  meal,
-                  coachName ?? undefined,
-                );
-                setToast("Saved on this phone.");
-              } catch {
-                setToast(
-                  "Saved on this phone. We'll send it when you're online.",
-                );
-              } finally {
-                setShowMealBanner(false);
-              }
-            })();
-          }}
-          onSecondary={() => {
+          openLabel={`Open ${mealLabel}`}
+          onOpen={() => {
             setShowMealBanner(false);
             openMeal();
           }}
@@ -248,16 +251,12 @@ export function WidgetTipsScreen({
       ) : null}
       {showNoteBanner ? (
         <InAppBanner
-          kicker={coachNote.kicker}
           title={coachNote.title}
-          body={coachNote.body}
-          primaryLabel={IN_APP_NOTE_ACTIONS[0]}
-          secondaryLabel={IN_APP_NOTE_ACTIONS[1]}
-          onPrimary={() => {
+          openLabel="Open"
+          onOpen={() => {
             setShowNoteBanner(false);
             onGoToday?.();
           }}
-          onSecondary={() => setShowNoteBanner(false)}
         />
       ) : null}
 
@@ -270,8 +269,7 @@ export function WidgetTipsScreen({
       <LockMessageCard title={note.title} body={note.body} whenLabel="12 min ago" />
 
       <Text style={styles.section}>Workout on the lock screen</Text>
-      <LiveActivityPreview onNotice={setToast} />
-      <DynamicIslandPreview onNotice={setToast} />
+      <WorkoutNotificationPreviews onNotice={setToast} />
       <DevBuildNote />
 
       {toast ? (

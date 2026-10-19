@@ -69,9 +69,10 @@ await shot("TR-21.png");
 
 if ((await page.getByRole("button", { name: "Snooze 30 min" }).count()) > 0) {
   await page.getByRole("button", { name: "Snooze 30 min" }).first().click();
-  await page.getByText("Snoozed for 30 minutes.").waitFor({ timeout: 8000 });
+  const snooze = page.getByText(/Snoozed for 30 minutes\.|Snoozed until quiet hours end\./);
+  await snooze.first().waitFor({ timeout: 8000 });
+  console.log("snooze", await snooze.first().innerText());
   await shot("TR-21--snoozed.png");
-  console.log("snooze ok");
 } else {
   console.log("aarav has no open meal to snooze");
 }
@@ -82,15 +83,17 @@ console.log("aarav eaten count", await eaten.count());
 await page.getByText("Workout on the lock screen").scrollIntoViewIfNeeded();
 await page.waitForTimeout(400);
 await shot("TR-21--live.png");
-await page.getByRole("button", { name: "More weight" }).first().click();
 await page.getByRole("button", { name: "Log set 2" }).first().click();
-await page.getByText(/Set 2 logged/).first().waitFor({ timeout: 5000 });
+await page.getByText("Set 3 of 3").first().waitFor({ timeout: 5000 });
+await page.getByText("Set 2 logged · 22.5 kg × 10").first().waitFor({ timeout: 5000 });
 await shot("TR-21--logged.png");
 console.log("log set ok");
-await page.getByRole("button", { name: "Skip rest" }).first().click();
-await page.getByText("Set 3 · Go").first().waitFor({ timeout: 5000 });
-await shot("TR-21--rest-skipped.png");
-console.log("skip rest ok");
+await page.getByRole("button", { name: "More weight" }).first().click();
+await page.getByText("25 kg").first().waitFor({ timeout: 5000 });
+await shot("TR-21--stepped.png");
+console.log("step ok");
+const restLeft = await page.getByText(/Rest left|Skip rest|\+30 s/).count();
+console.log("rest controls", restLeft);
 
 const scrolled = await page.evaluate(() => document.body.innerText);
 console.log("banned after", hits(scrolled));
@@ -100,6 +103,21 @@ await page.evaluate(async () => {
   await window.__fitbudCapture.loginTrainee("rohan.slipping@demo.fitbud.test");
 });
 await page.waitForTimeout(2500);
+const rohanToday = await page.evaluate(() => document.body.innerText);
+const banner = page.getByRole("button", { name: /^Open (Breakfast|Lunch|Dinner|Snack|Meal)$/ });
+if ((await banner.count()) > 0 && /isn't logged yet/.test(rohanToday)) {
+  const bannerName = await banner.first().getAttribute("aria-label");
+  await shot("TR-21--banner.png");
+  await banner.first().click();
+  await page.getByText("What did you have instead?").waitFor({ timeout: 20000 });
+  console.log("banner open ok", bannerName);
+  await page.evaluate(async () => {
+    await window.__fitbudCapture.navigate("TR-21", { skipAuth: true });
+  });
+  await page.waitForTimeout(1500);
+} else {
+  console.log("rohan today has no meal banner");
+}
 await page.evaluate(async () => {
   await window.__fitbudCapture.navigate("TR-21", { skipAuth: true });
 });
@@ -109,9 +127,19 @@ console.log("ROHAN", rohan.slice(0, 900));
 console.log("rohan banned", hits(rohan));
 if (/Snooze 30 min/.test(rohan)) {
   await shot("TR-21--rohan.png");
+  const mealOpen = page.getByRole("button", { name: "Open", exact: true }).first();
+  await mealOpen.click();
+  await page.getByText("What did you have instead?").waitFor({ timeout: 20000 });
+  await shot("TR-21--meal-open.png");
+  console.log("meal open ok");
+  await page.evaluate(async () => {
+    await window.__fitbudCapture.navigate("TR-21", { skipAuth: true });
+  });
+  await page.waitForTimeout(2000);
   await page.getByRole("button", { name: "Snooze 30 min" }).first().click();
-  await page.getByText("Snoozed for 30 minutes.").waitFor({ timeout: 8000 });
-  console.log("rohan snooze ok");
+  const snooze = page.getByText(/Snoozed for 30 minutes\.|Snoozed until quiet hours end\./);
+  await snooze.first().waitFor({ timeout: 8000 });
+  console.log("rohan snooze", await snooze.first().innerText());
 }
 const rohanEaten = page.getByRole("button", { name: "Eaten as planned" });
 if ((await rohanEaten.count()) > 0) {

@@ -34,8 +34,11 @@ const base: Notification = {
 describe("notificationRowTitle", () => {
   it("uses guide copy for meal reminders", () => {
     expect(notificationRowTitle(base)).toBe("Lunch isn't logged yet");
-    expect(notificationRowBody(base)).toContain("ate as planned");
-    expect(mealPushCopy("Lunch", true).body).toBe(
+    expect(notificationRowBody(base)).toBe(
+      "Open it in Diet, or snooze for 30 minutes.",
+    );
+    expect(notificationRowBody(base)).not.toMatch(/chicken|rice|kcal/i);
+    expect(mealPushCopy("Lunch", true).title).toBe(
       "You have something to log in FitBud.",
     );
   });
@@ -64,11 +67,8 @@ describe("notificationRowTitle", () => {
       "Tap to read.",
     );
     expect(notePushCopy("Rahul Verma").body).toBe("Tap to read.");
-    expect(noteBannerCopy("Rahul Verma")).toMatchObject({
-      kicker: "From your coach",
-      title: "Rahul has a note for you!",
-      body: "Tap to read it on Today.",
-      mark: "R",
+    expect(noteBannerCopy("Rahul Verma")).toEqual({
+      title: "Rahul has a note for you",
     });
   });
 });

@@ -26,13 +26,15 @@ export const SHOTS2 = [
   ["meal-plan-ios.html", "24-trainee-meal-plan-ios.png", "Assigned meal plan", "Day totals · what changed"],
   ["ask-coach-ios.html", "25-trainee-ask-coach-ios.png", "Ask coach", "WhatsApp prefill · you press Send"],
   ["unavailable-ios.html", "26-trainee-item-unavailable-ios.png", "Item unavailable", "Replaced by a plan update"],
-  ["lock-live-activity-ios.html", "27-trainee-lock-live-activity-ios.png", "Lock · Live Activity", "Log set · prefilled kg × reps · − / +"],
-  ["lock-live-rest-ios.html", "27c-trainee-lock-live-rest-ios.png", "Live Activity · after log", "Rest countdown · +30 s · Skip · next set"],
-  ["dynamic-island-ios.html", "27b-trainee-dynamic-island-ios.png", "Dynamic Island", "Expanded with Log set · compact pill"],
-  ["lock-meal-push-ios.html", "28-trainee-lock-meal-push-ios.png", "Lock · meal push", "Grouped text · Eaten as planned, Open Diet"],
-  ["inapp-meal-ios.html", "29-trainee-inapp-meal-ios.png", "In-app banner · meal", "Over Today · one-tap log"],
-  ["inapp-note-ios.html", "29b-trainee-inapp-note-ios.png", "In-app banner · coach note", "Over Today · note text not shown"],
-  ["lock-coach-ios.html", "30-trainee-lock-coach-ios.png", "Lock · check-in and note", "Check-in due · coach note"],
+  ["lock-live-activity-ios.html", "27-trainee-lock-live-activity-ios.png", "Lock · workout", "Last set · prefilled · check to log"],
+  ["lock-live-rest-ios.html", "27c-trainee-lock-live-rest-ios.png", "Lock · next set", "Advances after the check"],
+  ["dynamic-island-ios.html", "27b-trainee-dynamic-island-ios.png", "Expanded · workout", "− / + kg and reps · Log set"],
+  ["lock-meal-push-ios.html", "28-trainee-lock-meal-push-ios.png", "Lock · meal reminder", "Open · Snooze 30 min"],
+  ["lock-meal-expanded-ios.html", "28b-trainee-lock-meal-expanded-ios.png", "Meal · expanded", "Same text · Open, Snooze"],
+  ["workout-notif-android.html", "27-android-trainee-workout-notif.png", "Android · workout", "360 × 800 · expanded shade"],
+  ["inapp-meal-ios.html", "29-trainee-inapp-meal-ios.png", "In-app · meal", "One line · tap opens the meal"],
+  ["inapp-note-ios.html", "29b-trainee-inapp-note-ios.png", "In-app · coach note", "One line · tap to open"],
+  ["lock-coach-ios.html", "30-trainee-lock-coach-ios.png", "Lock · check-in and note", "Tap opens the app"],
   ["clients-ios.html", "17-trainer-mobile-clients-ios.png", "Clients", "Trainer · search, filters, two chips"],
   ["client-status-ios.html", "18-trainer-mobile-client-status-ios.png", "Client status", "Trainer · Rohan this week"],
   ["check-in-review-ios.html", "19-trainer-mobile-check-in-review-ios.png", "Check-in review", "Trainer · sticky review sheet"],
@@ -42,7 +44,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const browser = await chromium.launch();
   for (const [file, out] of SHOTS2) {
     if (only && !file.includes(only) && !out.includes(only)) continue;
-    const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3 });
+    const ctx = await browser.newContext({ viewport: file.includes("android") ? { width: 360, height: 800 } : { width: 393, height: 852 }, deviceScaleFactor: 3 });
     const page = await ctx.newPage();
     await page.goto("file://" + H + file);
     await page.evaluate(() => document.fonts.ready);

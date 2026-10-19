@@ -4,13 +4,8 @@ import { MEAL_REMINDER_AFTER_MINUTES } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { localDateInTimezone } from "../../lib/dates";
 import { isMealSnoozed } from "../../notifications/actions";
-import {
-  inAppMealBannerCopy,
-  noteBannerCopy,
-} from "../../notifications/copy";
-import { useSyncEngine } from "../../sync/SyncProvider";
-import { confirmMealAssignment } from "../mealActions";
-import { IN_APP_MEAL_ACTIONS, IN_APP_NOTE_ACTIONS, InAppBanner } from "./Surfaces";
+import { inAppMealBannerCopy, noteBannerCopy } from "../../notifications/copy";
+import { InAppBanner } from "./Surfaces";
 
 type Props = {
   relationship: CoachingRelationship;
@@ -44,7 +39,6 @@ export function ForegroundBanner({
   onGoToday,
 }: Props) {
   const { api, me } = useAuth();
-  const sync = useSyncEngine();
   const [meal, setMeal] = useState<MealAssignment | null>(null);
   const [note, setNote] = useState<Notification | null>(null);
   const [hidden, setHidden] = useState<"meal" | "note" | null>(null);
@@ -87,33 +81,14 @@ export function ForegroundBanner({
 
   const showMeal = meal != null && hidden !== "meal";
   if (showMeal && meal) {
-    const copy = inAppMealBannerCopy(meal.mealName?.trim() || "Meal");
+    const label = meal.mealName?.trim() || "Meal";
+    const copy = inAppMealBannerCopy(label);
     return (
       <InAppBanner
         floating
-        kicker={copy.kicker}
         title={copy.title}
-        body={copy.body}
-        primaryLabel={IN_APP_MEAL_ACTIONS[0]}
-        secondaryLabel={IN_APP_MEAL_ACTIONS[1]}
-        onPrimary={() => {
-          void (async () => {
-            try {
-              await confirmMealAssignment(
-                api,
-                sync,
-                relationship.id,
-                meal,
-                coachName,
-              );
-            } catch {
-              // The outbox keeps the confirm if the network drops.
-            } finally {
-              setHidden("meal");
-            }
-          })();
-        }}
-        onSecondary={() => {
+        openLabel={`Open ${label}`}
+        onOpen={() => {
           setHidden("meal");
           onOpenMeal(meal.id);
         }}
@@ -126,16 +101,12 @@ export function ForegroundBanner({
     return (
       <InAppBanner
         floating
-        kicker={copy.kicker}
         title={copy.title}
-        body={copy.body}
-        primaryLabel={IN_APP_NOTE_ACTIONS[0]}
-        secondaryLabel={IN_APP_NOTE_ACTIONS[1]}
-        onPrimary={() => {
+        openLabel="Open"
+        onOpen={() => {
           setHidden("note");
           onGoToday();
         }}
-        onSecondary={() => setHidden("note")}
       />
     );
   }

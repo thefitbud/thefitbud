@@ -1,31 +1,34 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { brand, ink } from "@fitbud/tokens";
-import {
-  fontFamilyBold,
-  fontFamilySemiBold,
-} from "@fitbud/ui-mobile";
+import { fontFamilyBold, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import {
   DEV_BUILD_NOTE,
-  IN_APP_MEAL_ACTIONS,
-  IN_APP_NOTE_ACTIONS,
-  LIVE_ACTIVITY_ACTIONS,
   MEAL_NOTIFICATION_ACTIONS,
   isMealSnoozed,
   snoozeMeal,
+  snoozeNotice,
+  type QuietHoursInput,
 } from "../../notifications/actions";
 import { scheduleMealSnoozeNotification } from "../../notifications/nativeActions";
-import { mealPushCopy } from "../../notifications/copy";
+import { mealExpandedLine, mealPushCopy } from "../../notifications/copy";
 import {
   DEMO_LIVE_ACTIVITY,
+  currentValueLine,
   formatKg,
+  loggedSetLine,
   reduceLiveActivity,
   setLogFromState,
+  setProgressLine,
+  type LiveActivityEvent,
   type LiveActivityState,
 } from "../../notifications/liveActivity";
 
 import appIcon from "../../../../../packages/brand/app/icon.png";
+
+const EXERCISE = "Romanian deadlift";
+const WORKOUT = "Lower body B";
 
 function AppIcon({ size }: { size: number }) {
   return (
@@ -53,19 +56,24 @@ export function MealInlineButtons({
   mealId,
   title,
   body,
+  expanded = false,
+  quiet,
   onOpen,
   onSnoozed,
 }: {
   mealId: string;
   title: string;
   body: string;
+  expanded?: boolean;
+  quiet?: QuietHoursInput | null;
   onOpen: () => void;
   onSnoozed: (message: string) => void;
 }) {
   const [snoozed, setSnoozed] = useState(() => isMealSnoozed(mealId));
 
   async function snooze() {
-    const result = snoozeMeal(mealId);
+    const now = new Date();
+    const result = snoozeMeal(mealId, now, quiet);
     if (!result.ok) {
       setSnoozed(true);
       onSnoozed("Already snoozed.");
@@ -76,19 +84,20 @@ export function MealInlineButtons({
       title,
       body,
       mealAssignmentId: mealId,
+      until: result.until,
     });
-    onSnoozed("Snoozed for 30 minutes.");
+    onSnoozed(snoozeNotice(now, result.until));
   }
 
   return (
-    <View style={styles.inlineActions}>
+    <View style={styles.actionStack}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={MEAL_NOTIFICATION_ACTIONS[0].buttonTitle}
         onPress={onOpen}
-        style={[styles.inlineBtn, styles.inlinePrimary]}
+        style={styles.actionRow}
       >
-        <Text style={styles.inlinePrimaryText}>
+        <Text style={expanded ? styles.actionPrimaryText : styles.actionText}>
           {MEAL_NOTIFICATION_ACTIONS[0].buttonTitle}
         </Text>
       </Pressable>
@@ -100,13 +109,9 @@ export function MealInlineButtons({
         onPress={() => {
           void snooze();
         }}
-        style={[
-          styles.inlineBtn,
-          styles.inlineSecondary,
-          snoozed ? styles.inlineDisabled : null,
-        ]}
+        style={[styles.actionRow, styles.actionDivider, snoozed ? styles.actionDisabled : null]}
       >
-        <Text style={styles.inlineSecondaryText}>
+        <Text style={styles.actionText}>
           {MEAL_NOTIFICATION_ACTIONS[1].buttonTitle}
         </Text>
       </Pressable>
@@ -119,6 +124,9 @@ export function MealNotificationCard({
   mealLabel,
   hideDetails,
   whenLabel = "now",
+  expanded = false,
+  mealTime,
+  quiet,
   onOpen,
   onSnoozed,
 }: {
@@ -126,317 +134,286 @@ export function MealNotificationCard({
   mealLabel: string;
   hideDetails: boolean;
   whenLabel?: string;
+  expanded?: boolean;
+  mealTime?: string;
+  quiet?: QuietHoursInput | null;
   onOpen: () => void;
   onSnoozed: (message: string) => void;
 }) {
   const copy = mealPushCopy(mealLabel, hideDetails);
+  const detail =
+    expanded && mealTime && !hideDetails
+      ? mealExpandedLine(mealLabel, mealTime)
+      : null;
 
   return (
-    <View style={styles.noteCard} accessibilityLabel="Meal notification">
-      <AppIcon size={38} />
-      <View style={styles.noteBody}>
-        <View style={styles.noteTop}>
-          <Text style={styles.appName}>FitBud</Text>
-          <Text style={styles.when}>{whenLabel}</Text>
+    <View accessibilityLabel="Meal notification">
+      <View style={expanded ? styles.mealExpanded : styles.noteCard}>
+        <AppIcon size={38} />
+        <View style={styles.noteBody}>
+          <View style={styles.noteTop}>
+            <Text style={styles.noteTitle}>{copy.title}</Text>
+            <Text style={styles.when}>{whenLabel}</Text>
+          </View>
+          {detail ? <Text style={styles.mealDetail}>{detail}</Text> : null}
         </View>
-        <Text style={styles.noteTitle}>{copy.title}</Text>
-        <Text style={styles.noteCopy}>{copy.body}</Text>
-        <MealInlineButtons
-          mealId={mealId}
-          title={copy.title}
-          body={copy.body}
-          onOpen={onOpen}
-          onSnoozed={onSnoozed}
-        />
       </View>
+      <MealInlineButtons
+        mealId={mealId}
+        title={copy.title}
+        body={copy.body}
+        expanded={expanded}
+        quiet={quiet}
+        onOpen={onOpen}
+        onSnoozed={onSnoozed}
+      />
     </View>
   );
 }
 
-function useLiveActivity(onNotice?: (message: string) => void) {
+function useWorkout(onNotice?: (message: string) => void) {
   const [state, setState] = useState<LiveActivityState>(DEMO_LIVE_ACTIVITY);
 
-  useEffect(() => {
-    if (state.phase !== "rest") return;
-    const timer = setInterval(() => {
-      setState((current) => reduceLiveActivity(current, { type: "tick" }));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [state.phase]);
-
-  function send(event: Parameters<typeof reduceLiveActivity>[1]) {
+  function send(event: LiveActivityEvent) {
     setState((current) => {
-      const next = reduceLiveActivity(current, event);
-      if (event.type === "log_set" && next.phase === "rest") {
-        const entry = setLogFromState(current, "Romanian deadlift");
+      if (event.type === "log_set" && !current.finished) {
+        const entry = setLogFromState(current, EXERCISE);
         onNotice?.(
           `Set ${entry.setIndex} logged · ${formatKg(entry.kilograms)} kg × ${entry.reps}. The lock screen needs a dev build.`,
         );
       }
-      return next;
+      return reduceLiveActivity(current, event);
     });
   }
 
-  return { state, send };
+  function open() {
+    onNotice?.("Opens the workout. Typing a value needs the app.");
+  }
+
+  return { state, send, open };
 }
 
 function Stepper({
-  label,
   value,
+  unit,
   lessLabel,
   moreLabel,
   onLess,
   onMore,
+  dark,
 }: {
-  label: string;
   value: string;
+  unit: string;
   lessLabel: string;
   moreLabel: string;
   onLess: () => void;
   onMore: () => void;
+  dark?: boolean;
 }) {
   return (
-    <View style={styles.stepper}>
+    <View style={[styles.stepper, dark ? styles.stepperDark : null]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={lessLabel}
         onPress={onLess}
-        style={styles.stepBtn}
+        style={[styles.stepBtn, dark ? styles.stepBtnDark : null]}
       >
-        <Text style={styles.stepBtnText}>−</Text>
+        <Text style={[styles.stepBtnText, dark ? styles.onDark : null]}>−</Text>
       </Pressable>
-      <View style={styles.stepValue}>
-        <Text style={styles.stepLabel}>{label}</Text>
-        <Text style={styles.stepNumber}>{value}</Text>
-      </View>
+      <Text style={[styles.stepNumber, dark ? styles.onDark : null]}>
+        {value} {unit}
+      </Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={moreLabel}
         onPress={onMore}
-        style={styles.stepBtn}
+        style={[styles.stepBtn, dark ? styles.stepBtnDark : null]}
       >
-        <Text style={styles.stepBtnText}>+</Text>
+        <Text style={[styles.stepBtnText, dark ? styles.onDark : null]}>+</Text>
       </Pressable>
     </View>
   );
 }
 
-export function LiveActivityPreview({
-  onNotice,
+function LockCard({
+  state,
+  onLog,
+  onOpen,
 }: {
-  onNotice?: (message: string) => void;
+  state: LiveActivityState;
+  onLog: () => void;
+  onOpen: () => void;
 }) {
-  const { state, send } = useLiveActivity(onNotice);
-  const widthPct = Math.max(8, Math.round((state.restLeft / 90) * 100));
-  const logging = state.phase === "logging";
-
+  const logged = loggedSetLine(state);
   return (
-    <View
-      style={styles.live}
-      accessibilityLabel={logging ? "Workout in progress" : "Resting"}
-    >
+    <View style={styles.live} accessibilityLabel="Workout in progress">
       <View style={styles.liveHead}>
         <AppIcon size={22} />
-        <Text style={[styles.liveKicker, styles.liveTitle]}>
-          Lower body B · exercise 2 of 6
-        </Text>
-        <Text style={styles.liveKicker}>{logging ? "7 min" : "8 min"}</Text>
+        <Text style={styles.kicker}>FitBud · {WORKOUT}</Text>
+        <Text style={styles.whenDark}>now</Text>
       </View>
-      {logging ? (
-        <>
-          <Text style={styles.exercise}>Romanian deadlift</Text>
-          <Text style={styles.setLine}>Set 2 of 3 · Prev 20 kg × 10</Text>
-          <View style={styles.stepRow}>
-            <Stepper
-              label="Weight"
-              value={`${formatKg(state.kilograms)} kg`}
-              lessLabel="Less weight"
-              moreLabel="More weight"
-              onLess={() => send({ type: "weight", direction: -1 })}
-              onMore={() => send({ type: "weight", direction: 1 })}
-            />
-            <Stepper
-              label="Reps"
-              value={String(state.reps)}
-              lessLabel="Fewer reps"
-              moreLabel="More reps"
-              onLess={() => send({ type: "reps", direction: -1 })}
-              onMore={() => send({ type: "reps", direction: 1 })}
-            />
-          </View>
+      <Text style={styles.exercise}>{EXERCISE}</Text>
+      <Text style={styles.sub}>{setProgressLine(state)}</Text>
+      {logged ? <Text style={styles.logged}>{logged}</Text> : null}
+      <View style={styles.valueRow}>
+        <Text style={styles.value}>{currentValueLine(state)}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open"
+          onPress={onOpen}
+          style={styles.openBtn}
+        >
+          <Text style={styles.openText}>Open</Text>
+        </Pressable>
+        {state.finished ? null : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Log set ${state.setIndex}`}
-            onPress={() => send({ type: "log_set" })}
-            style={styles.logSet}
+            onPress={onLog}
+            style={styles.check}
           >
-            <Text style={styles.logSetText}>Log set {state.setIndex}</Text>
+            <Text style={styles.checkMark}>✓</Text>
           </Pressable>
-          <Text style={styles.nextLineCenter}>
-            Then 58 s rest · set 3 · 22.5 kg × 10
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Adjust in app"
-            onPress={() =>
-              onNotice?.("Open the active workout to type a value.")
-            }
-            style={styles.adjustLink}
-          >
-            <Text style={styles.adjustText}>Adjust in app</Text>
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <View style={styles.liveRow}>
-            <View style={styles.liveCopy}>
-              <Text style={styles.exercise}>Romanian deadlift</Text>
-              <Text style={styles.setLine}>
-                {state.phase === "go"
-                  ? "Set 3 · Go"
-                  : `Set ${state.setIndex} logged · ${formatKg(state.kilograms)} kg × ${state.reps}`}
-              </Text>
-            </View>
-            <View style={styles.restCol}>
-              <Text style={styles.restLabel}>
-                {state.phase === "go" ? "Next" : "Rest left"}
-              </Text>
-              <Text style={styles.restValue}>
-                {state.phase === "go" ? "Go" : `${state.restLeft} s`}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${widthPct}%` }]} />
-          </View>
-          {state.phase === "rest" ? (
-            <View style={styles.liveActions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={LIVE_ACTIVITY_ACTIONS[0]}
-                onPress={() => send({ type: "add_rest" })}
-                style={styles.liveBtn}
-              >
-                <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[0]}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={LIVE_ACTIVITY_ACTIONS[1]}
-                onPress={() => send({ type: "skip_rest" })}
-                style={[styles.liveBtn, styles.liveBtnPrimary]}
-              >
-                <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[1]}</Text>
-              </Pressable>
-            </View>
-          ) : null}
-          <Text style={styles.nextLine}>Next: set 3 of 3 · 22.5 kg × 10</Text>
-          <Text style={styles.adjustText}>After set 3: Step-ups · 3 sets · 14 kg</Text>
-        </>
-      )}
+        )}
+      </View>
     </View>
   );
 }
 
-export function DynamicIslandPreview({
+export function WorkoutNotificationPreviews({
   onNotice,
 }: {
   onNotice?: (message: string) => void;
 }) {
-  const { state, send } = useLiveActivity(onNotice);
-  const logging = state.phase === "logging";
+  const { state, send, open } = useWorkout(onNotice);
+  const logged = loggedSetLine(state);
+  const prior =
+    logged ??
+    `Set ${state.setIndex - 1} logged · ${formatKg(state.lastKg)} kg × ${state.lastReps}`;
 
   return (
-    <View accessibilityLabel="Expanded Live Activity">
-      <View style={styles.island}>
+    <View style={styles.stack}>
+      <LockCard
+        state={state}
+        onLog={() => send({ type: "log_set" })}
+        onOpen={open}
+      />
+      <View style={styles.pill} accessibilityLabel="Compact Live Activity">
+        <AppIcon size={22} />
+        <Text style={styles.pillText}>
+          Set {state.setIndex} of {state.setCount}
+        </Text>
+      </View>
+      <View style={styles.live} accessibilityLabel="Expanded Live Activity">
         <View style={styles.liveHead}>
           <AppIcon size={22} />
-          <Text style={[styles.liveKicker, styles.liveTitle]}>
-            Lower body B · exercise 2 of 6
-          </Text>
-          <Text style={styles.liveKicker}>{logging ? "7 min" : "8 min"}</Text>
+          <Text style={styles.kicker}>FitBud · {WORKOUT}</Text>
+          <Text style={styles.whenDark}>now</Text>
         </View>
-        {logging ? (
+        <Text style={styles.exercise}>{EXERCISE}</Text>
+        <Text style={styles.sub}>{setProgressLine(state)}</Text>
+        {logged ? <Text style={styles.logged}>{logged}</Text> : null}
+        {state.finished ? null : (
           <>
-            <Text style={styles.islandExercise}>Romanian deadlift</Text>
-            <Text style={styles.islandSet}>
-              Set 2 of 3 · {formatKg(state.kilograms)} kg × {state.reps}
-            </Text>
-            <View style={styles.liveActions}>
+            <View style={styles.stepRow}>
+              <Stepper
+                value={formatKg(state.kilograms)}
+                unit="kg"
+                lessLabel="Less weight"
+                moreLabel="More weight"
+                onLess={() => send({ type: "weight", direction: -1 })}
+                onMore={() => send({ type: "weight", direction: 1 })}
+              />
+              <Stepper
+                value={String(state.reps)}
+                unit="reps"
+                lessLabel="Fewer reps"
+                moreLabel="More reps"
+                onLess={() => send({ type: "reps", direction: -1 })}
+                onMore={() => send({ type: "reps", direction: 1 })}
+              />
+            </View>
+            <View style={styles.pair}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Adjust in app"
-                onPress={() =>
-                  onNotice?.("Open the active workout to type a value.")
-                }
-                style={[styles.liveBtn, styles.islandBtn]}
+                accessibilityLabel="Open"
+                onPress={open}
+                style={[styles.pairBtn, styles.pairSecondary]}
               >
-                <Text style={styles.liveBtnText}>Adjust in app</Text>
+                <Text style={styles.openText}>Open</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Log set"
+                accessibilityLabel={`Log set ${state.setIndex}`}
                 onPress={() => send({ type: "log_set" })}
-                style={[styles.liveBtn, styles.liveBtnPrimary]}
+                style={[styles.pairBtn, styles.pairPrimary]}
               >
-                <Text style={styles.liveBtnText}>Log set</Text>
+                <Text style={styles.pairPrimaryText}>✓  Log set {state.setIndex}</Text>
               </Pressable>
             </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.islandRow}>
-              <View style={styles.liveCopy}>
-                <Text style={styles.islandExercise}>Romanian deadlift</Text>
-                <Text style={styles.islandSet}>
-                  {state.phase === "go"
-                    ? "Set 3 · Go"
-                    : `Set ${state.setIndex} logged · ${formatKg(state.kilograms)} kg × ${state.reps}`}
-                </Text>
-              </View>
-              <Text style={styles.islandTime}>
-                {state.phase === "go" ? "Go" : `${state.restLeft} s`}
-              </Text>
-            </View>
-            {state.phase === "rest" ? (
-              <View style={styles.liveActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={LIVE_ACTIVITY_ACTIONS[0]}
-                  onPress={() => send({ type: "add_rest" })}
-                  style={[styles.liveBtn, styles.islandBtn]}
-                >
-                  <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[0]}</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={LIVE_ACTIVITY_ACTIONS[1]}
-                  onPress={() => send({ type: "skip_rest" })}
-                  style={[styles.liveBtn, styles.liveBtnPrimary]}
-                >
-                  <Text style={styles.liveBtnText}>{LIVE_ACTIVITY_ACTIONS[1]}</Text>
-                </Pressable>
-              </View>
-            ) : null}
           </>
         )}
       </View>
-      <View style={styles.compactWrap}>
-        <Text style={styles.compactLabel}>Compact</Text>
-        <View style={styles.compact}>
-          <AppIcon size={22} />
-          <Text style={styles.compactTime}>
-            {state.phase === "logging"
-              ? `Set ${state.setIndex}`
-              : state.phase === "go"
-                ? "Go"
-                : `${state.restLeft} s`}
-          </Text>
+      <View style={styles.android} accessibilityLabel="Android workout notification">
+        <View style={styles.liveHead}>
+          <AppIcon size={24} />
+          <Text style={styles.androidKicker}>FitBud · Workout · now</Text>
         </View>
-        <Text style={styles.compactHint}>
-          Compact shows the set, and during rest it shows the countdown.
-          Long-press expands it. After Log set it switches to Rest left 58 s
-          with +30 s and Skip.
+        <Text style={styles.androidTitle}>
+          {EXERCISE} · Set {state.setIndex} of {state.setCount}
         </Text>
+        <Text style={styles.androidSub}>
+          Last: {formatKg(state.lastKg)} kg × {state.lastReps}
+        </Text>
+        {state.finished ? null : (
+          <>
+            <View style={styles.stepRow}>
+              <Stepper
+                dark
+                value={formatKg(state.kilograms)}
+                unit="kg"
+                lessLabel="Less weight"
+                moreLabel="More weight"
+                onLess={() => send({ type: "weight", direction: -1 })}
+                onMore={() => send({ type: "weight", direction: 1 })}
+              />
+              <Stepper
+                dark
+                value={String(state.reps)}
+                unit="reps"
+                lessLabel="Fewer reps"
+                moreLabel="More reps"
+                onLess={() => send({ type: "reps", direction: -1 })}
+                onMore={() => send({ type: "reps", direction: 1 })}
+              />
+            </View>
+            <View style={styles.pair}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Log set ${state.setIndex}`}
+                onPress={() => send({ type: "log_set" })}
+                style={[styles.pairBtn, styles.pairPrimary]}
+              >
+                <Text style={styles.pairPrimaryText}>✓ Log set {state.setIndex}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open"
+                onPress={open}
+                style={[styles.pairBtn, styles.androidOpen]}
+              >
+                <Text style={styles.onDark}>Open</Text>
+              </Pressable>
+            </View>
+          </>
+        )}
+      </View>
+      <View style={styles.androidDim}>
+        <View style={styles.liveHead}>
+          <AppIcon size={24} />
+          <Text style={styles.androidKicker}>FitBud · 2 min ago</Text>
+        </View>
+        <Text style={styles.androidTitle}>{prior}</Text>
       </View>
     </View>
   );
@@ -460,71 +437,44 @@ export function LockMessageCard({
           <Text style={styles.when}>{whenLabel}</Text>
         </View>
         <Text style={styles.noteTitle}>{title}</Text>
-        <Text style={styles.noteCopy}>{body}</Text>
+        {body ? <Text style={styles.noteCopy}>{body}</Text> : null}
       </View>
     </View>
   );
 }
 
 export function InAppBanner({
-  kicker,
   title,
-  body,
-  primaryLabel,
-  secondaryLabel,
-  onPrimary,
-  onSecondary,
+  openLabel,
+  onOpen,
   floating = false,
 }: {
-  kicker: string;
   title: string;
-  body: string;
-  primaryLabel: string;
-  secondaryLabel: string;
-  onPrimary: () => void;
-  onSecondary: () => void;
+  openLabel: string;
+  onOpen: () => void;
   floating?: boolean;
 }) {
   return (
-    <View
-      accessibilityRole="summary"
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={openLabel}
+      onPress={onOpen}
       style={[styles.banner, floating ? styles.bannerFloat : null]}
     >
       <AppIcon size={38} />
       <View style={styles.bannerBody}>
-        <View style={styles.noteTop}>
-          <Text style={styles.bannerKicker}>{kicker}</Text>
-          <Text style={styles.when}>now</Text>
-        </View>
-        <Text style={styles.noteTitle}>{title}</Text>
-        <Text style={styles.bannerCopy}>{body}</Text>
-        <View style={styles.inlineActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={primaryLabel}
-            onPress={onPrimary}
-            style={[styles.inlineBtn, styles.inlinePrimary]}
-          >
-            <Text style={styles.inlinePrimaryText}>{primaryLabel}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={secondaryLabel}
-            onPress={onSecondary}
-            style={[styles.inlineBtn, styles.inlineSecondary]}
-          >
-            <Text style={styles.inlineSecondaryText}>{secondaryLabel}</Text>
-          </Pressable>
-        </View>
+        <Text style={styles.bannerKicker}>FitBud</Text>
+        <Text numberOfLines={1} style={styles.bannerTitle}>
+          {title}
+        </Text>
       </View>
-      <View style={styles.grabber} />
-    </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
   );
 }
 
-export { IN_APP_MEAL_ACTIONS, IN_APP_NOTE_ACTIONS };
-
 const styles = StyleSheet.create({
+  stack: { gap: 12 },
   devNote: {
     backgroundColor: brand.paleLavender,
     borderColor: "#E4DEFF",
@@ -536,42 +486,28 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   noteCard: {
-    backgroundColor: "#EEEDF4",
+    alignItems: "center",
+    backgroundColor: "#F2F1F7",
+    borderRadius: 20,
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  mealExpanded: {
+    alignItems: "center",
+    backgroundColor: "#F2F1F7",
     borderRadius: 22,
     flexDirection: "row",
-    gap: 11,
+    gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  mark: {
-    alignItems: "center",
-    backgroundColor: brand.indigo,
-    borderRadius: 10,
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  markText: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 17,
-  },
-  markSm: {
-    alignItems: "center",
-    backgroundColor: brand.indigo,
-    borderRadius: 6,
-    height: 22,
-    justifyContent: "center",
-    width: 22,
-  },
-  markSmText: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 12,
+    paddingVertical: 12,
   },
   noteBody: { flex: 1, minWidth: 0 },
   noteTop: {
+    alignItems: "flex-start",
     flexDirection: "row",
+    gap: 8,
     justifyContent: "space-between",
   },
   appName: {
@@ -579,215 +515,93 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilyBold,
     fontSize: 13,
   },
-  when: { color: ink[500], fontSize: 13 },
+  when: { color: "#4A4A52", fontSize: 13 },
+  whenDark: { color: "#3D3D44", fontSize: 13 },
   noteTitle: {
-    color: ink[900],
-    fontFamily: fontFamilyBold,
+    color: "#1C1C1E",
+    flex: 1,
+    fontFamily: fontFamilySemiBold,
     fontSize: 15,
     lineHeight: 20,
-    marginTop: 2,
   },
+  mealDetail: { color: "#3D3D44", fontSize: 13, marginTop: 2 },
   noteCopy: {
     color: ink[700],
     fontSize: 15,
     lineHeight: 20,
     marginTop: 2,
   },
-  inlineActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10,
-  },
-  inlineBtn: {
-    alignItems: "center",
-    borderRadius: 22,
-    flex: 1,
-    height: 44,
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-  inlinePrimary: { backgroundColor: brand.indigo },
-  inlineSecondary: { backgroundColor: brand.paleLavender },
-  inlineDisabled: { opacity: 0.45 },
-  inlinePrimaryText: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 15,
-  },
-  inlineSecondaryText: {
-    color: brand.indigo,
-    fontFamily: fontFamilyBold,
-    fontSize: 15,
-  },
-  live: {
-    backgroundColor: "rgba(20,16,44,0.92)",
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 16,
-  },
-  liveHead: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  liveKicker: {
-    color: "#fff",
-    fontFamily: fontFamilySemiBold,
-    fontSize: 13,
-  },
-  liveTitle: { flex: 1 },
-  liveRow: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
-  liveCopy: { flex: 1, minWidth: 0, paddingRight: 8 },
-  exercise: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 20,
-    lineHeight: 24,
-  },
-  setLine: { color: "#fff", fontSize: 15, marginTop: 3 },
-  restCol: { alignItems: "flex-end" },
-  restLabel: {
-    color: "#fff",
-    fontFamily: fontFamilySemiBold,
-    fontSize: 13,
-  },
-  restValue: {
-    color: "#CFC6FF",
-    fontFamily: fontFamilyBold,
-    fontSize: 36,
-    letterSpacing: -0.5,
-  },
-  barTrack: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 3,
-    height: 6,
-    marginTop: 12,
+  actionStack: {
+    backgroundColor: "#F2F1F7",
+    borderRadius: 14,
+    marginTop: 6,
     overflow: "hidden",
   },
-  barFill: {
-    backgroundColor: "#B7A9F5",
-    borderRadius: 3,
-    height: 6,
-  },
-  nextLine: { color: "#fff", fontSize: 13, marginTop: 10 },
-  liveActions: { flexDirection: "row", gap: 8, marginTop: 12 },
-  liveBtn: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderRadius: 22,
-    flex: 1,
-    height: 44,
+  actionRow: {
+    height: 48,
     justifyContent: "center",
+    paddingHorizontal: 16,
   },
-  liveBtnPrimary: { backgroundColor: brand.indigo },
-  islandBtn: { backgroundColor: "#2A2640" },
-  liveBtnText: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 15,
+  actionDivider: {
+    borderTopColor: "rgba(60,60,67,0.18)",
+    borderTopWidth: 1,
   },
-  stepRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  stepper: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 16,
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 4,
-  },
-  stepBtn: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderRadius: 12,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  stepBtnText: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 24,
-  },
-  stepValue: { alignItems: "center", flex: 1 },
-  stepLabel: {
-    color: "#CFC6FF",
+  actionDisabled: { opacity: 0.45 },
+  actionText: { color: "#000", fontSize: 16 },
+  actionPrimaryText: {
+    color: brand.indigo,
     fontFamily: fontFamilySemiBold,
-    fontSize: 11,
+    fontSize: 16,
   },
-  stepNumber: {
-    color: "#fff",
+  live: {
+    backgroundColor: "rgba(242,241,247,0.96)",
+    borderRadius: 22,
+    paddingBottom: 14,
+    paddingHorizontal: 14,
+    paddingTop: 13,
+  },
+  liveHead: { alignItems: "center", flexDirection: "row", gap: 8 },
+  kicker: {
+    color: "#3D3D44",
+    flex: 1,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 13,
+  },
+  exercise: {
+    color: "#000",
     fontFamily: fontFamilyBold,
     fontSize: 18,
+    marginTop: 8,
   },
-  logSet: {
+  sub: { color: "#3D3D44", fontSize: 14, marginTop: 1 },
+  logged: { color: "#3D3D44", fontSize: 13, marginTop: 8 },
+  valueRow: { alignItems: "center", flexDirection: "row", gap: 10, marginTop: 10 },
+  value: {
+    color: "#000",
+    flex: 1,
+    fontFamily: fontFamilyBold,
+    fontSize: 26,
+    letterSpacing: -0.2,
+  },
+  openBtn: {
+    alignItems: "center",
+    backgroundColor: "rgba(60,60,67,0.12)",
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  openText: { color: "#000", fontFamily: fontFamilyBold, fontSize: 15 },
+  check: {
     alignItems: "center",
     backgroundColor: brand.indigo,
     borderRadius: 28,
     height: 56,
     justifyContent: "center",
-    marginTop: 10,
+    width: 56,
   },
-  logSetText: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 18,
-  },
-  nextLineCenter: {
-    color: "#fff",
-    fontSize: 13,
-    marginTop: 10,
-    textAlign: "center",
-  },
-  adjustLink: {
-    alignItems: "center",
-    height: 44,
-    justifyContent: "center",
-  },
-  adjustText: {
-    color: "#CFC6FF",
-    fontFamily: fontFamilySemiBold,
-    fontSize: 14,
-    marginTop: 2,
-    textAlign: "center",
-  },
-  island: {
-    backgroundColor: "#000",
-    borderRadius: 44,
-    paddingHorizontal: 22,
-    paddingVertical: 18,
-  },
-  islandRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-  },
-  islandExercise: {
-    color: "#fff",
-    fontFamily: fontFamilyBold,
-    fontSize: 17,
-  },
-  islandSet: { color: "#E6E3F5", fontSize: 14, marginTop: 2 },
-  islandTime: {
-    color: "#CFC6FF",
-    fontFamily: fontFamilyBold,
-    fontSize: 34,
-  },
-  compactWrap: { marginTop: 12 },
-  compactLabel: {
-    color: ink[500],
-    fontFamily: fontFamilyBold,
-    fontSize: 13,
-    marginBottom: 10,
-  },
-  compact: {
+  checkMark: { color: "#fff", fontFamily: fontFamilyBold, fontSize: 26 },
+  pill: {
     alignItems: "center",
     alignSelf: "center",
     backgroundColor: "#000",
@@ -796,56 +610,93 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: "space-between",
     paddingLeft: 8,
-    paddingRight: 12,
-    width: 220,
+    paddingRight: 14,
+    width: 168,
   },
-  compactTime: {
-    color: "#CFC6FF",
-    fontFamily: fontFamilyBold,
-    fontSize: 15,
+  pillText: { color: "#fff", fontFamily: fontFamilySemiBold, fontSize: 14 },
+  stepRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  stepper: {
+    alignItems: "center",
+    backgroundColor: "rgba(60,60,67,0.08)",
+    borderRadius: 14,
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 3,
   },
-  compactHint: {
-    color: ink[700],
-    fontSize: 14,
-    lineHeight: 20,
+  stepperDark: { backgroundColor: "#3A3647" },
+  stepBtn: {
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  stepBtnDark: { backgroundColor: "transparent" },
+  stepBtnText: { color: "#000", fontFamily: fontFamilySemiBold, fontSize: 22 },
+  stepNumber: { color: "#000", fontFamily: fontFamilyBold, fontSize: 20 },
+  pair: { flexDirection: "row", gap: 8, marginTop: 10 },
+  pairBtn: {
+    alignItems: "center",
+    borderRadius: 25,
+    height: 50,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  pairSecondary: { backgroundColor: "rgba(60,60,67,0.12)", flex: 1 },
+  pairPrimary: { backgroundColor: brand.indigo, flex: 2 },
+  pairPrimaryText: { color: "#fff", fontFamily: fontFamilyBold, fontSize: 16 },
+  android: {
+    backgroundColor: "#2B2836",
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  androidDim: {
+    backgroundColor: "#2B2836",
+    borderRadius: 24,
+    opacity: 0.72,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  androidKicker: { color: "#D6D2E6", flex: 1, fontSize: 12 },
+  androidTitle: {
+    color: "#fff",
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
     marginTop: 10,
   },
+  androidSub: { color: "#D6D2E6", fontSize: 14, marginTop: 2 },
+  androidOpen: { backgroundColor: "#3A3647", flex: 1 },
+  onDark: { color: "#fff", fontFamily: fontFamilyBold, fontSize: 16 },
+  onDarkMuted: { color: "#D6D2E6", fontSize: 12 },
   banner: {
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
+    alignItems: "center",
+    backgroundColor: "rgba(250,249,253,0.97)",
     borderRadius: 20,
-    borderWidth: 1,
     flexDirection: "row",
-    gap: 12,
-    padding: 14,
-    paddingBottom: 18,
+    gap: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
     shadowColor: "#1A1248",
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
   },
   bannerFloat: {
     left: 10,
     position: "absolute",
     right: 10,
-    top: 54,
+    top: 56,
     zIndex: 50,
   },
   bannerBody: { flex: 1, minWidth: 0 },
-  bannerKicker: { color: ink[500], fontSize: 13 },
-  bannerCopy: {
-    color: ink[700],
-    fontSize: 14,
-    lineHeight: 19,
-    marginTop: 2,
-  },
-  grabber: {
-    backgroundColor: ink[200],
-    borderRadius: 2,
-    bottom: 6,
-    height: 4,
-    left: "50%",
-    marginLeft: -18,
-    position: "absolute",
-    width: 36,
+  bannerKicker: { color: "#4A4A52", fontFamily: fontFamilySemiBold, fontSize: 13 },
+  bannerTitle: { color: "#000", fontSize: 14 },
+  chevron: {
+    color: "#4A4A52",
+    fontSize: 22,
+    textAlign: "center",
+    width: 44,
   },
 });

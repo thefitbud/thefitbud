@@ -23,20 +23,32 @@ enum LiveActivityOutbox {
   }
 }
 
+func formatKg(_ value: Double) -> String {
+  let rounded = (value * 10).rounded() / 10
+  if rounded == rounded.rounded() {
+    return String(Int(rounded))
+  }
+  return String(format: "%.1f", rounded)
+}
+
 struct FitBudWorkoutAttributes: ActivityAttributes {
   public struct ContentState: Codable, Hashable {
-    var phase: String
     var exerciseName: String
     var setIndex: Int
     var setCount: Int
     var kilograms: Double
     var reps: Int
-    var restEndsAt: Date?
+    var planKilograms: Double
+    var planReps: Int
+    var lastKilograms: Double
+    var lastReps: Int
+    var loggedLine: String?
+    var finished: Bool
   }
 
   var workoutName: String
-  var exerciseIndex: Int
-  var exerciseCount: Int
+  /// fitbud://workout/{assignmentId}. The host app sets this when it starts the activity.
+  var openUrl: String
 }
 
 @available(iOS 17.0, *)
@@ -71,13 +83,21 @@ struct LogSetIntent: LiveActivityIntent {
       kilograms: kilograms,
       reps: reps
     )
-    let restEnds = Date().addingTimeInterval(58)
+    let logged = "Set \(setIndex) logged · \(formatKg(kilograms)) kg × \(reps)"
     for activity in Activity<FitBudWorkoutAttributes>.activities {
       var state = activity.content.state
-      state.phase = "rest"
-      state.kilograms = kilograms
-      state.reps = reps
-      state.restEndsAt = restEnds
+      guard !state.finished else { continue }
+      state.loggedLine = logged
+      state.lastKilograms = kilograms
+      state.lastReps = reps
+      let next = state.setIndex + 1
+      if next > state.setCount {
+        state.finished = true
+      } else {
+        state.setIndex = next
+        state.kilograms = state.planKilograms
+        state.reps = state.planReps
+      }
       await activity.update(ActivityContent(state: state, staleDate: nil))
     }
     return .result()
@@ -97,8 +117,9 @@ struct AdjustWeightIntent: LiveActivityIntent {
   func perform() async throws -> some IntentResult {
     for activity in Activity<FitBudWorkoutAttributes>.activities {
       var state = activity.content.state
-      guard state.phase == "logging" else { continue }
-      let next = max(0, state.kilograms + (direction >= 0 ? 2.5 : -2.5))
+      guard !state.finished else { continue }
+      let step = direction >= 0 ? 2.5 : -2.5
+      let next = max(0, state.kilograms + step)
       state.kilograms = (next * 10).rounded() / 10
       await activity.update(ActivityContent(state: state, staleDate: nil))
     }
@@ -119,42 +140,8 @@ struct AdjustRepsIntent: LiveActivityIntent {
   func perform() async throws -> some IntentResult {
     for activity in Activity<FitBudWorkoutAttributes>.activities {
       var state = activity.content.state
-      guard state.phase == "logging" else { continue }
+      guard !state.finished else { continue }
       state.reps = max(0, state.reps + (direction >= 0 ? 1 : -1))
-      await activity.update(ActivityContent(state: state, staleDate: nil))
-    }
-    return .result()
-  }
-}
-
-@available(iOS 17.0, *)
-struct AddRestIntent: LiveActivityIntent {
-  static var title: LocalizedStringResource = "Add 30 seconds"
-  static var openAppWhenRun: Bool = false
-
-  func perform() async throws -> some IntentResult {
-    for activity in Activity<FitBudWorkoutAttributes>.activities {
-      var state = activity.content.state
-      guard state.phase == "rest" else { continue }
-      let end = state.restEndsAt ?? Date()
-      state.restEndsAt = end.addingTimeInterval(30)
-      await activity.update(ActivityContent(state: state, staleDate: nil))
-    }
-    return .result()
-  }
-}
-
-@available(iOS 17.0, *)
-struct SkipRestIntent: LiveActivityIntent {
-  static var title: LocalizedStringResource = "Skip rest"
-  static var openAppWhenRun: Bool = false
-
-  func perform() async throws -> some IntentResult {
-    for activity in Activity<FitBudWorkoutAttributes>.activities {
-      var state = activity.content.state
-      guard state.phase == "rest" else { continue }
-      state.phase = "go"
-      state.restEndsAt = nil
       await activity.update(ActivityContent(state: state, staleDate: nil))
     }
     return .result()
@@ -176,11 +163,7 @@ struct FitBudLiveActivityWidget: Widget {
           .frame(width: 22, height: 22)
           .clipShape(RoundedRectangle(cornerRadius: 5))
       } compactTrailing: {
-        if context.state.phase == "rest", let end = context.state.restEndsAt {
-          Text(timerInterval: Date()...end, countsDown: true)
-        } else {
-          Text("Set \(context.state.setIndex)")
-        }
+        Text("Set \(context.state.setIndex) of \(context.state.setCount)")
       } minimal: {
         Text("\(context.state.setIndex)")
       }
@@ -188,43 +171,40 @@ struct FitBudLiveActivityWidget: Widget {
   }
 }
 
+private func openLink(_ raw: String) -> URL {
+  URL(string: raw) ?? URL(string: "fitbud://today/self")!
+}
+
 private struct LiveActivityLockView: View {
   let context: ActivityViewContext<FitBudWorkoutAttributes>
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("\(context.attributes.workoutName) · exercise \(context.attributes.exerciseIndex) of \(context.attributes.exerciseCount)")
+    VStack(alignment: .leading, spacing: 6) {
+      Text("FitBud · \(context.attributes.workoutName)")
+        .font(.caption)
       Text(context.state.exerciseName).font(.headline)
-      if context.state.phase == "logging" {
-        Text("Set \(context.state.setIndex) of \(context.state.setCount)")
-        HStack {
-          Button(intent: AdjustWeightIntent(direction: -1)) { Text("−") }
-          Text("\(context.state.kilograms, specifier: "%.1f") kg")
-          Button(intent: AdjustWeightIntent(direction: 1)) { Text("+") }
+      Text("Set \(context.state.setIndex) of \(context.state.setCount) · Last: \(formatKg(context.state.lastKilograms)) kg × \(context.state.lastReps)")
+        .font(.subheadline)
+      if let logged = context.state.loggedLine {
+        Text(logged).font(.caption)
+      }
+      HStack {
+        Text("\(formatKg(context.state.kilograms)) kg × \(context.state.reps)")
+          .font(.title2.bold())
+        Spacer()
+        Link("Open", destination: openLink(context.attributes.openUrl))
+        if !context.state.finished {
+          Button(intent: LogSetIntent(
+            exerciseName: context.state.exerciseName,
+            setIndex: context.state.setIndex,
+            kilograms: context.state.kilograms,
+            reps: context.state.reps
+          )) {
+            Image(systemName: "checkmark")
+          }
+          .buttonStyle(.borderedProminent)
+          .accessibilityLabel("Log set \(context.state.setIndex)")
         }
-        HStack {
-          Button(intent: AdjustRepsIntent(direction: -1)) { Text("−") }
-          Text("\(context.state.reps)")
-          Button(intent: AdjustRepsIntent(direction: 1)) { Text("+") }
-        }
-        Button(intent: LogSetIntent(
-          exerciseName: context.state.exerciseName,
-          setIndex: context.state.setIndex,
-          kilograms: context.state.kilograms,
-          reps: context.state.reps
-        )) {
-          Text("Log set \(context.state.setIndex)")
-        }
-        Link("Adjust in app", destination: URL(string: "fitbud://workout/active")!)
-      } else if context.state.phase == "rest", let end = context.state.restEndsAt {
-        Text("Set \(context.state.setIndex) logged · \(context.state.kilograms, specifier: "%.1f") kg × \(context.state.reps)")
-        Text(timerInterval: Date()...end, countsDown: true)
-        HStack {
-          Button(intent: AddRestIntent()) { Text("+30 s") }
-          Button(intent: SkipRestIntent()) { Text("Skip rest") }
-        }
-      } else {
-        Text("Set \(context.state.setIndex + 1) · Go")
       }
     }
   }
@@ -234,6 +214,40 @@ private struct LiveActivityExpandedView: View {
   let context: ActivityViewContext<FitBudWorkoutAttributes>
 
   var body: some View {
-    LiveActivityLockView(context: context)
+    VStack(alignment: .leading, spacing: 8) {
+      Text("FitBud · \(context.attributes.workoutName)")
+      Text(context.state.exerciseName).font(.headline)
+      Text("Set \(context.state.setIndex) of \(context.state.setCount) · Last: \(formatKg(context.state.lastKilograms)) kg × \(context.state.lastReps)")
+      if let logged = context.state.loggedLine {
+        Text(logged).font(.caption)
+      }
+      if !context.state.finished {
+        HStack {
+          Button(intent: AdjustWeightIntent(direction: -1)) { Text("−") }
+            .accessibilityLabel("Less weight")
+          Text("\(formatKg(context.state.kilograms)) kg")
+          Button(intent: AdjustWeightIntent(direction: 1)) { Text("+") }
+            .accessibilityLabel("More weight")
+        }
+        HStack {
+          Button(intent: AdjustRepsIntent(direction: -1)) { Text("−") }
+            .accessibilityLabel("Fewer reps")
+          Text("\(context.state.reps) reps")
+          Button(intent: AdjustRepsIntent(direction: 1)) { Text("+") }
+            .accessibilityLabel("More reps")
+        }
+        HStack {
+          Link("Open", destination: openLink(context.attributes.openUrl))
+          Button(intent: LogSetIntent(
+            exerciseName: context.state.exerciseName,
+            setIndex: context.state.setIndex,
+            kilograms: context.state.kilograms,
+            reps: context.state.reps
+          )) {
+            Text("Log set \(context.state.setIndex)")
+          }
+        }
+      }
+    }
   }
 }

@@ -35,11 +35,13 @@ export function mealPushCopy(
   hideDetails = false,
 ): { title: string; body: string } {
   return {
-    title: `${mealLabel} isn't logged yet`,
-    body: hideDetails
-      ? HIDDEN_LOCK_BODY
-      : "Tap if you ate as planned. Changed something? Open to log it.",
+    title: hideDetails ? HIDDEN_LOCK_BODY : `${mealLabel} isn't logged yet`,
+    body: hideDetails ? HIDDEN_LOCK_BODY : "Open it in Diet, or snooze for 30 minutes.",
   };
+}
+
+export function mealExpandedLine(mealLabel: string, clock: string): string {
+  return `${mealLabel} · ${clock}`;
 }
 
 export function checkinPushCopy(coachName?: string | null): {
@@ -62,31 +64,12 @@ export function notePushCopy(coachName?: string | null): {
   };
 }
 
-export function noteBannerCopy(coachName?: string | null): {
-  kicker: string;
-  title: string;
-  body: string;
-  mark: string;
-} {
-  const coach = coachOrFallback(coachName);
-  return {
-    kicker: "From your coach",
-    title: `${coach} has a note for you!`,
-    body: "Tap to read it on Today.",
-    mark: coach.slice(0, 1).toUpperCase(),
-  };
+export function noteBannerCopy(coachName?: string | null): { title: string } {
+  return { title: `${coachOrFallback(coachName)} has a note for you` };
 }
 
-export function inAppMealBannerCopy(mealLabel: string): {
-  kicker: string;
-  title: string;
-  body: string;
-} {
-  return {
-    kicker: `FitBud · ${mealLabel}`,
-    title: `${mealLabel} isn't logged yet`,
-    body: "Ate as planned? One tap logs it.",
-  };
+export function inAppMealBannerCopy(mealLabel: string): { title: string } {
+  return { title: `${mealLabel} isn't logged yet` };
 }
 
 function mealLabelFromRoute(notification: Notification): string {
@@ -164,7 +147,8 @@ export function notificationRowBody(
   }
   switch (notification.type) {
     case "meal_reminder":
-      return mealPushCopy(mealLabelFromRoute(notification)).body;
+      return mealPushCopy(mealLabelFromRoute(notification), context.hideLockDetails)
+        .body;
     case "workout_reminder":
       return "If you've already trained, log it in a tap. If today's not the day, that's okay too.";
     case "checkin_reminder":

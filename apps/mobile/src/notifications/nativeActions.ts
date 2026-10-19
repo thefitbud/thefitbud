@@ -1,8 +1,8 @@
 import { Platform } from "react-native";
-import { MEAL_REMINDER_SNOOZE_MINUTES } from "@fitbud/core";
 import {
   MEAL_ACTION_CATEGORY,
   MEAL_NOTIFICATION_ACTIONS,
+  quietWindow,
   snoozeMeal,
 } from "./actions";
 
@@ -47,7 +47,21 @@ export async function ensureMealNotificationActions(): Promise<void> {
     const mealAssignmentId =
       typeof data.mealAssignmentId === "string" ? data.mealAssignmentId : null;
     if (actionId === "meal_snooze_30") {
-      if (mealAssignmentId) snoozeMeal(mealAssignmentId);
+      if (mealAssignmentId) {
+        const result = snoozeMeal(mealAssignmentId, new Date(), quietWindow("Asia/Kolkata"));
+        if (result.ok) {
+          const title =
+            typeof response.notification.request.content.title === "string"
+              ? response.notification.request.content.title
+              : "Meal isn't logged yet";
+          void scheduleMealSnoozeNotification({
+            title,
+            body: "Open it in Diet, or snooze for 30 minutes.",
+            mealAssignmentId,
+            until: result.until,
+          });
+        }
+      }
       emit({ kind: "snooze", mealAssignmentId });
       return;
     }
@@ -66,6 +80,7 @@ export async function scheduleMealSnoozeNotification(input: {
   title: string;
   body: string;
   mealAssignmentId: string;
+  until: Date;
 }): Promise<"scheduled" | "needs-dev-build"> {
   if (Platform.OS === "web") return "needs-dev-build";
   const Notifications = await import("expo-notifications");
@@ -77,8 +92,8 @@ export async function scheduleMealSnoozeNotification(input: {
       data: { mealAssignmentId: input.mealAssignmentId },
     },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: MEAL_REMINDER_SNOOZE_MINUTES * 60,
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: input.until,
     },
   });
   return "scheduled";

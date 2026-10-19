@@ -92,22 +92,29 @@ Story: trainee **Rohan Mehta** (coach Rahul Verma), the same numbers as his web 
 - 25 is shown over the 5:40 pm Diet. The 26 button sits above the tab bar.
 - Compare: the built captures mix accounts and branches (ma = Aarav, mb = Rohan). TR-02/05/09/18/23 were recaptured on cursor/mb-trainee-workout-progress-c688, then db:reset was run.
 
-## Set 4 · notifications (19 Oct 2026, 27–30)
-- 27 Live Activity (TR-21): exercise, "Set 2 of 3 done", 58 s rest countdown, +30 s / Skip rest. The spec's optional "Done" button is not shown. 27b: expanded Dynamic Island plus compact pill.
-- 28 meal push: P-MEAL copy verbatim; actions Eaten as planned (background, logs via outbox), Snooze 30 min, Open Diet. "1 more from FitBud" shows grouping. No food names.
-- 29/29b in-app banners over Today (a banner is shown only while the app is open): meal reminder and coach note ("Tap to read it on Today"; note text never shown). Today behind is the static 7:30 demo, so its next-up card differs from the banner's Lunch (cosmetic).
-- 30 lock screen: P-CHK "Weekly check-in is ready" plus P-NOTE "Rahul has a note for you!". Text only, no % or streaks, nothing auto-sent; wording from 05-notifications.md.
-- New CSS: html/l3.css. Banner buttons are 44 pt tinted/primary pairs. The lock-screen clock has no am/pm, as on iOS (check.mjs 24h warning is expected).
+## Set 5 — minimal notifications (19 Oct 2026, replaces sets 4 and 4b)
+Philosophy: notifications and lock-screen surfaces are minimal reminders. They give one-tap logging where possible and make it easy to open the app for anything more. Few features, each easy to act on. Native iOS styling, FitBud app icon (html/assets/app-icon.png, from packages/brand/app/icon.png).
+- No rest timer anywhere on the lock screen, Live Activity or notifications: no countdown, no +30 s, no Skip rest.
+- Workout while locked or with the app closed: ONE active set. Exercise name, "Set 2 of 3", the planned "22.5 kg × 10", a primary "Log set" and a secondary "Open". No steppers, previous column or next-exercise list. Log set advances to the next set (27c, one "Set 2 logged" line). Lock screen = 27; Notification Centre with the phone unlocked = 27b; the compact Dynamic Island is a minimal pill ("Set 2 of 3").
+- Meal reminder (28): one line, "Lunch isn't logged yet". Two actions max: "Eaten as planned" (one tap logs it via the outbox) and "Open".
+- In-app banners (29, 29b): one short line with one action ("Eaten as planned"), or tap to open (coach note). 29 says Breakfast so it matches the 7:30 Today behind it.
+- Check-in and coach note (30): one-line reminders. Tapping opens the app; no inline actions. The note text is never shown.
+- Feasibility: Log set and Eaten as planned are iOS 17+ button intents (LiveActivityIntent or a notification action with no foreground). Open is a deep link. The device must be unlocked before a button runs.
 
-## Set 4b · Live Activity logging and real app icon (19 Oct 2026)
-Refs: Figma trainee_04 (weight and reps steppers plus a check; its "WhatsApp Live Sync" claims are dropped); Hevy (Live Activity marks a set done, rest timer ±15 s, Skip); Apple docs (iOS 17+ interactive Live Activities allow Button and Toggle via LiveActivityIntent only, no text fields; the device must be unlocked, so the first tap asks for Face ID).
-Feasibility per control:
-- Log set (27, 27b): feasible. A Button with a LiveActivityIntent writes the set to the shared outbox using the prefilled plan values. The Live Activity then switches to the rest state (27c).
-- Weight − / + (27): feasible. A button intent changes the draft value by one step (2.5 kg) and refreshes the activity. Values can only be stepped, not typed.
-- Reps − / + (27): feasible. A button intent changes the draft by 1 rep.
-- Adjust in app (27, 27b): feasible. A Link or widgetURL deep-links to /workout/:id/active. This is the only way to type a value, because text fields aren't allowed.
-- +30 s and Skip rest (27c, 27b rest): feasible. They are button intents that move or end the timer. The countdown itself uses a system timer (Text(timerInterval:)), so there are no per-second pushes.
-- Next set or exercise preview (27, 27c): feasible. It is plain state in ActivityKit content, updated by each intent.
-- Compact Dynamic Island (27b): feasible. It is a leading icon and trailing text; it has no buttons, since buttons exist only in the expanded view.
-- Not shown, because it is not feasible: typing a value, RPE entry, a note, or photo capture. These go through Adjust in app.
-- App icon: packages/brand/app/icon.png (1024 square, four dots with a coral ring), copied to html/assets/app-icon.png, rounded to 22% in 27–30.
+## Set 6 — researched notification logging (19 Oct 2026; supersedes Set 5 for 27, 27b, 27c, 28, 29; adds 28b and 27-android)
+Research (checked 19 Oct 2026):
+- Hevy: its Live Activity (iOS and Android) shows the prescribed weight and reps and marks a set complete without unlocking. It then shows a rest timer (±15 s, Skip). https://www.hevyapp.com/features/live-activity/ · https://help.hevyapp.com/hc/en-us/articles/35649846517399
+- StrongLifts and Fitbod: their Live Activities are glanceable (exercise, set progress, rest). Tapping or long-pressing the Dynamic Island opens the same card or the app. https://support.stronglifts.com/article/126-live-activities · https://help.fitbod.me/hc/en-us/articles/360058341233-iOS-Widget
+- Strong added a Lock Screen rest timer in Aug 2026. JEFIT has no confirmed lock-screen logging. https://shojin.fit/guides/workout-tracker-apps-compared
+- Ladder, Gymshark and Apple Workout: no lock-screen set logging was found in their listings. https://apps.apple.com/us/app/ladder-strength-training-plans/id1502936453 · https://apps.apple.com/us/app/gymshark-training-and-fitness/id1139151320
+- MyFitnessPal: reminders are per meal ("remind me if I haven't logged"), and logging happens in the app; Quick Log is in-app, a one-tap log at the current portion. https://support.myfitnesspal.com/hc/en-us/articles/360032622391 · https://support.myfitnesspal.com/hc/en-us/articles/360032622491
+- HealthifyMe: daily reminders that send you into the app (Snap photo log). Cronometer, Noom and Lose It: no quick-log notification actions found. So a one-tap "Eaten as planned" from the notification is a differentiator, and it is possible because FitBud has a coach plan to confirm against. https://www.healthifyme.com/track_calories/
+- iOS: Live Activities allow Button and Toggle via LiveActivityIntent only, with no text fields. On a locked device a button won't run until the user unlocks. https://apple-docs.everest.mt/docs/widgetkit/adding-interactivity-to-widgets-and-live-activities/ · https://developer.apple.com/documentation/appintents/liveactivityintent
+- iOS notifications: action buttons, plus UNTextInputNotificationAction for typing. A Notification Content Extension can draw a custom expanded view (iOS 12+ with UserInteractionEnabled). https://developer.apple.com/documentation/usernotificationsui/unnotificationcontentextension · https://docs.pushwoosh.com/developer/pushwoosh-sdk/ios-sdk/ios-push-customization/
+- Android: action buttons, RemoteInput, and DecoratedCustomViewStyle (collapsed 48 dp, expanded up to 252 dp; Android 12+ requires the system template). https://developer.android.com/develop/ui/views/notifications/custom-notification · https://developer.android.com/about/versions/12/behavior-changes-12
+Decisions and rationale:
+- 27 lock Live Activity: exercise, "Set 2 of 3 · Last: 20 kg × 10", the prefilled "22.5 kg × 10" big, a round check (56 pt, LiveActivityIntent) and "Open". No steppers on the lock card, because each tap needs an unlock and a small lock card should stay one decision. Still no rest timer.
+- 27c: after the check it advances to set 3, with one "Set 2 logged · 22.5 kg × 10" line, and Last updates.
+- 27b expanded (Notification Centre or long-press, phone unlocked): compact − / + for kg (2.5 kg step) and reps as 44 pt buttons. This is good UX because the plan value is right most of the time, so stepping by one notch beats opening the app, and buttons are all iOS allows. Typing goes through "Open". Compact Dynamic Island = a "Set 2 of 3" pill.
+- Meals (revised 19 Oct, 10:45 pm IST): food logging stays inside the app. Meal notifications have NO log action and NO food list, and never show food names. 28 (collapsed lock) and 28b (expanded) say "Lunch isn't logged yet" with exactly two actions: Open (deep-links to Diet at that meal) and Snooze 30 min (re-sends once after 30 min; quiet hours still apply, so a snooze that lands in quiet hours waits until they end). 29 (in-app banner) is one line; tapping it opens that meal, and it has no button. The earlier "Eaten as planned" quick-log and expanded food list are withdrawn.
+- 27-android (360 × 800): an expanded DecoratedCustomViewStyle with − / + (PendingIntent buttons), "Log set 2" and "Open"; the logged set collapses to one line.
