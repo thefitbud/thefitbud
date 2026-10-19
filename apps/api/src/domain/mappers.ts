@@ -19,6 +19,7 @@ import {
   type OnboardingFormVersion,
   type MealAssignment,
   type MealCompliance,
+  type MealComplianceLoggedItem,
   type MealPhotoIntent,
   type MealPrescription,
   type OnboardingReview,
@@ -54,6 +55,7 @@ import {
   labelFor,
   materializePlanContent,
   notificationInboxRoute,
+  unscaleNutrient,
 } from "@fitbud/core";
 import type {
   checkinFormTemplates,
@@ -614,8 +616,92 @@ export function parseMealPhotoIntentJson(
   return JSON.parse(photoIntentJson) as MealPhotoIntent;
 }
 
+function parseLoggedMealItems(
+  itemsJson: string | null,
+): MealComplianceLoggedItem[] {
+  if (!itemsJson) return [];
+  try {
+    const raw = JSON.parse(itemsJson) as unknown;
+    if (!Array.isArray(raw)) return [];
+    const out: MealComplianceLoggedItem[] = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object") continue;
+      const row = entry as Record<string, unknown>;
+      const custom =
+        row.customFood && typeof row.customFood === "object"
+          ? (row.customFood as Record<string, unknown>)
+          : null;
+      const nameFromCustom =
+        typeof custom?.name === "string" ? custom.name.trim() : "";
+      const nameFromRow =
+        typeof row.name === "string"
+          ? row.name.trim()
+          : typeof row.foodName === "string"
+            ? row.foodName.trim()
+            : "";
+      const name = nameFromCustom || nameFromRow;
+      if (!name) continue;
+      const quantity =
+        typeof row.quantity === "number"
+          ? row.quantity
+          : typeof custom?.quantity === "number"
+            ? custom.quantity
+            : null;
+      const servingLabel =
+        typeof row.servingLabel === "string"
+          ? row.servingLabel
+          : typeof custom?.servingLabel === "string"
+            ? custom.servingLabel
+            : null;
+      const energyKcal =
+        typeof custom?.kcal === "number"
+          ? custom.kcal
+          : typeof row.kcal === "number"
+            ? row.kcal
+            : typeof row.energyKcal === "number"
+              ? row.energyKcal
+              : null;
+      out.push({
+        name,
+        quantity,
+        servingLabel,
+        energyKcal,
+        proteinG:
+          typeof custom?.protein === "number"
+            ? custom.protein
+            : typeof row.protein === "number"
+              ? row.protein
+              : null,
+        carbsG:
+          typeof custom?.carbs === "number"
+            ? custom.carbs
+            : typeof row.carbs === "number"
+              ? row.carbs
+              : null,
+        fatG:
+          typeof custom?.fat === "number"
+            ? custom.fat
+            : typeof row.fat === "number"
+              ? row.fat
+              : null,
+        custom: Boolean(custom) || row.custom === true,
+        foodId: typeof row.foodId === "string" ? row.foodId : undefined,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export function mapMealCompliance(row: MealComplianceRow): MealCompliance {
   const photoIntent = parseMealPhotoIntentJson(row.photoIntentJson);
+  const loggedItems = parseLoggedMealItems(row.itemsJson);
+  const hasScaled =
+    row.kcalScaled != null ||
+    row.proteinScaled != null ||
+    row.carbsScaled != null ||
+    row.fatScaled != null;
   return {
     id: row.id,
     assignmentId: row.assignmentId,
@@ -637,6 +723,23 @@ export function mapMealCompliance(row: MealComplianceRow): MealCompliance {
           }
         : null),
     mediaAssetId: row.mediaAssetId ?? null,
+    ...(loggedItems.length > 0 ? { loggedItems } : {}),
+    ...(hasScaled
+      ? {
+          loggedTotals: {
+            energyKcal:
+              row.kcalScaled != null ? unscaleNutrient(row.kcalScaled) : null,
+            proteinG:
+              row.proteinScaled != null
+                ? unscaleNutrient(row.proteinScaled)
+                : null,
+            carbsG:
+              row.carbsScaled != null ? unscaleNutrient(row.carbsScaled) : null,
+            fatG:
+              row.fatScaled != null ? unscaleNutrient(row.fatScaled) : null,
+          },
+        }
+      : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

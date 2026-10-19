@@ -68,6 +68,22 @@ export const mealPhotoIntentSchema = z.object({
 });
 export type MealPhotoIntent = z.infer<typeof mealPhotoIntentSchema>;
 
+/** Display row for foods logged against a meal (TW-17 meal panel). */
+export const mealComplianceLoggedItemSchema = z.object({
+  name: z.string().min(1).max(160),
+  quantity: z.number().positive().max(100).nullable().optional(),
+  servingLabel: z.string().max(120).nullable().optional(),
+  energyKcal: z.number().nonnegative().nullable().optional(),
+  proteinG: z.number().nonnegative().nullable().optional(),
+  carbsG: z.number().nonnegative().nullable().optional(),
+  fatG: z.number().nonnegative().nullable().optional(),
+  custom: z.boolean().optional(),
+  foodId: uuidSchema.optional(),
+});
+export type MealComplianceLoggedItem = z.infer<
+  typeof mealComplianceLoggedItemSchema
+>;
+
 export const mealComplianceSchema = z.object({
   id: uuidSchema,
   assignmentId: uuidSchema,
@@ -83,6 +99,17 @@ export const mealComplianceSchema = z.object({
   photoIntent: mealPhotoIntentSchema.nullable(),
   /** Linked R2 media asset when upload completed (D1). */
   mediaAssetId: uuidSchema.nullable(),
+  /** Parsed logged foods when the trainee recorded a change (TW-17). */
+  loggedItems: z.array(mealComplianceLoggedItemSchema).optional(),
+  /** Totals for logged foods (kcal / macros). Null means unknown. */
+  loggedTotals: z
+    .object({
+      energyKcal: z.number().nonnegative().nullable(),
+      proteinG: z.number().nonnegative().nullable(),
+      carbsG: z.number().nonnegative().nullable(),
+      fatG: z.number().nonnegative().nullable(),
+    })
+    .optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
