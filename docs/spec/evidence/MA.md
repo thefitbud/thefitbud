@@ -213,6 +213,6 @@ INDB recipe portion labels stripped via `cleanFoodLabel`.
 
 | Item | Result |
 |---|---|
-| iPad tap targets (links, tabs, inputs, workspace, inbox) | PASS code (`tap-targets.css` + `tw-g-ipad.spec.ts` asserts); WebKit run blocked when API crashed mid-reset |
+| iPad tap targets (links, tabs, inputs, workspace, inbox) | PASS `tw-g-ipad.spec.ts` WebKit portrait — 3/3 including workspace+inbox **0 offenders** |
 | Reactivate Today empty plan | PASS preparing empty state + closed `effectiveTo` |
 | Hide Review check-in post-reactivate | PASS `pendingReviewCheckin` scoped to `reactivatedAt` |
