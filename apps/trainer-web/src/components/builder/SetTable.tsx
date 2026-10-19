@@ -1,4 +1,5 @@
 import type { WorkoutSetTarget } from "@fitbud/contracts";
+import { OverflowMenu } from "../OverflowMenu";
 import { sortedByOrder } from "../plan-composition";
 
 type SetPatch = Partial<
@@ -38,11 +39,13 @@ export function SetTable({
             <th scope="col">Reps</th>
             <th scope="col">Load</th>
             <th scope="col">RPE</th>
-            <th scope="col">Rest (s)</th>
+            <th scope="col">Rest</th>
             <th scope="col">Notes</th>
-            <th scope="col">
-              <span className="sr-only">Actions</span>
-            </th>
+            {!readOnly ? (
+              <th scope="col">
+                <span className="sr-only">Actions</span>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -75,7 +78,7 @@ export function SetTable({
                 <input
                   type="text"
                   maxLength={80}
-                  placeholder="kg or RPE 7"
+                  placeholder="kg"
                   aria-label={`Set ${set.order} load`}
                   value={set.loadLabel ?? ""}
                   disabled={readOnly}
@@ -105,6 +108,7 @@ export function SetTable({
                   max={3600}
                   step={15}
                   aria-label={`Set ${set.order} rest seconds`}
+                  title="Rest seconds"
                   value={set.restSeconds ?? ""}
                   disabled={readOnly}
                   onChange={(event) =>
@@ -124,30 +128,27 @@ export function SetTable({
                   }
                 />
               </td>
-              <td className="set-actions">
-                {readOnly ? null : (
-                  <>
-                    <button
-                      type="button"
-                      className="button-ghost button-sm"
-                      onClick={() => onDuplicate(set.id)}
-                      aria-label={`Duplicate set ${set.order}`}
-                      title="Duplicate set (⌘D)"
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      className="button-ghost button-sm"
-                      onClick={() => onRemove(set.id)}
-                      aria-label={`Delete set ${set.order}`}
-                      disabled={rows.length <= 1}
-                    >
-                      Delete
-                    </button>
-                  </>
-                )}
-              </td>
+              {!readOnly ? (
+                <td className="set-actions">
+                  <OverflowMenu
+                    label={`Set ${set.order} actions`}
+                    items={[
+                      {
+                        id: "duplicate",
+                        label: "Duplicate",
+                        onSelect: () => onDuplicate(set.id),
+                      },
+                      {
+                        id: "delete",
+                        label: "Delete",
+                        destructive: true,
+                        disabled: rows.length <= 1,
+                        onSelect: () => onRemove(set.id),
+                      },
+                    ]}
+                  />
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

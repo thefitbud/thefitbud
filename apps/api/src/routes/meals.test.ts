@@ -1200,6 +1200,15 @@ describe("meal assignment and compliance", () => {
       testEnv(),
     );
     expect(assigned.status).toBe(200);
+    const assignedBody = (await assigned.json()) as {
+      data: {
+        replaced: { workouts: number; meals: number };
+        created: { workouts: number; meals: number };
+      };
+    };
+    // Dry-run must count today's recreated unlogged slots the same as publish.
+    expect(dryBody.data.created.meals).toBe(assignedBody.data.created.meals);
+    expect(dryBody.data.replaced.meals).toBe(assignedBody.data.replaced.meals);
 
     const after = await app.request(
       `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${today}`,

@@ -214,7 +214,11 @@ async function countWouldReplaceInRange(
   return { workouts, meals };
 }
 
-/** Non-mutating: how many new assignment rows insert* would create. */
+/**
+ * Non-mutating preview of insert* counts after reconcile would run.
+ * Matches publish: unlogged/unexecuted scheduled rows are superseded first,
+ * so only logged meals (and executed workouts) block recreation.
+ */
 async function countWouldCreate(
   db: Db,
   input: {
@@ -238,8 +242,13 @@ async function countWouldCreate(
         workoutDayId: workoutAssignments.workoutDayId,
         localDate: workoutAssignments.localDate,
         scheduleStatus: workoutAssignments.scheduleStatus,
+        executionId: workoutExecutions.id,
       })
       .from(workoutAssignments)
+      .leftJoin(
+        workoutExecutions,
+        eq(workoutExecutions.assignmentId, workoutAssignments.id),
+      )
       .where(
         and(
           eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
@@ -255,12 +264,14 @@ async function countWouldCreate(
         .filter((row) => row.planVersionId === input.planVersionId)
         .map((row) => `${row.workoutDayId}:${row.localDate}`),
     );
+    // After reconcile, only executed workouts stay scheduled and block the date.
     const blockedDates = new Set(
       existing
         .filter(
           (row) =>
             row.scheduleStatus === "scheduled" &&
-            row.planVersionId !== input.planVersionId,
+            row.planVersionId !== input.planVersionId &&
+            row.executionId != null,
         )
         .map((row) => row.localDate),
     );
@@ -281,8 +292,13 @@ async function countWouldCreate(
         mealName: mealAssignments.mealName,
         localDate: mealAssignments.localDate,
         scheduleStatus: mealAssignments.scheduleStatus,
+        complianceId: mealCompliance.id,
       })
       .from(mealAssignments)
+      .leftJoin(
+        mealCompliance,
+        eq(mealCompliance.assignmentId, mealAssignments.id),
+      )
       .where(
         and(
           eq(mealAssignments.coachingRelationshipId, input.relationshipId),
@@ -298,12 +314,14 @@ async function countWouldCreate(
         .filter((row) => row.planVersionId === input.planVersionId)
         .map((row) => `${row.mealPrescriptionId}:${row.localDate}`),
     );
+    // After reconcile, only logged meals stay scheduled and keep their slot.
     const keptSlots = new Set(
       existing
         .filter(
           (row) =>
             row.scheduleStatus === "scheduled" &&
-            row.planVersionId !== input.planVersionId,
+            row.planVersionId !== input.planVersionId &&
+            row.complianceId != null,
         )
         .map((row) => `${row.mealName.trim().toLowerCase()}:${row.localDate}`),
     );
