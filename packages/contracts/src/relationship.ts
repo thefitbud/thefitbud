@@ -95,6 +95,13 @@ export type AcceptInvitationWithTokenResponse = z.infer<
 >;
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequestSchema>;
 
+export const pendingReactivationSchema = z.object({
+  requestId: uuidSchema,
+  expiresAt: isoDateTimeSchema,
+  intakeUpdateRequested: z.boolean(),
+});
+export type PendingReactivation = z.infer<typeof pendingReactivationSchema>;
+
 export const coachingRelationshipSchema = z.object({
   id: uuidSchema,
   trainerUserId: uuidSchema,
@@ -106,6 +113,8 @@ export const coachingRelationshipSchema = z.object({
   endedAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
+  /** Present on relationship read when a trainee reactivation request is pending. */
+  pendingReactivation: pendingReactivationSchema.nullable().optional(),
 });
 export type CoachingRelationship = z.infer<typeof coachingRelationshipSchema>;
 

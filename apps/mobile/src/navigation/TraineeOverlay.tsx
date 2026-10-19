@@ -68,6 +68,7 @@ type Props = {
   onOpen: TraineeOverlayOpener;
   onSignOut: () => void;
   onNotificationNavigate?: (link: NotificationDeepLink) => void;
+  onCoachingResumed?: (relationship: CoachingRelationship) => void;
 };
 
 export function TraineeOverlayHost({
@@ -79,8 +80,10 @@ export function TraineeOverlayHost({
   onOpen,
   onSignOut,
   onNotificationNavigate,
+  onCoachingResumed,
 }: Props) {
   const { api, me } = useAuth();
+  const coachName = me?.trainerProfile?.displayName ?? "Your coach";
   const [mealAssignment, setMealAssignment] = useState<MealAssignment | null>(
     null,
   );
@@ -245,8 +248,13 @@ export function TraineeOverlayHost({
     case "ended":
       return (
         <EndedCoachingScreen
+          relationship={relationship}
+          coachName={coachName}
           onOpenHistory={() => onOpen({ screen: "past_coaching" })}
           onSignOut={onSignOut}
+          onCoachingResumed={(updated) => {
+            onCoachingResumed?.(updated);
+          }}
         />
       );
     case "deep_link":
@@ -261,7 +269,14 @@ export function TraineeOverlayHost({
         />
       );
     case "past_coaching":
-      return <PastCoachingScreen onBack={onClose} />;
+      return (
+        <PastCoachingScreen
+          onBack={onClose}
+          showEndedBanner={relationship.status === "ended"}
+          coachName={coachName}
+          endedAt={relationship.endedAt}
+        />
+      );
     case "widget_tips":
       return <WidgetTipsScreen onBack={onClose} />;
     case "privacy":

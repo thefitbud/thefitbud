@@ -462,6 +462,17 @@ export class FitBudApiClient {
     );
   }
 
+  async confirmReactivation(
+    relationshipId: string,
+  ): Promise<CoachingRelationship> {
+    return this.request(
+      "POST",
+      `/relationships/${encodeURIComponent(relationshipId)}/reactivate/confirm`,
+      coachingRelationshipSchema,
+      { auth: true },
+    );
+  }
+
   async acceptInvitation(
     body: AcceptInvitationRequest,
   ): Promise<AcceptInvitationResponse> {

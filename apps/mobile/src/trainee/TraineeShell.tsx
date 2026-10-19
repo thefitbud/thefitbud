@@ -66,6 +66,7 @@ export function TraineeShell({
     me,
     signOut,
     refreshSession,
+    setActiveRelationship,
     api,
     pendingNotificationLink,
     clearPendingNotificationLink,
@@ -313,6 +314,15 @@ export function TraineeShell({
     relationship.id,
   ]);
 
+  const handleCoachingResumed = useCallback(
+    (updated: CoachingRelationship) => {
+      setActiveRelationship(updated);
+      setOverlay(null);
+      void refreshSession();
+    },
+    [refreshSession, setActiveRelationship],
+  );
+
   if (relationship.status === "ended" && overlay?.screen !== "past_coaching") {
     return (
       <TraineeOverlayHost
@@ -322,6 +332,7 @@ export function TraineeShell({
         onClose={() => setOverlay({ screen: "past_coaching" })}
         onOpen={openOverlay}
         onSignOut={signOut}
+        onCoachingResumed={handleCoachingResumed}
       />
     );
   }
@@ -369,6 +380,7 @@ export function TraineeShell({
         onOpen={openOverlay}
         onSignOut={signOut}
         onNotificationNavigate={handleNotificationNavigate}
+        onCoachingResumed={handleCoachingResumed}
       />
     );
   }

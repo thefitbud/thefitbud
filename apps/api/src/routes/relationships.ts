@@ -3,7 +3,7 @@ import {
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   coachingRelationshipSchema,
@@ -156,11 +156,39 @@ relationshipRoutes.get(
     }
 
     const statuses = await deriveOnboardingStatusForRelationships(db, [row]);
+    const base = mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending");
+    let pendingReactivation: {
+      requestId: string;
+      expiresAt: string;
+      intakeUpdateRequested: boolean;
+    } | null = null;
+    if (row.status === "ended") {
+      const now = new Date().toISOString();
+      const [pending] = await db
+        .select()
+        .from(reactivationRequests)
+        .where(
+          and(
+            eq(reactivationRequests.relationshipId, relationshipId),
+            eq(reactivationRequests.status, "pending"),
+            gt(reactivationRequests.expiresAt, now),
+          ),
+        )
+        .limit(1);
+      if (pending) {
+        pendingReactivation = {
+          requestId: pending.id,
+          expiresAt: pending.expiresAt,
+          intakeUpdateRequested: pending.intakeUpdateRequested,
+        };
+      }
+    }
     return ok(
       c,
-      coachingRelationshipSchema.parse(
-        mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending"),
-      ),
+      coachingRelationshipSchema.parse({
+        ...base,
+        pendingReactivation,
+      }),
     );
   },
 );
