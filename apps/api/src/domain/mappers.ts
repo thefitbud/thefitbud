@@ -752,6 +752,7 @@ export function mapMealAssignment(
   row: MealAssignmentRow,
   compliance: MealComplianceRow | null,
   nowIso: string,
+  lock?: { locked: boolean; reason: string | null },
 ): MealAssignment {
   return {
     id: row.id,
@@ -775,6 +776,8 @@ export function mapMealAssignment(
     supersededByPlanVersionId: row.supersededByPlanVersionId,
     prescription: parseMealPrescriptionJson(row.mealPrescriptionJson),
     compliance: compliance ? mapMealCompliance(compliance) : null,
+    loggingLocked: lock?.locked ?? false,
+    loggingLockReason: lock?.reason ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

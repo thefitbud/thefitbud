@@ -29,6 +29,7 @@ type Props = {
   onSignIn: (identifier: string, password: string) => Promise<void>;
   onUseCode: () => void;
   onForgotPassword: () => void;
+  onHaveInviteCode?: () => void;
   inviteTrainerName?: string | null;
 };
 
@@ -38,6 +39,7 @@ export function SignInScreen({
   onSignIn,
   onUseCode,
   onForgotPassword,
+  onHaveInviteCode,
   inviteTrainerName,
 }: Props) {
   const { config } = useConfig();
@@ -132,6 +134,17 @@ export function SignInScreen({
           >
             <Text style={styles.link}>Sign in with a code instead</Text>
           </Pressable>
+
+          {onHaveInviteCode ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Have a code"
+              onPress={onHaveInviteCode}
+              style={styles.linkWrap}
+            >
+              <Text style={styles.link}>Have a code?</Text>
+            </Pressable>
+          ) : null}
 
           {waSoon ? (
             <View style={styles.note} accessibilityLabel="WhatsApp Coming soon">

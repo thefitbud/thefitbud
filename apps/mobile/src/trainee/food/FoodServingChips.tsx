@@ -47,6 +47,8 @@ export function FoodServingChips({ api, item, onSelect }: Props) {
       {presets.map((preset) => (
         <Pressable
           key={preset.id}
+          accessibilityRole="button"
+          accessibilityLabel={preset.label}
           style={styles.servingChip}
           onPress={() =>
             onSelect(item, preset.quantity, preset.servingId ?? item.defaultServingId ?? undefined)

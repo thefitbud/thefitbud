@@ -21,6 +21,7 @@ import { configurationRoutes } from "./routes/configurations";
 import { exceptionRoutes } from "./routes/exceptions";
 import { fileRoutes } from "./routes/files";
 import { invitationRoutes } from "./routes/invitations";
+import { inviteLandingRoutes } from "./routes/invite-landing";
 import { onboardingRoutes } from "./routes/onboarding";
 import {
   subscriptionAttentionRoutes,
@@ -79,6 +80,7 @@ app.route("/dev", devRoutes);
 app.route("/auth", authRoutes);
 app.route("/me", meRoutes);
 app.route("/invitations", invitationRoutes);
+app.route("/i", inviteLandingRoutes);
 app.route("/relationships", subscriptionRoutes);
 app.route("/relationships", relationshipRoutes);
 app.route("/subscriptions", subscriptionAttentionRoutes);

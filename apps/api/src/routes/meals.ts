@@ -26,6 +26,7 @@ import { createDb } from "../db/client";
 import {
   coachingConfigurations,
   coachingRelationships,
+  exceptions,
   mealAssignments,
   mealCompliance,
   mediaAssets,
@@ -434,10 +435,35 @@ mealRoutes.get(
       );
 
     const now = nowIso();
+    const assignmentIds = rows.map((row) => row.assignment.id);
+    const lockByAssignment = new Map<string, string>();
+    if (assignmentIds.length > 0) {
+      const exceptionRows = await db
+        .select({
+          sourceEntityId: exceptions.sourceEntityId,
+          status: exceptions.status,
+        })
+        .from(exceptions)
+        .where(
+          and(
+            eq(exceptions.coachingRelationshipId, relationship.id),
+            eq(exceptions.sourceEntityType, "meal_assignment"),
+          ),
+        );
+      for (const ex of exceptionRows) {
+        if (ex.status === "resolved" && assignmentIds.includes(ex.sourceEntityId)) {
+          lockByAssignment.set(ex.sourceEntityId, "exception_resolved");
+        }
+      }
+    }
     const items = rows
-      .map((row) =>
-        mapMealAssignment(row.assignment, row.compliance ?? null, now),
-      )
+      .map((row) => {
+        const reason = lockByAssignment.get(row.assignment.id) ?? null;
+        return mapMealAssignment(row.assignment, row.compliance ?? null, now, {
+          locked: reason != null,
+          reason,
+        });
+      })
       .sort((left, right) => {
         if (left.localDate !== right.localDate) {
           return left.localDate.localeCompare(right.localDate);

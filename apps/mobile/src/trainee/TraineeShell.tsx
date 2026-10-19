@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import {
+  CalendarDays,
+  CircleUserRound,
+  Dumbbell,
+  House,
+  Utensils,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import type {
@@ -41,12 +48,16 @@ import type { NotificationDeepLink } from "../notifications/routing";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
 
-const TABS: Array<{ id: TraineeTab; label: string }> = [
-  { id: "today", label: "Today" },
-  { id: "workout", label: "Workout" },
-  { id: "diet", label: "Diet" },
-  { id: "progress", label: "Progress" },
-  { id: "more", label: "More" },
+const TABS: Array<{
+  id: TraineeTab;
+  label: string;
+  Icon: typeof House;
+}> = [
+  { id: "today", label: "Today", Icon: House },
+  { id: "workout", label: "Workout", Icon: Dumbbell },
+  { id: "diet", label: "Diet", Icon: Utensils },
+  { id: "progress", label: "Progress", Icon: CalendarDays },
+  { id: "more", label: "More", Icon: CircleUserRound },
 ];
 
 const TAB_TITLES: Record<TraineeTab, string> = {
@@ -467,6 +478,8 @@ export function TraineeShell({
       <View accessibilityRole="tablist" style={styles.tabBar}>
         {TABS.map((item) => {
           const selected = item.id === tab;
+          const Icon = item.Icon;
+          const tint = selected ? colors.indigo : colors.midGrey;
           return (
             <Pressable
               key={item.id}
@@ -476,6 +489,13 @@ export function TraineeShell({
               onPress={() => setTab(item.id)}
               style={styles.tab}
             >
+              <Icon
+                size={22}
+                color={tint}
+                strokeWidth={selected ? 2.25 : 1.75}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              />
               <Text
                 style={[
                   styles.tabLabel,

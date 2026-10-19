@@ -24,10 +24,18 @@ async function assertTapTargets(root: Locator, label: string) {
       "[role='tab']",
       "input[type='checkbox']",
       "input[type='radio']",
+      "input[type='search']",
+      "input[type='text']",
       ".overflow-menu-trigger",
       ".filter-pill",
       ".segment-tab",
+      ".segment-btn",
       ".button-sm",
+      ".link",
+      ".text-link",
+      ".wsh-tab",
+      ".wsh-crumb a",
+      ".filter-search",
     ].join(",");
     const seen = new Set<Element>();
     const bad: Array<{ tag: string; text: string; w: number; h: number }> = [];
@@ -102,5 +110,47 @@ test.describe("TW-G iPad shell smoke", () => {
     await page.goto("/clients?status=ended");
     await expect(page.getByText("Kavya")).toBeVisible({ timeout: 20_000 });
     await assertTapTargets(page.locator("body"), "Ended roster");
+  });
+
+  test("workspace and inbox controls meet 44×44 tap targets", async ({
+    page,
+  }) => {
+    // Resolve Aarav's workspace via directory so the ID stays seed-stable.
+    const token = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          identifier: "rahul.coach@demo.fitbud.test",
+          password: "FitBud-demo-2026",
+        }),
+      });
+      const json = (await res.json()) as { data?: { token?: string } };
+      return json.data?.token ?? null;
+    });
+    expect(token).toBeTruthy();
+    const directory = await page.evaluate(async (authToken) => {
+      const res = await fetch("/api/clients?limit=50", {
+        headers: { authorization: `Bearer ${authToken}` },
+      });
+      return (await res.json()) as {
+        data?: { items?: Array<{ traineeDisplayName?: string; relationshipId?: string }> };
+      };
+    }, token);
+    const aarav = directory.data?.items?.find((item) =>
+      (item.traineeDisplayName ?? "").toLowerCase().includes("aarav"),
+    );
+    expect(aarav?.relationshipId).toBeTruthy();
+    await page.goto(`/clients/${aarav!.relationshipId}/overview`);
+    await expect(page.getByRole("heading", { name: /Aarav/i })).toBeVisible({
+      timeout: 25_000,
+    });
+    await assertTapTargets(page.locator("body"), "Workspace overview");
+
+    await page.goto("/checkins");
+    await expect(page.getByRole("heading", { name: /Check-ins/i })).toBeVisible({
+      timeout: 20_000,
+    });
+    await assertTapTargets(page.locator("body"), "Inbox");
   });
 });

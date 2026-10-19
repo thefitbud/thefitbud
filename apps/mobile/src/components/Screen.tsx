@@ -47,7 +47,7 @@ export function Screen({
   onRefresh,
 }: Props) {
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} accessibilityRole="summary">
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -57,37 +57,39 @@ export function Screen({
           ) : undefined
         }
       >
-        {showHeader ? (
-          <>
-            {chrome === "page"
-              ? (() => {
-                  const display = brandDisplay ?? "text";
-                  if (display === "none") return null;
-                  if (display === "mark") {
-                    return <BrandMark size={36} />;
-                  }
-                  return (
-                    <Text style={styles.brand} accessibilityRole="header">
-                      FitBud
-                    </Text>
-                  );
-                })()
-              : null}
-            <Text
-              style={[styles.title, chrome === "app" ? styles.titleApp : null]}
-              accessibilityRole="header"
-              accessibilityLabel={title}
-            >
-              {title}
-            </Text>
-            {subtitle ? (
-              <Text style={styles.subtitle} accessibilityRole="text">
-                {subtitle}
+        <View accessibilityRole="main" style={styles.main}>
+          {showHeader ? (
+            <>
+              {chrome === "page"
+                ? (() => {
+                    const display = brandDisplay ?? "text";
+                    if (display === "none") return null;
+                    if (display === "mark") {
+                      return <BrandMark size={36} />;
+                    }
+                    return (
+                      <Text style={styles.brand} accessibilityRole="header">
+                        FitBud
+                      </Text>
+                    );
+                  })()
+                : null}
+              <Text
+                style={[styles.title, chrome === "app" ? styles.titleApp : null]}
+                accessibilityRole="header"
+                accessibilityLabel={title}
+              >
+                {title}
               </Text>
-            ) : null}
-          </>
-        ) : null}
-        <View style={styles.body}>{children}</View>
+              {subtitle ? (
+                <Text style={styles.subtitle} accessibilityRole="text">
+                  {subtitle}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+          <View style={styles.body}>{children}</View>
+        </View>
       </ScrollView>
       {footer ? <View style={styles.footer}>{footer}</View> : null}
     </SafeAreaView>
@@ -103,6 +105,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
     paddingBottom: spacing.xxxl,
+  },
+  main: {
+    flexGrow: 1,
   },
   brand: {
     fontFamily: fontFamilySemiBold,

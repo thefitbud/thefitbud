@@ -195,8 +195,8 @@ export async function buildWeekReadModel(
   let mealsAssigned = 0;
   let mealsLogged = 0;
   for (const row of meals) {
-    // Exclude future meal slots from "Meals logged so far".
-    if (Date.parse(row.assignment.windowStartsAt) > nowMs) continue;
+    // Denominator is every planned meal slot for the week (plan length),
+    // not "windows that have started" — avoids "4 of 3" when dinner is early-logged.
     mealsAssigned += 1;
     const status = deriveMealAssignmentStatus({
       nowIso: input.nowIso,
@@ -207,7 +207,8 @@ export async function buildWeekReadModel(
     if (
       status === "confirmed" ||
       status === "modified" ||
-      status === "logged_later"
+      status === "logged_later" ||
+      status === "skipped"
     ) {
       mealsLogged += 1;
     }
@@ -246,11 +247,8 @@ export async function buildWeekReadModel(
     });
 
     const mealsLoggedDay = mealSlots.filter((s) => s === "logged").length;
-    const mealsAssignedDay =
-      date > today
-        ? dayMeals.length
-        : dayMeals.filter((m) => Date.parse(m.assignment.windowStartsAt) <= nowMs)
-            .length;
+    // Always count all planned slots for the day (matches trainee Diet "N of M").
+    const mealsAssignedDay = dayMeals.length;
 
     let workoutLabel = "Rest";
     let workoutState: WeekDayState = "rest";

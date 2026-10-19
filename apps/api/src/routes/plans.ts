@@ -492,7 +492,12 @@ planRoutes.get(
       .limit(1);
 
     const row = rows[0];
-    if (!row) {
+    // Closed horizon (end coaching) leaves status=effective but effectiveTo in
+    // the past — treat as no live plan so reactivation shows the waiting state.
+    const closed =
+      row?.version.effectiveTo != null &&
+      Date.parse(row.version.effectiveTo) <= Date.parse(now);
+    if (!row || closed) {
       return ok(
         c,
         effectivePlanResponseSchema.parse({ plan: null, version: null }),

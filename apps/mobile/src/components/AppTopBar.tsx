@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, View } from "react-native";
+import { Bell } from "lucide-react-native";
 import { Text } from "./Text";
 import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
 import { SyncIndicator } from "./SyncIndicator";
@@ -53,7 +54,13 @@ export function AppTopBar({
             onPress={onOpenNotifications}
             style={styles.bell}
           >
-            <Text style={styles.bellIcon}>🔔</Text>
+            <Bell
+              size={22}
+              color={colors.deepNavy}
+              strokeWidth={2}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            />
             {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
           </Pressable>
         ) : null}
@@ -102,7 +109,7 @@ const styles = StyleSheet.create({
   actions: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   bell: {
     alignItems: "center",
@@ -111,16 +118,13 @@ const styles = StyleSheet.create({
     minWidth: 44,
     position: "relative",
   },
-  bellIcon: {
-    fontSize: 20,
-  },
   unreadDot: {
-    backgroundColor: colors.indigo,
-    borderRadius: 4,
-    height: 8,
+    backgroundColor: colors.warning,
+    borderRadius: 5,
+    height: 10,
     position: "absolute",
-    right: 6,
-    top: 6,
-    width: 8,
+    right: 8,
+    top: 8,
+    width: 10,
   },
 });

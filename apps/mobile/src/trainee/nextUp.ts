@@ -94,14 +94,24 @@ export function nextUp(input: {
   return null;
 }
 
-/** Label for the hero eyebrow, e.g. "Next up · in 30 min" / "Overdue". */
+/** Format a positive minute countdown as "in 2 h 31 min" / "in 45 min". */
+export function formatCountdown(totalMinutes: number): string {
+  if (totalMinutes <= 0) return "now";
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hours <= 0) return `in ${mins} min`;
+  if (mins === 0) return `in ${hours} h`;
+  return `in ${hours} h ${mins} min`;
+}
+
+/** Label for the hero eyebrow, e.g. "Next up · in 2 h 31 min" / "Overdue". */
 export function nextUpEyebrow(hero: NextUpHero, now = new Date()): string {
   if (hero.kind === "meal") {
     if (hero.reason === "overdue" || hero.meal.status === "overdue") {
       return "Overdue";
     }
     const mins = minutesUntil(hero.meal.windowStartsAt, now);
-    if (mins > 0) return `Next up · in ${mins} min`;
+    if (mins > 0) return `Next up · ${formatCountdown(mins)}`;
     if (mins >= -60) return "Next up · now";
     return "Next up";
   }

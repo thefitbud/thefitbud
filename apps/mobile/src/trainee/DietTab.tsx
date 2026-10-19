@@ -16,10 +16,16 @@ import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { TraineeDateNavigator } from "./TraineeDateNavigator";
-import { confirmMealAssignment, skipMealAssignment } from "./mealActions";
+import {
+  confirmMealAssignment,
+  MealSyncError,
+  skipMealAssignment,
+} from "./mealActions";
 import {
   canLogMealOnDate,
+  cleanFoodLabel,
   mealKcalFromDayTotals,
+  mealLockCopy,
 } from "./mealHelpers";
 import {
   buildNutritionRings,
@@ -30,6 +36,7 @@ import {
   scheduledAssignments,
   sortMealsByTime,
 } from "./scheduledAssignments";
+import { invalidateRelationshipDayData, subscribeAll } from "./dataCache";
 import { WebNutritionSummary } from "./web/WebTraineeChrome";
 
 function statusLabel(status: MealAssignment["status"]): string {
@@ -72,11 +79,14 @@ export function DietTab({
   const [dayTotals, setDayTotals] = useState<Awaited<
     ReturnType<typeof s1.getMeDay>
   > | null>(null);
-  const [unresolvedExceptions, setUnresolvedExceptions] = useState(0);
+  // Late logging still needs a positive count; trainee listExceptions is 403.
+  const unresolvedExceptions = 1;
   const [skippedUndo, setSkippedUndo] = useState<{
     assignmentId: string;
     mealName: string;
   } | null>(null);
+  const coachName =
+    relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
@@ -84,24 +94,15 @@ export function DietTab({
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [listed, day, exceptions] = await Promise.all([
+      const [listed, day] = await Promise.all([
         api.listMealAssignments(relationship.id, {
           fromDate: selectedDate,
           toDate: selectedDate,
         }),
         s1.getMeDay(selectedDate).catch(() => null),
-        api.listExceptions(relationship.id).catch(() => ({ items: [] })),
       ]);
       setAssignments(sortMealsByTime(scheduledAssignments(listed.items)));
       setDayTotals(day);
-      setUnresolvedExceptions(
-        exceptions.items.filter(
-          (item) =>
-            item.status === "detected" ||
-            item.status === "active" ||
-            item.status === "acknowledged",
-        ).length,
-      );
       setOffline(false);
     } catch (err) {
       setOffline(true);
@@ -120,6 +121,12 @@ export function DietTab({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    return subscribeAll(() => {
+      void load();
+    });
+  }, [load]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
@@ -135,13 +142,22 @@ export function DietTab({
     setActingId(assignment.id);
     setError(null);
     try {
-      await confirmMealAssignment(api, sync, relationship.id, assignment);
+      await confirmMealAssignment(
+        api,
+        sync,
+        relationship.id,
+        assignment,
+        coachName,
+      );
+      invalidateRelationshipDayData(relationship.id);
       await load();
     } catch (err) {
       setError(
-        err instanceof ApiClientError
+        err instanceof MealSyncError
           ? err.message
-          : "Could not confirm meal.",
+          : err instanceof ApiClientError
+            ? err.message
+            : "Could not confirm meal.",
       );
     } finally {
       setActingId(null);
@@ -152,7 +168,13 @@ export function DietTab({
     setActingId(assignment.id);
     setError(null);
     try {
-      await skipMealAssignment(sync, assignment);
+      await skipMealAssignment(
+        sync,
+        assignment,
+        null,
+        coachName,
+        relationship.id,
+      );
       setSkippedUndo({
         assignmentId: assignment.id,
         mealName: assignment.mealName,
@@ -160,7 +182,11 @@ export function DietTab({
       await load();
     } catch (err) {
       setError(
-        err instanceof ApiClientError ? err.message : "Could not skip meal.",
+        err instanceof MealSyncError
+          ? err.message
+          : err instanceof ApiClientError
+            ? err.message
+            : "Could not skip meal.",
       );
     } finally {
       setActingId(null);
@@ -217,12 +243,15 @@ export function DietTab({
             </View>
           ) : (
             assignments.map((meal) => {
-              const canLog = canLogMealOnDate({
-                selectedDate,
-                today,
-                meal,
-                unresolvedExceptionCount: unresolvedExceptions,
-              });
+              const lockCopy = mealLockCopy(meal, coachName);
+              const canLog =
+                !lockCopy &&
+                canLogMealOnDate({
+                  selectedDate,
+                  today,
+                  meal,
+                  unresolvedExceptionCount: unresolvedExceptions,
+                });
               const kcal = mealKcalFromDayTotals(
                 meal,
                 dayTotals?.totals.perMeal,
@@ -232,21 +261,25 @@ export function DietTab({
                 <View key={meal.id} style={styles.card}>
                   <View style={styles.cardHeader}>
                     <View style={styles.cardTitles}>
-                      <Text style={styles.rowTitle}>{meal.mealName}</Text>
+                      <Text style={styles.rowTitle}>
+                        {cleanFoodLabel(meal.mealName)}
+                      </Text>
                       <Text style={styles.rowMeta}>
                         {formatClockTime(meal.windowStartsAt, timeZone)}
                         {kcal != null ? ` · ${formatKcal(kcal)}` : ""}
                       </Text>
                     </View>
                     <StatusChip
-                      label={statusLabel(meal.status)}
-                      tone={statusTone(meal.status)}
+                      label={lockCopy ? "Closed" : statusLabel(meal.status)}
+                      tone={lockCopy ? "neutral" : statusTone(meal.status)}
                     />
                   </View>
-                  {meal.photoRequired ? (
+                  {meal.photoRequired && !lockCopy ? (
                     <Text style={styles.photoChip}>📷 Photo requested</Text>
                   ) : null}
-                  {canLog ? (
+                  {lockCopy ? (
+                    <Text style={styles.lockCopy}>{lockCopy}</Text>
+                  ) : canLog ? (
                     <View style={styles.actions}>
                       <PrimaryButton
                         label="Eaten as planned"
@@ -401,5 +434,12 @@ const styles = StyleSheet.create({
     color: colors.indigo,
     fontSize: 14,
     fontWeight: "600",
+  },
+  lockCopy: {
+    color: colors.midGrey,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+    marginTop: spacing.xs,
   },
 });

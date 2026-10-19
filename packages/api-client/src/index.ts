@@ -7,6 +7,7 @@ import {
   authOtpVerifyRequestSchema,
   authOtpVerifyResponseSchema,
   acceptInvitationResponseSchema,
+  acceptInvitationWithTokenResponseSchema,
   activateConfigurationRequestSchema,
   coachingConfigurationSchema,
   configureConfigurationRequestSchema,
@@ -152,6 +153,7 @@ import {
   type AuthOtpVerifyResponse,
   type AcceptInvitationRequest,
   type AcceptInvitationResponse,
+  type AcceptInvitationWithTokenResponse,
   type AcknowledgeExceptionRequest,
   type ActivateConfigurationRequest,
   type AttentionFeedResponse,
@@ -479,14 +481,22 @@ export class FitBudApiClient {
 
   async acceptInvitation(
     body: AcceptInvitationRequest,
-  ): Promise<AcceptInvitationResponse> {
+  ): Promise<AcceptInvitationResponse | AcceptInvitationWithTokenResponse> {
     const parsed = acceptInvitationRequestSchema.parse(body);
-    return this.request(
-      "POST",
-      "/invitations/accept",
-      acceptInvitationResponseSchema,
-      { auth: true, body: parsed },
-    );
+    // New accounts accept with password + otpProof (no session yet).
+    // Returning trainees accept while authenticated.
+    const needsSession = !(parsed.password && parsed.otpProof);
+    const unionSchema = {
+      parse: (value: unknown) => {
+        const withToken = acceptInvitationWithTokenResponseSchema.safeParse(value);
+        if (withToken.success) return withToken.data;
+        return acceptInvitationResponseSchema.parse(value);
+      },
+    };
+    return this.request("POST", "/invitations/accept", unionSchema, {
+      auth: needsSession,
+      body: parsed,
+    });
   }
 
   async listRelationships(query?: {

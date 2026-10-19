@@ -19,9 +19,14 @@ import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { MINIMAL_PNG_CONTENT_TYPE } from "../lib/minimalPng";
-import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { uploadMealPhoto } from "./mealActions";
+import { nextLoggedRowsForSubstitution } from "./substitution";
+import {
+  deviateMealAssignment,
+  MealSyncError,
+  uploadMealPhoto,
+} from "./mealActions";
+import { cleanFoodLabel } from "./mealHelpers";
 import { PORTION_MULTIPLIER_CHIPS } from "./food/servingPresetsV2";
 import { FoodServingChips } from "./food/FoodServingChips";
 import { fetchMeFoodRecent } from "../lib/meFoodsApi";
@@ -29,6 +34,7 @@ import {
   loggedRowsFromPlanned,
   plannedSummaryLine,
 } from "../lib/plannedMealItems";
+import { invalidateRelationshipDayData } from "./dataCache";
 
 const QUANTITY_CHIPS = [0.5, 1, 1.5, 2, 3];
 
@@ -74,6 +80,8 @@ export function SomethingDifferentSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
+  /** Once the trainee adds a substitute food, planned rows are cleared (replace). */
+  const [replacedPlan, setReplacedPlan] = useState(false);
 
   const plannedSummary = plannedSummaryLine(assignment);
 
@@ -124,35 +132,46 @@ export function SomethingDifferentSheet({
       item.energyKcalScaled != null
         ? Math.round((item.energyKcalScaled / NUTRIENT_SCALE) * quantity)
         : null;
-    setLogged((prev) => [
-      ...prev,
-      {
-        foodId: item.id,
-        servingId: servingId ?? item.defaultServingId ?? undefined,
-        quantity,
-        label: item.name,
-        kcalPreview,
-      },
-    ]);
+    const row: LoggedRow = {
+      foodId: item.id,
+      servingId: servingId ?? item.defaultServingId ?? undefined,
+      quantity,
+      label: cleanFoodLabel(item.name),
+      kcalPreview,
+    };
+    // Substitution replaces the planned meal — do not append onto prefills.
+    setLogged((prev) =>
+      nextLoggedRowsForSubstitution({
+        previous: prev,
+        next: row,
+        alreadyReplaced: replacedPlan,
+      }),
+    );
+    setReplacedPlan(true);
     setResults([]);
     setQuery("");
   }
 
   function addCustom() {
-    const name = customName.trim();
+    const name = cleanFoodLabel(customName.trim());
     if (!name) return;
     const kcal = Number.parseInt(customKcal, 10);
-    setLogged((prev) => [
-      ...prev,
-      {
-        customFood: {
-          name,
-          kcal: Number.isFinite(kcal) ? kcal : 0,
-        },
-        label: name,
-        kcalPreview: Number.isFinite(kcal) ? kcal : null,
+    const row: LoggedRow = {
+      customFood: {
+        name,
+        kcal: Number.isFinite(kcal) ? kcal : 0,
       },
-    ]);
+      label: name,
+      kcalPreview: Number.isFinite(kcal) ? kcal : null,
+    };
+    setLogged((prev) =>
+      nextLoggedRowsForSubstitution({
+        previous: prev,
+        next: row,
+        alreadyReplaced: replacedPlan,
+      }),
+    );
+    setReplacedPlan(true);
     setCustomName("");
     setCustomKcal("");
   }
@@ -166,29 +185,33 @@ export function SomethingDifferentSheet({
     );
   }
 
+  function syncErrorMessage(err: unknown): string {
+    if (err instanceof MealSyncError) return err.message;
+    if (err instanceof ApiClientError) return err.message;
+    return "Could not save meal.";
+  }
+
   async function savePortionAdjustment(multiplier: number) {
     setSaving(true);
     setError(null);
     try {
-      await enqueueAndPush(sync, {
-        recordId: assignment.id,
-        operation: "meal.deviate",
-        payload: {
-          assignmentId: assignment.id,
-          body: {
-            deviationKind: "portion_adjustment",
-            notes: `Portion ×${multiplier}`,
-            photoIntent: null,
-            items: [],
-            portionMultiplier: multiplier,
-          },
+      await deviateMealAssignment(
+        sync,
+        assignment,
+        {
+          deviationKind: "portion_adjustment",
+          notes: `Portion ×${multiplier}`,
+          photoIntent: null,
+          items: [],
+          portionMultiplier: multiplier,
         },
-      });
+        undefined,
+        relationshipId,
+      );
+      invalidateRelationshipDayData(relationshipId);
       onDone();
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not save meal.",
-      );
+      setError(syncErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -199,30 +222,28 @@ export function SomethingDifferentSheet({
     setSaving(true);
     setError(null);
     try {
-      await enqueueAndPush(sync, {
-        recordId: assignment.id,
-        operation: "meal.deviate",
-        payload: {
-          assignmentId: assignment.id,
-          body: {
-            deviationKind: "repeat_recent",
-            notes: `Same as recent: ${item.name}`,
-            photoIntent: null,
-            items: [
-              {
-                foodId: item.id,
-                servingId: item.defaultServingId ?? undefined,
-                quantity: 1,
-              },
-            ],
-          },
+      await deviateMealAssignment(
+        sync,
+        assignment,
+        {
+          deviationKind: "repeat_recent",
+          notes: `Same as recent: ${item.name}`,
+          photoIntent: null,
+          items: [
+            {
+              foodId: item.id,
+              servingId: item.defaultServingId ?? undefined,
+              quantity: 1,
+            },
+          ],
         },
-      });
+        undefined,
+        relationshipId,
+      );
+      invalidateRelationshipDayData(relationshipId);
       onDone();
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not save meal.",
-      );
+      setError(syncErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -232,24 +253,22 @@ export function SomethingDifferentSheet({
     setSaving(true);
     setError(null);
     try {
-      await enqueueAndPush(sync, {
-        recordId: assignment.id,
-        operation: "meal.deviate",
-        payload: {
-          assignmentId: assignment.id,
-          body: {
-            deviationKind: kind,
-            notes,
-            photoIntent: null,
-            items: [],
-          },
+      await deviateMealAssignment(
+        sync,
+        assignment,
+        {
+          deviationKind: kind,
+          notes,
+          photoIntent: null,
+          items: [],
         },
-      });
+        undefined,
+        relationshipId,
+      );
+      invalidateRelationshipDayData(relationshipId);
       onDone();
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not save meal.",
-      );
+      setError(syncErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -284,24 +303,22 @@ export function SomethingDifferentSheet({
           quantity: row.quantity,
         };
       });
-      await enqueueAndPush(sync, {
-        recordId: assignment.id,
-        operation: "meal.deviate",
-        payload: {
-          assignmentId: assignment.id,
-          body: {
-            deviationKind: "logged_foods",
-            notes: null,
-            photoIntent,
-            items,
-          },
+      await deviateMealAssignment(
+        sync,
+        assignment,
+        {
+          deviationKind: "logged_foods",
+          notes: null,
+          photoIntent,
+          items,
         },
-      });
+        undefined,
+        relationshipId,
+      );
+      invalidateRelationshipDayData(relationshipId);
       onDone();
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not save meal.",
-      );
+      setError(syncErrorMessage(err));
     } finally {
       setSaving(false);
     }

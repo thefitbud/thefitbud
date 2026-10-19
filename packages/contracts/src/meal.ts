@@ -133,6 +133,12 @@ export const mealAssignmentSchema = z.object({
   supersededByPlanVersionId: uuidSchema.nullable().optional(),
   prescription: mealPrescriptionSchema,
   compliance: mealComplianceSchema.nullable(),
+  /**
+   * Derived for trainee UI: resolved exception / closed window.
+   * When true, hide logging actions and show loggingLockReason copy.
+   */
+  loggingLocked: z.boolean().optional().default(false),
+  loggingLockReason: z.string().max(64).nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });

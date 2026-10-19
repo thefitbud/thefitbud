@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { useAuth } from "../auth/AuthProvider";
 import { stage1Api } from "../lib/stage1Api";
+import { AcceptInviteScreen } from "./AcceptInviteScreen";
 import { CodeSignInScreen } from "./auth/CodeSignInScreen";
 import { ForgotPasswordScreen } from "./auth/ForgotPasswordScreen";
 import { SignInScreen } from "./auth/SignInScreen";
 
-type AuthMode = "password" | "code" | "forgot";
+type AuthMode = "password" | "code" | "forgot" | "invite";
+
+function hasInviteQuery(): boolean {
+  if (Platform.OS !== "web" || typeof window === "undefined") return false;
+  return Boolean(new URLSearchParams(window.location.search).get("invite"));
+}
 
 export function AuthScreen() {
   const { api, signInWithToken, errorMessage, clearError } = useAuth();
   const s1 = stage1Api(api);
-  const [mode, setMode] = useState<AuthMode>("password");
+  const [mode, setMode] = useState<AuthMode>(() =>
+    hasInviteQuery() ? "invite" : "password",
+  );
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [identifier, setIdentifier] = useState("");
@@ -152,6 +161,18 @@ export function AuthScreen() {
     }
   }
 
+  if (mode === "invite") {
+    return (
+      <AcceptInviteScreen
+        onBackToSignIn={() => {
+          setMode("password");
+          clearError();
+          setLocalError(null);
+        }}
+      />
+    );
+  }
+
   if (mode === "code") {
     return (
       <CodeSignInScreen
@@ -201,6 +222,11 @@ export function AuthScreen() {
       onSignIn={signInPassword}
       onUseCode={() => {
         setMode("code");
+        clearError();
+        setLocalError(null);
+      }}
+      onHaveInviteCode={() => {
+        setMode("invite");
         clearError();
         setLocalError(null);
       }}

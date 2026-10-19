@@ -68,6 +68,8 @@ meDayRoutes.get(
     if (!rel) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "No active relationship.");
     }
+    // After end/reactivate, superseded slots stay in history but must not
+    // inflate Today rings (e.g. "1218 / 0 kcal" with no live plan).
     const workouts = await db
       .select()
       .from(workoutAssignments)
@@ -75,6 +77,7 @@ meDayRoutes.get(
         and(
           eq(workoutAssignments.coachingRelationshipId, rel.id),
           eq(workoutAssignments.localDate, date),
+          eq(workoutAssignments.scheduleStatus, "scheduled"),
         ),
       );
     const meals = await db
@@ -84,6 +87,7 @@ meDayRoutes.get(
         and(
           eq(mealAssignments.coachingRelationshipId, rel.id),
           eq(mealAssignments.localDate, date),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
         ),
       );
     // Join compliance via assignment for this local date (loggedAt is an ISO
@@ -102,6 +106,7 @@ meDayRoutes.get(
         and(
           eq(mealAssignments.coachingRelationshipId, rel.id),
           eq(mealAssignments.localDate, date),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
         ),
       );
     const workoutLogs = await db
@@ -118,6 +123,7 @@ meDayRoutes.get(
         and(
           eq(workoutAssignments.coachingRelationshipId, rel.id),
           eq(workoutAssignments.localDate, date),
+          eq(workoutAssignments.scheduleStatus, "scheduled"),
         ),
       );
     const kcal = mealLogs.reduce(

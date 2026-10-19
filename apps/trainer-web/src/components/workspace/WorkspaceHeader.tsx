@@ -56,12 +56,9 @@ export function WorkspaceHeader({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const configurationActive =
     workspace.configuration.configuration?.status === "active";
-  const reviewCheckin =
-    workspace.overview.pendingReviewCheckin ??
-    (workspace.overview.nextCheckin?.status === "due" ||
-    workspace.overview.nextCheckin?.status === "overdue"
-      ? workspace.overview.nextCheckin
-      : null);
+  // Only a real submitted-awaiting-review check-in drives the CTA. Do not
+  // promote due/overdue drafts (or pre-reactivation leftovers) to "Review".
+  const reviewCheckin = workspace.overview.pendingReviewCheckin ?? null;
 
   const primary = primaryActionFor({
     relationshipId,

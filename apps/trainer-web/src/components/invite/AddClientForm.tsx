@@ -119,7 +119,7 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
           recipientDisplayName: displayName.trim() || undefined,
           recipientWhatsapp,
           ...(templateId ? { onboardingFormTemplateId: templateId } : {}),
-          sendEmail: false,
+          sendEmail: true,
         },
         createIdempotencyKey(),
       );

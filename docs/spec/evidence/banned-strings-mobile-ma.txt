@@ -1,0 +1,34 @@
+
+Running 2 tests using 1 worker
+
+(node:8446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:8446) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/2] e2e/banned-strings.spec.ts:232:3 › banned-strings · trainer web › sign-in + TW-A/TW-B/TW-C routes hard-fail
+e2e/banned-strings.spec.ts:232:3 › banned-strings · trainer web › sign-in + TW-A/TW-B/TW-C routes hard-fail
+{
+  "app": "trainer-web",
+  "hardFailErrors": [],
+  "reportOnlyErrors": [],
+  "warns": [],
+  "errorCount": 0,
+  "warnCount": 0
+}
+
+[2/2] e2e/banned-strings.spec.ts:332:3 › banned-strings · Expo web › cleaned screens hard-fail; Today/Attention report
+e2e/banned-strings.spec.ts:332:3 › banned-strings · Expo web › cleaned screens hard-fail; Today/Attention report
+{
+  "app": "expo-web",
+  "hardFailErrors": [],
+  "reportOnlyErrors": [],
+  "warns": [],
+  "errorCount": 0,
+  "warnCount": 0
+}
+
+  2 passed (1.2m)

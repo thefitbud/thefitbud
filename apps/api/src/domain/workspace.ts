@@ -587,7 +587,17 @@ async function loadPendingReviewCheckin(
   db: Db,
   relationshipId: string,
   nowIso: string,
+  /** After reactivation, ignore submissions from the prior coaching period. */
+  reactivatedAt: string | null,
 ) {
+  const conditions = [
+    eq(checkins.coachingRelationshipId, relationshipId),
+    eq(checkins.recordStatus, "submitted"),
+    isNull(checkinReviews.id),
+  ];
+  if (reactivatedAt) {
+    conditions.push(gte(checkins.submittedAt, reactivatedAt));
+  }
   const submitted = await db
     .select({
       checkin: checkins,
@@ -595,13 +605,7 @@ async function loadPendingReviewCheckin(
     })
     .from(checkins)
     .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-    .where(
-      and(
-        eq(checkins.coachingRelationshipId, relationshipId),
-        eq(checkins.recordStatus, "submitted"),
-        isNull(checkinReviews.id),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(desc(checkins.submittedAt), desc(checkins.localDate))
     .limit(1);
   if (!submitted[0]) return null;
@@ -707,7 +711,12 @@ export async function loadClientWorkspace(
     ),
     loadOpenException(db, relationship.id),
     loadNextCheckin(db, relationship.id, nowIso),
-    loadPendingReviewCheckin(db, relationship.id, nowIso),
+    loadPendingReviewCheckin(
+      db,
+      relationship.id,
+      nowIso,
+      relationship.reactivatedAt ?? null,
+    ),
     loadRecentActivity(db, relationship.id, nowIso),
     loadProgressSummary(db, relationship.id),
     relationship.status === "ended"

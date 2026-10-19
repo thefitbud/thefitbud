@@ -124,7 +124,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (role === "trainee" || role === "trainer") {
         await loadRelationships(client);
-        await registerPushToken(client);
+        // Device-token registration is trainer-facing in local demo; trainee
+        // calls were 403-ing and polluting the console — skip for trainees.
+        if (role === "trainer") {
+          await registerPushToken(client);
+        }
       } else {
         // Dual-role awaiting explicit selection.
         setRelationships([]);

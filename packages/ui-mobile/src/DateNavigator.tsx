@@ -60,41 +60,52 @@ export function DateNavigator({
           <View />
         )}
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.strip}
-      >
-        <View style={styles.stripRow}>
-          {days.map((day) => {
-            const selected = day.localDate === selectedDate;
-            return (
-              <Pressable
-                key={day.localDate}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}`}
-                onPress={() => onSelect(day.localDate)}
-                style={[styles.day, selected ? styles.daySelected : null]}
-              >
-                <Text
-                  style={[styles.weekday, selected ? styles.textSelected : null]}
+      <View style={styles.stripCard}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.strip}
+        >
+          <View style={styles.stripRow}>
+            {days.map((day) => {
+              const selected = day.localDate === selectedDate;
+              return (
+                <Pressable
+                  key={day.localDate}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}`}
+                  onPress={() => onSelect(day.localDate)}
+                  style={[styles.day, selected ? styles.daySelected : null]}
                 >
-                  {String(day.weekdayLabel)}
-                </Text>
-                <Text
-                  style={[styles.dayNum, selected ? styles.textSelected : null]}
-                >
-                  {String(day.dayLabel)}
-                </Text>
-                <View
-                  style={[styles.dot, { backgroundColor: dotColor(day.state) }]}
-                />
-              </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
+                  <Text
+                    style={[
+                      styles.weekday,
+                      selected ? styles.textSelected : null,
+                    ]}
+                  >
+                    {String(day.weekdayLabel)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.dayNum,
+                      selected ? styles.textSelected : null,
+                    ]}
+                  >
+                    {String(day.dayLabel)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.dot,
+                      { backgroundColor: dotColor(day.state) },
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -122,6 +133,14 @@ const styles = StyleSheet.create({
     fontSize: typeScale.caption,
     fontWeight: "600",
   },
+  stripCard: {
+    backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
+    borderRadius: radii.card,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
   strip: {
     paddingVertical: spacing.xs,
   },
@@ -129,6 +148,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: radii.control,
     marginRight: spacing.sm,
+    minHeight: touchTargetMin,
     minWidth: 44,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,

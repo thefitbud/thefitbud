@@ -40,40 +40,55 @@ export function WebDateHeading({
   return (
     <View style={styles.dateBlock}>
       {days.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.stripRow}>
-            {days.map((day) => {
-              const selected = day.localDate === selectedDate;
-              return (
-                <Pressable
-                  key={day.localDate}
-                  accessibilityRole="button"
-                  onPress={() => onSelectDate(day.localDate)}
-                  style={[styles.dayPill, selected ? styles.dayPillSelected : null]}
-                >
-                  <Text
-                    style={[styles.weekday, selected ? styles.dayTextSelected : null]}
+        <View style={styles.stripCard}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.stripRow}>
+              {days.map((day) => {
+                const selected = day.localDate === selectedDate;
+                return (
+                  <Pressable
+                    key={day.localDate}
+                    accessibilityRole="button"
+                    onPress={() => onSelectDate(day.localDate)}
+                    style={[
+                      styles.dayPill,
+                      selected ? styles.dayPillSelected : null,
+                    ]}
                   >
-                    {day.weekdayLabel}
-                  </Text>
-                  <Text
-                    style={[styles.dayNum, selected ? styles.dayTextSelected : null]}
-                  >
-                    {day.dayLabel}
-                  </Text>
-                  <View
-                    style={[styles.dot, { backgroundColor: dotColor(day.state) }]}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
+                    <Text
+                      style={[
+                        styles.weekday,
+                        selected ? styles.dayTextSelected : null,
+                      ]}
+                    >
+                      {day.weekdayLabel}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.dayNum,
+                        selected ? styles.dayTextSelected : null,
+                      ]}
+                    >
+                      {day.dayLabel}
+                    </Text>
+                    <View
+                      style={[
+                        styles.dot,
+                        { backgroundColor: dotColor(day.state) },
+                      ]}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
       ) : null}
     <View style={styles.dateRow}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Previous day"
+        style={styles.chevronHit}
         onPress={() => {
           const [y, m, d] = selectedDate.split("-").map(Number);
           const prev = new Date(Date.UTC(y!, m! - 1, d! - 1));
@@ -89,6 +104,7 @@ export function WebDateHeading({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Next day"
+        style={styles.chevronHit}
         onPress={() => {
           const [y, m, d] = selectedDate.split("-").map(Number);
           const next = new Date(Date.UTC(y!, m! - 1, d! + 1));
@@ -115,12 +131,20 @@ export function WebDateHeading({
 export function WebNutritionSummary({ data }: { data: RingDatum[] }) {
   const kcal = data.find((row) => row.key === "kcal");
   const protein = data.find((row) => row.key === "protein");
+  const assigned = kcal?.assigned ?? 0;
+  const logged = kcal?.logged ?? 0;
+  const line =
+    kcal == null
+      ? "Nutrition"
+      : assigned > 0
+        ? `${logged} / ${assigned} kcal`
+        : logged > 0
+          ? `${logged} kcal logged`
+          : "No plan calories yet";
   return (
     <View style={styles.nutritionRow}>
-      <Text style={styles.nutritionLine}>
-        {kcal ? `${kcal.logged} / ${kcal.assigned} kcal` : "Nutrition"}
-      </Text>
-      {protein ? (
+      <Text style={styles.nutritionLine}>{line}</Text>
+      {protein && assigned > 0 ? (
         <Text style={styles.nutritionSub}>
           Protein {protein.logged}g · Carbs{" "}
           {data.find((row) => row.key === "carbs")?.logged ?? 0}g · Fat{" "}
@@ -136,6 +160,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
+  stripCard: {
+    backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
   stripRow: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -144,6 +177,7 @@ const styles = StyleSheet.create({
   dayPill: {
     alignItems: "center",
     borderRadius: 12,
+    minHeight: 44,
     minWidth: 44,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -176,11 +210,16 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     marginBottom: spacing.md,
   },
+  chevronHit: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 44,
+  },
   chevron: {
     color: colors.indigo,
     fontSize: 24,
     fontWeight: "600",
-    paddingHorizontal: spacing.sm,
   },
   dateTitle: {
     color: colors.deepNavy,

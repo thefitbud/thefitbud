@@ -37,8 +37,14 @@ import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { TodayCheckinCard } from "./CheckinScreen";
 import { TraineeDateNavigator } from "./TraineeDateNavigator";
-import { confirmMealAssignment } from "./mealActions";
-import { canLogMealOnDate, mealKcalFromDayTotals } from "./mealHelpers";
+import { confirmMealAssignment, MealSyncError } from "./mealActions";
+import {
+  canLogMealOnDate,
+  cleanFoodLabel,
+  mealKcalFromDayTotals,
+  mealLockCopy,
+} from "./mealHelpers";
+import { subscribeAll } from "./dataCache";
 import {
   buildNutritionRings,
   isMealLoggedForCount,
@@ -63,24 +69,27 @@ function workoutTone(
   return "neutral";
 }
 
-function greetingFor(name: string, now = new Date()): string {
-  const hour = now.getHours();
-  const first = name.trim().split(/\s+/)[0] || "there";
-  if (hour < 12) return `Good morning, ${first}`;
-  if (hour < 17) return `Good afternoon, ${first}`;
-  return `Good evening, ${first}`;
-}
-
 function mealItemLine(meal: MealAssignment): string {
   const items = meal.prescription.items
     .slice(0, 3)
     .map((item) => {
-      if ("label" in item && item.label) return item.label;
-      if ("name" in item && typeof item.name === "string") return item.name;
+      if ("label" in item && item.label) return cleanFoodLabel(item.label);
+      if ("name" in item && typeof item.name === "string") {
+        return cleanFoodLabel(item.name);
+      }
       return null;
     })
     .filter(Boolean);
   return items.join(" · ");
+}
+
+function exerciseCountLabel(count: number): string {
+  return count === 1 ? "1 exercise" : `${count} exercises`;
+}
+
+/** Spec decision 22: Home heading is "Today" (no time-of-day greeting). */
+function hasLivePlan(plan: EffectivePlanResponse | null): boolean {
+  return plan?.version != null;
 }
 
 function mealStatusChip(
@@ -143,9 +152,12 @@ export function TodayTab({
     ReturnType<typeof s1.getMeDay>
   > | null>(null);
   const [coachNotes, setCoachNotes] = useState<CoachNote[]>([]);
-  const [unresolvedExceptions, setUnresolvedExceptions] = useState(0);
+  // Trainee listExceptions is 403 — late-log gate uses a positive sentinel.
+  const unresolvedExceptions = 1;
   const [mealActingId, setMealActingId] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const coachName =
+    relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,7 +165,7 @@ export function TodayTab({
     try {
       const weekStart = startOfWeekMonday(selectedDate);
       const nextDay = addDays(selectedDate, 1);
-      const [workouts, mealList, week, day, notes, exceptions, checkins] =
+      const [workouts, mealList, week, day, notes, checkins] =
         await Promise.all([
           api.listWorkoutAssignments(relationship.id, {
             fromDate: selectedDate,
@@ -166,20 +178,11 @@ export function TodayTab({
           s1.getMeWeek(weekStart).catch(() => null),
           s1.getMeDay(selectedDate).catch(() => null),
           s1.listMeCoachNotes().catch(() => ({ items: [] as CoachNote[] })),
-          api.listExceptions(relationship.id).catch(() => ({ items: [] })),
           api.listCheckins(relationship.id).catch(() => ({ items: [] as Checkin[] })),
         ]);
       setWeekModel(week);
       setDayTotals(day);
       setCoachNotes(notes.items.slice(0, 2));
-      setUnresolvedExceptions(
-        exceptions.items.filter(
-          (item) =>
-            item.status === "detected" ||
-            item.status === "active" ||
-            item.status === "acknowledged",
-        ).length,
-      );
       setWorkout(
         scheduledAssignments(workouts.items).find(
           (item) => item.localDate === selectedDate,
@@ -201,6 +204,12 @@ export function TodayTab({
   useEffect(() => {
     void load();
   }, [load, refreshNonce]);
+
+  useEffect(() => {
+    return subscribeAll(() => {
+      setRefreshNonce((value) => value + 1);
+    });
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -238,27 +247,31 @@ export function TodayTab({
 
   async function handleConfirmMeal(meal: MealAssignment) {
     setMealActingId(meal.id);
+    setError(null);
     try {
-      await confirmMealAssignment(api, sync, relationship.id, meal);
+      await confirmMealAssignment(
+        api,
+        sync,
+        relationship.id,
+        meal,
+        coachName,
+      );
       await load();
+    } catch (err) {
+      setError(
+        err instanceof MealSyncError
+          ? err.message
+          : "Couldn't save that meal. Try again when you're online.",
+      );
     } finally {
       setMealActingId(null);
     }
   }
 
-  const displayName = useMemo(() => {
-    const email = me?.email ?? "";
-    const local = email.split("@")[0] ?? "";
-    if (local.startsWith("aarav")) return "Aarav";
-    if (local.startsWith("rohan")) return "Rohan";
-    if (local.startsWith("meera")) return "Meera";
-    if (local.startsWith("deepak")) return "Deepak";
-    if (local.startsWith("lakshmi")) return "Lakshmi";
-    if (local) return local.split(".")[0] ?? "there";
-    return "there";
-  }, [me?.email]);
+  const planReady = hasLivePlan(effectivePlan);
   const allDone =
     isToday &&
+    planReady &&
     meals.length > 0 &&
     meals.every((m) => isMealLoggedForCount(m.status)) &&
     (!workout ||
@@ -282,12 +295,14 @@ export function TodayTab({
         {isToday ? (
           <View style={styles.greet}>
             <Text style={styles.greetTitle} accessibilityRole="header">
-              {allDone
-                ? "That's everything for today."
-                : greetingFor(displayName)}
+              {allDone ? "That's everything for today." : "Today"}
             </Text>
             <Text style={styles.greetSub}>
-              {allDone ? "Nicely done." : "Here's your day."}
+              {allDone
+                ? "Nicely done."
+                : planReady
+                  ? "Here's your day."
+                  : `${coachName} is preparing your plan.`}
             </Text>
           </View>
         ) : null}
@@ -302,6 +317,21 @@ export function TodayTab({
         ) : null}
         {error ? <ErrorBanner message={error} /> : null}
 
+        {!planReady && !loading ? (
+          <View
+            style={styles.card}
+            accessibilityLabel="Your coach is preparing your plan"
+          >
+            <Text style={styles.cardTitle}>
+              Your coach is preparing your plan
+            </Text>
+            <Text style={styles.body}>
+              {coachName} will publish your meals and workouts soon. Pull down
+              to check for updates.
+            </Text>
+          </View>
+        ) : null}
+
         {!isToday && !isFuture && lateLoggableCount > 0 ? (
           <Text style={styles.lateBanner}>
             You can still log {lateLoggableCount} item
@@ -315,7 +345,7 @@ export function TodayTab({
           </View>
         ) : null}
 
-        {hero && !loading ? (
+        {planReady && hero && !loading ? (
           <View style={styles.hero} accessibilityLabel={nextUpEyebrow(hero)}>
             <Text style={styles.heroEyebrow}>{nextUpEyebrow(hero)}</Text>
             {hero.kind === "meal" ? (
@@ -344,45 +374,58 @@ export function TodayTab({
                     </Text>
                   );
                 })()}
-                {canLogMealOnDate({
-                  selectedDate,
-                  today,
-                  meal: hero.meal,
-                  unresolvedExceptionCount: unresolvedExceptions,
-                }) ? (
-                  <View style={styles.heroBtns}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Eaten as planned"
-                      disabled={mealActingId === hero.meal.id}
-                      onPress={() => {
-                        void handleConfirmMeal(hero.meal);
-                      }}
-                      style={styles.heroPrimary}
-                    >
-                      <Text style={styles.heroPrimaryLabel}>
-                        {mealActingId === hero.meal.id
-                          ? "Saving…"
-                          : "Eaten as planned"}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Something different"
-                      onPress={() =>
-                        onOpenOverlay({
-                          screen: "something_different",
-                          assignmentId: hero.meal.id,
-                        })
-                      }
-                      style={styles.heroSecondary}
-                    >
-                      <Text style={styles.heroSecondaryLabel}>
-                        Something different
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
+                {(() => {
+                  const lockCopy = mealLockCopy(hero.meal, coachName);
+                  if (lockCopy) {
+                    return (
+                      <Text style={styles.heroItems}>{lockCopy}</Text>
+                    );
+                  }
+                  if (
+                    !canLogMealOnDate({
+                      selectedDate,
+                      today,
+                      meal: hero.meal,
+                      unresolvedExceptionCount: unresolvedExceptions,
+                    })
+                  ) {
+                    return null;
+                  }
+                  return (
+                    <View style={styles.heroBtns}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Eaten as planned"
+                        disabled={mealActingId === hero.meal.id}
+                        onPress={() => {
+                          void handleConfirmMeal(hero.meal);
+                        }}
+                        style={styles.heroPrimary}
+                      >
+                        <Text style={styles.heroPrimaryLabel}>
+                          {mealActingId === hero.meal.id
+                            ? "Saving…"
+                            : "Eaten as planned"}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Something different"
+                        onPress={() =>
+                          onOpenOverlay({
+                            screen: "something_different",
+                            assignmentId: hero.meal.id,
+                          })
+                        }
+                        style={styles.heroSecondary}
+                      >
+                        <Text style={styles.heroSecondaryLabel}>
+                          Something different
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                })()}
               </>
             ) : null}
             {hero.kind === "workout" ? (
@@ -391,8 +434,8 @@ export function TodayTab({
                   {hero.workout.workoutDayName}
                 </Text>
                 <Text style={styles.heroItems}>
-                  {hero.workout.workoutDay.exercises.length} exercises · about{" "}
-                  {workoutMins} min
+                  {exerciseCountLabel(hero.workout.workoutDay.exercises.length)}{" "}
+                  · about {workoutMins} min
                 </Text>
                 <View style={styles.heroBtns}>
                   <Pressable
@@ -466,7 +509,8 @@ export function TodayTab({
               </View>
               <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
               <Text style={styles.body}>
-                {workoutExercises.length} exercises · about {workoutMins} min
+                {exerciseCountLabel(workoutExercises.length)} · about{" "}
+                {workoutMins} min
               </Text>
               {workoutExercises.slice(0, 3).map((ex) => (
                 <Text key={ex.id} style={styles.exRow}>
@@ -499,63 +543,79 @@ export function TodayTab({
           )}
         </View>
 
-        <View style={styles.secHead}>
-          <Text style={styles.secTitle}>Nutrition</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open diet"
-            onPress={onOpenDiet}
-            style={styles.secLink}
-          >
-            <Text style={styles.secLinkText}>Diet ›</Text>
-          </Pressable>
-        </View>
-        <View style={styles.card}>
-          {Platform.OS === "web" ? (
-            <WebNutritionSummary data={rings} />
-          ) : (
-            <NutritionRings data={rings} />
-          )}
-          {rings.some((r) => r.unknown) ? (
-            <Text style={styles.footnote}>
-              Some foods have no nutrition data. Totals show ≥ when unknown.
-            </Text>
-          ) : null}
-          <View style={styles.mealsHead}>
-            <Text style={styles.mealsLabel}>Meals</Text>
-            <Text style={styles.mealsCount}>{mealsLoggedSummary(meals)}</Text>
-          </View>
-          {meals.length === 0 && !loading ? (
-            <Text style={styles.body}>No meals planned today.</Text>
-          ) : (
-            meals.map((meal) => {
-              const chip = mealStatusChip(meal, nextOpenMeal?.id);
-              const kcal = mealKcalFromDayTotals(
-                meal,
-                dayTotals?.totals.perMeal,
-              );
-              return (
-                <View key={meal.id} style={styles.mealRow}>
-                  <View style={styles.mealMain}>
-                    <Text style={styles.mealName}>{meal.mealName}</Text>
-                    <Text style={styles.mealMeta}>
-                      {formatClockTime(meal.windowStartsAt, timeZone)}
-                      {mealItemLine(meal) ? ` · ${mealItemLine(meal)}` : ""}
-                    </Text>
-                  </View>
-                  <View style={styles.mealRight}>
-                    <Text style={styles.mealKcal}>
-                      {kcal != null
-                        ? formatKcal(kcal, false).replace(" kcal", "") + " kcal"
-                        : "—"}
-                    </Text>
-                    <StatusChip label={chip.label} tone={chip.tone} />
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
+        {planReady ? (
+          <>
+            <View style={styles.secHead}>
+              <Text style={styles.secTitle}>Nutrition</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open diet"
+                onPress={onOpenDiet}
+                style={styles.secLink}
+              >
+                <Text style={styles.secLinkText}>Diet ›</Text>
+              </Pressable>
+            </View>
+            <View style={styles.card}>
+              {Platform.OS === "web" ? (
+                <WebNutritionSummary data={rings} />
+              ) : (
+                <NutritionRings data={rings} />
+              )}
+              {rings.some((r) => r.unknown) ? (
+                <Text style={styles.footnote}>
+                  Some foods have no nutrition data. Totals show ≥ when unknown.
+                </Text>
+              ) : null}
+              <View style={styles.mealsHead}>
+                <Text style={styles.mealsLabel}>Meals</Text>
+                <Text style={styles.mealsCount}>
+                  {mealsLoggedSummary(meals)}
+                </Text>
+              </View>
+              {meals.length === 0 && !loading ? (
+                <Text style={styles.body}>No meals planned today.</Text>
+              ) : (
+                meals.map((meal) => {
+                  const chip = mealStatusChip(meal, nextOpenMeal?.id);
+                  const kcal = mealKcalFromDayTotals(
+                    meal,
+                    dayTotals?.totals.perMeal,
+                  );
+                  const lockCopy = mealLockCopy(meal, coachName);
+                  return (
+                    <View key={meal.id} style={styles.mealRow}>
+                      <View style={styles.mealMain}>
+                        <Text style={styles.mealName}>
+                          {cleanFoodLabel(meal.mealName)}
+                        </Text>
+                        <Text style={styles.mealMeta}>
+                          {formatClockTime(meal.windowStartsAt, timeZone)}
+                          {mealItemLine(meal)
+                            ? ` · ${mealItemLine(meal)}`
+                            : ""}
+                          {lockCopy ? ` · ${lockCopy}` : ""}
+                        </Text>
+                      </View>
+                      <View style={styles.mealRight}>
+                        <Text style={styles.mealKcal}>
+                          {kcal != null
+                            ? formatKcal(kcal, false).replace(" kcal", "") +
+                              " kcal"
+                            : "—"}
+                        </Text>
+                        <StatusChip
+                          label={lockCopy ? "Closed" : chip.label}
+                          tone={lockCopy ? "neutral" : chip.tone}
+                        />
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          </>
+        ) : null}
 
         <StepsCard />
 
