@@ -119,25 +119,7 @@ async function deriveResponsivenessLabel(
     };
   }
 
-  const [prefs] = await db
-    .select({ pushEnabled: notificationPreferences.pushEnabled })
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.userId, relationship.traineeUserId))
-    .limit(1);
-
-  const tokens = await db
-    .select()
-    .from(deviceTokens)
-    .where(eq(deviceTokens.userId, relationship.traineeUserId));
-  const hasLiveToken = tokens.some((t) => t.status !== "revoked");
-  if (prefs?.pushEnabled === false || !hasLiveToken) {
-    return {
-      label: "notifications_off",
-      counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
-      pushEnabled: prefs?.pushEnabled ?? false,
-    };
-  }
-
+  // Paused takes priority over push-off (Farhan = reminders paused).
   const [paused] = await db
     .select()
     .from(reminderStates)
@@ -153,6 +135,28 @@ async function deriveResponsivenessLabel(
       label: "reminders_paused",
       counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
       pausedUntil: paused.pausedUntil ?? null,
+    };
+  }
+
+  const [prefs] = await db
+    .select({ pushEnabled: notificationPreferences.pushEnabled })
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, relationship.traineeUserId))
+    .limit(1);
+
+  const tokens = await db
+    .select()
+    .from(deviceTokens)
+    .where(eq(deviceTokens.userId, relationship.traineeUserId));
+  // Match prior behaviour: only "notifications off" when push is disabled, or
+  // every known device token is revoked (no tokens ≠ push off — Rohan seed).
+  const allTokensRevoked =
+    tokens.length > 0 && tokens.every((t) => t.status === "revoked");
+  if (prefs?.pushEnabled === false || allTokensRevoked) {
+    return {
+      label: "notifications_off",
+      counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
+      pushEnabled: prefs?.pushEnabled ?? false,
     };
   }
 

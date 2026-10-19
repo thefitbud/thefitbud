@@ -483,6 +483,43 @@ export function ConfigureCoachingPage() {
     }
   }
 
+  /** Persist form fields (including preferred check-in form) before status transitions. */
+  async function persistConfigurationFields(
+    expected: number,
+  ): Promise<CoachingConfiguration> {
+    const saved = await apiClient.saveConfigurationDraft(relationshipId, {
+      expectedVersion: expected,
+      goalShort: form.goalShort.trim() || null,
+      goalDescription: form.goalDescription.trim() || null,
+      notes: form.notes.trim() || null,
+      workout: {
+        sessionsPerWeek: form.sessionsPerWeek,
+        completionWindowHours: form.completionWindowHours,
+      },
+      nutrition: {
+        mealsPerDay: form.mealsPerDay,
+        confirmationWindowHours: form.confirmationWindowHours,
+        photoRequirement: form.photoRequirement,
+      },
+      checkin: {
+        cadence: form.cadence,
+        dueWindowHours: form.dueWindowHours,
+        formVersionId: form.formVersionId,
+      },
+      tracking: {
+        requireBodyWeight: form.requireBodyWeight,
+        requireProgressPhotos: form.requireProgressPhotos,
+        requireSessionRpe: form.requireSessionRpe,
+      },
+    });
+    if (form.formVersionId) {
+      await apiClient.assignPreferredCheckinForm(relationshipId, {
+        checkinFormVersionId: form.formVersionId,
+      });
+    }
+    return saved;
+  }
+
   async function saveDraft(event?: FormEvent) {
     event?.preventDefault();
     if (!relationshipId || readOnly || !online) return;
@@ -491,36 +528,7 @@ export function ConfigureCoachingPage() {
     setMessage(null);
     setGoalError(null);
     try {
-      const saved = await apiClient.saveConfigurationDraft(relationshipId, {
-        expectedVersion,
-        goalShort: form.goalShort.trim() || null,
-        goalDescription: form.goalDescription.trim() || null,
-        notes: form.notes.trim() || null,
-        workout: {
-          sessionsPerWeek: form.sessionsPerWeek,
-          completionWindowHours: form.completionWindowHours,
-        },
-        nutrition: {
-          mealsPerDay: form.mealsPerDay,
-          confirmationWindowHours: form.confirmationWindowHours,
-          photoRequirement: form.photoRequirement,
-        },
-        checkin: {
-          cadence: form.cadence,
-          dueWindowHours: form.dueWindowHours,
-          formVersionId: form.formVersionId,
-        },
-        tracking: {
-          requireBodyWeight: form.requireBodyWeight,
-          requireProgressPhotos: form.requireProgressPhotos,
-          requireSessionRpe: form.requireSessionRpe,
-        },
-      });
-      if (form.formVersionId) {
-        await apiClient.assignPreferredCheckinForm(relationshipId, {
-          checkinFormVersionId: form.formVersionId,
-        });
-      }
+      const saved = await persistConfigurationFields(expectedVersion);
       applyConfiguration(saved);
       setMessage("Draft saved.");
       showToast("Draft saved");
@@ -543,6 +551,52 @@ export function ConfigureCoachingPage() {
     }
   }
 
+  async function markConfigured() {
+    if (!relationshipId || mutationsBlocked || !online) return;
+    if (!form.goalShort.trim()) {
+      setGoalError("A short goal is required.");
+      setForceGoalOpen(true);
+      setError("A short goal is required before marking configured.");
+      return;
+    }
+    setActing(true);
+    setError(null);
+    setMessage(null);
+    setGoalError(null);
+    try {
+      // Always persist form fields (including check-in form) before status change.
+      let current = await persistConfigurationFields(
+        configuration?.recordVersion ?? expectedVersion,
+      );
+      applyConfiguration(current);
+      if (current.status === "draft") {
+        current = await apiClient.configureConfiguration(
+          relationshipId,
+          { expectedVersion: current.recordVersion },
+          createIdempotencyKey(),
+        );
+        applyConfiguration(current);
+      }
+      showToast("Marked configured");
+      reloadWorkspace();
+    } catch (err) {
+      if (
+        err instanceof ApiClientError &&
+        err.code === "CONFIGURATION_INCOMPLETE"
+      ) {
+        setGoalError("A short goal is required.");
+        setForceGoalOpen(true);
+      }
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not mark configured.",
+      );
+    } finally {
+      setActing(false);
+    }
+  }
+
   async function activate() {
     if (!relationshipId || !configuration || mutationsBlocked) return;
     setActing(true);
@@ -558,31 +612,7 @@ export function ConfigureCoachingPage() {
           setError("A short goal is required before activation.");
           return;
         }
-        current = await apiClient.saveConfigurationDraft(relationshipId, {
-          expectedVersion: current.recordVersion,
-          goalShort: form.goalShort.trim() || null,
-          goalDescription: form.goalDescription.trim() || null,
-          notes: form.notes.trim() || null,
-          workout: {
-            sessionsPerWeek: form.sessionsPerWeek,
-            completionWindowHours: form.completionWindowHours,
-          },
-          nutrition: {
-            mealsPerDay: form.mealsPerDay,
-            confirmationWindowHours: form.confirmationWindowHours,
-            photoRequirement: form.photoRequirement,
-          },
-          checkin: {
-            cadence: form.cadence,
-            dueWindowHours: form.dueWindowHours,
-            formVersionId: form.formVersionId,
-          },
-          tracking: {
-            requireBodyWeight: form.requireBodyWeight,
-            requireProgressPhotos: form.requireProgressPhotos,
-            requireSessionRpe: form.requireSessionRpe,
-          },
-        });
+        current = await persistConfigurationFields(current.recordVersion);
         applyConfiguration(current);
       }
       if (current.status === "draft") {
@@ -1367,39 +1397,7 @@ export function ConfigureCoachingPage() {
               variant="secondary"
               disabled={acting || mutationsBlocked}
               onClick={() => {
-                void (async () => {
-                  if (!configuration) {
-                    await saveDraft();
-                    return;
-                  }
-                  setActing(true);
-                  setError(null);
-                  try {
-                    const updated = await apiClient.configureConfiguration(
-                      relationshipId,
-                      { expectedVersion: configuration.recordVersion },
-                      createIdempotencyKey(),
-                    );
-                    applyConfiguration(updated);
-                    showToast("Marked configured");
-                    reloadWorkspace();
-                  } catch (err) {
-                    if (
-                      err instanceof ApiClientError &&
-                      err.code === "CONFIGURATION_INCOMPLETE"
-                    ) {
-                      setGoalError("A short goal is required.");
-                      setForceGoalOpen(true);
-                    }
-                    setError(
-                      err instanceof ApiClientError
-                        ? err.message
-                        : "Could not mark configured.",
-                    );
-                  } finally {
-                    setActing(false);
-                  }
-                })();
+                void markConfigured();
               }}
             >
               Mark configured
