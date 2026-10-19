@@ -91,3 +91,10 @@ Story: trainee **Rohan Mehta** (coach Rahul Verma), the same numbers as his web 
 - 11 logging: a set table (previous · kg · reps · check), prefilled from the plan, one tap to confirm. A 64 px log bar sits in the thumb zone and the rest band starts automatically.
 - 25 is shown over the 5:40 pm Diet. The 26 button sits above the tab bar.
 - Compare: the built captures mix accounts and branches (ma = Aarav, mb = Rohan). TR-02/05/09/18/23 were recaptured on cursor/mb-trainee-workout-progress-c688, then db:reset was run.
+
+## Set 4 · notifications (19 Oct 2026, 27–30)
+- 27 Live Activity (TR-21): exercise, "Set 2 of 3 done", 58 s rest countdown, +30 s / Skip rest. The spec's optional "Done" button is not shown. 27b: expanded Dynamic Island plus compact pill.
+- 28 meal push: P-MEAL copy verbatim; actions Eaten as planned (background, logs via outbox), Snooze 30 min, Open Diet. "1 more from FitBud" shows grouping. No food names.
+- 29/29b in-app banners over Today (a banner is shown only while the app is open): meal reminder and coach note ("Tap to read it on Today"; note text never shown). Today behind is the static 7:30 demo, so its next-up card differs from the banner's Lunch (cosmetic).
+- 30 lock screen: P-CHK "Weekly check-in is ready" plus P-NOTE "Rahul has a note for you!". Text only, no % or streaks, nothing auto-sent; wording from 05-notifications.md.
+- New CSS: html/l3.css. Banner buttons are 44 pt tinted/primary pairs. The lock-screen clock has no am/pm, as on iOS (check.mjs 24h warning is expected).

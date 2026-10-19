@@ -1,0 +1,74 @@
+/* set 4 · lock screen, Live Activity, Dynamic Island, in-app banners */
+.lock{background:linear-gradient(170deg,#2E2370 0%,#1A1248 55%,#120c33 100%);color:#fff;font-family:var(--font)}
+.lock .sb{color:#fff}.lock .sb svg *{fill:#fff;stroke:#fff}
+.lock .home-ind{background:#fff}
+.lk-pad{position:absolute;top:58px;left:0;right:0;text-align:center}
+.lk-pad .padlock{width:14px;height:10px;margin:0 auto 6px;border-radius:2px;background:#fff;position:relative}
+.lk-pad .padlock:before{content:"";position:absolute;left:2px;top:-7px;width:6px;height:7px;border:2px solid #fff;border-bottom:0;border-radius:6px 6px 0 0}
+.lk-date{font-size:19px;font-weight:600;margin-top:4px}
+.lk-clock{font-size:92px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:2px;font-family:-apple-system,"SF Pro Display",var(--font)}
+.lk-stack{position:absolute;left:12px;right:12px;bottom:118px;display:flex;flex-direction:column;gap:8px}
+.lk-btm{position:absolute;bottom:42px;left:46px;right:46px;display:flex;justify-content:space-between}
+.lk-btm span{width:50px;height:50px;border-radius:25px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:12px;font-weight:600}
+.app{width:38px;height:38px;flex:none;border-radius:10px;background:var(--indigo);color:#fff;display:grid;place-items:center;font-weight:800;font-size:17px}
+.app.sm{width:22px;height:22px;border-radius:6px;font-size:12px}
+.nt{background:#EEEDF4;color:var(--ink-900);border-radius:22px;padding:13px 14px;display:flex;gap:11px;box-shadow:0 6px 20px rgb(0 0 0/22%)}
+.nt .bd{flex:1;min-width:0}
+.nt .top{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-500)}
+.nt .top b{color:var(--ink-900);font-weight:700}
+.nt h4{margin:2px 0 0;font-size:15px;font-weight:700;line-height:1.3}
+.nt p{margin:2px 0 0;font-size:15px;line-height:1.35;color:var(--ink-700)}
+.grp{position:relative;padding-bottom:16px}
+.grp .ghost{position:absolute;left:10px;right:10px;bottom:6px;height:30px;background:#DAD8E4;border-radius:0 0 18px 18px;z-index:-1}
+.grp .ghost2{left:22px;right:22px;bottom:0;background:#C9C6D6}
+.grp .more{display:block;text-align:center;font-size:13px;color:#fff;margin-top:6px;font-weight:600}
+.acts{display:flex;flex-direction:column;background:#EEEDF4;border-radius:18px;overflow:hidden;box-shadow:0 6px 20px rgb(0 0 0/22%)}
+.acts a{height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:16px;color:var(--ink-900);text-decoration:none;border-top:1px solid #D6D4E0}
+.acts a:first-child{border-top:0;font-weight:700;color:var(--indigo)}
+.acts small{font-size:13px;color:var(--ink-500);font-weight:500}
+.lk-cap{position:absolute;left:0;right:0;text-align:center;font-size:13px;color:#fff;font-weight:600}
+/* Live Activity */
+.la{background:rgba(20,16,44,.92);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:16px;color:#fff}
+.la .h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+.la .h .t{flex:1}
+.la .row{display:flex;align-items:flex-end;justify-content:space-between;margin-top:10px}
+.la .ex{font-size:20px;font-weight:700;line-height:1.2}
+.la .st{font-size:15px;margin-top:3px}
+.la .rest{text-align:right}
+.la .rest small{display:block;font-size:13px;font-weight:600}
+.la .rest b{font-size:36px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:#CFC6FF}
+.la .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.18);margin-top:12px;overflow:hidden}
+.la .bar i{display:block;height:100%;width:52%;background:#B7A9F5;border-radius:3px}
+.la .ft{display:flex;gap:8px;margin-top:12px}
+.la .ft a{flex:1;height:44px;border-radius:22px;display:grid;place-items:center;font-size:15px;font-weight:700;text-decoration:none;color:#fff;background:rgba(255,255,255,.16)}
+.la .ft a.p{background:var(--indigo)}
+.la .nx{font-size:13px;margin-top:10px}
+/* Dynamic Island */
+.di-c{position:absolute;top:11px;left:50%;margin-left:-110px;width:220px;height:36px;border-radius:20px;background:#000;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 8px;color:#fff;z-index:31}
+.di-c b{font-size:15px;color:#CFC6FF;font-variant-numeric:tabular-nums}
+.di-e{position:absolute;top:11px;left:11px;right:11px;border-radius:44px;background:#000;color:#fff;padding:18px 22px 18px;z-index:31}
+.di-e .row{display:flex;justify-content:space-between;align-items:center}
+.di-e .ex{font-size:17px;font-weight:700}
+.di-e .st{font-size:14px;margin-top:2px;color:#E6E3F5}
+.di-e b{font-size:34px;color:#CFC6FF;font-variant-numeric:tabular-nums}
+.di-e .ft{display:flex;gap:8px;margin-top:14px}
+.di-e .ft a{flex:1;height:44px;border-radius:22px;display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff;text-decoration:none;background:#2a2640}
+.di-e .ft a.p{background:var(--indigo)}
+.home-apps{position:absolute;top:250px;left:28px;right:28px;display:grid;grid-template-columns:repeat(4,1fr);gap:26px 20px}
+.home-apps i{display:block;height:62px;border-radius:15px;background:rgba(255,255,255,.14)}
+.spec{position:absolute;left:16px;right:16px;bottom:60px;background:#fff;color:var(--ink-900);border-radius:20px;padding:16px}
+.spec h5{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--ink-500);text-transform:none}
+.spec .mini{height:36px;width:220px;border-radius:20px;background:#000;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 8px;margin:0 auto}
+.spec .mini b{color:#CFC6FF;font-size:15px}
+.spec p{margin:10px 0 0;font-size:14px;color:var(--ink-700);line-height:1.4}
+/* in-app banner */
+.iab{position:absolute;z-index:50;top:54px;left:10px;right:10px;background:#fff;border-radius:20px;padding:14px;display:flex;gap:12px;box-shadow:0 12px 32px rgb(26 18 72/24%);border:1px solid var(--border)}
+.iab .bd{flex:1}
+.iab .top{font-size:13px;color:var(--ink-500);display:flex;justify-content:space-between}
+.iab h4{margin:2px 0 0;font-size:15px;font-weight:700;color:var(--ink-900)}
+.iab p{margin:2px 0 0;font-size:14px;color:var(--ink-700);line-height:1.35}
+.iab .ac{display:flex;gap:8px;margin-top:10px}
+.iab .ac a{height:44px;padding:0 16px;border-radius:22px;display:grid;place-items:center;font-size:15px;font-weight:700;text-decoration:none;background:var(--lavender);color:var(--indigo)}
+.iab .ac a.p{background:var(--indigo);color:#fff}
+.iab .gr{position:absolute;bottom:6px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--ink-200)}
+.dimtop{position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,17,21,.18),rgba(15,17,21,0) 40%);z-index:45;pointer-events:none}

@@ -28,6 +28,7 @@ import {
   notificationRowBody,
   notificationRowTitle,
 } from "../notifications/copy";
+import { MealInlineButtons } from "./notifications/Surfaces";
 import {
   deepLinkFromNotification,
   type NotificationDeepLink,
@@ -39,6 +40,7 @@ const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type Props = {
   onBack: () => void;
+  coachName?: string | null;
   onOpenSettings: () => void;
   onNavigate: (link: NotificationDeepLink) => void;
 };
@@ -95,6 +97,7 @@ function iconForType(type: NotificationType) {
 
 export function NotificationsScreen({
   onBack,
+  coachName,
   onOpenSettings,
   onNavigate,
 }: Props) {
@@ -107,6 +110,7 @@ export function NotificationsScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const load = useCallback(
@@ -226,25 +230,59 @@ export function NotificationsScreen({
         </Text>
         {rows.map((item) => {
           const Icon = iconForType(item.type);
+          const title = notificationRowTitle(item, { coachName });
+          const body = notificationRowBody(item, { coachName });
+          const inner = (
+            <>
+              <View style={styles.rowTop}>
+                <Icon size={20} color={colors.indigo} strokeWidth={2} />
+                <Text style={styles.title}>{title}</Text>
+                {item.readAt == null ? <View style={styles.dot} /> : null}
+              </View>
+              <Text style={styles.body}>{body}</Text>
+              <Text style={styles.meta}>
+                {formatRelativeTime(item.createdAt)}
+              </Text>
+            </>
+          );
+          if (item.type === "meal_reminder") {
+            return (
+              <View
+                key={item.id}
+                style={[styles.row, item.readAt == null ? styles.unread : null]}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={title}
+                  onPress={() => {
+                    void openItem(item);
+                  }}
+                >
+                  {inner}
+                </Pressable>
+                <MealInlineButtons
+                  mealId={item.domainEntityId}
+                  title={title}
+                  body={body}
+                  onOpen={() => {
+                    void openItem(item);
+                  }}
+                  onSnoozed={setToast}
+                />
+              </View>
+            );
+          }
           return (
             <Pressable
               key={item.id}
               accessibilityRole="button"
-              accessibilityLabel={notificationRowTitle(item)}
+              accessibilityLabel={title}
               style={[styles.row, item.readAt == null ? styles.unread : null]}
               onPress={() => {
                 void openItem(item);
               }}
             >
-              <View style={styles.rowTop}>
-                <Icon size={20} color={colors.indigo} strokeWidth={2} />
-                <Text style={styles.title}>{notificationRowTitle(item)}</Text>
-                {item.readAt == null ? <View style={styles.dot} /> : null}
-              </View>
-              <Text style={styles.body}>{notificationRowBody(item)}</Text>
-              <Text style={styles.meta}>
-                {formatRelativeTime(item.createdAt)}
-              </Text>
+              {inner}
             </Pressable>
           );
         })}
@@ -265,6 +303,7 @@ export function NotificationsScreen({
       }}
     >
       {error ? <ErrorBanner message={error} /> : null}
+      {toast ? <Text accessibilityLiveRegion="polite">{toast}</Text> : null}
       {offline ? (
         <Text style={styles.offline}>Showing saved notifications</Text>
       ) : null}

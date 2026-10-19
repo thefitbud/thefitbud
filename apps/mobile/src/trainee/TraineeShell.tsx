@@ -45,7 +45,9 @@ import {
 import { scheduledAssignments } from "./scheduledAssignments";
 import { pickTodayCheckin } from "./pickTodayCheckin";
 import { invalidateRelationshipDayData } from "./dataCache";
+import { subscribeMealNotificationResponses } from "../notifications/nativeActions";
 import type { NotificationDeepLink } from "../notifications/routing";
+import { ForegroundBanner } from "./notifications/ForegroundBanner";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
 
@@ -229,6 +231,21 @@ export function TraineeShell({
     void loadEffectivePlan();
     void refreshUnread();
   }, [loadEffectivePlan, refreshUnread]);
+
+  useEffect(() => {
+    return subscribeMealNotificationResponses((event) => {
+      if (event.kind !== "open") return;
+      if (event.mealAssignmentId) {
+        setTab("diet");
+        setOverlay({
+          screen: "something_different",
+          assignmentId: event.mealAssignmentId,
+        });
+        return;
+      }
+      setTab("diet");
+    });
+  }, []);
 
   useEffect(() => {
     setSelectedDate(today);
@@ -509,6 +526,10 @@ export function TraineeShell({
           setOverlay(null);
           setTab("today");
         }}
+        onOpenDiet={() => {
+          setOverlay(null);
+          setTab("diet");
+        }}
         onNotificationNavigate={handleNotificationNavigate}
         onCoachingResumed={handleCoachingResumed}
       />
@@ -600,7 +621,22 @@ export function TraineeShell({
             setOverlay(null);
             setTab("today");
           }}
+          onOpenDiet={() => {
+            setOverlay(null);
+            setTab("diet");
+          }}
           onNotificationNavigate={handleNotificationNavigate}
+        />
+      ) : null}
+
+      {tab === "today" ? (
+        <ForegroundBanner
+          relationship={relationship}
+          coachName={relationship.trainerDisplayName?.trim() || "Your coach"}
+          onOpenMeal={(assignmentId) =>
+            openOverlay({ screen: "something_different", assignmentId })
+          }
+          onGoToday={() => setTab("today")}
         />
       ) : null}
 

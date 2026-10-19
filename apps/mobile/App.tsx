@@ -8,10 +8,12 @@ import { ConfigProvider } from "./src/providers/ConfigProvider";
 import { FontsProvider } from "./src/providers/FontsProvider";
 import { SyncProvider } from "./src/sync/SyncProvider";
 import { ensureAndroidNotificationChannels } from "./src/notifications/androidChannels";
+import { ensureMealNotificationActions } from "./src/notifications/nativeActions";
 
 export default function App() {
   useEffect(() => {
     void ensureAndroidNotificationChannels();
+    void ensureMealNotificationActions();
   }, []);
 
   return (

@@ -73,6 +73,7 @@ type Props = {
   onOpen: TraineeOverlayOpener;
   onSignOut: () => void;
   onGoToday?: () => void;
+  onOpenDiet?: () => void;
   onNotificationNavigate?: (link: NotificationDeepLink) => void;
   onCoachingResumed?: (relationship: CoachingRelationship) => void;
 };
@@ -86,6 +87,7 @@ export function TraineeOverlayHost({
   onOpen,
   onSignOut,
   onGoToday,
+  onOpenDiet,
   onNotificationNavigate,
   onCoachingResumed,
 }: Props) {
@@ -134,6 +136,7 @@ export function TraineeOverlayHost({
       return (
         <NotificationsScreen
           onBack={onClose}
+          coachName={coachName}
           onOpenSettings={() => onOpen({ screen: "reminder_settings" })}
           onNavigate={(link) => {
             onClose();
@@ -300,7 +303,17 @@ export function TraineeOverlayHost({
         />
       );
     case "widget_tips":
-      return <WidgetTipsScreen onBack={onClose} />;
+      return (
+        <WidgetTipsScreen
+          onBack={onClose}
+          coachName={coachName}
+          onOpenMeal={(assignmentId) =>
+            onOpen({ screen: "something_different", assignmentId })
+          }
+          onOpenDiet={onOpenDiet}
+          onGoToday={goToday}
+        />
+      );
     case "privacy":
       return <PrivacyScreen onBack={onClose} />;
     case "password":

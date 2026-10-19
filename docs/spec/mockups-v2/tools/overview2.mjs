@@ -20,7 +20,7 @@ img.s{display:block;width:300px;border-radius:44px;box-shadow:0 0 0 7px #121019,
 const fig = ([, f, cap, sub], i) => `<figure><img class="s" src="file://${P}${f}"><figcaption>${f.split("-")[0]} · ${cap}<span>${sub}</span></figcaption></figure>`;
 const tr = SHOTS2.filter((s) => s[1].includes("trainee")), tm = SHOTS2.filter((s) => s[1].includes("trainer"));
 const html = `<html><head>${css}</head><body><h1><img src="file:///workspace/fitbud-mockups/html/assets/mark.svg">FitBud · Mobile, set 2</h1><div class="sub">iOS 393 × 852 · trainee Rohan Mehta (coach Rahul Verma) · Fri 16 – Mon 19 Oct</div>
-<h2>Trainee</h2>${[0, 8, 16].map((i) => `<div class="row">${tr.slice(i, i + 8).map(fig).join("")}</div>`).join("")}
+<h2>Trainee</h2>${[0, 8, 16, 24].map((i) => `<div class="row">${tr.slice(i, i + 8).map(fig).join("")}</div>`).join("")}
 <h2>Trainer mobile</h2><div class="row">${tm.map(fig).join("")}</div></body></html>`;
 fs.writeFileSync("/tmp/overview-mobile-2.html", html);
 const b = await chromium.launch();

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Notification } from "@fitbud/contracts";
-import { notificationRowBody, notificationRowTitle } from "./copy";
+import {
+  checkinPushCopy,
+  mealPushCopy,
+  noteBannerCopy,
+  notePushCopy,
+  notificationRowBody,
+  notificationRowTitle,
+} from "./copy";
 
 const base: Notification = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -28,5 +35,40 @@ describe("notificationRowTitle", () => {
   it("uses guide copy for meal reminders", () => {
     expect(notificationRowTitle(base)).toBe("Lunch isn't logged yet");
     expect(notificationRowBody(base)).toContain("ate as planned");
+    expect(mealPushCopy("Lunch", true).body).toBe(
+      "You have something to log in FitBud.",
+    );
+  });
+
+  it("names the coach on a check-in and a note", () => {
+    const checkin = {
+      ...base,
+      type: "checkin_reminder" as const,
+      notificationType: "checkin_reminder" as const,
+    };
+    const note = {
+      ...base,
+      type: "trainer_note_shared" as const,
+      notificationType: "trainer_note_shared" as const,
+    };
+    expect(notificationRowTitle(checkin, { coachName: "Rahul Verma" })).toBe(
+      "Weekly check-in is ready",
+    );
+    expect(notificationRowBody(checkin, { coachName: "Rahul Verma" })).toBe(
+      checkinPushCopy("Rahul Verma").body,
+    );
+    expect(notificationRowTitle(note, { coachName: "Rahul Verma" })).toBe(
+      "Rahul has a note for you!",
+    );
+    expect(notificationRowBody(note, { coachName: "Rahul Verma" })).toBe(
+      "Tap to read.",
+    );
+    expect(notePushCopy("Rahul Verma").body).toBe("Tap to read.");
+    expect(noteBannerCopy("Rahul Verma")).toMatchObject({
+      kicker: "From your coach",
+      title: "Rahul has a note for you!",
+      body: "Tap to read it on Today.",
+      mark: "R",
+    });
   });
 });

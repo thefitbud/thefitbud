@@ -1,5 +1,94 @@
 import type { Notification, NotificationType } from "@fitbud/contracts";
 
+/** Lock-screen body when "Hide details on lock screen" is on. */
+export const HIDDEN_LOCK_BODY = "You have something to log in FitBud.";
+
+export type NotificationCopyContext = {
+  coachName?: string | null;
+  /** Lock screen only. The inbox keeps the full sentence. */
+  hideLockDetails?: boolean;
+};
+
+const LOCK_DETAIL_TYPES = new Set<NotificationType>([
+  "meal_reminder",
+  "workout_reminder",
+  "checkin_reminder",
+  "daily_summary",
+  "activity_nudge",
+  "trainer_note_shared",
+]);
+
+export function coachGivenName(displayName: string | null | undefined): string | null {
+  const trimmed = displayName?.trim();
+  if (!trimmed) return null;
+  const first = trimmed.split(/\s+/)[0];
+  if (!first || /^your$/i.test(first)) return null;
+  return first;
+}
+
+function coachOrFallback(coachName: string | null | undefined): string {
+  return coachGivenName(coachName) ?? "Your coach";
+}
+
+export function mealPushCopy(
+  mealLabel: string,
+  hideDetails = false,
+): { title: string; body: string } {
+  return {
+    title: `${mealLabel} isn't logged yet`,
+    body: hideDetails
+      ? HIDDEN_LOCK_BODY
+      : "Tap if you ate as planned. Changed something? Open to log it.",
+  };
+}
+
+export function checkinPushCopy(coachName?: string | null): {
+  title: string;
+  body: string;
+} {
+  return {
+    title: "Weekly check-in is ready",
+    body: `About 3 minutes. ${coachOrFallback(coachName)} will review it.`,
+  };
+}
+
+export function notePushCopy(coachName?: string | null): {
+  title: string;
+  body: string;
+} {
+  return {
+    title: `${coachOrFallback(coachName)} has a note for you!`,
+    body: "Tap to read.",
+  };
+}
+
+export function noteBannerCopy(coachName?: string | null): {
+  kicker: string;
+  title: string;
+  body: string;
+  mark: string;
+} {
+  const coach = coachOrFallback(coachName);
+  return {
+    kicker: "From your coach",
+    title: `${coach} has a note for you!`,
+    body: "Tap to read it on Today.",
+    mark: coach.slice(0, 1).toUpperCase(),
+  };
+}
+
+export function inAppMealBannerCopy(mealLabel: string): {
+  kicker: string;
+  title: string;
+  body: string;
+} {
+  return {
+    kicker: `FitBud · ${mealLabel}`,
+    title: `${mealLabel} isn't logged yet`,
+    body: "Ate as planned? One tap logs it.",
+  };
+}
+
 function mealLabelFromRoute(notification: Notification): string {
   const route = notification.route.toLowerCase();
   if (route.includes("breakfast")) return "Breakfast";
@@ -9,16 +98,19 @@ function mealLabelFromRoute(notification: Notification): string {
   return "Meal";
 }
 
-export function notificationRowTitle(notification: Notification): string {
+export function notificationRowTitle(
+  notification: Notification,
+  context: NotificationCopyContext = {},
+): string {
   const type = notification.type;
   const meal = mealLabelFromRoute(notification);
   switch (type) {
     case "meal_reminder":
-      return `${meal} isn't logged yet`;
+      return mealPushCopy(meal).title;
     case "workout_reminder":
       return "Time for your workout?";
     case "checkin_reminder":
-      return "Weekly check-in is ready";
+      return checkinPushCopy(context.coachName).title;
     case "daily_summary":
       return "Things left today";
     case "activity_nudge":
@@ -36,7 +128,7 @@ export function notificationRowTitle(notification: Notification): string {
     case "relationship_ended":
       return "Coaching has ended";
     case "trainer_note_shared":
-      return "Your coach has a note for you";
+      return notePushCopy(context.coachName).title;
     case "reactivation_requested":
       return "Your coach wants to restart coaching";
     case "trainer_ask_coach":
@@ -60,14 +152,23 @@ export function notificationRowTitle(notification: Notification): string {
   }
 }
 
-export function notificationRowBody(notification: Notification): string {
+export function notificationRowBody(
+  notification: Notification,
+  context: NotificationCopyContext = {},
+): string {
+  if (
+    context.hideLockDetails &&
+    LOCK_DETAIL_TYPES.has(notification.type)
+  ) {
+    return HIDDEN_LOCK_BODY;
+  }
   switch (notification.type) {
     case "meal_reminder":
-      return "Tap if you ate as planned. Changed something? Open to log it.";
+      return mealPushCopy(mealLabelFromRoute(notification)).body;
     case "workout_reminder":
       return "If you've already trained, log it in a tap. If today's not the day, that's okay too.";
     case "checkin_reminder":
-      return "About 3 minutes. Your coach will review it.";
+      return checkinPushCopy(context.coachName).body;
     case "daily_summary":
       return "Log what you did today, then rest easy.";
     case "activity_nudge":
@@ -85,7 +186,7 @@ export function notificationRowBody(notification: Notification): string {
     case "relationship_ended":
       return "Your access to this coaching space has ended.";
     case "trainer_note_shared":
-      return "Tap to read on Today.";
+      return notePushCopy(context.coachName).body;
     case "reactivation_requested":
       return "Tap to review the request.";
     case "trainer_ask_coach":
