@@ -44,6 +44,7 @@ export function Button({
   variant = "primary",
   disabled,
   icon,
+  style,
   ...rest
 }: Props) {
   const isDisabled = Boolean(disabled || loading);
@@ -60,7 +61,7 @@ export function Button({
       accessibilityLabel={label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       disabled={isDisabled}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.base,
         resolved === "primary" && styles.primary,
         resolved === "secondary" && styles.secondary,
@@ -68,8 +69,9 @@ export function Button({
         resolved === "tinted" && styles.tinted,
         resolved === "tertiary" && styles.tertiary,
         resolved === "destructive" && styles.destructive,
-        pressed && !isDisabled && styles.pressed,
+        state.pressed && !isDisabled && styles.pressed,
         isDisabled && styles.disabled,
+        typeof style === "function" ? style(state) : style,
       ]}
       {...rest}
     >

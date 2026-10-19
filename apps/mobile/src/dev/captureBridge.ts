@@ -42,9 +42,17 @@ export type AuthCaptureNav = {
 let traineeNav: TraineeCaptureNav | null = null;
 let trainerNav: TrainerCaptureNav | null = null;
 let authNav: AuthCaptureNav | null = null;
+/** IntakeScreen step index for TR-03 (Your routine = 1). Consumed once. */
+let pendingCaptureIntakeStep: number | null = null;
 
 export function registerTraineeCaptureNav(nav: TraineeCaptureNav | null) {
   traineeNav = nav;
+}
+
+export function consumeCaptureIntakeStep(): number | null {
+  const step = pendingCaptureIntakeStep;
+  pendingCaptureIntakeStep = null;
+  return step;
 }
 
 export function registerTrainerCaptureNav(nav: TrainerCaptureNav | null) {
@@ -85,6 +93,8 @@ export async function navigateCaptureScreen(
   }
 
   if (!skipAuth && id === "TR-03") {
+    // Mockup 21 = "Your routine" (step index 1), not Goals on step 0.
+    pendingCaptureIntakeStep = 1;
     await authNav?.signInWithPassword(
       "vikram.onboarding@demo.fitbud.test",
       "FitBud-demo-2026",
@@ -132,7 +142,8 @@ export async function navigateCaptureScreen(
         ? "lakshmi.foods@demo.fitbud.test"
         : id === "TR-08"
           ? "deepak.dubai@demo.fitbud.test"
-          : id === "TR-10" ||
+          : id === "TR-06" ||
+              id === "TR-10" ||
               id === "TR-10B" ||
               id === "TR-11" ||
               id === "TR-11B" ||

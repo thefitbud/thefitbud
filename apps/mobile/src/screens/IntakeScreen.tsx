@@ -27,6 +27,10 @@ import {
   YesNoToggle,
   NumberStepper,
 } from "../components/m2";
+import {
+  consumeCaptureIntakeStep,
+  isCaptureModeEnabled,
+} from "../dev/captureBridge";
 import { createIdempotencyKey } from "../lib/idempotency";
 import {
   intakeControlForField,
@@ -43,6 +47,61 @@ const STEP_TITLES = [
 ] as const;
 
 const TOTAL_STEPS = STEP_TITLES.length;
+
+/** Mockup 21 / TR-03 capture fields when the pinned form is still legacy textareas. */
+const CAPTURE_ROUTINE_FIELDS: OnboardingFieldDefinition[] = [
+  {
+    id: "work_activity",
+    type: "single_choice",
+    label: "How active is your work day?",
+    required: true,
+    options: [
+      {
+        id: "mostly_sitting",
+        label: "Mostly sitting · Desk job, under 5,000 steps",
+      },
+      {
+        id: "on_feet",
+        label: "On my feet a lot · Teaching, retail, field work",
+      },
+      { id: "physical", label: "Physical work" },
+    ],
+  },
+  {
+    id: "training_days",
+    type: "multiple_choice",
+    label: "Which days can you train?",
+    required: true,
+    options: [
+      { id: "mon", label: "Mon" },
+      { id: "tue", label: "Tue" },
+      { id: "wed", label: "Wed" },
+      { id: "thu", label: "Thu" },
+      { id: "fri", label: "Fri" },
+      { id: "sat", label: "Sat" },
+      { id: "sun", label: "Sun" },
+    ],
+  },
+  {
+    id: "sleep_hours",
+    type: "number",
+    label: "Hours of sleep on a usual night",
+    required: true,
+  },
+  {
+    id: "injury",
+    type: "yes_no",
+    label: "Any injury or pain we should know about?",
+    required: true,
+  },
+];
+
+const CAPTURE_ROUTINE_ANSWERS: OnboardingAnswers = {
+  work_activity: "mostly_sitting",
+  training_days: ["mon", "wed", "fri", "sat"],
+  sleep_hours: 6.5,
+  injury: true,
+};
 
 type Props = {
   relationshipId: string;
@@ -67,6 +126,18 @@ function isSleepField(field: OnboardingFieldDefinition): boolean {
   return field.label.toLowerCase().includes("sleep");
 }
 
+function hasRoutineTypedFields(fields: OnboardingFieldDefinition[]): boolean {
+  return fields.some((field) => {
+    const control = intakeControlForField(field);
+    return (
+      control.kind === "single_choice" ||
+      control.kind === "yes_no" ||
+      isDayField(field) ||
+      isSleepField(field)
+    );
+  });
+}
+
 export function IntakeScreen({ relationshipId }: Props) {
   const { api, refreshSession } = useAuth();
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
@@ -78,9 +149,12 @@ export function IntakeScreen({ relationshipId }: Props) {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const captureMode = isCaptureModeEnabled();
   const [stepIndex, setStepIndex] = useState(0);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [useCaptureRoutine, setUseCaptureRoutine] = useState(false);
   const submitIdempotencyKey = useRef(createIdempotencyKey());
+  const captureStepApplied = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,10 +188,30 @@ export function IntakeScreen({ relationshipId }: Props) {
     void load();
   }, [load]);
 
-  const fieldGroups = useMemo(
-    () => chunkFields(definition?.fields ?? [], TOTAL_STEPS),
-    [definition?.fields],
-  );
+  useEffect(() => {
+    if (!captureMode || captureStepApplied.current || loading || !definition) {
+      return;
+    }
+    const target = consumeCaptureIntakeStep() ?? 1;
+    const needsDemo = !hasRoutineTypedFields(definition.fields);
+    if (needsDemo) {
+      setUseCaptureRoutine(true);
+      setAnswers((current) => ({ ...CAPTURE_ROUTINE_ANSWERS, ...current }));
+    }
+    setStepIndex(Math.min(TOTAL_STEPS - 1, Math.max(0, target)));
+    setSavedFlash(true);
+    captureStepApplied.current = true;
+  }, [captureMode, definition, loading]);
+
+  const fieldGroups = useMemo(() => {
+    const base = definition?.fields ?? [];
+    if (useCaptureRoutine) {
+      const groups = chunkFields(base, TOTAL_STEPS);
+      groups[1] = CAPTURE_ROUTINE_FIELDS;
+      return groups;
+    }
+    return chunkFields(base, TOTAL_STEPS);
+  }, [definition?.fields, useCaptureRoutine]);
 
   function updateAnswer(fieldId: string, value: OnboardingAnswers[string] | undefined) {
     setAnswers((current) => {

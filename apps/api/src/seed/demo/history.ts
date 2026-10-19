@@ -418,13 +418,18 @@ function buildAssignmentsAndLogs(input: {
         }
       } else if (submitted) {
         // Keep only the most recent past Sunday awaiting review (inbox realism).
+        // Slipping (Rohan): review that Sunday too so Today can show the coach
+        // reply instead of "Waiting for Rahul" (Friday overlay also reviewed).
         const refDow = new Date(`${input.refDate}T12:00:00Z`).getUTCDay();
         const daysSinceSunday = refDow === 0 ? 7 : refDow;
         const latestPastSunday = addDaysFromLocalDate(
           input.refDate,
           -daysSinceSunday,
         );
-        if (localDate < latestPastSunday) {
+        if (
+          localDate < latestPastSunday ||
+          input.state === "slipping"
+        ) {
           lines.push(
             `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", checkinId))}, ${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(userId(input.trainerEmail))}, 'acknowledged', NULL, ${sqlQuote(submittedAt)}, ${sqlQuote(submittedAt)});`,
           );
@@ -498,6 +503,11 @@ function shouldLogWorkout(
   }
   if (state === "slipping") {
     const missFrom = addDaysFromLocalDate(refDate, -2);
+    // Leave the current-week Saturday (Lower body B) startable for TR-10 / TR-10b.
+    const dow = new Date(`${localDate}T12:00:00Z`).getUTCDay();
+    if (dow === 6 && localDate >= addDaysFromLocalDate(refDate, -6)) {
+      return false;
+    }
     if (localDate >= missFrom) return false;
     return "completed";
   }
@@ -789,7 +799,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
   }
 
-  // Rohan: latest weekly (Friday) check-in submitted and still awaiting review.
+  // Rohan: latest weekly (Friday) check-in submitted and reviewed (Today + Progress).
   const rohanCheckinDate = previousWeekdayBefore(refDate, 5);
   const rohanCheckinStart = localDayStartIso(rohanCheckinDate, "09:00", "Asia/Kolkata");
   const rohanSubmittedAt = clampIsoToNow(
@@ -799,6 +809,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
   lines.push(
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Tired but okay. Missed two workouts this week.", notes: "Travel for work threw off lunches and I skipped Wednesday's session. Back on track from Monday." })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
     `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledged', 'Solid effort this week — lock in sleep and we will rebuild training next.', ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanSubmittedAt)});`,
+    // Latest Sunday is also reviewed for slipping; give it the reply so Today prefers it.
+    `UPDATE checkin_reviews SET notes = 'Solid effort this week — lock in sleep and we will rebuild training next.', updated_at = ${sqlQuote(rohanSubmittedAt)} WHERE checkin_id = ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(refDate, 0)))};`,
   );
 
   // Rohan waist for Progress measurements row (TR-13).
@@ -859,13 +871,13 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
   }
 
-  // Rohan reminders (last 14d) so responsiveness has enough data.
+  // Rohan reminders (14d window) for responsiveness; inbox still leads with mixed types.
   const rohanReminders = [
     [3, MEAL_PRESCRIPTION_IDS.breakfast, true],
-    [3, MEAL_PRESCRIPTION_IDS.dinner, false],
+    [3, MEAL_PRESCRIPTION_IDS.dinner, true],
     [2, MEAL_PRESCRIPTION_IDS.lunch, true],
-    [1, MEAL_PRESCRIPTION_IDS.lunch, false],
-    [1, MEAL_PRESCRIPTION_IDS.dinner, true],
+    [1, MEAL_PRESCRIPTION_IDS.lunch, true],
+    [1, MEAL_PRESCRIPTION_IDS.dinner, false],
   ] as const;
   rohanReminders.forEach(([daysAgo, slot, opened], index) => {
     const day = addDaysFromLocalDate(refDate, -daysAgo);

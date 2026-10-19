@@ -49,8 +49,12 @@ type Props = {
 
 type TileTone = "default" | "navy" | "neu" | "info";
 
-function isToday(iso: string, today: string): boolean {
-  return iso.slice(0, 10) === today;
+function isToday(
+  iso: string,
+  today: string,
+  timeZone = "Asia/Kolkata",
+): boolean {
+  return localDateInTimezone(timeZone, new Date(iso)) === today;
 }
 
 function withinRetention(iso: string, now = Date.now()): boolean {
@@ -268,15 +272,16 @@ export function NotificationsScreen({
     [items],
   );
 
+  const timeZone = me?.timezone ?? "Asia/Kolkata";
   const { todayItems, earlierItems } = useMemo(() => {
     const todayRows: Notification[] = [];
     const earlier: Notification[] = [];
     for (const item of retained) {
-      if (isToday(item.createdAt, today)) todayRows.push(item);
+      if (isToday(item.createdAt, today, timeZone)) todayRows.push(item);
       else earlier.push(item);
     }
     return { todayItems: todayRows, earlierItems: earlier };
-  }, [retained, today]);
+  }, [retained, today, timeZone]);
 
   async function openItem(item: Notification) {
     if (item.readAt == null) {

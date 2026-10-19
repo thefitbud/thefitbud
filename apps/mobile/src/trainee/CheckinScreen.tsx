@@ -1165,7 +1165,8 @@ export function TodayCheckinCard({
     );
   }
 
-  if (checkin.status === "reviewed" && checkin.review) {
+  // API may keep record_status=submitted after a review row exists; prefer review UI.
+  if (checkin.review) {
     const coach =
       relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "your coach";
     return (

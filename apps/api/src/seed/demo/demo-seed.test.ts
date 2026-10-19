@@ -471,6 +471,15 @@ describe("demo seed", () => {
     expect(
       Number(
         rows(
+          `SELECT COUNT(*) FROM notifications
+           WHERE coaching_relationship_id = '${rohanRel}'
+             AND notification_type IN ('trainer_note_shared','checkin_reviewed','workout_reminder')`,
+        )[0]?.[0],
+      ),
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      Number(
+        rows(
           `SELECT COUNT(*) FROM notification_preferences WHERE quiet_hours_start IS NOT NULL`,
         )[0]?.[0],
       ),

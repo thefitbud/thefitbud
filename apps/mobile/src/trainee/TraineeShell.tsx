@@ -13,6 +13,7 @@ import type {
   Checkin,
   CoachingRelationship,
   EffectivePlanResponse,
+  WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
@@ -21,6 +22,7 @@ import {
   addDays,
   formatHeadingDate,
   localDateInTimezone,
+  startOfWeekMonday,
 } from "../lib/dates";
 import {
   TraineeOverlayHost,
@@ -107,8 +109,12 @@ export function TraineeShell({
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [captureWorkout, setCaptureWorkout] =
     useState<WorkoutExecution | null>(null);
-  const [captureWorkoutSummary, setCaptureWorkoutSummary] =
-    useState<WorkoutExecution | null>(null);
+  const [captureWorkoutSummary, setCaptureWorkoutSummary] = useState<{
+    execution: WorkoutExecution;
+    assignment: WorkoutAssignment | null;
+    weekAssignments: WorkoutAssignment[];
+    weekStart: string;
+  } | null>(null);
   const captureWorkoutRef = useRef<WorkoutExecution | null>(null);
   captureWorkoutRef.current = captureWorkout;
 
@@ -364,9 +370,26 @@ export function TraineeShell({
           fromDate: from,
           toDate: addDays(today, 7),
         });
-        const scheduled = scheduledAssignments(listed.items);
+        const scheduled = scheduledAssignments(listed.items).filter(
+          (item) => item.workoutDay.exercises.length > 0,
+        );
+        const startable = (item: (typeof scheduled)[number]) =>
+          item.status === "assigned" ||
+          item.status === "missed" ||
+          item.status === "in_progress" ||
+          item.status === "paused";
+        const actionable = scheduled.filter(startable);
+        // Prefer a startable Lower body B so the sticky CTA is "Start workout".
         const workout =
-          scheduled.find((item) => /lower body b/i.test(item.workoutDayName)) ??
+          actionable.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
+          actionable.find((item) => item.localDate === selectedDate) ??
+          actionable.find((item) => item.localDate === today) ??
+          actionable[0] ??
+          scheduled.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
           scheduled.find((item) => item.localDate === selectedDate) ??
           scheduled.find((item) => item.localDate === today) ??
           scheduled[0];
@@ -396,8 +419,21 @@ export function TraineeShell({
         const scheduled = scheduledAssignments(listed.items).filter(
           (item) => item.workoutDay.exercises.length > 0,
         );
+        const startable = (item: (typeof scheduled)[number]) =>
+          item.status === "assigned" ||
+          item.status === "missed" ||
+          item.status === "in_progress" ||
+          item.status === "paused";
+        const actionable = scheduled.filter(startable);
         const workout =
-          scheduled.find((item) => /lower body b/i.test(item.workoutDayName)) ??
+          actionable.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
+          actionable.find((item) => item.localDate === today) ??
+          actionable[0] ??
+          scheduled.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
           scheduled.find((item) => item.localDate === today) ??
           scheduled[0];
         if (workout?.localDate) {
@@ -445,55 +481,126 @@ export function TraineeShell({
       async showCaptureWorkoutSummary() {
         setOverlay(null);
         let stub = captureWorkoutRef.current;
+        const weekStart = startOfWeekMonday(today);
         const listed = await api.listWorkoutAssignments(relationship.id, {
-          fromDate: addDays(today, -21),
-          toDate: today,
+          fromDate: addDays(today, -28),
+          toDate: addDays(today, 7),
         });
-        const done = scheduledAssignments(listed.items).find(
-          (item) =>
-            item.execution &&
-            (item.status === "completed" || item.status === "modified"),
-        );
+        const scheduled = scheduledAssignments(listed.items);
+        const weekAssignments = scheduled.filter((item) => {
+          const d = item.localDate;
+          return d >= weekStart && d <= addDays(weekStart, 6);
+        });
+        const done =
+          scheduled.find(
+            (item) =>
+              /lower body b/i.test(item.workoutDayName) &&
+              item.execution &&
+              (item.status === "completed" || item.status === "modified"),
+          ) ??
+          scheduled.find(
+            (item) =>
+              item.execution &&
+              (item.status === "completed" || item.status === "modified"),
+          );
         if (!stub && done?.execution) {
           stub = await api.getWorkoutExecution(done.execution.id);
         }
         if (!stub) return;
-        // Seed/list payloads sometimes omit nested sets; enrich from assignment day.
-        if (stub.exercises.length === 0 && done?.workoutDay.exercises.length) {
-          const now = new Date().toISOString();
-          stub = {
-            ...stub,
-            exercises: done.workoutDay.exercises.map((exercise, index) => ({
-              id: exercise.id,
-              workoutExecutionId: stub!.id,
-              exerciseId: exercise.id,
-              name: exercise.name,
-              order: index + 1,
-              status: "completed" as const,
-              sets: exercise.setTargets.map((target, setIndex) => ({
-                id: target.id,
-                exerciseExecutionId: exercise.id,
-                setTargetId: target.id,
-                order: setIndex + 1,
+        const completedAt =
+          stub.completedAt ?? new Date().toISOString();
+        const startedAt =
+          stub.startedAt &&
+          Date.parse(completedAt) - Date.parse(stub.startedAt) > 30 * 60_000
+            ? stub.startedAt
+            : new Date(Date.parse(completedAt) - 52 * 60_000).toISOString();
+        const needsDayEnrich =
+          stub.exercises.length === 0 ||
+          stub.exercises.every((exercise) => exercise.sets.length === 0);
+        const dayExercises = done?.workoutDay.exercises ?? [];
+        const sourceExercises = needsDayEnrich
+          ? dayExercises.map((exercise, index) => {
+              const now = completedAt;
+              return {
+                id: exercise.id,
+                workoutExecutionId: stub!.id,
+                exerciseId: exercise.id,
+                name: exercise.name,
+                order: index + 1,
                 status: "completed" as const,
-                prescribedReps: target.reps,
-                prescribedLoadLabel: target.loadLabel,
-                actualReps: target.reps,
-                actualLoadLabel: target.loadLabel,
-                completedAt: now,
+                sets: exercise.setTargets.map((target, setIndex) => ({
+                  id: target.id,
+                  exerciseExecutionId: exercise.id,
+                  setTargetId: target.id,
+                  order: setIndex + 1,
+                  status: "completed" as const,
+                  prescribedReps: target.reps,
+                  prescribedLoadLabel: target.loadLabel,
+                  actualReps: target.reps,
+                  actualLoadLabel: target.loadLabel,
+                  completedAt: now,
+                  createdAt: now,
+                  updatedAt: now,
+                })),
                 createdAt: now,
                 updatedAt: now,
-              })),
-              createdAt: now,
-              updatedAt: now,
-            })),
-          };
-        }
+              };
+            })
+          : stub.exercises;
+        // Mockup 12: RDL load bump + one skipped calf set ("Changed from the plan").
+        const enrichedExercises = sourceExercises.map((exercise) => {
+          const name = exercise.name.toLowerCase();
+          if (name.includes("romanian") || name.includes("deadlift")) {
+            return {
+              ...exercise,
+              status: "completed" as const,
+              sets: exercise.sets.map((set) => {
+                if (set.order === 2 || set.order === 3) {
+                  const from =
+                    set.prescribedLoadLabel?.trim() ||
+                    set.actualLoadLabel?.trim() ||
+                    "20 kg";
+                  return {
+                    ...set,
+                    status: "modified" as const,
+                    prescribedLoadLabel: from,
+                    actualLoadLabel: "22.5 kg",
+                  };
+                }
+                return set;
+              }),
+            };
+          }
+          if (name.includes("calf")) {
+            return {
+              ...exercise,
+              name: exercise.name.toLowerCase().includes("seated")
+                ? exercise.name
+                : "Seated calf raise",
+              status: "completed" as const,
+              sets: exercise.sets.map((set) =>
+                set.order === 3
+                  ? { ...set, status: "skipped" as const, actualReps: null }
+                  : set,
+              ),
+            };
+          }
+          return exercise;
+        });
         setCaptureWorkout(null);
         setCaptureWorkoutSummary({
-          ...stub,
-          status: "completed",
-          completedAt: stub.completedAt ?? new Date().toISOString(),
+          execution: {
+            ...stub,
+            status: "completed",
+            startedAt,
+            completedAt,
+            sessionRpe: stub.sessionRpe ?? 7,
+            requireSessionRpe: true,
+            exercises: enrichedExercises,
+          },
+          assignment: done ?? null,
+          weekAssignments,
+          weekStart,
         });
       },
       clearCaptureWorkoutScreens() {
@@ -550,17 +657,18 @@ export function TraineeShell({
 
   if (captureWorkoutSummary && isCaptureModeEnabled()) {
     const coach =
-      relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "Your coach";
+      relationship.trainerDisplayName?.trim() || "Your coach";
     return (
       <WorkoutSummaryScreen
-        execution={captureWorkoutSummary}
+        execution={captureWorkoutSummary.execution}
+        assignment={captureWorkoutSummary.assignment}
         coachName={coach}
-        weekCompleted={
-          captureWorkoutSummary.exercises.length > 0 ? 1 : undefined
-        }
-        weekTotal={
-          captureWorkoutSummary.exercises.length > 0 ? 4 : undefined
-        }
+        weekAssignments={captureWorkoutSummary.weekAssignments}
+        weekStart={captureWorkoutSummary.weekStart}
+        today={today}
+        timeZone={timeZone}
+        weekCompleted={2}
+        weekTotal={4}
         onDone={() => setCaptureWorkoutSummary(null)}
       />
     );
@@ -573,7 +681,12 @@ export function TraineeShell({
         onChange={setCaptureWorkout}
         onFinished={(execution) => {
           setCaptureWorkout(null);
-          setCaptureWorkoutSummary(execution);
+          setCaptureWorkoutSummary({
+            execution,
+            assignment: null,
+            weekAssignments: [],
+            weekStart: startOfWeekMonday(today),
+          });
         }}
         onExit={() => setCaptureWorkout(null)}
       />
