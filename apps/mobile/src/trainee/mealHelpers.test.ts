@@ -28,6 +28,8 @@ function meal(partial: Partial<MealAssignment> & Pick<MealAssignment, "id">): Me
       required: true,
     },
     compliance: null,
+    loggingLocked: false,
+    loggingLockReason: null,
     createdAt: "2026-10-17T00:00:00.000Z",
     updatedAt: "2026-10-17T00:00:00.000Z",
     ...rest,

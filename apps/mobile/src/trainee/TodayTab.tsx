@@ -73,8 +73,10 @@ function mealItemLine(meal: MealAssignment): string {
   const items = meal.prescription.items
     .slice(0, 3)
     .map((item) => {
-      if ("label" in item && item.label) return cleanFoodLabel(item.label);
-      if ("name" in item && typeof item.name === "string") {
+      if ("label" in item && typeof item.label === "string" && item.label) {
+        return cleanFoodLabel(item.label);
+      }
+      if ("name" in item && typeof item.name === "string" && item.name) {
         return cleanFoodLabel(item.name);
       }
       return null;

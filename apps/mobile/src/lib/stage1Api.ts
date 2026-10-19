@@ -72,8 +72,7 @@ export type Stage1FitBudClient = FitBudApiClient & {
   updateMealTimes(body: UpdateMealTimesRequest): Promise<MealTimesResponse>;
   getInvitationPreview(token: string): Promise<{
     trainerDisplayName: string;
-    recipientEmail: string | null;
-    expiresAt: string;
+    status: "pending" | "accepted" | "expired" | "revoked";
   }>;
   searchMeFoods(query: { q: string; limit?: number }): Promise<TraineeFoodSearchResponse>;
   getTraineeFood(foodId: string): Promise<TraineeFoodDetail>;

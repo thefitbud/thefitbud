@@ -57,7 +57,11 @@ export function Screen({
           ) : undefined
         }
       >
-        <View accessibilityRole="main" style={styles.main}>
+        <View
+          // RN types omit landmark roles; Expo web maps this to <main>.
+          accessibilityRole={"main" as "summary"}
+          style={styles.main}
+        >
           {showHeader ? (
             <>
               {chrome === "page"
