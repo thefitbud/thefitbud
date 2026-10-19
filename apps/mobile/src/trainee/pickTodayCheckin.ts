@@ -19,6 +19,19 @@ export function pickTodayCheckin(
     });
   if (actionable[0]) return actionable[0];
 
+  // Surface a recent coach reply on Today before the next scheduled window.
+  const reviewed = items
+    .filter((item) => item.status === "reviewed" && item.review)
+    .slice()
+    .sort((a, b) => b.localDate.localeCompare(a.localDate));
+  if (reviewed[0]) return reviewed[0];
+
+  const submitted = items
+    .filter((item) => item.status === "submitted")
+    .slice()
+    .sort((a, b) => b.localDate.localeCompare(a.localDate));
+  if (submitted[0]) return submitted[0];
+
   const upcoming = items
     .filter((item) => item.status === "scheduled")
     .slice()

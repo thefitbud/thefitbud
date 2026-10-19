@@ -5,6 +5,7 @@ import { cleanFoodLabel } from "../trainee/mealHelpers";
 export type PlannedRow = {
   label: string;
   displayLabel: string;
+  unitLabel: string;
   quantity: number;
   foodId?: string;
   servingId?: string;
@@ -65,6 +66,7 @@ export function plannedRowsFromAssignment(
     return {
       label: name,
       displayLabel: label,
+      unitLabel: servingLabel || "serving",
       quantity,
       foodId,
       servingId,

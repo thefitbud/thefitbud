@@ -1,16 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { Check, ChevronDown, Pause, Play } from "lucide-react-native";
+import {
+  Check,
+  ChevronDown,
+  CirclePlay,
+  Pause,
+  Play,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
-import type { ExerciseExecution, WorkoutExecution } from "@fitbud/contracts";
+import type {
+  ExerciseExecution,
+  WorkoutAssignment,
+  WorkoutExecution,
+} from "@fitbud/contracts";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { BottomSheet } from "../components/BottomSheet";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { useAuth } from "../auth/AuthProvider";
+import { localDateInTimezone } from "../lib/dates";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
+import {
+  exerciseInstructionsFor,
+  loadPreviousSetHistory,
+  previousSetLabel,
+} from "./workoutDisplay";
 
 const DEFAULT_REST_SECONDS = 90;
 const TARGET = 44;
@@ -206,22 +223,27 @@ function isDraftModified(
 
 export function ActiveWorkoutScreen({
   execution,
+  assignment = null,
   onChange,
   onFinished,
   onExit,
   sessionName,
+  coachName = "Your coach",
   restSecondsBySetTargetId = {},
   onAskCoach,
 }: {
   execution: WorkoutExecution;
+  assignment?: WorkoutAssignment | null;
   onChange: (execution: WorkoutExecution) => void;
   onFinished: (execution: WorkoutExecution) => void;
   onExit: () => void;
   sessionName?: string;
+  coachName?: string;
   restSecondsBySetTargetId?: Record<string, number>;
   onAskCoach?: () => void;
 }) {
   const sync = useSyncEngine();
+  const { api, me } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [finishOpen, setFinishOpen] = useState(false);
   const [sessionRpe, setSessionRpe] = useState<number | null>(
@@ -231,6 +253,7 @@ export function ActiveWorkoutScreen({
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(DEFAULT_REST_SECONDS);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [previousByKey, setPreviousByKey] = useState<Record<string, string>>({});
   const pausedAccumRef = useRef(0);
   const pauseStartedRef = useRef<number | null>(null);
   const tickBaseRef = useRef(Date.parse(execution.startedAt));
@@ -280,6 +303,19 @@ export function ActiveWorkoutScreen({
       deactivate?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (!assignment) return;
+    const timeZone = me?.timezone ?? "UTC";
+    const today = localDateInTimezone(timeZone);
+    let cancelled = false;
+    void loadPreviousSetHistory(api, assignment, today).then((map) => {
+      if (!cancelled) setPreviousByKey(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, assignment, me?.timezone]);
 
   useEffect(() => {
     if (restRemaining == null || restRemaining <= 0) return;
@@ -709,14 +745,14 @@ export function ActiveWorkoutScreen({
                       : exercisePrescriptionLine(ex, restSecondsBySetTargetId)}
                   </Text>
                 </View>
-                {isCurrent && onAskCoach ? (
+                {isCurrent ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Ask coach"
+                    accessibilityLabel="How to do it"
                     onPress={onAskCoach}
                     style={styles.coachVid}
                   >
-                    <Text style={styles.coachVidText}>?</Text>
+                    <CirclePlay color={colors.indigo} size={22} />
                   </Pressable>
                 ) : null}
                 {!isCurrent ? (
@@ -731,6 +767,23 @@ export function ActiveWorkoutScreen({
               </View>
 
               {isCurrent ? (
+                <>
+                  {(() => {
+                    const cue = exerciseInstructionsFor(
+                      assignment,
+                      ex.exerciseId,
+                    );
+                    if (!cue) return null;
+                    const coachFirst = coachName.split(/\s+/)[0] ?? coachName;
+                    return (
+                      <View style={styles.note2}>
+                        <Text style={styles.note2Text}>
+                          <Text style={styles.note2Bold}>{coachFirst}:</Text>{" "}
+                          {cue}
+                        </Text>
+                      </View>
+                    );
+                  })()}
                 <View style={styles.stab}>
                   <View style={styles.stabTh}>
                     <Text style={styles.thCell}>Set</Text>
@@ -764,7 +817,7 @@ export function ActiveWorkoutScreen({
                           {set.order}
                         </Text>
                         <Text style={styles.stabPrev} numberOfLines={1}>
-                          —
+                          {previousSetLabel(ex, set, previousByKey)}
                         </Text>
                         {isNow ? (
                           <View style={styles.valEditWrap}>
@@ -839,6 +892,7 @@ export function ActiveWorkoutScreen({
                     );
                   })}
                 </View>
+                </>
               ) : null}
             </View>
           );
@@ -1150,9 +1204,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32,
   },
-  coachVidText: {
+  note2: {
+    marginBottom: 6,
+    paddingHorizontal: spacing.md,
+  },
+  note2Text: {
     color: colors.indigo,
-    fontSize: 18,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  note2Bold: {
     fontWeight: "700",
   },
   stab: {

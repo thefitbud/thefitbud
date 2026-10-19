@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 import * as Linking from "expo-linking";
+import { Lock } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth, messageFromError } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { Field } from "../components/Field";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
+import { Button } from "../components/Button";
+import {
+  BrandRow,
+  InviteHeroCard,
+  M2Field,
+  M2InputRow,
+  M2Screen,
+} from "../components/m2";
 import { stage1Api } from "../lib/stage1Api";
-
-const BULLETS = [
-  "Your plan, day by day",
-  "Log meals and workouts in a tap",
-  "Your coach sees your progress",
-];
 
 function inviteParamsFromUrl(url: string | null): {
   token: string | null;
@@ -54,8 +54,13 @@ function inviteParamsFromUrl(url: string | null): {
   return empty;
 }
 
+function formatMobileDisplay(digits: string): string {
+  const d = digits.replace(/\D/g, "").slice(-10);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)} ${d.slice(5)}`;
+}
+
 type Props = {
-  /** When embedded from signed-out AuthScreen. */
   onBackToSignIn?: () => void;
   initialToken?: string;
 };
@@ -76,12 +81,14 @@ export function AcceptInviteScreen({
   const s1 = stage1Api(api);
   const [token, setToken] = useState(initialToken?.trim() ?? "");
   const [displayName, setDisplayName] = useState("");
+  const [mobileDigits, setMobileDigits] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpProof, setOtpProof] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState<string | null>(null);
-  const [showCode, setShowCode] = useState(!initialToken);
+  const [showCodeEntry, setShowCodeEntry] = useState(!initialToken);
+  const [showOtpEntry, setShowOtpEntry] = useState(false);
   const [trainerName, setTrainerName] = useState<string | null>(null);
   const [previewStatus, setPreviewStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -102,7 +109,7 @@ export function AcceptInviteScreen({
       const fromLink = inviteParamsFromUrl(initial);
       if (!cancelled && fromLink.token && !token) {
         setToken(fromLink.token);
-        setShowCode(false);
+        setShowCodeEntry(false);
       }
       if (!cancelled && fromLink.email) setInviteEmail(fromLink.email);
     })();
@@ -110,7 +117,7 @@ export function AcceptInviteScreen({
       const fromLink = inviteParamsFromUrl(event.url);
       if (fromLink.token) {
         setToken(fromLink.token);
-        setShowCode(false);
+        setShowCodeEntry(false);
       }
       if (fromLink.email) setInviteEmail(fromLink.email);
     });
@@ -158,8 +165,6 @@ export function AcceptInviteScreen({
   async function sendInviteCode() {
     clearError();
     setLocalError(null);
-    // Preview API does not return email (PII). For demo/dev the mail goes to
-    // the invite recipient; ask the user only when we cannot infer it.
     const email = inviteEmail?.trim();
     if (!email) {
       setLocalError("Enter the email your coach invited, then request a code.");
@@ -169,6 +174,7 @@ export function AcceptInviteScreen({
     try {
       await s1.startOtp({ identifier: email, purpose: "invite" });
       setResendSeconds(60);
+      setShowOtpEntry(true);
       setLocalError(null);
     } catch {
       setLocalError("Couldn't send a code. Check the email and try again.");
@@ -197,6 +203,7 @@ export function AcceptInviteScreen({
         return;
       }
       setOtpProof(result.otpProof);
+      setShowOtpEntry(false);
     } catch {
       setLocalError("That code didn't work. Check the latest email or resend.");
     } finally {
@@ -210,7 +217,7 @@ export function AcceptInviteScreen({
     const trimmed = token.trim();
     if (!trimmed) {
       setLocalError("Paste the invitation code from your coach.");
-      setShowCode(true);
+      setShowCodeEntry(true);
       return;
     }
     if (previewStatus === "expired" || previewStatus === "revoked") {
@@ -220,7 +227,6 @@ export function AcceptInviteScreen({
       return;
     }
 
-    // Signed-in returning trainee: link without password/OTP.
     if (accessToken && !password) {
       setLoading(true);
       try {
@@ -253,9 +259,16 @@ export function AcceptInviteScreen({
       return;
     }
     if (!otpProof) {
-      setLocalError("Verify the code from your email before joining.");
+      await sendInviteCode();
+      if (!inviteEmail?.trim()) return;
+      setLocalError("Enter the 6-digit code we emailed you to continue.");
       return;
     }
+
+    const mobileE164 =
+      mobileDigits.replace(/\D/g, "").length >= 10
+        ? `+91${mobileDigits.replace(/\D/g, "").slice(-10)}`
+        : undefined;
 
     setLoading(true);
     try {
@@ -264,6 +277,7 @@ export function AcceptInviteScreen({
         displayName: displayName.trim() || undefined,
         password: password.trim(),
         otpProof,
+        mobileE164,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       if ("token" in result && result.token) {
@@ -289,90 +303,137 @@ export function AcceptInviteScreen({
   }
 
   const displayError = localError ?? errorMessage;
-  const coach = trainerName ?? "Your coach";
-  const coachFirst = coach.split(/\s+/)[0] ?? "coach";
+  const coachDisplay = trainerName ?? "Your coach";
+  const coachFirst = trainerName?.split(/\s+/)[0];
+  const joinLabel = coachFirst ? `Join ${coachFirst}` : "Join";
   const needsNewAccount = !accessToken;
+  const emailLocked = Boolean(inviteEmail?.trim());
+
+  const footer = (
+    <View style={styles.footerStack}>
+      <Button
+        label={joinLabel}
+        loading={loading}
+        onPress={() => {
+          void accept();
+        }}
+      />
+      <Text style={styles.codeNote}>
+        We&apos;ll email you a 6-digit code to confirm it&apos;s you.
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setShowCodeEntry(true)}
+        style={styles.codeLinkHit}
+      >
+        <Text style={styles.codeLink}>Have a code instead?</Text>
+      </Pressable>
+    </View>
+  );
 
   return (
-    <Screen
-      title="Join your coach"
-      subtitle="Accept the invitation to start your FitBud coaching space."
-      refreshing={false}
-      onRefresh={() => {
-        if (token.trim()) void preview(token);
-      }}
-    >
+    <M2Screen footer={footer}>
+      <BrandRow />
       {displayError ? <ErrorBanner message={displayError} /> : null}
 
-      <View style={styles.card} accessibilityRole="summary">
-        <Text style={styles.cardTitle} accessibilityRole="header">
-          {trainerName
-            ? `${trainerName} invited you to coaching on FitBud`
-            : "You're invited to coaching"}
-        </Text>
-        {BULLETS.map((line) => (
-          <Text key={line} style={styles.bullet}>
-            • {line.replace("Your coach", coach)}
-          </Text>
-        ))}
-      </View>
+      {trainerName ? (
+        <InviteHeroCard coachName={trainerName} />
+      ) : (
+        <InviteHeroCard coachName={coachDisplay} />
+      )}
 
-      <Field
-        label="Your name"
-        value={displayName}
-        onChangeText={setDisplayName}
-        placeholder="How your coach should address you"
-      />
+      <M2Field label="Your name">
+        <M2InputRow
+          value={displayName}
+          onChangeText={setDisplayName}
+          inputProps={{
+            placeholder: "How your coach should address you",
+            autoCapitalize: "words",
+          }}
+        />
+      </M2Field>
 
       {needsNewAccount ? (
         <>
-          <Field
-            label="Email from your invite"
-            value={inviteEmail ?? ""}
-            onChangeText={setInviteEmail}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            placeholder="you@example.com"
-          />
-          <Field
+          <M2Field label="Mobile number">
+            <M2InputRow
+              value={formatMobileDisplay(mobileDigits)}
+              onChangeText={(text) =>
+                setMobileDigits(text.replace(/\D/g, "").slice(0, 10))
+              }
+              prefix={<Text style={styles.prefix}>+91</Text>}
+              inputProps={{
+                keyboardType: "phone-pad",
+                placeholder: "98201 45632",
+              }}
+            />
+          </M2Field>
+          <M2Field label="Email">
+            <M2InputRow
+              value={inviteEmail ?? ""}
+              onChangeText={(text) => setInviteEmail(text)}
+              readOnly={emailLocked}
+              suffix={
+                emailLocked ? (
+                  <Lock size={18} color={colors.midGrey} strokeWidth={1.75} />
+                ) : null
+              }
+              inputProps={{
+                autoCapitalize: "none",
+                keyboardType: "email-address",
+                placeholder: "you@example.com",
+              }}
+            />
+          </M2Field>
+          <M2Field
             label="Create a password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            placeholder="At least 8 characters"
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-            onPress={() => setShowPassword((v) => !v)}
-            style={styles.linkHit}
+            help="At least 8 characters. You'll sign in with your mobile number or email and this password."
           >
-            <Text style={styles.link}>
-              {showPassword ? "Hide password" : "Show password"}
-            </Text>
-          </Pressable>
-          <Text style={styles.helper}>
-            You&apos;ll sign in with your mobile number or email and this password.
-          </Text>
-          {!otpProof ? (
+            <M2InputRow
+              value={password}
+              onChangeText={setPassword}
+              focused={password.length > 0}
+              suffix={
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setShowPassword((v) => !v)}
+                >
+                  <Text style={styles.showPwd}>
+                    {showPassword ? "Hide" : "Show"}
+                  </Text>
+                </Pressable>
+              }
+              inputProps={{
+                secureTextEntry: !showPassword,
+                placeholder: "••••••••••",
+              }}
+            />
+          </M2Field>
+          {showOtpEntry ? (
             <>
-              <PrimaryButton
-                label={resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Email me a code"}
+              <M2Field label="6-digit code">
+                <M2InputRow
+                  value={otpCode}
+                  onChangeText={setOtpCode}
+                  inputProps={{
+                    keyboardType: "number-pad",
+                    placeholder: "000000",
+                    maxLength: 6,
+                  }}
+                />
+              </M2Field>
+              <Button
+                label={
+                  resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend code"
+                }
                 variant="secondary"
                 loading={otpSending}
+                disabled={resendSeconds > 0}
                 onPress={() => {
                   void sendInviteCode();
                 }}
               />
-              <Field
-                label="Verification code"
-                value={otpCode}
-                onChangeText={setOtpCode}
-                keyboardType="number-pad"
-                placeholder="6-digit code"
-              />
-              <PrimaryButton
+              <Button
                 label="Verify code"
                 variant="secondary"
                 loading={loading}
@@ -381,97 +442,69 @@ export function AcceptInviteScreen({
                 }}
               />
             </>
-          ) : (
+          ) : otpProof ? (
             <Text style={styles.verified}>Email verified</Text>
-          )}
+          ) : null}
         </>
       ) : null}
 
-      {showCode ? (
-        <Field
-          label="Invitation code"
-          value={token}
-          onChangeText={(value) => {
-            setToken(value);
-            void preview(value);
-          }}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="Paste code from your coach"
-        />
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Have a code instead"
-          onPress={() => setShowCode(true)}
-          style={styles.linkHit}
-        >
-          <Text style={styles.link}>Have a code instead?</Text>
-        </Pressable>
-      )}
-
-      <PrimaryButton
-        label={`Join ${coachFirst}`}
-        loading={loading}
-        onPress={() => {
-          void accept();
-        }}
-      />
+      {showCodeEntry ? (
+        <M2Field label="Invitation code">
+          <M2InputRow
+            value={token}
+            onChangeText={(value) => {
+              setToken(value);
+              void preview(value);
+            }}
+            inputProps={{
+              autoCapitalize: "none",
+              placeholder: "Paste code from your coach",
+            }}
+          />
+        </M2Field>
+      ) : null}
 
       {onBackToSignIn ? (
-        <PrimaryButton
-          label="Back to sign in"
-          variant="ghost"
-          onPress={onBackToSignIn}
-        />
+        <Button label="Back to sign in" variant="tertiary" onPress={onBackToSignIn} />
       ) : accessToken ? (
-        <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
+        <Button label="Sign out" variant="tertiary" onPress={signOut} />
       ) : null}
-    </Screen>
+    </M2Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
-    borderWidth: 1,
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-    padding: spacing.lg,
-  },
-  cardTitle: {
-    color: colors.deepNavy,
+  prefix: {
+    color: colors.midGrey,
     fontSize: 16,
-    fontWeight: "700",
   },
-  bullet: {
-    color: colors.darkGrey,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  linkHit: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    marginBottom: spacing.sm,
-  },
-  link: {
+  showPwd: {
     color: colors.indigo,
     fontSize: 15,
     fontWeight: "600",
-  },
-  helper: {
-    color: colors.midGrey,
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: spacing.md,
   },
   verified: {
     color: colors.deepNavy,
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+  },
+  footerStack: {
+    gap: spacing.sm,
+  },
+  codeNote: {
+    color: colors.midGrey,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  codeLinkHit: {
+    alignItems: "center",
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  codeLink: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

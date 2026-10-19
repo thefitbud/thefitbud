@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import {
+  Camera,
+  Check,
+  Minus,
+  PersonStanding,
+  Plus,
+  RefreshCw,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -11,7 +19,13 @@ import type {
   CoachingRelationship,
 } from "@fitbud/contracts";
 import { formatCivilDate } from "@fitbud/core";
-import { colors, radii, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import {
+  colors,
+  radii,
+  semanticColors,
+  spacing,
+  touchTargetMin,
+} from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -31,7 +45,7 @@ function coachFirstName(relationship: CoachingRelationship): string {
   return raw.split(/\s+/)[0] ?? raw;
 }
 
-function outcomeCopy(
+export function outcomeCopy(
   outcome: CheckinReviewOutcome,
   coach: string,
 ): string {
@@ -73,7 +87,8 @@ function groupFields(
 }
 
 function canEditCheckin(status: Checkin["status"]): boolean {
-  return status === "due" || status === "overdue" || status === "scheduled";
+  // Scheduled (not yet due) is read-only — show "Next check-in …" instead.
+  return status === "due" || status === "overdue";
 }
 
 function answersToPayload(
@@ -143,7 +158,7 @@ function FieldControl({
   if (field.type === "scale_1_5") {
     return (
       <View style={styles.field}>
-        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.qLabel}>{field.label}</Text>
         <View style={styles.scaleRow}>
           {[1, 2, 3, 4, 5].map((n) => (
             <Pressable
@@ -159,13 +174,21 @@ function FieldControl({
                 value === String(n) ? styles.scaleChipOn : null,
               ]}
             >
-              <Text>{n}</Text>
+              <Text
+                style={[
+                  styles.scaleChipText,
+                  value === String(n) ? styles.scaleChipTextOn : null,
+                ]}
+              >
+                {n}
+              </Text>
             </Pressable>
           ))}
         </View>
-        <Text style={styles.help}>
-          1 · {field.lowLabel ?? "Very low"} … 5 · {field.highLabel ?? "Very high"}
-        </Text>
+        <View style={styles.scaleAnch}>
+          <Text style={styles.help}>{field.lowLabel ?? "Very low"}</Text>
+          <Text style={styles.help}>{field.highLabel ?? "Very high"}</Text>
+        </View>
       </View>
     );
   }
@@ -198,35 +221,45 @@ function FieldControl({
   }
 
   if (field.type === "photo_intent") {
+    const slot =
+      field.photoSlot === "front"
+        ? "Front"
+        : field.photoSlot === "side"
+          ? "Side"
+          : field.photoSlot === "back"
+            ? "Back"
+            : field.label;
+    const noted = value === "noted";
     return (
-      <View style={styles.field}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.help}>
-          {field.photoSlot === "front"
-            ? "Front photo · optional unless required"
-            : field.photoSlot === "side"
-              ? "Side photo · optional unless required"
-              : field.photoSlot === "back"
-                ? "Back photo · optional unless required"
-                : "Photo slot · optional unless required"}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Mark ${field.label} ready`}
-          style={[
-            styles.photoSlot,
-            value === "noted" ? styles.scaleChipOn : null,
-          ]}
-          onPress={() => {
-            onChange(value === "noted" ? "" : "noted");
-            onBlur();
-          }}
-        >
-          <Text style={styles.photoSlotText}>
-            {value === "noted" ? "Noted for upload" : "Add later"}
-          </Text>
-        </Pressable>
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${slot} photo`}
+        style={[styles.phTile, noted ? styles.phTileDone : styles.phTileEmpty]}
+        onPress={() => {
+          onChange(noted ? "" : "noted");
+          onBlur();
+        }}
+      >
+        {noted ? (
+          <>
+            <PersonStanding
+              size={64}
+              color="rgba(26, 18, 72, 0.28)"
+              strokeWidth={1.75}
+            />
+            <View style={styles.phOk}>
+              <Check size={13} color={semanticColors.positive.text} strokeWidth={3} />
+            </View>
+            <Text style={styles.phTileLabel}>{slot}</Text>
+          </>
+        ) : (
+          <>
+            <Camera size={24} color={colors.indigo} strokeWidth={1.75} />
+            <Text style={styles.phTileLabel}>{slot}</Text>
+            <Text style={styles.phTileSub}>Add photo</Text>
+          </>
+        )}
+      </Pressable>
     );
   }
 
@@ -238,36 +271,83 @@ function FieldControl({
     const step = field.measurementType === "body_weight_kg" ? 0.1 : 0.5;
     const numeric = Number(value);
     const current = Number.isFinite(numeric) && numeric > 0 ? numeric : 70;
+    if (field.measurementType === "body_weight_kg") {
+      return (
+        <View style={styles.wbig}>
+          <View>
+            <Text style={styles.ov}>Weight</Text>
+            <Text style={styles.wbigVal}>
+              {current}
+              <Text style={styles.wbigUnit}>kg</Text>
+            </Text>
+          </View>
+          <View style={styles.rstp}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Decrease weight"
+              style={styles.rstpBtn}
+              onPress={() => {
+                const next = Math.round((current - step) * 10) / 10;
+                onChange(String(next));
+                onBlur();
+              }}
+            >
+              <Minus size={22} color={colors.indigo} strokeWidth={2} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Increase weight"
+              style={styles.rstpBtn}
+              onPress={() => {
+                const next = Math.round((current + step) * 10) / 10;
+                onChange(String(next));
+                onBlur();
+              }}
+            >
+              <Plus size={22} color={colors.indigo} strokeWidth={2} />
+            </Pressable>
+          </View>
+        </View>
+      );
+    }
     return (
-      <View style={styles.field}>
-        <Text style={styles.label}>{label}</Text>
-        <View style={styles.stepperRow}>
+      <View style={styles.mrow2}>
+        <View>
+          <Text style={styles.mrowTitle}>{field.label}</Text>
+          {field.helpText ? (
+            <Text style={styles.help}>{field.helpText}</Text>
+          ) : (
+            <Text style={styles.help}>Measure at the navel</Text>
+          )}
+        </View>
+        <View style={styles.stp}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Decrease"
-            style={styles.stepperBtn}
+            style={styles.stpBtn}
             onPress={() => {
               const next = Math.round((current - step) * 10) / 10;
               onChange(String(next));
               onBlur();
             }}
           >
-            <Text style={styles.stepperGlyph}>−</Text>
+            <Minus size={18} color={colors.indigo} strokeWidth={2.2} />
           </Pressable>
-          <Text style={styles.stepperValue}>
-            {current} {unit}
+          <Text style={styles.stpVal}>
+            {current}
+            <Text style={styles.stpUnit}>{unit}</Text>
           </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Increase"
-            style={styles.stepperBtn}
+            style={styles.stpBtn}
             onPress={() => {
               const next = Math.round((current + step) * 10) / 10;
               onChange(String(next));
               onBlur();
             }}
           >
-            <Text style={styles.stepperGlyph}>+</Text>
+            <Plus size={18} color={colors.indigo} strokeWidth={2.2} />
           </Pressable>
         </View>
       </View>
@@ -319,17 +399,13 @@ export function CheckinScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftInFlight = useRef<Promise<void> | null>(null);
   const recordVersionRef = useRef(recordVersion);
   recordVersionRef.current = recordVersion;
   const valuesRef = useRef(values);
   valuesRef.current = values;
-
-  const introSubtitle = useMemo(() => {
-    const due = formatCivilDate(checkin.localDate);
-    return `Weekly check-in · takes about 3 min · Due ${due}, 11:59 pm`;
-  }, [checkin.localDate]);
 
   const overdueCopy = useMemo(() => {
     if (checkin.status !== "overdue") return null;
@@ -503,6 +579,7 @@ export function CheckinScreen({
           setRecordVersion(result.serverVersion);
         }
         setOffline(false);
+        setDraftSavedAt(new Date());
       } catch {
         setOffline(true);
       }
@@ -530,6 +607,12 @@ export function CheckinScreen({
 
   async function submit() {
     if (!form) return;
+    if (!canEditCheckin(checkin.status)) {
+      setError(
+        `Next check-in ${formatCivilDate(checkin.localDate, { includeWeekday: true })}.`,
+      );
+      return;
+    }
     setActing(true);
     setError(null);
     try {
@@ -542,7 +625,16 @@ export function CheckinScreen({
       if (draftInFlight.current) {
         await draftInFlight.current;
       }
+      // Flush latest answers once, then refetch the authoritative etag so
+      // submit never races a just-applied draft with a stale expectedVersion.
       await saveDraft();
+      try {
+        const fresh = await api.getCheckin(checkin.id);
+        recordVersionRef.current = fresh.recordVersion;
+        setRecordVersion(fresh.recordVersion);
+      } catch {
+        // keep ref from draft result
+      }
       const expected = recordVersionRef.current;
       const answers = answersToPayload(fields, values);
       const wellbeing =
@@ -568,6 +660,19 @@ export function CheckinScreen({
       });
       const syncMsg = messageFromSyncResults(results, coach);
       if (syncMsg) {
+        if (
+          results.some(
+            (item) => item.error?.code === "CHECKIN_VERSION_CONFLICT",
+          )
+        ) {
+          try {
+            const fresh = await api.getCheckin(checkin.id);
+            recordVersionRef.current = fresh.recordVersion;
+            setRecordVersion(fresh.recordVersion);
+          } catch {
+            // ignore
+          }
+        }
         setError(syncMsg);
         return;
       }
@@ -590,6 +695,23 @@ export function CheckinScreen({
     } finally {
       setActing(false);
     }
+  }
+
+  if (checkin.status === "scheduled") {
+    return (
+      <Screen chrome="app" title="Check-in">
+        <View style={styles.banner}>
+          <Text style={styles.bannerTitle} accessibilityRole="header">
+            Next check-in{" "}
+            {formatCivilDate(checkin.localDate, { includeWeekday: true })}
+          </Text>
+          <Text style={styles.bannerBody}>
+            You can fill this in when it opens. Nothing to do until then.
+          </Text>
+        </View>
+        <PrimaryButton label="Back to Today" onPress={onDone} />
+      </Screen>
+    );
   }
 
   if (checkin.status === "reviewed" && checkin.review) {
@@ -683,8 +805,63 @@ export function CheckinScreen({
     );
   }
 
+  const dueLabel = `Due ${formatCivilDate(checkin.localDate)}, 11:59 pm`;
+  const draftTimeLabel = draftSavedAt
+    ? new Intl.DateTimeFormat("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone,
+      }).format(draftSavedAt)
+    : null;
+
+  const formFooter = (
+    <View style={styles.abar}>
+      <PrimaryButton
+        label="Continue"
+        disabled={!form || acting || !canEditCheckin(checkin.status)}
+        onPress={() => setStep("review")}
+      />
+      {draftTimeLabel ? (
+        <View style={styles.savedRow}>
+          <RefreshCw size={16} color={colors.midGrey} strokeWidth={1.75} />
+          <Text style={styles.savedText}>
+            Draft saved on your phone · {draftTimeLabel}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
   return (
-    <Screen chrome="app" title="Check-in" subtitle={introSubtitle}>
+    <Screen chrome="app" title="Check-in" showHeader={false} footer={formFooter}>
+      <View style={styles.topnav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          onPress={onDone}
+          style={styles.closeBtn}
+        >
+          <Text style={styles.closeLabel}>Close</Text>
+        </Pressable>
+        <Text style={styles.topTitle}>Weekly check-in</Text>
+        <View style={styles.topRight} />
+      </View>
+
+      <View style={styles.steps3}>
+        <View style={[styles.stepSeg, styles.stepSegOn]} />
+        <View style={styles.stepSeg} />
+        <View style={styles.stepSeg} />
+      </View>
+      <View style={styles.stepl}>
+        <Text style={styles.steplMain}>
+          <Text style={styles.steplBold}>Body and photos</Text> · step 1 of 3
+        </Text>
+        <Text style={styles.steplDue}>{dueLabel}</Text>
+      </View>
+      <Text style={styles.intro}>
+        Takes about 3 min. Only {coach} sees your answers and photos.
+      </Text>
+
       {error ? <ErrorBanner message={error} /> : null}
       {offline ? (
         <Text style={styles.offline}>Draft saved on phone · will sync later</Text>
@@ -706,34 +883,62 @@ export function CheckinScreen({
         </View>
       ) : null}
 
-      {sections.map((section) => (
-        <View key={section.title} style={styles.section}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">
-            {section.title}
-          </Text>
-          {section.fields.map((field) => (
-            <FieldControl
-              key={field.id}
-              field={field}
-              value={values[field.id] ?? ""}
-              onChange={(next) => {
-                setValues((current) => ({ ...current, [field.id]: next }));
-                scheduleDraftSave();
-              }}
-              onBlur={() => {
-                void saveDraft();
-              }}
-            />
-          ))}
-        </View>
-      ))}
-
-      <PrimaryButton
-        label="Review"
-        disabled={!form || acting || !canEditCheckin(checkin.status)}
-        onPress={() => setStep("review")}
-      />
-      <PrimaryButton label="Cancel" variant="ghost" onPress={onDone} />
+      {sections.map((section) => {
+        const isPhotos = section.title === "Photos";
+        const isMeasurements = section.title === "Measurements";
+        return (
+          <View key={section.title} style={styles.section}>
+            <View style={styles.sh}>
+              <Text style={styles.sectionTitle} accessibilityRole="header">
+                {section.title}
+                {isPhotos ? (
+                  <Text style={styles.sectionCnt}> optional</Text>
+                ) : null}
+              </Text>
+              {isPhotos ? (
+                <Pressable accessibilityRole="button">
+                  <Text style={styles.shLink}>How to</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={isMeasurements || isPhotos ? styles.cardPad : null}>
+              {isPhotos ? (
+                <View style={styles.ph3}>
+                  {section.fields.map((field) => (
+                    <FieldControl
+                      key={field.id}
+                      field={field}
+                      value={values[field.id] ?? ""}
+                      onChange={(next) => {
+                        setValues((current) => ({ ...current, [field.id]: next }));
+                        scheduleDraftSave();
+                      }}
+                      onBlur={() => {
+                        void saveDraft();
+                      }}
+                    />
+                  ))}
+                </View>
+              ) : (
+                section.fields.map((field) => (
+                  <FieldControl
+                    key={field.id}
+                    field={field}
+                    value={values[field.id] ?? ""}
+                    onChange={(next) => {
+                      setValues((current) => ({ ...current, [field.id]: next }));
+                      scheduleDraftSave();
+                    }}
+                    onBlur={() => {
+                      void saveDraft();
+                    }}
+                  />
+                ))
+              )}
+            </View>
+          </View>
+        );
+      })}
     </Screen>
   );
 }
@@ -784,17 +989,70 @@ export function TodayCheckinCard({
     return <ErrorBanner message={error} />;
   }
 
-  if (!checkin || checkin.status === "scheduled") {
+  if (!checkin) {
     return (
       <View style={styles.banner}>
         <Text style={styles.bannerTitle} accessibilityRole="header">
           Check-in
         </Text>
-        <Text style={styles.bannerBody}>
-          {checkin
-            ? `Next check-in is scheduled for ${formatCivilDate(checkin.localDate)}.`
-            : "No check-in is due right now."}
+        <Text style={styles.bannerBody}>No check-in is due right now.</Text>
+      </View>
+    );
+  }
+
+  if (checkin.status === "scheduled") {
+    return (
+      <View style={styles.banner}>
+        <Text style={styles.bannerTitle} accessibilityRole="header">
+          Next check-in{" "}
+          {formatCivilDate(checkin.localDate, { includeWeekday: true })}
         </Text>
+        <Text style={styles.bannerBody}>
+          You can fill this in when it opens.
+        </Text>
+      </View>
+    );
+  }
+
+  if (checkin.status === "reviewed" && checkin.review) {
+    const coach =
+      relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "your coach";
+    return (
+      <View style={styles.banner}>
+        <Text style={styles.bannerTitle} accessibilityRole="header">
+          {outcomeCopy(checkin.review.outcome, coach)}
+        </Text>
+        {checkin.review.notes ? (
+          <Text style={styles.bannerBody}>{checkin.review.notes}</Text>
+        ) : (
+          <Text style={styles.bannerBody}>
+            {coach} reviewed your check-in.
+          </Text>
+        )}
+        <PrimaryButton
+          label="See check-in"
+          variant="secondary"
+          onPress={() => onOpen(checkin)}
+        />
+      </View>
+    );
+  }
+
+  if (checkin.status === "submitted") {
+    return (
+      <View style={styles.banner}>
+        <Text style={styles.bannerTitle} accessibilityRole="header">
+          Check-in sent
+        </Text>
+        <Text style={styles.bannerBody}>
+          Waiting for {relationship.trainerDisplayName?.split(/\s+/)[0] ?? "your coach"} to
+          review.
+        </Text>
+        <PrimaryButton
+          label="See check-in"
+          variant="secondary"
+          onPress={() => onOpen(checkin)}
+        />
       </View>
     );
   }
@@ -965,5 +1223,251 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 13,
     marginBottom: spacing.sm,
+  },
+  topnav: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: 48,
+    marginBottom: spacing.xs,
+  },
+  closeBtn: {
+    justifyContent: "center",
+    minHeight: 44,
+    paddingLeft: 2,
+  },
+  closeLabel: {
+    color: colors.indigo,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  topTitle: {
+    color: colors.deepNavy,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  topRight: {
+    width: 52,
+  },
+  steps3: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: spacing.xs,
+    paddingHorizontal: 4,
+  },
+  stepSeg: {
+    backgroundColor: colors.lightGrey,
+    borderRadius: 2,
+    flex: 1,
+    height: 4,
+  },
+  stepSegOn: {
+    backgroundColor: colors.indigo,
+  },
+  stepl: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+    paddingHorizontal: 4,
+  },
+  steplMain: {
+    color: colors.darkGrey,
+    fontSize: 14,
+  },
+  steplBold: {
+    color: colors.deepNavy,
+    fontWeight: "700",
+  },
+  steplDue: {
+    color: colors.midGrey,
+    fontSize: 14,
+  },
+  intro: {
+    color: colors.midGrey,
+    fontSize: 15,
+    lineHeight: 21,
+    marginBottom: spacing.md,
+    paddingHorizontal: 4,
+  },
+  sh: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  shLink: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  sectionCnt: {
+    color: colors.midGrey,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  cardPad: {
+    backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
+    borderRadius: radii.card,
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
+  ov: {
+    color: colors.midGrey,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  wbig: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  wbigVal: {
+    color: colors.deepNavy,
+    fontSize: 40,
+    fontWeight: "700",
+    letterSpacing: -1.2,
+    lineHeight: 44,
+  },
+  wbigUnit: {
+    color: colors.midGrey,
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  rstp: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  rstpBtn: {
+    alignItems: "center",
+    backgroundColor: colors.background,
+    borderColor: "#E7E9F2",
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  mrow2: {
+    alignItems: "center",
+    borderTopColor: "#E7E9F2",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+  },
+  mrowTitle: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  stp: {
+    alignItems: "center",
+    backgroundColor: colors.background,
+    borderColor: "#E7E9F2",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+  },
+  stpBtn: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  stpVal: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+    minWidth: 52,
+    textAlign: "center",
+  },
+  stpUnit: {
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  ph3: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  phTile: {
+    alignItems: "center",
+    borderRadius: 18,
+    flex: 1,
+    height: 128,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+    paddingBottom: 10,
+  },
+  phTileDone: {
+    backgroundColor: "#D9D3F7",
+  },
+  phTileEmpty: {
+    backgroundColor: colors.white,
+    borderColor: "#D5D6DE",
+    borderStyle: "dashed",
+    borderWidth: 1.5,
+    justifyContent: "center",
+    gap: 6,
+    paddingBottom: 0,
+  },
+  phOk: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: 11,
+    height: 22,
+    justifyContent: "center",
+    position: "absolute",
+    right: 8,
+    top: 8,
+    width: 22,
+  },
+  phTileLabel: {
+    color: colors.deepNavy,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  phTileSub: {
+    color: colors.midGrey,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  qLabel: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: spacing.sm,
+  },
+  scaleChipText: {
+    color: colors.darkGrey,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  scaleChipTextOn: {
+    color: colors.indigo,
+  },
+  scaleAnch: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing.xs,
+  },
+  abar: {
+    gap: spacing.sm,
+  },
+  savedRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+  },
+  savedText: {
+    color: colors.midGrey,
+    fontSize: 13,
   },
 });

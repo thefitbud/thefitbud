@@ -1,199 +1,626 @@
-import { useCallback, useEffect, useState } from "react";
-import { FlatList, Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import {
+  ChevronLeft,
+  Minus,
+  Plus,
+  Search,
+  X,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
+import type { LoggedFoodItem, MealAssignment } from "@fitbud/contracts";
+import { NUTRIENT_SCALE } from "@fitbud/contracts";
+import { formatKcal, formatNumber } from "@fitbud/core";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import { useAuth } from "../auth/AuthProvider";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { Screen } from "../components/Screen";
+import { weekdayShort } from "../lib/dates";
+import { plannedRowsFromAssignment } from "../lib/plannedMealItems";
+import { stage1Api } from "../lib/stage1Api";
+import { useSyncEngine } from "../sync/SyncProvider";
+import { deviateMealAssignment, MealSyncError } from "./mealActions";
+import { invalidateRelationshipDayData } from "./dataCache";
+import { nutrientsFromMealPrescription } from "./nutrition";
+import { loadServingPresetsForFood } from "./food/foodServingsApi";
 import type { TraineeFoodSearchResponse } from "@fitbud/contracts";
 
 type TraineeFoodSearchItem = TraineeFoodSearchResponse["items"][number];
-import { NUTRIENT_SCALE } from "@fitbud/contracts";
-import { formatKcal } from "@fitbud/core";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
-import { stage1Api } from "../lib/stage1Api";
-import { useAuth } from "../auth/AuthProvider";
-import { ErrorBanner } from "../components/ErrorBanner";
-import { Field } from "../components/Field";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
-import { FoodServingChips } from "./food/FoodServingChips";
 
-type Props = {
-  onBack: () => void;
-  onSelect?: (item: TraineeFoodSearchItem) => void;
-  mealTitle?: string;
+type LogLine = {
+  key: string;
+  name: string;
+  quantity: number;
+  /** Kcal per one unit of quantity. */
+  kcalPerUnit: number | null;
+  subtitle: string;
+  item: LoggedFoodItem;
 };
 
-export function FoodSearchScreen({ onBack, onSelect, mealTitle }: Props) {
-  const { api } = useAuth();
+type Props = {
+  assignment: MealAssignment;
+  relationshipId: string;
+  coachName?: string;
+  onBack: () => void;
+  onSaved: () => void;
+};
+
+function itemKcal(item: TraineeFoodSearchItem): number | null {
+  if (item.energyKcalScaled == null) return null;
+  return Math.round(item.energyKcalScaled / NUTRIENT_SCALE);
+}
+
+export function FoodSearchScreen({
+  assignment,
+  relationshipId,
+  onBack,
+  onSaved,
+}: Props) {
+  const { api, me } = useAuth();
+  const sync = useSyncEngine();
   const s1 = stage1Api(api);
+  const timeZone = me?.timezone ?? "UTC";
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TraineeFoodSearchItem[]>([]);
-  const [suggestions, setSuggestions] = useState<TraineeFoodSearchItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
+  const [logLines, setLogLines] = useState<LogLine[]>(() =>
+    plannedRowsFromAssignment(assignment).map((row, index) => ({
+      key: `plan-${index}`,
+      name: row.label,
+      quantity: row.quantity,
+      kcalPerUnit:
+        row.kcalPreview != null && row.quantity > 0
+          ? row.kcalPreview / row.quantity
+          : null,
+      subtitle: "from your plan",
+      item: row.foodId
+        ? {
+            foodId: row.foodId,
+            servingId: row.servingId,
+            quantity: row.quantity,
+          }
+        : {
+            customFood: {
+              name: row.label,
+              kcal: row.kcalPreview ?? 0,
+            },
+          },
+    })),
+  );
+  const [saving, setSaving] = useState(false);
 
-  const loadSuggestions = useCallback(async () => {
-    try {
-      const page = await s1.searchMeFoods({ q: "dal", limit: 8 });
-      setSuggestions(page.items);
-      setOffline(false);
-    } catch {
-      setOffline(true);
-    }
-  }, [s1]);
+  const planKcal = nutrientsFromMealPrescription(assignment).kcal;
+  const weekday = weekdayShort(timeZone, assignment.localDate);
+
+  const search = useCallback(
+    async (q: string) => {
+      const trimmed = q.trim();
+      if (trimmed.length < 2) {
+        setResults([]);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const page = await s1.searchMeFoods({ q: trimmed, limit: 30 });
+        setResults(page.items);
+      } catch (err) {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Search failed. Try again.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [s1],
+  );
 
   useEffect(() => {
-    void loadSuggestions();
-  }, [loadSuggestions]);
+    const handle = setTimeout(() => {
+      void search(query);
+    }, 280);
+    return () => clearTimeout(handle);
+  }, [query, search]);
 
-  const search = useCallback(async () => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setError("Type at least 2 characters.");
+  const totals = useMemo(() => {
+    let kcal = 0;
+    let unknown = false;
+    for (const line of logLines) {
+      if (line.kcalPerUnit == null) unknown = true;
+      else kcal += Math.round(line.kcalPerUnit * line.quantity);
+    }
+    const planMacros = nutrientsFromMealPrescription(assignment);
+    const ratio = planMacros.kcal > 0 && !unknown ? kcal / planMacros.kcal : 0;
+    return {
+      kcal,
+      unknown,
+      protein: ratio > 0 ? Math.round(planMacros.protein * ratio) : 0,
+      carbs: ratio > 0 ? Math.round(planMacros.carbs * ratio) : 0,
+      fat: ratio > 0 ? Math.round(planMacros.fat * ratio) : 0,
+    };
+  }, [assignment, logLines]);
+
+  async function addFood(item: TraineeFoodSearchItem) {
+    const presets = await loadServingPresetsForFood(api, item);
+    const preset = presets[0];
+    const qty = preset?.quantity ?? 1;
+    const servingId = preset?.servingId ?? item.defaultServingId ?? undefined;
+    const kcalEach = itemKcal(item);
+    const line: LogLine = {
+      key: `food-${item.id}-${Date.now()}`,
+      name: item.name,
+      quantity: qty,
+      kcalPerUnit: kcalEach,
+      subtitle: "just added",
+      item: {
+        foodId: item.id,
+        servingId,
+        quantity: qty,
+      },
+    };
+    setLogLines((prev) => [line, ...prev]);
+  }
+
+  function adjustLine(key: string, delta: number) {
+    setLogLines((prev) =>
+      prev
+        .map((line) =>
+          line.key === key
+            ? { ...line, quantity: Math.max(0, line.quantity + delta) }
+            : line,
+        )
+        .filter((line) => line.quantity > 0),
+    );
+  }
+
+  function removeLine(key: string) {
+    setLogLines((prev) => prev.filter((line) => line.key !== key));
+  }
+
+  async function saveLog() {
+    if (logLines.length === 0) {
+      setError("Add at least one food.");
       return;
     }
-    setLoading(true);
+    setSaving(true);
     setError(null);
     try {
-      const page = await s1.searchMeFoods({ q, limit: 30 });
-      setResults(page.items);
-      setOffline(false);
+      await deviateMealAssignment(
+        sync,
+        assignment,
+        {
+          deviationKind: "logged_foods",
+          notes: null,
+          photoIntent: null,
+          items: logLines.map((line) => ({
+            ...line.item,
+            quantity: line.quantity,
+          })),
+        },
+        undefined,
+        relationshipId,
+      );
+      invalidateRelationshipDayData(relationshipId);
+      onSaved();
     } catch (err) {
-      setOffline(true);
       setError(
-        err instanceof ApiClientError
+        err instanceof MealSyncError
           ? err.message
-          : "Search failed. Showing foods saved on your phone if available.",
+          : err instanceof ApiClientError
+            ? err.message
+            : "Could not save meal.",
       );
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  }, [query, s1]);
-
-  const list = results.length > 0 ? results : suggestions;
-  const emptyCopy =
-    query.trim().length >= 2 && !loading
-      ? `Can't find '${query.trim()}'? Add it as a custom food — it's fine to log it anyway.`
-      : "Recent and plan foods appear here. Search for dal, roti, poha…";
+  }
 
   return (
-    <Screen
-      title={mealTitle ? `Log · ${mealTitle}` : "Food search"}
-      subtitle="Search foods, e.g. dal, roti, poha"
-      refreshing={loading}
-      onRefresh={() => {
-        void (query.trim().length >= 2 ? search() : loadSuggestions());
-      }}
-    >
+    <Screen chrome="app" showHeader={false} title="">
+      <View style={styles.topnav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={onBack}
+          style={styles.back}
+        >
+          <ChevronLeft size={24} color={colors.indigo} strokeWidth={2} />
+          <Text style={styles.backLabel}>Back</Text>
+        </Pressable>
+        <View style={styles.topTitle}>
+          <Text style={styles.topTitleMain}>
+            {assignment.mealName} · {weekday}
+          </Text>
+          {planKcal > 0 ? (
+            <Text style={styles.topTitleSub}>plan {formatKcal(planKcal)}</Text>
+          ) : null}
+        </View>
+        <View style={styles.topRight} />
+      </View>
+
       {error ? <ErrorBanner message={error} /> : null}
-      {offline ? (
-        <Text style={styles.offline}>Showing foods saved on your phone</Text>
-      ) : null}
-      <Field
-        label="Search"
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search foods, e.g. dal, roti, poha"
-        autoCapitalize="none"
-        onSubmitEditing={() => {
-          void search();
-        }}
-      />
-      <PrimaryButton
-        label="Search"
-        loading={loading}
-        onPress={() => void search()}
-      />
-      {results.length === 0 && suggestions.length > 0 ? (
-        <Text style={styles.section}>From your plan · frequent</Text>
-      ) : null}
-      <FlatList
-        data={list}
-        keyExtractor={(item) => item.id}
-        style={styles.list}
-        ListEmptyComponent={
-          !loading ? (
-            <Text style={styles.muted}>{emptyCopy}</Text>
+
+      <View style={styles.srch}>
+        <Search size={19} color={colors.midGrey} strokeWidth={1.75} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search foods"
+          placeholderTextColor={colors.midGrey}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.srchInput}
+        />
+        {query.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            onPress={() => setQuery("")}
+            style={styles.srchClear}
+          >
+            <X size={13} color={colors.white} strokeWidth={2.6} />
+          </Pressable>
+        ) : null}
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.sml}>Results</Text>
+        <View style={styles.card}>
+          {loading ? (
+            <ActivityIndicator style={styles.loader} color={colors.indigo} />
+          ) : null}
+          {results.map((item) => {
+            const kcal = itemKcal(item);
+            return (
+              <View key={item.id} style={styles.lrow}>
+                <View style={styles.lrowText}>
+                  <Text style={styles.foodName}>
+                    {item.name}
+                    <Text style={styles.srcTag}>FitBud</Text>
+                  </Text>
+                  <Text style={styles.foodMeta}>
+                    1 piece · {kcal != null ? `${kcal} kcal` : "kcal —"}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add ${item.name}`}
+                  onPress={() => void addFood(item)}
+                  style={styles.addBtn}
+                >
+                  <Plus size={22} color={colors.indigo} strokeWidth={1.75} />
+                </Pressable>
+              </View>
+            );
+          })}
+          {!loading && query.trim().length >= 2 && results.length === 0 ? (
+            <Text style={styles.empty}>No matches. Try another spelling.</Text>
+          ) : null}
+        </View>
+
+        <Text style={styles.hint}>
+          Tap a food to pick katori, piece, cup or grams. Can&apos;t find it? Add
+          it as your own food.
+        </Text>
+
+        <Text style={styles.smlLog}>In this log · {logLines.length}</Text>
+        <View style={styles.card}>
+          {logLines.map((line) => {
+            const lineKcal =
+              line.kcalPerUnit != null
+                ? Math.round(line.kcalPerUnit * line.quantity)
+                : null;
+            return (
+              <View key={line.key} style={styles.lrow}>
+                <View style={styles.lrowText}>
+                  <Text style={styles.foodName}>{line.name}</Text>
+                  <Text style={styles.foodMeta}>
+                    {formatNumber(line.quantity)} ·{" "}
+                    {lineKcal != null ? `${lineKcal} kcal` : "kcal —"} ·{" "}
+                    {line.subtitle}
+                  </Text>
+                </View>
+                <View style={styles.stp}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Decrease ${line.name}`}
+                    onPress={() => adjustLine(line.key, -1)}
+                    style={styles.stpBtn}
+                  >
+                    <Minus size={18} color={colors.indigo} strokeWidth={2.2} />
+                  </Pressable>
+                  <Text style={styles.stpVal}>
+                    {formatNumber(line.quantity)}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Increase ${line.name}`}
+                    onPress={() => adjustLine(line.key, 1)}
+                    style={styles.stpBtn}
+                  >
+                    <Plus size={18} color={colors.indigo} strokeWidth={2.2} />
+                  </Pressable>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${line.name}`}
+                  onPress={() => removeLine(line.key)}
+                  style={styles.rmBtn}
+                >
+                  <X size={18} color={colors.midGrey} strokeWidth={2.4} />
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      <View style={styles.abar}>
+        <View style={styles.abarTotals}>
+          <Text style={styles.abarKcal}>
+            {totals.unknown ? "≥ " : ""}
+            {totals.kcal} kcal
+          </Text>
+          <Text style={styles.abarMacros}>
+            P {totals.protein} · C {totals.carbs} · F {totals.fat} g
+            {planKcal > 0 ? ` · plan ${formatKcal(planKcal)}` : ""}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Save"
+          disabled={saving}
+          onPress={() => void saveLog()}
+          style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+        >
+          {saving ? (
+            <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.muted}>Searching…</Text>
-          )
-        }
-        renderItem={({ item }) => {
-          const kcal =
-            item.energyKcalScaled != null
-              ? Math.round(item.energyKcalScaled / NUTRIENT_SCALE)
-              : null;
-          const unknown = item.energyKcalScaled == null;
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Select ${item.name}`}
-              style={styles.row}
-              onPress={() => onSelect?.(item)}
-            >
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.meta}>
-                {kcal != null
-                  ? formatKcal(kcal, unknown)
-                  : "≥ nutrition unknown"}
-                {item.defaultServingId ? " · default serving" : ""}
-              </Text>
-              <FoodServingChips
-                api={api}
-                item={item}
-                onSelect={(food) => {
-                  onSelect?.(food);
-                }}
-              />
-            </Pressable>
-          );
-        }}
-      />
-      <PrimaryButton label="Close" variant="ghost" onPress={onBack} />
+            <Text style={styles.saveBtnLabel}>Save</Text>
+          )}
+        </Pressable>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  list: {
-    marginTop: spacing.lg,
-    maxHeight: 420,
-  },
-  section: {
-    color: colors.deepNavy,
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: spacing.lg,
-  },
-  muted: {
-    color: colors.midGrey,
-    fontSize: 14,
-    marginTop: spacing.lg,
-    lineHeight: 20,
-  },
-  offline: {
-    color: colors.midGrey,
-    fontSize: 13,
-    fontWeight: "600",
+  topnav: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: 48,
     marginBottom: spacing.sm,
   },
-  row: {
+  back: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 44,
+    minWidth: 44,
+    paddingLeft: 2,
+  },
+  backLabel: {
+    color: colors.indigo,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  topTitle: {
+    alignItems: "center",
+    flex: 1,
+  },
+  topTitleMain: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  topTitleSub: {
+    color: colors.midGrey,
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+    textAlign: "center",
+  },
+  topRight: {
+    width: 44,
+  },
+  srch: {
+    alignItems: "center",
+    backgroundColor: "#ECEAF4",
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    height: 44,
+    marginBottom: spacing.md,
+    paddingHorizontal: 12,
+  },
+  srchInput: {
+    color: colors.nearBlack,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "500",
+    minHeight: 44,
+    paddingVertical: 0,
+  },
+  srchClear: {
+    alignItems: "center",
+    backgroundColor: "#B9BCC6",
+    borderRadius: 10,
+    height: 20,
+    justifyContent: "center",
+    width: 20,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 120,
+  },
+  sml: {
+    color: colors.midGrey,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  smlLog: {
+    color: colors.midGrey,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    marginTop: 18,
+    textTransform: "uppercase",
+  },
+  card: {
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
-    borderRadius: radii.card,
+    borderRadius: 20,
     borderWidth: 1,
-    marginBottom: spacing.sm,
-    minHeight: 44,
-    padding: spacing.md,
+    overflow: "hidden",
   },
-  name: {
+  lrow: {
+    alignItems: "center",
+    borderTopColor: "#E7E9F2",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 56,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  lrowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodName: {
     color: colors.deepNavy,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
-  meta: {
+  srcTag: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: 6,
+    color: colors.indigo,
+    fontSize: 11,
+    fontWeight: "700",
+    marginLeft: 8,
+    overflow: "hidden",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  foodMeta: {
+    color: colors.midGrey,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  addBtn: {
+    alignItems: "center",
+    backgroundColor: colors.paleLavender,
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  hint: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  stp: {
+    alignItems: "center",
+    backgroundColor: "#F4F3F8",
+    borderColor: "#E7E9F2",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+  },
+  stpBtn: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  stpVal: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+    minWidth: 52,
+    textAlign: "center",
+  },
+  rmBtn: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  loader: {
+    margin: spacing.md,
+  },
+  empty: {
+    color: colors.midGrey,
+    fontSize: 14,
+    padding: spacing.md,
+  },
+  abar: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderTopColor: "#E7E9F2",
+    borderTopWidth: 1,
+    bottom: 0,
+    flexDirection: "row",
+    gap: 12,
+    left: 0,
+    paddingBottom: 34,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    position: "absolute",
+    right: 0,
+  },
+  abarTotals: {
+    flex: 1,
+  },
+  abarKcal: {
+    color: colors.deepNavy,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  abarMacros: {
     color: colors.midGrey,
     fontSize: 13,
     marginTop: 2,
+  },
+  saveBtn: {
+    alignItems: "center",
+    backgroundColor: colors.indigo,
+    borderRadius: 16,
+    height: 56,
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
+  },
+  saveBtnLabel: {
+    color: colors.white,
+    fontSize: 17,
+    fontWeight: "700",
   },
 });

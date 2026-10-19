@@ -1,8 +1,19 @@
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import Svg, { Path } from "react-native-svg";
 import {
   ChevronLeft,
   ChevronRight,
+  Minus,
+  Pencil,
+  Plus,
   Search,
   SlidersHorizontal,
   Store,
@@ -111,7 +122,11 @@ export function SomethingDifferentSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const planKcal = nutrientsFromMealPrescription(assignment).kcal;
+  const planMacros = useMemo(
+    () => nutrientsFromMealPrescription(assignment),
+    [assignment],
+  );
+  const planKcal = planMacros.kcal;
   const mealSubtitle = `${assignment.mealName}${
     planKcal > 0 ? ` · plan ${formatKcal(planKcal)}` : ""
   }`;
@@ -125,8 +140,16 @@ export function SomethingDifferentSheet({
       if (rowKcal == null) hasUnknown = true;
       else kcal += rowKcal;
     }
-    return { kcal, hasUnknown };
-  }, [portionRows]);
+    const ratio =
+      planMacros.kcal > 0 && !hasUnknown ? kcal / planMacros.kcal : 0;
+    return {
+      kcal,
+      hasUnknown,
+      protein: ratio > 0 ? Math.round(planMacros.protein * ratio) : 0,
+      carbs: ratio > 0 ? Math.round(planMacros.carbs * ratio) : 0,
+      fat: ratio > 0 ? Math.round(planMacros.fat * ratio) : 0,
+    };
+  }, [portionRows, planMacros]);
 
   function syncErrorMessage(err: unknown): string {
     if (err instanceof MealSyncError) return err.message;
@@ -136,7 +159,6 @@ export function SomethingDifferentSheet({
 
   function openFoodSearch() {
     onOpenFoodSearch?.();
-    onDone();
   }
 
   function adjustPortion(index: number, delta: number) {
@@ -219,9 +241,9 @@ export function SomethingDifferentSheet({
     }
   }
 
-  function sheetHeader(title: string, subtitle?: string, showBack = false) {
+  function sheetNav(showBack = false) {
     return (
-      <View style={styles.sheetHeader}>
+      <View style={styles.sheetNav}>
         {showBack ? (
           <Pressable
             accessibilityRole="button"
@@ -232,36 +254,70 @@ export function SomethingDifferentSheet({
             }}
             style={styles.backBtn}
           >
-            <ChevronLeft size={22} color={colors.indigo} />
+            <ChevronLeft size={24} color={colors.indigo} strokeWidth={2} />
             <Text style={styles.backLabel}>Back</Text>
           </Pressable>
         ) : (
-          <View style={styles.backSpacer} />
+          <View />
         )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
           onPress={onCancel}
-          style={styles.closeBtn}
+          style={styles.xbtn}
         >
-          <X size={22} color={colors.darkGrey} />
+          <X size={17} color={colors.midGrey} strokeWidth={2.4} />
         </Pressable>
+      </View>
+    );
+  }
+
+  function sheetHeader(title: string, subtitle?: string, showBack = false) {
+    return (
+      <>
+        {sheetNav(showBack)}
         <View style={styles.titleBlock}>
           <Text style={styles.sheetTitle}>{title}</Text>
           {subtitle ? <Text style={styles.sheetSubtitle}>{subtitle}</Text> : null}
         </View>
-      </View>
+      </>
     );
   }
 
   function saveButton(label: string, onPress: () => void) {
     return (
-      <PrimaryButton
-        label={label}
-        loading={saving}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={saving}
         onPress={onPress}
-        style={styles.saveBtn}
-      />
+        style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+      >
+        {saving ? (
+          <ActivityIndicator color={colors.white} />
+        ) : (
+          <Text style={styles.saveBtnLabel}>{label}</Text>
+        )}
+      </Pressable>
+    );
+  }
+
+  function WhatsAppGlyph() {
+    return (
+      <Svg width={20} height={20} viewBox="0 0 24 24" accessibilityElementsHidden>
+        <Path
+          fill="#25D366"
+          d="M12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.9 0-3.18-1.24-6.16-3.48-8.41A11.82 11.82 0 0 0 12.05 0Z"
+        />
+        <Path
+          fill="#fff"
+          d="M12.05 21.79h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.83 9.83 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88Z"
+        />
+        <Path
+          fill="#25D366"
+          d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.47-2.39-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.88 1.21 3.07.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.41-.08-.13-.28-.2-.57-.35Z"
+        />
+      </Svg>
     );
   }
 
@@ -270,10 +326,10 @@ export function SomethingDifferentSheet({
       {variant === "sheet"
         ? sheetHeader("What did you have instead?", mealSubtitle)
         : null}
-      <View style={styles.optionList}>
+      <View style={styles.opt3}>
         <Pressable
           accessibilityRole="button"
-          style={styles.optionRow}
+          style={styles.opt}
           onPress={() => {
             setError(null);
             setScreen("ate_out");
@@ -292,7 +348,7 @@ export function SomethingDifferentSheet({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          style={styles.optionRow}
+          style={styles.opt}
           onPress={openFoodSearch}
         >
           <View style={styles.optionIcon}>
@@ -308,7 +364,7 @@ export function SomethingDifferentSheet({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          style={styles.optionRow}
+          style={styles.opt}
           onPress={() => {
             setError(null);
             setScreen("portion");
@@ -332,6 +388,7 @@ export function SomethingDifferentSheet({
           onPress={onAskCoach}
           style={styles.askCoach}
         >
+          <WhatsAppGlyph />
           <Text style={styles.askCoachText}>
             Ask {coachShort} about this meal
           </Text>
@@ -341,136 +398,160 @@ export function SomethingDifferentSheet({
   );
 
   const ateOutBody = (
-    <>
-      {sheetHeader(
-        "Ate out",
-        `${assignment.mealName} · what did you have, and where?`,
-        true,
-      )}
-      <TextInput
-        value={ateOutNote}
-        onChangeText={setAteOutNote}
-        placeholder="What did you eat?"
-        placeholderTextColor={colors.midGrey}
-        multiline
-        style={styles.noteBox}
-        textAlignVertical="top"
-      />
-      <Text style={styles.hint}>
-        Nutrition stays unknown, so today&apos;s kcal shows as “at least”.{" "}
-        {coachShort} sees your note.
-      </Text>
-      <View style={styles.chipRow}>
-        {PLACE_CHIPS.map((chip) => (
-          <Pressable
-            key={chip}
-            accessibilityRole="button"
-            style={styles.placeChip}
-            onPress={() => {
-              setAteOutNote((prev) => {
-                const trimmed = prev.trim();
-                if (!trimmed) return `${chip}: `;
-                if (trimmed.toLowerCase().startsWith(chip.toLowerCase())) {
-                  return prev;
-                }
-                return `${chip}: ${prev}`;
-              });
-            }}
-          >
-            <Text style={styles.placeChipText}>{chip}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        onPress={openFoodSearch}
-        style={styles.linkRow}
+    <View style={styles.subScreen}>
+      <ScrollView
+        style={styles.subScroll}
+        contentContainerStyle={styles.subScrollContent}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.linkText}>Know the foods? Log it myself instead</Text>
-      </Pressable>
-      {error ? <ErrorBanner message={error} /> : null}
-      {saveButton("Save", () => void saveAteOut())}
-    </>
+        {sheetHeader(
+          "Ate out",
+          `${assignment.mealName} · what did you have, and where?`,
+          true,
+        )}
+        <TextInput
+          value={ateOutNote}
+          onChangeText={setAteOutNote}
+          placeholder="What did you eat?"
+          placeholderTextColor={colors.midGrey}
+          multiline
+          style={styles.noteBox}
+          textAlignVertical="top"
+        />
+        <Text style={styles.hint}>
+          Nutrition stays unknown, so today&apos;s kcal shows as “at least”.{" "}
+          {coachShort} sees your note.
+        </Text>
+        <View style={styles.chipRow}>
+          {PLACE_CHIPS.map((chip) => (
+            <Pressable
+              key={chip}
+              accessibilityRole="button"
+              style={styles.placeChipOutline}
+              onPress={() => {
+                setAteOutNote((prev) => {
+                  const trimmed = prev.trim();
+                  if (!trimmed) return `${chip}: `;
+                  if (trimmed.toLowerCase().startsWith(chip.toLowerCase())) {
+                    return prev;
+                  }
+                  return `${chip}: ${prev}`;
+                });
+              }}
+            >
+              <Text style={styles.placeChipOutlineText}>{chip}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={openFoodSearch}
+          style={styles.linkRow}
+        >
+          <Text style={styles.linkText}>Know the foods? Log it myself instead</Text>
+        </Pressable>
+        {error ? <ErrorBanner message={error} /> : null}
+      </ScrollView>
+      <View style={styles.stickySave}>{saveButton("Save", () => void saveAteOut())}</View>
+    </View>
   );
 
   const portionBody = (
-    <>
-      {sheetHeader(
-        "Changed the portion",
-        `${assignment.mealName} · set how much you had of each`,
-        true,
-      )}
-      <View style={styles.portionList}>
-        {portionRows.map((row, index) => {
-          if (row.removed) return null;
-          const kcal = scaledKcal(row);
-          const asPlanned = row.quantity === row.plannedQuantity;
-          return (
-            <View key={`${row.label}-${index}`} style={styles.portionRow}>
-              <View style={styles.portionMain}>
-                <Text style={styles.portionName}>{row.label}</Text>
-                <Text style={styles.portionMeta}>
-                  {kcal != null ? `${kcal} kcal` : "kcal unknown"}
-                  {asPlanned ? " · as planned" : ` · plan ${row.displayLabel}`}
-                </Text>
-              </View>
-              <View style={styles.stepper}>
+    <View style={styles.subScreen}>
+      <ScrollView
+        style={styles.subScroll}
+        contentContainerStyle={styles.subScrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {sheetHeader(
+          "Changed the portion",
+          `${assignment.mealName} · set how much you had of each`,
+          true,
+        )}
+        <View style={styles.portionList}>
+          {portionRows.map((row, index) => {
+            if (row.removed) return null;
+            const kcal = scaledKcal(row);
+            const asPlanned = row.quantity === row.plannedQuantity;
+            return (
+              <View key={`${row.label}-${index}`} style={styles.prow}>
+                <View style={styles.prowText}>
+                  <Text style={styles.prowName}>{row.label}</Text>
+                  <Text style={styles.prowMeta}>
+                    {kcal != null ? `${kcal} kcal` : "kcal unknown"}
+                    {asPlanned
+                      ? " · as planned"
+                      : ` · plan ${row.plannedQuantity} ${row.unitLabel}`}
+                  </Text>
+                </View>
+                <View style={styles.stp}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Decrease ${row.label}`}
+                    onPress={() => adjustPortion(index, -PORTION_STEP)}
+                    style={styles.stpBtn}
+                  >
+                    <Minus size={18} color={colors.indigo} strokeWidth={2.2} />
+                  </Pressable>
+                  <Text style={styles.stpValue}>
+                    {formatQuantityDisplay(row.quantity)}{" "}
+                    <Text style={styles.stpUnit}>{row.unitLabel}</Text>
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Increase ${row.label}`}
+                    onPress={() => adjustPortion(index, PORTION_STEP)}
+                    style={styles.stpBtn}
+                  >
+                    <Plus size={18} color={colors.indigo} strokeWidth={2.2} />
+                  </Pressable>
+                </View>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Decrease ${row.label}`}
-                  onPress={() => adjustPortion(index, -PORTION_STEP)}
-                  style={styles.stepBtn}
+                  accessibilityLabel={`Remove ${row.label}`}
+                  onPress={() => removePortionRow(index)}
+                  style={styles.removeBtn}
                 >
-                  <Text style={styles.stepGlyph}>−</Text>
-                </Pressable>
-                <Text style={styles.stepValue}>
-                  {formatQuantityDisplay(row.quantity)}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Increase ${row.label}`}
-                  onPress={() => adjustPortion(index, PORTION_STEP)}
-                  style={styles.stepBtn}
-                >
-                  <Text style={styles.stepGlyph}>+</Text>
+                  <X size={18} color={colors.midGrey} strokeWidth={2.4} />
                 </Pressable>
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${row.label}`}
-                onPress={() => removePortionRow(index)}
-                style={styles.removeBtn}
-              >
-                <X size={18} color={colors.midGrey} />
-              </Pressable>
-            </View>
-          );
-        })}
-      </View>
-      <Text style={styles.noteLabel}>
-        Note for {coachShort} <Text style={styles.noteOptional}>· optional</Text>
-      </Text>
-      <TextInput
-        value={portionNote}
-        onChangeText={setPortionNote}
-        placeholder="Anything your coach should know?"
-        placeholderTextColor={colors.midGrey}
-        style={styles.noteField}
-      />
-      <View style={styles.totalsBar}>
-        <Text style={styles.totalsMain}>
-          <Text style={styles.totalsKcal}>
-            {portionTotals.hasUnknown ? "≥ " : ""}
-            {portionTotals.kcal} kcal
-          </Text>
+            );
+          })}
+        </View>
+        <Text style={styles.noteLabel}>
+          Note for {coachShort}{" "}
+          <Text style={styles.noteOptional}>· optional</Text>
         </Text>
-        {planKcal > 0 ? (
-          <Text style={styles.totalsPlan}>plan {formatKcal(planKcal)}</Text>
-        ) : null}
-      </View>
-      {error ? <ErrorBanner message={error} /> : null}
-      {saveButton("Save", () => void savePortion())}
-    </>
+        <View style={styles.noteFieldWrap}>
+          <Pencil size={18} color={colors.indigo} style={styles.noteIcon} />
+          <TextInput
+            value={portionNote}
+            onChangeText={setPortionNote}
+            placeholder="Anything your coach should know?"
+            placeholderTextColor={colors.midGrey}
+            style={styles.noteField}
+          />
+        </View>
+        <View style={styles.totbar}>
+          <Text style={styles.totbarMain}>
+            <Text style={styles.totbarKcal}>
+              {portionTotals.hasUnknown ? "≥ " : ""}
+              {portionTotals.kcal} kcal
+            </Text>
+            <Text style={styles.totbarMacros}>
+              {" "}
+              · P {portionTotals.protein} · C {portionTotals.carbs} · F{" "}
+              {portionTotals.fat} g
+            </Text>
+          </Text>
+          {planKcal > 0 ? (
+            <Text style={styles.totbarPlan}>plan {formatKcal(planKcal)}</Text>
+          ) : null}
+        </View>
+        {error ? <ErrorBanner message={error} /> : null}
+      </ScrollView>
+      <View style={styles.stickySave}>{saveButton("Save", () => void savePortion())}</View>
+    </View>
   );
 
   const body =
@@ -504,72 +585,72 @@ export function SomethingDifferentSheet({
 const styles = StyleSheet.create({
   sheetBody: {
     gap: spacing.md,
+    maxHeight: 560,
   },
-  sheetHeader: {
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  backSpacer: {
-    height: 0,
+  sheetNav: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
   },
   backBtn: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 2,
+    gap: 0,
     minHeight: 44,
-    alignSelf: "flex-start",
   },
   backLabel: {
     color: colors.indigo,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
-  closeBtn: {
+  xbtn: {
     alignItems: "center",
+    backgroundColor: "#EFEEF5",
+    borderRadius: 16,
+    height: 32,
     justifyContent: "center",
-    minHeight: 44,
-    minWidth: 44,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 1,
+    width: 32,
   },
   titleBlock: {
-    paddingRight: spacing.xl,
+    marginBottom: spacing.xs,
   },
   sheetTitle: {
     color: colors.deepNavy,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
+    letterSpacing: -0.3,
+    lineHeight: 28,
   },
   sheetSubtitle: {
     color: colors.midGrey,
     fontSize: 14,
     lineHeight: 20,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
-  optionList: {
-    gap: spacing.sm,
+  opt3: {
+    gap: 10,
+    marginTop: spacing.md,
   },
-  optionRow: {
+  opt: {
     alignItems: "center",
     backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
+    borderColor: "#D5D6DE",
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
-    gap: spacing.md,
-    minHeight: 72,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    gap: 14,
+    minHeight: 76,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   optionIcon: {
     alignItems: "center",
     backgroundColor: colors.paleLavender,
-    borderRadius: 14,
-    height: 44,
+    borderRadius: 15,
+    height: 48,
     justifyContent: "center",
-    width: 44,
+    width: 48,
   },
   optionIconAttn: {
     backgroundColor: "#FFFBEB",
@@ -593,14 +674,47 @@ const styles = StyleSheet.create({
   },
   askCoach: {
     alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
     justifyContent: "center",
+    marginTop: 10,
     minHeight: 44,
-    marginTop: spacing.sm,
   },
   askCoachText: {
-    color: colors.indigo,
-    fontSize: 15,
-    fontWeight: "600",
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  subScreen: {
+    flex: 1,
+    maxHeight: 520,
+  },
+  subScroll: {
+    flex: 1,
+  },
+  subScrollContent: {
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  stickySave: {
+    borderTopColor: "#E7E9F2",
+    borderTopWidth: 1,
+    paddingTop: spacing.sm,
+  },
+  saveBtn: {
+    alignItems: "center",
+    backgroundColor: colors.indigo,
+    borderRadius: 16,
+    height: PRIMARY_BTN_HEIGHT,
+    justifyContent: "center",
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
+  },
+  saveBtnLabel: {
+    color: colors.white,
+    fontSize: 17,
+    fontWeight: "700",
   },
   noteBox: {
     backgroundColor: colors.white,
@@ -623,14 +737,17 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.xs,
   },
-  placeChip: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  placeChipOutline: {
+    backgroundColor: colors.white,
+    borderColor: "#D5D6DE",
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: "center",
+    paddingHorizontal: 14,
   },
-  placeChipText: {
-    color: colors.deepNavy,
+  placeChipOutlineText: {
+    color: colors.darkGrey,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -645,53 +762,56 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   portionList: {
-    gap: spacing.sm,
+    marginTop: 14,
   },
-  portionRow: {
+  prow: {
     alignItems: "center",
+    borderTopColor: "#E7E9F2",
+    borderTopWidth: 1,
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: 10,
+    minHeight: 72,
+    paddingVertical: 10,
   },
-  portionMain: {
+  prowText: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
   },
-  portionName: {
+  prowName: {
     color: colors.deepNavy,
     fontSize: 16,
-    fontWeight: "700",
-  },
-  portionMeta: {
-    color: colors.midGrey,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  stepper: {
-    alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.card,
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
-  },
-  stepBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 40,
-    minWidth: 40,
-  },
-  stepGlyph: {
-    color: colors.deepNavy,
-    fontSize: 20,
     fontWeight: "600",
   },
-  stepValue: {
+  prowMeta: {
+    color: colors.midGrey,
+    fontSize: 13,
+    marginTop: 1,
+  },
+  stp: {
+    alignItems: "center",
+    backgroundColor: "#F4F3F8",
+    borderColor: "#E7E9F2",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+  },
+  stpBtn: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  stpValue: {
     color: colors.deepNavy,
     fontSize: 16,
     fontWeight: "700",
-    minWidth: 36,
+    minWidth: 64,
     textAlign: "center",
+  },
+  stpUnit: {
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "500",
   },
   removeBtn: {
     alignItems: "center",
@@ -709,36 +829,52 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontWeight: "500",
   },
-  noteField: {
+  noteFieldWrap: {
+    alignItems: "center",
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
     borderRadius: radii.control,
     borderWidth: 1,
-    color: colors.darkGrey,
-    fontSize: 16,
+    flexDirection: "row",
+    gap: 10,
     minHeight: 52,
     paddingHorizontal: spacing.md,
+  },
+  noteIcon: {
+    marginTop: 2,
+  },
+  noteField: {
+    color: colors.darkGrey,
+    flex: 1,
+    fontSize: 16,
+    minHeight: 44,
     paddingVertical: spacing.sm,
   },
-  totalsBar: {
-    alignItems: "center",
+  totbar: {
+    alignItems: "baseline",
+    backgroundColor: "#F4F3F8",
+    borderRadius: 16,
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  totalsMain: {
+  totbarMain: {
+    flex: 1,
+    flexWrap: "wrap",
+  },
+  totbarKcal: {
     color: colors.deepNavy,
-    fontSize: 15,
-  },
-  totalsKcal: {
+    fontSize: 18,
     fontWeight: "700",
   },
-  totalsPlan: {
+  totbarMacros: {
     color: colors.midGrey,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 13,
   },
-  saveBtn: {
-    minHeight: PRIMARY_BTN_HEIGHT,
+  totbarPlan: {
+    color: colors.midGrey,
+    fontSize: 13,
   },
 });

@@ -1,39 +1,64 @@
 import type { CoachingRelationship } from "@fitbud/contracts";
-import { whatsappHref } from "@fitbud/core";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import { formatCivilDate, whatsappHref } from "@fitbud/core";
+import { colors, spacing } from "@fitbud/ui-mobile";
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
+import {
+  Bell,
+  ChevronRight,
+  Scale,
+  Check,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
+import { Button } from "../components/Button";
+import {
+  BrandRow,
+  Card2,
+  M2Avatar,
+  M2Screen,
+} from "../components/m2";
+import { WhatsAppGlyph } from "../components/m2/WhatsAppGlyph";
 
-function checklistFor(relationship: CoachingRelationship) {
+type TimelineStep = {
+  label: string;
+  detail?: string;
+  state: "done" | "current" | "later";
+};
+
+function timelineFor(relationship: CoachingRelationship): TimelineStep[] {
   const status = relationship.onboardingStatus;
+  const joined = formatCivilDate(relationship.startedAt.slice(0, 10));
+  const intakeDone =
+    status === "onboarding_submitted" ||
+    status === "coaching_ready" ||
+    status === "active";
+  const reviewDone = status === "coaching_ready" || status === "active";
+  const planReady = status === "active";
+
   return [
-    { label: "Joined FitBud", done: true },
+    { label: "Joined", detail: joined, state: "done" },
     {
       label: "Intake sent",
-      done:
-        status === "onboarding_submitted" ||
-        status === "coaching_ready" ||
-        status === "active",
+      detail: intakeDone ? joined : undefined,
+      state: intakeDone ? "done" : "later",
     },
     {
-      label: "Coach reviews your answers",
-      done: status === "coaching_ready" || status === "active",
+      label: `${coachFirstName(relationship)} reviews your answers`,
+      detail: reviewDone ? "Usually the next step" : "Usually the next step",
+      state: reviewDone ? "done" : intakeDone ? "current" : "later",
     },
     {
       label: "Your plan is ready",
-      done: status === "active",
+      state: planReady ? "done" : "later",
     },
   ];
 }
 
 function coachFirstName(relationship: CoachingRelationship): string {
   const raw = relationship.trainerDisplayName?.trim();
-  if (!raw) return "your coach";
+  if (!raw) return "Your coach";
   return raw.split(/\s+/)[0] ?? raw;
 }
 
@@ -46,10 +71,12 @@ export function WaitingReviewScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
-  const steps = checklistFor(relationship);
   const coach = coachFirstName(relationship);
+  const coachFull = relationship.trainerDisplayName?.trim() ?? coach;
   const phoneE164 = relationship.trainerWhatsappE164 ?? null;
   const hasNumber = Boolean(phoneE164 && phoneE164.replace(/\D/g, "").length >= 10);
+  const steps = timelineFor(relationship);
+  const greetingName = "there";
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -74,125 +101,144 @@ export function WaitingReviewScreen({
     return () => clearInterval(timer);
   }, [refreshSession]);
 
-  const subtitle =
-    relationship.onboardingStatus === "coaching_ready"
-      ? `${coach} is building your plan.`
-      : "Your coach is reviewing your intake. You can set up reminders while you wait.";
-
   return (
-    <Screen
-      title="Waiting for your plan"
-      subtitle={subtitle}
-      refreshing={refreshing}
-      onRefresh={() => {
-        void refresh();
-      }}
-    >
-      {error ? <ErrorBanner message={error} /> : null}
-      {offline ? (
-        <Text style={styles.offline}>You're offline · we'll keep checking</Text>
-      ) : null}
-
-      <View style={styles.banner} accessibilityLabel={`${coach} is preparing your plan`}>
-        <Text style={styles.bannerTitle}>{coach} is preparing your plan</Text>
-        <Text style={styles.bannerBody}>
-          We'll notify you when your coaching plan is ready. Pull down to check
-          for updates.
+    <M2Screen>
+      <BrandRow />
+      <View style={styles.hero}>
+        <Text style={styles.h1} accessibilityRole="header">
+          Hi {greetingName}
+        </Text>
+        <Text style={styles.lead}>
+          Your coach has your answers. Here&apos;s where things are.
         </Text>
       </View>
 
-      <View style={styles.checklist}>
-        {steps.map((step) => (
-          <Text
-            key={step.label}
-            style={[styles.checkItem, step.done ? styles.checkDone : null]}
-            accessibilityLabel={`${step.label}${step.done ? ", done" : ", pending"}`}
-          >
-            {step.done ? "✓" : "○"} {step.label}
-          </Text>
-        ))}
-      </View>
+      {error ? <ErrorBanner message={error} /> : null}
+      {offline ? (
+        <Text style={styles.offline}>You&apos;re offline · we&apos;ll keep checking</Text>
+      ) : null}
 
-      <Text style={styles.meanwhile}>Meanwhile</Text>
-      <Text style={styles.hint}>
-        • Set up reminders so logging is easy once your plan goes live{"\n"}
-        • Message {coach} on WhatsApp if you have a quick question
-      </Text>
+      <Card2 style={styles.statusCard}>
+        <View style={styles.coachRow}>
+          <M2Avatar name={coachFull} />
+          <View style={styles.coachText}>
+            <Text style={styles.coachTitle}>{coach} is preparing your plan</Text>
+            <Text style={styles.coachSub}>
+              You&apos;ll get a notification when it&apos;s ready
+            </Text>
+          </View>
+        </View>
+        <View style={styles.timeline}>
+          {steps.map((step, index) => (
+            <View key={step.label}>
+              <View style={styles.chkRow}>
+                <View
+                  style={[
+                    styles.chkIcon,
+                    step.state === "done" && styles.chkIconDone,
+                    step.state === "current" && styles.chkIconCurrent,
+                    step.state === "later" && styles.chkIconLater,
+                  ]}
+                >
+                  {step.state === "done" ? (
+                    <Check size={15} color={colors.white} strokeWidth={3} />
+                  ) : null}
+                </View>
+                <View>
+                  <Text
+                    style={[
+                      styles.chkLabel,
+                      step.state === "later" && styles.chkLabelLater,
+                    ]}
+                  >
+                    {step.label}
+                  </Text>
+                  {step.detail ? (
+                    <Text style={styles.chkDetail}>{step.detail}</Text>
+                  ) : null}
+                </View>
+              </View>
+              {index < steps.length - 1 ? <View style={styles.chkLine} /> : null}
+            </View>
+          ))}
+        </View>
+      </Card2>
 
-      <PrimaryButton
-        label={`Message ${coach}`}
+      <Text style={styles.section}>Meanwhile</Text>
+      <Card2 style={styles.listCard}>
+        <Pressable accessibilityRole="button" style={styles.lrow}>
+          <View style={styles.tile}>
+            <Bell size={19} color={colors.indigo} strokeWidth={1.75} />
+          </View>
+          <View style={styles.lrowText}>
+            <Text style={styles.lrowTitle}>Set up reminders</Text>
+            <Text style={styles.lrowSub}>
+              Two minutes, so logging is easy later
+            </Text>
+          </View>
+          <ChevronRight size={18} color={colors.midGrey} />
+        </Pressable>
+        <View style={styles.rowDivider} />
+        <Pressable accessibilityRole="button" style={styles.lrow}>
+          <View style={styles.tile}>
+            <Scale size={19} color={colors.indigo} strokeWidth={1.75} />
+          </View>
+          <View style={styles.lrowText}>
+            <Text style={styles.lrowTitle}>Add your starting weight</Text>
+            <Text style={styles.lrowSub}>Optional</Text>
+          </View>
+          <ChevronRight size={18} color={colors.midGrey} />
+        </Pressable>
+      </Card2>
+
+      <Button
+        label={`Message ${coach} on WhatsApp`}
         variant="whatsapp"
         disabled={!hasNumber}
         onPress={() => {
           if (!hasNumber) return;
           const text = `Hi ${coach}, I've filled my FitBud intake and I'm ready when you are.`;
-          // Prefill only — never auto-send (product rule).
-          void Linking.openURL(
-            whatsappHref({ phoneE164, draftText: text }),
-          );
+          void Linking.openURL(whatsappHref({ phoneE164, draftText: text }));
         }}
       />
-      {!hasNumber ? (
-        <Text style={styles.noNumber}>
-          {coach}'s WhatsApp number isn't on file yet.
+      <View style={styles.waNoteRow}>
+        <WhatsAppGlyph size={18} />
+        <Text style={styles.waNote}>
+          Opens WhatsApp with a message ready. You press Send.
         </Text>
-      ) : null}
+      </View>
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Sign out"
-        onPress={signOut}
-        style={styles.signOut}
+        onPress={() => void refresh()}
+        style={styles.refreshHit}
       >
-        <Text style={styles.signOutLabel}>Sign out</Text>
+        <Text style={styles.refreshLabel}>
+          {refreshing ? "Checking…" : "Pull to refresh for updates"}
+        </Text>
       </Pressable>
-    </Screen>
+
+      <Button label="Sign out" variant="tertiary" onPress={signOut} />
+    </M2Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  banner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
+  hero: {
+    marginTop: spacing.md,
   },
-  bannerTitle: {
+  h1: {
     color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  bannerBody: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  checklist: {
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  checkItem: {
-    color: colors.midGrey,
-    fontSize: 15,
-    minHeight: 44,
-    paddingVertical: spacing.sm,
-  },
-  checkDone: {
-    color: colors.deepNavy,
-    fontWeight: "600",
-  },
-  meanwhile: {
-    color: colors.deepNavy,
-    fontSize: 15,
+    fontSize: 30,
     fontWeight: "700",
-    marginBottom: spacing.sm,
+    letterSpacing: -0.4,
+    lineHeight: 36,
   },
-  hint: {
-    color: colors.darkGrey,
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
+  lead: {
+    color: colors.midGrey,
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 4,
   },
   offline: {
     color: colors.midGrey,
@@ -200,21 +246,140 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: spacing.md,
   },
-  noNumber: {
+  statusCard: {
+    marginTop: spacing.lg,
+  },
+  coachRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  coachText: {
+    flex: 1,
+  },
+  coachTitle: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  coachSub: {
+    color: colors.midGrey,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  timeline: {
+    marginTop: 14,
+  },
+  chkRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    minHeight: 48,
+  },
+  chkIcon: {
+    alignItems: "center",
+    borderRadius: 14,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  chkIconDone: {
+    backgroundColor: colors.deepNavy,
+  },
+  chkIconCurrent: {
+    borderColor: colors.indigo,
+    borderWidth: 2,
+  },
+  chkIconLater: {
+    borderColor: "#D5D6DE",
+    borderStyle: "dashed",
+    borderWidth: 2,
+  },
+  chkLabel: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  chkLabelLater: {
+    color: colors.midGrey,
+    fontWeight: "500",
+  },
+  chkDetail: {
     color: colors.midGrey,
     fontSize: 13,
-    textAlign: "center",
-    marginTop: spacing.sm,
   },
-  signOut: {
+  chkLine: {
+    backgroundColor: "#E7E9F2",
+    height: 10,
+    marginLeft: 13,
+    width: 2,
+  },
+  section: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: spacing.sm,
+    marginTop: spacing.lg,
+    paddingHorizontal: 4,
+  },
+  listCard: {
+    padding: 0,
+  },
+  lrow: {
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: spacing.xl,
-    minHeight: 44,
+    flexDirection: "row",
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
   },
-  signOutLabel: {
+  rowDivider: {
+    backgroundColor: "#E7E9F2",
+    height: StyleSheet.hairlineWidth,
+    marginLeft: spacing.lg + 36 + spacing.md,
+  },
+  tile: {
+    alignItems: "center",
+    backgroundColor: colors.paleLavender,
+    borderRadius: 11,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  lrowText: {
+    flex: 1,
+  },
+  lrowTitle: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  lrowSub: {
     color: colors.midGrey,
-    fontSize: 15,
+    fontSize: 14,
+  },
+  waNoteRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    marginTop: spacing.md,
+  },
+  waNote: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 17,
+    textAlign: "center",
+  },
+  refreshHit: {
+    alignItems: "center",
+    marginTop: spacing.lg,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  refreshLabel: {
+    color: colors.midGrey,
+    fontSize: 13,
     fontWeight: "600",
   },
 });

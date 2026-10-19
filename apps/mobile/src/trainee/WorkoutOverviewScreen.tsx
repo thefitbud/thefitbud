@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { ChevronLeft, MessageSquare, Timer } from "lucide-react-native";
+import { ChevronLeft, MessageSquare, Play, Timer } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { WorkoutAssignment } from "@fitbud/contracts";
-import { formatCivilDate } from "@fitbud/core";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
+import { OverflowMenu } from "../components/OverflowMenu";
 import { Screen } from "../components/Screen";
-import { weekdayShort } from "../lib/dates";
+import { localDateInTimezone } from "../lib/dates";
 import { estimateDurationMinutesFromDay } from "./workoutDuration";
+import { assignmentDayEyebrow } from "./workoutDisplay";
 
 const TARGET = 44;
 
@@ -96,6 +96,7 @@ export function WorkoutOverviewScreen({
   const [offline, setOffline] = useState(false);
 
   const timeZone = me?.timezone ?? "UTC";
+  const today = localDateInTimezone(timeZone);
 
   const load = useCallback(async () => {
     setError(null);
@@ -140,20 +141,35 @@ export function WorkoutOverviewScreen({
 
   const dateEyebrow =
     assignment != null
-      ? `${weekdayShort(timeZone, assignment.localDate)} · ${formatCivilDate(assignment.localDate)}`
+      ? assignmentDayEyebrow(assignment, timeZone, today)
       : null;
 
   const showStart =
     assignment != null && onStart != null && canStartWorkout(assignment);
 
+  const menuItems =
+    assignment && onAskCoach
+      ? [
+          {
+            id: "ask",
+            label: "Ask coach",
+            onSelect: () => onAskCoach(assignment),
+          },
+        ]
+      : [];
+
   const footer = showStart ? (
     <View style={styles.abar}>
-      <PrimaryButton
-        label={startButtonLabel(assignment!)}
-        loading={startLoading}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={startButtonLabel(assignment!)}
+        disabled={startLoading}
         onPress={() => onStart!(assignment!)}
-        style={styles.startBtn}
-      />
+        style={[styles.startBtn, startLoading ? styles.startBtnDisabled : null]}
+      >
+        <Play color={colors.white} size={20} fill={colors.white} />
+        <Text style={styles.startBtnText}>{startButtonLabel(assignment!)}</Text>
+      </Pressable>
     </View>
   ) : null;
 
@@ -169,15 +185,22 @@ export function WorkoutOverviewScreen({
         }}
         footer={footer}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to workout"
-          onPress={onBack}
-          style={styles.topnav}
-        >
-          <ChevronLeft color={colors.indigo} size={24} />
-          <Text style={styles.topnavLabel}>Workout</Text>
-        </Pressable>
+        <View style={styles.topnav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to workout"
+            onPress={onBack}
+            style={styles.topnavBack}
+          >
+            <ChevronLeft color={colors.indigo} size={24} />
+            <Text style={styles.topnavLabel}>Workout</Text>
+          </Pressable>
+          {menuItems.length > 0 ? (
+            <OverflowMenu label="Workout day options" items={menuItems} />
+          ) : (
+            <View style={styles.topnavSpacer} />
+          )}
+        </View>
 
         {error ? <ErrorBanner message={error} /> : null}
         {offline ? (
@@ -276,14 +299,6 @@ export function WorkoutOverviewScreen({
               })}
             </View>
 
-            {onAskCoach ? (
-              <PrimaryButton
-                label="Ask coach"
-                variant="secondary"
-                onPress={() => onAskCoach(assignment)}
-              />
-            ) : null}
-
             {showStart ? <View style={styles.abarSpacer} /> : null}
           </View>
         ) : null}
@@ -299,10 +314,19 @@ const styles = StyleSheet.create({
   topnav: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 2,
+    justifyContent: "space-between",
     marginBottom: spacing.md,
+    minHeight: TARGET,
+  },
+  topnavBack: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 2,
     marginLeft: -spacing.xs,
     minHeight: TARGET,
+  },
+  topnavSpacer: {
+    width: TARGET,
   },
   topnavLabel: {
     color: colors.indigo,
@@ -473,7 +497,21 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   startBtn: {
-    minHeight: 56,
+    alignItems: "center",
+    backgroundColor: colors.indigo,
+    borderRadius: radii.control,
+    flexDirection: "row",
+    gap: spacing.sm,
+    height: 56,
+    justifyContent: "center",
+  },
+  startBtnDisabled: {
+    opacity: 0.6,
+  },
+  startBtnText: {
+    color: colors.white,
+    fontSize: 17,
+    fontWeight: "700",
   },
   abarSpacer: {
     height: 72,

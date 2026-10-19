@@ -244,6 +244,8 @@ function statusFromHttp(
 /**
  * Persist a sync mutation result. Retries must never 500 on UNIQUE — return the
  * prior stored result when the same mutationId / idempotency key already exists.
+ * First successful insert keeps status "applied"; only true retries become
+ * "already_applied".
  */
 async function persistSyncMutationResult(
   db: ReturnType<typeof createDb>,
@@ -253,8 +255,9 @@ async function persistSyncMutationResult(
     result: SyncMutationResult;
   },
 ): Promise<SyncMutationResult> {
+  let insertedId: string | null = null;
   try {
-    await db
+    const inserted = await db
       .insert(syncMutations)
       .values({
         id: createId(),
@@ -269,9 +272,15 @@ async function persistSyncMutationResult(
         resultBody: JSON.stringify(input.result),
         createdAt: nowIso(),
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: syncMutations.id });
+    insertedId = inserted[0]?.id ?? null;
   } catch {
     // D1 / sqlite UNIQUE races — fall through to lookup.
+  }
+
+  if (insertedId) {
+    return input.result;
   }
 
   const existingByMutation = await db
@@ -320,6 +329,12 @@ async function persistSyncMutationResult(
             "Idempotency key was already used by a different mutation id.",
         },
       };
+    }
+    if (
+      prior.status === "applied" ||
+      prior.status === "already_applied"
+    ) {
+      return { ...prior, status: "already_applied" };
     }
     return prior;
   }

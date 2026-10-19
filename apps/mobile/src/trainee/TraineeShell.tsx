@@ -562,13 +562,13 @@ export function TraineeShell({
     );
   }
 
-  // Mockups hide the tab bar on immersive flows; notifications keeps it.
   const sheetOverlay =
     overlay?.screen === "something_different" ||
     overlay?.screen === "ask_coach";
-  const keepTabsWithOverlay = overlay?.screen === "notifications";
+  const tabbedOverlay =
+    overlay?.screen === "meal_plan" || overlay?.screen === "deep_link";
   const fullscreenOverlay =
-    overlay != null && !sheetOverlay && !keepTabsWithOverlay;
+    overlay != null && !sheetOverlay && !tabbedOverlay;
   const hideTabBar =
     Boolean(activeCheckin) ||
     workoutImmersive ||
@@ -607,7 +607,7 @@ export function TraineeShell({
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        {!hideTabBar || keepTabsWithOverlay ? (
+        {!hideTabBar && tab !== "diet" ? (
           <View style={styles.topPad}>
             <AppTopBar
               title={topTitle}
@@ -643,6 +643,7 @@ export function TraineeShell({
         {tab === "workout" ? (
           <WorkoutTab
             relationship={relationship}
+            effectivePlan={effectivePlan}
             selectedDate={selectedDate}
             onOpenOverlay={openOverlay}
             autoStartToday={workoutAutostart}
@@ -659,22 +660,30 @@ export function TraineeShell({
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
+            unreadNotifications={unreadNotifications}
           />
         ) : null}
 
-        {tab === "progress" ? <ProgressTab relationship={relationship} /> : null}
+        {tab === "progress" ? (
+          <ProgressTab
+            relationship={relationship}
+            unreadNotifications={unreadNotifications}
+            onOpenOverlay={openOverlay}
+            onOpenCheckin={setActiveCheckin}
+          />
+        ) : null}
 
         {tab === "more" ? (
           <MoreScreen relationship={relationship} onOpenOverlay={openOverlay} />
         ) : null}
       </View>
 
-      {sheetOverlay || keepTabsWithOverlay ? (
+      {sheetOverlay ? (
         <TraineeOverlayHost
           overlay={overlay!}
           relationship={relationship}
           effectivePlan={effectivePlan}
-          presentation={sheetOverlay ? "sheet" : "fullscreen"}
+          presentation="sheet"
           onClose={() => {
             invalidateRelationshipDayData(relationship.id);
             setOverlay(null);
@@ -689,6 +698,29 @@ export function TraineeShell({
           onNotificationNavigate={handleNotificationNavigate}
           onStartWorkout={handleStartWorkoutFromOverview}
         />
+      ) : null}
+
+      {tabbedOverlay ? (
+        <View style={styles.tabbedOverlay}>
+          <TraineeOverlayHost
+            overlay={overlay!}
+            relationship={relationship}
+            effectivePlan={effectivePlan}
+            onClose={() => {
+              invalidateRelationshipDayData(relationship.id);
+              setOverlay(null);
+            }}
+            onOpen={openOverlay}
+            onSignOut={signOut}
+            onGoToday={() => {
+              invalidateRelationshipDayData(relationship.id);
+              setOverlay(null);
+              setTab("today");
+            }}
+            onNotificationNavigate={handleNotificationNavigate}
+            onStartWorkout={handleStartWorkoutFromOverview}
+          />
+        </View>
       ) : null}
 
       {!hideTabBar ? (
@@ -772,5 +804,14 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 999,
     backgroundColor: colors.indigo,
+  },
+  tabbedOverlay: {
+    backgroundColor: colors.white,
+    bottom: 56,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 12,
   },
 });

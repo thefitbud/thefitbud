@@ -888,6 +888,36 @@ async function recordCompliance(
       relationshipId: relationship.id,
       items: input.loggedFoodItems,
     });
+  } else if (input.outcome === "confirmed") {
+    const prescription = parseMealPrescriptionJson(
+      loaded.assignment.mealPrescriptionJson,
+    );
+    let kcalScaled = 0;
+    let proteinScaled = 0;
+    let carbsScaled = 0;
+    let fatScaled = 0;
+    for (const item of prescription.items) {
+      if (!("calculated" in item) || !item.calculated) continue;
+      const calc = item.calculated;
+      kcalScaled += calc.energyKcalScaled ?? 0;
+      proteinScaled += calc.proteinScaled ?? 0;
+      carbsScaled += calc.carbsScaled ?? 0;
+      fatScaled += calc.fatScaled ?? 0;
+    }
+    if (
+      kcalScaled > 0 ||
+      proteinScaled > 0 ||
+      carbsScaled > 0 ||
+      fatScaled > 0
+    ) {
+      macroFields = {
+        itemsJson: null,
+        kcalScaled,
+        proteinScaled,
+        carbsScaled,
+        fatScaled,
+      };
+    }
   }
 
   const row = {

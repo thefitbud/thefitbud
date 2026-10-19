@@ -223,7 +223,12 @@ export async function navigateCaptureScreen(
     case "TR-23":
       traineeNav?.openOverlay({
         screen: "deep_link",
-        reason: "This link is no longer available.",
+        reason: "Rahul updated your plan, so this dinner was replaced.",
+        updatedOnLabel: "Sun 18 Oct",
+        replacement: {
+          title: "Dinner · 8:30 pm",
+          subtitle: "Paneer bhurji · 2 roti · salad · 700 kcal",
+        },
       });
       break;
     case "TR-24":
@@ -233,7 +238,7 @@ export async function navigateCaptureScreen(
       traineeNav?.openOverlay({ screen: "steps_settings" });
       break;
     case "TR-26":
-      traineeNav?.openOverlay({ screen: "food_search" });
+      await traineeNav?.openSomethingDifferent();
       break;
     case "TM-01":
       trainerNav?.setTab("attention");

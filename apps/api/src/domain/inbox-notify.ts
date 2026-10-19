@@ -11,7 +11,8 @@ export type InboxNotificationType =
   | "trainer_ask_coach"
   | "coach_answered"
   | "trainer_meal_times_changed"
-  | "activity_nudge";
+  | "activity_nudge"
+  | "checkin_reviewed";
 
 export async function storeInboxNotification(
   db: Db,
@@ -21,6 +22,11 @@ export async function storeInboxNotification(
     notificationType: InboxNotificationType;
     domainEntityId: string;
     dedupeKey: string;
+    domainEntityType?:
+      | "coaching_relationship"
+      | "checkin"
+      | "meal_assignment"
+      | "workout_assignment";
   },
 ): Promise<void> {
   const now = nowIso();
@@ -30,7 +36,7 @@ export async function storeInboxNotification(
       recipientUserId: input.recipientUserId,
       coachingRelationshipId: input.relationshipId,
       notificationType: input.notificationType as (typeof notifications.$inferInsert)["notificationType"],
-      domainEntityType: "coaching_relationship",
+      domainEntityType: input.domainEntityType ?? "coaching_relationship",
       domainEntityId: input.domainEntityId,
       state: "delivered",
       dedupeKey: input.dedupeKey,

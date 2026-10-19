@@ -41,23 +41,16 @@ export function nextUp(input: {
 }): NextUpHero | null {
   const now = input.now ?? new Date();
 
-  const overdueMeal = input.meals.find(
-    (meal) => meal.status === "overdue" && !isLoggedMealStatus(meal.status),
-  );
-  if (overdueMeal) {
-    return { kind: "meal", meal: overdueMeal, reason: "overdue" };
-  }
+  const openMeals = input.meals
+    .filter((meal) => !isLoggedMealStatus(meal.status))
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(a.windowStartsAt).getTime() -
+        new Date(b.windowStartsAt).getTime(),
+    );
 
-  const overdueWorkout =
-    input.workout &&
-    input.workout.status === "missed"
-      ? input.workout
-      : null;
-  // Missed workouts still surface via the workout card; hero prefers meal window next.
-
-  const openMeals = input.meals.filter(
-    (meal) => meal.status === "pending" || meal.status === "overdue",
-  );
+  // Prefer a meal whose window is open or within ±60 min of now.
   const inWindow = openMeals.find((meal) => {
     const start = new Date(meal.windowStartsAt).getTime();
     const end = new Date(meal.windowEndsAt).getTime();
@@ -68,8 +61,28 @@ export function nextUp(input: {
     return {
       kind: "meal",
       meal: inWindow,
-      reason: inWindow.status === "overdue" ? "overdue" : "window",
+      reason:
+        inWindow.status === "overdue" ||
+        now.getTime() > new Date(inWindow.windowEndsAt).getTime()
+          ? "overdue"
+          : "window",
     };
+  }
+
+  // Stale overdue: pick the most recently ended window (dinner at 10:50 pm,
+  // not breakfast from the morning).
+  const overdueMeals = openMeals
+    .filter(
+      (meal) =>
+        meal.status === "overdue" ||
+        now.getTime() > new Date(meal.windowEndsAt).getTime(),
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.windowEndsAt).getTime() - new Date(a.windowEndsAt).getTime(),
+    );
+  if (overdueMeals[0]) {
+    return { kind: "meal", meal: overdueMeals[0], reason: "overdue" };
   }
 
   if (input.workout && !isDoneWorkout(input.workout.status)) {
@@ -83,13 +96,14 @@ export function nextUp(input: {
     return { kind: "checkin", checkin: input.checkin };
   }
 
-  // Fallback: next pending meal by time even outside the ±60 min window.
-  const nextPending = openMeals[0];
+  // Next pending meal later today (by start time).
+  const nextPending = openMeals.find(
+    (meal) => new Date(meal.windowStartsAt).getTime() > now.getTime(),
+  );
   if (nextPending) {
     return { kind: "meal", meal: nextPending, reason: "window" };
   }
 
-  void overdueWorkout;
   void minutesUntil;
   return null;
 }

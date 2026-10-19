@@ -121,12 +121,22 @@ function hasLivePlan(plan: EffectivePlanResponse | null): boolean {
 function mealStatusChip(
   meal: MealAssignment,
   nextId: string | undefined,
+  now = new Date(),
 ): { label: string; tone: "neutral" | "positive" | "attention" } {
   if (isMealLoggedForCount(meal.status)) {
     return { label: "Logged", tone: "positive" };
   }
+  if (
+    meal.status === "overdue" ||
+    now.getTime() > new Date(meal.windowEndsAt).getTime()
+  ) {
+    return { label: "Overdue", tone: "attention" };
+  }
   if (meal.id === nextId) {
     return { label: "Up next", tone: "attention" };
+  }
+  if (now.getTime() >= new Date(meal.windowStartsAt).getTime()) {
+    return { label: "Due", tone: "attention" };
   }
   return { label: "Later", tone: "neutral" };
 }

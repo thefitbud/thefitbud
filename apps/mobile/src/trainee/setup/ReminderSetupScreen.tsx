@@ -1,13 +1,20 @@
 import { useMemo, useState } from "react";
-import { Linking, Platform, StyleSheet, View } from "react-native";
+import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../../components/Text";
 import * as Notifications from "expo-notifications";
+import { ChevronRight, Clock, Info } from "lucide-react-native";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
 import { useConfig } from "../../providers/ConfigProvider";
 import { isWhatsAppAutomationEnabled } from "../../lib/config";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
+import { Button } from "../../components/Button";
+import {
+  Dots4,
+  M2Screen,
+  M2TopNav,
+  NoteCallout,
+  RadioCard,
+} from "../../components/m2";
 import { OemBatterySheet } from "./OemBatterySheet";
 
 type Props = {
@@ -15,20 +22,21 @@ type Props = {
   onOpenQuietHours: () => void;
 };
 
-const WORKOUT_CHIPS = [
-  "Morning (6–9)",
-  "Midday (12–2)",
-  "Evening (5–8)",
-  "Night (8–10)",
-  "Varies",
-];
+const WORKOUT_SLOTS = [
+  { id: "morning", title: "Morning", subtitle: "6:00 am – 9:00 am" },
+  { id: "midday", title: "Midday", subtitle: "12:00 pm – 2:00 pm" },
+  { id: "evening", title: "Evening", subtitle: "5:00 pm – 8:00 pm" },
+  { id: "night", title: "Night", subtitle: "8:00 pm – 10:00 pm" },
+  { id: "varies", title: "It varies" },
+] as const;
 
 export function ReminderSetupScreen({ onDone, onOpenQuietHours }: Props) {
   const { config } = useConfig();
   const { me } = useAuth();
   const waOn = isWhatsAppAutomationEnabled(config);
   const [step, setStep] = useState(0);
-  const [workoutChip, setWorkoutChip] = useState<string | null>(null);
+  const [workoutSlot, setWorkoutSlot] = useState<string>("evening");
+  const [exactTimeLabel] = useState("6:30 pm");
   const [permissionNote, setPermissionNote] = useState<string | null>(null);
   const [showOem, setShowOem] = useState(false);
 
@@ -76,186 +84,223 @@ export function ReminderSetupScreen({ onDone, onOpenQuietHours }: Props) {
     );
   }
 
+  const footer =
+    step < 3 ? (
+      <Button
+        label="Continue"
+        onPress={() => setStep((value) => Math.min(3, value + 1))}
+      />
+    ) : (
+      <Button label="Done" onPress={onDone} />
+    );
+
   return (
-    <Screen
-      title="Reminder setup"
-      subtitle={`Step ${step + 1} of 4 · Choose when and how FitBud nudges you.`}
-    >
-      <View style={styles.dots}>
-        {[0, 1, 2, 3].map((index) => (
-          <View
-            key={index}
-            style={[styles.dot, index === step ? styles.dotActive : null]}
-          />
-        ))}
-      </View>
-
-      <View style={styles.stack}>
-        {step === 0 ? (
-          <>
-            <Text style={styles.sectionTitle}>When do you usually work out?</Text>
-            <View style={styles.chips}>
-              {WORKOUT_CHIPS.map((chip) => (
-                <PrimaryButton
-                  key={chip}
-                  label={chip}
-                  variant={workoutChip === chip ? "primary" : "secondary"}
-                  onPress={() => setWorkoutChip(chip)}
-                />
-              ))}
-            </View>
-            <Text style={styles.helper}>
-              We remind you about an hour after this time only if the workout is
-              still unlogged. You can change it anytime in Settings.
-            </Text>
-          </>
-        ) : null}
-
-        {step === 1 ? (
-          <>
-            <Text style={styles.sectionTitle}>How should we remind you?</Text>
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>App notifications (recommended)</Text>
-              <Text style={styles.body}>Selected by default.</Text>
-            </View>
-            <View style={[styles.card, !waOn ? styles.cardDisabled : null]}>
-              <Text style={styles.cardTitle}>
-                App + WhatsApp backup{" "}
-                {!waOn ? (
-                  <Text style={styles.comingSoon}>· Coming soon</Text>
-                ) : null}
-              </Text>
-              <Text style={styles.body}>
-                {waOn
-                  ? "If app notifications miss you, WhatsApp can send one utility reminder a day."
-                  : "WhatsApp reminders are coming soon. For now we'll remind you in the app. Your coach can still message you on WhatsApp anytime."}
-              </Text>
-            </View>
-          </>
-        ) : null}
-
-        {step === 2 ? (
-          <>
-            <Text style={styles.sectionTitle}>Allow notifications</Text>
-            <View style={styles.sample}>
-              <Text style={styles.sampleTitle}>Lunch isn't logged yet</Text>
-              <Text style={styles.sampleBody}>Eaten as planned · Something different</Text>
-            </View>
-            <PrimaryButton
-              label="Allow notifications"
-              onPress={() => {
-                void requestPushPermission();
-              }}
-            />
-            <PrimaryButton
-              label="Not now"
-              variant="ghost"
+    <M2Screen footer={footer}>
+      <M2TopNav
+        onBack={step > 0 ? () => setStep((s) => Math.max(0, s - 1)) : onDone}
+        titleNode={<Dots4 step={step} />}
+        right={
+          step < 3 ? (
+            <Pressable
+              accessibilityRole="button"
               onPress={() => setStep(3)}
+              style={styles.skipHit}
+            >
+              <Text style={styles.skip}>Skip</Text>
+            </Pressable>
+          ) : null
+        }
+      />
+
+      {step === 0 ? (
+        <>
+          <View style={styles.lt2}>
+            <Text style={styles.eb}>Reminders · step 1 of 4</Text>
+            <Text style={styles.h1}>When do you usually work out?</Text>
+          </View>
+          {WORKOUT_SLOTS.map((slot) => (
+            <RadioCard
+              key={slot.id}
+              title={slot.title}
+              subtitle={"subtitle" in slot ? slot.subtitle : undefined}
+              selected={workoutSlot === slot.id}
+              onPress={() => setWorkoutSlot(slot.id)}
             />
-            {permissionNote ? (
-              <Text style={styles.helper}>{permissionNote}</Text>
-            ) : null}
-          </>
-        ) : null}
+          ))}
+          <Pressable accessibilityRole="button" style={styles.exactRow}>
+            <View style={styles.tile}>
+              <Clock size={19} color={colors.indigo} strokeWidth={1.75} />
+            </View>
+            <View style={styles.exactText}>
+              <Text style={styles.exactTitle}>Set exact time</Text>
+              <Text style={styles.exactSub}>Optional</Text>
+            </View>
+            <Text style={styles.exactVal}>{exactTimeLabel}</Text>
+            <ChevronRight size={18} color={colors.midGrey} />
+          </Pressable>
+          <NoteCallout icon={<Info size={18} color={colors.indigo} />}>
+            We&apos;ll only remind you if your workout isn&apos;t logged about an
+            hour after this. You can change it anytime.
+          </NoteCallout>
+        </>
+      ) : null}
 
-        {step === 3 ? (
-          <>
-            <Text style={styles.sectionTitle}>Almost done</Text>
-            <Text style={styles.body}>
-              Quiet hours default to 10:00 pm – 7:00 am.{" "}
-              <Text style={styles.link} onPress={onOpenQuietHours}>
-                Change
-              </Text>
+      {step === 1 ? (
+        <>
+          <View style={styles.lt2}>
+            <Text style={styles.eb}>Reminders · step 2 of 4</Text>
+            <Text style={styles.h1}>How should we remind you?</Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Text style={styles.cardTitle}>App notifications (recommended)</Text>
+            <Text style={styles.body}>Selected by default.</Text>
+          </View>
+          <View style={[styles.infoCard, !waOn ? styles.cardDisabled : null]}>
+            <Text style={styles.cardTitle}>
+              App + WhatsApp backup{" "}
+              {!waOn ? (
+                <Text style={styles.comingSoon}>· Coming soon</Text>
+              ) : null}
             </Text>
             <Text style={styles.body}>
-              Times shown in {timeZoneLabel} · from your phone.
+              {waOn
+                ? "If app notifications miss you, WhatsApp can send one utility reminder a day."
+                : "WhatsApp reminders are coming soon. For now we'll remind you in the app."}
             </Text>
-            <Text style={styles.body}>
-              Meal reminders follow your plan's times. Adjust anytime under Settings
-              › Meal times.
-            </Text>
-            {Platform.OS === "android" ? (
-              <PrimaryButton
-                label="Battery & background tips"
-                variant="secondary"
-                onPress={() => setShowOem(true)}
-              />
-            ) : null}
-          </>
-        ) : null}
+          </View>
+        </>
+      ) : null}
 
-        <View style={styles.nav}>
-          {step < 3 ? (
-            <>
-              <PrimaryButton
-                label="Continue"
-                onPress={() => setStep((value) => Math.min(3, value + 1))}
-              />
-              <PrimaryButton
-                label="Skip step"
-                variant="ghost"
-                onPress={() => setStep((value) => Math.min(3, value + 1))}
-              />
-            </>
-          ) : (
-            <>
-              <PrimaryButton label="Done" onPress={onDone} />
-              <PrimaryButton
-                label="Open phone settings"
-                variant="ghost"
-                onPress={() => {
-                  void Linking.openSettings();
-                }}
-              />
-            </>
-          )}
-        </View>
-      </View>
-    </Screen>
+      {step === 2 ? (
+        <>
+          <View style={styles.lt2}>
+            <Text style={styles.eb}>Reminders · step 3 of 4</Text>
+            <Text style={styles.h1}>Allow notifications</Text>
+          </View>
+          <View style={styles.sample}>
+            <Text style={styles.sampleTitle}>Lunch isn&apos;t logged yet</Text>
+            <Text style={styles.sampleBody}>
+              Eaten as planned · Something different
+            </Text>
+          </View>
+          <Button
+            label="Allow notifications"
+            onPress={() => {
+              void requestPushPermission();
+            }}
+          />
+          <Button label="Not now" variant="tertiary" onPress={() => setStep(3)} />
+          {permissionNote ? (
+            <Text style={styles.helper}>{permissionNote}</Text>
+          ) : null}
+        </>
+      ) : null}
+
+      {step === 3 ? (
+        <>
+          <View style={styles.lt2}>
+            <Text style={styles.eb}>Reminders · step 4 of 4</Text>
+            <Text style={styles.h1}>Almost done</Text>
+          </View>
+          <Text style={styles.body}>
+            Quiet hours default to 10:00 pm – 7:00 am.{" "}
+            <Text style={styles.link} onPress={onOpenQuietHours}>
+              Change
+            </Text>
+          </Text>
+          <Text style={styles.body}>
+            Times shown in {timeZoneLabel} · from your phone.
+          </Text>
+          {Platform.OS === "android" ? (
+            <Button
+              label="Battery & background tips"
+              variant="secondary"
+              onPress={() => setShowOem(true)}
+            />
+          ) : null}
+          <Button
+            label="Open phone settings"
+            variant="tertiary"
+            onPress={() => {
+              void Linking.openSettings();
+            }}
+          />
+        </>
+      ) : null}
+    </M2Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  dots: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
+  skipHit: {
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 10,
   },
-  dot: {
-    backgroundColor: colors.lightGrey,
-    borderRadius: 999,
-    height: 8,
-    width: 8,
-  },
-  dotActive: {
-    backgroundColor: colors.indigo,
-    width: 18,
-  },
-  stack: {
-    gap: spacing.md,
-  },
-  nav: {
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  sectionTitle: {
-    color: colors.deepNavy,
+  skip: {
+    color: colors.indigo,
     fontSize: 16,
-    fontWeight: "700",
-    marginTop: spacing.sm,
+    fontWeight: "600",
   },
-  chips: {
-    gap: spacing.sm,
+  lt2: {
+    marginBottom: spacing.md,
+    marginTop: spacing.md,
   },
-  helper: {
+  eb: {
     color: colors.midGrey,
     fontSize: 14,
-    lineHeight: 20,
+    fontWeight: "600",
+    lineHeight: 18,
   },
-  card: {
+  h1: {
+    color: colors.deepNavy,
+    fontSize: 30,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+    lineHeight: 36,
+    marginTop: 2,
+  },
+  exactRow: {
+    alignItems: "center",
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderColor: "#E7E9F2",
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  tile: {
+    alignItems: "center",
+    backgroundColor: colors.paleLavender,
+    borderRadius: 11,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  exactText: {
+    flex: 1,
+  },
+  exactTitle: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  exactSub: {
+    color: colors.midGrey,
+    fontSize: 14,
+  },
+  exactVal: {
+    color: colors.midGrey,
+    fontSize: 15,
+  },
+  infoCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
     gap: spacing.xs,
+    marginTop: spacing.sm,
     padding: spacing.lg,
   },
   cardDisabled: {
@@ -270,6 +315,7 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 14,
     lineHeight: 20,
+    marginTop: spacing.sm,
   },
   comingSoon: {
     color: colors.indigo,
@@ -279,10 +325,17 @@ const styles = StyleSheet.create({
     color: colors.indigo,
     fontWeight: "600",
   },
+  helper: {
+    color: colors.midGrey,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: spacing.sm,
+  },
   sample: {
     backgroundColor: colors.paleLavender,
     borderRadius: 12,
     gap: spacing.xs,
+    marginBottom: spacing.md,
     padding: spacing.lg,
   },
   sampleTitle: {
