@@ -487,8 +487,48 @@ body.is-offline .button-destructive {
   .button-tinted,
   .button-ghost,
   .button-destructive,
-  .button-danger {
+  .button-danger,
+  .button-sm,
+  .button-link,
+  .segment-tab,
+  .filter-pill,
+  .history-kind-pills .filter-pill,
+  .workspace-tab,
+  .workspace-plan-link,
+  .shell-client-plan-link,
+  a.button-primary,
+  a.button-secondary,
+  a.button-tinted {
+    min-width: 44px;
     min-height: 44px;
+    height: auto;
+  }
+
+  .overflow-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .button-sm {
+    padding: 0 0.9rem;
+  }
+
+  .filter-pill,
+  .segment-tab,
+  .workspace-plan-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  .workspace-plan-link {
+    padding: 0.5rem 0.35rem;
   }
 }
 

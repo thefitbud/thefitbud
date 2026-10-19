@@ -33,7 +33,12 @@ test.describe("TW-G history, settings, ended, reminders", () => {
       timeout: 20_000,
     });
     await expect(page.getByRole("button", { name: /^All$/i })).toBeVisible();
-    await expect(page.locator(".history-kind-pills .filter-pill").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Workouts$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Meals$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Check-ins$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Plans$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Account$/i })).toBeVisible();
+    await expect(page.locator(".history-kind-pills .filter-pill")).toHaveCount(6);
     await expect(page.getByText("clinical intervention")).toHaveCount(0);
   });
 
@@ -56,7 +61,11 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     const href = await mail.getAttribute("href");
     expect(href).toMatch(/^mailto:/);
     expect(href).toContain("subject=");
-    expect(decodeURIComponent(href!)).toMatch(/FitBud support · Trainer web · TW-28/);
+    expect(decodeURIComponent(href!)).toMatch(
+      /FitBud support · Trainer web · TW-28 Help/,
+    );
+    expect(decodeURIComponent(href!)).toMatch(/Version:/);
+    expect(decodeURIComponent(href!)).toMatch(/Role: trainer/);
     await expect(page.getByText(/We'll get back to you within a day/i)).toBeVisible();
     await expect(page.getByText("Help & Support")).toHaveCount(0);
   });
@@ -96,6 +105,17 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await expect(page.getByRole("button", { name: /^Add note$/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "History" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Progress" })).toBeVisible();
+
+    await page.goto(`/clients/${KAVYA}/activity`);
+    await expect(page.getByTestId("screen-TW-17")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: /^Nudge$/i })).toHaveCount(0);
+
+    await page.goto(`/clients/${KAVYA}/check-ins`);
+    await expect(page.getByTestId("screen-TW-19")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: /Schedule check-in/i })).toHaveCount(0);
+
+    await page.goto(`/clients/${KAVYA}/configure`);
+    await expect(page.getByRole("button", { name: /Create new version/i })).toHaveCount(0);
   });
 
   test("TW-30 Nikhil pending reactivation UI", async ({ page }) => {

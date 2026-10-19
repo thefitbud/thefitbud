@@ -1,7 +1,7 @@
 /**
- * TW-G tablet smoke — WebKit iPad viewports (shell nav, clients, overflow).
+ * TW-G tablet smoke — WebKit iPad viewports (shell nav, clients, overflow, tap targets).
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 
 const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
@@ -13,6 +13,45 @@ async function signIn(page: Page) {
   await page.locator('input[name="password"]').fill(PASSWORD);
   await page.getByRole("button", { name: /^sign in$/i }).click();
   await expect(page).toHaveURL("/", { timeout: 45_000 });
+}
+
+async function assertTapTargets(root: Locator, label: string) {
+  const undersized = await root.evaluate((node) => {
+    const selectors = [
+      "button",
+      "a[href]",
+      "[role='button']",
+      "[role='tab']",
+      "input[type='checkbox']",
+      "input[type='radio']",
+      ".overflow-menu-trigger",
+      ".filter-pill",
+      ".segment-tab",
+      ".button-sm",
+    ].join(",");
+    const seen = new Set<Element>();
+    const bad: Array<{ tag: string; text: string; w: number; h: number }> = [];
+    for (const el of Array.from(node.querySelectorAll(selectors))) {
+      if (seen.has(el)) continue;
+      seen.add(el);
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
+        bad.push({
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent ?? "").trim().slice(0, 40),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+        });
+      }
+    }
+    return bad;
+  });
+  expect(undersized, `${label}: ${JSON.stringify(undersized.slice(0, 12))}`).toEqual(
+    [],
+  );
 }
 
 test.describe("TW-G iPad shell smoke", () => {
@@ -29,7 +68,7 @@ test.describe("TW-G iPad shell smoke", () => {
       await page.goto("/clients");
     }
     await expect(page).toHaveURL(/\/clients/);
-    await expect(page.getByRole("heading", { name: /Clients/i })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /^Clients$/i })).toBeVisible({
       timeout: 20_000,
     });
 
@@ -41,5 +80,24 @@ test.describe("TW-G iPad shell smoke", () => {
       await overflow.click();
       await expect(page.getByRole("menu")).toBeVisible();
     }
+  });
+
+  test("interactive controls meet 44×44 tap targets on Home and Roster", async ({
+    page,
+  }) => {
+    await expect(page.getByTestId("screen-TW-04").or(page.locator("main"))).toBeVisible({
+      timeout: 20_000,
+    });
+    await assertTapTargets(page.locator("body"), "Home");
+
+    await page.goto("/clients");
+    await expect(page.getByRole("heading", { name: /^Clients$/i })).toBeVisible({
+      timeout: 20_000,
+    });
+    await assertTapTargets(page.locator("body"), "Roster");
+
+    await page.goto("/clients?status=ended");
+    await expect(page.getByText("Kavya")).toBeVisible({ timeout: 20_000 });
+    await assertTapTargets(page.locator("body"), "Ended roster");
   });
 });

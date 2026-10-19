@@ -20,7 +20,9 @@ export function MoreScreen({ relationship, onOpenOverlay }: Props) {
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
   const trainerName =
-    me?.trainerProfile?.displayName ?? "Your coach";
+    relationship.trainerDisplayName?.trim() ||
+    me?.trainerProfile?.displayName?.trim() ||
+    "Your coach";
 
   return (
     <Screen

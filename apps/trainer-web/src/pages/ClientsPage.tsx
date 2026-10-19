@@ -238,12 +238,10 @@ export function ClientsPage() {
     <section className="page clients-page" data-testid="screen-TW-06">
       <header className="page-header clients-header">
         <div>
-          <h1>
-            Clients{" "}
-            <span className="clients-count muted">
-              {segmentCount} {segmentLabel}
-            </span>
-          </h1>
+          <h1>Clients</h1>
+          <p className="clients-count muted" aria-live="polite">
+            {segmentCount} {segmentLabel}
+          </p>
         </div>
         <Link to="/clients/add" className="button-primary">
           Add client

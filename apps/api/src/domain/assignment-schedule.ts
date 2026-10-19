@@ -158,6 +158,38 @@ export async function insertWorkoutAssignments(
   const sortedDates = [...input.dates].sort();
   const minDate = sortedDates[0]!;
   const maxDate = sortedDates[sortedDates.length - 1]!;
+  const toRevive = await db
+    .select()
+    .from(workoutAssignments)
+    .where(
+      and(
+        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+        eq(workoutAssignments.planVersionId, input.planVersionId),
+        eq(workoutAssignments.scheduleStatus, "superseded"),
+        gte(workoutAssignments.localDate, minDate),
+        lte(workoutAssignments.localDate, maxDate),
+      ),
+    );
+  if (toRevive.length > 0) {
+    await db
+      .update(workoutAssignments)
+      .set({
+        scheduleStatus: "scheduled",
+        supersededAt: null,
+        supersededByPlanVersionId: null,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+          eq(workoutAssignments.planVersionId, input.planVersionId),
+          eq(workoutAssignments.scheduleStatus, "superseded"),
+          gte(workoutAssignments.localDate, minDate),
+          lte(workoutAssignments.localDate, maxDate),
+        ),
+      );
+  }
+
   const existing = await db
     .select({
       planVersionId: workoutAssignments.planVersionId,
@@ -175,7 +207,11 @@ export async function insertWorkoutAssignments(
     );
   const sameVersionKeys = new Set(
     existing
-      .filter((row) => row.planVersionId === input.planVersionId)
+      .filter(
+        (row) =>
+          row.planVersionId === input.planVersionId &&
+          row.scheduleStatus === "scheduled",
+      )
       .map((row) => `${row.workoutDayId}:${row.localDate}`),
   );
   const blockedDates = new Set(
@@ -224,7 +260,7 @@ export async function insertWorkoutAssignments(
       .values(chunk)
       .onConflictDoNothing();
   }
-  return rows;
+  return [...toRevive, ...rows];
 }
 
 const MEAL_INSERT_CHUNK = 6;
@@ -249,6 +285,38 @@ export async function insertMealAssignments(
   const sortedDates = [...input.dates].sort();
   const minDate = sortedDates[0]!;
   const maxDate = sortedDates[sortedDates.length - 1]!;
+  const toRevive = await db
+    .select()
+    .from(mealAssignments)
+    .where(
+      and(
+        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+        eq(mealAssignments.planVersionId, input.planVersionId),
+        eq(mealAssignments.scheduleStatus, "superseded"),
+        gte(mealAssignments.localDate, minDate),
+        lte(mealAssignments.localDate, maxDate),
+      ),
+    );
+  if (toRevive.length > 0) {
+    await db
+      .update(mealAssignments)
+      .set({
+        scheduleStatus: "scheduled",
+        supersededAt: null,
+        supersededByPlanVersionId: null,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+          eq(mealAssignments.planVersionId, input.planVersionId),
+          eq(mealAssignments.scheduleStatus, "superseded"),
+          gte(mealAssignments.localDate, minDate),
+          lte(mealAssignments.localDate, maxDate),
+        ),
+      );
+  }
+
   const existing = await db
     .select({
       planVersionId: mealAssignments.planVersionId,
@@ -267,7 +335,11 @@ export async function insertMealAssignments(
     );
   const sameVersionKeys = new Set(
     existing
-      .filter((row) => row.planVersionId === input.planVersionId)
+      .filter(
+        (row) =>
+          row.planVersionId === input.planVersionId &&
+          row.scheduleStatus === "scheduled",
+      )
       .map((row) => `${row.mealPrescriptionId}:${row.localDate}`),
   );
   // Kept (logged) meals from another version stay scheduled after supersede.
@@ -325,7 +397,7 @@ export async function insertMealAssignments(
       .values(chunk)
       .onConflictDoNothing();
   }
-  return rows;
+  return [...toRevive, ...rows];
 }
 
 function dateInSupersedeRange(

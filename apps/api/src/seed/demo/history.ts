@@ -275,6 +275,10 @@ function buildAssignmentsAndLogs(input: {
   state: string;
   refDate: string;
   now: string;
+  /** Inclusive last civil date that may receive activity (end date for ended clients). */
+  activityUntilDate: string;
+  /** Cap for logged/submitted timestamps (endedAt for ended clients). */
+  activityUntilIso: string;
   planId: string;
   planVersionId: string;
   content: PlanContent;
@@ -288,9 +292,11 @@ function buildAssignmentsAndLogs(input: {
   const workoutDayByWeekday = new Map(
     input.content.workoutDays.map((day) => [day.weekday, day] as const),
   );
+  const logCap = input.activityUntilIso;
 
   for (let offset = 0; offset < 28; offset++) {
     const localDate = addDaysFromLocalDate(historyStart, offset);
+    if (localDate > input.activityUntilDate) continue;
     if (localDate > input.refDate) continue;
     const planVersionForDay =
       input.state === "active_on_track" &&
@@ -317,12 +323,12 @@ function buildAssignmentsAndLogs(input: {
         `INSERT INTO meal_assignments (id, coaching_relationship_id, plan_id, plan_version_id, meal_prescription_id, meal_name, meal_prescription_json, local_date, window_starts_at, window_ends_at, photo_required, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(meal.id)}, ${sqlQuote(meal.name)}, ${jsonQuote(meal)}, ${sqlQuote(localDate)}, ${sqlQuote(windowStart)}, ${sqlQuote(windowEnd)}, 0, 'scheduled', NULL, NULL, ${sqlQuote(windowStart)}, ${sqlQuote(windowStart)});`,
       );
 
-      // Never log a meal whose slot time hasn't started yet in the client TZ.
-      const slotReached = Date.parse(windowStart) <= Date.parse(input.now);
+      // Never log a meal whose slot time hasn't started yet, and never after end.
+      const slotReached = Date.parse(windowStart) <= Date.parse(logCap);
       const shouldLog = shouldLogMeal(
         input.state,
         localDate,
-        input.refDate,
+        input.activityUntilDate,
         meal.name,
         adherenceStart,
       );
@@ -332,7 +338,7 @@ function buildAssignmentsAndLogs(input: {
         const loggedAt = clampIsoToNow(
           // Log near the slot start, not the long window end (avoids future stamps).
           new Date(Date.parse(windowStart) + 30 * 60_000).toISOString(),
-          input.now,
+          logCap,
         );
         lines.push(
           `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(complianceId)}, ${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, 'confirmed', 0, ${sqlQuote(loggedAt)}, NULL, NULL, 0, NULL, NULL, NULL, ${macros.kcal}, ${macros.protein}, ${macros.carbs}, ${macros.fat}, 0, 0, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)}, ${sqlQuote(loggedAt)});`,
@@ -353,12 +359,17 @@ function buildAssignmentsAndLogs(input: {
       lines.push(
         `INSERT INTO workout_assignments (id, coaching_relationship_id, plan_id, plan_version_id, workout_day_id, workout_day_name, workout_day_json, local_date, window_starts_at, window_ends_at, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(workoutDay.id)}, ${sqlQuote(workoutDay.name)}, ${jsonQuote(workoutDay)}, ${sqlQuote(localDate)}, ${sqlQuote(wStart)}, ${sqlQuote(wEnd)}, 'scheduled', NULL, NULL, ${sqlQuote(wStart)}, ${sqlQuote(wStart)});`,
       );
-      const workoutLog = shouldLogWorkout(input.state, localDate, input.refDate, adherenceStart);
+      const workoutLog = shouldLogWorkout(
+        input.state,
+        localDate,
+        input.activityUntilDate,
+        adherenceStart,
+      );
       if (workoutLog) {
         const execId = demoUuid("workout-execution", workoutAssignmentId);
         const completedAt = clampIsoToNow(
           new Date(Date.parse(wStart) + 60 * 60_000).toISOString(),
-          input.now,
+          logCap,
         );
         lines.push(
           `INSERT INTO workout_executions (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, status, record_version, started_at, paused_at, completed_at, session_rpe, require_session_rpe, logged_late, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(execId)}, ${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(trainee)}, ${sqlQuote(workoutLog)}, 0, ${sqlQuote(wStart)}, NULL, ${sqlQuote(completedAt)}, NULL, 0, 0, ${sqlQuote(completedAt)}, ${sqlQuote(wStart)}, ${sqlQuote(completedAt)});`,
@@ -366,14 +377,18 @@ function buildAssignmentsAndLogs(input: {
       }
     }
 
-    if (dow === 0 && localDate < input.refDate && input.state !== "reminders_paused") {
+    if (
+      dow === 0 &&
+      localDate < input.activityUntilDate &&
+      input.state !== "reminders_paused"
+    ) {
       const checkinId = demoUuid("checkin", input.traineeEmail, localDate);
       const cStart = localDayStartIso(localDate, "09:00", input.timezone);
       const cEnd = new Date(Date.parse(cStart) + 48 * 3_600_000).toISOString();
-      const submittedAt = clampIsoToNow(cEnd, input.now);
+      const submittedAt = clampIsoToNow(cEnd, logCap);
       const submitted =
         input.state !== "food_deviations" ||
-        localDate < input.refDate;
+        localDate < input.activityUntilDate;
       lines.push(
         `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("checkin-schedule", input.relId))}, ${sqlQuote(localDate)}, ${sqlQuote(cStart)}, ${sqlQuote(cEnd)}, ${submitted ? "'submitted'" : "'draft'"}, 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${submitted ? `'{"wellbeing":"OK"}'` : "NULL"}, ${submitted ? sqlQuote(submittedAt) : "NULL"}, ${sqlQuote(cStart)}, ${sqlQuote(cStart)});`,
       );
@@ -909,6 +924,10 @@ export function buildDemoHistorySql(input: HistoryInput): string {
     const timezone = account.email.startsWith("deepak.")
       ? "Asia/Dubai"
       : "Asia/Kolkata";
+    const activityUntilIso = endedAt ?? now;
+    const activityUntilDate = endedAt
+      ? activityUntilIso.slice(0, 10)
+      : refDate;
     lines.push(
       buildAssignmentsAndLogs({
         relId: rid,
@@ -917,12 +936,24 @@ export function buildDemoHistorySql(input: HistoryInput): string {
         state: account.state,
         refDate,
         now,
+        activityUntilDate,
+        activityUntilIso,
         planId: plan.planId,
         planVersionId: plan.planVersionId,
         content: plan.content,
         timezone,
       }),
     );
+    if (ended && endedAt) {
+      // Match endCoachingRelationship: no live schedule after the end date.
+      const endDay = endedAt.slice(0, 10);
+      const closedTo = `${addDaysFromLocalDate(endDay, -1)}T00:00:00.000Z`;
+      lines.push(
+        `UPDATE workout_assignments SET schedule_status = 'superseded', superseded_at = ${sqlQuote(endedAt)}, updated_at = ${sqlQuote(endedAt)} WHERE coaching_relationship_id = ${sqlQuote(rid)} AND schedule_status = 'scheduled' AND local_date >= ${sqlQuote(endDay)};`,
+        `UPDATE meal_assignments SET schedule_status = 'superseded', superseded_at = ${sqlQuote(endedAt)}, updated_at = ${sqlQuote(endedAt)} WHERE coaching_relationship_id = ${sqlQuote(rid)} AND schedule_status = 'scheduled' AND local_date >= ${sqlQuote(endDay)};`,
+        `UPDATE plan_versions SET effective_to = ${sqlQuote(closedTo)}, updated_at = ${sqlQuote(endedAt)} WHERE plan_id = ${sqlQuote(plan.planId)} AND status = 'effective';`,
+      );
+    }
   }
 
   lines.push(buildPersonaOverlays(input));

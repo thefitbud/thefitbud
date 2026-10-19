@@ -164,13 +164,15 @@ export function ClientCheckinsPage() {
             History and upcoming check-ins for {clientName}.
           </p>
         </div>
-        <Button
-          variant="primary"
-          disabled={!online || ended}
-          onClick={() => void openSchedule()}
-        >
-          Schedule check-in
-        </Button>
+        {!ended ? (
+          <Button
+            variant="primary"
+            disabled={!online}
+            onClick={() => void openSchedule()}
+          >
+            Schedule check-in
+          </Button>
+        ) : null}
       </header>
 
       {!online ? (
