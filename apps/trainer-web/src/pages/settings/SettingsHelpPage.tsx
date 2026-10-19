@@ -1,20 +1,25 @@
 import { useConfig } from "../../lib/config";
 
-function supportMailto(screen: string): string {
-  const version = "trainer-web";
-  const subject = encodeURIComponent("FitBud trainer support");
-  const body = encodeURIComponent(
-    `App version: ${version}\nRole: trainer\nScreen: ${screen}\n\nDescribe what happened:\n`,
+function supportMailto(screenId: string, supportEmail: string): string {
+  const subject = encodeURIComponent(
+    `FitBud support · Trainer web · ${screenId}`,
   );
-  return `mailto:tech@thefitbud.com?subject=${subject}&body=${body}`;
+  const body = encodeURIComponent(
+    `\n\n---\nApp: Trainer web\nRole: trainer\nScreen: ${screenId}\nLocal time: ${new Date().toISOString()}`,
+  );
+  return `mailto:${supportEmail}?subject=${subject}&body=${body}`;
 }
 
 export function SettingsHelpPage() {
-  useConfig();
+  const { config } = useConfig();
+  const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
   return (
     <div className="settings-panel">
       <h2>Help</h2>
-      <a className="button-secondary" href={supportMailto("/settings/help")}>
+      <a
+        className="settings-help-row button-secondary"
+        href={supportMailto("TW-28", supportEmail)}
+      >
         Email FitBud support
       </a>
       <p className="muted help-promise">

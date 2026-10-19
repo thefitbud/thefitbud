@@ -1,32 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   historyItemKindSchema,
   type HistoryItem,
   type HistoryItemKind,
 } from "@fitbud/contracts";
-import {
-  formatCivilDate,
-  formatInstant,
-  labelFor,
-  sentenceCaseEnum,
-} from "@fitbud/core";
+import { formatRelative, labelFor } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
+import {
+  groupHistoryByWeek,
+  historyKindIcon,
+  historySourceHref,
+  historySourceLabel,
+  humanizeHistoryText,
+} from "../lib/history-ui";
+import {
+  ErrorState,
+  LoadingBlock,
+  errorKindFromFailure,
+  type ErrorKind,
+} from "../components/StatePanels";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
 function parseKind(value: string | null): HistoryItemKind | undefined {
   const parsed = historyItemKindSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
-}
-
-/** Replace civil ISO dates embedded in API summary/title strings. */
-function humanizeCivilDates(text: string): string {
-  return text.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (match) =>
-    formatCivilDate(match),
-  );
 }
 
 export function ClientHistoryPage() {
@@ -37,12 +38,17 @@ export function ClientHistoryPage() {
     "UTC";
   const { relationshipId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutletContext>();
+  const { refreshEpoch = 0, online = true } =
+    useOutletContext<WorkspaceOutletContext>();
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    kind: ErrorKind;
+    requestId?: string | null;
+  } | null>(null);
   const requestId = useRef(0);
 
   const kind = parseKind(searchParams.get("kind"));
@@ -53,13 +59,22 @@ export function ClientHistoryPage() {
   const listReady = loadedKey === filterKey && !loading;
 
   const load = useCallback(
-    async (cursor?: string | null) => {
+    async (cursor?: string | null, opts?: { quiet?: boolean }) => {
       if (!relationshipId) return;
+      if (!online && !cursor) {
+        setError({
+          message: "You're offline. Reconnect to load history.",
+          kind: "network",
+        });
+        setLoading(false);
+        return;
+      }
       const id = ++requestId.current;
       const appending = Boolean(cursor);
+      const quiet = opts?.quiet === true;
       if (appending) {
         setLoadingMore(true);
-      } else {
+      } else if (!quiet) {
         setLoading(true);
         setItems([]);
         setNextCursor(null);
@@ -81,11 +96,16 @@ export function ClientHistoryPage() {
         if (!appending) setLoadedKey(filterKey);
       } catch (err) {
         if (requestId.current !== id) return;
-        setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load history.",
-        );
+        const apiErr = err instanceof ApiClientError ? err : null;
+        setError({
+          message: apiErr?.message ?? "Could not load history.",
+          kind: errorKindFromFailure({
+            status: apiErr?.status,
+            code: apiErr?.code,
+            message: apiErr?.message,
+          }),
+          requestId: apiErr?.requestId ?? null,
+        });
         if (!appending) setLoadedKey(filterKey);
       } finally {
         if (requestId.current === id) {
@@ -94,12 +114,20 @@ export function ClientHistoryPage() {
         }
       }
     },
-    [filterKey, kind, occurredFrom, occurredTo, relationshipId],
+    [filterKey, kind, occurredFrom, occurredTo, online, relationshipId],
   );
 
   useEffect(() => {
     void load();
   }, [load, refreshEpoch]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      void load(undefined, { quiet: true });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
 
   function updateFilters(next: {
     kind?: HistoryItemKind | null;
@@ -127,54 +155,60 @@ export function ClientHistoryPage() {
     );
   }
 
-  const empty = !loading && items.length === 0 && !error;
+  const empty = listReady && items.length === 0 && !error;
   const filtersActive = Boolean(kind || occurredFrom || occurredTo);
+  const weekGroups = groupHistoryByWeek(items, timeZone);
 
   return (
-    <div className="workspace-page" data-testid="screen-TW-21">
-      {error ? (
-        <p className="form-error" role="alert">
-          {error}
+    <div className="workspace-page history-page" data-testid="screen-TW-21">
+      <header className="history-page-head">
+        <h1 className="workspace-page-title">History</h1>
+        <p className="lede muted">
+          A readable ledger of plans, check-ins, notes, and coaching events for
+          this client.
+        </p>
+      </header>
+
+      {!online ? (
+        <p className="form-error" role="status">
+          You&apos;re offline. History may be out of date until you reconnect.
         </p>
       ) : null}
 
-      <section className="workspace-card" aria-labelledby="history-list-heading">
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">History</p>
-            <h2 id="history-list-heading" className="workspace-card-title">
-              {kind === "plan_version" ? "Plan history" : "Coaching history"}
-            </h2>
-            <p className="lede">
-              {kind === "plan_version"
-                ? "Published plan versions for this client. Kind is a single server filter."
-                : "What happened, what changed, and what you did. Kind is a single server filter."}
-            </p>
-          </div>
+      <section className="workspace-card" aria-labelledby="history-filters-heading">
+        <h2 id="history-filters-heading" className="sr-only">
+          History filters
+        </h2>
+
+        <div className="history-kind-pills" role="group" aria-label="Kind">
+          <button
+            type="button"
+            className={!kind ? "filter-pill is-on" : "filter-pill"}
+            aria-pressed={!kind}
+            onClick={() => updateFilters({ kind: null })}
+          >
+            All
+          </button>
+          {historyItemKindSchema.options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={kind === option ? "filter-pill is-on" : "filter-pill"}
+              aria-pressed={kind === option}
+              onClick={() =>
+                updateFilters({ kind: kind === option ? null : option })
+              }
+            >
+              {labelFor("history_kind", option)}
+            </button>
+          ))}
         </div>
 
         <form
-          className="workspace-filters"
-          aria-label="History filters"
+          className="workspace-filters history-date-filters"
+          aria-label="Date range"
           onSubmit={(event) => event.preventDefault()}
         >
-          <label className="field">
-            <span>Kind</span>
-            <select
-              value={kind ?? ""}
-              onChange={(event) => {
-                const next = parseKind(event.target.value);
-                updateFilters({ kind: next ?? null });
-              }}
-            >
-              <option value="">All history</option>
-              {historyItemKindSchema.options.map((option) => (
-                <option key={option} value={option}>
-                  {labelFor("history_kind", option)}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className="field">
             <span>From</span>
             <input
@@ -211,58 +245,91 @@ export function ClientHistoryPage() {
             </button>
           ) : null}
         </form>
-
-        {!listReady ? <p className="muted">Loading…</p> : null}
-
-        {listReady && empty ? (
-          <p className="workspace-empty" role="status">
-            {filtersActive
-              ? "No coaching history matches these filters."
-              : "No coaching history yet. Onboarding, configuration, plans, execution, check-ins, notes, and interventions appear here as they happen."}
-          </p>
-        ) : null}
-
-        {listReady && items.length > 0 ? (
-          <ol className="history-list">
-            {items.map((item) => (
-              <li key={`${item.kind}:${item.id}`} className="history-item">
-                <div className="history-item-meta">
-                  <span className="workspace-kind">
-                    {labelFor("history_kind", item.kind)}
-                  </span>
-                  <time dateTime={item.occurredAt}>
-                    {formatInstant(item.occurredAt, timeZone)}
-                  </time>
-                  {item.status ? (
-                    <span className="history-status">
-                      {sentenceCaseEnum(item.status)}
-                    </span>
-                  ) : null}
-                </div>
-                <strong className="history-title">
-                  {humanizeCivilDates(item.title)}
-                </strong>
-                <p className="muted history-summary">
-                  {humanizeCivilDates(item.summary)}
-                </p>
-              </li>
-            ))}
-          </ol>
-        ) : null}
-
-        {listReady && nextCursor ? (
-          <button
-            type="button"
-            className="button-secondary"
-            disabled={loadingMore}
-            onClick={() => {
-              void load(nextCursor);
-            }}
-          >
-            {loadingMore ? "Loading…" : "Load older"}
-          </button>
-        ) : null}
       </section>
+
+      {error && !listReady ? (
+        <ErrorState
+          message={error.message}
+          kind={error.kind}
+          requestId={error.requestId}
+          screenId="TW-21"
+          onRetry={() => void load()}
+        />
+      ) : null}
+
+      {!listReady && !error ? <LoadingBlock label="Loading history…" /> : null}
+
+      {listReady && error ? (
+        <ErrorState
+          message={error.message}
+          kind={error.kind}
+          requestId={error.requestId}
+          screenId="TW-21"
+          onRetry={() => void load()}
+        />
+      ) : null}
+
+      {empty ? (
+        <p className="workspace-empty" role="status">
+          Nothing recorded yet.
+        </p>
+      ) : null}
+
+      {listReady && items.length > 0 ? (
+        <div className="history-week-groups">
+          {weekGroups.map((group) => (
+            <section
+              key={group.weekStart}
+              className="history-week-group workspace-card"
+              aria-labelledby={`week-${group.weekStart}`}
+            >
+              <h2 id={`week-${group.weekStart}`} className="history-week-heading">
+                {group.heading}
+              </h2>
+              <ol className="history-list history-row-list">
+                {group.items.map((item) => {
+                  const Icon = historyKindIcon(item.kind);
+                  const href = historySourceHref(relationshipId, item);
+                  const sentence = humanizeHistoryText(item.title);
+                  return (
+                    <li key={`${item.kind}:${item.id}`} className="history-row">
+                      <span className="history-row-icon" aria-hidden="true">
+                        <Icon size={20} strokeWidth={1.75} />
+                      </span>
+                      <div className="history-row-body">
+                        <p className="history-row-sentence">{sentence}</p>
+                        <div className="history-row-meta">
+                          <time dateTime={item.occurredAt}>
+                            {formatRelative(item.occurredAt)}
+                          </time>
+                          {href ? (
+                            <Link className="text-link" to={href}>
+                              {historySourceLabel(item)}
+                            </Link>
+                          ) : null}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
+        </div>
+      ) : null}
+
+      {listReady && nextCursor ? (
+        <button
+          type="button"
+          className="button-secondary history-load-more"
+          disabled={loadingMore || !online}
+          onClick={() => {
+            void load(nextCursor);
+          }}
+        >
+          {loadingMore ? "Loading…" : "Load more"}
+        </button>
+      ) : null}
     </div>
   );
 }

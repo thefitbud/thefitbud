@@ -29,8 +29,10 @@ import { WelcomePage } from "./pages/WelcomePage";
 import { EndedClientsSettingsPage } from "./pages/settings/EndedClientsSettingsPage";
 import { NotificationSettingsPage } from "./pages/settings/NotificationSettingsPage";
 import { ProfileSettingsPage } from "./pages/settings/ProfileSettingsPage";
+import { PrivacyDataPage } from "./pages/settings/PrivacyDataPage";
 import { SettingsHelpPage } from "./pages/settings/SettingsHelpPage";
 import { SettingsLayout } from "./pages/settings/SettingsLayout";
+import { UnitsLanguagePage } from "./pages/settings/UnitsLanguagePage";
 import { SpecimensPage } from "./pages/SpecimensPage";
 
 export function App() {
@@ -62,7 +64,9 @@ export function App() {
             <Route path="profile" element={<ProfileSettingsPage />} />
             <Route path="notifications" element={<NotificationSettingsPage />} />
             <Route path="ended" element={<EndedClientsSettingsPage />} />
+            <Route path="units" element={<UnitsLanguagePage />} />
             <Route path="help" element={<SettingsHelpPage />} />
+            <Route path="privacy" element={<PrivacyDataPage />} />
           </Route>
           <Route
             path="/clients/:relationshipId"

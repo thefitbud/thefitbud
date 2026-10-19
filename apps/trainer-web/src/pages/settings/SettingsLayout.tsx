@@ -19,10 +19,20 @@ export function SettingsLayout() {
           <NavLink to="/settings/ended" className={tabClass}>
             Ended clients
           </NavLink>
+          <NavLink to="/settings/units" className={tabClass}>
+            Units &amp; language
+          </NavLink>
           <NavLink to="/settings/help" className={tabClass}>
             Help
           </NavLink>
-          <button type="button" className="settings-signout" onClick={() => void signOut()}>
+          <NavLink to="/settings/privacy" className={tabClass}>
+            Privacy &amp; data
+          </NavLink>
+          <button
+            type="button"
+            className="settings-tab settings-signout button-danger"
+            onClick={() => void signOut()}
+          >
             Sign out
           </button>
         </nav>
