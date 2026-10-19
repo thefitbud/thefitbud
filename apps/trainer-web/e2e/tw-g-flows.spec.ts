@@ -82,8 +82,9 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     const wasChecked = await morning.isChecked();
     await morning.click();
     await expect(morning).toBeChecked({ checked: !wasChecked, timeout: 10_000 });
-    // Wait for debounce/persist before reload.
-    await page.waitForTimeout(1800);
+    await expect(page.getByTestId("notification-prefs-saved")).toBeVisible({
+      timeout: 15_000,
+    });
     await page.reload();
     await expect(page.getByTestId("screen-TW-29")).toBeVisible({ timeout: 20_000 });
     const morningAgain = page.getByRole("checkbox", { name: /Morning summary/i });
@@ -91,7 +92,9 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     // restore
     await morningAgain.click();
     await expect(morningAgain).toBeChecked({ checked: wasChecked, timeout: 10_000 });
-    await page.waitForTimeout(800);
+    await expect(page.getByTestId("notification-prefs-saved")).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test("TW-30 ended roster and Kavya read-only workspace", async ({ page }) => {
