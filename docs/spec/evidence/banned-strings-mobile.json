@@ -1,22 +1,20 @@
 {
-  "app": "expo-web",
-  "errorCount": 2,
-  "warnCount": 0,
-  "errors": [
+  "ma": [
     {
-      "id": "iso-date",
-      "severity": "error",
-      "match": "2026-10-18",
-      "route": "mobile/Today",
-      "why": "Raw ISO date/timestamp. Use the packages/core formatter ('Thu 15 Oct')."
+      "app": "trainer-web",
+      "hardFailErrors": [],
+      "reportOnlyErrors": [],
+      "warns": [],
+      "errorCount": 0,
+      "warnCount": 0
     },
     {
-      "id": "snake-case",
-      "severity": "error",
-      "match": "missed_workout",
-      "route": "mobile/Attention",
-      "why": "Raw enum (overdue_meal, portion_size, upper_back, steps_enabled). Map it through packages/core labels."
+      "app": "expo-web",
+      "hardFailErrors": [],
+      "reportOnlyErrors": [],
+      "warns": [],
+      "errorCount": 0,
+      "warnCount": 0
     }
-  ],
-  "warns": []
+  ]
 }
