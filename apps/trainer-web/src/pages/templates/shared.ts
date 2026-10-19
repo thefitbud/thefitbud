@@ -4,7 +4,7 @@ import type {
   PlanContent,
   PlanTemplateType,
 } from "@fitbud/contracts";
-import { canonicalShortMonth, formatInstant, labelFor } from "@fitbud/core";
+import { formatInstant, labelFor } from "@fitbud/core";
 
 export type ApplyClient = ClientDirectoryItem & { relationshipId: string };
 
@@ -40,9 +40,10 @@ export function formatUpdatedDate(iso: string, timeZone = "UTC"): string {
     year: "numeric",
   }).formatToParts(date);
   const day = parts.find((p) => p.type === "day")?.value ?? "";
-  const month = canonicalShortMonth(
-    parts.find((p) => p.type === "month")?.value ?? "",
-  );
+  const rawMonth = parts.find((p) => p.type === "month")?.value ?? "";
+  const month = rawMonth.toLowerCase().startsWith("sep")
+    ? "Sep"
+    : rawMonth.slice(0, 3).replace(/^./, (c) => c.toUpperCase());
   const year = Number(parts.find((p) => p.type === "year")?.value ?? "");
   const yearPart = year === new Date().getFullYear() ? "" : ` ${year}`;
   return `Updated ${day} ${month}${yearPart}`;

@@ -457,86 +457,113 @@ export function TodayCheckinCard({
     void load();
   }, [load]);
 
+  const subtitle = useMemo(() => {
+    if (!checkin) return null;
+    return `${statusLabel(checkin.status)} · ${formatCivilDate(checkin.localDate)}`;
+  }, [checkin]);
+
   if (loading) {
     return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Check-in</Text>
-        <Text style={styles.help}>Loading…</Text>
+      <View style={styles.banner}>
+        <Text style={styles.bannerBody}>Checking for a due check-in…</Text>
       </View>
     );
   }
+
   if (error) {
+    return <ErrorBanner message={error} />;
+  }
+
+  if (!checkin || checkin.status === "scheduled") {
     return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Check-in</Text>
-        <Text style={styles.help}>{error}</Text>
+      <View style={styles.banner}>
+        <Text style={styles.bannerTitle}>Check-in</Text>
+        <Text style={styles.bannerBody}>
+          {checkin
+            ? `Next check-in is scheduled for ${formatCivilDate(checkin.localDate)}.`
+            : "No check-in is due right now."}
+        </Text>
       </View>
     );
   }
-  if (!checkin) return null;
 
   return (
-    <Pressable style={styles.card} onPress={() => onOpen(checkin)}>
-      <Text style={styles.cardTitle}>Check-in</Text>
-      <Text style={styles.help}>
-        {statusLabel(checkin.status)} · {formatCivilDate(checkin.localDate)}
+    <View style={styles.banner}>
+      <Text style={styles.bannerTitle}>
+        Check-in {statusLabel(checkin.status)}
       </Text>
-    </Pressable>
+      <Text style={styles.bannerBody}>{subtitle}</Text>
+      <PrimaryButton label="Open check-in" onPress={() => onOpen(checkin)} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  field: { marginBottom: spacing.md },
-  label: {
-    fontWeight: "600",
-    marginBottom: spacing.xs,
-    color: colors.nearBlack,
+  banner: {
+    backgroundColor: colors.white,
+    borderRadius: radii.card,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
-  help: { color: colors.midGrey, marginTop: spacing.xs },
+  bannerTitle: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  bannerBody: {
+    color: colors.midGrey,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  field: {
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  label: {
+    color: colors.deepNavy,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  help: {
+    color: colors.midGrey,
+    fontSize: 13,
+  },
   input: {
     minHeight: 96,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.sm,
+    borderColor: colors.lightGrey,
+    borderRadius: radii.control,
+    padding: spacing.md,
     color: colors.nearBlack,
+    backgroundColor: colors.white,
     textAlignVertical: "top",
   },
   inputSingle: {
     minHeight: 48,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.sm,
+    borderColor: colors.lightGrey,
+    borderRadius: radii.control,
+    paddingHorizontal: spacing.md,
     color: colors.nearBlack,
+    backgroundColor: colors.white,
   },
-  banner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+  scaleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
   },
-  bannerTitle: { fontWeight: "700", marginBottom: spacing.xs },
-  bannerBody: { color: colors.darkGrey },
-  scaleRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   scaleChip: {
     minWidth: 40,
     alignItems: "center",
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
-    borderRadius: radii.md,
+    borderRadius: radii.control,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.lightGrey,
   },
   scaleChipOn: {
     backgroundColor: colors.paleLavender,
     borderColor: colors.indigo,
   },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  cardTitle: { fontWeight: "700", marginBottom: spacing.xs },
 });

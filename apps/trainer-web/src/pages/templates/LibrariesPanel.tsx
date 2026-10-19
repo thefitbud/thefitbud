@@ -87,7 +87,7 @@ function classificationLabel(value: FoodClassification): string {
 }
 
 function basisLabel(value: NutritionBasis): string {
-  return value === "per_100g" ? "per 100 g" : "per 100 ml";
+  return value === "per_100_g" ? "per 100 g" : "per 100 ml";
 }
 
 function scaledDisplay(value: number | null): string {
@@ -807,7 +807,7 @@ function FoodLibrary() {
               id: null,
               name: "",
               classification: "generic_food",
-              basis: "per_100g",
+              basis: "per_100_g",
               energyKcal: "",
               proteinGrams: "",
               carbsGrams: "",
@@ -1023,8 +1023,8 @@ function FoodLibrary() {
                   })
                 }
               >
-                <option value="per_100g">per 100 g</option>
-                <option value="per_100ml">per 100 ml</option>
+                <option value="per_100_g">per 100 g</option>
+                <option value="per_100_ml">per 100 ml</option>
               </select>
             </label>
             <div className="library-macro-grid">

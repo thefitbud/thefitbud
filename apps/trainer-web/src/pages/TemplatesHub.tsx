@@ -34,16 +34,21 @@ export function TemplatesHub() {
       <Route path="workouts/:templateId" element={<PlanTemplateEditorPage />} />
       <Route path="diets/:templateId" element={<PlanTemplateEditorPage />} />
       <Route path="full-plans/:templateId" element={<PlanTemplateEditorPage />} />
-      <Route path="libraries/:segment" element={<LibrariesPanel />} />
+      <Route path="libraries/:segment" element={<TemplatesHubChrome />} />
       <Route path=":type" element={<TemplatesHubChrome />} />
     </Routes>
   );
 }
 
 function TemplatesHubChrome() {
-  const { type = "workouts" } = useParams();
-  if (type && LEGACY_FAMILY[type] && LEGACY_FAMILY[type] !== type) {
-    return <Navigate to={`/templates/${LEGACY_FAMILY[type]}`} replace />;
+  const { type = "workouts", segment } = useParams();
+  const resolvedType = type === "libraries" || segment ? "libraries" : type;
+  if (
+    resolvedType &&
+    LEGACY_FAMILY[resolvedType] &&
+    LEGACY_FAMILY[resolvedType] !== resolvedType
+  ) {
+    return <Navigate to={`/templates/${LEGACY_FAMILY[resolvedType]}`} replace />;
   }
 
   return (
@@ -62,17 +67,23 @@ function TemplatesHubChrome() {
         {TABS.map((tab) => (
           <NavLink
             key={tab.slug}
-            to={`/templates/${tab.slug}`}
-            className={({ isActive }) =>
-              isActive ? "hub-tab is-active" : "hub-tab"
+            to={
+              tab.slug === "libraries"
+                ? "/templates/libraries/exercises"
+                : `/templates/${tab.slug}`
             }
-            end
+            className={({ isActive }) =>
+              isActive || (tab.slug === "libraries" && resolvedType === "libraries")
+                ? "hub-tab is-active"
+                : "hub-tab"
+            }
+            end={tab.slug !== "libraries"}
           >
             {tab.label}
           </NavLink>
         ))}
       </nav>
-      <TemplatesTabContent type={type} />
+      <TemplatesTabContent type={resolvedType} />
     </section>
   );
 }
