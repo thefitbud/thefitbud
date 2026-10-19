@@ -309,25 +309,90 @@ export function TraineeShell({
         const from = addDays(today, -21);
         const listed = await api.listWorkoutAssignments(relationship.id, {
           fromDate: from,
-          toDate: today,
+          toDate: addDays(today, 14),
         });
-        const assignment = scheduledAssignments(listed.items).find(
+        const scheduled = scheduledAssignments(listed.items).filter(
           (item) => item.workoutDay.exercises.length > 0,
         );
+        const assignment =
+          scheduled.find(
+            (item) =>
+              item.status === "assigned" ||
+              item.status === "in_progress" ||
+              item.status === "paused",
+          ) ?? scheduled[0];
         if (!assignment) return;
         setSelectedDate(assignment.localDate);
+        if (
+          assignment.status === "completed" ||
+          assignment.status === "modified" ||
+          assignment.status === "skipped"
+        ) {
+          // Capture stub so TR-11 empty/done guard is visible; TR-12 uses summary stub.
+          const stubExecution =
+            assignment.execution != null
+              ? await api.getWorkoutExecution(assignment.execution.id)
+              : null;
+          if (stubExecution) {
+            setCaptureWorkout(stubExecution);
+          }
+          return;
+        }
         const execution = await openActiveWorkout(api, sync, assignment);
         setCaptureWorkout(execution);
       },
-      showCaptureWorkoutSummary() {
+      async showCaptureWorkoutSummary() {
         setOverlay(null);
-        const stub = captureWorkoutRef.current;
+        let stub = captureWorkoutRef.current;
+        const listed = await api.listWorkoutAssignments(relationship.id, {
+          fromDate: addDays(today, -21),
+          toDate: today,
+        });
+        const done = scheduledAssignments(listed.items).find(
+          (item) =>
+            item.execution &&
+            (item.status === "completed" || item.status === "modified"),
+        );
+        if (!stub && done?.execution) {
+          stub = await api.getWorkoutExecution(done.execution.id);
+        }
         if (!stub) return;
+        // Seed/list payloads sometimes omit nested sets; enrich from assignment day.
+        if (stub.exercises.length === 0 && done?.workoutDay.exercises.length) {
+          const now = new Date().toISOString();
+          stub = {
+            ...stub,
+            exercises: done.workoutDay.exercises.map((exercise, index) => ({
+              id: exercise.id,
+              workoutExecutionId: stub!.id,
+              exerciseId: exercise.id,
+              name: exercise.name,
+              order: index + 1,
+              status: "completed" as const,
+              sets: exercise.setTargets.map((target, setIndex) => ({
+                id: target.id,
+                exerciseExecutionId: exercise.id,
+                setTargetId: target.id,
+                order: setIndex + 1,
+                status: "completed" as const,
+                prescribedReps: target.reps,
+                prescribedLoadLabel: target.loadLabel,
+                actualReps: target.reps,
+                actualLoadLabel: target.loadLabel,
+                completedAt: now,
+                createdAt: now,
+                updatedAt: now,
+              })),
+              createdAt: now,
+              updatedAt: now,
+            })),
+          };
+        }
         setCaptureWorkout(null);
         setCaptureWorkoutSummary({
           ...stub,
           status: "completed",
-          completedAt: new Date().toISOString(),
+          completedAt: stub.completedAt ?? new Date().toISOString(),
         });
       },
       clearCaptureWorkoutScreens() {
@@ -390,9 +455,18 @@ export function TraineeShell({
   }
 
   if (captureWorkoutSummary && isCaptureModeEnabled()) {
+    const coach =
+      relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "Your coach";
     return (
       <WorkoutSummaryScreen
         execution={captureWorkoutSummary}
+        coachName={coach}
+        weekCompleted={
+          captureWorkoutSummary.exercises.length > 0 ? 1 : undefined
+        }
+        weekTotal={
+          captureWorkoutSummary.exercises.length > 0 ? 4 : undefined
+        }
         onDone={() => setCaptureWorkoutSummary(null)}
       />
     );

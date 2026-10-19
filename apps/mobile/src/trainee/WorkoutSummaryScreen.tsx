@@ -70,7 +70,11 @@ export function WorkoutSummaryScreen({
   }
 
   const durationMinutes = durationMinutesFromExecution(execution);
-  const coachLabel = coachName.trim().split(/\s+/)[0] || "Your coach";
+  const trimmedCoach = coachName.trim() || "Your coach";
+  const coachLabel =
+    trimmedCoach.toLowerCase() === "your coach"
+      ? "Your coach"
+      : trimmedCoach.split(/\s+/)[0] || "Your coach";
   const showWeek =
     weekCompleted != null &&
     weekTotal != null &&
