@@ -72,7 +72,7 @@ Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 90. API, core,
 
 ## TR-21 · Lock screen
 
-Set 6 mockups 27, 27b, 27c, 27-android, 28, 28b, 29, and 29b are in `docs/spec/mockups-v2`. Meal notifications have no log action and no food names. The workout card has no rest timer.
+Set 6 mockups 27, 27b, 27c, 27-android, 28, 29, and 29b are in `docs/spec/mockups-v2`. Meal notification 28 is one card with Open and Snooze 30 min inside it. There is no expanded meal card. Meal notifications have no log action and no food names. The workout card has no rest timer.
 
 | ID | Result | Proof |
 |---|---|---|
@@ -83,7 +83,7 @@ Set 6 mockups 27, 27b, 27c, 27-android, 28, 28b, 29, and 29b are in `docs/spec/m
 | TR-21.5 | PASS | Banned-string scan on the captured text was empty. |
 | TR-21.6 | FAIL | Aarav empty state is “Nothing left today” (`TR-21.png`). Loading, error, offline, and signed-out were not captured. |
 
-Rohan’s meal card is “Breakfast isn't logged yet” with Open and Snooze 30 min, and the expanded line is “Breakfast · 8:00 am” (`TR-21--rohan.png`). Open reaches “What did you have instead?” (`TR-21--meal-open.png`). The in-app banner is one line, “Breakfast isn't logged yet”, and Open Breakfast opens that meal (`TR-21--banner.png`). Snooze during Rohan’s quiet hours (10:00 pm – 6:30 am) said “Snoozed until quiet hours end.” The system re-send needs a dev build; Expo web only stores the follow-up time. `snoozeFireAt` covers the 30-minute case and the quiet-hours wait in `actions.test.ts`.
+Rohan’s meal card is one line, “Lunch isn't logged yet”, with Open and Snooze 30 min inside the card (`TR-21--rohan.png`). Open reaches “What did you have instead?” (`TR-21--meal-open.png`). The in-app banner is one line, “Lunch isn't logged yet”, and Open Lunch opens that meal (`TR-21--banner.png`). Snooze during Rohan’s quiet hours (10:00 pm – 6:30 am) said “Snoozed until quiet hours end.” Drawing those two buttons inside the system notification needs a dev build. Expo web only stores the follow-up time. `snoozeFireAt` covers the 30-minute case and the quiet-hours wait in `actions.test.ts`.
 
 ## TR-22 · Ended coaching
 
