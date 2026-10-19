@@ -3,9 +3,9 @@
 Branch: `cursor/mc-trainee-settings-1568`  
 Base: `cursor/mb-trainee-workout-progress-c688`  
 Stack: API `:8787` + Expo web `:8081` (`EXPO_PUBLIC_SCREEN_CAPTURE=1`) · viewport 393×852, plus 360×800 for More and Reminders  
-Meal notifications use Open and Snooze 30 min inside the card, with the FitBud app icon. The Live Activity preview can log a set, then rest. The real ActivityKit target needs a dev build.
+Set 6. Meal notifications are Open and Snooze 30 min only, with the FitBud app icon and no food names. Snooze fires once and waits until quiet hours end when that time falls inside them. The in-app banner is one line and opens that meal. The workout preview logs a set and advances to the next set. There is no rest timer. The Live Activity, Dynamic Island, lock screen, and Android notification need a dev build.
 
-Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 87. API, core, contracts, api-client, and trainer-web were not re-run (last counts 230, 126, 22, 7, 24).
+Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 90. API, core, contracts, api-client, and trainer-web were not re-run (last counts 230, 126, 22, 7, 24).
 
 ## Summary counts
 
@@ -72,16 +72,18 @@ Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 87. API, core,
 
 ## TR-21 · Lock screen
 
-Mockups 27, 27b, 29, 29b, and 30 are in `docs/spec/mockups-v2`. Meal push actions follow the later instruction: **Open** and **Snooze 30 min**, inline in the card. A refreshed mockup 28 was not in this pack.
+Set 6 mockups 27, 27b, 27c, 27-android, 28, 28b, 29, and 29b are in `docs/spec/mockups-v2`. Meal notifications have no log action and no food names. The workout card has no rest timer.
 
 | ID | Result | Proof |
 |---|---|---|
 | TR-21.1 | FAIL | `TR-21--rohan.png` shows “Next: Breakfast · 8:00 am”. That is an in-app preview. The home-screen widget needs a dev build. |
-| TR-21.2 | PASS | Rohan: Eaten as planned, then “Saved on this phone.” (`TR-21--confirmed.png`). Same outbox path as Diet. The lock-screen button needs a dev build. |
-| TR-21.3 | FAIL | The preview steps weight, logs set 2 at 25 kg × 10, then rests (`TR-21--live.png`, `TR-21--logged.png`). Skip rest shows “Set 3 · Go”. ActivityKit and the LiveActivityIntent in `apps/mobile/targets/FitBudLiveActivity` need a dev build. iOS asks for Face ID on the first lock-screen tap and does not open the app. |
+| TR-21.2 | PASS | Rohan, on the next-item widget: Eaten as planned, then “Saved on this phone.” (`TR-21--confirmed.png`). Same outbox path as Diet. Meal notifications and the in-app banner do not log. |
+| TR-21.3 | FAIL | The preview shows set 2 of 3, Last 20 kg × 10, and 22.5 kg × 10, then after the check “Set 3 of 3 · Last: 22.5 kg × 10” and “Set 2 logged · 22.5 kg × 10” (`TR-21--live.png`, `TR-21--logged.png`). More weight then shows 25 kg (`TR-21--stepped.png`). No rest countdown, +30 s, or Skip. ActivityKit (`apps/mobile/targets/FitBudLiveActivity`, LiveActivityIntent) and the Android scaffold (`apps/mobile/targets/android/WorkoutSetNotification.kt`) need a dev build. iOS asks for Face ID on the first lock-screen tap and does not open the app. Expo web does not run them. |
 | TR-21.4 | PASS | Captured text has no “placeholder” and no screen id. |
 | TR-21.5 | PASS | Banned-string scan on the captured text was empty. |
 | TR-21.6 | FAIL | Aarav empty state is “Nothing left today” (`TR-21.png`). Loading, error, offline, and signed-out were not captured. |
+
+Rohan’s meal card is “Breakfast isn't logged yet” with Open and Snooze 30 min, and the expanded line is “Breakfast · 8:00 am” (`TR-21--rohan.png`). Open reaches “What did you have instead?” (`TR-21--meal-open.png`). The in-app banner is one line, “Breakfast isn't logged yet”, and Open Breakfast opens that meal (`TR-21--banner.png`). Snooze during Rohan’s quiet hours (10:00 pm – 6:30 am) said “Snoozed until quiet hours end.” The system re-send needs a dev build; Expo web only stores the follow-up time. `snoozeFireAt` covers the 30-minute case and the quiet-hours wait in `actions.test.ts`.
 
 ## TR-22 · Ended coaching
 
