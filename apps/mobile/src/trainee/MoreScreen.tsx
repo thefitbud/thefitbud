@@ -10,6 +10,7 @@ import {
 import Svg, { Path } from "react-native-svg";
 import {
   Bell,
+  ChevronRight,
   Cloud,
   Globe,
   KeyRound,
@@ -318,6 +319,7 @@ export function MoreScreen({ relationship, onOpenOverlay }: Props) {
             <Text style={styles.profName}>{displayName}</Text>
             <Text style={styles.profSub}>{profileLine}</Text>
           </View>
+          <ChevronRight color={ink[500]} size={18} strokeWidth={2} />
         </Pressable>
         <View style={styles.coach}>
           <View style={styles.coachRow}>

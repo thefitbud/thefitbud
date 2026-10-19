@@ -124,14 +124,10 @@ export function WidgetTipsScreen({ onBack }: Props) {
           />
         ) : null}
       </View>
-      <View style={styles.preview}>
-        <Text style={styles.previewKicker}>During a workout</Text>
-        <Text style={styles.previewTitle}>
-          {hideDetails ? "Rest timer" : "Bench press · set 2 of 4"}
-        </Text>
-        <Text style={styles.clock}>0:45</Text>
-        <Text style={styles.previewSub}>Done</Text>
-      </View>
+      <M2Note>
+        The lock screen and notifications are waiting on the updated mockups.
+        This page is not the final design.
+      </M2Note>
       <M2SwitchRow
         label="Hide details on lock screen"
         hint="Off by default. Food names stay off the lock screen when this is on."
@@ -144,8 +140,8 @@ export function WidgetTipsScreen({ onBack }: Props) {
         </Text>
       ) : null}
       <M2Note>
-        On iPhone and Android the live rest timer needs the installed app. This
-        preview shows the same layout.
+        Confirm from this preview saves through the same outbox as the app. The
+        phone widget itself is not on this build.
       </M2Note>
     </M2Page>
   );

@@ -50,7 +50,16 @@ export function MealTimesScreen({ onBack, coachName = "Your coach" }: Props) {
     setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
     try {
       const response = await s1.getMealTimes();
-      setSlots(response.slots);
+      const rank = (slot: MealTimeSlot) => {
+        const key = slot.slotKey.toLowerCase();
+        const order = ["breakfast", "lunch", "snack", "dinner"];
+        const index = order.indexOf(key);
+        return index === -1 ? 50 : index;
+      };
+      const ordered = [...response.slots].sort(
+        (a, b) => rank(a) - rank(b) || a.planTime.localeCompare(b.planTime),
+      );
+      setSlots(ordered);
       setReview(Boolean(response.mealTimesNeedReview));
       const nextTimes: Record<string, string> = {};
       const nextPatterns: Record<string, Pattern> = {};

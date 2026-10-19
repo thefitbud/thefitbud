@@ -31,14 +31,29 @@ export async function notifyTrainerMealTimesChanged(
   });
 }
 
-function slotKeyForPrescription(json: string): string | null {
+function readPrescription(json: string): Record<string, unknown> | null {
   try {
-    const parsed = mealPrescriptionSchema.safeParse(JSON.parse(json));
-    if (!parsed.success) return null;
-    return parsed.data.mealType ?? parsed.data.name.toLowerCase().replace(/\s+/g, "_");
+    const value = JSON.parse(json) as unknown;
+    return value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
+}
+
+function slotKeyForPrescription(json: string): string | null {
+  const raw = readPrescription(json);
+  if (!raw) return null;
+  if (typeof raw.mealType === "string" && raw.mealType.trim()) {
+    return raw.mealType.trim();
+  }
+  if (typeof raw.name === "string" && raw.name.trim()) {
+    return raw.name.trim().toLowerCase().replace(/\s+/g, "_");
+  }
+  const parsed = mealPrescriptionSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  return parsed.data.mealType ?? parsed.data.name.toLowerCase().replace(/\s+/g, "_");
 }
 
 /**
@@ -94,14 +109,12 @@ export async function recomputeMealAssignmentTimes(
     const overrideTime = slotKey ? timeBySlot.get(slotKey) : undefined;
     if (!overrideTime) continue;
 
-    const parsed = mealPrescriptionSchema.safeParse(
-      JSON.parse(assignment.mealPrescriptionJson),
-    );
-    if (!parsed.success) continue;
-    if (parsed.data.localTime === overrideTime) continue;
+    const raw = readPrescription(assignment.mealPrescriptionJson);
+    if (!raw) continue;
+    if (raw.localTime === overrideTime) continue;
 
     const nextJson = JSON.stringify({
-      ...parsed.data,
+      ...raw,
       localTime: overrideTime,
     });
     await db
