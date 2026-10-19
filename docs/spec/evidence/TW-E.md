@@ -3,7 +3,7 @@
 Branch: `cursor/tw-e-activity-checkins-e531` · PR #9  
 Base: `cursor/tw-d-plan-builders-af84`  
 Stack: API `:8787` + trainer-web `:5173` · Node 22.23.3  
-Proof: `pnpm --filter @fitbud/{core,contracts,api,trainer-web} typecheck` green · core **124** / trainer-web **22** / api `meals.test` (dry-run === publish created) green · Playwright `e2e/tw-e-flows.spec.ts` + `e2e/banned-strings.spec.ts` **7 passed**, 1 skipped (Expo report-only)
+Proof: `pnpm --filter @fitbud/{core,contracts,api,trainer-web} typecheck` green · core **126** / trainer-web **22** / mobile `pickTodayCheckin` **3** / api notes-visibility + migration-chain + demo-seed + meals dry-run green · Playwright `e2e/tw-e-flows.spec.ts` + `e2e/banned-strings.spec.ts` **8 passed**, 1 skipped (Expo report-only)
 
 Screenshots: `docs/spec/evidence/TW-E/` (also under `/opt/cursor/artifacts/screenshots/`). Capture: `apps/trainer-web/scripts/capture-tw-e.mjs`. Layout notes: `TW-E/layout-notes.json` (no sideways scroll at 1280/768/390; TW-20 bar bottom ≤ 900; inbox names `hasUuid: false`).
 
@@ -14,18 +14,26 @@ Screenshots: `docs/spec/evidence/TW-E/` (also under `/opt/cursor/artifacts/scree
 | TW-17 | 11 | 4 | 15 |
 | TW-18 | 10 | 2 | 12 |
 | TW-19 | 8 | 2 | 10 |
-| TW-20 | 9 | 4 | 13 |
+| TW-20 | 11 | 2 | 13 |
 | TW-22 | 10 | 1 | 11 |
-| **Total** | **48** | **13** | **61** |
+| **Total** | **50** | **11** | **61** |
 
-## TW-D leftovers (this pack)
+## TW-D leftovers + QA follow-ups (this pack)
 
 | Item | Result | Proof |
 |---|---|---|
-| Set table fits at 1280/1440 (RPE/REST/NOTES + row menu; no sideways scroll) | PASS | `TW-D-set-table-1280.png`, `TW-D-set-table-1440.png` + `layout-notes.json` |
-| Assign dry-run meal count matches publish (incl. today’s unlogged recreates) | PASS | `apps/api/src/routes/meals.test.ts` asserts `dryBody.data.created.meals === assignedBody.data.created.meals` |
+| Set table fits at 1280/1440 (RPE/REST/NOTES + row menu; no sideways scroll) | PASS | `TW-D-set-table-1280.png`, `TW-D-set-table-1440.png` + notes col min-width 8rem |
+| Assign dry-run meal count matches publish (incl. today’s unlogged recreates) | PASS | `meals.test.ts` dry === real |
+| Check-in note “Visible to client” not forced private | PASS | `trainer-notes-visibility.test.ts` + `/me/coach-notes` |
+| Expo TodayCheckinCard prefers due/overdue over future scheduled | PASS | `pickTodayCheckin.test.ts` |
+| Demo seed FK on re-apply (measurements before checkins wipe) | PASS | `migration-chain.test.ts`, `demo-seed.test.ts` |
+| Inbox Review reachable at 768 (card layout) | PASS | `TW-22-768.png` + e2e |
+| Inbox Show more paging; Due/Overdue seeded | PASS | `TW-22--due.png`, `TW-22--overdue.png`; seed Meera due / Farhan overdue |
+| Review Next without 29-id query string | PASS | review page loads next from inbox API (`?from=inbox` only) |
+| Month format Sep (not Sept) | PASS | `canonicalShortMonth` / `formatInstant` core test |
+| Inbox submitted time in client TZ | PASS | inbox item `traineeTimezone` + `formatInstant` |
 
-Seed: Aarav `active_on_track` Sunday check-ins now insert `body_weight_kg` measurements so TW-18 can show a chart (`history.ts`).
+Seed: Aarav weigh-ins; older Sunday check-ins auto-reviewed for inbox realism; Due/Overdue drafts for Meera/Farhan.
 
 ---
 
@@ -98,14 +106,14 @@ Viewports: `TW-18-1280.png`, `TW-18-390.png`.
 | TW-20.1 | PASS | `TW-20.png` + layout `barBottom: 900` — outcome + Save visible at 1440×900 |
 | TW-20.2 | PASS | `TW-20.png` — Since last shows non-zero lines only (no zero tile grid) |
 | TW-20.3 | FAIL | Review push not verified in browser |
-| TW-20.4 | FAIL | Visible-to-client trainee appearance not verified (needs client app) |
+| TW-20.4 | PASS | API: check-in-linked note with `visibility: "client"` appears on `/me/coach-notes` (`trainer-notes-visibility.test.ts`); Expo feed uses that endpoint |
 | TW-20.5 | PASS | `TW-20.png` — “Form v1 (pinned)” |
 | TW-20.6 | PASS | `TW-20.png` — two columns; answers; measurements show “—” when absent |
 | TW-20.7 | PASS | `TW-20.png` — Since last + Open items with Review |
 | TW-20.8 | PASS | `TW-20.png` + e2e sticky bar; Outcome · Note · Visible to client · Save · Schedule next |
 | TW-20.9 | PASS | Overflow menu on bar (WhatsApp / Adjust plan in code); not expanded in PNG |
-| TW-20.10 | FAIL | Already-reviewed banner not captured |
-| TW-20.11 | FAIL | Next › from inbox queue implemented in code; not browser-proven this run |
+| TW-20.10 | FAIL | Already-reviewed banner not separately captured this run |
+| TW-20.11 | PASS | Next › resolves via inbox API (`?from=inbox`); no long queue query string |
 | TW-20.12 | PASS | banned-strings green |
 | TW-20.13 | PASS | `TW-20--loading.png`, `TW-20--offline.png` (error/empty not each shot) |
 
@@ -120,12 +128,12 @@ Viewports: `TW-18-1280.png`, `TW-18-390.png`.
 | TW-22.3 | PASS | e2e `?tab` / data-filter; default submitted/to-review |
 | TW-22.4 | PASS | `TW-22.png` — To review · Due · Overdue · Reviewed + counts |
 | TW-22.5 | PASS | `TW-22.png` + layout `hasUuid: false` — names + avatars |
-| TW-22.6 | PASS | `TW-22.png` — Review on To review; Due/Overdue empty in seed |
+| TW-22.6 | PASS | `TW-22.png` Review; `TW-22--due.png` / `--overdue.png` Nudge path |
 | TW-22.7 | PASS | No Kavya/Nikhil in visible To review sample (`TW-22.png`) |
-| TW-22.8 | FAIL | Empty “No check-ins waiting. Nice.” not captured (seed has 29 to review) |
+| TW-22.8 | FAIL | Empty “No check-ins waiting. Nice.” not captured (seed still has to-review rows) |
 | TW-22.9 | PASS | Ended clients absent from To review list sample |
 | TW-22.10 | PASS | banned-strings green |
-| TW-22.11 | PASS | `TW-22--loading.png`, `TW-22--offline.png` (error/empty incomplete) |
+| TW-22.11 | PASS | `TW-22--loading.png`, `TW-22--offline.png`, `TW-22-768.png` card layout (error/empty incomplete) |
 
 ---
 

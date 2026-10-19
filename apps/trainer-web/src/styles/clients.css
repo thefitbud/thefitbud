@@ -257,6 +257,62 @@
   border-collapse: collapse;
 }
 
+.checkins-page .inbox-table {
+  min-width: 36rem;
+}
+
+.checkins-page .inbox-card-list {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.checkins-page .inbox-card {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.checkins-page .inbox-card:last-child {
+  border-bottom: none;
+}
+
+.checkins-page .inbox-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.checkins-page .inbox-card-when {
+  margin: 0.45rem 0 0.65rem;
+  font-size: 0.875rem;
+  color: #5c6578;
+}
+
+.checkins-page .inbox-more {
+  display: flex;
+  justify-content: center;
+  padding: 0.85rem 1rem 1.1rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 900px) {
+  .checkins-page .inbox-table-wrap {
+    display: none;
+  }
+
+  .checkins-page .inbox-card-list {
+    display: block;
+  }
+
+  .checkins-page .inbox-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
 .clients-page .roster-table {
   min-width: 64rem;
 }

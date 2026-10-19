@@ -12,6 +12,7 @@ import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
+import { pickTodayCheckin } from "./pickTodayCheckin";
 
 function statusLabel(status: Checkin["status"]): string {
   switch (status) {
@@ -255,13 +256,7 @@ export function TodayCheckinCard({
     try {
       await api.ensureDueCheckin(relationship.id, createIdempotencyKey());
       const listed = await api.listCheckins(relationship.id);
-      const actionable = listed.items.find(
-        (item) =>
-          item.status === "due" ||
-          item.status === "overdue" ||
-          item.status === "scheduled",
-      );
-      setCheckin(actionable ?? null);
+      setCheckin(pickTodayCheckin(listed.items));
     } catch (err) {
       setError(
         err instanceof ApiClientError

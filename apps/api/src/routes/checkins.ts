@@ -57,6 +57,7 @@ import {
   plans,
   planVersions,
   trainerNotes,
+  traineeProfiles,
   users,
   workoutAssignments,
   workoutExecutions,
@@ -1005,8 +1006,7 @@ checkinRoutes.post(
     }
 
     const now = nowIso();
-    const visibility =
-      parsed.data.checkinId != null ? "private" : (parsed.data.visibility ?? "private");
+    const visibility = parsed.data.visibility ?? "private";
     const row = {
       id: createId(),
       coachingRelationshipId: relationship.id,
@@ -1024,7 +1024,7 @@ checkinRoutes.post(
     };
     await db.insert(trainerNotes).values(row);
 
-    if (visibility === "client" && !parsed.data.checkinId) {
+    if (visibility === "client") {
       await notifyTraineeNoteShared(db, {
         noteId: row.id,
         relationshipId: relationship.id,
@@ -1278,6 +1278,8 @@ checkinRoutes.get(
         checkin: checkins,
         review: checkinReviews,
         relationship: coachingRelationships,
+        traineeTimezone: users.timezone,
+        traineeDisplayName: traineeProfiles.displayName,
       })
       .from(checkins)
       .innerJoin(
@@ -1285,6 +1287,11 @@ checkinRoutes.get(
         eq(coachingRelationships.id, checkins.coachingRelationshipId),
       )
       .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+      .leftJoin(users, eq(users.id, coachingRelationships.traineeUserId))
+      .leftJoin(
+        traineeProfiles,
+        eq(traineeProfiles.userId, coachingRelationships.traineeUserId),
+      )
       .where(eq(coachingRelationships.trainerUserId, actor.userId))
       .orderBy(desc(checkins.localDate), desc(checkins.createdAt));
 
@@ -1295,6 +1302,8 @@ checkinRoutes.get(
         checkin: mapCheckin(row.checkin, row.review ?? null, now),
         coachingRelationshipId: row.relationship.id,
         traineeUserId: row.relationship.traineeUserId,
+        traineeDisplayName: row.traineeDisplayName ?? "Client",
+        traineeTimezone: row.traineeTimezone ?? "UTC",
       }))
       .filter((item) =>
         ["due", "overdue", "submitted"].includes(item.checkin.status),

@@ -64,7 +64,15 @@ test.describe("TW-E activity, progress, check-ins", () => {
 
   test("TW-20 review: sticky action bar at 1440", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`/clients/${ROHAN}/check-ins/${CHECKIN}`);
+    // Prefer an unreviewed inbox item so Save review is shown; fall back to known seed id.
+    await page.goto("/checkins");
+    await expect(page.getByTestId("screen-TW-22")).toBeVisible();
+    const reviewLink = page.locator('a.button-primary', { hasText: "Review" }).first();
+    if (await reviewLink.isVisible().catch(() => false)) {
+      await reviewLink.click();
+    } else {
+      await page.goto(`/clients/${ROHAN}/check-ins/${CHECKIN}`);
+    }
     await expect(page.getByTestId("screen-TW-20")).toBeVisible();
     const bar = page.getByTestId("review-action-bar");
     await expect(bar).toBeVisible();
@@ -73,7 +81,9 @@ test.describe("TW-E activity, progress, check-ins", () => {
     if (box) {
       expect(box.y + box.height).toBeLessThanOrEqual(900);
     }
-    await expect(page.getByRole("button", { name: /Save review/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Save review|Edit review/i }),
+    ).toBeVisible();
   });
 
   test("TW-22 inbox: tabs and default to review", async ({ page }) => {
@@ -86,6 +96,18 @@ test.describe("TW-E activity, progress, check-ins", () => {
     await expect(page.locator('[data-filter="due"]')).toBeVisible();
     await expect(page.locator('[data-filter="overdue"]')).toBeVisible();
     await expect(page.locator('[data-filter="reviewed"]')).toBeVisible();
+  });
+
+  test("TW-22 inbox: Review reachable at 768", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/checkins");
+    await expect(page.getByTestId("screen-TW-22")).toBeVisible();
+    await expect(page.locator(".inbox-card-list a.button-primary").first()).toBeVisible();
+    const scroll = await page.evaluate(() => {
+      const doc = document.documentElement;
+      return doc.scrollWidth > doc.clientWidth + 1;
+    });
+    expect(scroll).toBe(false);
   });
 });
 

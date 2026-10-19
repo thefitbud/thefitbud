@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalShortMonth,
   formatCivilDate,
   formatClockTime,
+  formatInstant,
   formatPersonName,
   formatRelative,
   formatTimeDiff,
@@ -34,6 +36,19 @@ describe("formatClockTime", () => {
     // 02:00 UTC = 07:30 IST
     const out = formatClockTime("2026-10-15T02:00:00.000Z", "Asia/Kolkata");
     expect(out).toMatch(/7:30 am/);
+  });
+});
+
+describe("canonicalShortMonth / formatInstant", () => {
+  it("normalizes Sept to Sep", () => {
+    expect(canonicalShortMonth("Sept")).toBe("Sep");
+    expect(canonicalShortMonth("September")).toBe("Sep");
+  });
+
+  it("formats instants with Sep not Sept", () => {
+    const out = formatInstant("2026-09-15T03:30:00.000Z", "Asia/Kolkata");
+    expect(out).toMatch(/\bSep\b/);
+    expect(out).not.toMatch(/\bSept\b/);
   });
 });
 

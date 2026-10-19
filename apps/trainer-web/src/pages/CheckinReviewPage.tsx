@@ -59,6 +59,10 @@ export function CheckinReviewPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [comparePhotos, setComparePhotos] = useState(false);
+  const [nextReview, setNextReview] = useState<{
+    checkinId: string;
+    relationshipId: string;
+  } | null>(null);
 
   const relationshipId =
     routeRelationshipId || context?.checkin.coachingRelationshipId || "";
@@ -75,15 +79,6 @@ export function CheckinReviewPage() {
     "UTC";
   const clientWa = workspace?.header.clientWhatsappE164 ?? null;
   const fromInbox = searchParams.get("from") === "inbox";
-  const queue = (searchParams.get("queue") ?? "")
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-  const queueIndex = checkinId ? queue.indexOf(checkinId) : -1;
-  const nextId =
-    searchParams.get("next") ??
-    (queueIndex >= 0 ? queue[queueIndex + 1] : undefined) ??
-    null;
 
   const load = useCallback(async () => {
     if (!checkinId) return;
@@ -113,6 +108,39 @@ export function CheckinReviewPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!fromInbox || !checkinId) {
+      setNextReview(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const inbox = await apiClient.listTrainerCheckinInbox();
+        const submitted = inbox.items.filter(
+          (row) => row.checkin.status === "submitted",
+        );
+        const index = submitted.findIndex((row) => row.checkin.id === checkinId);
+        const next = index >= 0 ? submitted[index + 1] : undefined;
+        if (!cancelled) {
+          setNextReview(
+            next
+              ? {
+                  checkinId: next.checkin.id,
+                  relationshipId: next.coachingRelationshipId,
+                }
+              : null,
+          );
+        }
+      } catch {
+        if (!cancelled) setNextReview(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromInbox, checkinId]);
 
   const adherenceLines = useMemo(() => {
     if (!context) return [];
@@ -262,10 +290,10 @@ export function CheckinReviewPage() {
           <p className="lede">{submittedLabel}</p>
         </div>
         <div className="workspace-header-actions">
-          {fromInbox && nextId && relationshipId ? (
+          {fromInbox && nextReview ? (
             <Link
               className="button-secondary"
-              to={`/clients/${relationshipId}/check-ins/${nextId}?from=inbox&queue=${encodeURIComponent(queue.join(","))}`}
+              to={`/clients/${nextReview.relationshipId}/check-ins/${nextReview.checkinId}?from=inbox`}
             >
               Next ›
             </Link>

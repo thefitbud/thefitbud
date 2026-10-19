@@ -36,6 +36,7 @@ import {
   registerTraineeCaptureNav,
 } from "../dev/captureBridge";
 import { scheduledAssignments } from "./scheduledAssignments";
+import { pickTodayCheckin } from "./pickTodayCheckin";
 import type { NotificationDeepLink } from "../notifications/routing";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
@@ -229,10 +230,7 @@ export function TraineeShell({
       },
       async openTodayCheckin() {
         const list = await api.listCheckins(relationship.id);
-        const due =
-          list.items.find((item) => item.status === "due") ??
-          list.items.find((item) => item.status === "scheduled") ??
-          list.items[0];
+        const due = pickTodayCheckin(list.items) ?? list.items[0];
         if (due) setActiveCheckin(due);
       },
       closeOverlay() {

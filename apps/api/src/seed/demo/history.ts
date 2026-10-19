@@ -401,11 +401,19 @@ function buildAssignmentsAndLogs(input: {
             `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "waist", checkinId))}, ${sqlQuote(input.relId)}, ${sqlQuote(trainee)}, 'waist_cm', ${waist}, 'cm', ${sqlQuote(observedAt)}, 'checkin', ${sqlQuote(checkinId)}, NULL, 0, ${sqlQuote(observedAt)}, ${sqlQuote(observedAt)});`,
           );
         }
-      }
-      if (submitted && input.state === "dual_role") {
-        lines.push(
-          `-- karan check-in awaiting review on ${localDate}`,
+      } else if (submitted) {
+        // Keep only the most recent past Sunday awaiting review (inbox realism).
+        const refDow = new Date(`${input.refDate}T12:00:00Z`).getUTCDay();
+        const daysSinceSunday = refDow === 0 ? 7 : refDow;
+        const latestPastSunday = addDaysFromLocalDate(
+          input.refDate,
+          -daysSinceSunday,
         );
+        if (localDate < latestPastSunday) {
+          lines.push(
+            `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", checkinId))}, ${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(userId(input.trainerEmail))}, 'acknowledged', NULL, ${sqlQuote(submittedAt)}, ${sqlQuote(submittedAt)});`,
+          );
+        }
       }
     }
   }
@@ -718,6 +726,29 @@ function buildPersonaOverlays(input: HistoryInput): string {
     const timezone = email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", `${email}-next`))}, ${sqlQuote(relationship)}, ${sqlQuote(demoUuid("checkin-schedule", relationship))}, ${sqlQuote(nextCheckinDate)}, ${sqlQuote(localDayStartIso(nextCheckinDate, "09:00", timezone))}, ${sqlQuote(new Date(Date.parse(localDayStartIso(nextCheckinDate, "09:00", timezone)) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    );
+  }
+
+  // Explicit Due + Overdue drafts for inbox tabs (TW-22).
+  {
+    const meeraRel = relId(
+      "rahul.coach@demo.fitbud.test",
+      "meera.ack@demo.fitbud.test",
+    );
+    const dueStart = new Date(Date.parse(now) - 2 * 3_600_000).toISOString();
+    const dueEnd = new Date(Date.parse(now) + 22 * 3_600_000).toISOString();
+    lines.push(
+      `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "meera-due"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("checkin-schedule", meeraRel))}, ${sqlQuote(refDate)}, ${sqlQuote(dueStart)}, ${sqlQuote(dueEnd)}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    );
+    const farhanRel = relId(
+      "rahul.coach@demo.fitbud.test",
+      "farhan.paused@demo.fitbud.test",
+    );
+    const overdueDate = addDaysFromLocalDate(refDate, -2);
+    const overdueStart = localDayStartIso(overdueDate, "09:00", "Asia/Kolkata");
+    const overdueEnd = new Date(Date.parse(now) - 6 * 3_600_000).toISOString();
+    lines.push(
+      `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "farhan-overdue"))}, ${sqlQuote(farhanRel)}, ${sqlQuote(demoUuid("checkin-schedule", farhanRel))}, ${sqlQuote(overdueDate)}, ${sqlQuote(overdueStart)}, ${sqlQuote(overdueEnd)}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
   }
 

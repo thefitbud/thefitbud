@@ -20,6 +20,15 @@ const MONTHS = [
   "Dec",
 ] as const;
 
+/** Map Intl short months (e.g. "Sept") onto the shared 3-letter set. */
+export function canonicalShortMonth(value: string): string {
+  const key = value.trim().toLowerCase().replace(/\.$/, "");
+  if (!key) return value;
+  if (key.startsWith("sep")) return "Sep";
+  const match = MONTHS.find((m) => m.toLowerCase() === key.slice(0, 3));
+  return match ?? value;
+}
+
 function parseCivilDate(localDate: string): {
   year: number;
   month: number;
@@ -124,7 +133,10 @@ export function formatInstant(
     hour12: true,
   }).formatToParts(date);
   const day = parts.find((p) => p.type === "day")?.value ?? "";
-  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  // Intl may yield "Sept"; product copy uses the shared 3-letter months ("Sep").
+  const month = canonicalShortMonth(
+    parts.find((p) => p.type === "month")?.value ?? "",
+  );
   const hour = parts.find((p) => p.type === "hour")?.value ?? "";
   const minute = parts.find((p) => p.type === "minute")?.value ?? "";
   const dayPeriod = (

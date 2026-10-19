@@ -403,6 +403,8 @@ export const trainerCheckinInboxItemSchema = z.object({
   checkin: checkinSchema,
   coachingRelationshipId: uuidSchema,
   traineeUserId: uuidSchema,
+  traineeDisplayName: z.string().min(1).max(320).optional(),
+  traineeTimezone: z.string().min(1).max(64).optional(),
 });
 export type TrainerCheckinInboxItem = z.infer<
   typeof trainerCheckinInboxItemSchema

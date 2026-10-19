@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  Checkin,
-  TrainerCheckinInboxItem,
-} from "@fitbud/contracts";
+import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
   formatCivilDate,
   formatInstant,
   formatLocalDate,
-  labelFor,
+  whatsappHref,
 } from "@fitbud/core";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusChip";
@@ -20,10 +17,10 @@ import {
   LoadingBlock,
 } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
-import { whatsappHref } from "@fitbud/core";
 
 type InboxTab = "to-review" | "due" | "overdue" | "reviewed";
 
+const PAGE_SIZE = 12;
 const ENDED_NAMES = new Set(["Kavya", "Nikhil"]);
 
 function tabFromParam(raw: string | null): InboxTab {
@@ -47,9 +44,17 @@ function relationshipInitials(name: string): string {
 
 type Row = TrainerCheckinInboxItem & {
   traineeDisplayName: string;
+  traineeTimezone: string;
   clientWhatsappE164: string | null;
   formLabel: string;
 };
+
+function whenLabel(row: Row): string {
+  if (row.checkin.status === "submitted" && row.checkin.submittedAt) {
+    return formatInstant(row.checkin.submittedAt, row.traineeTimezone);
+  }
+  return formatCivilDate(row.checkin.localDate);
+}
 
 export function CheckinsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -60,6 +65,7 @@ export function CheckinsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nudgingId, setNudgingId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,7 +84,10 @@ export function CheckinsPage() {
       let rows: Row[] = inbox.items.map((item) => ({
         ...item,
         traineeDisplayName:
-          names.get(item.coachingRelationshipId) ?? "Client",
+          item.traineeDisplayName ??
+          names.get(item.coachingRelationshipId) ??
+          "Client",
+        traineeTimezone: item.traineeTimezone ?? "Asia/Kolkata",
         clientWhatsappE164: null,
         formLabel: "Weekly check-in",
       }));
@@ -88,12 +97,17 @@ export function CheckinsPage() {
           (row) =>
             row.relationshipId &&
             row.status !== "ended" &&
-            !ENDED_NAMES.has((row.traineeDisplayName ?? "").split(/\s+/)[0] ?? ""),
+            !ENDED_NAMES.has(
+              (row.traineeDisplayName ?? "").split(/\s+/)[0] ?? "",
+            ),
         );
-        const since = addDaysToLocalDate(formatLocalDate(new Date(), "UTC"), -14);
+        const since = addDaysToLocalDate(
+          formatLocalDate(new Date(), "UTC"),
+          -14,
+        );
         const reviewedLists = await Promise.all(
           active.slice(0, 20).map(async (client) => {
-            if (!client.relationshipId) return [] as Checkin[];
+            if (!client.relationshipId) return [] as Row[];
             const list = await apiClient.listCheckins(client.relationshipId, {
               fromDate: since,
               limit: 20,
@@ -107,13 +121,14 @@ export function CheckinsPage() {
                     coachingRelationshipId: client.relationshipId!,
                     traineeUserId: "",
                     traineeDisplayName: client.traineeDisplayName ?? "Client",
+                    traineeTimezone: "Asia/Kolkata",
                     clientWhatsappE164: null,
                     formLabel: "Weekly check-in",
                   }) satisfies Row,
               );
           }),
         );
-        rows = reviewedLists.flat() as Row[];
+        rows = reviewedLists.flat();
       }
 
       rows = rows.filter((row) => {
@@ -122,6 +137,7 @@ export function CheckinsPage() {
       });
 
       setItems(rows);
+      setVisibleCount(PAGE_SIZE);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -152,25 +168,18 @@ export function CheckinsPage() {
     return items.filter((row) => row.checkin.status === status);
   }, [items, tab]);
 
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleCount;
+
   const counts = useMemo(() => {
-    const base = {
+    return {
       "to-review": items.filter((row) => row.checkin.status === "submitted")
         .length,
       due: items.filter((row) => row.checkin.status === "due").length,
       overdue: items.filter((row) => row.checkin.status === "overdue").length,
       reviewed: items.filter((row) => row.checkin.status === "reviewed").length,
     };
-    return base;
   }, [items]);
-
-  const reviewQueue = useMemo(
-    () =>
-      items
-        .filter((row) => row.checkin.status === "submitted")
-        .map((row) => row.checkin.id)
-        .join(","),
-    [items],
-  );
 
   async function nudge(row: Row) {
     setNudgingId(row.checkin.id);
@@ -180,10 +189,52 @@ export function CheckinsPage() {
         activityId: row.checkin.id,
       });
     } catch {
-      /* toast optional */
+      /* optional */
     } finally {
       setNudgingId(null);
     }
+  }
+
+  function renderActions(row: Row) {
+    if (row.checkin.status === "submitted") {
+      return (
+        <Link
+          className="button-primary"
+          to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}?from=inbox`}
+        >
+          Review
+        </Link>
+      );
+    }
+    if (row.checkin.status === "overdue") {
+      return (
+        <>
+          <Button
+            type="button"
+            variant="tinted"
+            disabled={nudgingId === row.checkin.id}
+            onClick={() => void nudge(row)}
+          >
+            Nudge
+          </Button>
+          {row.clientWhatsappE164 ? (
+            <a
+              className="button-secondary"
+              href={whatsappHref({
+                phoneE164: row.clientWhatsappE164,
+                draftText:
+                  "Hi — your check-in is overdue. Please submit when you can.",
+              })}
+              target="_blank"
+              rel="noreferrer"
+            >
+              WhatsApp
+            </a>
+          ) : null}
+        </>
+      );
+    }
+    return <span className="muted">—</span>;
   }
 
   return (
@@ -221,90 +272,89 @@ export function CheckinsPage() {
       <div className="roster-card">
         {loading ? <LoadingBlock label="Loading check-ins…" /> : null}
         {error && items.length === 0 ? (
-          <ErrorState message={error} onRetry={() => void load()} screenId="TW-22" />
+          <ErrorState
+            message={error}
+            onRetry={() => void load()}
+            screenId="TW-22"
+          />
         ) : null}
         {!loading && tab === "to-review" && filtered.length === 0 ? (
           <EmptyState title="No check-ins waiting. Nice." />
         ) : null}
         {!loading && filtered.length > 0 ? (
-          <div className="roster-scroll">
-            <table className="roster-table" aria-label="Check-ins inbox">
-              <thead>
-                <tr>
-                  <th scope="col">Client</th>
-                  <th scope="col">Form</th>
-                  <th scope="col">When</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((row) => (
-                  <tr key={row.checkin.id}>
-                    <td>
-                      <div className="roster-person">
-                        <span className="avatar" aria-hidden="true">
-                          {relationshipInitials(row.traineeDisplayName)}
-                        </span>
-                        <span className="client-name">
-                          {row.traineeDisplayName}
-                        </span>
-                      </div>
-                    </td>
-                    <td>{row.formLabel}</td>
-                    <td>
-                      {row.checkin.status === "submitted" &&
-                      row.checkin.submittedAt
-                        ? formatInstant(
-                            row.checkin.submittedAt,
-                            Intl.DateTimeFormat().resolvedOptions().timeZone,
-                          )
-                        : formatCivilDate(row.checkin.localDate)}
-                    </td>
-                    <td>
-                      <StatusChip kind="checkin" value={row.checkin.status} />
-                    </td>
-                    <td className="inbox-actions">
-                      {row.checkin.status === "submitted" ? (
-                        <Link
-                          className="button-primary"
-                          to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}?from=inbox&queue=${encodeURIComponent(reviewQueue)}`}
-                        >
-                          Review
-                        </Link>
-                      ) : null}
-                      {row.checkin.status === "overdue" ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="tinted"
-                            disabled={nudgingId === row.checkin.id}
-                            onClick={() => void nudge(row)}
-                          >
-                            Nudge
-                          </Button>
-                          {row.clientWhatsappE164 ? (
-                            <a
-                              className="button-secondary"
-                              href={whatsappHref({
-                                phoneE164: row.clientWhatsappE164,
-                                draftText:
-                                  "Hi — your check-in is overdue. Please submit when you can.",
-                              })}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              WhatsApp
-                            </a>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </td>
+          <>
+            <div className="roster-scroll inbox-table-wrap">
+              <table className="roster-table inbox-table" aria-label="Check-ins inbox">
+                <thead>
+                  <tr>
+                    <th scope="col">Client</th>
+                    <th scope="col">Form</th>
+                    <th scope="col">When</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {visible.map((row) => (
+                    <tr key={row.checkin.id}>
+                      <td>
+                        <div className="roster-person">
+                          <span className="avatar" aria-hidden="true">
+                            {relationshipInitials(row.traineeDisplayName)}
+                          </span>
+                          <span className="client-name">
+                            {row.traineeDisplayName}
+                          </span>
+                        </div>
+                      </td>
+                      <td>{row.formLabel}</td>
+                      <td>{whenLabel(row)}</td>
+                      <td>
+                        <StatusChip
+                          kind="checkin"
+                          value={row.checkin.status}
+                        />
+                      </td>
+                      <td className="inbox-actions">{renderActions(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <ul className="inbox-card-list" aria-label="Check-ins inbox">
+              {visible.map((row) => (
+                <li key={row.checkin.id} className="inbox-card">
+                  <div className="inbox-card-top">
+                    <div className="roster-person">
+                      <span className="avatar" aria-hidden="true">
+                        {relationshipInitials(row.traineeDisplayName)}
+                      </span>
+                      <div>
+                        <p className="client-name">{row.traineeDisplayName}</p>
+                        <p className="muted">{row.formLabel}</p>
+                      </div>
+                    </div>
+                    <StatusChip kind="checkin" value={row.checkin.status} />
+                  </div>
+                  <p className="inbox-card-when">{whenLabel(row)}</p>
+                  <div className="inbox-actions">{renderActions(row)}</div>
+                </li>
+              ))}
+            </ul>
+
+            {hasMore ? (
+              <div className="inbox-more">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                >
+                  Show more ({filtered.length - visibleCount} left)
+                </Button>
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
     </section>

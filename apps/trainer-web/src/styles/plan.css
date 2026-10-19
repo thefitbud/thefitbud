@@ -1916,13 +1916,13 @@
 }
 
 .set-table-wrap {
-  overflow-x: visible;
+  overflow-x: auto;
   min-width: 0;
 }
 
 .set-table {
   width: 100%;
-  min-width: 0;
+  min-width: 32rem;
   border-collapse: collapse;
   font-size: 0.8125rem;
   table-layout: fixed;
@@ -1966,12 +1966,17 @@
 
 .set-table th:nth-child(6),
 .set-table td:nth-child(6) {
-  width: auto;
+  width: 30%;
+  min-width: 8rem;
 }
 
 .set-table th:nth-child(7),
 .set-table td:nth-child(7) {
   width: 2.25rem;
+}
+
+.set-table td:nth-child(6) input {
+  min-width: 7rem;
 }
 
 .set-table input,

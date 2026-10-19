@@ -447,4 +447,172 @@ describe("TW-C trainer note visibility", () => {
     );
     expect(blockedPatch.status).toBeGreaterThanOrEqual(400);
   });
+
+  it("keeps trainer-chosen visibility on check-in-linked notes (Visible to client)", async () => {
+    const { trainer, traineeToken, relationshipId } = await setupPair("cinote");
+    const traineeHeaders = {
+      Authorization: `Bearer ${traineeToken}`,
+      "x-fitbud-role": "trainee",
+      "Content-Type": "application/json",
+    };
+    await app.request(
+      `/onboarding/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: traineeHeaders,
+        body: JSON.stringify({
+          expectedVersion: 0,
+          answers: {
+            goals: "Recomp",
+            relevant_history: "None",
+            preferences: "Home food",
+            schedule: "Evenings",
+            limitations: "None",
+          },
+        }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      `/onboarding/relationships/${relationshipId}/submit`,
+      {
+        method: "POST",
+        headers: {
+          ...traineeHeaders,
+          "Idempotency-Key": "cinote-submit",
+        },
+        body: JSON.stringify({ expectedVersion: 1 }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      `/onboarding/relationships/${relationshipId}/review`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "cinote-review",
+        },
+        body: JSON.stringify({ outcome: "coaching_ready" }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedVersion: 0,
+          goalShort: "Note visibility",
+          workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
+          nutrition: {
+            mealsPerDay: 2,
+            confirmationWindowHours: 24,
+            photoRequirement: "none",
+          },
+          checkin: { cadence: "weekly", dueWindowHours: 48 },
+          tracking: {
+            requireBodyWeight: false,
+            requireProgressPhotos: false,
+            requireSessionRpe: false,
+          },
+        }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      `/configurations/relationships/${relationshipId}/configure`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "cinote-cfg",
+        },
+        body: JSON.stringify({ expectedVersion: 1 }),
+      },
+      testEnv(),
+    );
+    await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "cinote-act",
+        },
+        body: JSON.stringify({ expectedVersion: 2 }),
+      },
+      testEnv(),
+    );
+    const scheduled = await app.request(
+      `/checkins/relationships/${relationshipId}/schedule`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "cinote-schedule",
+        },
+        body: JSON.stringify({ localDate: "2026-10-19" }),
+      },
+      testEnv(),
+    );
+    expect(scheduled.status).toBe(200);
+    const scheduledBody = (await scheduled.json()) as {
+      data: { checkin: { id: string } };
+    };
+    const checkinId = scheduledBody.data.checkin.id;
+
+    const created = await app.request(
+      `/checkins/relationships/${relationshipId}/notes`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "cinote-visible",
+        },
+        body: JSON.stringify({
+          body: "VISIBLE_CHECKIN_REVIEW_NOTE",
+          visibility: "client",
+          checkinId,
+          subjectType: "checkin",
+          subjectId: checkinId,
+        }),
+      },
+      testEnv(),
+    );
+    expect(created.status).toBe(200);
+    const note = ((await created.json()) as {
+      data: { id: string; visibility: string; checkinId: string | null };
+    }).data;
+    expect(note.visibility).toBe("client");
+    expect(note.checkinId).toBe(checkinId);
+
+    const traineeList = await app.request(
+      "/me/coach-notes",
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    expect(traineeList.status).toBe(200);
+    const listBody = (await traineeList.json()) as {
+      data: { items: Array<{ id: string; body: string }> };
+    };
+    expect(listBody.data.items.some((n) => n.id === note.id)).toBe(true);
+    expect(
+      listBody.data.items.some((n) => n.body === "VISIBLE_CHECKIN_REVIEW_NOTE"),
+    ).toBe(true);
+  });
 });
