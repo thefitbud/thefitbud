@@ -30,8 +30,12 @@ export function NotificationSettingsPage() {
     requestId?: string | null;
   } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
+    "idle",
+  );
   const persistTimer = useRef<number | null>(null);
   const skipPersist = useRef(true);
+  const saveGen = useRef(0);
 
   const load = useCallback(async () => {
     if (!online) {
@@ -79,23 +83,20 @@ export function NotificationSettingsPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const onFocus = () => {
-      void load();
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [load]);
-
   const persist = useCallback(
-    async (next: {
-      pushEnabled: boolean;
-      quietStart: string;
-      quietEnd: string;
-      categories: TrainerNotificationPrefs;
-    }) => {
-      if (skipPersist.current || !online) return;
+    async (
+      next: {
+        pushEnabled: boolean;
+        quietStart: string;
+        quietEnd: string;
+        categories: TrainerNotificationPrefs;
+      },
+      opts?: { force?: boolean },
+    ) => {
+      if ((!opts?.force && skipPersist.current) || !online) return;
+      const gen = ++saveGen.current;
       setSaveError(null);
+      setSaveStatus("saving");
       try {
         await apiClient.updateNotificationPreferences({
           pushEnabled: next.pushEnabled,
@@ -103,12 +104,16 @@ export function NotificationSettingsPage() {
           quietHoursEnd: next.quietEnd,
           trainerCategories: next.categories,
         });
+        if (gen === saveGen.current) setSaveStatus("saved");
       } catch (err) {
-        setSaveError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not save notification settings.",
-        );
+        if (gen === saveGen.current) {
+          setSaveStatus("idle");
+          setSaveError(
+            err instanceof ApiClientError
+              ? err.message
+              : "Could not save notification settings.",
+          );
+        }
       }
     },
     [online],
@@ -128,15 +133,17 @@ export function NotificationSettingsPage() {
   function toggleCategory(key: keyof TrainerNotificationPrefs) {
     setCategories((current) => {
       const next = { ...current, [key]: !current[key] };
-      // Persist immediately so a quick reload cannot race the debounce.
-      window.setTimeout(() => {
-        void persist({
+      // Force persist now — do not race skipPersist from the initial load.
+      skipPersist.current = false;
+      void persist(
+        {
           pushEnabled,
           quietStart,
           quietEnd,
           categories: next,
-        });
-      }, 0);
+        },
+        { force: true },
+      );
       return next;
     });
   }
@@ -262,6 +269,11 @@ export function NotificationSettingsPage() {
         </div>
       </fieldset>
 
+      {saveStatus === "saved" && !saveError ? (
+        <p className="muted" role="status" data-testid="notification-prefs-saved">
+          Saved
+        </p>
+      ) : null}
       {saveError ? (
         <p className="form-error" role="alert">
           {saveError}

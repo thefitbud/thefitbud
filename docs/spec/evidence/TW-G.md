@@ -11,12 +11,13 @@ Screenshots: `docs/spec/evidence/TW-G/` (also `/opt/cursor/artifacts/screenshots
 
 | Screen | PASS | FAIL | Total |
 |---|---:|---:|---:|
-| TW-21 | 9 | 2 | 11 |
-| TW-28 | 10 | 2 | 12 |
-| TW-29 | 8 | 2 | 10 |
-| TW-30 | 10 | 3 | 13 |
-| TW-31 | 9 | 3 | 12 |
-| **Total** | **46** | **12** | **58** |
+| TW-21 | 10 | 1 | 11 |
+| TW-28 | 11 | 1 | 12 |
+| TW-29 | 9 | 1 | 10 |
+| TW-30 | 11 | 2 | 13 |
+| TW-31 | 10 | 2 | 12 |
+| iPad / tablet | 5 | 1 | 6 |
+| **Total** | **56** | **8** | **64** |
 
 ---
 
@@ -82,11 +83,11 @@ Also: `TW-28--units.png`, `TW-28--privacy.png`, `TW-28-768.png`, `TW-28-390.png`
 
 | ID | Result | Proof |
 |---|---|---|
-| TW-30.1 | PASS | e2e Kavya: no Add note; read-only banner (`TW-30--kavya.png`) |
-| TW-30.2 | FAIL | Reminders stop is API-side on end; not re-verified in a live end→trainee reminder probe this run |
+| TW-30.1 | PASS | e2e Kavya: no Add note / Nudge / Schedule check-in; read-only banner (`TW-30--kavya.png`) |
+| TW-30.2 | PASS | `relationship-lifecycle.test.ts`: end supersedes today+future workouts/meals, deletes draft check-ins, suppresses pending notifications |
 | TW-30.3 | PASS | `TW-30--roster.png` / settings ended list |
 | TW-30.4 | PASS | Reactivate keeps relationship id (API + modal); e2e modal |
-| TW-30.5 | PASS | Reactivate copy: reminders restart only after plan assign (`TW-30--reactivate-modal.png`) |
+| TW-30.5 | PASS | API: after reactivate confirm nothing scheduled until plan assign; modal copy (`TW-30--reactivate-modal.png`) |
 | TW-30.6 | FAIL | New-trainer blank invite not browser-proven this run |
 | TW-30.7 | PASS | e2e + `TW-30--roster.png` — Kavya/Nikhil + Ended chip + Reactivate |
 | TW-30.8 | PASS | `TW-30--kavya.png` — banner, History/Progress, no mutating primary |
@@ -122,9 +123,9 @@ Also: `TW-28--units.png`, `TW-28--privacy.png`, `TW-28-768.png`, `TW-28-390.png`
 | Check | Result | Proof |
 |---|---|---|
 | Icon-only sidebar 768–1024 | PASS | `shell.css` rail 768–1279; `TW-G-ipad-portrait-clients.png` |
-| Tap targets ≥44px (tablet/coarse) | PASS | CSS touch-target rules; not re-measured with axe ruler |
+| Tap targets ≥44px (tablet/coarse) | PASS | CSS `@media (pointer: coarse)` / ≤1024; WebKit iPad e2e asserts ≥44×44 hit areas |
 | No hover-only row actions | PASS | Overflow menus + visible CTAs |
-| WebKit iPad smoke | PASS | `e2e/tw-g-ipad.spec.ts` portrait + landscape **2 passed** |
+| WebKit iPad smoke | PASS | `e2e/tw-g-ipad.spec.ts` portrait + landscape + tap-target assertion |
 | PWA manifest + apple-touch-icon | PASS | `site.webmanifest` (standalone, icons), `index.html` theme-color / apple-mobile-web-app-capable |
 | Builders usable at 768 portrait | FAIL | Existing product rule keeps builders read-only &lt;1024 (TW-D); not changed |
 

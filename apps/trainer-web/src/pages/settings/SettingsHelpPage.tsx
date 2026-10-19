@@ -1,11 +1,15 @@
 import { useConfig } from "../../lib/config";
 
-function supportMailto(screenId: string, supportEmail: string): string {
+const APP_VERSION = "0.0.0";
+const SCREEN_NAME = "Help";
+const SCREEN_ID = "TW-28";
+
+function supportMailto(supportEmail: string): string {
   const subject = encodeURIComponent(
-    `FitBud support · Trainer web · ${screenId}`,
+    `FitBud support · Trainer web · ${SCREEN_ID} ${SCREEN_NAME}`,
   );
   const body = encodeURIComponent(
-    `\n\n---\nApp: Trainer web\nRole: trainer\nScreen: ${screenId}\nLocal time: ${new Date().toISOString()}`,
+    `\n\n---\nApp: Trainer web\nVersion: ${APP_VERSION}\nRole: trainer\nScreen: ${SCREEN_ID} ${SCREEN_NAME}\nLocal time: ${new Date().toISOString()}`,
   );
   return `mailto:${supportEmail}?subject=${subject}&body=${body}`;
 }
@@ -18,7 +22,7 @@ export function SettingsHelpPage() {
       <h2>Help</h2>
       <a
         className="settings-help-row button-secondary"
-        href={supportMailto("TW-28", supportEmail)}
+        href={supportMailto(supportEmail)}
       >
         Email FitBud support
       </a>

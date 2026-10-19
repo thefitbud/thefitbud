@@ -25,6 +25,8 @@ type Props = {
   nudge?: NudgeUiState;
   nudging?: boolean;
   online: boolean;
+  /** When true, hide mutating actions (TW-30 ended workspace). */
+  readOnly?: boolean;
   onNudge: () => void;
   onView: () => void;
 };
@@ -37,6 +39,7 @@ export function ActivityRow({
   nudge,
   nudging,
   online,
+  readOnly = false,
   onNudge,
   onView,
 }: Props) {
@@ -68,7 +71,7 @@ export function ActivityRow({
   const photoId =
     item.type === "meal" ? mealAssignment?.compliance?.mediaAssetId : null;
 
-  const showNudge = canNudgeItem(item);
+  const showNudge = !readOnly && canNudgeItem(item);
 
   return (
     <li className="activity-feed-row" data-testid="activity-row">

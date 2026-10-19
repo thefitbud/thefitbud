@@ -116,7 +116,10 @@ export function WorkspaceHeader({
     metaNodes.push({
       key: "plan",
       node: (
-        <Link to={`/clients/${relationshipId}/plan`}>
+        <Link
+          className="workspace-plan-link"
+          to={`/clients/${relationshipId}/plan`}
+        >
           {header.effectivePlan.title}
         </Link>
       ),

@@ -81,8 +81,13 @@ export function ClientActivityPage() {
     me?.timezone ??
     Intl.DateTimeFormat().resolvedOptions().timeZone ??
     "UTC";
-  const { workspace, workspaceLoading, refreshEpoch = 0, online = true } =
-    useOutletContext<WorkspaceOutletContext>();
+  const {
+    workspace,
+    workspaceLoading,
+    refreshEpoch = 0,
+    online = true,
+    ended = false,
+  } = useOutletContext<WorkspaceOutletContext>();
   const header = workspace?.header;
   const { timezone: clientTimezone } = resolveTraineeTimezone(
     header ?? {
@@ -232,7 +237,7 @@ export function ClientActivityPage() {
   }
 
   async function nudge(item: WorkspaceActivityItem) {
-    if (!relationshipId) return;
+    if (!relationshipId || ended) return;
     setNudgingId(item.id);
     try {
       const result = await apiClient.nudgeActivity(relationshipId, {
@@ -505,6 +510,7 @@ export function ClientActivityPage() {
           nudgeState={nudgeState}
           nudgingId={nudgingId}
           online={online}
+          readOnly={ended}
           onNudge={(item) => void nudge(item)}
           onView={openPanel}
         />

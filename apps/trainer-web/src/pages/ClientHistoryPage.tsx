@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import {
-  historyItemKindSchema,
-  type HistoryItem,
-  type HistoryItemKind,
-} from "@fitbud/contracts";
-import { formatRelative, labelFor } from "@fitbud/core";
+import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
+import { formatRelative } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
@@ -25,9 +21,52 @@ import {
 } from "../components/StatePanels";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
-function parseKind(value: string | null): HistoryItemKind | undefined {
-  const parsed = historyItemKindSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+/** Keep-it-simple kind groups (TW-21) instead of one pill per schema kind. */
+const HISTORY_KIND_GROUPS = [
+  {
+    id: "workouts",
+    label: "Workouts",
+    kinds: ["workout_execution"] as const satisfies readonly HistoryItemKind[],
+  },
+  {
+    id: "meals",
+    label: "Meals",
+    kinds: ["meal_compliance"] as const satisfies readonly HistoryItemKind[],
+  },
+  {
+    id: "checkins",
+    label: "Check-ins",
+    kinds: ["checkin_submitted", "checkin_reviewed"] as const satisfies readonly HistoryItemKind[],
+  },
+  {
+    id: "plans",
+    label: "Plans",
+    kinds: [
+      "plan_version",
+      "configuration_activated",
+      "subscription_revision",
+    ] as const satisfies readonly HistoryItemKind[],
+  },
+  {
+    id: "account",
+    label: "Account",
+    kinds: [
+      "onboarding_submitted",
+      "onboarding_reviewed",
+      "measurement",
+      "progress_entry",
+      "progress_photo",
+      "exception",
+      "trainer_note",
+      "intervention",
+    ] as const satisfies readonly HistoryItemKind[],
+  },
+] as const;
+
+type HistoryKindGroupId = (typeof HISTORY_KIND_GROUPS)[number]["id"];
+
+function parseKindGroup(value: string | null): HistoryKindGroupId | undefined {
+  return HISTORY_KIND_GROUPS.find((group) => group.id === value)?.id;
 }
 
 export function ClientHistoryPage() {
@@ -51,10 +90,11 @@ export function ClientHistoryPage() {
   } | null>(null);
   const requestId = useRef(0);
 
-  const kind = parseKind(searchParams.get("kind"));
+  const kindGroup = parseKindGroup(searchParams.get("kind"));
+  const selectedGroup = HISTORY_KIND_GROUPS.find((group) => group.id === kindGroup);
   const occurredFrom = searchParams.get("occurredFrom") ?? "";
   const occurredTo = searchParams.get("occurredTo") ?? "";
-  const filterKey = `${relationshipId}|${kind ?? ""}|${occurredFrom}|${occurredTo}`;
+  const filterKey = `${relationshipId}|${kindGroup ?? ""}|${occurredFrom}|${occurredTo}`;
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const listReady = loadedKey === filterKey && !loading;
 
@@ -81,16 +121,28 @@ export function ClientHistoryPage() {
       }
       setError(null);
       try {
+        // Single-kind groups use the API kind filter; multi-kind groups filter
+        // client-side after an unfiltered page (keep-it-simple).
+        const apiKind =
+          selectedGroup && selectedGroup.kinds.length === 1
+            ? selectedGroup.kinds[0]
+            : undefined;
         const result = await apiClient.listHistory(relationshipId, {
           cursor: cursor ?? undefined,
           limit: 30,
-          kind,
+          kind: apiKind,
           occurredFrom: civilDateStart(occurredFrom),
           occurredTo: civilDateEnd(occurredTo),
         });
         if (requestId.current !== id) return;
+        const allowed = selectedGroup
+          ? new Set<string>(selectedGroup.kinds)
+          : null;
+        const pageItems = allowed
+          ? result.items.filter((item) => allowed.has(item.kind))
+          : result.items;
         setItems((current) =>
-          appending ? [...current, ...result.items] : result.items,
+          appending ? [...current, ...pageItems] : pageItems,
         );
         setNextCursor(result.nextCursor);
         if (!appending) setLoadedKey(filterKey);
@@ -114,7 +166,14 @@ export function ClientHistoryPage() {
         }
       }
     },
-    [filterKey, kind, occurredFrom, occurredTo, online, relationshipId],
+    [
+      filterKey,
+      occurredFrom,
+      occurredTo,
+      online,
+      relationshipId,
+      selectedGroup,
+    ],
   );
 
   useEffect(() => {
@@ -130,7 +189,7 @@ export function ClientHistoryPage() {
   }, [load]);
 
   function updateFilters(next: {
-    kind?: HistoryItemKind | null;
+    kind?: HistoryKindGroupId | null;
     occurredFrom?: string;
     occurredTo?: string;
   }) {
@@ -156,7 +215,7 @@ export function ClientHistoryPage() {
   }
 
   const empty = listReady && items.length === 0 && !error;
-  const filtersActive = Boolean(kind || occurredFrom || occurredTo);
+  const filtersActive = Boolean(kindGroup || occurredFrom || occurredTo);
   const weekGroups = groupHistoryByWeek(items, timeZone);
 
   return (
@@ -183,23 +242,27 @@ export function ClientHistoryPage() {
         <div className="history-kind-pills" role="group" aria-label="Kind">
           <button
             type="button"
-            className={!kind ? "filter-pill is-on" : "filter-pill"}
-            aria-pressed={!kind}
+            className={!kindGroup ? "filter-pill is-on" : "filter-pill"}
+            aria-pressed={!kindGroup}
             onClick={() => updateFilters({ kind: null })}
           >
             All
           </button>
-          {historyItemKindSchema.options.map((option) => (
+          {HISTORY_KIND_GROUPS.map((group) => (
             <button
-              key={option}
+              key={group.id}
               type="button"
-              className={kind === option ? "filter-pill is-on" : "filter-pill"}
-              aria-pressed={kind === option}
+              className={
+                kindGroup === group.id ? "filter-pill is-on" : "filter-pill"
+              }
+              aria-pressed={kindGroup === group.id}
               onClick={() =>
-                updateFilters({ kind: kind === option ? null : option })
+                updateFilters({
+                  kind: kindGroup === group.id ? null : group.id,
+                })
               }
             >
-              {labelFor("history_kind", option)}
+              {group.label}
             </button>
           ))}
         </div>

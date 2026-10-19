@@ -778,6 +778,7 @@ export function ConfigureCoachingPage() {
       : labelFor("coaching_configuration_status", statusKey);
 
   const primaryAction = (() => {
+    if (relationshipEnded) return null;
     if (status === "active") {
       return {
         label: "Create new version",
@@ -1403,13 +1404,15 @@ export function ConfigureCoachingPage() {
               Mark configured
             </Button>
           ) : null}
-          <Button
-            variant="primary"
-            disabled={primaryAction.disabled}
-            onClick={primaryAction.onClick}
-          >
-            {acting ? "Working…" : primaryAction.label}
-          </Button>
+          {primaryAction ? (
+            <Button
+              variant="primary"
+              disabled={primaryAction.disabled}
+              onClick={primaryAction.onClick}
+            >
+              {acting ? "Working…" : primaryAction.label}
+            </Button>
+          ) : null}
         </div>
       </footer>
 

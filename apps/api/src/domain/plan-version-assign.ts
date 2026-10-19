@@ -457,6 +457,40 @@ export async function assignPlanVersion(
       dietScope,
       now,
     });
+  } else if (
+    !input.dryRun &&
+    (version.status === "effective" || version.status === "published")
+  ) {
+    // Re-assign after end/reactivate (or extend an effective plan): reopen the
+    // scheduling horizon with the trainer-picked start/end dates.
+    if (version.status === "published") {
+      previousVersions = await supersedeEffectiveVersions(
+        db,
+        input.planId,
+        now,
+        version.id,
+      );
+    }
+    await db
+      .update(planVersions)
+      .set({
+        status: "effective",
+        recordVersion: version.recordVersion + 1,
+        publishedAt: version.publishedAt ?? now,
+        effectiveFrom: input.request.effectiveFrom,
+        effectiveTo: input.request.effectiveTo ?? null,
+        updatedAt: now,
+      })
+      .where(eq(planVersions.id, version.id));
+    const [updated] = await db
+      .select()
+      .from(planVersions)
+      .where(eq(planVersions.id, version.id))
+      .limit(1);
+    if (!updated) {
+      throw new Error("PLAN_VERSION_PERSIST_FAILED");
+    }
+    version = updated;
   }
 
   const existingPolicy = await loadAssignmentPolicy(db, version.id);

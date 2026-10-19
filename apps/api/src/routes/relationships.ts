@@ -3,7 +3,7 @@ import {
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   coachingRelationshipSchema,
@@ -12,7 +12,7 @@ import {
   relationshipListResponseSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
-import { coachingRelationships } from "../db/schema";
+import { coachingRelationships, trainerProfiles } from "../db/schema";
 import { deriveOnboardingStatusForRelationships } from "../domain/client-status";
 import { mapRelationship } from "../domain/mappers";
 import {
@@ -113,11 +113,27 @@ relationshipRoutes.get(
 
     const page = buildPage(rows, limit, (item) => item.createdAt);
     const statuses = await deriveOnboardingStatusForRelationships(db, page.items);
+    const trainerIds = [...new Set(page.items.map((row) => row.trainerUserId))];
+    const profiles =
+      trainerIds.length === 0
+        ? []
+        : await db
+            .select({
+              userId: trainerProfiles.userId,
+              displayName: trainerProfiles.displayName,
+            })
+            .from(trainerProfiles)
+            .where(inArray(trainerProfiles.userId, trainerIds));
+    const nameByTrainer = new Map(
+      profiles.map((row) => [row.userId, row.displayName] as const),
+    );
     return ok(
       c,
       relationshipListResponseSchema.parse({
         items: page.items.map((row) =>
-          mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending"),
+          mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending", {
+            trainerDisplayName: nameByTrainer.get(row.trainerUserId) ?? null,
+          }),
         ),
         nextCursor: page.nextCursor,
       }),
@@ -156,7 +172,14 @@ relationshipRoutes.get(
     }
 
     const statuses = await deriveOnboardingStatusForRelationships(db, [row]);
-    const base = mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending");
+    const [trainerProfile] = await db
+      .select({ displayName: trainerProfiles.displayName })
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, row.trainerUserId))
+      .limit(1);
+    const base = mapRelationship(row, statuses.get(row.id) ?? "onboarding_pending", {
+      trainerDisplayName: trainerProfile?.displayName ?? null,
+    });
     let pendingReactivation: {
       requestId: string;
       expiresAt: string;

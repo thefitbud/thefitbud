@@ -477,20 +477,7 @@ body.is-offline .button-destructive {
   outline-offset: 2px;
 }
 
-@media (max-width: 1024px), (pointer: coarse) {
-  .shell-nav-link,
-  .shell-search,
-  .shell-bell,
-  .overflow-menu-trigger,
-  .button-primary,
-  .button-secondary,
-  .button-tinted,
-  .button-ghost,
-  .button-destructive,
-  .button-danger {
-    min-height: 44px;
-  }
-}
+/* Tablet/coarse ≥44×44 hit targets: see styles/tap-targets.css (loaded last). */
 
 .button-whatsapp {
   background: var(--white);

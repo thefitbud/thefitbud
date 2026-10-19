@@ -83,7 +83,10 @@ export function TraineeOverlayHost({
   onCoachingResumed,
 }: Props) {
   const { api, me } = useAuth();
-  const coachName = me?.trainerProfile?.displayName ?? "Your coach";
+  const coachName =
+    relationship.trainerDisplayName?.trim() ||
+    me?.trainerProfile?.displayName?.trim() ||
+    "Your coach";
   const [mealAssignment, setMealAssignment] = useState<MealAssignment | null>(
     null,
   );

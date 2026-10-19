@@ -13,6 +13,7 @@ type Props = {
   nudgeState: Record<string, NudgeUiState>;
   nudgingId: string | null;
   online: boolean;
+  readOnly?: boolean;
   onNudge: (item: WorkspaceActivityItem) => void;
   onView: (item: WorkspaceActivityItem) => void;
 };
@@ -27,6 +28,7 @@ export function ActivityDayGroup({
   nudgeState,
   nudgingId,
   online,
+  readOnly = false,
   onNudge,
   onView,
 }: Props) {
@@ -48,6 +50,7 @@ export function ActivityDayGroup({
             nudge={nudgeState[item.id]}
             nudging={nudgingId === item.id}
             online={online}
+            readOnly={readOnly}
             onNudge={() => onNudge(item)}
             onView={() => onView(item)}
           />

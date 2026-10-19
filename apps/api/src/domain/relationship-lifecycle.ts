@@ -1,9 +1,13 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import {
+  checkins,
   coachingRelationships,
   exceptions,
   mealAssignments,
+  notifications,
+  planVersions,
+  plans,
   reactivationRequests,
   workoutAssignments,
 } from "../db/schema.js";
@@ -31,6 +35,20 @@ export async function assertRelationshipWritable(
   return relationship;
 }
 
+/** Civil date one day before `iso` (UTC calendar), used to close plan horizons. */
+function previousCivilDate(iso: string): string {
+  const day = iso.slice(0, 10);
+  const prior = new Date(`${day}T12:00:00.000Z`);
+  prior.setUTCDate(prior.getUTCDate() - 1);
+  return prior.toISOString().slice(0, 10);
+}
+
+/**
+ * Ends coaching: closes open exceptions, supersedes today+future workout/meal
+ * assignments, removes unsubmitted check-ins from today onward, suppresses
+ * pending reminders/nudges, and closes the effective plan horizon so rolling
+ * replenishment cannot recreate a schedule until the trainer re-assigns.
+ */
 export async function endCoachingRelationship(
   db: Db,
   input: {
@@ -65,27 +83,82 @@ export async function endCoachingRelationship(
       ),
     );
 
-  const futureDate = timestamp.slice(0, 10);
+  const fromDate = timestamp.slice(0, 10);
   await db
     .update(workoutAssignments)
-    .set({ scheduleStatus: "superseded", updatedAt: timestamp })
+    .set({
+      scheduleStatus: "superseded",
+      supersededAt: timestamp,
+      updatedAt: timestamp,
+    })
     .where(
       and(
         eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
         eq(workoutAssignments.scheduleStatus, "scheduled"),
-        gt(workoutAssignments.localDate, futureDate),
+        gte(workoutAssignments.localDate, fromDate),
       ),
     );
   await db
     .update(mealAssignments)
-    .set({ scheduleStatus: "superseded", updatedAt: timestamp })
+    .set({
+      scheduleStatus: "superseded",
+      supersededAt: timestamp,
+      updatedAt: timestamp,
+    })
     .where(
       and(
         eq(mealAssignments.coachingRelationshipId, input.relationshipId),
         eq(mealAssignments.scheduleStatus, "scheduled"),
-        gt(mealAssignments.localDate, futureDate),
+        gte(mealAssignments.localDate, fromDate),
       ),
     );
+
+  // Draft check-ins have no schedule_status; remove future/today unsubmitted rows
+  // so reminders and the trainee Today surface cannot keep them alive.
+  await db
+    .delete(checkins)
+    .where(
+      and(
+        eq(checkins.coachingRelationshipId, input.relationshipId),
+        eq(checkins.recordStatus, "draft"),
+        gte(checkins.localDate, fromDate),
+      ),
+    );
+
+  await db
+    .update(notifications)
+    .set({ state: "suppressed" })
+    .where(
+      and(
+        eq(notifications.coachingRelationshipId, input.relationshipId),
+        inArray(notifications.state, ["pending", "deferred", "queued"]),
+      ),
+    );
+
+  // Close the effective plan horizon so replenishRollingHorizons creates nothing
+  // after reactivation until the trainer assigns a plan with a new start date.
+  const relationshipPlans = await db
+    .select({ id: plans.id })
+    .from(plans)
+    .where(eq(plans.coachingRelationshipId, input.relationshipId));
+  if (relationshipPlans.length > 0) {
+    const planIds = relationshipPlans.map((row) => row.id);
+    // Midnight UTC on the prior civil day stays on/before that day in all
+    // common trainer timezones (avoids T23:59Z rolling into "today" in IST).
+    const closedTo = `${previousCivilDate(timestamp)}T00:00:00.000Z`;
+    await db
+      .update(planVersions)
+      .set({
+        effectiveTo: closedTo,
+        updatedAt: timestamp,
+      })
+      .where(
+        and(
+          inArray(planVersions.planId, planIds),
+          eq(planVersions.status, "effective"),
+        ),
+      );
+  }
 
   await db
     .update(reactivationRequests)
@@ -147,6 +220,10 @@ export async function cancelRelationshipReactivation(
   return true;
 }
 
+/**
+ * Trainee confirms reactivation. Schedules stay empty until the trainer assigns
+ * a plan (effective plan horizon remains closed; assignments stay superseded).
+ */
 export async function confirmRelationshipReactivation(
   db: Db,
   input: { relationshipId: string; requestId: string },
@@ -167,4 +244,44 @@ export async function confirmRelationshipReactivation(
     .update(reactivationRequests)
     .set({ status: "confirmed", resolvedAt: timestamp })
     .where(eq(reactivationRequests.id, input.requestId));
+
+  // Belt-and-suspenders: nothing scheduled from today until assign.
+  const fromDate = timestamp.slice(0, 10);
+  await db
+    .update(workoutAssignments)
+    .set({
+      scheduleStatus: "superseded",
+      supersededAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .where(
+      and(
+        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+        eq(workoutAssignments.scheduleStatus, "scheduled"),
+        gte(workoutAssignments.localDate, fromDate),
+      ),
+    );
+  await db
+    .update(mealAssignments)
+    .set({
+      scheduleStatus: "superseded",
+      supersededAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .where(
+      and(
+        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+        eq(mealAssignments.scheduleStatus, "scheduled"),
+        gte(mealAssignments.localDate, fromDate),
+      ),
+    );
+  await db
+    .delete(checkins)
+    .where(
+      and(
+        eq(checkins.coachingRelationshipId, input.relationshipId),
+        eq(checkins.recordStatus, "draft"),
+        gte(checkins.localDate, fromDate),
+      ),
+    );
 }

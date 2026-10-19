@@ -9,6 +9,8 @@ import "./styles/home.css";
 import "./styles/clients.css";
 import "./styles/workspace.css";
 import "./styles/templates.css";
+/* Tap targets last — must win over fixed heights in component CSS. */
+import "./styles/tap-targets.css";
 
 const root = document.getElementById("root");
 if (!root) {

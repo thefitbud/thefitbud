@@ -115,6 +115,8 @@ export const coachingRelationshipSchema = z.object({
   endedAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
+  /** Trainer's display name when available (trainee-facing reads). */
+  trainerDisplayName: z.string().min(1).max(120).nullable().optional(),
   /** Present on relationship read when a trainee reactivation request is pending. */
   pendingReactivation: pendingReactivationSchema.nullable().optional(),
 });
