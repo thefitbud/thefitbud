@@ -3,9 +3,9 @@
 Branch: `cursor/mc-trainee-settings-1568`  
 Base: `cursor/mb-trainee-workout-progress-c688`  
 Stack: API `:8787` + Expo web `:8081` (`EXPO_PUBLIC_SCREEN_CAPTURE=1`) · viewport 393×852, plus 360×800 for More and Reminders  
-TR-21 lock screen and notification styling are held for the replacement mockups. The rest timer is not on the screen.
+Meal notifications use Open and Snooze 30 min inside the card. Live Activity, Dynamic Island, and the lock screen need a dev build. The in-app previews are not the system UI.
 
-Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 81 · API vitest 230 · core 126 · contracts 22 · api-client 7 · trainer-web 24.
+Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 85. API, core, contracts, api-client, and trainer-web were not re-run (last counts 230, 126, 22, 7, 24).
 
 ## Summary counts
 
@@ -15,11 +15,11 @@ Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 81 · API vite
 | TR-17 | 3 | 2 | 5 |
 | TR-19 | 3 | 4 | 7 |
 | TR-20 | 4 | 3 | 7 |
-| TR-21 | 2 | 4 | 6 |
+| TR-21 | 3 | 3 | 6 |
 | TR-22 | 4 | 4 | 8 |
 | TR-24 | 5 | 2 | 7 |
 | TR-25 | 5 | 2 | 7 |
-| **Total** | **33** | **24** | **57** |
+| **Total** | **34** | **23** | **57** |
 
 ## TR-16 · Reminders
 
@@ -72,16 +72,16 @@ Tests this run: `@fitbud/mobile` typecheck green · mobile vitest 81 · API vite
 
 ## TR-21 · Lock screen
 
-Held. Mockups 27–30 were rejected. No rest timer.
+Mockups 27, 27b, 29, 29b, and 30 are in `docs/spec/mockups-v2`. Meal push actions follow the later instruction: **Open** and **Snooze 30 min**, inline in the card. A refreshed mockup 28 was not in this pack.
 
 | ID | Result | Proof |
 |---|---|---|
-| TR-21.1 | FAIL | Held for the new lock-screen mockup. |
-| TR-21.2 | FAIL | Confirm was not proven on the held screen. |
-| TR-21.3 | FAIL | Rest timer removed on purpose. Waiting on the new mockup. |
-| TR-21.4 | PASS | `TR-21.png` text has no “TR-21 placeholder” and no screen id. |
-| TR-21.5 | PASS | No banned-string hit on the held screen. |
-| TR-21.6 | FAIL | Held. States not captured. |
+| TR-21.1 | FAIL | `TR-21--rohan.png` shows “Next: Breakfast · 8:00 am”. That is an in-app preview. The home-screen widget needs a dev build. |
+| TR-21.2 | PASS | Rohan: Eaten as planned, then “Saved on this phone.” (`TR-21--confirmed.png`). Same outbox path as Diet. The lock-screen button needs a dev build. |
+| TR-21.3 | FAIL | The preview counts down and Skip rest shows “Set 3 · Go” (`TR-21--rest-skipped.png`). The Live Activity needs a dev build. |
+| TR-21.4 | PASS | Captured text has no “placeholder” and no screen id. |
+| TR-21.5 | PASS | Banned-string scan on the captured text was empty. |
+| TR-21.6 | FAIL | Aarav empty state is “Nothing left today” (`TR-21.png`). Loading, error, offline, and signed-out were not captured. |
 
 ## TR-22 · Ended coaching
 

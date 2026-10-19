@@ -107,15 +107,17 @@ export function WidgetTipsScreen({
     void load();
   }, [load]);
 
-  const mealLabel = meal?.mealName?.trim() || "Lunch";
-  const clock = formatHhMmTime(meal?.prescription.localTime ?? "13:00");
+  const mealLabel = meal?.mealName?.trim() || "Meal";
+  const clock = meal
+    ? formatHhMmTime(meal.prescription.localTime ?? "13:00")
+    : "";
   const title = !me
     ? "Open FitBud to get started."
-    : hideDetails
-      ? "Next item"
-      : meal
-        ? `Next: ${mealLabel} · ${clock}`
-        : "Nothing left today";
+    : !meal
+      ? "Nothing left today"
+      : hideDetails
+        ? "Next item"
+        : `Next: ${mealLabel} · ${clock}`;
   const checkin = checkinPushCopy(coachName);
   const note = notePushCopy(coachName);
   const mealBanner = inAppMealBannerCopy(mealLabel);
@@ -194,16 +196,20 @@ export function WidgetTipsScreen({
       />
 
       <Text style={styles.section}>Meal notification</Text>
-      <MealNotificationCard
-        mealId={meal?.id ?? "next-meal"}
-        mealLabel={mealLabel}
-        hideDetails={hideDetails}
-        onOpen={openMeal}
-        onSnoozed={setToast}
-      />
+      {meal ? (
+        <MealNotificationCard
+          mealId={meal.id}
+          mealLabel={mealLabel}
+          hideDetails={hideDetails}
+          onOpen={openMeal}
+          onSnoozed={setToast}
+        />
+      ) : (
+        <Text style={styles.muted}>Nothing left to log.</Text>
+      )}
 
       <Text style={styles.section}>While the app is open</Text>
-      {showMealBanner ? (
+      {meal && showMealBanner ? (
         <InAppBanner
           mark="F"
           kicker={mealBanner.kicker}
@@ -212,7 +218,7 @@ export function WidgetTipsScreen({
           primaryLabel={IN_APP_MEAL_ACTIONS[0]}
           secondaryLabel={IN_APP_MEAL_ACTIONS[1]}
           onPrimary={() => {
-            if (!meal || !relationshipId) {
+            if (!relationshipId) {
               setShowMealBanner(false);
               return;
             }
