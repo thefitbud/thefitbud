@@ -115,17 +115,23 @@ export function LibrariesPanel() {
           Exercises and foods used in plan builders. Global items are read-only.
         </p>
       </header>
-      <div className="segment" role="group" aria-label="Library type">
+      <div
+        className="segment-control library-segment"
+        role="group"
+        aria-label="Library type"
+      >
         <Link
           to="/templates/libraries/exercises"
-          className={tab === "exercises" ? "segment-btn is-on" : "segment-btn"}
+          className={
+            tab === "exercises" ? "segment-tab is-selected" : "segment-tab"
+          }
           onClick={() => setTab("exercises")}
         >
           Exercises
         </Link>
         <Link
           to="/templates/libraries/foods"
-          className={tab === "foods" ? "segment-btn is-on" : "segment-btn"}
+          className={tab === "foods" ? "segment-tab is-selected" : "segment-tab"}
           onClick={() => setTab("foods")}
         >
           Foods
@@ -387,25 +393,31 @@ function ExerciseLibrary() {
             <tbody>
               {page.items.map((item) => (
                 <tr key={item.id}>
-                  <td>
+                  <td data-label="Name">
                     <div className="library-name-cell">
                       <LibraryThumb name={item.name} kind="exercise" />
                       <span>{item.name}</span>
                     </div>
                   </td>
-                  <td>{joinLabels(item.primaryMuscles, "body_part")}</td>
-                  <td>{joinLabels(item.secondaryMuscles, "body_part")}</td>
-                  <td>{joinLabels(item.equipment, "equipment")}</td>
-                  <td>
+                  <td data-label="Primary muscles">
+                    {joinLabels(item.primaryMuscles, "body_part")}
+                  </td>
+                  <td data-label="Secondary">
+                    {joinLabels(item.secondaryMuscles, "body_part")}
+                  </td>
+                  <td data-label="Equipment">
+                    {joinLabels(item.equipment, "equipment")}
+                  </td>
+                  <td data-label="Difficulty">
                     {item.difficulty
                       ? labelFor("exercise_difficulty", item.difficulty)
                       : "—"}
                   </td>
-                  <td>—</td>
-                  <td>
+                  <td data-label="Media">—</td>
+                  <td data-label="Owner">
                     {item.ownership === "global" ? "FitBud" : "Mine"}
                   </td>
-                  <td>
+                  <td data-label="Actions">
                     <OverflowMenu
                       label={`Actions for ${item.name}`}
                       items={
@@ -463,14 +475,14 @@ function ExerciseLibrary() {
 
       {form ? (
         <div className="modal-scrim" role="presentation" onClick={() => setForm(null)}>
-          <form
+          <div
             className="modal-card library-drawer"
             role="dialog"
             aria-modal="true"
             aria-label={form.id ? "Edit exercise" : "Create exercise"}
             onClick={(event) => event.stopPropagation()}
-            onSubmit={(event) => void save(event)}
           >
+          <form onSubmit={(event) => void save(event)}>
             <h2>{form.id ? "Edit exercise" : "New exercise"}</h2>
             <label className="field">
               <span>Name</span>
@@ -592,6 +604,7 @@ function ExerciseLibrary() {
               </Button>
             </div>
           </form>
+          </div>
         </div>
       ) : null}
 
@@ -776,7 +789,7 @@ function FoodLibrary() {
 
   const customLoggedHint = useMemo(
     () =>
-      "Logged by clients, not in library — open a client workspace to review custom foods.",
+      "Client-logged foods stay on that client's meals — they are not listed in your library. Open the client workspace to review them.",
     [],
   );
 
@@ -812,7 +825,10 @@ function FoodLibrary() {
               proteinGrams: "",
               carbsGrams: "",
               fatGrams: "",
-              servings: [{ label: "1 katori", unit: "g", conversion: "150" }],
+              servings: [
+                { label: "100 g", unit: "g", conversion: "100" },
+                { label: "1 katori", unit: "g", conversion: "150" },
+              ],
               aliases: "",
               description: "",
             })
@@ -866,27 +882,35 @@ function FoodLibrary() {
             <tbody>
               {page.items.map((item) => (
                 <tr key={item.id}>
-                  <td>
+                  <td data-label="Name">
                     <div className="library-name-cell">
                       <LibraryThumb name={item.name} kind="food" />
                       <span>{item.name}</span>
                     </div>
                   </td>
-                  <td>
+                  <td data-label="Classification">
                     {item.classification
                       ? classificationLabel(item.classification)
                       : "—"}
                   </td>
-                  <td>{item.basis ? basisLabel(item.basis) : "—"}</td>
-                  <td>{scaledDisplay(item.energyKcalScaled)}</td>
-                  <td>{scaledDisplay(item.proteinScaled)}</td>
-                  <td>{scaledDisplay(item.carbsScaled)}</td>
-                  <td>{scaledDisplay(item.fatScaled)}</td>
-                  <td>{item.servings.length}</td>
-                  <td>
+                  <td data-label="Basis">
+                    {item.basis ? basisLabel(item.basis) : "—"}
+                  </td>
+                  <td data-label="kcal">
+                    {scaledDisplay(item.energyKcalScaled)}
+                  </td>
+                  <td data-label="Protein">
+                    {scaledDisplay(item.proteinScaled)}
+                  </td>
+                  <td data-label="Carbs">
+                    {scaledDisplay(item.carbsScaled)}
+                  </td>
+                  <td data-label="Fat">{scaledDisplay(item.fatScaled)}</td>
+                  <td data-label="Servings">{item.servings.length}</td>
+                  <td data-label="Owner">
                     {item.ownership === "global" ? "FitBud" : "Mine"}
                   </td>
-                  <td>
+                  <td data-label="Actions">
                     <OverflowMenu
                       label={`Actions for ${item.name}`}
                       items={
@@ -972,14 +996,14 @@ function FoodLibrary() {
 
       {form ? (
         <div className="modal-scrim" role="presentation" onClick={() => setForm(null)}>
-          <form
+          <div
             className="modal-card library-drawer"
             role="dialog"
             aria-modal="true"
             aria-label={form.id ? "Edit food" : "Create food"}
             onClick={(event) => event.stopPropagation()}
-            onSubmit={(event) => void save(event)}
           >
+          <form onSubmit={(event) => void save(event)}>
             <h2>{form.id ? "Edit food" : "New food"}</h2>
             <label className="field">
               <span>Name</span>
@@ -1130,6 +1154,7 @@ function FoodLibrary() {
               </Button>
             </div>
           </form>
+          </div>
         </div>
       ) : null}
 

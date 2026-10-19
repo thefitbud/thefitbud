@@ -206,6 +206,8 @@ async function upsertExpectationChildren(
       .set({
         cadence: payload.checkin.cadence,
         dueWindowHours: payload.checkin.dueWindowHours,
+        preferredCheckinFormVersionId:
+          payload.checkin.formVersionId ?? null,
         updatedAt: timestamp,
       })
       .where(eq(checkinSchedules.id, existing.checkin.id));
@@ -216,6 +218,7 @@ async function upsertExpectationChildren(
       coachingRelationshipId: relationshipId,
       cadence: payload.checkin.cadence,
       dueWindowHours: payload.checkin.dueWindowHours,
+      preferredCheckinFormVersionId: payload.checkin.formVersionId ?? null,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -419,6 +422,8 @@ configurationRoutes.put(
             checkin: {
               cadence: existing.checkin.cadence,
               dueWindowHours: existing.checkin.dueWindowHours,
+              formVersionId:
+                existing.checkin.preferredCheckinFormVersionId ?? null,
             },
             tracking: {
               requireBodyWeight: existing.tracking.requireBodyWeight,
@@ -1109,6 +1114,8 @@ configurationRoutes.post(
       coachingRelationshipId: relationshipId,
       cadence: source.checkin.cadence,
       dueWindowHours: source.checkin.dueWindowHours,
+      preferredCheckinFormVersionId:
+        source.checkin.preferredCheckinFormVersionId ?? null,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -1355,6 +1362,8 @@ configurationRoutes.post(
       coachingRelationshipId: relationshipId,
       cadence: source.checkin.cadence,
       dueWindowHours: source.checkin.dueWindowHours,
+      preferredCheckinFormVersionId:
+        source.checkin.preferredCheckinFormVersionId ?? null,
       createdAt: timestamp,
       updatedAt: timestamp,
     });

@@ -85,9 +85,28 @@ test.describe("TW-F templates, forms, libraries", () => {
     await expect(page.getByRole("columnheader", { name: "Primary muscles" })).toBeVisible();
     await expect(page.getByText("defaultReps")).toHaveCount(0);
     await expect(page.getByText("defaultLoadLabel")).toHaveCount(0);
+    await expect(
+      page.getByRole("group", { name: "Library type" }).getByRole("link", {
+        name: "Exercises",
+      }),
+    ).toBeVisible();
     await page.getByRole("link", { name: "Foods" }).click();
     await expect(page.getByRole("columnheader", { name: "Basis" })).toBeVisible({
       timeout: 20_000,
     });
+  });
+
+  test("TW-25.1 configure has check-in form select", async ({ page }) => {
+    const rohan = "c422296e-ed7b-4196-a2b4-647096af3002";
+    await page.goto(`/clients/${rohan}/configure`);
+    await expect(page.getByTestId("screen-TW-11")).toBeVisible({
+      timeout: 30_000,
+    });
+    const checkins = page.locator("details").filter({
+      has: page.locator(".configure-accordion-title", { hasText: "Check-ins" }),
+    });
+    await expect(checkins).toBeVisible();
+    await checkins.locator("summary").click();
+    await expect(checkins.getByLabel("Check-in form")).toBeVisible();
   });
 });

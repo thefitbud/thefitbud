@@ -277,7 +277,9 @@ export function TemplatesPlanTab({
                     >
                       {isBase ? "FitBud base" : "Mine"}
                     </span>
-                    <span>{formatUpdatedDate(item.updatedAt)}</span>
+                    {isBase ? null : (
+                      <span>{formatUpdatedDate(item.updatedAt)}</span>
+                    )}
                   </p>
                   <p className="template-card-summary">{summary}</p>
                 </div>

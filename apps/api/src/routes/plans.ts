@@ -853,9 +853,11 @@ planRoutes.post(
             updatedAt: now,
           })
           .where(eq(planVersions.id, draft.id));
+        // Keep the plan title: Use creates/updates a draft only. The published
+        // version card must not rename until the trainer publishes.
         await db
           .update(plans)
-          .set({ title, updatedAt: now })
+          .set({ updatedAt: now })
           .where(eq(plans.id, plan.id));
         versionId = draft.id;
         updatedExistingDraft = true;
@@ -886,7 +888,7 @@ planRoutes.post(
         });
         await db
           .update(plans)
-          .set({ title, updatedAt: now })
+          .set({ updatedAt: now })
           .where(eq(plans.id, plan.id));
       }
       const [refreshed] = await db

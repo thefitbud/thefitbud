@@ -416,6 +416,121 @@ describe("templates and libraries", () => {
     expect(secondBody.data.version.recordVersion).toBe(2);
   });
 
+  it("does not rename the plan title when Use creates a draft on a published plan", async () => {
+    const ctx = await reachCoachingReady("keep-title");
+    const publishedTitle = "Aarav live block";
+
+    const createdPlan = await app.request(
+      `/plans/relationships/${ctx.relationshipId}`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "keep-title-plan",
+        },
+        body: JSON.stringify({
+          title: publishedTitle,
+          content: workoutContent(),
+        }),
+      },
+      testEnv(),
+    );
+    expect(createdPlan.status).toBe(201);
+    const planBody = (await createdPlan.json()) as {
+      data: {
+        plan: { id: string; title: string };
+        version: { id: string; recordVersion: number };
+      };
+    };
+    expect(planBody.data.plan.title).toBe(publishedTitle);
+
+    const preview = await app.request(
+      `/plans/${planBody.data.plan.id}/versions/${planBody.data.version.id}/preview`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(preview.status).toBe(200);
+
+    const publish = await app.request(
+      `/plans/${planBody.data.plan.id}/versions/${planBody.data.version.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "keep-title-publish",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: planBody.data.version.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(publish.status).toBe(200);
+
+    const template = await app.request(
+      "/templates",
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "keep-title-tmpl",
+        },
+        body: JSON.stringify({
+          title: "Template that must not rename",
+          templateType: "workout",
+          content: workoutContent(),
+        }),
+      },
+      testEnv(),
+    );
+    const templateBody = (await template.json()) as { data: { id: string } };
+
+    const apply = await app.request(
+      `/plans/relationships/${ctx.relationshipId}/from-template`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: ctx.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "keep-title-apply",
+        },
+        body: JSON.stringify({ templateId: templateBody.data.id }),
+      },
+      testEnv(),
+    );
+    expect(apply.status).toBe(201);
+    const applyBody = (await apply.json()) as {
+      data: {
+        plan: { title: string };
+        version: { status: string; versionNumber: number };
+      };
+    };
+    expect(applyBody.data.version.status).toBe("draft");
+    expect(applyBody.data.version.versionNumber).toBeGreaterThan(1);
+    expect(applyBody.data.plan.title).toBe(publishedTitle);
+
+    const listed = await app.request(
+      `/plans/relationships/${ctx.relationshipId}`,
+      { headers: { Cookie: ctx.trainerCookie } },
+      testEnv(),
+    );
+    const listedBody = (await listed.json()) as {
+      data: { items: Array<{ plan: { title: string } }> };
+    };
+    expect(listedBody.data.items[0]!.plan.title).toBe(publishedTitle);
+  });
+
   it("rejects a stale template record version without creating another template", async () => {
     const trainer = await createTrainerSession("stale-tmpl@example.com");
     const created = await app.request(

@@ -412,6 +412,7 @@ describe("coaching configuration", () => {
     expect(createdBody.data.checkin).toEqual({
       cadence: "weekly",
       dueWindowHours: 48,
+      formVersionId: null,
     });
     expect(createdBody.data.tracking).toEqual({
       requireBodyWeight: false,

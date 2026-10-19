@@ -412,6 +412,7 @@ export const checkinSchedules = sqliteTable(
       enum: ["weekly", "biweekly", "monthly"],
     }).notNull(),
     dueWindowHours: integer("due_window_hours").notNull(),
+    preferredCheckinFormVersionId: text("preferred_checkin_form_version_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

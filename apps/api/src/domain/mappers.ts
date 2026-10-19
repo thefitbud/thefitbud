@@ -281,6 +281,7 @@ export function mapCoachingConfiguration(input: {
     checkin: {
       cadence: checkin.cadence,
       dueWindowHours: checkin.dueWindowHours,
+      formVersionId: checkin.preferredCheckinFormVersionId ?? null,
     },
     tracking: {
       requireBodyWeight: tracking.requireBodyWeight,

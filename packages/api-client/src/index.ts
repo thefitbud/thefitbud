@@ -98,6 +98,8 @@ import {
   updatePlanDraftRequestSchema,
   completeSetRequestSchema,
   completeWorkoutRequestSchema,
+  assignPreferredCheckinFormRequestSchema,
+  assignPreferredCheckinFormResponseSchema,
   checkinFormTemplateDetailSchema,
   checkinFormTemplateListResponseSchema,
   checkinFormVersionSchema,
@@ -255,6 +257,8 @@ import {
   type SaveConfigurationDraftRequest,
   type SaveOnboardingDraftRequest,
   type SaveSubscriptionRequest,
+  type AssignPreferredCheckinFormRequest,
+  type AssignPreferredCheckinFormResponse,
   type ScheduleCheckinRequest,
   type ScheduleCheckinResponse,
   type ScheduleNextCheckinRequest,
@@ -1487,6 +1491,19 @@ export class FitBudApiClient {
       `/checkins/relationships/${relationshipId}/ensure-due`,
       scheduleCheckinResponseSchema,
       { auth: true, body: {}, idempotencyKey },
+    );
+  }
+
+  async assignPreferredCheckinForm(
+    relationshipId: string,
+    body: AssignPreferredCheckinFormRequest,
+  ): Promise<AssignPreferredCheckinFormResponse> {
+    const parsed = assignPreferredCheckinFormRequestSchema.parse(body);
+    return this.request(
+      "PUT",
+      `/checkins/relationships/${relationshipId}/preferred-form`,
+      assignPreferredCheckinFormResponseSchema,
+      { auth: true, body: parsed },
     );
   }
 

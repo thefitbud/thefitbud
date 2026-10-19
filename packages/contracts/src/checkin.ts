@@ -280,12 +280,29 @@ export const scheduleNextCheckinRequestSchema = z.object({
   localDate: localDateSchema.optional(),
   fromCheckinId: uuidSchema.optional(),
   /**
-   * When omitted, the next check-in keeps the source check-in's pinned form version.
+   * When omitted, the next check-in uses the relationship's preferred form,
+   * then the source check-in's pinned form, then the FitBud base.
    */
   checkinFormVersionId: uuidSchema.optional(),
 });
 export type ScheduleNextCheckinRequest = z.infer<
   typeof scheduleNextCheckinRequestSchema
+>;
+
+/** Assign a check-in form version to a client (TW-11 / Use for client). */
+export const assignPreferredCheckinFormRequestSchema = z.object({
+  checkinFormVersionId: uuidSchema,
+});
+export type AssignPreferredCheckinFormRequest = z.infer<
+  typeof assignPreferredCheckinFormRequestSchema
+>;
+
+export const assignPreferredCheckinFormResponseSchema = z.object({
+  coachingRelationshipId: uuidSchema,
+  checkinFormVersionId: uuidSchema,
+});
+export type AssignPreferredCheckinFormResponse = z.infer<
+  typeof assignPreferredCheckinFormResponseSchema
 >;
 
 export const saveCheckinDraftRequestSchema = z.object({
