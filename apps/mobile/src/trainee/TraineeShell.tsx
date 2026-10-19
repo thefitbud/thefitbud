@@ -385,20 +385,20 @@ export function TraineeShell({
     );
   }
 
-  const subtitle =
+  const headingDate = formatHeadingDate(timeZone, selectedDate);
+  const topTitle =
     tab === "today"
-      ? formatHeadingDate(timeZone, selectedDate)
+      ? `Today · ${headingDate}`
       : tab === "diet"
-        ? selectedDate
-        : undefined;
+        ? `Diet · ${headingDate}`
+        : TAB_TITLES[tab];
 
   return (
     <View style={styles.root}>
       <View style={styles.content}>
         <View style={styles.topPad}>
           <AppTopBar
-            title={TAB_TITLES[tab]}
-            subtitle={subtitle}
+            title={topTitle}
             unreadNotifications={unreadNotifications}
             onOpenNotifications={() => openOverlay({ screen: "notifications" })}
             onOpenSync={() => openOverlay({ screen: "sync" })}

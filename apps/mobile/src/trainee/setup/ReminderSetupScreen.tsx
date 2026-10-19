@@ -162,7 +162,7 @@ export function ReminderSetupScreen({ onDone, onOpenQuietHours }: Props) {
           <>
             <Text style={styles.sectionTitle}>Almost done</Text>
             <Text style={styles.body}>
-              Quiet hours default to 22:00–07:00.{" "}
+              Quiet hours default to 10:00 pm – 7:00 am.{" "}
               <Text style={styles.link} onPress={onOpenQuietHours}>
                 Change
               </Text>

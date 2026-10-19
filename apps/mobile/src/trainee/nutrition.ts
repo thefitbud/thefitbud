@@ -25,13 +25,76 @@ export function nutrientsFromMealPrescription(meal: MealAssignment): MacroTotals
   };
 }
 
-function isLoggedMeal(status: MealAssignment["status"]): boolean {
+/** Meal counts as logged for "N of M meals" (matches trainer activityUtils). */
+export function isMealLoggedForCount(status: MealAssignment["status"]): boolean {
   return (
     status === "confirmed" ||
     status === "modified" ||
     status === "logged_later" ||
     status === "skipped"
   );
+}
+
+/**
+ * Macros contributed by one meal toward day rings.
+ * - confirmed / logged_later → plan prescription values
+ * - modified → compliance loggedTotals / loggedItems (actual foods)
+ * - skipped → nothing (0)
+ * - pending / overdue → nothing
+ */
+export function loggedMacrosForMeal(meal: MealAssignment): MacroTotals {
+  if (meal.status === "skipped") {
+    return { kcal: 0, protein: 0, carbs: 0, fat: 0, unknown: false };
+  }
+  if (meal.status === "pending" || meal.status === "overdue") {
+    return { kcal: 0, protein: 0, carbs: 0, fat: 0, unknown: false };
+  }
+
+  if (meal.status === "modified") {
+    const totals = meal.compliance?.loggedTotals;
+    if (totals) {
+      const unknown =
+        totals.energyKcal == null ||
+        totals.proteinG == null ||
+        totals.carbsG == null ||
+        totals.fatG == null;
+      return {
+        kcal: Math.round(totals.energyKcal ?? 0),
+        protein: Math.round(totals.proteinG ?? 0),
+        carbs: Math.round(totals.carbsG ?? 0),
+        fat: Math.round(totals.fatG ?? 0),
+        unknown,
+      };
+    }
+    const items = meal.compliance?.loggedItems ?? [];
+    if (items.length > 0) {
+      // Sum display units then round once via scaled path for consistency.
+      const scaled = items.map((item) => ({
+        energyKcalScaled:
+          item.energyKcal != null ? Math.round(item.energyKcal * NUTRIENT_SCALE) : null,
+        proteinScaled:
+          item.proteinG != null ? Math.round(item.proteinG * NUTRIENT_SCALE) : null,
+        carbsScaled:
+          item.carbsG != null ? Math.round(item.carbsG * NUTRIENT_SCALE) : null,
+        fatScaled: item.fatG != null ? Math.round(item.fatG * NUTRIENT_SCALE) : null,
+        partial:
+          item.energyKcal == null ||
+          item.proteinG == null ||
+          item.carbsG == null ||
+          item.fatG == null,
+      }));
+      const day = dayMacrosFromScaledItems(scaled);
+      return {
+        kcal: day.kcal,
+        protein: day.proteinG,
+        carbs: day.carbsG,
+        fat: day.fatG,
+        unknown: day.unknown,
+      };
+    }
+  }
+
+  return nutrientsFromMealPrescription(meal);
 }
 
 /** Assigned and logged day totals for nutrition rings from meal assignments. */
@@ -53,27 +116,35 @@ export function dayNutritionFromMeals(
     unknown: assignedTotals.unknown,
   };
 
-  const loggedItems = meals
-    .filter((meal) => isLoggedMeal(meal.status))
-    .flatMap((meal) =>
-      meal.prescription.items.map((item) =>
-        "calculated" in item && item.calculated ? item.calculated : null,
-      ),
-    );
-  const loggedTotals = dayMacrosFromScaledItems(loggedItems);
-  const loggedFromMeals: MacroTotals = {
-    kcal: loggedTotals.kcal,
-    protein: loggedTotals.proteinG,
-    carbs: loggedTotals.carbsG,
-    fat: loggedTotals.fatG,
-    unknown: loggedTotals.unknown,
-  };
-
-  if (dayTotals?.kcalScaled != null) {
-    loggedFromMeals.kcal = unscaleNutrient(dayTotals.kcalScaled);
+  let loggedKcal = 0;
+  let loggedProtein = 0;
+  let loggedCarbs = 0;
+  let loggedFat = 0;
+  let unknown = false;
+  for (const meal of meals) {
+    if (!isMealLoggedForCount(meal.status)) continue;
+    const macros = loggedMacrosForMeal(meal);
+    loggedKcal += macros.kcal;
+    loggedProtein += macros.protein;
+    loggedCarbs += macros.carbs;
+    loggedFat += macros.fat;
+    if (macros.unknown) unknown = true;
   }
 
-  return { assigned, logged: loggedFromMeals };
+  const logged: MacroTotals = {
+    kcal: loggedKcal,
+    protein: loggedProtein,
+    carbs: loggedCarbs,
+    fat: loggedFat,
+    unknown,
+  };
+
+  // Prefer authoritative day kcal from /me/day when present (scaled sum, unscale once).
+  if (dayTotals?.kcalScaled != null) {
+    logged.kcal = unscaleNutrient(dayTotals.kcalScaled);
+  }
+
+  return { assigned, logged };
 }
 
 export function buildNutritionRings(
@@ -117,4 +188,11 @@ export function buildNutritionRings(
       unknown,
     },
   ];
+}
+
+export function mealsLoggedSummary(meals: readonly MealAssignment[]): string {
+  const total = meals.length;
+  const logged = meals.filter((m) => isMealLoggedForCount(m.status)).length;
+  if (total === 0) return "No meals planned today.";
+  return `${logged} of ${total} meals logged`;
 }

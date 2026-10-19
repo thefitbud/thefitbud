@@ -490,10 +490,10 @@ export function TodayCheckinCard({
   return (
     <View style={styles.banner}>
       <Text style={styles.bannerTitle}>
-        Check-in {statusLabel(checkin.status)}
+        Weekly check-in due {formatCivilDate(checkin.localDate)}
       </Text>
       <Text style={styles.bannerBody}>{subtitle}</Text>
-      <PrimaryButton label="Open check-in" onPress={() => onOpen(checkin)} />
+      <PrimaryButton label="Start" onPress={() => onOpen(checkin)} />
     </View>
   );
 }

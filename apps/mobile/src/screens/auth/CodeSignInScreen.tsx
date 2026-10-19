@@ -21,6 +21,19 @@ type Props = {
   resendSeconds: number;
 };
 
+function maskIdentifier(raw: string): string {
+  const value = raw.trim();
+  const at = value.indexOf("@");
+  if (at > 0) {
+    const local = value.slice(0, at);
+    const domain = value.slice(at);
+    if (local.length <= 2) return `${local[0] ?? ""}••${domain}`;
+    return `${local[0]}•••${local[local.length - 1]}${domain}`;
+  }
+  if (value.length < 4) return "••••";
+  return `••••${value.slice(-4)}`;
+}
+
 export function CodeSignInScreen({
   identifier,
   loading,
@@ -79,7 +92,8 @@ export function CodeSignInScreen({
       ) : (
         <>
           <Text style={styles.sentCopy}>
-            If an account exists, we&apos;ve sent a code. Check your email (and spam).
+            Sent to {maskIdentifier(identifier)}. If an account exists, we&apos;ve
+            emailed a code — check spam if you don&apos;t see it.
           </Text>
           <Field
             label="6-digit code"

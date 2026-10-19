@@ -3,7 +3,7 @@ import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { formatClockTime, formatKcal, labelFor } from "@fitbud/core";
 import { NutritionRings, colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -21,7 +21,11 @@ import {
   canLogMealOnDate,
   mealKcalFromDayTotals,
 } from "./mealHelpers";
-import { buildNutritionRings } from "./nutrition";
+import {
+  buildNutritionRings,
+  isMealLoggedForCount,
+  mealsLoggedSummary,
+} from "./nutrition";
 import {
   scheduledAssignments,
   sortMealsByTime,
@@ -29,9 +33,10 @@ import {
 import { WebNutritionSummary } from "./web/WebTraineeChrome";
 
 function statusLabel(status: MealAssignment["status"]): string {
-  if (status === "confirmed") return "As planned";
+  if (status === "confirmed") return "Logged";
   if (status === "pending") return "Due";
   if (status === "modified") return "Changed";
+  if (status === "logged_later") return "Logged late";
   return labelFor("meal_assignment_status", status);
 }
 
@@ -60,7 +65,9 @@ export function DietTab({
   const sync = useSyncEngine();
   const [assignments, setAssignments] = useState<MealAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [dayTotals, setDayTotals] = useState<Awaited<
     ReturnType<typeof s1.getMeDay>
@@ -75,7 +82,6 @@ export function DietTab({
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const [listed, day, exceptions] = await Promise.all([
@@ -96,11 +102,13 @@ export function DietTab({
             item.status === "acknowledged",
         ).length,
       );
+      setOffline(false);
     } catch (err) {
+      setOffline(true);
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not load diet for this day.",
+          : "Couldn't refresh diet. Pull to try again.",
       );
     } finally {
       setLoading(false);
@@ -108,18 +116,20 @@ export function DietTab({
   }, [api, relationship.id, selectedDate, s1]);
 
   useEffect(() => {
+    setLoading(true);
     void load();
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
   }, [load]);
 
   const rings = useMemo(
     () => buildNutritionRings(assignments, dayTotals?.totals ?? null),
     [assignments, dayTotals],
   );
-
-  const loggedCount = assignments.filter(
-    (meal) =>
-      meal.status !== "pending" && meal.status !== "overdue",
-  ).length;
 
   async function confirmMeal(assignment: MealAssignment) {
     setActingId(assignment.id);
@@ -158,15 +168,26 @@ export function DietTab({
   }
 
   return (
-    <Screen chrome="app" title="Diet" showHeader={false}>
+    <Screen
+      chrome="app"
+      title="Diet"
+      showHeader={false}
+      refreshing={refreshing}
+      onRefresh={() => {
+        void onRefresh();
+      }}
+    >
       {error ? <ErrorBanner message={error} /> : null}
+      {offline ? (
+        <Text style={styles.offline}>Saved on phone · Not sent yet</Text>
+      ) : null}
       <View style={styles.header}>
         <TraineeDateNavigator
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
         />
-        <Text style={styles.summary}>
-          {loggedCount} of {assignments.length} meals logged
+        <Text style={styles.summary} accessibilityLabel={mealsLoggedSummary(assignments)}>
+          {mealsLoggedSummary(assignments)}
         </Text>
       </View>
       <View style={styles.ringsWrap}>
@@ -175,14 +196,21 @@ export function DietTab({
         ) : (
           <NutritionRings data={rings} compact />
         )}
+        {rings.some((r) => r.unknown) ? (
+          <Text style={styles.footnote}>
+            Some foods have no nutrition data · totals show ≥
+          </Text>
+        ) : null}
       </View>
       {loading ? (
-        <Text style={styles.muted}>Loading meals…</Text>
+        <Text style={styles.muted} accessibilityLabel="Loading meals">
+          Loading meals…
+        </Text>
       ) : (
         <View style={styles.stack}>
           {assignments.length === 0 ? (
             <View style={styles.card}>
-              <Text style={styles.rowTitle}>No meals assigned</Text>
+              <Text style={styles.rowTitle}>No meals planned today.</Text>
               <Text style={styles.instructions}>
                 Meals appear when your trainer publishes a nutrition plan.
               </Text>
@@ -199,27 +227,24 @@ export function DietTab({
                 meal,
                 dayTotals?.totals.perMeal,
               );
+              const logged = isMealLoggedForCount(meal.status);
               return (
                 <View key={meal.id} style={styles.card}>
                   <View style={styles.cardHeader}>
-                    <Text style={styles.rowTitle}>{meal.mealName}</Text>
-                    <View style={styles.headerRight}>
-                      {kcal != null ? (
-                        <Text style={styles.kcal}>{kcal} kcal</Text>
-                      ) : null}
-                      <StatusChip
-                        label={statusLabel(meal.status)}
-                        tone={statusTone(meal.status)}
-                      />
+                    <View style={styles.cardTitles}>
+                      <Text style={styles.rowTitle}>{meal.mealName}</Text>
+                      <Text style={styles.rowMeta}>
+                        {formatClockTime(meal.windowStartsAt, timeZone)}
+                        {kcal != null ? ` · ${formatKcal(kcal)}` : ""}
+                      </Text>
                     </View>
+                    <StatusChip
+                      label={statusLabel(meal.status)}
+                      tone={statusTone(meal.status)}
+                    />
                   </View>
-                  {meal.prescription.scheduleHint ? (
-                    <Text style={styles.rowMeta}>
-                      {meal.prescription.scheduleHint}
-                    </Text>
-                  ) : null}
                   {meal.photoRequired ? (
-                    <Text style={styles.photoChip}>Photo requested</Text>
+                    <Text style={styles.photoChip}>📷 Photo requested</Text>
                   ) : null}
                   {canLog ? (
                     <View style={styles.actions}>
@@ -242,13 +267,29 @@ export function DietTab({
                       />
                       <Pressable
                         accessibilityRole="button"
+                        accessibilityLabel="Skip this meal"
                         onPress={() => {
                           void skipMeal(meal);
                         }}
+                        style={styles.skipHit}
                       >
                         <Text style={styles.skipLink}>Skip this meal</Text>
                       </Pressable>
                     </View>
+                  ) : logged ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Change meal log"
+                      onPress={() =>
+                        onOpenOverlay({
+                          screen: "something_different",
+                          assignmentId: meal.id,
+                        })
+                      }
+                      style={styles.skipHit}
+                    >
+                      <Text style={styles.changeLink}>Change</Text>
+                    </Pressable>
                   ) : null}
                 </View>
               );
@@ -285,6 +326,17 @@ const styles = StyleSheet.create({
   },
   ringsWrap: {
     marginBottom: spacing.lg,
+    gap: spacing.xs,
+  },
+  footnote: {
+    color: colors.midGrey,
+    fontSize: 12,
+  },
+  offline: {
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: spacing.sm,
   },
   stack: {
     gap: spacing.lg,
@@ -295,7 +347,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
     borderRadius: radii.card,
+    borderWidth: 1,
     padding: spacing.xl,
     gap: spacing.sm,
   },
@@ -305,18 +359,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.md,
   },
-  headerRight: {
-    alignItems: "flex-end",
-    gap: spacing.xs,
-  },
-  kcal: {
-    color: colors.deepNavy,
-    fontSize: 14,
-    fontWeight: "600",
+  cardTitles: {
+    flex: 1,
+    gap: 2,
   },
   rowTitle: {
     color: colors.deepNavy,
-    flex: 1,
     fontSize: 18,
     fontWeight: "700",
   },
@@ -338,11 +386,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.sm,
   },
+  skipHit: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+  },
   skipLink: {
     color: colors.midGrey,
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
-    paddingVertical: spacing.sm,
+  },
+  changeLink: {
+    color: colors.indigo,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

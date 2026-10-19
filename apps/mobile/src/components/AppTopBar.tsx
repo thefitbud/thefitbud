@@ -11,6 +11,26 @@ type Props = {
   onOpenSync?: () => void;
 };
 
+/** Renders "Today · Sun 18 Oct" with bold lead + mid-grey date (mockup 04). */
+function TitleLine({ title }: { title: string }) {
+  const sep = title.indexOf(" · ");
+  if (sep > 0) {
+    const lead = title.slice(0, sep);
+    const rest = title.slice(sep);
+    return (
+      <Text style={styles.titleLine} accessibilityRole="header">
+        <Text style={styles.titleLead}>{lead}</Text>
+        <Text style={styles.titleRest}>{rest}</Text>
+      </Text>
+    );
+  }
+  return (
+    <Text style={styles.title} accessibilityRole="header">
+      {title}
+    </Text>
+  );
+}
+
 export function AppTopBar({
   title,
   subtitle,
@@ -21,9 +41,7 @@ export function AppTopBar({
   return (
     <View style={styles.wrap}>
       <View style={styles.titles}>
-        <Text style={styles.title} accessibilityRole="header">
-          {title}
-        </Text>
+        <TitleLine title={title} />
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
       <View style={styles.actions}>
@@ -46,7 +64,7 @@ export function AppTopBar({
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: "flex-start",
+    alignItems: "center",
     flexDirection: "row",
     gap: spacing.md,
     justifyContent: "space-between",
@@ -62,6 +80,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: -0.4,
   },
+  titleLine: {
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  titleLead: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  titleRest: {
+    color: colors.midGrey,
+    fontSize: 17,
+    fontWeight: "500",
+  },
   subtitle: {
     color: colors.midGrey,
     fontSize: typeScale.body,
@@ -71,13 +103,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: spacing.xs,
-    paddingTop: spacing.xs,
   },
   bell: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 40,
-    minWidth: 40,
+    minHeight: 44,
+    minWidth: 44,
     position: "relative",
   },
   bellIcon: {
