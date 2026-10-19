@@ -1,325 +1,324 @@
-import { useCallback, useEffect, useState } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Measurement, MeasurementType, ProgressEntry } from "@fitbud/contracts";
+import { formatCivilDate, formatInstant, labelFor } from "@fitbud/core";
 import { LinkedMedia } from "../components/LinkedMedia";
 import {
   MEASUREMENT_SERIES,
-  MeasurementTrend,
-  formatObservedAt,
+  TrendChart,
+  type TrendPoint,
+  type TrendRange,
   measurementTypeLabel,
 } from "../components/MeasurementTrend";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+} from "../components/StatePanels";
 import { apiClient } from "../lib/api";
+import { resolveTraineeTimezone } from "../lib/trainee-timezone";
+import { todayInTimezone } from "../components/activity/activityUtils";
+import type { WorkspaceOutletContext } from "./workspaceContext";
 
-type WorkspaceOutlet = { refreshEpoch?: number };
-
-const PAGE_SIZE = 50;
+const TAB_LABELS: Record<MeasurementType | "other", string> = {
+  body_weight_kg: "Weight",
+  waist_cm: "Waist",
+  hip_cm: "Hip",
+  chest_cm: "Chest",
+  other: "Other",
+};
 
 export function ClientProgressPage() {
   const { relationshipId = "" } = useParams();
-  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
+  const { workspace, refreshEpoch = 0, online = true } =
+    useOutletContext<WorkspaceOutletContext>();
+  const clientTz = resolveTraineeTimezone(
+    workspace?.header ?? {
+      relationshipId,
+      traineeDisplayName: "Client",
+      onboardingStatus: "coaching_ready",
+      effectivePlan: null,
+      goalShort: null,
+      renewalState: null,
+      adherenceState: "on_track",
+      traineeProfile: { displayName: "Client", age: null, gender: null },
+      traineeTimezone: "Asia/Kolkata",
+      hasCustomMealTimes: false,
+      trainerWhatsappE164: null,
+      clientWhatsappE164: null,
+    },
+  ).timezone;
+
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
-  const [measurementCursor, setMeasurementCursor] = useState<string | null>(null);
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
-  const [entryCursor, setEntryCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingMeasurements, setLoadingMeasurements] = useState(false);
-  const [loadingEntries, setLoadingEntries] = useState(false);
-  const [measurementError, setMeasurementError] = useState<string | null>(null);
-  const [entryError, setEntryError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [metric, setMetric] = useState<MeasurementType>("body_weight_kg");
+  const [range, setRange] = useState<TrendRange>("12w");
+  const [compareA, setCompareA] = useState<string>("");
+  const [compareB, setCompareB] = useState<string>("");
 
-  const loadMeasurements = useCallback(
-    async (cursor?: string | null) => {
-      if (!relationshipId) return;
-      const appending = Boolean(cursor);
-      if (appending) setLoadingMeasurements(true);
-      else setMeasurementError(null);
-      try {
-        const result = await apiClient.listMeasurements(relationshipId, {
-          cursor: cursor ?? undefined,
-          limit: PAGE_SIZE,
-        });
-        setMeasurements((current) =>
-          appending ? [...current, ...result.items] : result.items,
-        );
-        setMeasurementCursor(result.nextCursor);
-      } catch (err) {
-        setMeasurementError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load measurements.",
-        );
-      } finally {
-        setLoadingMeasurements(false);
-      }
-    },
-    [relationshipId],
-  );
-
-  const loadEntries = useCallback(
-    async (cursor?: string | null) => {
-      if (!relationshipId) return;
-      const appending = Boolean(cursor);
-      if (appending) setLoadingEntries(true);
-      else setEntryError(null);
-      try {
-        const result = await apiClient.listProgressEntries(relationshipId, {
-          cursor: cursor ?? undefined,
-          limit: PAGE_SIZE,
-        });
-        setEntries((current) =>
-          appending ? [...current, ...result.items] : result.items,
-        );
-        setEntryCursor(result.nextCursor);
-      } catch (err) {
-        setEntryError(
-          err instanceof ApiClientError ? err.message : "Could not load progress entries.",
-        );
-      } finally {
-        setLoadingEntries(false);
-      }
-    },
-    [relationshipId],
-  );
+  const load = useCallback(async () => {
+    if (!relationshipId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [measurementPage, entryPage] = await Promise.all([
+        apiClient.listMeasurements(relationshipId, { limit: 200 }),
+        apiClient.listProgressEntries(relationshipId, { limit: 100 }),
+      ]);
+      setMeasurements(measurementPage.items);
+      setEntries(entryPage.items);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not load progress.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [relationshipId]);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void Promise.all([loadMeasurements(), loadEntries()]).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [loadEntries, loadMeasurements, refreshEpoch]);
+    void load();
+  }, [load, refreshEpoch]);
 
-  const extraTypes = [
-    ...new Set(
-      measurements
-        .map((item) => item.type)
-        .filter((type) => !MEASUREMENT_SERIES.includes(type)),
-    ),
-  ];
+  const today = useMemo(() => todayInTimezone(clientTz), [clientTz]);
+
+  const metricsWithData = useMemo(() => {
+    const types = new Set(measurements.map((row) => row.type));
+    const tabs: Array<MeasurementType | "other"> = ["body_weight_kg"];
+    for (const type of MEASUREMENT_SERIES) {
+      if (type !== "body_weight_kg" && types.has(type)) tabs.push(type);
+    }
+    if (types.has("other")) tabs.push("other");
+    return tabs;
+  }, [measurements]);
+
+  useEffect(() => {
+    if (!metricsWithData.includes(metric)) {
+      setMetric(metricsWithData[0] ?? "body_weight_kg");
+    }
+  }, [metric, metricsWithData]);
+
+  const pointsForMetric = useMemo((): TrendPoint[] => {
+    return measurements
+      .filter((row) => row.type === metric)
+      .map((row) => ({
+        id: row.id,
+        value: row.value,
+        unit: row.unit,
+        observedAt: row.observedAt,
+        source: row.source,
+        checkinId: row.checkinId,
+        localDate: row.observedAt.slice(0, 10),
+      }));
+  }, [measurements, metric]);
+
   const photoEntries = entries
-    .filter((item) => item.entryType === "progress_photo")
-    .slice()
-    .sort((left, right) => left.observedAt.localeCompare(right.observedAt));
-  const comparable = photoEntries.filter((item) => item.mediaAssetId);
-  const earliest = comparable[0] ?? null;
-  const latest =
-    comparable.length > 1 ? (comparable[comparable.length - 1] ?? null) : null;
-  const comparisonIds = new Set(
-    [earliest?.id, latest?.id].filter((id): id is string => Boolean(id)),
-  );
-  const listedPhotos = latest
-    ? photoEntries.filter((item) => !comparisonIds.has(item.id))
-    : photoEntries;
-  const notes = entries.filter(
-    (item) => item.entryType === "note" || item.entryType === "milestone",
-  );
+    .filter((row) => row.entryType === "progress_photo" && row.mediaAssetId)
+    .sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+
+  const compareLeft = photoEntries.find((row) => row.id === compareA) ?? null;
+  const compareRight = photoEntries.find((row) => row.id === compareB) ?? null;
+
+  const weightEmpty =
+    metric === "body_weight_kg" && pointsForMetric.length === 0 && !loading;
 
   return (
-    <div className="workspace-page" data-testid="screen-TW-18">
-      <section className="workspace-card">
-        <p className="workspace-kicker">Progress</p>
-        <h2 className="workspace-card-title">Progress</h2>
-        <p className="lede">
-          Charts use the paged measurement list. The progress summary is capped at
-          50 rows and is not used here. Strength, fatigue, and risk are not stored.
-        </p>
-      </section>
+    <div className="workspace-page progress-page" data-testid="screen-TW-18">
+      <header className="workspace-page-head">
+        <h1>Progress</h1>
+      </header>
 
-      {measurementError ? (
-        <p className="form-error" role="alert">
-          {measurementError}
-        </p>
+      {error ? (
+        <ErrorState message={error} onRetry={() => void load()} screenId="TW-18" />
       ) : null}
-      {loading ? <p className="muted">Loading measurements…</p> : null}
+      {loading ? <LoadingBlock label="Loading progress…" /> : null}
 
-      {!loading
-        ? MEASUREMENT_SERIES.map((type) => (
-            <MeasurementCard
-              key={type}
-              type={type}
-              points={measurements.filter((item) => item.type === type)}
-            />
-          ))
-        : null}
-      {!loading
-        ? extraTypes.map((type) => (
-            <MeasurementCard
-              key={type}
-              type={type}
-              points={measurements.filter((item) => item.type === type)}
-            />
-          ))
-        : null}
-      {measurementCursor ? (
-        <button
-          type="button"
-          className="button-secondary"
-          disabled={loadingMeasurements}
-          onClick={() => {
-            void loadMeasurements(measurementCursor);
-          }}
-        >
-          {loadingMeasurements ? "Loading…" : "Load more measurements"}
-        </button>
+      {!loading && weightEmpty ? (
+        <EmptyState title="No weigh-ins yet. Weight is collected in check-ins.">
+          <Link to={`/clients/${relationshipId}/configure`}>
+            Open check-in settings
+          </Link>
+        </EmptyState>
+      ) : null}
+
+      {!loading && !weightEmpty ? (
+        <>
+          <div
+            className="progress-metric-tabs"
+            role="tablist"
+            aria-label="Measurement"
+          >
+            {metricsWithData.map((type) => (
+              <button
+                key={type}
+                type="button"
+                role="tab"
+                aria-selected={metric === type}
+                className={
+                  metric === type ? "segment-btn is-on" : "segment-btn"
+                }
+                onClick={() => setMetric(type)}
+              >
+                {TAB_LABELS[type]}
+              </button>
+            ))}
+          </div>
+
+          <div
+            className="progress-range-tabs segment"
+            role="group"
+            aria-label="Trend range"
+          >
+            {(
+              [
+                ["4w", "4 w"],
+                ["12w", "12 w"],
+                ["all", "All"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={range === value ? "segment-btn is-on" : "segment-btn"}
+                aria-pressed={range === value}
+                onClick={() => setRange(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <TrendChart
+            label={measurementTypeLabel(metric)}
+            points={pointsForMetric}
+            range={range}
+            today={today}
+            timeZone={clientTz}
+          />
+
+          <details className="progress-data-table">
+            <summary>Measurement history</summary>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Value</th>
+                  <th scope="col">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pointsForMetric.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatCivilDate(row.localDate ?? row.observedAt.slice(0, 10))}</td>
+                    <td>
+                      {row.value} {row.unit}
+                    </td>
+                    <td>
+                      {row.source === "checkin" && row.checkinId ? (
+                        <Link
+                          to={`/clients/${relationshipId}/check-ins/${row.checkinId}`}
+                        >
+                          From check-in ·{" "}
+                          {formatCivilDate(row.localDate ?? row.observedAt.slice(0, 10))}
+                        </Link>
+                      ) : (
+                        labelFor("measurement_source", row.source ?? "trainee_entry")
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        </>
       ) : null}
 
       <section className="workspace-card" aria-labelledby="photos-heading">
         <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Photos</p>
-            <h2 id="photos-heading" className="workspace-card-title">
-              Progress photos
-            </h2>
-            <p className="lede">
-              Ready photos linked from progress entries. Download runs only when an
-              entry has a media file.
-            </p>
+          <h2 id="photos-heading">Photos</h2>
+          <div className="progress-compare-controls">
+            <label className="field">
+              <span>Compare</span>
+              <select
+                value={compareA}
+                onChange={(event) => setCompareA(event.target.value)}
+              >
+                <option value="">Pick a date</option>
+                {photoEntries.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {formatCivilDate(row.observedAt.slice(0, 10))}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>With</span>
+              <select
+                value={compareB}
+                onChange={(event) => setCompareB(event.target.value)}
+              >
+                <option value="">Pick a date</option>
+                {photoEntries.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {formatCivilDate(row.observedAt.slice(0, 10))}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
-        {entryError ? (
-          <p className="form-error" role="alert">
-            {entryError}
-          </p>
-        ) : null}
-        {!loading && photoEntries.length === 0 && !entryError ? (
-          <p className="workspace-empty" role="status">
-            No progress photos yet
-          </p>
-        ) : null}
-        {earliest?.mediaAssetId && latest?.mediaAssetId ? (
-          <div className="progress-compare">
+
+        {compareLeft?.mediaAssetId && compareRight?.mediaAssetId ? (
+          <div className="progress-compare" data-testid="photo-compare">
             <figure className="progress-photo">
-              <figcaption>Earlier photo · {formatObservedAt(earliest.observedAt)}</figcaption>
+              <figcaption>
+                {formatCivilDate(compareLeft.observedAt.slice(0, 10))}
+              </figcaption>
               <LinkedMedia
-                mediaAssetId={earliest.mediaAssetId}
-                label={`Earlier progress photo ${formatObservedAt(earliest.observedAt)}`}
+                mediaAssetId={compareLeft.mediaAssetId}
+                label="Earlier progress photo"
               />
             </figure>
             <figure className="progress-photo">
-              <figcaption>Latest photo · {formatObservedAt(latest.observedAt)}</figcaption>
+              <figcaption>
+                {formatCivilDate(compareRight.observedAt.slice(0, 10))}
+              </figcaption>
               <LinkedMedia
-                mediaAssetId={latest.mediaAssetId}
-                label={`Latest progress photo ${formatObservedAt(latest.observedAt)}`}
+                mediaAssetId={compareRight.mediaAssetId}
+                label="Later progress photo"
               />
             </figure>
           </div>
         ) : null}
-        {listedPhotos.length > 0 ? (
-          <ul className="workspace-list">
-            {listedPhotos.map((item) => (
-              <li key={item.id} className="workspace-row progress-photo-row">
-                <div className="workspace-row-copy">
-                  <p className="workspace-row-title">
-                    {item.title?.trim() || "Progress photo"}
-                  </p>
-                  <p className="workspace-row-meta">
-                    <time dateTime={item.observedAt}>{formatObservedAt(item.observedAt)}</time>
-                  </p>
-                  {item.body ? <p className="muted">{item.body}</p> : null}
-                  {item.mediaAssetId ? (
-                    <LinkedMedia
-                      mediaAssetId={item.mediaAssetId}
-                      label={item.title?.trim() || "Progress photo"}
-                    />
-                  ) : (
-                    <p className="muted">This progress photo has no media file.</p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+
+        <ul className="progress-photo-grid">
+          {photoEntries.map((row) => (
+            <li key={row.id}>
+              <p>{formatCivilDate(row.observedAt.slice(0, 10))}</p>
+              {row.mediaAssetId ? (
+                <LinkedMedia
+                  mediaAssetId={row.mediaAssetId}
+                  label={row.title?.trim() || "Progress photo"}
+                />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {!loading && photoEntries.length === 0 ? (
+          <p className="workspace-empty" role="status">No progress photos yet</p>
         ) : null}
       </section>
 
-      <section className="workspace-card" aria-labelledby="notes-heading">
-        <div className="workspace-card-head">
-          <div>
-            <p className="workspace-kicker">Notes</p>
-            <h2 id="notes-heading" className="workspace-card-title">
-              Notes
-            </h2>
-          </div>
-        </div>
-        {!loading && notes.length === 0 && !entryError ? (
-          <p className="workspace-empty" role="status">
-            No notes yet
-          </p>
-        ) : null}
-        {notes.length > 0 ? (
-          <ul className="workspace-list">
-            {notes.map((item) => (
-              <li key={item.id} className="workspace-row">
-                <div className="workspace-row-copy">
-                  <p className="workspace-row-title">
-                    {item.title?.trim() || measurementTypeLabel(item.entryType)}
-                  </p>
-                  <p className="workspace-row-meta">
-                    <span className="workspace-kind">
-                      {measurementTypeLabel(item.entryType)}
-                    </span>
-                    <time dateTime={item.observedAt}>{formatObservedAt(item.observedAt)}</time>
-                  </p>
-                  {item.body ? <p className="muted">{item.body}</p> : null}
-                  {item.mediaAssetId ? (
-                    <LinkedMedia
-                      mediaAssetId={item.mediaAssetId}
-                      label={item.title?.trim() || "Progress note photo"}
-                    />
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {entryCursor ? (
-          <button
-            type="button"
-            className="button-secondary"
-            disabled={loadingEntries}
-            onClick={() => {
-              void loadEntries(entryCursor);
-            }}
-          >
-            {loadingEntries ? "Loading…" : "Load more entries"}
-          </button>
-        ) : null}
-      </section>
-    </div>
-  );
-}
-
-function MeasurementCard({
-  type,
-  points,
-}: {
-  type: MeasurementType | string;
-  points: Measurement[];
-}) {
-  const label = measurementTypeLabel(type);
-  return (
-    <section className="workspace-card" aria-labelledby={`measurement-${type}`}>
-      <h2 id={`measurement-${type}`} className="workspace-card-title">
-        {label}
-      </h2>
-      {points.length === 0 ? (
-        <p className="workspace-empty" role="status">
-          No stored {label.toLowerCase()} measurements.
+      {!online ? (
+        <p className="muted" role="status">
+          Offline — progress data may be stale.
         </p>
-      ) : (
-        <MeasurementTrend
-          label={label}
-          points={points.map((item) => ({
-            id: item.id,
-            value: item.value,
-            unit: item.unit,
-            observedAt: item.observedAt,
-          }))}
-        />
-      )}
-    </section>
+      ) : null}
+    </div>
   );
 }
