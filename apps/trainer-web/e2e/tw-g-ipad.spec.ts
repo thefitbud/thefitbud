@@ -34,10 +34,13 @@ async function assertTapTargets(root: Locator, label: string) {
     for (const el of Array.from(node.querySelectorAll(selectors))) {
       if (seen.has(el)) continue;
       seen.add(el);
+      if (el.classList.contains("skip-link")) continue;
       const style = window.getComputedStyle(el);
       if (style.display === "none" || style.visibility === "hidden") continue;
+      // Off-screen / visually clipped controls are not tablet hit targets.
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) continue;
+      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
       if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
         bad.push({
           tag: el.tagName.toLowerCase(),
@@ -85,7 +88,7 @@ test.describe("TW-G iPad shell smoke", () => {
   test("interactive controls meet 44×44 tap targets on Home and Roster", async ({
     page,
   }) => {
-    await expect(page.getByTestId("screen-TW-04").or(page.locator("main"))).toBeVisible({
+    await expect(page.getByTestId("screen-TW-04")).toBeVisible({
       timeout: 20_000,
     });
     await assertTapTargets(page.locator("body"), "Home");

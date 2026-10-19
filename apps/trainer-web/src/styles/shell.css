@@ -416,10 +416,26 @@
   .shell-nav-link {
     justify-content: center;
     padding: 0;
+    min-width: 44px;
+    min-height: 44px;
+    height: 44px;
   }
 
   .shell-me {
     justify-content: center;
+  }
+}
+
+@media (max-width: 1024px), (pointer: coarse) {
+  .shell-nav-link {
+    min-width: 44px;
+    min-height: 44px;
+    height: 44px;
+  }
+
+  .shell-me-link,
+  .shell-help-link {
+    min-height: 44px;
   }
 }
 

@@ -81,14 +81,16 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await expect(morning).toBeVisible();
     const wasChecked = await morning.isChecked();
     await morning.click();
-    await expect(page.getByText(/saved|Notification settings/i).or(morning)).toBeVisible();
-    await page.waitForTimeout(1200);
+    await expect(morning).toBeChecked({ checked: !wasChecked, timeout: 10_000 });
+    // Wait for debounce/persist before reload.
+    await page.waitForTimeout(1800);
     await page.reload();
     await expect(page.getByTestId("screen-TW-29")).toBeVisible({ timeout: 20_000 });
     const morningAgain = page.getByRole("checkbox", { name: /Morning summary/i });
     await expect(morningAgain).toBeChecked({ checked: !wasChecked, timeout: 15_000 });
     // restore
     await morningAgain.click();
+    await expect(morningAgain).toBeChecked({ checked: wasChecked, timeout: 10_000 });
     await page.waitForTimeout(800);
   });
 
