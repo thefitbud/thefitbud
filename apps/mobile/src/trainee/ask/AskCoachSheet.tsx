@@ -145,13 +145,20 @@ export function AskCoachSheet({
       topic.trim().toLowerCase() === itemLabel.trim().toLowerCase()
         ? "a question"
         : topic.toLowerCase();
-    return buildAskCoachMessage({
+    const built = buildAskCoachMessage({
       coachName: coachShort,
       itemLabel,
       date: dateLabel,
       topic: topicText,
       link,
     });
+    const shortLink = link.includes("fitbud.app/go/")
+      ? "fitbud.app/go/…"
+      : link.length > 36
+        ? `${link.slice(0, 32)}…`
+        : link;
+    const plainText = built.hrefText.replace(link, "").trimEnd();
+    return { ...built, plainText, shortLink };
   }, [coachShort, dateLabel, itemId, itemLabel, itemType, topic]);
 
   async function openWhatsApp() {
@@ -253,10 +260,14 @@ export function AskCoachSheet({
 
             <Text style={styles.previewLabel}>Message preview</Text>
             <View style={styles.waprev}>
-              <Text style={styles.waprevText}>{preview.hrefText}</Text>
-              <Text style={styles.waprevLink} numberOfLines={1}>
-                {preview.hrefText.includes("fitbud") ? "fitbud.app/go/…" : ""}
+              <Text style={styles.waprevText} numberOfLines={4}>
+                {preview.plainText}
               </Text>
+              {preview.shortLink ? (
+                <Text style={styles.waprevLink} numberOfLines={1}>
+                  {preview.shortLink}
+                </Text>
+              ) : null}
             </View>
 
             {isPain && painAck ? (

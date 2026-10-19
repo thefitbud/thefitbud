@@ -2,51 +2,51 @@
 
 Branch: `cursor/mb-trainee-workout-progress-c688`  
 Visual target: `docs/spec/mockups-v2/png` @ 393×852  
-Proof: mobile vitest **74** · api sync **5** · checkins **5** · meals **10** · openapi **3** · core whatsapp **4** (Node **22.23.3**) · Expo captures after `pnpm db:reset`
+Proof: mobile vitest **74** · api vitest **228** (Node **22.23.3**) · clock-frozen demo-seed / batch-0 / read-models
+
+Prior live QA (20 Oct): **5 MATCH · 15 CLOSE · 2 FAR**. This round closed the listed behaviour gaps + FAR structure; ratings below are code-verified vs mockups-v2 (no new browser sheet this pass).
 
 ## Match vs mockup (honest)
 
 | Screen | Match | Note |
 |---|---|---|
-| TR-07 Diet | **CLOSE** | H1 + week pill + daysum2 rings/bars + Today's meals + compact rows; due expanded mealc still varies by seed state |
-| TR-07b Photo | **CLOSE** | Inline photop after confirm; confirm now writes prescription kcal |
-| TR-08 Something different | **MATCH** | opt3 + grey ✕ + WhatsApp glyph Ask coach |
-| TR-08b Portion | **CLOSE** | Sticky Save + totbar + unit labels; fraction glyphs may still show decimals for odd servings |
+| TR-07 Diet | **CLOSE** | Due + “Something different” one meta line; 50/50 Eaten / Something different; ⋯ header; seed still drives which meal is expanded |
+| TR-07b Photo | **CLOSE** | Compact ✓ Eaten as planned + photop below |
+| TR-08 Something different | **MATCH** | opt3 + grey ✕ + WhatsApp Ask coach |
+| TR-08b Portion | **CLOSE** | Per-food kcal (no ×qty double-count); sticky totbar+Save; stepper qty+unit; odd fractions may still decimal |
 | TR-08c Ate out | **CLOSE** | Outline chips + sticky Save |
-| TR-26 / 09 Food search | **CLOSE** | Capture opens food_search; search/log/sticky abar present |
-| TR-10 Workout week | **CLOSE** | Week strip + navy hero + miss card (seed-dependent density) |
-| TR-10b Day detail | **CLOSE** | Eyebrow + dstats + chips; sticky Start/Back bar |
-| TR-11 Active | **CLOSE** | Accordion + previous + EDITED + log bar; polish vs 11 |
-| TR-11b Rest | **CLOSE** | Rest band + next line + progress |
-| TR-12 Summary | **CLOSE** | stat4 + avatar row; sticky Done via Screen footer |
-| TR-13 Progress | **CLOSE** | Weight hero + chart + Log rows |
-| TR-14 Check-in | **CLOSE** | 3-step chrome when due; reviewed shows **Acknowledged** |
-| TR-15 Notifications | **CLOSE** | Opaque screen · Today/Earlier · settings row |
-| TR-20 More | **CLOSE** | Profile + coach WhatsApp cards + icon rows |
-| TR-02 Invite | **CLOSE** | Hero + Join {Coach} when invite preview loads (capture seeds Anita token) |
-| TR-03 Intake | **CLOSE** | Stepper + radio/day pills (not bare boxes) |
-| TR-04 Waiting | **CLOSE** | Timeline + WhatsApp outline |
+| TR-26 / 09 Food search | **CLOSE** | Plan browse before typing; clear ✕; sticky kcal+Save; unit in stepper; one-line names |
+| TR-10 Workout week | **CLOSE** | Miss card “workouts weren't logged · Log it” when week has ✕ |
+| TR-10b Day detail | **CLOSE** | Real overview: back+⋯, 3 stats (singular “exercise”), coach note, chips/cues, sticky Start |
+| TR-11 Active | **CLOSE** | Accordion + previous + log bar |
+| TR-11b Rest | **CLOSE** | Next line + progress; mid-workout footer; Finish only after final set |
+| TR-12 Summary | **CLOSE** | Eyebrow workout·date; Changed card; week dots; RV initials; purple sticky Done |
+| TR-13 Progress | **CLOSE** | Single Progress+bell; check-in rows with weight; Rohan weight series seeded (86.4 kg latest) |
+| TR-14 Check-in | **CLOSE** | step 1 of 3 + Due; measurements+photos step1; waist stepper; photo tiles; draft saved line |
+| TR-15 Notifications | **CLOSE** | Today group; per-type icons; ✓ Already logged; review → Acknowledged + relative time |
+| TR-20 More | **CLOSE** | One More title; meal count; quiet hours 12h |
+| TR-02 Invite | **CLOSE** | Mobile + locked Email + Create password; Sign out removed |
+| TR-03 Intake | **CLOSE** | Radio cards, day pills, sleep stepper, Yes/No; Back + Saved chip |
+| TR-04 Waiting | **CLOSE** | Hi {first}; joined + intake submittedAt; WA glyph + green outline button |
 | TR-05 Reminders | **CLOSE** | Radio time rows + Skip |
-| TR-09 Meal plan | **CLOSE** | Training/Rest + tab bar kept |
-| TR-18 Ask coach | **CLOSE** | Sheet + green bubble + WA glyph |
-| TR-23 Unavailable | **CLOSE** | Icon + Tonight instead + CTA + tabs |
+| TR-09 Meal plan | **CLOSE** | Portion column (“1 plate”) |
+| TR-18 Ask coach | **CLOSE** | Preview one short link |
+| TR-23 Unavailable | **CLOSE** | Go to Today pinned above tab bar |
 
-**Counts:** **1 MATCH · 21 CLOSE · 0 FAR** (vs prior QA 0 / 9 / 13). Remaining gaps are polish/seed density, not wrong structure.
+**Counts:** **1 MATCH · 21 CLOSE · 0 FAR** (live QA was 5/15/2; FARs closed in code — not re-sheeted). Remaining gaps are polish/seed density.
 
 ## Behaviour fixes
 
 | Item | Result |
 |---|---|
-| Sync first apply → `applied` (not already_applied) | PASS — `sync.test` green |
-| Check-in CHECKIN_VERSION_CONFLICT stream | PASS — flush draft + refetch etag before submit |
-| Trainer Acknowledged reaches trainee | PASS — inbox `checkin_reviewed` + Today card + Check-in screen |
-| Scheduled check-in not fillable | PASS — “Next check-in {date}” only |
-| Next-up at ~10:50 pm | PASS — most recent overdue; chips not “Later” after window |
-| Confirm 0 kcal | PASS — compliance stores prescription macros |
+| No CHECKIN_VERSION_CONFLICT loop / sync 500 | **PASS** — submit skips saveDraft race; sync pre-check insert; conflict on already-submitted → success |
+| After trainer review → Today “Next check-in …” | **PASS** — `pickTodayCheckin` prefers scheduled over reviewed |
+| Diet next-up at night never “due now” early | **PASS** — `mealDueStatusLabel` countdown / clock before window |
+| Review notif time + Acknowledged | **PASS** — Just now/Today relative; outcome Acknowledged |
+| Demo / batch-0 / read-models clock-independent | **PASS** — frozen `2026-10-19T14:30:00.000Z` + fake timers |
 
 ## Test counts (Node ≥ 22.23)
 
 - `@fitbud/mobile` vitest: **74** passed  
-- `@fitbud/api` sync: **5** · checkins: **5** · meals: **10** · openapi: **3**  
-- `@fitbud/core` whatsapp: **4**  
-- mobile typecheck: green  
+- `@fitbud/api` vitest: **228** passed (46 files)  
+- typecheck mobile + api: green  

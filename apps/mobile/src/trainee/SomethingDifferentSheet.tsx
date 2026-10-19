@@ -476,7 +476,9 @@ export function SomethingDifferentSheet({
             return (
               <View key={`${row.label}-${index}`} style={styles.prow}>
                 <View style={styles.prowText}>
-                  <Text style={styles.prowName}>{row.label}</Text>
+                  <Text style={styles.prowName} numberOfLines={1}>
+                    {row.label}
+                  </Text>
                   <Text style={styles.prowMeta}>
                     {kcal != null ? `${kcal} kcal` : "kcal unknown"}
                     {asPlanned
@@ -493,7 +495,7 @@ export function SomethingDifferentSheet({
                   >
                     <Minus size={18} color={colors.indigo} strokeWidth={2.2} />
                   </Pressable>
-                  <Text style={styles.stpValue}>
+                  <Text style={styles.stpValue} numberOfLines={1}>
                     {formatQuantityDisplay(row.quantity)}{" "}
                     <Text style={styles.stpUnit}>{row.unitLabel}</Text>
                   </Text>
@@ -532,6 +534,9 @@ export function SomethingDifferentSheet({
             style={styles.noteField}
           />
         </View>
+        {error ? <ErrorBanner message={error} /> : null}
+      </ScrollView>
+      <View style={styles.stickyFooter}>
         <View style={styles.totbar}>
           <Text style={styles.totbarMain}>
             <Text style={styles.totbarKcal}>
@@ -548,9 +553,8 @@ export function SomethingDifferentSheet({
             <Text style={styles.totbarPlan}>plan {formatKcal(planKcal)}</Text>
           ) : null}
         </View>
-        {error ? <ErrorBanner message={error} /> : null}
-      </ScrollView>
-      <View style={styles.stickySave}>{saveButton("Save", () => void savePortion())}</View>
+        {saveButton("Save", () => void savePortion())}
+      </View>
     </View>
   );
 
@@ -701,6 +705,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingTop: spacing.sm,
   },
+  stickyFooter: {
+    borderTopColor: "#E7E9F2",
+    borderTopWidth: 1,
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+  },
   saveBtn: {
     alignItems: "center",
     backgroundColor: colors.indigo,
@@ -794,23 +804,27 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
+    flexShrink: 0,
+    maxWidth: 132,
   },
   stpBtn: {
     alignItems: "center",
     height: 44,
     justifyContent: "center",
-    width: 44,
+    width: 36,
   },
   stpValue: {
     color: colors.deepNavy,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    minWidth: 64,
+    flexShrink: 1,
+    minWidth: 56,
+    maxWidth: 68,
     textAlign: "center",
   },
   stpUnit: {
     color: colors.midGrey,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
   },
   removeBtn: {
@@ -856,7 +870,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: spacing.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },

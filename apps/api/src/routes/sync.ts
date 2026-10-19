@@ -255,34 +255,8 @@ async function persistSyncMutationResult(
     result: SyncMutationResult;
   },
 ): Promise<SyncMutationResult> {
-  let insertedId: string | null = null;
-  try {
-    const inserted = await db
-      .insert(syncMutations)
-      .values({
-        id: createId(),
-        mutationId: input.mutation.mutationId,
-        actorUserId: input.actorUserId,
-        idempotencyKey: input.mutation.idempotencyKey,
-        operation: input.mutation.operation,
-        entityType: input.mutation.entityType,
-        recordId: input.result.recordId,
-        resultStatus: input.result.status,
-        serverVersion: input.result.serverVersion,
-        resultBody: JSON.stringify(input.result),
-        createdAt: nowIso(),
-      })
-      .onConflictDoNothing()
-      .returning({ id: syncMutations.id });
-    insertedId = inserted[0]?.id ?? null;
-  } catch {
-    // D1 / sqlite UNIQUE races — fall through to lookup.
-  }
-
-  if (insertedId) {
-    return input.result;
-  }
-
+  // Pre-check — avoid D1 quirks with RETURNING + ON CONFLICT (can 500 or
+  // mis-report first apply as already_applied).
   const existingByMutation = await db
     .select()
     .from(syncMutations)
@@ -339,8 +313,45 @@ async function persistSyncMutationResult(
     return prior;
   }
 
-  // Insert was a no-op without a readable prior row — return the computed result.
-  return input.result;
+  try {
+    await db.insert(syncMutations).values({
+      id: createId(),
+      mutationId: input.mutation.mutationId,
+      actorUserId: input.actorUserId,
+      idempotencyKey: input.mutation.idempotencyKey,
+      operation: input.mutation.operation,
+      entityType: input.mutation.entityType,
+      recordId: input.result.recordId,
+      resultStatus: input.result.status,
+      serverVersion: input.result.serverVersion,
+      resultBody: JSON.stringify(input.result),
+      createdAt: nowIso(),
+    });
+    return input.result;
+  } catch {
+    // Race: another writer persisted first — return prior without 500.
+    const raced = await db
+      .select()
+      .from(syncMutations)
+      .where(
+        and(
+          eq(syncMutations.actorUserId, input.actorUserId),
+          eq(syncMutations.mutationId, input.mutation.mutationId),
+        ),
+      )
+      .limit(1);
+    if (raced[0]) {
+      const prior = mutationResultFromStored(raced[0].resultBody);
+      if (
+        prior.status === "applied" ||
+        prior.status === "already_applied"
+      ) {
+        return { ...prior, status: "already_applied" };
+      }
+      return prior;
+    }
+    return input.result;
+  }
 }
 
 syncRoutes.post(

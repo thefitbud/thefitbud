@@ -243,7 +243,9 @@ export function WorkoutOverviewScreen({
             <View style={styles.dstats}>
               <View style={styles.dstat}>
                 <Text style={styles.dstatB}>{exerciseCount}</Text>
-                <Text style={styles.dstatS}>Exercises</Text>
+                <Text style={styles.dstatS}>
+                  {exerciseCount === 1 ? "exercise" : "Exercises"}
+                </Text>
               </View>
               <View style={styles.dstat}>
                 <Text style={styles.dstatB}>{setCount}</Text>

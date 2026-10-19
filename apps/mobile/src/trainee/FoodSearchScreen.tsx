@@ -30,6 +30,7 @@ import { useSyncEngine } from "../sync/SyncProvider";
 import { deviateMealAssignment, MealSyncError } from "./mealActions";
 import { invalidateRelationshipDayData } from "./dataCache";
 import { nutrientsFromMealPrescription } from "./nutrition";
+import { cleanFoodLabel } from "./mealHelpers";
 import { loadServingPresetsForFood } from "./food/foodServingsApi";
 import type { TraineeFoodSearchResponse } from "@fitbud/contracts";
 
@@ -41,6 +42,7 @@ type LogLine = {
   quantity: number;
   /** Kcal per one unit of quantity. */
   kcalPerUnit: number | null;
+  unitLabel: string;
   subtitle: string;
   item: LoggedFoodItem;
 };
@@ -56,6 +58,15 @@ type Props = {
 function itemKcal(item: TraineeFoodSearchItem): number | null {
   if (item.energyKcalScaled == null) return null;
   return Math.round(item.energyKcalScaled / NUTRIENT_SCALE);
+}
+
+function unitFromLabel(label: string | undefined): string {
+  const raw = label?.trim() || "serving";
+  const parts = raw.split(/\s+/);
+  if (parts.length >= 2 && /^[\d½¾¼⅓⅔]+/.test(parts[0] ?? "")) {
+    return parts.slice(1).join(" ");
+  }
+  return raw;
 }
 
 export function FoodSearchScreen({
@@ -76,12 +87,13 @@ export function FoodSearchScreen({
   const [logLines, setLogLines] = useState<LogLine[]>(() =>
     plannedRowsFromAssignment(assignment).map((row, index) => ({
       key: `plan-${index}`,
-      name: row.label,
+      name: cleanFoodLabel(row.label),
       quantity: row.quantity,
       kcalPerUnit:
         row.kcalPreview != null && row.quantity > 0
           ? row.kcalPreview / row.quantity
           : null,
+      unitLabel: row.unitLabel || "serving",
       subtitle: "from your plan",
       item: row.foodId
         ? {
@@ -101,6 +113,11 @@ export function FoodSearchScreen({
 
   const planKcal = nutrientsFromMealPrescription(assignment).kcal;
   const weekday = weekdayShort(timeZone, assignment.localDate);
+  const planBrowse = useMemo(
+    () => plannedRowsFromAssignment(assignment),
+    [assignment],
+  );
+  const showPlanBrowse = query.trim().length < 2;
 
   const search = useCallback(
     async (q: string) => {
@@ -160,9 +177,10 @@ export function FoodSearchScreen({
     const kcalEach = itemKcal(item);
     const line: LogLine = {
       key: `food-${item.id}-${Date.now()}`,
-      name: item.name,
+      name: cleanFoodLabel(item.name),
       quantity: qty,
       kcalPerUnit: kcalEach,
+      unitLabel: unitFromLabel(preset?.label),
       subtitle: "just added",
       item: {
         foodId: item.id,
@@ -280,6 +298,32 @@ export function FoodSearchScreen({
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
+        {showPlanBrowse ? (
+          <>
+            <Text style={styles.sml}>From your plan · frequent</Text>
+            <View style={styles.card}>
+              {planBrowse.map((row, index) => {
+                const kcalEach =
+                  row.kcalPreview != null && row.quantity > 0
+                    ? Math.round(row.kcalPreview / row.quantity)
+                    : null;
+                return (
+                  <View key={`plan-browse-${index}`} style={styles.lrow}>
+                    <View style={styles.lrowText}>
+                      <Text style={styles.foodName} numberOfLines={1}>
+                        {cleanFoodLabel(row.label)}
+                      </Text>
+                      <Text style={styles.foodMeta}>
+                        {row.displayLabel.split("·").pop()?.trim() ?? "from your plan"}
+                        {kcalEach != null ? ` · ${kcalEach} kcal` : ""}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
         <Text style={styles.sml}>Results</Text>
         <View style={styles.card}>
           {loading ? (
@@ -290,8 +334,8 @@ export function FoodSearchScreen({
             return (
               <View key={item.id} style={styles.lrow}>
                 <View style={styles.lrowText}>
-                  <Text style={styles.foodName}>
-                    {item.name}
+                  <Text style={styles.foodName} numberOfLines={1}>
+                    {cleanFoodLabel(item.name)}
                     <Text style={styles.srcTag}>FitBud</Text>
                   </Text>
                   <Text style={styles.foodMeta}>
@@ -329,7 +373,9 @@ export function FoodSearchScreen({
             return (
               <View key={line.key} style={styles.lrow}>
                 <View style={styles.lrowText}>
-                  <Text style={styles.foodName}>{line.name}</Text>
+                  <Text style={styles.foodName} numberOfLines={1}>
+                    {line.name}
+                  </Text>
                   <Text style={styles.foodMeta}>
                     {formatNumber(line.quantity)} ·{" "}
                     {lineKcal != null ? `${lineKcal} kcal` : "kcal —"} ·{" "}
@@ -345,8 +391,9 @@ export function FoodSearchScreen({
                   >
                     <Minus size={18} color={colors.indigo} strokeWidth={2.2} />
                   </Pressable>
-                  <Text style={styles.stpVal}>
-                    {formatNumber(line.quantity)}
+                  <Text style={styles.stpVal} numberOfLines={1}>
+                    {formatNumber(line.quantity)}{" "}
+                    <Text style={styles.stpUnit}>{line.unitLabel}</Text>
                   </Text>
                   <Pressable
                     accessibilityRole="button"
@@ -551,19 +598,27 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
+    flexShrink: 0,
+    maxWidth: 128,
   },
   stpBtn: {
     alignItems: "center",
-    height: 44,
+    height: 40,
     justifyContent: "center",
-    width: 44,
+    width: 36,
   },
   stpVal: {
     color: colors.deepNavy,
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "700",
-    minWidth: 52,
+    maxWidth: 64,
+    minWidth: 48,
     textAlign: "center",
+  },
+  stpUnit: {
+    color: colors.midGrey,
+    fontSize: 12,
+    fontWeight: "500",
   },
   rmBtn: {
     alignItems: "center",

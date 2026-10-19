@@ -106,7 +106,12 @@ export function WorkoutSummaryScreen({
 
   const footer = (
     <View style={styles.abar}>
-      <PrimaryButton label="Done" onPress={onDone} style={styles.doneBtn} />
+      <PrimaryButton
+        label="Done"
+        onPress={onDone}
+        style={styles.doneBtn}
+        variant="primary"
+      />
     </View>
   );
 

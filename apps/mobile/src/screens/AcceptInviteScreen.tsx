@@ -72,7 +72,6 @@ export function AcceptInviteScreen({
   const {
     api,
     refreshSession,
-    signOut,
     signInWithToken,
     accessToken,
     errorMessage,
@@ -481,8 +480,6 @@ export function AcceptInviteScreen({
 
       {onBackToSignIn ? (
         <Button label="Back to sign in" variant="tertiary" onPress={onBackToSignIn} />
-      ) : accessToken ? (
-        <Button label="Sign out" variant="tertiary" onPress={signOut} />
       ) : null}
     </M2Screen>
   );

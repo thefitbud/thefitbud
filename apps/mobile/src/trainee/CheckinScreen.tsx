@@ -39,6 +39,21 @@ import { pickTodayCheckin } from "./pickTodayCheckin";
 
 type Step = "form" | "review" | "done";
 
+const WIZARD_STEPS = [
+  {
+    label: "Measurements",
+    sectionTitles: ["Measurements", "Photos"],
+  },
+  {
+    label: "How was your week",
+    sectionTitles: ["How was your week"],
+  },
+  {
+    label: "Reflection",
+    sectionTitles: ["Reflection"],
+  },
+] as const;
+
 function coachFirstName(relationship: CoachingRelationship): string {
   const raw = relationship.trainerDisplayName?.trim();
   if (!raw) return "Your coach";
@@ -147,11 +162,13 @@ function FieldControl({
   value,
   onChange,
   onBlur,
+  lastWeightLabel,
 }: {
   field: CheckinFieldDefinition;
   value: string;
   onChange: (next: string) => void;
   onBlur: () => void;
+  lastWeightLabel?: string | null;
 }) {
   const label = `${field.label}${field.required ? " *" : ""}`;
 
@@ -280,6 +297,9 @@ function FieldControl({
               {current}
               <Text style={styles.wbigUnit}>kg</Text>
             </Text>
+            {lastWeightLabel ? (
+              <Text style={styles.lastWeight}>Last: {lastWeightLabel}</Text>
+            ) : null}
           </View>
           <View style={styles.rstp}>
             <Pressable
@@ -390,6 +410,8 @@ export function CheckinScreen({
   const [form, setForm] = useState<CheckinFormVersion | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [recordVersion, setRecordVersion] = useState(checkin.recordVersion);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [lastWeightLabel, setLastWeightLabel] = useState<string | null>(null);
   const [step, setStep] = useState<Step>(
     checkin.recordStatus === "submitted" || checkin.status === "reviewed"
       ? "done"
@@ -461,6 +483,15 @@ export function CheckinScreen({
               .filter((m) => m.type === "body_weight_kg")
               .sort((a, b) => b.observedAt.localeCompare(a.observedAt))[0];
             if (latest) {
+              const lastDate = formatCivilDate(
+                localDateInTimezone(timeZone, new Date(latest.observedAt)),
+                { includeWeekday: true },
+              );
+              const rounded =
+                Math.round(latest.value * 10) / 10;
+              setLastWeightLabel(
+                `${lastDate} · ${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} kg`,
+              );
               for (const field of loaded.fields) {
                 if (
                   field.type === "measurement" &&
@@ -534,6 +565,14 @@ export function CheckinScreen({
 
   const fields = useMemo(() => form?.fields ?? [], [form]);
   const sections = useMemo(() => groupFields(fields), [fields]);
+  const visibleSections = useMemo(() => {
+    const allowed = new Set(
+      WIZARD_STEPS[wizardStep]?.sectionTitles ?? WIZARD_STEPS[0].sectionTitles,
+    );
+    return sections.filter((section) =>
+      (allowed as Set<string>).has(section.title),
+    );
+  }, [sections, wizardStep]);
 
   const saveDraft = useCallback(async () => {
     if (!form || !canEditCheckin(checkin.status)) return;
@@ -616,8 +655,9 @@ export function CheckinScreen({
     setActing(true);
     setError(null);
     try {
-      // Cancel debounce and wait for any in-flight draft so submit uses the
-      // latest server recordVersion (avoids CHECKIN_VERSION_CONFLICT).
+      // Cancel debounce and wait for any in-flight draft, then refetch the
+      // authoritative etag. Do NOT saveDraft again here — a second draft with
+      // the same expectedVersion races submit and loops CHECKIN_VERSION_CONFLICT.
       if (draftTimer.current) {
         clearTimeout(draftTimer.current);
         draftTimer.current = null;
@@ -625,15 +665,20 @@ export function CheckinScreen({
       if (draftInFlight.current) {
         await draftInFlight.current;
       }
-      // Flush latest answers once, then refetch the authoritative etag so
-      // submit never races a just-applied draft with a stale expectedVersion.
-      await saveDraft();
       try {
         const fresh = await api.getCheckin(checkin.id);
         recordVersionRef.current = fresh.recordVersion;
         setRecordVersion(fresh.recordVersion);
+        if (
+          fresh.recordStatus === "submitted" ||
+          fresh.status === "reviewed"
+        ) {
+          setStep("done");
+          setOffline(false);
+          return;
+        }
       } catch {
-        // keep ref from draft result
+        // keep ref
       }
       const expected = recordVersionRef.current;
       const answers = answersToPayload(fields, values);
@@ -658,21 +703,62 @@ export function CheckinScreen({
           },
         },
       });
+      const conflict = results.some(
+        (item) => item.error?.code === "CHECKIN_VERSION_CONFLICT",
+      );
+      if (conflict) {
+        try {
+          const fresh = await api.getCheckin(checkin.id);
+          recordVersionRef.current = fresh.recordVersion;
+          setRecordVersion(fresh.recordVersion);
+          if (
+            fresh.recordStatus === "submitted" ||
+            fresh.status === "reviewed"
+          ) {
+            // Already accepted — never surface "changed after this version".
+            setStep("done");
+            setOffline(false);
+            return;
+          }
+          // Retry once with the fresh etag (no intervening draft).
+          const retry = await enqueueAndPush(sync, {
+            recordId: checkin.id,
+            operation: "checkin.submit",
+            expectedServerVersion: fresh.recordVersion,
+            payload: {
+              checkinId: checkin.id,
+              body: {
+                expectedVersion: fresh.recordVersion,
+                answers: {
+                  wellbeing,
+                  notes: answers.notes ?? null,
+                  bodyWeightKg: answers.bodyWeightKg ?? null,
+                  fieldAnswers: answers.fieldAnswers,
+                },
+              },
+            },
+          });
+          const retryMsg = messageFromSyncResults(retry.results, coach);
+          if (retryMsg) {
+            setError(retryMsg);
+            return;
+          }
+          const retryResult =
+            retry.results.find((item) => item.recordId === checkin.id) ??
+            retry.results[0];
+          if (retryResult?.serverVersion != null) {
+            recordVersionRef.current = retryResult.serverVersion;
+            setRecordVersion(retryResult.serverVersion);
+          }
+          setStep("done");
+          setOffline(false);
+          return;
+        } catch {
+          // fall through
+        }
+      }
       const syncMsg = messageFromSyncResults(results, coach);
       if (syncMsg) {
-        if (
-          results.some(
-            (item) => item.error?.code === "CHECKIN_VERSION_CONFLICT",
-          )
-        ) {
-          try {
-            const fresh = await api.getCheckin(checkin.id);
-            recordVersionRef.current = fresh.recordVersion;
-            setRecordVersion(fresh.recordVersion);
-          } catch {
-            // ignore
-          }
-        }
         setError(syncMsg);
         return;
       }
@@ -819,7 +905,13 @@ export function CheckinScreen({
       <PrimaryButton
         label="Continue"
         disabled={!form || acting || !canEditCheckin(checkin.status)}
-        onPress={() => setStep("review")}
+        onPress={() => {
+          if (wizardStep < WIZARD_STEPS.length - 1) {
+            setWizardStep((index) => index + 1);
+          } else {
+            setStep("review");
+          }
+        }}
       />
       {draftTimeLabel ? (
         <View style={styles.savedRow}>
@@ -848,13 +940,21 @@ export function CheckinScreen({
       </View>
 
       <View style={styles.steps3}>
-        <View style={[styles.stepSeg, styles.stepSegOn]} />
-        <View style={styles.stepSeg} />
-        <View style={styles.stepSeg} />
+        {WIZARD_STEPS.map((_, index) => (
+          <View
+            key={`wizard-seg-${index}`}
+            style={[
+              styles.stepSeg,
+              index <= wizardStep ? styles.stepSegOn : null,
+            ]}
+          />
+        ))}
       </View>
       <View style={styles.stepl}>
-        <Text style={styles.steplMain}>
-          <Text style={styles.steplBold}>Body and photos</Text> · step 1 of 3
+        <Text style={styles.steplMain} numberOfLines={1}>
+          <Text style={styles.steplBold}>{WIZARD_STEPS[wizardStep]?.label}</Text>
+          {" · step "}
+          {wizardStep + 1} of {WIZARD_STEPS.length}
         </Text>
         <Text style={styles.steplDue}>{dueLabel}</Text>
       </View>
@@ -883,7 +983,7 @@ export function CheckinScreen({
         </View>
       ) : null}
 
-      {sections.map((section) => {
+      {visibleSections.map((section) => {
         const isPhotos = section.title === "Photos";
         const isMeasurements = section.title === "Measurements";
         return (
@@ -925,6 +1025,7 @@ export function CheckinScreen({
                     key={field.id}
                     field={field}
                     value={values[field.id] ?? ""}
+                    lastWeightLabel={lastWeightLabel}
                     onChange={(next) => {
                       setValues((current) => ({ ...current, [field.id]: next }));
                       scheduleDraftSave();
@@ -1010,30 +1111,6 @@ export function TodayCheckinCard({
         <Text style={styles.bannerBody}>
           You can fill this in when it opens.
         </Text>
-      </View>
-    );
-  }
-
-  if (checkin.status === "reviewed" && checkin.review) {
-    const coach =
-      relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "your coach";
-    return (
-      <View style={styles.banner}>
-        <Text style={styles.bannerTitle} accessibilityRole="header">
-          {outcomeCopy(checkin.review.outcome, coach)}
-        </Text>
-        {checkin.review.notes ? (
-          <Text style={styles.bannerBody}>{checkin.review.notes}</Text>
-        ) : (
-          <Text style={styles.bannerBody}>
-            {coach} reviewed your check-in.
-          </Text>
-        )}
-        <PrimaryButton
-          label="See check-in"
-          variant="secondary"
-          onPress={() => onOpen(checkin)}
-        />
       </View>
     );
   }
@@ -1337,6 +1414,11 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 18,
     fontWeight: "600",
+  },
+  lastWeight: {
+    color: colors.midGrey,
+    fontSize: 14,
+    marginTop: 4,
   },
   rstp: {
     flexDirection: "row",

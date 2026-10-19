@@ -3,6 +3,7 @@ import type {
   MealAssignment,
   WorkoutAssignment,
 } from "@fitbud/contracts";
+import { formatClockTime } from "@fitbud/core";
 
 export type NextUpHero =
   | { kind: "meal"; meal: MealAssignment; reason: "overdue" | "window" }
@@ -106,6 +107,27 @@ export function nextUp(input: {
 
   void minutesUntil;
   return null;
+}
+
+/** Status chip line for a due meal card (TR-07): countdown or "due now" in window. */
+export function mealDueStatusLabel(
+  meal: MealAssignment,
+  _timeZone: string,
+  now = new Date(),
+): string {
+  if (
+    meal.status === "overdue" ||
+    now.getTime() > new Date(meal.windowEndsAt).getTime()
+  ) {
+    return "Overdue";
+  }
+  const mins = minutesUntil(meal.windowStartsAt, now);
+  // Never "due now" before the window starts (night → next breakfast).
+  if (mins > 0) return formatCountdown(mins);
+  if (now.getTime() <= new Date(meal.windowEndsAt).getTime()) {
+    return "due now";
+  }
+  return "Later";
 }
 
 /** Format a positive minute countdown as "in 2 h 31 min" / "in 45 min". */

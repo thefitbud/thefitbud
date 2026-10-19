@@ -311,9 +311,9 @@ export function weekDotStatus(
 
 export function missedLogHeadline(count: number): string {
   if (count === 1) {
-    return "One workout this week wasn't logged. If you did it, log it now.";
+    return "One workout wasn't logged this week";
   }
-  return `${count} workouts this week weren't logged. If you did them, log them now.`;
+  return `${count} workouts weren't logged this week`;
 }
 
 export function exerciseInstructionsFor(

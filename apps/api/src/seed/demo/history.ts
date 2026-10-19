@@ -800,6 +800,25 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Tired but okay. Missed two workouts this week.", notes: "Travel for work threw off lunches and I skipped Wednesday's session. Back on track from Monday." })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
   );
 
+  // Rohan: weigh-in series for Progress chart (TR-13).
+  for (let weeksAgo = 0; weeksAgo < 8; weeksAgo += 1) {
+    const localDate = addDaysFromLocalDate(rohanCheckinDate, -7 * weeksAgo);
+    const weightKg = Number((86.4 + weeksAgo * 0.25).toFixed(1));
+    const observedAt = clampIsoToNow(
+      localDayStartIso(localDate, "08:20", "Asia/Kolkata"),
+      now,
+    );
+    const measurementId = demoUuid(
+      "measurement",
+      "rohan-weight",
+      "rohan.slipping@demo.fitbud.test",
+      localDate,
+    );
+    lines.push(
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(measurementId)}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'body_weight_kg', ${weightKg}, 'kg', ${sqlQuote(observedAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(observedAt)}, ${sqlQuote(observedAt)});`,
+    );
+  }
+
   // Rohan reminders (last 14d) so responsiveness has enough data.
   const rohanReminders = [
     [3, MEAL_PRESCRIPTION_IDS.breakfast, true],

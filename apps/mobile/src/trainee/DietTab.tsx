@@ -49,7 +49,7 @@ import {
   mealLockCopy,
 } from "./mealHelpers";
 import { invalidateRelationshipDayData, subscribeAll } from "./dataCache";
-import { nextUp } from "./nextUp";
+import { mealDueStatusLabel, nextUp } from "./nextUp";
 import {
   buildNutritionRings,
   isMealLoggedForCount,
@@ -444,18 +444,42 @@ export function DietTab({
                 <Text style={styles.savedText}>Eaten as planned</Text>
               </View>
             ) : (
-              <View style={styles.dueRow}>
-                <Clock size={14} color={colors.indigo} strokeWidth={2.1} />
-                <Text style={styles.dueText}>
-                  {formatClockTime(meal.windowStartsAt, timeZone)} · due now
-                </Text>
+              <View style={styles.dueMetaLine}>
+                <View style={styles.dueRow}>
+                  <Clock size={14} color={colors.indigo} strokeWidth={2.1} />
+                  <Text style={styles.dueText} numberOfLines={1}>
+                    {formatClockTime(meal.windowStartsAt, timeZone)} ·{" "}
+                    {mealDueStatusLabel(meal, timeZone)}
+                  </Text>
+                </View>
+                {canLog ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Something different"
+                    onPress={() =>
+                      onOpenOverlay({
+                        screen: "something_different",
+                        assignmentId: meal.id,
+                      })
+                    }
+                    hitSlop={8}
+                  >
+                    <Text style={styles.mealHdrMetaLinkText} numberOfLines={1}>
+                      Something different
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             )}
           </View>
           {kcal != null ? (
             <Text style={styles.mealKcalRight}>{formatKcal(kcal)}</Text>
           ) : null}
-          <Pressable accessibilityRole="button" style={styles.moreBtn}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+            style={styles.moreBtn}
+          >
             <Ellipsis size={22} color={colors.darkGrey} />
           </Pressable>
         </View>
@@ -472,7 +496,7 @@ export function DietTab({
             </Pressable>
           </View>
         ) : null}
-        {canLog ? (
+        {canLog && !showPhotoPrompt ? (
           <View style={styles.btn2}>
             <Pressable
               accessibilityRole="button"
@@ -1043,14 +1067,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  dueRow: {
+  dueMetaLine: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 4,
+    flexWrap: "nowrap",
+    gap: 8,
+    justifyContent: "space-between",
     marginTop: 2,
+  },
+  dueRow: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    gap: 4,
+    minWidth: 0,
   },
   dueText: {
     color: colors.indigo,
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1111,11 +1146,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  mealHdrMeta: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  mealHdrMetaTime: {
+    color: colors.midGrey,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  mealHdrMetaLink: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  mealHdrMetaLinkText: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
+  },
   eatenBtn: {
     alignItems: "center",
     backgroundColor: colors.indigo,
     borderRadius: 16,
-    flex: 1.08,
+    flex: 1,
     flexDirection: "row",
     gap: 6,
     height: 56,

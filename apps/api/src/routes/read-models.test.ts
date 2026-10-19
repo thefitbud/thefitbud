@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { formatLocalDate } from "@fitbud/core";
 import { app } from "../index.js";
@@ -109,12 +109,16 @@ function collectPercentKeys(value: unknown, keys: Set<string>): void {
   }
 }
 
+const FROZEN_REFERENCE_INSTANT = "2026-10-19T14:30:00.000Z";
+
 describe("read models", () => {
   let db: Db;
   let close: () => void;
   let queryCounter: { count: number; reset: () => void };
 
   beforeEach(async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(FROZEN_REFERENCE_INSTANT));
     const handle = await createMemoryDb();
     db = handle.db;
     queryCounter = handle.queryCounter;
@@ -123,6 +127,7 @@ describe("read models", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     setTestDbOverride(null);
     close();
   });

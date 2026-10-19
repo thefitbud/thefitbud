@@ -17,7 +17,7 @@ import {
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import type { CoachingRelationship, TraineeProfile } from "@fitbud/contracts";
-import { formatCivilDate, whatsappHref } from "@fitbud/core";
+import { formatCivilDate, formatHhMmTime, whatsappHref } from "@fitbud/core";
 import { colors, radii, semanticColors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { useConfig } from "../providers/ConfigProvider";
 import { useAuth } from "../auth/AuthProvider";
@@ -88,7 +88,9 @@ export function MoreScreen({ relationship, onOpenOverlay }: Props) {
     try {
       const prefs = await api.getNotificationPreferences();
       if (prefs.quietHoursStart && prefs.quietHoursEnd) {
-        setQuietHours(`${prefs.quietHoursStart} – ${prefs.quietHoursEnd}`);
+        setQuietHours(
+          `${formatHhMmTime(prefs.quietHoursStart)} — ${formatHhMmTime(prefs.quietHoursEnd)}`,
+        );
       }
       if (prefs.locale) {
         setLocale(prefs.locale === "en-IN" ? "English" : prefs.locale);

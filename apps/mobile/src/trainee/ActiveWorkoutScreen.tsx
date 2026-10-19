@@ -637,14 +637,18 @@ export function ActiveWorkoutScreen({
               </Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Finish workout"
-            onPress={() => finishWorkout()}
-            style={styles.fin}
-          >
-            <Text style={styles.finText}>Finish</Text>
-          </Pressable>
+          {allSetsDone ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Finish workout"
+              onPress={() => finishWorkout()}
+              style={styles.fin}
+            >
+              <Text style={styles.finText}>Finish</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.finPlaceholder} />
+          )}
         </View>
 
         {error ? <ErrorBanner message={error} /> : null}
@@ -1041,6 +1045,10 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "center",
     paddingHorizontal: 14,
+  },
+  finPlaceholder: {
+    height: 44,
+    minWidth: 64,
   },
   finText: {
     color: colors.indigo,

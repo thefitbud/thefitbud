@@ -1,4 +1,5 @@
 import type { EffectivePlanResponse, MealPrescription } from "@fitbud/contracts";
+import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import {
   dayMacrosFromScaledItems,
   formatCivilDate,
@@ -52,6 +53,19 @@ function itemLabel(item: MealPrescription["items"][number]): string {
 function itemPortion(item: MealPrescription["items"][number]): string | null {
   if ("portionLabel" in item && typeof item.portionLabel === "string") {
     return item.portionLabel;
+  }
+  if ("serving" in item && item.serving?.label) {
+    const qty =
+      "snapshotKind" in item && item.snapshotKind === "calculated"
+        ? item.quantityScaled / NUTRIENT_SCALE
+        : 1;
+    const q =
+      Math.abs(qty - 0.5) < 0.01
+        ? "½"
+        : Math.abs(qty - Math.round(qty)) < 0.01
+          ? String(Math.round(qty))
+          : qty.toFixed(2).replace(/\.?0+$/, "");
+    return qty === 1 ? item.serving.label : `${q} ${item.serving.label}`;
   }
   if ("servingLabel" in item && typeof item.servingLabel === "string") {
     return item.servingLabel;

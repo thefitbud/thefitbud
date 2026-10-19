@@ -1,4 +1,11 @@
-import { ActivityIndicator, Pressable, StyleSheet, View, type PressableProps } from "react-native";
+import type { ReactNode } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  View,
+  type PressableProps,
+} from "react-native";
 import { Text } from "./Text";
 import {
   colors,
@@ -23,17 +30,20 @@ type Props = PressableProps & {
   label: string;
   loading?: boolean;
   variant?: ButtonVariant;
+  /** Optional leading icon (e.g. WhatsApp glyph). */
+  icon?: ReactNode;
 };
 
 /**
  * Mobile button hierarchy. Replaces PrimaryButton variants and adds
- * tertiary / destructive / tinted / whatsapp (neutral secondary).
+ * tertiary / destructive / tinted / whatsapp (green outline + icon).
  */
 export function Button({
   label,
   loading = false,
   variant = "primary",
   disabled,
+  icon,
   ...rest
 }: Props) {
   const isDisabled = Boolean(disabled || loading);
@@ -67,6 +77,7 @@ export function Button({
         <ActivityIndicator color={spinnerColor} />
       ) : (
         <View style={styles.row}>
+          {icon}
           <Text
             style={[
               styles.label,
@@ -88,6 +99,8 @@ export function Button({
 
 /** @deprecated Prefer Button — kept for existing call sites during Batch 0. */
 export { Button as PrimaryButton };
+
+const WA_GREEN = "#25D366";
 
 const styles = StyleSheet.create({
   base: {
@@ -113,8 +126,8 @@ const styles = StyleSheet.create({
   },
   whatsapp: {
     backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.lightGrey,
+    borderWidth: 1.5,
+    borderColor: WA_GREEN,
   },
   tinted: {
     backgroundColor: colors.paleLavender,

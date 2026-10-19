@@ -27,7 +27,10 @@ type TimelineStep = {
   state: "done" | "current" | "later";
 };
 
-function timelineFor(relationship: CoachingRelationship): TimelineStep[] {
+function timelineFor(
+  relationship: CoachingRelationship,
+  intakeSubmittedAt: string | null,
+): TimelineStep[] {
   const status = relationship.onboardingStatus;
   const joined = formatCivilDate(relationship.startedAt.slice(0, 10));
   const intakeDone =
@@ -36,12 +39,17 @@ function timelineFor(relationship: CoachingRelationship): TimelineStep[] {
     status === "active";
   const reviewDone = status === "coaching_ready" || status === "active";
   const planReady = status === "active";
+  const intakeDetail = intakeDone
+    ? formatCivilDate(
+        (intakeSubmittedAt ?? relationship.startedAt).slice(0, 10),
+      )
+    : undefined;
 
   return [
     { label: "Joined", detail: joined, state: "done" },
     {
       label: "Intake sent",
-      detail: intakeDone ? joined : undefined,
+      detail: intakeDetail,
       state: intakeDone ? "done" : "later",
     },
     {
@@ -67,7 +75,7 @@ export function WaitingReviewScreen({
 }: {
   relationship: CoachingRelationship;
 }) {
-  const { refreshSession, signOut } = useAuth();
+  const { refreshSession, signOut, api } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
@@ -75,8 +83,30 @@ export function WaitingReviewScreen({
   const coachFull = relationship.trainerDisplayName?.trim() ?? coach;
   const phoneE164 = relationship.trainerWhatsappE164 ?? null;
   const hasNumber = Boolean(phoneE164 && phoneE164.replace(/\D/g, "").length >= 10);
-  const steps = timelineFor(relationship);
-  const greetingName = "there";
+  const [intakeSubmittedAt, setIntakeSubmittedAt] = useState<string | null>(null);
+  const steps = timelineFor(relationship, intakeSubmittedAt);
+  const [greetingName, setGreetingName] = useState("there");
+  useEffect(() => {
+    void api
+      .getTraineeProfile()
+      .then((profile) => {
+        const first = profile.displayName?.trim().split(/\s+/)[0];
+        if (first) setGreetingName(first);
+      })
+      .catch(() => {
+        // keep default
+      });
+  }, [api]);
+  useEffect(() => {
+    void api
+      .getOnboardingResponse(relationship.id)
+      .then((res) => {
+        if (res.submittedAt) setIntakeSubmittedAt(res.submittedAt);
+      })
+      .catch(() => {
+        // keep joined date fallback
+      });
+  }, [api, relationship.id]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -194,6 +224,7 @@ export function WaitingReviewScreen({
       <Button
         label={`Message ${coach} on WhatsApp`}
         variant="whatsapp"
+        icon={<WhatsAppGlyph size={20} />}
         disabled={!hasNumber}
         onPress={() => {
           if (!hasNumber) return;
@@ -201,12 +232,9 @@ export function WaitingReviewScreen({
           void Linking.openURL(whatsappHref({ phoneE164, draftText: text }));
         }}
       />
-      <View style={styles.waNoteRow}>
-        <WhatsAppGlyph size={18} />
-        <Text style={styles.waNote}>
-          Opens WhatsApp with a message ready. You press Send.
-        </Text>
-      </View>
+      <Text style={styles.waNote}>
+        Opens WhatsApp with a message ready. You press Send.
+      </Text>
 
       <Pressable
         accessibilityRole="button"

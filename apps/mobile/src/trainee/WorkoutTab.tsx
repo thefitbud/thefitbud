@@ -96,6 +96,7 @@ export function WorkoutTab({
   relationship,
   effectivePlan = null,
   selectedDate,
+  onSelectDate,
   onOpenOverlay,
   autoStartToday = false,
   onAutoStartConsumed,
@@ -107,6 +108,7 @@ export function WorkoutTab({
   relationship: CoachingRelationship;
   effectivePlan?: EffectivePlanResponse | null;
   selectedDate?: string;
+  onSelectDate?: (localDate: string) => void;
   onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
   autoStartToday?: boolean;
   onAutoStartConsumed?: () => void;
@@ -335,6 +337,7 @@ export function WorkoutTab({
   }, [pendingStartAssignmentId, loading, assignments, onPendingStartConsumed]);
 
   function openDayDetail(assignment: WorkoutAssignment) {
+    onSelectDate?.(assignment.localDate);
     setDayDetailAssignmentId(assignment.id);
   }
 
@@ -777,6 +780,22 @@ export function WorkoutTab({
             <Text style={styles.missbHeadText}>
               {missedLogHeadline(lateLoggable.length)}
             </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss missed workout reminder"
+              onPress={() => {
+                setClosedMissedIds((prev) => {
+                  const next = new Set(prev);
+                  for (const item of lateLoggable) {
+                    next.add(item.id);
+                  }
+                  return next;
+                });
+              }}
+              style={styles.missbClose}
+            >
+              <X size={20} color={colors.midGrey} strokeWidth={2.2} />
+            </Pressable>
           </View>
           {lateLoggable.map((item) => (
             <View key={`late-${item.id}`} style={styles.missbRow}>
@@ -1123,11 +1142,19 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   missbHead: {
+    alignItems: "center",
     flexDirection: "row",
     gap: 10,
     paddingBottom: 6,
     paddingHorizontal: spacing.lg,
     paddingTop: 12,
+  },
+  missbClose: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    marginLeft: "auto",
+    width: 44,
   },
   missbHeadText: {
     color: colors.darkGrey,

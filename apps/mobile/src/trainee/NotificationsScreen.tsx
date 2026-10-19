@@ -82,8 +82,15 @@ function notificationDetail(
   const body = notificationRowBody(notification);
   const short = body.split(".")[0]?.trim() ?? "";
   switch (notification.type) {
-    case "checkin_reviewed":
-      return `${coachFirst} will follow up`;
+    case "checkin_reviewed": {
+      // Match review outcome copy — default Acknowledged (most common Save).
+      const lower = body.toLowerCase();
+      if (lower.includes("follow")) return `${coachFirst} will follow up`;
+      if (lower.includes("updating") || lower.includes("adjust")) {
+        return `${coachFirst} is updating your plan`;
+      }
+      return "Acknowledged";
+    }
     case "trainer_note_shared":
       return "About your check-in";
     case "plan_published":
@@ -97,9 +104,13 @@ function notificationDetail(
   }
 }
 
-function timePrefix(iso: string, today: string): string {
+function timePrefix(iso: string, today: string, now = new Date()): string {
   const day = iso.slice(0, 10);
-  if (day === today) return formatRelativeTime(iso);
+  if (day === today) {
+    const rel = formatRelativeTime(iso, now);
+    // Same calendar day: prefer "Just now" / "N min ago" / "N h ago".
+    return rel;
+  }
   const yesterday = addDays(today, -1);
   if (day === yesterday) return "Yesterday";
   const d = new Date(`${day}T12:00:00`);
@@ -107,7 +118,7 @@ function timePrefix(iso: string, today: string): string {
     d,
   );
   if (day.slice(0, 7) === today.slice(0, 7)) return weekday;
-  return formatRelativeTime(iso);
+  return formatRelativeTime(iso, now);
 }
 
 function iconForType(type: NotificationType): {
