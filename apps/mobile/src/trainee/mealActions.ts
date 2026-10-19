@@ -51,30 +51,35 @@ function afterMealMutation(relationshipId: string) {
 }
 
 export async function confirmMealAssignment(
-  api: FitBudApiClient,
+  _api: FitBudApiClient,
   sync: SyncEngine,
   relationshipId: string,
   assignment: MealAssignment,
   coachName?: string,
 ): Promise<void> {
-  const photoIntent = assignment.photoRequired
-    ? {
-        notedAt: new Date().toISOString(),
-        mediaAssetId: await uploadMealPhoto(api, relationshipId, assignment),
-        contentType: MINIMAL_PNG_CONTENT_TYPE,
-        clientRef: `meal-photo-${assignment.id}`,
-      }
-    : null;
   const { results } = await enqueueAndPush(sync, {
     recordId: assignment.id,
     operation: "meal.confirm",
     payload: {
       assignmentId: assignment.id,
-      body: { photoIntent },
+      body: { photoIntent: null },
     },
   });
   assertSyncOk(results, coachName);
   afterMealMutation(relationshipId);
+}
+
+/** Best-effort meal photo upload after logging (does not block confirm). */
+export async function attachMealPhotoBestEffort(
+  api: FitBudApiClient,
+  relationshipId: string,
+  assignment: MealAssignment,
+): Promise<void> {
+  try {
+    await uploadMealPhoto(api, relationshipId, assignment);
+  } catch {
+    // Photo is optional post-log; ignore upload failures.
+  }
 }
 
 export async function skipMealAssignment(

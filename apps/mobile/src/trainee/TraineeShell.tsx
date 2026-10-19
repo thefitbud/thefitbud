@@ -27,6 +27,10 @@ import {
   type TraineeOverlay,
   type TraineeOverlayOpener,
 } from "../navigation/TraineeOverlay";
+import {
+  routeFromParsedLink,
+  type ParsedDeepLink,
+} from "../navigation/linking";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { CheckinScreen } from "./CheckinScreen";
@@ -82,6 +86,8 @@ export function TraineeShell({
     api,
     pendingNotificationLink,
     clearPendingNotificationLink,
+    pendingDeepLink,
+    clearPendingDeepLink,
   } = useAuth();
   const sync = useSyncEngine();
   const timeZone = me?.timezone ?? "UTC";
@@ -90,6 +96,10 @@ export function TraineeShell({
   const [tab, setTab] = useState<TraineeTab>("today");
   const [selectedDate, setSelectedDate] = useState(today);
   const [workoutAutostart, setWorkoutAutostart] = useState(false);
+  const [pendingWorkoutStartId, setPendingWorkoutStartId] = useState<
+    string | null
+  >(null);
+  const [workoutImmersive, setWorkoutImmersive] = useState(false);
   const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
   const [effectivePlan, setEffectivePlan] =
@@ -104,6 +114,11 @@ export function TraineeShell({
 
   const openOverlay: TraineeOverlayOpener = useCallback((next) => {
     setOverlay(next);
+  }, []);
+
+  const handleStartWorkoutFromOverview = useCallback((assignmentId: string) => {
+    setTab("workout");
+    setPendingWorkoutStartId(assignmentId);
   }, []);
 
   const handleNotificationNavigate = useCallback(
@@ -123,10 +138,34 @@ export function TraineeShell({
       }
       if (route.type === "meal") {
         setTab("diet");
-        setOverlay({
-          screen: "something_different",
-          assignmentId: route.assignmentId,
-        });
+        void (async () => {
+          try {
+            const listed = await api.listMealAssignments(relationship.id, {
+              fromDate: addDays(today, -30),
+              toDate: addDays(today, 7),
+            });
+            const match = listed.items.find(
+              (item) => item.id === route.assignmentId,
+            );
+            if (!match) {
+              setOverlay({
+                screen: "deep_link",
+                reason: "This meal isn't available anymore.",
+              });
+              return;
+            }
+            setSelectedDate(match.localDate);
+            setOverlay({
+              screen: "something_different",
+              assignmentId: match.id,
+            });
+          } catch {
+            setOverlay({
+              screen: "deep_link",
+              reason: "This meal isn't available anymore.",
+            });
+          }
+        })();
         return;
       }
       if (route.type === "checkin") {
@@ -183,7 +222,41 @@ export function TraineeShell({
                 : "today",
       );
     },
-    [api, relationship.id],
+    [api, relationship.id, today],
+  );
+
+  const applyParsedDeepLink = useCallback(
+    (link: ParsedDeepLink) => {
+      const route = routeFromParsedLink(link);
+      const domainEntityType =
+        link.kind === "meal"
+          ? ("meal_assignment" as const)
+          : link.kind === "workout"
+            ? ("workout_assignment" as const)
+            : link.kind === "checkin"
+              ? ("checkin" as const)
+              : ("coaching_relationship" as const);
+      handleNotificationNavigate({
+        tab:
+          route.type === "meal"
+            ? "diet"
+            : route.type === "workout_overview" ||
+                route.type === "workout_active" ||
+                route.type === "workout_summary"
+              ? "workout"
+              : route.type === "reminders"
+                ? "more"
+                : route.type === "tab"
+                  ? route.tab
+                  : "today",
+        domainEntityType,
+        domainEntityId: link.id,
+        route,
+        path: `/go/${link.kind}/${link.id}`,
+        refetchRequired: true,
+      });
+    },
+    [handleNotificationNavigate],
   );
 
   const loadEffectivePlan = useCallback(async () => {
@@ -405,31 +478,23 @@ export function TraineeShell({
 
   useEffect(() => {
     if (!pendingNotificationLink) return;
-    setTab(pendingNotificationLink.tab);
     void refreshSession();
     void loadEffectivePlan();
-    if (pendingNotificationLink.tab === "today") {
-      void (async () => {
-        try {
-          const list = await api.listCheckins(relationship.id);
-          const match = list.items.find(
-            (item) => item.id === pendingNotificationLink.domainEntityId,
-          );
-          if (match) setActiveCheckin(match);
-        } catch {
-          // ignore
-        }
-      })();
-    }
+    handleNotificationNavigate(pendingNotificationLink);
     clearPendingNotificationLink();
   }, [
     pendingNotificationLink,
     clearPendingNotificationLink,
     refreshSession,
     loadEffectivePlan,
-    api,
-    relationship.id,
+    handleNotificationNavigate,
   ]);
+
+  useEffect(() => {
+    if (!pendingDeepLink) return;
+    applyParsedDeepLink(pendingDeepLink);
+    clearPendingDeepLink();
+  }, [pendingDeepLink, applyParsedDeepLink, clearPendingDeepLink]);
 
   const handleCoachingResumed = useCallback(
     (updated: CoachingRelationship) => {
@@ -450,6 +515,7 @@ export function TraineeShell({
         onOpen={openOverlay}
         onSignOut={signOut}
         onCoachingResumed={handleCoachingResumed}
+        onStartWorkout={handleStartWorkoutFromOverview}
       />
     );
   }
@@ -496,7 +562,21 @@ export function TraineeShell({
     );
   }
 
-  if (overlay && overlay.screen !== "something_different") {
+  // Mockups hide the tab bar on immersive flows; notifications keeps it.
+  const sheetOverlay =
+    overlay?.screen === "something_different" ||
+    overlay?.screen === "ask_coach";
+  const keepTabsWithOverlay = overlay?.screen === "notifications";
+  const fullscreenOverlay =
+    overlay != null && !sheetOverlay && !keepTabsWithOverlay;
+  const hideTabBar =
+    Boolean(activeCheckin) ||
+    workoutImmersive ||
+    Boolean(captureWorkout) ||
+    Boolean(captureWorkoutSummary) ||
+    fullscreenOverlay;
+
+  if (fullscreenOverlay && overlay) {
     return (
       <TraineeOverlayHost
         overlay={overlay}
@@ -511,6 +591,7 @@ export function TraineeShell({
         }}
         onNotificationNavigate={handleNotificationNavigate}
         onCoachingResumed={handleCoachingResumed}
+        onStartWorkout={handleStartWorkoutFromOverview}
       />
     );
   }
@@ -526,14 +607,18 @@ export function TraineeShell({
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        <View style={styles.topPad}>
-          <AppTopBar
-            title={topTitle}
-            unreadNotifications={unreadNotifications}
-            onOpenNotifications={() => openOverlay({ screen: "notifications" })}
-            onOpenSync={() => openOverlay({ screen: "sync" })}
-          />
-        </View>
+        {!hideTabBar || keepTabsWithOverlay ? (
+          <View style={styles.topPad}>
+            <AppTopBar
+              title={topTitle}
+              unreadNotifications={unreadNotifications}
+              onOpenNotifications={() =>
+                openOverlay({ screen: "notifications" })
+              }
+              onOpenSync={() => openOverlay({ screen: "sync" })}
+            />
+          </View>
+        ) : null}
 
         {tab === "today" ? (
           <TodayTab
@@ -562,6 +647,9 @@ export function TraineeShell({
             onOpenOverlay={openOverlay}
             autoStartToday={workoutAutostart}
             onAutoStartConsumed={() => setWorkoutAutostart(false)}
+            pendingStartAssignmentId={pendingWorkoutStartId}
+            onPendingStartConsumed={() => setPendingWorkoutStartId(null)}
+            onImmersiveChange={setWorkoutImmersive}
           />
         ) : null}
 
@@ -581,12 +669,12 @@ export function TraineeShell({
         ) : null}
       </View>
 
-      {overlay?.screen === "something_different" ? (
+      {sheetOverlay || keepTabsWithOverlay ? (
         <TraineeOverlayHost
-          overlay={overlay}
+          overlay={overlay!}
           relationship={relationship}
           effectivePlan={effectivePlan}
-          presentation="sheet"
+          presentation={sheetOverlay ? "sheet" : "fullscreen"}
           onClose={() => {
             invalidateRelationshipDayData(relationship.id);
             setOverlay(null);
@@ -599,43 +687,46 @@ export function TraineeShell({
             setTab("today");
           }}
           onNotificationNavigate={handleNotificationNavigate}
+          onStartWorkout={handleStartWorkoutFromOverview}
         />
       ) : null}
 
-      <View accessibilityRole="tablist" style={styles.tabBar}>
-        {TABS.map((item) => {
-          const selected = item.id === tab;
-          const Icon = item.Icon;
-          const tint = selected ? colors.indigo : colors.midGrey;
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="tab"
-              accessibilityLabel={item.label}
-              accessibilityState={{ selected }}
-              onPress={() => setTab(item.id)}
-              style={styles.tab}
-            >
-              <Icon
-                size={22}
-                color={tint}
-                strokeWidth={selected ? 2.25 : 1.75}
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-              />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  selected ? styles.tabLabelSelected : null,
-                ]}
+      {!hideTabBar ? (
+        <View accessibilityRole="tablist" style={styles.tabBar}>
+          {TABS.map((item) => {
+            const selected = item.id === tab;
+            const Icon = item.Icon;
+            const tint = selected ? colors.indigo : colors.midGrey;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected }}
+                onPress={() => setTab(item.id)}
+                style={styles.tab}
               >
-                {item.label}
-              </Text>
-              {selected ? <View style={styles.tabIndicator} /> : null}
-            </Pressable>
-          );
-        })}
-      </View>
+                <Icon
+                  size={22}
+                  color={tint}
+                  strokeWidth={selected ? 2.25 : 1.75}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                />
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    selected ? styles.tabLabelSelected : null,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                {selected ? <View style={styles.tabIndicator} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }

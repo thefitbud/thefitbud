@@ -26,6 +26,7 @@ import {
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
+import { WorkoutOverviewScreen } from "./WorkoutOverviewScreen";
 import {
   cacheKey,
   getCached,
@@ -38,6 +39,7 @@ import { scheduledAssignments } from "./scheduledAssignments";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
 import { estimateDurationMinutesFromDay } from "./workoutDuration";
 import {
+  enrichExecutionFromAssignmentDay,
   openActiveWorkout,
   restSecondsBySetTargetId,
   workoutStartError,
@@ -89,6 +91,9 @@ export function WorkoutTab({
   onOpenOverlay,
   autoStartToday = false,
   onAutoStartConsumed,
+  pendingStartAssignmentId = null,
+  onPendingStartConsumed,
+  onImmersiveChange,
   coachName: coachNameProp,
 }: {
   relationship: CoachingRelationship;
@@ -96,6 +101,10 @@ export function WorkoutTab({
   onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
   autoStartToday?: boolean;
   onAutoStartConsumed?: () => void;
+  pendingStartAssignmentId?: string | null;
+  onPendingStartConsumed?: () => void;
+  /** True while active workout or summary fills the tab (hide shell tab bar). */
+  onImmersiveChange?: (immersive: boolean) => void;
   /** Optional override; defaults to relationship.trainerDisplayName. */
   coachName?: string;
 }) {
@@ -123,6 +132,9 @@ export function WorkoutTab({
     done: number;
     total: number;
   } | null>(null);
+  const [dayDetailAssignmentId, setDayDetailAssignmentId] = useState<
+    string | null
+  >(null);
 
   const coachName =
     coachNameProp?.trim() ||
@@ -279,6 +291,7 @@ export function WorkoutTab({
   }, [assignments, closedMissedIds]);
 
   async function startOrContinue(assignment: WorkoutAssignment) {
+    setDayDetailAssignmentId(null);
     setActingId(assignment.id);
     setError(null);
     try {
@@ -299,6 +312,21 @@ export function WorkoutTab({
     } finally {
       setActingId(null);
     }
+  }
+
+  useEffect(() => {
+    if (!pendingStartAssignmentId || loading) return;
+    const assignment = assignments.find(
+      (item) => item.id === pendingStartAssignmentId,
+    );
+    if (assignment) {
+      void startOrContinue(assignment);
+    }
+    onPendingStartConsumed?.();
+  }, [pendingStartAssignmentId, loading, assignments, onPendingStartConsumed]);
+
+  function openDayDetail(assignment: WorkoutAssignment) {
+    setDayDetailAssignmentId(assignment.id);
   }
 
   async function confirmSkip(reason: string | null) {
@@ -330,6 +358,20 @@ export function WorkoutTab({
     }
   }
 
+  useEffect(() => {
+    onImmersiveChange?.(
+      Boolean(
+        summaryExecution || activeExecution || dayDetailAssignmentId,
+      ),
+    );
+    return () => onImmersiveChange?.(false);
+  }, [
+    summaryExecution,
+    activeExecution,
+    dayDetailAssignmentId,
+    onImmersiveChange,
+  ]);
+
   if (summaryExecution) {
     const alreadyCounted = assignments.some(
       (item) =>
@@ -337,9 +379,16 @@ export function WorkoutTab({
         (item.status === "completed" || item.status === "modified"),
     );
     const summaryWeekCompleted = weekCompleted + (alreadyCounted ? 0 : 1);
+    const sourceAssignment =
+      assignments.find((item) => item.execution?.id === summaryExecution.id) ??
+      activeAssignment;
+    const enriched = enrichExecutionFromAssignmentDay(
+      summaryExecution,
+      sourceAssignment,
+    );
     return (
       <WorkoutSummaryScreen
-        execution={summaryExecution}
+        execution={enriched}
         coachName={coachName}
         weekCompleted={summaryWeekCompleted}
         weekTotal={weekTotal > 0 ? weekTotal : undefined}
@@ -350,6 +399,32 @@ export function WorkoutTab({
           invalidateRelationshipDayData(relationship.id);
           void load();
         }}
+      />
+    );
+  }
+
+  if (dayDetailAssignmentId) {
+    return (
+      <WorkoutOverviewScreen
+        assignmentId={dayDetailAssignmentId}
+        coachName={coachName}
+        startLoading={actingId === dayDetailAssignmentId}
+        onBack={() => setDayDetailAssignmentId(null)}
+        onStart={(assignment) => {
+          void startOrContinue(assignment);
+        }}
+        onAskCoach={
+          onOpenOverlay
+            ? (assignment) =>
+                onOpenOverlay({
+                  screen: "ask_coach",
+                  itemType: "workout_assignment",
+                  itemId: assignment.id,
+                  itemLabel: assignment.workoutDayName,
+                  dateLabel: formatCivilDate(assignment.localDate),
+                })
+            : undefined
+        }
       />
     );
   }
@@ -392,7 +467,6 @@ export function WorkoutTab({
                   itemId: activeAssignment.id,
                   itemLabel: activeAssignment.workoutDayName,
                   dateLabel: formatCivilDate(activeAssignment.localDate),
-                  topic: activeAssignment.workoutDayName,
                 })
             : undefined
         }
@@ -460,8 +534,14 @@ export function WorkoutTab({
             }
           }
           return (
-            <View
+            <Pressable
               key={date}
+              accessibilityRole="button"
+              accessibilityLabel={`${weekdayShort(timeZone, date)} ${caption}`}
+              disabled={!assignment}
+              onPress={() => {
+                if (assignment) openDayDetail(assignment);
+              }}
               style={[styles.weekDay, isToday ? styles.weekDayToday : null]}
             >
               <Text style={styles.weekDow}>
@@ -477,7 +557,7 @@ export function WorkoutTab({
                   {caption}
                 </Text>
               )}
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -542,7 +622,6 @@ export function WorkoutTab({
                             itemId: todayAssignment.id,
                             itemLabel: todayAssignment.workoutDayName,
                             dateLabel: formatCivilDate(todayAssignment.localDate),
-                            topic: todayAssignment.workoutDayName,
                           }),
                       },
                     ]
@@ -569,18 +648,11 @@ export function WorkoutTab({
             </View>
           ))}
 
-          {onOpenOverlay ? (
-            <PrimaryButton
-              label="See workout overview"
-              variant="secondary"
-              onPress={() => {
-                onOpenOverlay({
-                  screen: "workout_overview",
-                  assignmentId: todayAssignment.id,
-                });
-              }}
-            />
-          ) : null}
+          <PrimaryButton
+            label="See workout overview"
+            variant="secondary"
+            onPress={() => openDayDetail(todayAssignment)}
+          />
 
           {todayAssignment.status === "completed" ||
           todayAssignment.status === "modified" ? (
@@ -594,7 +666,12 @@ export function WorkoutTab({
                     const execution = await api.getWorkoutExecution(
                       todayAssignment.execution.id,
                     );
-                    setSummaryExecution(execution);
+                    setSummaryExecution(
+                      enrichExecutionFromAssignmentDay(
+                        execution,
+                        todayAssignment,
+                      ),
+                    );
                   } catch (err) {
                     setError(
                       err instanceof ApiClientError

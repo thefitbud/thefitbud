@@ -17,6 +17,7 @@ import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { TraineeDateNavigator } from "./TraineeDateNavigator";
 import {
+  attachMealPhotoBestEffort,
   confirmMealAssignment,
   MealSyncError,
   skipMealAssignment,
@@ -27,6 +28,7 @@ import {
   mealKcalFromDayTotals,
   mealLockCopy,
 } from "./mealHelpers";
+import { plannedSummaryLine } from "../lib/plannedMealItems";
 import {
   buildNutritionRings,
   isMealLoggedForCount,
@@ -87,6 +89,8 @@ export function DietTab({
     assignmentId: string;
     mealName: string;
   } | null>(null);
+  const [photoPromptId, setPhotoPromptId] = useState<string | null>(null);
+  const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
   const coachName =
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
@@ -155,6 +159,7 @@ export function DietTab({
         coachName,
       );
       invalidateRelationshipDayData(relationship.id);
+      setPhotoPromptId(assignment.id);
       await load();
     } catch (err) {
       setError(
@@ -166,6 +171,16 @@ export function DietTab({
       );
     } finally {
       setActingId(null);
+    }
+  }
+
+  async function addMealPhoto(assignment: MealAssignment) {
+    setPhotoUploadingId(assignment.id);
+    try {
+      await attachMealPhotoBestEffort(api, relationship.id, assignment);
+    } finally {
+      setPhotoUploadingId(null);
+      setPhotoPromptId(null);
     }
   }
 
@@ -263,6 +278,10 @@ export function DietTab({
                 dayTotals?.totals.perMeal,
               );
               const logged = isMealLoggedForCount(meal.status);
+              const showPhotoPrompt =
+                photoPromptId === meal.id &&
+                (meal.status === "confirmed" || meal.status === "logged_later");
+              const itemsLine = plannedSummaryLine(meal);
               return (
                 <View key={meal.id} style={styles.card}>
                   <View style={styles.cardHeader}>
@@ -280,30 +299,41 @@ export function DietTab({
                       tone={lockCopy ? "neutral" : statusTone(meal.status)}
                     />
                   </View>
-                  {meal.photoRequired && !lockCopy ? (
+                  {itemsLine ? (
+                    <Text style={styles.itemsLine}>{itemsLine}</Text>
+                  ) : null}
+                  {meal.photoRequired && !lockCopy && !showPhotoPrompt ? (
                     <Text style={styles.photoChip}>📷 Photo requested</Text>
                   ) : null}
                   {lockCopy ? (
                     <Text style={styles.lockCopy}>{lockCopy}</Text>
                   ) : canLog ? (
                     <View style={styles.actions}>
-                      <PrimaryButton
-                        label="Eaten as planned"
-                        loading={actingId === meal.id}
-                        onPress={() => {
-                          void confirmMeal(meal);
-                        }}
-                      />
-                      <PrimaryButton
-                        label="Something different"
-                        variant="secondary"
-                        onPress={() =>
-                          onOpenOverlay({
-                            screen: "something_different",
-                            assignmentId: meal.id,
-                          })
-                        }
-                      />
+                      <View style={styles.btnRow}>
+                        <View style={styles.btnHalf}>
+                          <PrimaryButton
+                            label="Eaten as planned"
+                            loading={actingId === meal.id}
+                            onPress={() => {
+                              void confirmMeal(meal);
+                            }}
+                            style={styles.mealActionBtn}
+                          />
+                        </View>
+                        <View style={styles.btnHalf}>
+                          <PrimaryButton
+                            label="Something different"
+                            variant="secondary"
+                            onPress={() =>
+                              onOpenOverlay({
+                                screen: "something_different",
+                                assignmentId: meal.id,
+                              })
+                            }
+                            style={styles.mealActionBtn}
+                          />
+                        </View>
+                      </View>
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Skip this meal"
@@ -329,6 +359,39 @@ export function DietTab({
                     >
                       <Text style={styles.changeLink}>Change</Text>
                     </Pressable>
+                  ) : null}
+                  {showPhotoPrompt ? (
+                    <View style={styles.photoPrompt}>
+                      <Text style={styles.photoPromptTitle}>
+                        Add a photo for {coachName.split(/\s+/)[0]}?
+                      </Text>
+                      <Text style={styles.photoPromptBody}>
+                        Your log is saved. A photo is optional and can follow
+                        later.
+                      </Text>
+                      <View style={styles.btnRow}>
+                        <View style={styles.btnHalf}>
+                          <PrimaryButton
+                            label="Camera"
+                            variant="secondary"
+                            loading={photoUploadingId === meal.id}
+                            onPress={() => {
+                              void addMealPhoto(meal);
+                            }}
+                          />
+                        </View>
+                        <View style={styles.btnHalf}>
+                          <PrimaryButton
+                            label="Gallery"
+                            variant="secondary"
+                            loading={photoUploadingId === meal.id}
+                            onPress={() => {
+                              void addMealPhoto(meal);
+                            }}
+                          />
+                        </View>
+                      </View>
+                    </View>
                   ) : null}
                 </View>
               );
@@ -421,9 +484,41 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  itemsLine: {
+    color: colors.darkGrey,
+    fontSize: 15,
+    lineHeight: 22,
+  },
   actions: {
     gap: spacing.sm,
     marginTop: spacing.sm,
+  },
+  btnRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  btnHalf: {
+    flex: 1,
+  },
+  mealActionBtn: {
+    minHeight: 56,
+  },
+  photoPrompt: {
+    backgroundColor: colors.paleLavender,
+    borderRadius: radii.card,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+  },
+  photoPromptTitle: {
+    color: colors.deepNavy,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  photoPromptBody: {
+    color: colors.midGrey,
+    fontSize: 14,
+    lineHeight: 20,
   },
   skipHit: {
     alignItems: "center",

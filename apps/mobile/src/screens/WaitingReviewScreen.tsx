@@ -1,4 +1,5 @@
 import type { CoachingRelationship } from "@fitbud/contracts";
+import { whatsappHref } from "@fitbud/core";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
@@ -30,6 +31,12 @@ function checklistFor(relationship: CoachingRelationship) {
   ];
 }
 
+function coachFirstName(relationship: CoachingRelationship): string {
+  const raw = relationship.trainerDisplayName?.trim();
+  if (!raw) return "your coach";
+  return raw.split(/\s+/)[0] ?? raw;
+}
+
 export function WaitingReviewScreen({
   relationship,
 }: {
@@ -40,9 +47,9 @@ export function WaitingReviewScreen({
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const steps = checklistFor(relationship);
-  // Demo coach is Rahul; until a trainee-facing coach name API exists, use the
-  // product copy from TR-04 (Rahul) for submitted intakes in the demo seed.
-  const coach = "Rahul";
+  const coach = coachFirstName(relationship);
+  const phoneE164 = relationship.trainerWhatsappE164 ?? null;
+  const hasNumber = Boolean(phoneE164 && phoneE164.replace(/\D/g, "").length >= 10);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -115,14 +122,21 @@ export function WaitingReviewScreen({
       <PrimaryButton
         label={`Message ${coach}`}
         variant="whatsapp"
+        disabled={!hasNumber}
         onPress={() => {
-          const text = encodeURIComponent(
-            `Hi ${coach}, I've filled my FitBud intake and I'm ready when you are.`,
-          );
+          if (!hasNumber) return;
+          const text = `Hi ${coach}, I've filled my FitBud intake and I'm ready when you are.`;
           // Prefill only — never auto-send (product rule).
-          void Linking.openURL(`https://wa.me/919876543210?text=${text}`);
+          void Linking.openURL(
+            whatsappHref({ phoneE164, draftText: text }),
+          );
         }}
       />
+      {!hasNumber ? (
+        <Text style={styles.noNumber}>
+          {coach}'s WhatsApp number isn't on file yet.
+        </Text>
+      ) : null}
 
       <Pressable
         accessibilityRole="button"
@@ -185,6 +199,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     marginBottom: spacing.md,
+  },
+  noNumber: {
+    color: colors.midGrey,
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: spacing.sm,
   },
   signOut: {
     alignItems: "center",

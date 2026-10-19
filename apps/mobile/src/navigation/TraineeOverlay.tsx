@@ -73,6 +73,7 @@ type Props = {
   onGoToday?: () => void;
   onNotificationNavigate?: (link: NotificationDeepLink) => void;
   onCoachingResumed?: (relationship: CoachingRelationship) => void;
+  onStartWorkout?: (assignmentId: string) => void;
 };
 
 export function TraineeOverlayHost({
@@ -86,6 +87,7 @@ export function TraineeOverlayHost({
   onGoToday,
   onNotificationNavigate,
   onCoachingResumed,
+  onStartWorkout,
 }: Props) {
   const goToday = onGoToday ?? onClose;
   const { api, me } = useAuth();
@@ -191,16 +193,12 @@ export function TraineeOverlayHost({
       }
       if (presentation === "sheet") {
         return (
-          <BottomSheet
-            visible
-            title="What did you have instead?"
-            subtitle={`${mealAssignment.mealName} · log what you actually ate`}
-            onDismiss={onClose}
-          >
+          <BottomSheet visible headerless onDismiss={onClose}>
             <SomethingDifferentSheet
               variant="sheet"
               assignment={mealAssignment}
               relationshipId={relationship.id}
+              coachName={coachName}
               onDone={onClose}
               onCancel={onClose}
               onOpenFoodSearch={() => onOpen({ screen: "food_search" })}
@@ -234,7 +232,16 @@ export function TraineeOverlayHost({
       return (
         <WorkoutOverviewScreen
           assignmentId={overlay.assignmentId}
+          coachName={coachName}
           onBack={onClose}
+          onStart={
+            onStartWorkout
+              ? (assignment) => {
+                  onClose();
+                  onStartWorkout(assignment.id);
+                }
+              : undefined
+          }
           onAskCoach={(assignment) =>
             onOpen({
               screen: "ask_coach",

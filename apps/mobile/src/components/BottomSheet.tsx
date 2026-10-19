@@ -8,8 +8,10 @@ const SHEET_RADIUS = radii.card;
 
 type Props = {
   visible: boolean;
-  title: string;
+  title?: string;
   subtitle?: string;
+  /** When true, only the grab handle and children are shown (child owns the title). */
+  headerless?: boolean;
   onDismiss: () => void;
   children: ReactNode;
 };
@@ -18,6 +20,7 @@ export function BottomSheet({
   visible,
   title,
   subtitle,
+  headerless = false,
   onDismiss,
   children,
 }: Props) {
@@ -41,8 +44,12 @@ export function BottomSheet({
         />
         <View style={[styles.sheet, !isWeb ? styles.sheetNative : null]}>
           <View style={styles.handle} accessibilityElementsHidden />
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          {!headerless && title ? (
+            <Text style={styles.title}>{title}</Text>
+          ) : null}
+          {!headerless && subtitle ? (
+            <Text style={styles.subtitle}>{subtitle}</Text>
+          ) : null}
           <ScrollView
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}

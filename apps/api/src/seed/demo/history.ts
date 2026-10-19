@@ -579,6 +579,28 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(ROHAN_RESOLVED_EXCEPTION_ID)}, ${sqlQuote(rohanRel)}, 'missed_workout', 'attention', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -10)))}, 'Missed workout', ${sqlQuote(rohanResolvedDetected)}, ${sqlQuote(rohanResolvedAt)}, 'talked', ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
+  // Unlogged past meal with resolved exception → Diet shows "Closed by …".
+  const rohanLockedMealId = demoUuid(
+    "meal-assignment",
+    "rohan.slipping@demo.fitbud.test",
+    addDaysFromLocalDate(refDate, -3),
+    MEAL_PRESCRIPTION_IDS.lunch,
+  );
+  const rohanLockedMealExceptionId = demoUuid(
+    "exception",
+    "rohan-resolved-meal",
+  );
+  const rohanLockedDetected = new Date(
+    Date.parse(now) - 3 * 86_400_000 - 5 * 3_600_000,
+  ).toISOString();
+  const rohanLockedResolved = new Date(
+    Date.parse(now) - 2 * 86_400_000,
+  ).toISOString();
+  lines.push(
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(rohanLockedMealId)};`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(rohanLockedMealExceptionId)}, ${sqlQuote(rohanRel)}, 'overdue_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(rohanLockedMealId)}, 'Missed lunch', ${sqlQuote(rohanLockedDetected)}, ${sqlQuote(rohanLockedResolved)}, 'talked', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+  );
+
   const meeraRel = relId("rahul.coach@demo.fitbud.test", "meera.ack@demo.fitbud.test");
   const ackMealId = demoUuid("meal-assignment", "meera.ack@demo.fitbud.test", addDaysFromLocalDate(refDate, -2), MEAL_PRESCRIPTION_IDS.lunch);
   const ackExceptionId = MEERA_ACK_EXCEPTION_ID;

@@ -19,14 +19,41 @@ import { Screen } from "../../components/Screen";
 
 type CoachAskItemType = CreateCoachAskRequest["itemType"];
 
-const TOPICS = [
+const MEAL_TOPICS = [
   "Swap a food",
   "Portion size",
+  "Can't do this today",
+  "Other",
+] as const;
+
+const WORKOUT_TOPICS = [
   "Form check",
   "Pain or discomfort",
   "Can't do this today",
   "Other",
 ] as const;
+
+const CHECKIN_TOPICS = [
+  "Pain or discomfort",
+  "Other",
+] as const;
+
+function topicsForItemType(itemType: CoachAskItemType): readonly string[] {
+  switch (itemType) {
+    case "meal_assignment":
+    case "plan_version":
+      return MEAL_TOPICS;
+    case "workout_assignment":
+    case "exercise_execution":
+      return WORKOUT_TOPICS;
+    case "checkin":
+      return CHECKIN_TOPICS;
+    default: {
+      const _exhaustive: never = itemType;
+      return _exhaustive;
+    }
+  }
+}
 
 type Props = {
   relationship?: CoachingRelationship;
@@ -94,7 +121,13 @@ export function AskCoachSheet({
   const phoneE164 =
     phone ?? relationship?.trainerWhatsappE164 ?? null;
 
-  const [topic, setTopic] = useState<string>(initialTopic ?? TOPICS[0]);
+  const topics = useMemo(() => topicsForItemType(itemType), [itemType]);
+  const defaultTopic = topics[0] ?? "Other";
+  const initialAllowed =
+    initialTopic && topics.some((t) => t.toLowerCase() === initialTopic.toLowerCase())
+      ? topics.find((t) => t.toLowerCase() === initialTopic!.toLowerCase())!
+      : defaultTopic;
+  const [topic, setTopic] = useState<string>(initialAllowed);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
@@ -105,11 +138,16 @@ export function AskCoachSheet({
 
   const preview = useMemo(() => {
     const link = askCoachGoLink(goKindForItem(itemType), itemId);
+    // Avoid "Upper body … : upper body" when a caller passed the item name as topic.
+    const topicText =
+      topic.trim().toLowerCase() === itemLabel.trim().toLowerCase()
+        ? "a question"
+        : topic.toLowerCase();
     return buildAskCoachMessage({
       coachName: coachShort,
       itemLabel,
       date: dateLabel,
-      topic: topic.toLowerCase(),
+      topic: topicText,
       link,
     });
   }, [coachShort, dateLabel, itemId, itemLabel, itemType, topic]);
@@ -171,7 +209,7 @@ export function AskCoachSheet({
           Topic
         </Text>
         <View style={styles.chips}>
-          {TOPICS.map((option) => {
+          {topics.map((option) => {
             const selected = topic === option;
             return (
               <Pressable

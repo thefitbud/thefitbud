@@ -320,6 +320,9 @@ export function CheckinScreen({
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftInFlight = useRef<Promise<void> | null>(null);
+  const recordVersionRef = useRef(recordVersion);
+  recordVersionRef.current = recordVersion;
   const valuesRef = useRef(values);
   valuesRef.current = values;
 
@@ -458,35 +461,59 @@ export function CheckinScreen({
 
   const saveDraft = useCallback(async () => {
     if (!form || !canEditCheckin(checkin.status)) return;
-    try {
-      const answers = answersToPayload(fields, valuesRef.current);
-      const { results } = await enqueueAndPush(sync, {
-        recordId: checkin.id,
-        operation: "checkin.save_draft",
-        expectedServerVersion: recordVersion,
-        payload: {
-          checkinId: checkin.id,
-          body: {
-            expectedVersion: recordVersion,
-            answers,
+    const expected = recordVersionRef.current;
+    const run = (async () => {
+      try {
+        const answers = answersToPayload(fields, valuesRef.current);
+        const { results } = await enqueueAndPush(sync, {
+          recordId: checkin.id,
+          operation: "checkin.save_draft",
+          expectedServerVersion: expected,
+          payload: {
+            checkinId: checkin.id,
+            body: {
+              expectedVersion: expected,
+              answers,
+            },
           },
-        },
-      });
-      const syncMsg = messageFromSyncResults(results, coach);
-      if (syncMsg) {
-        setError(syncMsg);
-        return;
+        });
+        const syncMsg = messageFromSyncResults(results, coach);
+        if (syncMsg) {
+          // Stale etag after overlapping saves — refetch authoritative version.
+          if (
+            results.some(
+              (item) => item.error?.code === "CHECKIN_VERSION_CONFLICT",
+            )
+          ) {
+            try {
+              const fresh = await api.getCheckin(checkin.id);
+              recordVersionRef.current = fresh.recordVersion;
+              setRecordVersion(fresh.recordVersion);
+            } catch {
+              // keep local version
+            }
+          }
+          setError(syncMsg);
+          return;
+        }
+        const result =
+          results.find((item) => item.recordId === checkin.id) ?? results[0];
+        if (result?.serverVersion != null) {
+          recordVersionRef.current = result.serverVersion;
+          setRecordVersion(result.serverVersion);
+        }
+        setOffline(false);
+      } catch {
+        setOffline(true);
       }
-      const result =
-        results.find((item) => item.recordId === checkin.id) ?? results[0];
-      if (result?.serverVersion != null) {
-        setRecordVersion(result.serverVersion);
-      }
-      setOffline(false);
-    } catch {
-      setOffline(true);
+    })();
+    draftInFlight.current = run;
+    try {
+      await run;
+    } finally {
+      if (draftInFlight.current === run) draftInFlight.current = null;
     }
-  }, [checkin.id, checkin.status, coach, fields, form, recordVersion, sync]);
+  }, [api, checkin.id, checkin.status, coach, fields, form, sync]);
 
   function scheduleDraftSave() {
     if (draftTimer.current) clearTimeout(draftTimer.current);
@@ -506,6 +533,17 @@ export function CheckinScreen({
     setActing(true);
     setError(null);
     try {
+      // Cancel debounce and wait for any in-flight draft so submit uses the
+      // latest server recordVersion (avoids CHECKIN_VERSION_CONFLICT).
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current);
+        draftTimer.current = null;
+      }
+      if (draftInFlight.current) {
+        await draftInFlight.current;
+      }
+      await saveDraft();
+      const expected = recordVersionRef.current;
       const answers = answersToPayload(fields, values);
       const wellbeing =
         answers.wellbeing ??
@@ -514,11 +552,11 @@ export function CheckinScreen({
       const { results } = await enqueueAndPush(sync, {
         recordId: checkin.id,
         operation: "checkin.submit",
-        expectedServerVersion: recordVersion,
+        expectedServerVersion: expected,
         payload: {
           checkinId: checkin.id,
           body: {
-            expectedVersion: recordVersion,
+            expectedVersion: expected,
             answers: {
               wellbeing,
               notes: answers.notes ?? null,
@@ -536,6 +574,7 @@ export function CheckinScreen({
       const result =
         results.find((item) => item.recordId === checkin.id) ?? results[0];
       if (result?.serverVersion != null) {
+        recordVersionRef.current = result.serverVersion;
         setRecordVersion(result.serverVersion);
       }
       setStep("done");
