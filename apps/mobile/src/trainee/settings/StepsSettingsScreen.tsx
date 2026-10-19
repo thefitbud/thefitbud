@@ -1,105 +1,50 @@
-import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { ink } from "@fitbud/tokens";
 import { Text } from "../../components/Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
-import type { StepsSettingsResponse } from "@fitbud/contracts";
-import { useConfig } from "../../providers/ConfigProvider";
-import { isStepsEnabled } from "../../lib/config";
-import { useAuth } from "../../auth/AuthProvider";
-import { getMeSteps } from "../../lib/meStepsApi";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
+import { M2Note, M2Page } from "./m2";
 
 type Props = {
   onBack: () => void;
 };
 
+/** Steps stay behind the product flag. The screen never prints the flag name. */
 export function StepsSettingsScreen({ onBack }: Props) {
-  const { config } = useConfig();
-  const { accessToken } = useAuth();
-  const stepsFlag = isStepsEnabled(config);
-  const [settings, setSettings] = useState<StepsSettingsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    if (!accessToken) return;
-    setLoading(true);
-    try {
-      const value = await getMeSteps(accessToken);
-      setSettings(value);
-    } catch {
-      setSettings({ enabled: false, dailyGoal: null, source: null });
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (!stepsFlag || (!loading && settings && !settings.enabled)) {
-    return (
-      <Screen title="Steps" subtitle="Optional on-device step count.">
-        <View style={styles.stack}>
-          <Text style={styles.body}>
-            Step counting isn&apos;t enabled for this app build yet. The server
-            returns steps as disabled while <Text style={styles.mono}>steps_enabled</Text> is
-            off.
-          </Text>
-          <Text style={styles.muted}>
-            When enabled, steps stay on your phone only — they&apos;re never sent
-            to FitBud or shared with your coach.
-          </Text>
-          <PrimaryButton label="Back" variant="ghost" onPress={onBack} />
-        </View>
-      </Screen>
-    );
-  }
-
   return (
-    <Screen
+    <M2Page
       title="Steps"
-      subtitle="Connect Health Connect or Apple Health to see today's steps on Today."
+      subtitle="See your steps on Today"
+      onBack={onBack}
     >
-      <View style={styles.stack}>
-        {loading ? (
-          <Text style={styles.muted}>Loading…</Text>
-        ) : (
-          <>
-            <Text style={styles.body}>
-              Steps are for your eyes only. FitBud does not upload them or show
-              them to your trainer.
-            </Text>
-            <Text style={styles.body}>
-              Daily goal: {settings?.dailyGoal ?? "Not set"}
-            </Text>
-            <Text style={styles.muted}>
-              Source: {settings?.source ?? "Not connected"}
-            </Text>
-          </>
-        )}
-        <PrimaryButton label="Back" variant="ghost" onPress={onBack} />
+      <View style={styles.chipWrap}>
+        <Text style={styles.chip}>Coming soon</Text>
       </View>
-    </Screen>
+      <M2Note>
+        FitBud will read your step count from Health Connect or Apple Health.
+        Steps stay on your phone and aren't shared with your coach.
+      </M2Note>
+      <Text style={styles.body}>
+        Step counting isn't available in this version yet. Today's card stays
+        hidden until it is.
+      </Text>
+    </M2Page>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.md,
+  chipWrap: { alignItems: "flex-start" },
+  chip: {
+    backgroundColor: "#EEF0FF",
+    borderRadius: 999,
+    color: "#3D4BD8",
+    fontSize: 13,
+    fontWeight: "600",
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   body: {
-    color: colors.darkGrey,
+    color: ink[700],
     fontSize: 15,
     lineHeight: 22,
-  },
-  muted: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  mono: {
-    fontFamily: "monospace",
   },
 });

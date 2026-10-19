@@ -18,6 +18,7 @@ import {
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
   reminderRulesResponseSchema,
+  reminderStatusSchema,
   removeDeviceTokenRequestSchema,
   updateNotificationPreferencesRequestSchema,
   updateReminderRulesRequestSchema,
@@ -29,6 +30,7 @@ import {
   deviceTokens,
   notificationPreferences,
   reminderRules,
+  reminderStates,
   users,
 } from "../db/schema";
 import {
@@ -49,6 +51,7 @@ import {
   markNotificationRead,
   type ReminderQueue,
 } from "../domain/reminders";
+import { deriveReminderStatus } from "../domain/reminder-status.js";
 import { createId, nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
@@ -307,6 +310,107 @@ notificationRoutes.get(
         mapNotificationPreferences(row, userRow?.timezone ?? null),
       ),
     );
+  },
+);
+
+async function readReminderStatus(db: Db, userId: string) {
+  const now = nowIso();
+  const [state] = await db
+    .select()
+    .from(reminderStates)
+    .where(eq(reminderStates.traineeUserId, userId))
+    .limit(1);
+  const tokens = await db
+    .select({ status: deviceTokens.status })
+    .from(deviceTokens)
+    .where(eq(deviceTokens.userId, userId));
+  const rels = await db
+    .select()
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.traineeUserId, userId));
+  const rel =
+    rels.find((row) => row.status === "active") ??
+    rels.find((row) => row.status === "ended") ??
+    rels[0];
+  const rules = rel
+    ? await db
+        .select({
+          reminderType: reminderRules.reminderType,
+          enabled: reminderRules.enabled,
+        })
+        .from(reminderRules)
+        .where(eq(reminderRules.coachingRelationshipId, rel.id))
+    : [];
+  return reminderStatusSchema.parse(
+    deriveReminderStatus({
+      mode: state?.mode ?? "normal",
+      pausedUntil: state?.pausedUntil ?? null,
+      nowIso: now,
+      tokens,
+      rules,
+    }),
+  );
+}
+
+notificationRoutes.get(
+  "/reminder-status",
+  operation({
+    tag: "Notifications",
+    summary: "Trainee reminder status",
+    description:
+      "Pause, phone delivery, and trainer-disabled categories for the signed-in trainee.",
+    roles: ["trainee"],
+    response: reminderStatusSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    return ok(c, await readReminderStatus(db, actor.userId));
+  },
+);
+
+notificationRoutes.post(
+  "/reminder-status/resume",
+  operation({
+    tag: "Notifications",
+    summary: "Turn paused reminders back on",
+    description: "Clears a trainee reminder pause immediately.",
+    roles: ["trainee"],
+    response: reminderStatusSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const now = nowIso();
+    const [existing] = await db
+      .select()
+      .from(reminderStates)
+      .where(eq(reminderStates.traineeUserId, actor.userId))
+      .limit(1);
+    if (existing) {
+      await db
+        .update(reminderStates)
+        .set({
+          mode: "normal",
+          pausedUntil: null,
+          consecutiveIgnores: 0,
+          updatedAt: now,
+        })
+        .where(eq(reminderStates.traineeUserId, actor.userId));
+    }
+    return ok(c, await readReminderStatus(db, actor.userId));
   },
 );
 

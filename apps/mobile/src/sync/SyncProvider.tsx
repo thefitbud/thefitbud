@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useAuth } from "../auth/AuthProvider";
+import { createBrowserDurableSyncStore } from "./durableStore";
 import {
   createMemorySyncStore,
   createSyncEngine,
@@ -8,8 +9,8 @@ import {
 
 const SyncContext = createContext<SyncEngine | null>(null);
 
-/** Process-wide memory store so UI + tests share offline state in JS runtime. */
-const sharedStore = createMemorySyncStore();
+/** Process-wide store. Web persists to localStorage; tests stay in memory. */
+const sharedStore = createBrowserDurableSyncStore() ?? createMemorySyncStore();
 
 export function SyncProvider({ children }: { children: ReactNode }) {
   const { api } = useAuth();

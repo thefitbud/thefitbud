@@ -24,6 +24,7 @@ import {
   linkKindSchema,
   linkResolveResponseSchema,
   mealTimesResponseSchema,
+  reminderStatusSchema,
   meDayResponseSchema,
   patchTrainerNoteRequestSchema,
   planVersionDiffResponseSchema,
@@ -291,6 +292,21 @@ proto.listMeCoachNotes = async function listMeCoachNotes(
   return this.request("GET", `/me/coach-notes${suffix}`, coachNotesListSchema, {
     auth: true,
   });
+};
+
+proto.getReminderStatus = async function getReminderStatus() {
+  return this.request("GET", "/notifications/reminder-status", reminderStatusSchema, {
+    auth: true,
+  });
+};
+
+proto.resumeReminders = async function resumeReminders() {
+  return this.request(
+    "POST",
+    "/notifications/reminder-status/resume",
+    reminderStatusSchema,
+    { auth: true },
+  );
 };
 
 proto.getMealTimes = async function getMealTimes() {

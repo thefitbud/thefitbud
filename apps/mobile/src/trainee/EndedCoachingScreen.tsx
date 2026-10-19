@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import type { CoachingRelationship, PendingReactivation } from "@fitbud/contracts";
 import { Text } from "../components/Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -34,6 +34,8 @@ export function EndedCoachingScreen({
   );
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState("");
+  const [joining, setJoining] = useState(false);
 
   const refreshPending = useCallback(async () => {
     setLoading(true);
@@ -58,8 +60,10 @@ export function EndedCoachingScreen({
     void refreshPending();
   }, [relationship.id, relationship.pendingReactivation, refreshPending]);
 
+  const expired =
+    pending != null && new Date(pending.expiresAt).getTime() < Date.now();
   const showReactivationCard =
-    !cardDismissed && pending != null && !loading;
+    !cardDismissed && pending != null && !loading && !expired;
 
   const handleConfirm = async () => {
     setConfirming(true);
@@ -92,6 +96,12 @@ export function EndedCoachingScreen({
         />
 
         {error ? <ErrorBanner message={error} /> : null}
+
+        {expired ? (
+          <Text style={styles.body}>
+            This request has expired. Ask {trainerLabel} to send a new one.
+          </Text>
+        ) : null}
 
         {showReactivationCard ? (
           <View style={styles.reactivationCard}>
@@ -136,6 +146,43 @@ export function EndedCoachingScreen({
           and check-ins. If the same coach restarts with you, your workspace
           can be restored.
         </Text>
+        <Text style={styles.body}>
+          Got an invite from a new coach? Open the link, or enter a code.
+        </Text>
+        <TextInput
+          accessibilityLabel="Invite code"
+          value={inviteCode}
+          onChangeText={setInviteCode}
+          autoCapitalize="none"
+          placeholder="Invite code"
+          style={styles.code}
+        />
+        <PrimaryButton
+          label="Use this code"
+          loading={joining}
+          variant="secondary"
+          onPress={() => {
+            const token = inviteCode.trim();
+            if (!token) {
+              setError("Enter the code from your new coach.");
+              return;
+            }
+            setJoining(true);
+            setError(null);
+            void api
+              .acceptInvitation({
+                token,
+                timezone:
+                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+              })
+              .then(() => {
+                setError(null);
+                setInviteCode("");
+              })
+              .catch((err) => setError(messageFromError(err)))
+              .finally(() => setJoining(false));
+          }}
+        />
         <PrimaryButton label="Past coaching" onPress={onOpenHistory} />
         <PrimaryButton label="Sign out" variant="ghost" onPress={onSignOut} />
       </View>
@@ -154,7 +201,7 @@ const styles = StyleSheet.create({
   },
   reactivationCard: {
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: radii.card,
     gap: spacing.md,
     padding: spacing.lg,
   },
@@ -168,6 +215,16 @@ const styles = StyleSheet.create({
     color: colors.indigo,
     fontSize: 15,
     fontWeight: "500",
+    minHeight: 44,
     textAlign: "center",
+  },
+  code: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    fontSize: 16,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
   },
 });

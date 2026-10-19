@@ -30,6 +30,7 @@ import { ProfileScreen } from "../trainee/settings/ProfileScreen";
 import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
 import { ReminderSettingsScreen } from "../trainee/settings/ReminderSettingsScreen";
 import { StepsSettingsScreen } from "../trainee/settings/StepsSettingsScreen";
+import { LanguageScreen } from "../trainee/settings/LanguageScreen";
 import { SyncStatusScreen } from "../trainee/settings/SyncStatusScreen";
 
 export type TraineeOverlay =
@@ -58,7 +59,8 @@ export type TraineeOverlay =
   | { screen: "past_coaching" }
   | { screen: "widget_tips" }
   | { screen: "privacy" }
-  | { screen: "password" };
+  | { screen: "password" }
+  | { screen: "language" };
 
 export type TraineeOverlayOpener = (overlay: TraineeOverlay) => void;
 
@@ -158,9 +160,11 @@ export function TraineeOverlayHost({
     case "quiet_hours":
       return <QuietHoursScreen onBack={onClose} />;
     case "meal_times":
-      return <MealTimesScreen onBack={onClose} />;
+      return <MealTimesScreen onBack={onClose} coachName={coachName} />;
     case "sync":
-      return <SyncStatusScreen onBack={onClose} />;
+      return <SyncStatusScreen onBack={onClose} coachName={coachName} />;
+    case "language":
+      return <LanguageScreen onBack={onClose} />;
     case "steps_settings":
       return <StepsSettingsScreen onBack={onClose} />;
     case "food_search":

@@ -14,7 +14,7 @@ type Props = {
 };
 
 export function PasswordScreen({ onBack }: Props) {
-  const { api } = useAuth();
+  const { api, me } = useAuth();
   const s1 = stage1Api(api);
   const [identifier, setIdentifier] = useState("");
   const [code, setCode] = useState("");
@@ -92,6 +92,10 @@ export function PasswordScreen({ onBack }: Props) {
         </View>
       ) : (
         <View style={styles.stack}>
+          <Text style={styles.body}>
+            Signed in as {me?.email ?? "your account"}. Ask your coach to update
+            these.
+          </Text>
           {step === "request" ? (
             <>
               <Field

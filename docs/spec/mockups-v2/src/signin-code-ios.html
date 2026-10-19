@@ -1,0 +1,19 @@
+<!doctype html><html lang="en-IN"><head><meta charset="utf-8"><title>FitBud · Sign in with a code (iOS)</title><link rel="stylesheet" href="tokens.css">{{> signin-style}}<style>.auth-hero{height:250px;padding-top:110px}.sheet{top:190px}</style></head>
+<body><div class="phone ios m">
+  <div class="auth-hero"><div class="lg"><img src="assets/mark-white.svg" alt=""><b>FitBud</b></div></div>
+  <span class="back" aria-label="Back"><ic n="chevron-left"></ic></span>
+  {{sb-ios:7:24}}
+  <div class="sheet">
+    <h1>Sign in with a code</h1>
+    <p class="lead">We'll send you a 6-digit code.</p>
+    <div class="mfield"><label>Mobile number or email</label><div class="minput"><ic n="mail"></ic>aarav.shah@gmail.com</div></div>
+    <div class="mfield" style="margin-top:20px"><label style="margin-bottom:0">Send code to</label>
+      <div class="opt sel" role="radio" aria-checked="true"><span class="radio"></span><div class="ot"><b>Email</b><span>To the email on your account</span></div><span class="oi"><ic n="mail"></ic></span></div>
+      <div class="opt dis" role="radio" aria-checked="false" aria-disabled="true"><span class="radio"></span><div class="ot"><b>WhatsApp <span class="chip neu" style="height:22px;font-size:12px"><ic n="hourglass"></ic>Coming soon</span></b><span>Codes on WhatsApp are coming soon. For now we'll email your code; check spam if you don't see it.</span></div><span class="oi"><wa></wa></span></div>
+    </div>
+    <button class="mbtn primary xl block" style="margin-top:20px">Send code</button>
+    <div class="center" style="margin-top:6px"><button class="mbtn text">Use password instead</button></div>
+    <div class="needhelp" style="bottom:40px"><a href="mailto:tech@thefitbud.com">Need help?</a></div>
+  </div>
+  <div class="home-ind" data-chrome></div>
+</div><script>document.querySelector('.sb').classList.add('light')</script></body></html>

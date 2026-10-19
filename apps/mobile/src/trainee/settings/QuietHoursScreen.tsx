@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
-import { Text } from "../../components/Text";
+import { StyleSheet, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import { colors, spacing } from "@fitbud/ui-mobile";
-import { useAuth } from "../../auth/AuthProvider";
+import { brand, ink } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { Text } from "../../components/Text";
 import { ErrorBanner } from "../../components/ErrorBanner";
-import { PrimaryButton } from "../../components/PrimaryButton";
 import { QuietHoursPreviewBar } from "../../components/QuietHoursPreviewBar";
-import { Screen } from "../../components/Screen";
+import { useAuth } from "../../auth/AuthProvider";
+import { clockLabel, shiftQuarterHour, validateQuietHours } from "./clock";
+import { M2Button, M2Note, M2Page } from "./m2";
 
 type Props = {
   onBack: () => void;
 };
 
-const PRESETS: Array<{ label: string; start: string; end: string }> = [
-  { label: "Night 10 pm–7 am", start: "22:00", end: "07:00" },
-  { label: "Late night 11 pm–6 am", start: "23:00", end: "06:00" },
+const PRESETS: Array<{ id: string; label: string; start: string; end: string }> = [
+  { id: "night", label: "Night 10 pm–7 am", start: "22:00", end: "07:00" },
+  { id: "late", label: "Late night 11 pm–6 am", start: "23:00", end: "06:00" },
 ];
 
 export function QuietHoursScreen({ onBack }: Props) {
@@ -23,15 +24,26 @@ export function QuietHoursScreen({ onBack }: Props) {
   const [start, setStart] = useState("22:00");
   const [end, setEnd] = useState("07:00");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [custom, setCustom] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    setError(null);
+    setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
     try {
       const prefs = await api.getNotificationPreferences();
       setStart(prefs.quietHoursStart ?? "22:00");
       setEnd(prefs.quietHoursEnd ?? "07:00");
+      const match = PRESETS.some(
+        (preset) =>
+          preset.start === (prefs.quietHoursStart ?? "22:00") &&
+          preset.end === (prefs.quietHoursEnd ?? "07:00"),
+      );
+      setCustom(!match);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -40,6 +52,7 @@ export function QuietHoursScreen({ onBack }: Props) {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [api]);
 
@@ -47,7 +60,13 @@ export function QuietHoursScreen({ onBack }: Props) {
     void load();
   }, [load]);
 
+  const validation = validateQuietHours(start, end);
+
   async function save() {
+    if (validation) {
+      setError(validation);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -55,96 +74,163 @@ export function QuietHoursScreen({ onBack }: Props) {
         quietHoursStart: start,
         quietHoursEnd: end,
       });
-      onBack();
+      setToast("Saved");
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not save times.",
-      );
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setOffline(true);
+        setToast("Saved on this phone. We'll sync it when you're back online.");
+      } else {
+        setError(
+          err instanceof ApiClientError ? err.message : "Could not save times.",
+        );
+      }
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Screen
+    <M2Page
       title="Quiet hours"
-      subtitle="We won't send push reminders during these hours (your local time)."
+      subtitle="No notifications during these hours."
+      onBack={onBack}
+      refreshing={refreshing}
+      onRefresh={() => {
+        setRefreshing(true);
+        void load();
+      }}
+      footer={
+        <M2Button
+          label={saving ? "Saving…" : "Save"}
+          disabled={saving || loading}
+          onPress={() => {
+            void save();
+          }}
+        />
+      }
     >
       {error ? <ErrorBanner message={error} /> : null}
+      {offline ? (
+        <Text style={styles.muted}>You're offline. Pull to try again.</Text>
+      ) : null}
       {loading ? (
-        <Text style={styles.muted}>Loading…</Text>
+        <Text accessibilityLabel="Loading quiet hours" style={styles.muted}>
+          Loading…
+        </Text>
       ) : (
-        <View style={styles.stack}>
-          <Text style={styles.explain}>
+        <>
+          <M2Note>
             No notifications during these hours. Reminders that would fall here
-            are skipped, not saved for later. Your coach can&apos;t override
-            this. FitBud never sends reminders after 10 pm even if your quiet
-            hours start later.
-          </Text>
+            are skipped, not saved for later. Your coach can't override this.
+          </M2Note>
           <QuietHoursPreviewBar quietStart={start} quietEnd={end} />
-          {PRESETS.map((preset) => (
-            <PrimaryButton
-              key={preset.label}
-              label={preset.label}
-              variant="secondary"
-              onPress={() => {
-                setStart(preset.start);
-                setEnd(preset.end);
+          <View style={styles.presets}>
+            {PRESETS.map((preset) => {
+              const on = !custom && start === preset.start && end === preset.end;
+              return (
+                <M2Button
+                  key={preset.id}
+                  label={preset.label}
+                  variant={on ? "primary" : "secondary"}
+                  onPress={() => {
+                    setCustom(false);
+                    setStart(preset.start);
+                    setEnd(preset.end);
+                    setError(null);
+                  }}
+                />
+              );
+            })}
+            <M2Button
+              label="Custom"
+              variant={custom ? "primary" : "secondary"}
+              onPress={() => setCustom(true)}
+            />
+          </View>
+          <View style={styles.pickers}>
+            <TimeStepper
+              label="From"
+              value={start}
+              onChange={(next) => {
+                setCustom(true);
+                setStart(next);
               }}
             />
-          ))}
-          <Text style={styles.label}>From</Text>
-          <TextInput
-            accessibilityLabel="Quiet hours start"
-            value={start}
-            onChangeText={setStart}
-            placeholder="22:00"
-            placeholderTextColor={colors.midGrey}
-            style={styles.input}
-          />
-          <Text style={styles.label}>To</Text>
-          <TextInput
-            accessibilityLabel="Quiet hours end"
-            value={end}
-            onChangeText={setEnd}
-            placeholder="07:00"
-            placeholderTextColor={colors.midGrey}
-            style={styles.input}
-          />
-          <PrimaryButton label="Save" loading={saving} onPress={() => void save()} />
-          <PrimaryButton label="Cancel" variant="ghost" onPress={onBack} />
-        </View>
+            <TimeStepper
+              label="To"
+              value={end}
+              onChange={(next) => {
+                setCustom(true);
+                setEnd(next);
+              }}
+            />
+          </View>
+          {validation ? <Text style={styles.warn}>{validation}</Text> : null}
+          <Text style={styles.rule}>FitBud never sends reminders after 10 pm.</Text>
+          {toast ? (
+            <Text accessibilityLiveRegion="polite" style={styles.toast}>
+              {toast}
+            </Text>
+          ) : null}
+        </>
       )}
-    </Screen>
+    </M2Page>
+  );
+}
+
+function TimeStepper({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <View style={styles.step}>
+      <Text style={styles.stepLabel}>{label}</Text>
+      <Text style={styles.clock}>{clockLabel(value)}</Text>
+      <View style={styles.row}>
+        <M2Button
+          label="Earlier"
+          variant="secondary"
+          onPress={() => onChange(shiftQuarterHour(value, -15))}
+        />
+        <M2Button
+          label="Later"
+          variant="secondary"
+          onPress={() => onChange(shiftQuarterHour(value, 15))}
+        />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.md,
-  },
-  muted: {
-    color: colors.midGrey,
-    fontSize: 15,
-  },
-  explain: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  label: {
-    color: colors.deepNavy,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  input: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: 12,
+  muted: { color: ink[500], fontSize: 15 },
+  presets: { gap: 8 },
+  pickers: { gap: 12 },
+  step: {
+    backgroundColor: "#fff",
+    borderColor: "#E7E9F2",
+    borderRadius: 20,
     borderWidth: 1,
-    color: colors.nearBlack,
-    fontSize: 16,
-    minHeight: 48,
-    paddingHorizontal: spacing.md,
+    gap: 8,
+    padding: 14,
   },
+  stepLabel: {
+    color: ink[500],
+    fontFamily: fontFamilySemiBold,
+    fontSize: 13,
+  },
+  clock: {
+    color: brand.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 28,
+  },
+  row: { flexDirection: "row", gap: 8 },
+  warn: { color: "#9A3412", fontSize: 14, lineHeight: 20 },
+  rule: { color: ink[700], fontSize: 14, lineHeight: 20 },
+  toast: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 14 },
 });

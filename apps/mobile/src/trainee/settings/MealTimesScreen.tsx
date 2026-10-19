@@ -1,45 +1,65 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
-import { Text } from "../../components/Text";
+import { StyleSheet, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import { colors, spacing } from "@fitbud/ui-mobile";
-import { stage1Api } from "../../lib/stage1Api";
-import { useAuth } from "../../auth/AuthProvider";
+import { brand, ink } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { Text } from "../../components/Text";
 import { ErrorBanner } from "../../components/ErrorBanner";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
+import { useAuth } from "../../auth/AuthProvider";
+import { stage1Api } from "../../lib/stage1Api";
+import {
+  clockLabel,
+  mealReminderClock,
+  shiftQuarterHour,
+  validateMealTimes,
+} from "./clock";
+import { M2Button, M2Note, M2Page } from "./m2";
 
 type Props = {
   onBack: () => void;
+  coachName?: string;
 };
 
-export function MealTimesScreen({ onBack }: Props) {
+type Pattern = "all" | "weekdays" | "weekends";
+
+type MealTimeSlot = {
+  slotKey: string;
+  label: string;
+  planTime: string;
+  overrideTime?: string | null;
+  dayPattern?: Pattern | null;
+};
+
+export function MealTimesScreen({ onBack, coachName = "Your coach" }: Props) {
   const { api } = useAuth();
   const s1 = stage1Api(api);
-  const [slots, setSlots] = useState<
-    Array<{
-      slotKey: string;
-      label: string;
-      planTime: string;
-      overrideTime?: string | null;
-    }>
-  >([]);
+  const first = coachName.split(/\s+/)[0] || "Your coach";
+  const [slots, setSlots] = useState<MealTimeSlot[]>([]);
   const [times, setTimes] = useState<Record<string, string>>({});
+  const [patterns, setPatterns] = useState<Record<string, Pattern>>({});
+  const [review, setReview] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
+    setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
     try {
       const response = await s1.getMealTimes();
       setSlots(response.slots);
-      const map: Record<string, string> = {};
+      setReview(Boolean(response.mealTimesNeedReview));
+      const nextTimes: Record<string, string> = {};
+      const nextPatterns: Record<string, Pattern> = {};
       for (const slot of response.slots) {
-        map[slot.slotKey] = slot.overrideTime ?? slot.planTime;
+        nextTimes[slot.slotKey] = slot.overrideTime ?? slot.planTime;
+        nextPatterns[slot.slotKey] = slot.dayPattern ?? "all";
       }
-      setTimes(map);
+      setTimes(nextTimes);
+      setPatterns(nextPatterns);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -48,6 +68,7 @@ export function MealTimesScreen({ onBack }: Props) {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [s1]);
 
@@ -55,93 +76,193 @@ export function MealTimesScreen({ onBack }: Props) {
     void load();
   }, [load]);
 
+  const validation = validateMealTimes(
+    slots.map((slot) => ({
+      label: slot.label,
+      time: times[slot.slotKey] ?? slot.planTime,
+    })),
+  );
+
   async function save() {
+    if (validation) {
+      setError(validation);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await s1.updateMealTimes({
+      const response = await s1.updateMealTimes({
         overrides: slots.map((slot) => ({
           slotKey: slot.slotKey,
-          dayPattern: "*",
+          dayPattern: patterns[slot.slotKey] ?? "all",
           time: times[slot.slotKey] ?? slot.planTime,
         })),
       });
-      onBack();
+      setSlots(response.slots);
+      setToast(`Meal times updated. ${first} has been told.`);
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not save times.",
-      );
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setOffline(true);
+        setToast("Saved on this phone. We'll sync it when you're back online.");
+      } else {
+        setError(
+          err instanceof ApiClientError ? err.message : "Could not save times.",
+        );
+      }
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <Screen
-      title="Meal times"
-      subtitle="Reminders follow these times. Your coach sees when you change them."
+    <M2Page
+      title="Your meal times"
+      subtitle={`Reminders follow these times. ${first} will see that you changed them.`}
+      onBack={onBack}
+      refreshing={refreshing}
+      onRefresh={() => {
+        setRefreshing(true);
+        void load();
+      }}
+      footer={
+        slots.length > 0 ? (
+          <M2Button
+            label={saving ? "Saving…" : "Save"}
+            disabled={saving || loading}
+            onPress={() => {
+              void save();
+            }}
+          />
+        ) : undefined
+      }
     >
       {error ? <ErrorBanner message={error} /> : null}
+      {offline ? (
+        <Text style={styles.muted}>You're offline. Pull to try again.</Text>
+      ) : null}
       {loading ? (
-        <Text style={styles.muted}>Loading…</Text>
+        <Text accessibilityLabel="Loading meal times" style={styles.muted}>
+          Loading…
+        </Text>
       ) : slots.length === 0 ? (
         <Text style={styles.muted}>No meal slots on your plan yet.</Text>
       ) : (
         <View style={styles.stack}>
-          {slots.map((slot) => (
-            <View key={slot.slotKey} style={styles.row}>
-              <Text style={styles.label}>{slot.label}</Text>
-              <TextInput
-                accessibilityLabel={`${slot.label} time`}
-                value={times[slot.slotKey] ?? ""}
-                onChangeText={(value) =>
-                  setTimes((prev) => ({ ...prev, [slot.slotKey]: value }))
-                }
-                placeholder={slot.planTime}
-                placeholderTextColor={colors.midGrey}
-                style={styles.input}
-              />
-              <Text style={styles.planHint}>Plan default {slot.planTime}</Text>
-            </View>
-          ))}
-          <PrimaryButton label="Save" loading={saving} onPress={() => void save()} />
-          <PrimaryButton label="Cancel" variant="ghost" onPress={onBack} />
+          {review ? (
+            <M2Note>Your plan changed. Check your meal times.</M2Note>
+          ) : null}
+          {validation ? <Text style={styles.warn}>{validation}</Text> : null}
+          {toast ? (
+            <Text accessibilityLiveRegion="polite" style={styles.toast}>
+              {toast}
+            </Text>
+          ) : null}
+          {slots.map((slot) => {
+            const time = times[slot.slotKey] ?? slot.planTime;
+            const changed = time !== slot.planTime;
+            const pattern = patterns[slot.slotKey] ?? "all";
+            return (
+              <View key={slot.slotKey} style={styles.card}>
+                <Text style={styles.label}>{slot.label}</Text>
+                <Text style={styles.clock}>{clockLabel(time)}</Text>
+                {changed ? (
+                  <Text style={styles.plan}>plan {clockLabel(slot.planTime)}</Text>
+                ) : null}
+                <Text style={styles.reminder}>
+                  Reminder about {clockLabel(mealReminderClock(time) ?? time)}
+                </Text>
+                <View style={styles.row}>
+                  <M2Button
+                    label="Earlier"
+                    variant="secondary"
+                    onPress={() =>
+                      setTimes((prev) => ({
+                        ...prev,
+                        [slot.slotKey]: shiftQuarterHour(time, -15, {
+                          min: "05:00",
+                          max: "22:00",
+                        }),
+                      }))
+                    }
+                  />
+                  <M2Button
+                    label="Later"
+                    variant="secondary"
+                    onPress={() =>
+                      setTimes((prev) => ({
+                        ...prev,
+                        [slot.slotKey]: shiftQuarterHour(time, 15, {
+                          min: "05:00",
+                          max: "22:00",
+                        }),
+                      }))
+                    }
+                  />
+                </View>
+                <View style={styles.patterns}>
+                  {(
+                    [
+                      ["all", "Every day"],
+                      ["weekdays", "Weekdays"],
+                      ["weekends", "Weekends"],
+                    ] as const
+                  ).map(([id, name]) => (
+                    <M2Button
+                      key={id}
+                      label={name}
+                      variant={pattern === id ? "primary" : "secondary"}
+                      onPress={() =>
+                        setPatterns((prev) => ({ ...prev, [slot.slotKey]: id }))
+                      }
+                    />
+                  ))}
+                </View>
+                {changed ? (
+                  <M2Button
+                    label="Reset to plan"
+                    variant="secondary"
+                    onPress={() =>
+                      setTimes((prev) => ({
+                        ...prev,
+                        [slot.slotKey]: slot.planTime,
+                      }))
+                    }
+                  />
+                ) : null}
+              </View>
+            );
+          })}
         </View>
       )}
-    </Screen>
+    </M2Page>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.lg,
-  },
-  muted: {
-    color: colors.midGrey,
-    fontSize: 15,
-  },
-  row: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    gap: spacing.sm,
-    padding: spacing.lg,
+  stack: { gap: 12 },
+  muted: { color: ink[500], fontSize: 15 },
+  card: {
+    backgroundColor: "#fff",
+    borderColor: "#E7E9F2",
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+    padding: 14,
   },
   label: {
-    color: colors.deepNavy,
+    color: ink[900],
+    fontFamily: fontFamilySemiBold,
     fontSize: 16,
-    fontWeight: "600",
   },
-  input: {
-    borderColor: colors.lightGrey,
-    borderRadius: 10,
-    borderWidth: 1,
-    color: colors.nearBlack,
-    fontSize: 16,
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
+  clock: {
+    color: brand.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 28,
   },
-  planHint: {
-    color: colors.midGrey,
-    fontSize: 12,
-  },
+  plan: { color: ink[500], fontSize: 13 },
+  reminder: { color: ink[500], fontSize: 14 },
+  row: { flexDirection: "row", gap: 8 },
+  patterns: { gap: 8 },
+  warn: { color: "#9A3412", fontSize: 14, lineHeight: 20 },
+  toast: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 14 },
 });

@@ -526,14 +526,16 @@ export function TraineeShell({
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        <View style={styles.topPad}>
-          <AppTopBar
-            title={topTitle}
-            unreadNotifications={unreadNotifications}
-            onOpenNotifications={() => openOverlay({ screen: "notifications" })}
-            onOpenSync={() => openOverlay({ screen: "sync" })}
-          />
-        </View>
+        {tab === "more" ? null : (
+          <View style={styles.topPad}>
+            <AppTopBar
+              title={topTitle}
+              unreadNotifications={unreadNotifications}
+              onOpenNotifications={() => openOverlay({ screen: "notifications" })}
+              onOpenSync={() => openOverlay({ screen: "sync" })}
+            />
+          </View>
+        )}
 
         {tab === "today" ? (
           <TodayTab

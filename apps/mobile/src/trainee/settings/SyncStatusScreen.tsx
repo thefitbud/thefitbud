@@ -1,235 +1,241 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { brand, ink, semantic } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
-import type { OutboxEntry } from "../../sync/engine";
+import { BottomSheet } from "../../components/BottomSheet";
+import { ErrorBanner } from "../../components/ErrorBanner";
+import { useAuth } from "../../auth/AuthProvider";
+import { useConfig } from "../../providers/ConfigProvider";
+import {
+  buildSupportMailto,
+  DEFAULT_SUPPORT_EMAIL,
+} from "../../lib/support";
+import { Linking } from "react-native";
 import { useSyncEngine } from "../../sync/SyncProvider";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
+import {
+  conflictCopy,
+  describeOutboxEntry,
+  lastSyncedLabel,
+} from "../../sync/outboxCopy";
+import type { OutboxEntry } from "../../sync/engine";
+import { M2Button, M2Group, M2Note, M2Page, M2Row } from "./m2";
 
 type Props = {
   onBack: () => void;
+  coachName?: string;
 };
 
-type RowState = "queued" | "syncing" | "synced" | "failed";
-
-function mapOutboxStatus(status: OutboxEntry["status"]): RowState {
-  if (status === "in_flight") return "syncing";
-  if (status === "pending") return "queued";
-  if (status === "acked") return "synced";
-  return "failed";
-}
-
-function stateLabel(state: RowState): string {
-  switch (state) {
-    case "queued":
-      return "Queued";
-    case "syncing":
-      return "Syncing";
-    case "synced":
-      return "Synced";
-    case "failed":
-      return "Failed";
-  }
-}
-
-export function SyncStatusScreen({ onBack }: Props) {
+export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
   const sync = useSyncEngine();
+  const { me } = useAuth();
+  const { config } = useConfig();
+  const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
+  const first = coachName.split(/\s+/)[0] || "your coach";
   const [rows, setRows] = useState<OutboxEntry[]>([]);
-  const [syncing, setSyncing] = useState(false);
-  const [lastError, setLastError] = useState<string | null>(null);
+  const [syncedAt, setSyncedAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [diagOpen, setDiagOpen] = useState(false);
 
-  const refresh = useCallback(async () => {
-    const all = await sync.store.listOutbox();
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-    const active = all.filter(
-      (row) =>
-        row.status === "pending" ||
-        row.status === "in_flight" ||
-        row.status === "rejected" ||
-        row.status === "conflicted",
-    );
-    const recentSynced = all
-      .filter((row) => row.status === "acked")
-      .filter(
-        (row) => now - new Date(row.updatedAt).getTime() < dayMs,
-      )
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .slice(0, 10);
-    setRows(
-      [...active, ...recentSynced].sort((a, b) =>
-        b.updatedAt.localeCompare(a.updatedAt),
-      ),
-    );
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const [outbox, meta] = await Promise.all([
+        sync.store.listOutbox(),
+        sync.store.getMeta(),
+      ]);
+      setRows(outbox);
+      setSyncedAt(meta.lastSyncedAt);
+    } catch {
+      setError("Could not load sync status.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [sync]);
 
   useEffect(() => {
-    void refresh();
-    const timer = setInterval(() => {
-      void refresh();
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    void load();
+  }, [load]);
 
-  const queued = rows.filter((row) => mapOutboxStatus(row.status) === "queued");
-  const inFlight = rows.filter(
-    (row) => mapOutboxStatus(row.status) === "syncing",
+  const waiting = rows.filter(
+    (row) => row.status === "pending" || row.status === "in_flight",
   );
-  const synced = rows.filter((row) => mapOutboxStatus(row.status) === "synced");
-  const failed = rows.filter((row) => mapOutboxStatus(row.status) === "failed");
+  const failed = rows.filter(
+    (row) => row.status === "rejected" || row.status === "conflicted",
+  );
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
 
-  async function retrySync() {
-    setSyncing(true);
-    setLastError(null);
+  async function syncNow() {
+    setBusy(true);
+    setError(null);
     try {
       await sync.runCycle();
-      await refresh();
-    } catch (err) {
-      setLastError(err instanceof Error ? err.message : "Sync failed.");
+    } catch {
+      setError(
+        offline
+          ? "You're offline. Your logs stay on this phone."
+          : "Could not sync just now.",
+      );
     } finally {
-      setSyncing(false);
+      setBusy(false);
+      await load();
     }
   }
 
+  async function retry(row: OutboxEntry) {
+    await sync.store.updateOutboxStatus(row.mutationId, "pending", null);
+    await syncNow();
+  }
+
+  const deviceHint = me?.userId
+    ? `Device ${me.userId.slice(0, 8)}`
+    : "This phone";
+
   return (
-    <Screen
+    <M2Page
       title="Sync status"
-      subtitle="Logs save on your phone first, then upload when you're online."
+      subtitle={`Your logs are saved on this phone and sent to ${first} when you're online.`}
+      onBack={onBack}
+      refreshing={refreshing}
+      onRefresh={() => {
+        setRefreshing(true);
+        void load();
+      }}
     >
-      <View style={styles.stack}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            {queued.length + inFlight.length === 0 && failed.length === 0
-              ? synced.length > 0
-                ? "Recently synced"
-                : "All caught up"
-              : `${queued.length} queued · ${inFlight.length} syncing`}
-          </Text>
-          <Text style={styles.body}>
-            {failed.length > 0
-              ? `${failed.length} item(s) need attention. Tap retry after you are back online.`
-              : "Your recent logs are safe on this device until they upload."}
-          </Text>
+      {error ? <ErrorBanner message={error} /> : null}
+      {offline ? (
+        <Text style={styles.muted}>You're offline. Nothing is lost.</Text>
+      ) : null}
+      {loading ? (
+        <Text accessibilityLabel="Loading sync status" style={styles.muted}>
+          Loading…
+        </Text>
+      ) : null}
+      <Text style={styles.synced}>{lastSyncedLabel(syncedAt)}</Text>
+
+      <Text style={styles.section}>
+        Waiting to send ({waiting.length})
+      </Text>
+      {waiting.length === 0 ? (
+        <Text style={styles.muted}>Nothing waiting.</Text>
+      ) : (
+        <M2Group>
+          {waiting.map((row) => (
+            <M2Row
+              key={row.mutationId}
+              label={describeOutboxEntry(row)}
+              showChevron={false}
+            />
+          ))}
+        </M2Group>
+      )}
+
+      <Text style={styles.section}>Couldn't send ({failed.length})</Text>
+      {failed.length === 0 ? (
+        <Text style={styles.muted}>Nothing failed.</Text>
+      ) : (
+        <View style={styles.stack}>
+          {failed.map((row) => (
+            <View key={row.mutationId} style={styles.fail}>
+              <Text style={styles.failTitle}>{describeOutboxEntry(row)}</Text>
+              <Text style={styles.failWhy}>{conflictCopy(row.lastError)}</Text>
+              <M2Button
+                label="Retry"
+                variant="secondary"
+                onPress={() => {
+                  void retry(row);
+                }}
+              />
+            </View>
+          ))}
         </View>
+      )}
 
-        {rows.length > 0 ? (
-          <View style={styles.list}>
-            <Text style={styles.listTitle}>Offline queue</Text>
-            {rows.map((row) => {
-              const state = mapOutboxStatus(row.status);
-              return (
-                <View key={row.mutationId} style={styles.row}>
-                  <View style={styles.rowHeader}>
-                    <Text style={styles.rowOp}>{row.operation}</Text>
-                    <Text
-                      style={[
-                        styles.state,
-                        state === "failed" ? styles.stateFailed : null,
-                        state === "syncing" ? styles.stateSyncing : null,
-                      ]}
-                    >
-                      {stateLabel(state)}
-                    </Text>
-                  </View>
-                  <Text style={styles.rowMeta}>
-                    {row.recordId.slice(0, 8)}… ·{" "}
-                    {new Date(row.updatedAt).toLocaleString("en-IN")}
-                  </Text>
-                  {row.lastError ? (
-                    <Text style={styles.rowError}>{row.lastError}</Text>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
+      <M2Button
+        label={busy ? "Syncing…" : "Sync now"}
+        disabled={busy}
+        onPress={() => {
+          void syncNow();
+        }}
+      />
 
-        {lastError ? (
-          <Text style={styles.error}>Sync problem: {lastError}</Text>
-        ) : null}
-        <PrimaryButton
-          label="Retry sync now"
-          loading={syncing}
-          onPress={() => {
-            void retrySync();
-          }}
-        />
-        <PrimaryButton label="Done" variant="ghost" onPress={onBack} />
-      </View>
-    </Screen>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Diagnostics"
+        onPress={() => setDiagOpen((open) => !open)}
+        style={styles.linkHit}
+      >
+        <Text style={styles.link}>
+          {diagOpen ? "Hide diagnostics" : "Diagnostics"}
+        </Text>
+      </Pressable>
+      {diagOpen ? (
+        <M2Note>
+          {`FitBud mobile · ${deviceHint}. Email support includes this screen.`}
+        </M2Note>
+      ) : null}
+      <M2Button
+        label="Email support"
+        variant="secondary"
+        onPress={() => {
+          const url = buildSupportMailto({
+            supportEmail,
+            screenId: "TR-19",
+            role: "trainee",
+            extra: `Last synced: ${syncedAt ?? "never"}\nWaiting: ${waiting.length}\nCouldn't send: ${failed.length}`,
+          });
+          void Linking.canOpenURL(url).then(async (can) => {
+            if (can) {
+              await Linking.openURL(url);
+              return;
+            }
+            setHelpOpen(true);
+          });
+        }}
+      />
+
+      <BottomSheet
+        visible={helpOpen}
+        title="Email support"
+        subtitle="Copy this address if mail didn't open."
+        onDismiss={() => setHelpOpen(false)}
+      >
+        <Text style={styles.mail}>{supportEmail}</Text>
+      </BottomSheet>
+    </M2Page>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.md,
+  muted: { color: ink[500], fontSize: 15 },
+  synced: {
+    color: brand.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
   },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    gap: spacing.sm,
-    padding: spacing.lg,
-  },
-  cardTitle: {
-    color: colors.deepNavy,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  body: {
-    color: colors.midGrey,
+  section: {
+    color: ink[700],
+    fontFamily: fontFamilySemiBold,
     fontSize: 14,
-    lineHeight: 20,
+    marginTop: 4,
   },
-  list: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    gap: spacing.sm,
-    padding: spacing.lg,
+  stack: { gap: 8 },
+  fail: {
+    backgroundColor: "#fff",
+    borderColor: "#E7E9F2",
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+    padding: 14,
   },
-  listTitle: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  row: {
-    borderTopColor: colors.lightGrey,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
-    paddingTop: spacing.sm,
-  },
-  rowHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  rowOp: {
-    color: colors.deepNavy,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  state: {
-    color: colors.indigo,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  stateSyncing: {
-    color: colors.midGrey,
-  },
-  stateFailed: {
-    color: colors.warning,
-  },
-  rowMeta: {
-    color: colors.midGrey,
-    fontSize: 12,
-  },
-  rowError: {
-    color: colors.warning,
-    fontSize: 12,
-  },
-  error: {
-    color: colors.warning,
-    fontSize: 14,
-  },
+  failTitle: { color: ink[900], fontSize: 15, lineHeight: 21 },
+  failWhy: { color: semantic.critical.text, fontSize: 14, lineHeight: 20 },
+  linkHit: { justifyContent: "center", minHeight: 44 },
+  link: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 16 },
+  mail: { color: brand.deepNavy, fontSize: 16 },
 });

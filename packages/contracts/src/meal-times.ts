@@ -5,6 +5,8 @@ export const mealTimeSlotSchema = z.object({
   label: z.string(),
   planTime: z.string(),
   overrideTime: z.string().nullable().optional(),
+  /** all, weekdays, or weekends when an override exists. */
+  dayPattern: z.enum(["all", "weekdays", "weekends"]).nullable().optional(),
 });
 export const mealTimesResponseSchema = z.object({
   slots: z.array(mealTimeSlotSchema),

@@ -19,6 +19,7 @@ import type {
   TraineeFoodDetail,
   TraineeFoodSearchResponse,
   Notification,
+  ReminderStatus,
   UpdateMealTimesRequest,
   WeekReadModel,
 } from "@fitbud/contracts";
@@ -45,6 +46,7 @@ type MealTimesResponse = {
     label: string;
     planTime: string;
     overrideTime?: string | null;
+    dayPattern?: "all" | "weekdays" | "weekends" | null;
   }>;
   mealTimesNeedReview?: boolean;
 };
@@ -70,6 +72,8 @@ export type Stage1FitBudClient = FitBudApiClient & {
   getMeWeek(start?: string): Promise<WeekReadModel>;
   getMealTimes(): Promise<MealTimesResponse>;
   updateMealTimes(body: UpdateMealTimesRequest): Promise<MealTimesResponse>;
+  getReminderStatus(): Promise<ReminderStatus>;
+  resumeReminders(): Promise<ReminderStatus>;
   getInvitationPreview(token: string): Promise<{
     trainerDisplayName: string;
     status: "pending" | "accepted" | "expired" | "revoked";

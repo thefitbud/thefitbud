@@ -1,12 +1,11 @@
 import { StyleSheet, View } from "react-native";
+import { formatCivilDate, formatLocalDate } from "@fitbud/core";
 import { Text } from "../components/Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, radii, spacing } from "@fitbud/ui-mobile";
 
 function formatEndedDate(iso: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(iso));
+  const local = formatLocalDate(new Date(iso), "Asia/Kolkata");
+  return formatCivilDate(local);
 }
 
 export function coachingEndedBannerText(
@@ -39,7 +38,7 @@ export function CoachingEndedBanner({
 const styles = StyleSheet.create({
   banner: {
     backgroundColor: colors.paleLavender,
-    borderRadius: 12,
+    borderRadius: radii.card,
     padding: spacing.md,
   },
   text: {

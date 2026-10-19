@@ -6,10 +6,10 @@ import {
   coachingRelationships,
   mealAssignments,
   mealCompliance,
-  mealTimeOverrides,
   users,
 } from "../db/schema.js";
 import { storeInboxNotification } from "./inbox-notify.js";
+import { listMergedMealTimeSlots } from "./meal-time-slots.js";
 
 const TRAINER_MEAL_TIMES_MERGE_MS = 15 * 60 * 1000;
 
@@ -63,14 +63,11 @@ export async function recomputeMealAssignmentTimes(
   const timeZone = trainee?.timezone ?? "UTC";
   const today = formatLocalDate(new Date(input.now), timeZone);
 
-  const overrides = await db
-    .select()
-    .from(mealTimeOverrides)
-    .where(eq(mealTimeOverrides.relationshipId, input.relationshipId));
-  const overrideBySlot = new Map(
-    overrides.map((row) => [row.slotKey, row.time]),
+  const merged = await listMergedMealTimeSlots(db, input.relationshipId);
+  const timeBySlot = new Map(
+    merged.slots.map((slot) => [slot.slotKey, slot.overrideTime ?? slot.planTime]),
   );
-  if (overrideBySlot.size === 0) return 0;
+  if (timeBySlot.size === 0) return 0;
 
   const assignments = await db
     .select()
@@ -94,7 +91,7 @@ export async function recomputeMealAssignmentTimes(
     if (hasCompliance[0]) continue;
 
     const slotKey = slotKeyForPrescription(assignment.mealPrescriptionJson);
-    const overrideTime = slotKey ? overrideBySlot.get(slotKey) : undefined;
+    const overrideTime = slotKey ? timeBySlot.get(slotKey) : undefined;
     if (!overrideTime) continue;
 
     const parsed = mealPrescriptionSchema.safeParse(

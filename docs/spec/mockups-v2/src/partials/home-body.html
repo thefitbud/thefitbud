@@ -1,0 +1,194 @@
+<div class="shell{{shellcls}}">
+  {{> side active="home" mark="{{mark}}"}}
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb">Home</div>
+      <div class="search"><ic n="search"></ic>Search clients<span class="kbd">⌘K</span></div>
+      <button class="bell" aria-label="Notifications, 3 unread"><ic n="bell"></ic><span class="dot"></span></button>
+    </header>
+    <main class="content">
+      <div class="hdr">
+        <div>
+          {{eyebrow}}
+          <h1 class="t-display">{{title}}</h1>
+          <p class="t-body muted" style="margin-top:4px">{{subtitle}}</p>
+        </div>
+        <div class="tiles" role="group" aria-label="Filter by">
+          <button class="tile"><span class="ti" style="background:var(--crit-bg);color:var(--crit)"><ic n="octagon-alert"></ic></span><span><span class="lbl">Needs attention</span><span class="t-numl">11</span></span></button>
+          <button class="tile"><span class="ti" style="background:var(--info-bg);color:var(--info)"><ic n="clipboard-check"></ic></span><span><span class="lbl">Check-ins to review</span><span class="t-numl">2</span></span></button>
+          <button class="tile"><span class="ti" style="background:var(--attn-bg);color:var(--attn)"><ic n="calendar-days"></ic></span><span><span class="lbl">Renewals due</span><span class="t-numl">2</span></span></button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="col">
+          <!-- Needs attention -->
+          <section class="card" aria-labelledby="na">
+            <div class="card-h">
+              <div class="ttl"><h2 id="na" class="t-h2">Needs attention</h2><span class="count">11</span></div>
+              <span class="sort" title="Sorted by severity, then how long it's been open."><ic n="info"></ic>Sorted by severity, then age</span>
+            </div>
+            <div class="rows" role="grid">
+              <div class="row hover" style="position:relative">
+                <div class="who"><span class="av c3">RM</span><b>Rohan Mehta</b></div>
+                <div class="issue" title="Missed workout · Tue 13 Oct; Missed workout · Thu 15 Oct; Lunch not logged · Fri 16 Oct; Dinner not logged · Fri 16 Oct"><span class="txt">Missed 2 workouts (Tue, Thu)</span><span class="more">+2 more</span></div>
+                <div><span class="chip crit"><ic n="octagon-alert"></ic>Critical</span></div>
+                <div class="age" title="Open since Tue 13 Oct, 7:00 pm">since 5 d</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Rohan Mehta"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="row">
+                <div class="who"><span class="av c5">AK</span><b>Arjun Kapoor</b></div>
+                <div class="issue" title="Weekly check-in was due Fri 16 Oct"><span class="txt">Check-in 2 days overdue</span></div>
+                <div><span class="chip crit"><ic n="octagon-alert"></ic>Critical</span></div>
+                <div class="age">since 2 d</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Arjun Kapoor"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="row">
+                <div class="who"><span class="av c6">NR</span><b>Neha Reddy</b></div>
+                <div class="issue"><span class="txt">Breakfast not logged (Thu, Fri, Sat)</span></div>
+                <div><span class="chip attn"><ic n="triangle-alert"></ic>Attention</span></div>
+                <div class="age">since 3 d</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Neha Reddy"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="row">
+                <div class="who"><span class="av c7">PS</span><b>Priya Sharma</b></div>
+                <div class="issue"><span class="txt">Missed workout (Fri)</span><span class="more">+1 more</span></div>
+                <div><span class="chip attn"><ic n="triangle-alert"></ic>Attention</span></div>
+                <div class="age">since 2 d</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Priya Sharma"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="row">
+                <div class="who"><span class="av c1">IB</span><b>Ishita Banerjee</b></div>
+                <div class="issue"><span class="txt">Lunch and dinner not logged (Sat)</span></div>
+                <div><span class="chip attn"><ic n="triangle-alert"></ic>Attention</span></div>
+                <div class="age">since 1 d</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Ishita Banerjee"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="row">
+                <div class="who"><span class="av c4">KM</span><b>Karthik Menon</b></div>
+                <div class="issue"><span class="txt">Skipped workout (Sat)</span></div>
+                <div><span class="chip attn"><ic n="triangle-alert"></ic>Attention</span></div>
+                <div class="age">since 1 d</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Karthik Menon"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="row">
+                <div class="who"><span class="av c2">TJ</span><b>Tanvi Joshi</b></div>
+                <div class="issue"><span class="txt">Changed dinner (Sat): ate out</span></div>
+                <div><span class="chip attn"><ic n="triangle-alert"></ic>Attention</span></div>
+                <div class="age">since 1 d</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Tanvi Joshi"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="row">
+                <div class="who"><span class="av c8">VS</span><b>Varun Sethi</b></div>
+                <div class="issue"><span class="txt">Breakfast not logged (today)</span></div>
+                <div><span class="chip attn"><ic n="triangle-alert"></ic>Attention</span></div>
+                <div class="age">since 1 h</div>
+                <div><button class="btn btn-soft btn-sm">Review</button></div>
+                <button class="btn-icon" aria-label="More actions for Varun Sethi"><ic n="ellipsis"></ic></button>
+              </div>
+            </div>
+            <div class="foot-link"><span class="muted">Showing 8 of 11 clients</span><a class="link" href="#">View all (11) <ic n="arrow-right"></ic></a></div>
+          </section>
+
+          <!-- Asked you on WhatsApp -->
+          <section class="card">
+            <div class="card-h"><div class="ttl"><h2 class="t-h2">Asked you on WhatsApp</h2><span class="count">1</span></div></div>
+            <div class="list">
+              <div class="li">
+                <span class="av c1">IB</span>
+                <div class="tx"><b>Ishita asked about Lunch · Sat <span class="topic">Portion size</span></b><span>Opened WhatsApp from her lunch log</span></div>
+                <span class="chip info"><ic n="message-square-text"></ic>Asked coach · 3 h</span>
+                <button class="btn btn-soft btn-sm">Mark answered</button>
+                <button class="btn-icon" aria-label="More actions"><ic n="ellipsis"></ic></button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Reviewed, still open (collapsed) -->
+          <section class="card">
+            <div class="collapsed">
+              <ic n="chevron-right" c="muted"></ic>
+              <h2 class="t-h3">Reviewed, still open</h2>
+              <span class="count">1</span>
+              <span class="t-sm muted" style="margin-left:4px">1 reviewed item still open</span>
+              <span style="margin-left:auto" class="stack"><span class="av c4">MI</span></span>
+            </div>
+          </section>
+
+          <!-- Getting started -->
+          <section class="card">
+            <div class="card-h"><div class="ttl"><h2 class="t-h2">Getting started</h2><span class="count">2</span></div></div>
+            <div class="list">
+              <div class="li">
+                <span class="av c2">SK</span>
+                <div class="tx"><b>Sneha Kulkarni</b><span>Intake submitted · yesterday</span></div>
+                <span class="chip info"><ic n="clipboard-check"></ic>Awaiting review</span>
+                <button class="btn btn-soft btn-sm">Review intake</button>
+                <button class="btn-icon" aria-label="More actions"><ic n="ellipsis"></ic></button>
+              </div>
+              <div class="li">
+                <span class="av c8">AD</span>
+                <div class="tx"><b>Anita Desai</b><span>Invite sent Thu 15 Oct · not accepted yet</span></div>
+                <span class="chip neu"><ic n="circle-dashed"></ic>Invited</span>
+                <button class="btn btn-soft btn-sm">Resend invite</button>
+                <button class="btn-icon" aria-label="More actions"><ic n="ellipsis"></ic></button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Re-engage -->
+          <section class="card">
+            <div class="card-h"><div class="ttl"><h2 class="t-h2">Re-engage on WhatsApp</h2><span class="count">1</span></div></div>
+            <div class="list">
+              <div class="li">
+                <span class="av c5">SR</span>
+                <div class="tx"><b>Siddharth Rao</b><span>No logs since Thu · 3 reminders unanswered</span></div>
+                <button class="btn btn-secondary btn-sm"><wa></wa>Open WhatsApp</button>
+                <button class="btn-icon" aria-label="More actions"><ic n="ellipsis"></ic></button>
+              </div>
+            </div>
+            <div class="note"><ic n="info"></ic>Opens WhatsApp with a message written as you. You can edit it, and you press Send.</div>
+          </section>
+        </div>
+
+        <!-- Right rail -->
+        <div class="col rail">
+          <section class="card">
+            <div class="card-h"><div class="ttl"><h2 class="t-h3">Check-ins to review</h2><span class="count">2</span></div><a class="link t-sm" href="#">All</a></div>
+            <div class="list">
+              <div class="li"><span class="av c4">DN</span><div class="tx"><b>Deepak Nair</b><span>Submitted yesterday</span></div><button class="btn btn-soft btn-sm">Review</button></div>
+              <div class="li"><span class="av c3">RM</span><div class="tx"><b>Rohan Mehta</b><span>Submitted 2 d ago</span></div><button class="btn btn-soft btn-sm">Review</button></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-h"><div class="ttl"><h2 class="t-h3">Renewals</h2><span class="count">2</span></div></div>
+            <div class="list">
+              <div class="li"><div class="tx"><b>Rohan Mehta</b><span>Ended Thu 15 Oct</span></div><span class="chip attn"><ic n="triangle-alert"></ic>Expired</span></div>
+              <div class="li"><div class="tx"><b>Meera Iyer</b><span>Due Wed 21 Oct</span></div><span class="chip attn"><ic n="triangle-alert"></ic>Due</span></div>
+            </div>
+            <div class="foot-link" style="padding:10px 16px"><span class="muted">Open settings to renew</span><a class="link" href="#">Open settings</a></div>
+          </section>
+
+          <section class="card">
+            <div class="card-h"><h2 class="t-h3">Recent activity</h2><span class="t-cap muted">Client time</span></div>
+            <div class="feed">
+              <div class="ev"><span class="d" style="background:#9FD8C2"></span><span><b>Meera Iyer</b> logged breakfast as planned<span class="when">9:12 am</span></span></div>
+              <div class="ev"><span class="d" style="background:#9FD8C2"></span><span><b>Deepak Nair</b> finished Upper body A · 46 min<span class="when">7:05 am GST</span></span></div>
+              <div class="ev"><span class="d"></span><span><b>Priya Sharma</b> changed breakfast: 2 besan chilla<span class="when">8:50 am</span></span></div>
+              <div class="ev"><span class="d" style="background:#9FD8C2"></span><span><b>Aarav Shah</b> logged early morning snack<span class="when">6:42 am</span></span></div>
+              <div class="ev"><span class="d" style="background:#B8C9F5"></span><span><b>Sneha Kulkarni</b> submitted her intake<span class="when">Yesterday, 8:15 pm</span></span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>

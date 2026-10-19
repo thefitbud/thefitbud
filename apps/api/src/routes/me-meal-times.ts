@@ -8,6 +8,7 @@ import { createDb } from "../db/client.js";
 import { coachingRelationships, mealTimeOverrides } from "../db/schema.js";
 import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
+import { listMergedMealTimeSlots } from "../domain/meal-time-slots.js";
 import { applyMealTimeOverrideUpdate } from "../domain/meal-times-update.js";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { operation } from "../openapi/document.js";
@@ -59,23 +60,8 @@ meMealTimeRoutes.get(
     if (!rel) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "No active relationship.");
     }
-    const overrides = await db
-      .select()
-      .from(mealTimeOverrides)
-      .where(eq(mealTimeOverrides.relationshipId, rel.id));
-    const slots = overrides.map((row) => ({
-      slotKey: row.slotKey,
-      label: row.slotKey,
-      planTime: row.time,
-      overrideTime: row.time,
-    }));
-    return ok(
-      c,
-      mealTimesResponseSchema.parse({
-        slots,
-        mealTimesNeedReview: false,
-      }),
-    );
+    const merged = await listMergedMealTimeSlots(db, rel.id);
+    return ok(c, mealTimesResponseSchema.parse(merged));
   },
 );
 
@@ -145,13 +131,35 @@ meMealTimeRoutes.put(
       return writable.response;
     }
     const now = nowIso();
+    const before = await listMergedMealTimeSlots(db, rel.id);
+    const planTimeBySlot = new Map(
+      before.slots.map((slot) => [slot.slotKey, slot.planTime]),
+    );
     for (const override of parsed.data.overrides) {
+      const pattern = (
+        override.dayPattern === "weekdays" || override.dayPattern === "weekends"
+          ? override.dayPattern
+          : "all"
+      ) as "all" | "weekdays" | "weekends";
+      const planTime = planTimeBySlot.get(override.slotKey);
+      if (planTime && override.time === planTime && pattern === "all") {
+        await db
+          .delete(mealTimeOverrides)
+          .where(
+            and(
+              eq(mealTimeOverrides.relationshipId, rel.id),
+              eq(mealTimeOverrides.slotKey, override.slotKey),
+              eq(mealTimeOverrides.dayPattern, pattern),
+            ),
+          );
+        continue;
+      }
       await db
         .insert(mealTimeOverrides)
         .values({
           relationshipId: rel.id,
           slotKey: override.slotKey,
-          dayPattern: override.dayPattern as "all" | "weekdays" | "weekends",
+          dayPattern: pattern,
           time: override.time,
           updatedAt: now,
         })
@@ -169,20 +177,7 @@ meMealTimeRoutes.put(
       trainerUserId: rel.trainerUserId,
       now,
     });
-    const overrides = await db
-      .select()
-      .from(mealTimeOverrides)
-      .where(eq(mealTimeOverrides.relationshipId, rel.id));
-    return ok(
-      c,
-      mealTimesResponseSchema.parse({
-        slots: overrides.map((row) => ({
-          slotKey: row.slotKey,
-          label: row.slotKey,
-          planTime: row.time,
-          overrideTime: row.time,
-        })),
-      }),
-    );
+    const merged = await listMergedMealTimeSlots(db, rel.id);
+    return ok(c, mealTimesResponseSchema.parse(merged));
   },
 );

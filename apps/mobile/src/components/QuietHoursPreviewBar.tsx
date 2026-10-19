@@ -1,6 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import { Text } from "./Text";
 import { colors, spacing } from "@fitbud/ui-mobile";
+import { clockRange } from "../trainee/settings/clock";
 
 function parseHm(value: string): number {
   const parts = value.split(":");
@@ -49,7 +50,7 @@ export function QuietHoursPreviewBar({
         <Text style={styles.tick}>12 am</Text>
       </View>
       <Text style={styles.legend}>
-        Shaded: no notifications ({quietStart} – {quietEnd})
+        Shaded: no notifications ({clockRange(quietStart, quietEnd)})
       </Text>
     </View>
   );

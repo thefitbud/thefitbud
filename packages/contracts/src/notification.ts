@@ -203,6 +203,24 @@ export type ReminderRule = z.infer<typeof reminderRuleSchema>;
 export const reminderRulesResponseSchema = z.object({
   items: z.array(reminderRuleSchema),
 });
+
+export const reminderStatusSchema = z.object({
+  mode: z.enum([
+    "normal",
+    "self_logger",
+    "soft_ignorer",
+    "paused",
+    "push_failed",
+  ]),
+  pausedUntil: isoDateTimeSchema.nullable(),
+  pushDeliverable: z.boolean(),
+  trainerDisabled: z.object({
+    workoutReminder: z.boolean(),
+    mealReminder: z.boolean(),
+    checkinReminder: z.boolean(),
+  }),
+});
+export type ReminderStatus = z.infer<typeof reminderStatusSchema>;
 export type ReminderRulesResponse = z.infer<typeof reminderRulesResponseSchema>;
 
 export const updateReminderRulesRequestSchema = z.object({
