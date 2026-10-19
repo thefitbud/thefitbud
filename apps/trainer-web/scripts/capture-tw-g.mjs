@@ -86,11 +86,14 @@ await page.goto(`${BASE}/clients/${ROHAN}/history`);
 await page.waitForTimeout(1000);
 await shot(page, "TW-21--error.png");
 await page.unroute("**/api/history/**");
-await page.context().setOffline(true);
 await page.goto(`${BASE}/clients/${ROHAN}/history`);
-await page.waitForTimeout(800);
+await page.waitForTimeout(600);
+await page.context().setOffline(true);
+await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+await page.waitForTimeout(600);
 await shot(page, "TW-21--offline.png");
 await page.context().setOffline(false);
+await page.evaluate(() => window.dispatchEvent(new Event("online")));
 
 // TW-28 Settings
 await page.goto(`${BASE}/settings/profile`);
@@ -126,11 +129,18 @@ await page.goto(`${BASE}/settings/notifications`);
 await page.waitForTimeout(900);
 await shot(page, "TW-29--error.png");
 await page.unroute("**/api/notifications/preferences**");
-await page.context().setOffline(true);
-await page.goto(`${BASE}/settings/notifications`);
-await page.waitForTimeout(700);
-await shot(page, "TW-29--offline.png");
 await page.context().setOffline(false);
+await page.goto(`${BASE}/settings/notifications`);
+await page.getByTestId("screen-TW-29").waitFor({ timeout: 20_000 });
+try {
+  await page.context().setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+  await page.waitForTimeout(600);
+  await shot(page, "TW-29--offline.png");
+} finally {
+  await page.context().setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+}
 
 // TW-30 Ended
 await page.goto(`${BASE}/clients?status=ended`);

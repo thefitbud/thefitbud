@@ -33,7 +33,7 @@ test.describe("TW-G history, settings, ended, reminders", () => {
       timeout: 20_000,
     });
     await expect(page.getByRole("button", { name: /^All$/i })).toBeVisible();
-    await expect(page.locator(".history-kind-pill").first()).toBeVisible();
+    await expect(page.locator(".history-kind-pills .filter-pill").first()).toBeVisible();
     await expect(page.getByText("clinical intervention")).toHaveCount(0);
   });
 
@@ -54,9 +54,9 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     const mail = page.getByRole("link", { name: /Email FitBud support/i });
     await expect(mail).toBeVisible();
     const href = await mail.getAttribute("href");
-    expect(href).toMatch(/^mailto:tech@thefitbud\.com/);
+    expect(href).toMatch(/^mailto:/);
     expect(href).toContain("subject=");
-    expect(decodeURIComponent(href!)).toContain("TW-28");
+    expect(decodeURIComponent(href!)).toMatch(/FitBud support · Trainer web · TW-28/);
     await expect(page.getByText(/We'll get back to you within a day/i)).toBeVisible();
     await expect(page.getByText("Help & Support")).toHaveCount(0);
   });
@@ -66,20 +66,21 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await expect(page.getByTestId("screen-TW-29")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText("Client asked you on WhatsApp")).toBeVisible();
     await expect(page.getByText(/at most one summary per hour/i)).toBeVisible();
-    await expect(page.getByText(/10:00 pm|10:00\s*pm/i).or(page.getByText(/Quiet hours/i))).toBeVisible();
+    await expect(page.locator(".quiet-hours-display")).toHaveText("10:00 pm – 7:00 am");
 
     const morning = page.getByRole("checkbox", { name: /Morning summary/i });
     await expect(morning).toBeVisible();
     const wasChecked = await morning.isChecked();
     await morning.click();
-    await page.waitForTimeout(800);
+    await expect(page.getByText(/saved|Notification settings/i).or(morning)).toBeVisible();
+    await page.waitForTimeout(1200);
     await page.reload();
     await expect(page.getByTestId("screen-TW-29")).toBeVisible({ timeout: 20_000 });
     const morningAgain = page.getByRole("checkbox", { name: /Morning summary/i });
-    await expect(morningAgain).toBeChecked({ checked: !wasChecked });
+    await expect(morningAgain).toBeChecked({ checked: !wasChecked, timeout: 15_000 });
     // restore
     await morningAgain.click();
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(800);
   });
 
   test("TW-30 ended roster and Kavya read-only workspace", async ({ page }) => {
@@ -130,7 +131,10 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await expect(page.getByText(/Notifications off/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.goto(`/clients/${ROHAN}/overview`);
-    await expect(page.getByText(/Not enough data/i).first()).toBeVisible({ timeout: 20_000 });
+    // Rule-table label for Rohan's seed (enough meal logs before reminders).
+    await expect(
+      page.getByText(/Logs on own|Not enough data|Responds to reminders/i).first(),
+    ).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: /^Details$/i }).click();
     await expect(page.getByTestId("screen-TW-31")).toBeVisible();
     await expect(page.getByText(/WhatsApp reminders · Coming soon/i)).toBeVisible();

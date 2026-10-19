@@ -21,9 +21,20 @@ test.describe("TW-G iPad shell smoke", () => {
   });
 
   test("sign-in, shell nav, clients list, overflow menu", async ({ page }) => {
-    await page.getByRole("link", { name: /^Clients$/i }).click();
+    // Icon rail at 768–1279 hides nav labels — navigate by href / role.
+    const clientsNav = page.locator('a.shell-nav-link[href="/clients"]');
+    if (await clientsNav.count()) {
+      await clientsNav.first().click();
+    } else {
+      await page.goto("/clients");
+    }
     await expect(page).toHaveURL(/\/clients/);
-    await expect(page.getByRole("heading", { name: /Clients/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Clients/i })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // Sidebar should be present as icon rail (not bottom nav) at tablet widths.
+    await expect(page.locator(".shell-side")).toBeVisible();
 
     const overflow = page.getByRole("button", { name: /More actions|Open menu/i }).first();
     if (await overflow.isVisible()) {

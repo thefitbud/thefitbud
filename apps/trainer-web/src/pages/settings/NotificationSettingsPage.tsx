@@ -126,7 +126,19 @@ export function NotificationSettingsPage() {
   }, [pushEnabled, quietStart, quietEnd, categories, persist]);
 
   function toggleCategory(key: keyof TrainerNotificationPrefs) {
-    setCategories((current) => ({ ...current, [key]: !current[key] }));
+    setCategories((current) => {
+      const next = { ...current, [key]: !current[key] };
+      // Persist immediately so a quick reload cannot race the debounce.
+      window.setTimeout(() => {
+        void persist({
+          pushEnabled,
+          quietStart,
+          quietEnd,
+          categories: next,
+        });
+      }, 0);
+      return next;
+    });
   }
 
   if (loading) return <LoadingBlock label="Loading notifications…" />;
