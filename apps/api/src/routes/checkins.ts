@@ -5,6 +5,8 @@ import {
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import {
+  assignPreferredCheckinFormRequestSchema,
+  assignPreferredCheckinFormResponseSchema,
   checkinFormVersionSchema,
   checkinListResponseSchema,
   checkinReviewContextSchema,
@@ -460,6 +462,7 @@ checkinRoutes.post(
     const formPin = await resolveCheckinFormPin(db, {
       trainerUserId: actor.userId,
       requestedVersionId: parsed.data.checkinFormVersionId,
+      fallbackVersionId: config.schedule.preferredCheckinFormVersionId ?? null,
     });
     if (!formPin.ok) {
       return fail(c, formPin.status, formPin.code, formPin.message);
@@ -584,8 +587,9 @@ checkinRoutes.post(
       traineeTimeZone: timezone,
     });
 
-    let fallbackVersionId: string | null = null;
-    if (parsed.data.fromCheckinId) {
+    let fallbackVersionId: string | null =
+      config.schedule.preferredCheckinFormVersionId ?? null;
+    if (!fallbackVersionId && parsed.data.fromCheckinId) {
       const source = await db
         .select({ formVersionId: checkins.checkinFormVersionId })
         .from(checkins)
@@ -628,6 +632,95 @@ checkinRoutes.post(
       expiresAt: addDaysIso(7),
     });
     return c.json(responseBody, 200);
+  },
+);
+
+checkinRoutes.put(
+  "/relationships/:relationshipId/preferred-form",
+  operation({
+    tag: "Checkins",
+    summary:
+      "Assign a preferred check-in form version for a client's next scheduled check-ins.",
+    description:
+      "Updates the preferred form on every open or active check-in schedule for the relationship.",
+    roles: ["trainer"],
+    body: assignPreferredCheckinFormRequestSchema,
+    response: assignPreferredCheckinFormResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = assignPreferredCheckinFormRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(
+        c,
+        400,
+        "INVALID_REQUEST",
+        "Invalid preferred check-in form request.",
+        { issues: parsed.error.issues },
+      );
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const ended = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (ended) return ended;
+
+    const formPin = await resolveCheckinFormPin(db, {
+      trainerUserId: actor.userId,
+      requestedVersionId: parsed.data.checkinFormVersionId,
+    });
+    if (!formPin.ok) {
+      return fail(c, formPin.status, formPin.code, formPin.message);
+    }
+
+    const configs = await db
+      .select()
+      .from(coachingConfigurations)
+      .where(eq(coachingConfigurations.coachingRelationshipId, relationship.id));
+    const writable = configs.filter((row) =>
+      ["draft", "configured", "active"].includes(row.status),
+    );
+    if (writable.length === 0) {
+      return fail(
+        c,
+        422,
+        "NO_ACTIVE_CONFIGURATION",
+        "Save coaching configuration before assigning a check-in form.",
+      );
+    }
+
+    const now = nowIso();
+    for (const config of writable) {
+      await db
+        .update(checkinSchedules)
+        .set({
+          preferredCheckinFormVersionId: formPin.id,
+          updatedAt: now,
+        })
+        .where(eq(checkinSchedules.coachingConfigurationId, config.id));
+    }
+
+    return ok(
+      c,
+      assignPreferredCheckinFormResponseSchema.parse({
+        coachingRelationshipId: relationship.id,
+        checkinFormVersionId: formPin.id,
+      }),
+    );
   },
 );
 
@@ -766,7 +859,10 @@ checkinRoutes.post(
       const formPin = await resolveCheckinFormPin(db, {
         trainerUserId:
           actor.selectedRole === "trainer" ? actor.userId : null,
-        fallbackVersionId: latest[0]?.checkinFormVersionId ?? null,
+        fallbackVersionId:
+          config.schedule.preferredCheckinFormVersionId ??
+          latest[0]?.checkinFormVersionId ??
+          null,
       });
       if (!formPin.ok) {
         return fail(c, formPin.status, formPin.code, formPin.message);

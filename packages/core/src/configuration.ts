@@ -24,7 +24,7 @@ export const COACHING_CONFIGURATION_DEFAULTS: {
     confirmationWindowHours: 6,
     photoRequirement: "none",
   },
-  checkin: { cadence: "weekly", dueWindowHours: 48 },
+  checkin: { cadence: "weekly", dueWindowHours: 48, formVersionId: null },
   tracking: {
     requireBodyWeight: false,
     requireProgressPhotos: false,

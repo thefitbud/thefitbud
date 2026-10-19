@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { OnboardingFieldDefinition } from "@fitbud/contracts";
+import { checkinFieldTypeLabel } from "./checkinBuilder";
 import { fieldTypeLabel } from "./onboardingBuilder";
 
 type PreviewField = {
@@ -135,7 +136,9 @@ export function FormPhonePreview({
                 return (
                   <div key={field.id} className="phone-field">
                     <p>{label}</p>
-                    <p className="muted">Photo slot · {fieldTypeLabelSafe(field.type)}</p>
+                    <p className="muted">
+                      Photo slot · {checkinFieldTypeLabel("photo_intent")}
+                    </p>
                   </div>
                 );
               }

@@ -37,6 +37,8 @@ export type NutritionExpectations = z.infer<typeof nutritionExpectationsSchema>;
 export const checkinScheduleExpectationsSchema = z.object({
   cadence: checkinCadenceSchema,
   dueWindowHours: z.number().int().min(1).max(168),
+  /** Pinned check-in form version for newly scheduled check-ins. Null → FitBud base. */
+  formVersionId: uuidSchema.nullable().default(null),
 });
 export type CheckinScheduleExpectations = z.infer<
   typeof checkinScheduleExpectationsSchema

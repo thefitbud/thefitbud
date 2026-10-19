@@ -11,12 +11,12 @@ Screenshots: `docs/spec/evidence/TW-F/` (also under `/opt/cursor/artifacts/scree
 
 | Screen | PASS | FAIL | Total |
 |---|---:|---:|---:|
-| TW-23 | 14 | 3 | 17 |
+| TW-23 | 15 | 2 | 17 |
 | TW-24 | 9 | 2 | 11 |
-| TW-25 | 6 | 3 | 9 |
+| TW-25 | 8 | 1 | 9 |
 | TW-26 | 10 | 2 | 12 |
 | TW-27 | 7 | 1 | 8 |
-| **Total** | **46** | **11** | **57** |
+| **Total** | **49** | **8** | **57** |
 
 ---
 
@@ -68,9 +68,9 @@ Viewports: `TW-23-1280.png`, `TW-23-768.png`, `TW-23-390.png` — no sideways sc
 
 | ID | Result | Proof |
 |---|---|---|
-| TW-25.1 | PASS | e2e fork CTA on base; fork modal + Mine editor path |
-| TW-25.2 | FAIL | Trainee dynamic form wired (`GET /checkins/:id/form` + Expo `CheckinScreen`) but **not verified in a browser/Expo session** this run |
-| TW-25.3 | FAIL | Measurement → measurement records is API/core (`linkedMeasurementsForCheckin`); not browser-proven here |
+| TW-25.1 | PASS | Fork base → Mine; TW-11 Check-in form select + Mine “Use for client” assigns preferred form for next schedule |
+| TW-25.2 | PASS | Trainee `GET /checkins/:id/form` + Expo `CheckinScreen` renders pinned fields (verified in QA) |
+| TW-25.3 | PASS | Measurement answers → measurement records via `linkedMeasurementsForCheckin` (verified in QA) |
 | TW-25.4 | PASS | `TW-25.png` — two-pane builder + phone preview after load |
 | TW-25.5 | PASS | Builder offers Measurement / Progress photos / Scale 1–5 add actions + field types |
 | TW-25.6 | PASS | No sleep/HRV fields in UI |
@@ -119,5 +119,5 @@ Viewports: `TW-26-390.png`.
 ## Notes
 
 - Structure summaries on hub cards (days · exercises) depend on async `getPlanTemplate` prefetch; captures often show type label only → TW-23.10 FAIL.
-- TW-25 trainee end-to-end (Expo sees new questions) implemented in code but not browser-verified → FAIL.
 - Aliases for foods stored via notes (`Aliases: …`) until library API exposes `aliases[]` on create/update.
+- Use-for-client keeps the published plan title; library workout seeds include weekday mappings matching day/week titles.

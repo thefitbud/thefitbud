@@ -55,7 +55,7 @@ describe("coaching configuration transitions", () => {
         confirmationWindowHours: 6,
         photoRequirement: "none",
       },
-      checkin: { cadence: "weekly", dueWindowHours: 48 },
+      checkin: { cadence: "weekly", dueWindowHours: 48, formVersionId: null },
       tracking: {
         requireBodyWeight: false,
         requireProgressPhotos: false,

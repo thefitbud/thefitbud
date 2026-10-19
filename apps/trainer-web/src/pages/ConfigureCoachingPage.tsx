@@ -10,6 +10,7 @@ import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CheckinCadence,
+  CheckinFormTemplateSummary,
   CoachingConfiguration,
   MealPhotoRequirement,
   PaymentFrequency,
@@ -24,6 +25,7 @@ import {
 } from "@fitbud/contracts";
 import {
   COACHING_CONFIGURATION_DEFAULTS,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
   consistencyFingerprint,
   formatCivilDate,
   labelFor,
@@ -57,6 +59,7 @@ const DEFAULT_FORM = {
     .photoRequirement as MealPhotoRequirement,
   cadence: COACHING_CONFIGURATION_DEFAULTS.checkin.cadence as CheckinCadence,
   dueWindowHours: COACHING_CONFIGURATION_DEFAULTS.checkin.dueWindowHours,
+  formVersionId: null as string | null,
   requireBodyWeight: COACHING_CONFIGURATION_DEFAULTS.tracking.requireBodyWeight,
   requireProgressPhotos:
     COACHING_CONFIGURATION_DEFAULTS.tracking.requireProgressPhotos,
@@ -183,6 +186,9 @@ export function ConfigureCoachingPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [notificationsOff, setNotificationsOff] = useState(false);
   const [quietHours, setQuietHours] = useState<string | null>(null);
+  const [checkinForms, setCheckinForms] = useState<
+    CheckinFormTemplateSummary[]
+  >([]);
 
   const applyConfiguration = useCallback((config: CoachingConfiguration) => {
     setConfiguration(config);
@@ -197,6 +203,7 @@ export function ConfigureCoachingPage() {
       photoRequirement: config.nutrition.photoRequirement,
       cadence: config.checkin.cadence,
       dueWindowHours: config.checkin.dueWindowHours,
+      formVersionId: config.checkin.formVersionId ?? null,
       requireBodyWeight: config.tracking.requireBodyWeight,
       requireProgressPhotos: config.tracking.requireProgressPhotos,
       requireSessionRpe: config.tracking.requireSessionRpe,
@@ -236,6 +243,7 @@ export function ConfigureCoachingPage() {
         reminderResult,
         responsivenessResult,
         intakeResult,
+        formsResult,
       ] = await Promise.all([
         apiClient.getCoachingConfiguration(relationshipId, {
           notFoundAsNull: true,
@@ -254,6 +262,10 @@ export function ConfigureCoachingPage() {
           () => ({ ok: false as const }),
         ),
         apiClient.getOnboardingResponse(relationshipId).then(
+          (value) => ({ ok: true as const, value }),
+          () => ({ ok: false as const }),
+        ),
+        apiClient.listCheckinFormTemplates({ limit: 50 }).then(
           (value) => ({ ok: true as const, value }),
           () => ({ ok: false as const }),
         ),
@@ -316,6 +328,7 @@ export function ConfigureCoachingPage() {
       setQuietHours(
         responsivenessResult.ok ? quietHoursText(responsivenessResult.value) : null,
       );
+      setCheckinForms(formsResult.ok ? formsResult.value.items : []);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -421,7 +434,13 @@ export function ConfigureCoachingPage() {
       goal: goalBits.join(" · "),
       workouts: `${form.sessionsPerWeek} sessions/week · log within ${form.completionWindowHours} h`,
       nutrition: `${form.mealsPerDay} meals/day · photo: ${photoLabel.toLowerCase()}`,
-      checkins: `${cadenceLabel} · ${form.dueWindowHours} h window`,
+      checkins: `${cadenceLabel} · ${form.dueWindowHours} h window · ${
+        checkinForms.find(
+          (item) =>
+            item.latestVersionId ===
+            (form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID),
+        )?.name ?? "FitBud weekly check-in"
+      }`,
       tracking:
         trackingBits.length > 0 ? trackingBits.join(" · ") : "Nothing required",
       reminders: reminderSummary,
@@ -429,7 +448,7 @@ export function ConfigureCoachingPage() {
         ? `${freqLabel}${renewCivil ? ` · renews ${renewCivil}` : ""}`
         : "No subscription yet",
     };
-  }, [form, reminders, subscriptionForm]);
+  }, [checkinForms, form, reminders, subscriptionForm]);
 
   async function onAcknowledgeDifference() {
     if (
@@ -489,6 +508,7 @@ export function ConfigureCoachingPage() {
         checkin: {
           cadence: form.cadence,
           dueWindowHours: form.dueWindowHours,
+          formVersionId: form.formVersionId,
         },
         tracking: {
           requireBodyWeight: form.requireBodyWeight,
@@ -496,6 +516,11 @@ export function ConfigureCoachingPage() {
           requireSessionRpe: form.requireSessionRpe,
         },
       });
+      if (form.formVersionId) {
+        await apiClient.assignPreferredCheckinForm(relationshipId, {
+          checkinFormVersionId: form.formVersionId,
+        });
+      }
       applyConfiguration(saved);
       setMessage("Draft saved.");
       showToast("Draft saved");
@@ -550,6 +575,7 @@ export function ConfigureCoachingPage() {
           checkin: {
             cadence: form.cadence,
             dueWindowHours: form.dueWindowHours,
+            formVersionId: form.formVersionId,
           },
           tracking: {
             requireBodyWeight: form.requireBodyWeight,
@@ -1019,8 +1045,57 @@ export function ConfigureCoachingPage() {
                 }
               />
             </label>
+            <label className="field">
+              <span>Check-in form</span>
+              <select
+                value={form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID}
+                onChange={(event) => {
+                  const next = event.target.value || null;
+                  setForm((current) => ({
+                    ...current,
+                    formVersionId:
+                      next === GLOBAL_CHECKIN_FORM_VERSION_ID ? null : next,
+                  }));
+                  if (
+                    relationshipId &&
+                    configuration?.status === "active" &&
+                    next
+                  ) {
+                    void apiClient
+                      .assignPreferredCheckinForm(relationshipId, {
+                        checkinFormVersionId: next,
+                      })
+                      .then(() =>
+                        showToast("Check-in form assigned for next check-in"),
+                      )
+                      .catch((err: unknown) =>
+                        setError(
+                          err instanceof ApiClientError
+                            ? err.message
+                            : "Could not assign check-in form.",
+                        ),
+                      );
+                  }
+                }}
+              >
+                {checkinForms.length === 0 ? (
+                  <option value={GLOBAL_CHECKIN_FORM_VERSION_ID}>
+                    FitBud weekly check-in
+                  </option>
+                ) : (
+                  checkinForms.map((item) => (
+                    <option key={item.id} value={item.latestVersionId}>
+                      {item.ownership === "global"
+                        ? `${item.name} (FitBud base)`
+                        : `${item.name} (Mine)`}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
             <p className="muted">
-              Check-in form templates are managed under Templates.
+              Fork and edit forms under Templates · Check-ins. The next scheduled
+              check-in uses this form.
             </p>
           </fieldset>
         </AccordionSection>

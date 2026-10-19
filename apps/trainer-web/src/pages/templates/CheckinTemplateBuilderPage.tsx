@@ -28,6 +28,18 @@ function sortedVersions(detail: CheckinFormTemplateDetail) {
   return [...detail.versions].sort((a, b) => a.version - b.version);
 }
 
+function duplicateCheckinLabels(drafts: CheckinFieldDraft[]): string[] {
+  const seen = new Map<string, number>();
+  for (const draft of drafts) {
+    const key = draft.label.trim().toLowerCase();
+    if (!key) continue;
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  return [...seen.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([label]) => label);
+}
+
 export function CheckinTemplateBuilderPage() {
   const { templateId = "" } = useParams();
   const navigate = useNavigate();
@@ -62,6 +74,7 @@ export function CheckinTemplateBuilderPage() {
 
   const nextVersion = (detail?.latestVersionNumber ?? 0) + 1;
   const readOnly = detail?.ownership === "global";
+  const dupLabels = useMemo(() => duplicateCheckinLabels(drafts), [drafts]);
   const previewFields = useMemo(() => {
     const built = buildCheckinFields(
       drafts.map((d) =>
@@ -253,6 +266,10 @@ export function CheckinTemplateBuilderPage() {
                     <input
                       value={draft.label}
                       disabled={readOnly}
+                      aria-invalid={
+                        !draft.label.trim() ||
+                        dupLabels.includes(draft.label.trim().toLowerCase())
+                      }
                       onChange={(event) =>
                         setDrafts((current) =>
                           current.map((row) =>
@@ -263,6 +280,15 @@ export function CheckinTemplateBuilderPage() {
                         )
                       }
                     />
+                    {!draft.label.trim() ? (
+                      <span className="field-error">Enter a label.</span>
+                    ) : null}
+                    {draft.label.trim() &&
+                    dupLabels.includes(draft.label.trim().toLowerCase()) ? (
+                      <span className="field-error">
+                        Another question uses this label.
+                      </span>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Help text</span>

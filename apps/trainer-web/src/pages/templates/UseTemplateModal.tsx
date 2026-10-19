@@ -78,12 +78,17 @@ export function UseTemplateModal({
           <span>Client</span>
           <input
             type="search"
+            role="combobox"
+            aria-expanded={filtered.length > 0}
+            aria-controls="use-template-client-list"
+            aria-autocomplete="list"
             placeholder="Search clients"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
         <div
+          id="use-template-client-list"
           className="use-client-list"
           role="listbox"
           aria-label="Ready clients"

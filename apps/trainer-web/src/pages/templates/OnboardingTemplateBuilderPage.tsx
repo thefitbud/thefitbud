@@ -279,6 +279,10 @@ export function OnboardingTemplateBuilderPage() {
                     <input
                       value={draft.label}
                       disabled={readOnly}
+                      aria-invalid={
+                        !draft.label.trim() ||
+                        dupLabels.includes(draft.label.trim().toLowerCase())
+                      }
                       onChange={(event) =>
                         setDrafts((current) =>
                           current.map((row) =>
@@ -289,6 +293,15 @@ export function OnboardingTemplateBuilderPage() {
                         )
                       }
                     />
+                    {!draft.label.trim() ? (
+                      <span className="field-error">Enter a label.</span>
+                    ) : null}
+                    {draft.label.trim() &&
+                    dupLabels.includes(draft.label.trim().toLowerCase()) ? (
+                      <span className="field-error">
+                        Another question uses this label.
+                      </span>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Help text</span>

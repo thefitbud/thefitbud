@@ -107,7 +107,13 @@ function TemplateBuilder({
     <PlanBuilder
       key={template.id}
       backTo={hubPath}
-      backLabel={`${hubSlug} templates`}
+      backLabel={
+        hubSlug === "workouts"
+          ? "Workout templates"
+          : hubSlug === "diets"
+            ? "Diet templates"
+            : "Full plan templates"
+      }
       initialTitle={template.title}
       initialContent={template.content}
       statusLabel={isGlobal ? "FitBud template" : "Template"}
@@ -165,7 +171,12 @@ export function PlanTemplateEditorPage() {
       data-testid="screen-TW-27"
     >
       <Link to={`/templates/${hubSlug}`}>
-        ← {hubSlug.replace("-", " ")} templates
+        ←{" "}
+        {hubSlug === "workouts"
+          ? "Workout templates"
+          : hubSlug === "diets"
+            ? "Diet templates"
+            : "Full plan templates"}
       </Link>
       <PlanTemplateFamily
         templateType={templateType}

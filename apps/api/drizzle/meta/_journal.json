@@ -194,5 +194,12 @@
     "when": 1729699200000,
     "tag": "0027_daily_summary_preference",
     "breakpoints": true
+  },
+  {
+    "idx": 28,
+    "version": "7",
+    "when": 1729785600000,
+    "tag": "0028_checkin_preferred_form",
+    "breakpoints": true
   }
 ]

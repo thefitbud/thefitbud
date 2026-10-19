@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { CheckinFormTemplateSummary } from "@fitbud/contracts";
 import { Button } from "../../components/Button";
@@ -10,13 +10,17 @@ import {
 } from "../../components/StatePanels";
 import { useOnline } from "../../hooks/useOnline";
 import { apiClient } from "../../lib/api";
+import { pageClientDirectory } from "../../lib/clients";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import { ForkTemplateModal } from "./ForkTemplateModal";
+import { UseCheckinFormModal } from "./UseCheckinFormModal";
 import {
   emptyMineCopy,
   errorText,
   formatUpdatedDate,
   matchesName,
+  withRelationship,
+  type ApplyClient,
 } from "./shared";
 import {
   filterByScope,
@@ -36,9 +40,19 @@ export function CheckinTemplatesPanel() {
   );
   const [forkTarget, setForkTarget] =
     useState<CheckinFormTemplateSummary | null>(null);
+  const [useTarget, setUseTarget] =
+    useState<CheckinFormTemplateSummary | null>(null);
+  const [clients, setClients] = useState<ApplyClient[]>([]);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
+
+  useEffect(() => {
+    void pageClientDirectory((query) => apiClient.listClients(query))
+      .then((items) => setClients(withRelationship(items)))
+      .catch(() => setClients([]));
+  }, []);
 
   const typed = list.items;
   const basesCount = typed.filter((i) => i.ownership === "global").length;
@@ -118,6 +132,12 @@ export function CheckinTemplatesPanel() {
         />
       ) : null}
 
+      {message ? (
+        <p className="muted" role="status">
+          {message}
+        </p>
+      ) : null}
+
       {list.loading && visible.length === 0 ? (
         <LoadingBlock label="Loading check-in forms…" />
       ) : null}
@@ -146,7 +166,9 @@ export function CheckinTemplatesPanel() {
                     >
                       {isBase ? "FitBud base" : "Mine"}
                     </span>
-                    <span>{formatUpdatedDate(item.updatedAt)}</span>
+                    {isBase ? null : (
+                      <span>{formatUpdatedDate(item.updatedAt)}</span>
+                    )}
                   </p>
                   <p className="template-card-summary">
                     v{item.latestVersionNumber} · check-in form
@@ -157,7 +179,7 @@ export function CheckinTemplatesPanel() {
                     <>
                       <Button
                         variant="primary"
-                        onClick={() => setForkTarget(item)}
+                        onClick={() => setUseTarget(item)}
                       >
                         Use
                       </Button>
@@ -170,8 +192,14 @@ export function CheckinTemplatesPanel() {
                     </>
                   ) : (
                     <>
+                      <Button
+                        variant="primary"
+                        onClick={() => setUseTarget(item)}
+                      >
+                        Use for client
+                      </Button>
                       <Link
-                        className="button-primary"
+                        className="button-secondary"
                         to={`/templates/checkins/${item.id}`}
                       >
                         Edit
@@ -213,6 +241,18 @@ export function CheckinTemplatesPanel() {
           hubSlug="checkins"
           kind="checkin"
           onClose={() => setForkTarget(null)}
+        />
+      ) : null}
+
+      {useTarget ? (
+        <UseCheckinFormModal
+          formVersionId={useTarget.latestVersionId}
+          formTitle={useTarget.name}
+          clients={clients}
+          onClose={() => setUseTarget(null)}
+          onAssigned={(name) =>
+            setMessage(`Assigned “${useTarget.name}” for ${name}'s next check-in.`)
+          }
         />
       ) : null}
     </div>

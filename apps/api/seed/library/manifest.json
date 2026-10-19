@@ -30,8 +30,8 @@
  },
  "files": {
   "library-2026.10.2.json": {
-   "sha256": "9cee1055c3efe19c2cdc8a16a9d4f9763a463d538128c33be92012e739b610ed",
-   "bytes": 5859551
+   "sha256": "474d5cd342b4730bba7723af4b86347e7256519783f67d2114cdbc51ee6b4632",
+   "bytes": 4357815
   },
   "01_lookups.sql": {
    "sha256": "f03412efa686d296b10445f36ece30db14bb94887eebaf66ea0225a8da3a6d6c",
@@ -46,8 +46,8 @@
    "bytes": 4126045
   },
   "04_templates.sql": {
-   "sha256": "a830ff261733fcc5c37591e0ceb85d077593696c26a627670c46416ba4ef616b",
-   "bytes": 82516
+   "sha256": "bbf4109c9253a2a335d9883a44271e3f81bcad78ec3fee2c7581f3de75df270e",
+   "bytes": 102142
   },
   "05_search.sql": {
    "sha256": "575ab4c2475dced6dc37b143feae66ec4e70af69d451790a62e8b32f7710fb5b",
