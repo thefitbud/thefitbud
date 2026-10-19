@@ -1,5 +1,6 @@
 import type { LoggedFoodItem, MealAssignment, MealFoodItem } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
+import { cleanFoodLabel } from "../trainee/mealHelpers";
 
 export type PlannedRow = {
   label: string;
@@ -53,9 +54,10 @@ export function plannedRowsFromAssignment(
   return items.map((item) => {
     const quantity = foodItemQuantity(item);
     const { foodId, servingId } = foodItemIds(item);
-    const name = foodItemName(item);
-    const servingLabel =
-      "serving" in item && item.serving?.label ? item.serving.label : null;
+    const name = cleanFoodLabel(foodItemName(item));
+    const servingLabel = cleanFoodLabel(
+      "serving" in item && item.serving?.label ? item.serving.label : "",
+    );
     const label =
       quantity !== 1
         ? `${quantity} × ${name}${servingLabel ? ` (${servingLabel})` : ""}`

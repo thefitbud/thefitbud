@@ -170,7 +170,9 @@ export function WorkoutTab({
                 </Text>
                 <Text style={styles.bannerBody}>
                   {statusLabel(todayAssignment.status)} ·{" "}
-                  {todayAssignment.workoutDay.exercises.length} exercises
+                  {todayAssignment.workoutDay.exercises.length === 1
+                    ? "1 exercise"
+                    : `${todayAssignment.workoutDay.exercises.length} exercises`}
                 </Text>
                 {todayAssignment.workoutDay.exercises.map((exercise) => (
                   <View key={exercise.id} style={styles.exerciseRow}>

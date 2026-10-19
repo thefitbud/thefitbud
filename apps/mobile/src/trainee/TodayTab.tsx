@@ -89,7 +89,30 @@ function exerciseCountLabel(count: number): string {
   return count === 1 ? "1 exercise" : `${count} exercises`;
 }
 
-/** Spec decision 22: Home heading is "Today" (no time-of-day greeting). */
+/**
+ * Trainee Today greeting (TR-06). Decision 22 (no greeting) is trainer-web
+ * Home only — see DESIGN-NOTES / TW-04.11.
+ * Hour is taken in the client's timezone, not the device's local clock.
+ */
+function greetingFor(name: string, timeZone: string, now = new Date()): string {
+  const first = name.trim().split(/\s+/)[0] || "there";
+  let hour = now.getHours();
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "numeric",
+      hour12: false,
+    }).formatToParts(now);
+    const raw = parts.find((p) => p.type === "hour")?.value;
+    if (raw != null) hour = Number.parseInt(raw, 10) % 24;
+  } catch {
+    // fall back to device local hour
+  }
+  if (hour < 12) return `Good morning, ${first}`;
+  if (hour < 17) return `Good afternoon, ${first}`;
+  return `Good evening, ${first}`;
+}
+
 function hasLivePlan(plan: EffectivePlanResponse | null): boolean {
   return plan?.version != null;
 }
@@ -280,6 +303,18 @@ export function TodayTab({
       workout.status === "completed" ||
       workout.status === "skipped");
 
+  const displayName = useMemo(() => {
+    const email = me?.email ?? "";
+    const local = email.split("@")[0] ?? "";
+    if (local.startsWith("aarav")) return "Aarav";
+    if (local.startsWith("rohan")) return "Rohan";
+    if (local.startsWith("meera")) return "Meera";
+    if (local.startsWith("deepak")) return "Deepak";
+    if (local.startsWith("lakshmi")) return "Lakshmi";
+    if (local) return local.split(".")[0] ?? "there";
+    return "there";
+  }, [me?.email]);
+
   const workoutExercises = workout?.workoutDay.exercises ?? [];
   const workoutMins = Math.max(20, workoutExercises.length * 8);
 
@@ -297,7 +332,9 @@ export function TodayTab({
         {isToday ? (
           <View style={styles.greet}>
             <Text style={styles.greetTitle} accessibilityRole="header">
-              {allDone ? "That's everything for today." : "Today"}
+              {allDone
+                ? "That's everything for today."
+                : greetingFor(displayName, timeZone)}
             </Text>
             <Text style={styles.greetSub}>
               {allDone

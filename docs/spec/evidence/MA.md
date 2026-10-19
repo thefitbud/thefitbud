@@ -117,7 +117,7 @@ Also: after reactivate with closed horizon, Today shows **Your coach is preparin
 | TR-06.8 | PASS | WeeklyConsistency; week `mealsAssigned` = all slots (no “4 of 3”) |
 | TR-06.9 | FAIL | Offline cache not separately screenshot-proven |
 | TR-06.10 | PASS | No client generate calls |
-| TR-06.11 | PASS | Heading **Today** (decision 22 — no time-of-day greeting) |
+| TR-06.11 | PASS | TR-06 greeting uses client timezone; decision 22 is trainer Home only |
 | TR-06.12 | FAIL | Deepak Dubai timezone not re-captured |
 | TR-06.13 | PASS | Screen PTR |
 | TR-06.14 | PASS | banned-strings green |

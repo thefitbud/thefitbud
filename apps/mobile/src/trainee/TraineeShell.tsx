@@ -44,6 +44,7 @@ import {
 } from "../dev/captureBridge";
 import { scheduledAssignments } from "./scheduledAssignments";
 import { pickTodayCheckin } from "./pickTodayCheckin";
+import { invalidateRelationshipDayData } from "./dataCache";
 import type { NotificationDeepLink } from "../notifications/routing";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
@@ -468,7 +469,10 @@ export function TraineeShell({
           relationship={relationship}
           effectivePlan={effectivePlan}
           presentation="sheet"
-          onClose={() => setOverlay(null)}
+          onClose={() => {
+            invalidateRelationshipDayData(relationship.id);
+            setOverlay(null);
+          }}
           onOpen={openOverlay}
           onSignOut={signOut}
           onNotificationNavigate={handleNotificationNavigate}
