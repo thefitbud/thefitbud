@@ -34,8 +34,11 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { addDays, localDateInTimezone } from "../lib/dates";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { messageFromSyncResults } from "./dataCache";
-import { pickTodayCheckin } from "./pickTodayCheckin";
+import { messageFromSyncResults, subscribeAll } from "./dataCache";
+import {
+  pickNextScheduledCheckin,
+  pickTodayCheckin,
+} from "./pickTodayCheckin";
 
 type Step = "form" | "review" | "done";
 
@@ -1053,8 +1056,10 @@ export function TodayCheckinCard({
 }) {
   const { api } = useAuth();
   const [checkin, setCheckin] = useState<Checkin | null>(null);
+  const [nextScheduled, setNextScheduled] = useState<Checkin | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1063,6 +1068,7 @@ export function TodayCheckinCard({
       await api.ensureDueCheckin(relationship.id, createIdempotencyKey());
       const listed = await api.listCheckins(relationship.id);
       setCheckin(pickTodayCheckin(listed.items));
+      setNextScheduled(pickNextScheduledCheckin(listed.items));
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -1076,7 +1082,13 @@ export function TodayCheckinCard({
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshNonce]);
+
+  useEffect(() => {
+    return subscribeAll(() => {
+      setRefreshNonce((value) => value + 1);
+    });
+  }, []);
 
   if (loading) {
     return (
@@ -1111,6 +1123,36 @@ export function TodayCheckinCard({
         <Text style={styles.bannerBody}>
           You can fill this in when it opens.
         </Text>
+      </View>
+    );
+  }
+
+  if (checkin.status === "reviewed" && checkin.review) {
+    const coach =
+      relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "your coach";
+    return (
+      <View style={styles.banner}>
+        <Text style={styles.bannerTitle} accessibilityRole="header">
+          {outcomeCopy(checkin.review.outcome, coach)}
+        </Text>
+        {checkin.review.notes ? (
+          <Text style={styles.bannerBody}>{checkin.review.notes}</Text>
+        ) : (
+          <Text style={styles.bannerBody}>
+            {coach} reviewed your check-in.
+          </Text>
+        )}
+        {nextScheduled ? (
+          <Text style={styles.bannerBody}>
+            Next check-in{" "}
+            {formatCivilDate(nextScheduled.localDate, { includeWeekday: true })}
+          </Text>
+        ) : null}
+        <PrimaryButton
+          label="See check-in"
+          variant="secondary"
+          onPress={() => onOpen(checkin)}
+        />
       </View>
     );
   }

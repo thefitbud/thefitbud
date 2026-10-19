@@ -2,9 +2,12 @@ import type { Checkin } from "@fitbud/contracts";
 
 /**
  * Pick the most relevant check-in for Today.
- * Prefer due/overdue, else the next upcoming scheduled.
- * After a review, Today should show "Next check-in <date>" (scheduled),
- * not keep surfacing the reviewed card.
+ * Prefer due/overdue, else submitted (waiting for review), else a recent
+ * reviewed reply, else the next upcoming scheduled.
+ *
+ * When both reviewed and scheduled exist, return the reviewed item so Today
+ * can show the coach reply; callers should also use pickNextScheduledCheckin
+ * for the "Next check-in <date>" line.
  */
 export function pickTodayCheckin(
   items: readonly Checkin[],
@@ -26,6 +29,19 @@ export function pickTodayCheckin(
     .sort((a, b) => b.localDate.localeCompare(a.localDate));
   if (submitted[0]) return submitted[0];
 
+  const reviewed = items
+    .filter((item) => item.status === "reviewed" && item.review)
+    .slice()
+    .sort((a, b) => b.localDate.localeCompare(a.localDate));
+  if (reviewed[0]) return reviewed[0];
+
+  return pickNextScheduledCheckin(items);
+}
+
+/** Earliest upcoming scheduled check-in (for "Next check-in <date>"). */
+export function pickNextScheduledCheckin(
+  items: readonly Checkin[],
+): Checkin | null {
   const upcoming = items
     .filter((item) => item.status === "scheduled")
     .slice()
