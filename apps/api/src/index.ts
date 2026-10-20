@@ -51,6 +51,13 @@ import type { Env, Variables } from "./types";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+app.use("*", async (c, next) => {
+  const pinned = c.env.NOW?.trim();
+  if (pinned && !Number.isNaN(Date.parse(pinned))) {
+    (globalThis as { FITBUD_NOW?: string }).FITBUD_NOW = pinned;
+  }
+  await next();
+});
 app.use("*", requestIdMiddleware);
 app.use("*", requestLogMiddleware);
 

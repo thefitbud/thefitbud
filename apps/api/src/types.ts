@@ -48,6 +48,8 @@ export type Env = {
   WA_WEBHOOK_VERIFY_TOKEN?: string;
   WA_MONTHLY_BUDGET_INR?: string;
   WA_HARD_CAP_INR?: string;
+  /** Optional ISO instant for local demo captures. Unset in production. */
+  NOW?: string;
 };
 export type Variables = {
   requestId: string;
