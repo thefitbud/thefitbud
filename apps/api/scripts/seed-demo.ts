@@ -9,12 +9,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { hashPassword } from "../src/auth/password.js";
-import { buildDemoSeedSql } from "../src/seed/demo/build.js";
+import { DEMO_ALL_ACCOUNTS, buildDemoSeedSql } from "../src/seed/demo/build.js";
 import { DEMO_PENDING_INVITE_TOKEN } from "../src/seed/demo/history.js";
 import {
   loadDemoLibraryIndex,
 } from "../src/seed/demo/personas.js";
-import { DEMO_ACCOUNTS, DEMO_PASSWORD_PLAINTEXT } from "../src/seed/demo/spec.js";
+import { DEMO_PASSWORD_PLAINTEXT } from "../src/seed/demo/spec.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, "..");
@@ -73,7 +73,7 @@ const wranglerArgs = [
 const result = spawnSync("pnpm", wranglerArgs, spawnOptions({ cwd: apiRoot }));
 
 console.log("\nDemo accounts (@demo.fitbud.test, password FitBud-demo-2026):");
-for (const account of DEMO_ACCOUNTS) {
+for (const account of DEMO_ALL_ACCOUNTS) {
   console.log(`  ${account.email.padEnd(36)} ${account.state}`);
 }
 console.log(`\nPending invite token (anita.invite@demo.fitbud.test): ${DEMO_PENDING_INVITE_TOKEN}`);

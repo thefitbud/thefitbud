@@ -1,4 +1,9 @@
 import { DEMO_ACCOUNTS, DEMO_PASSWORD_PLAINTEXT } from "./spec.js";
+import { DEMO_EXTRA_ACCOUNTS } from "./spec-extra.js";
+import { personaConfig } from "./generator/personas.js";
+
+/** Original 19 accounts + the 8 generated Rahul clients. */
+export const DEMO_ALL_ACCOUNTS = [...DEMO_ACCOUNTS, ...DEMO_EXTRA_ACCOUNTS];
 import { buildDemoHistorySql } from "./history.js";
 import { demoUuid, sqlQuote } from "./ids.js";
 import type { DemoLibraryIndex } from "./personas.js";
@@ -77,6 +82,8 @@ DELETE FROM interventions;
 DELETE FROM exception_actions;
 DELETE FROM exceptions;
 DELETE FROM meal_compliance;
+DELETE FROM set_executions;
+DELETE FROM exercise_executions;
 DELETE FROM workout_executions;
 DELETE FROM meal_assignments;
 DELETE FROM workout_assignments;
@@ -106,6 +113,10 @@ DELETE FROM sync_mutations;
 DELETE FROM change_log;
 DELETE FROM trainee_custom_foods;
 DELETE FROM plan_templates WHERE ownership='trainer';
+DELETE FROM checkin_form_versions WHERE template_id IN (SELECT id FROM checkin_form_templates WHERE ownership='trainer');
+DELETE FROM checkin_form_templates WHERE ownership='trainer';
+DELETE FROM onboarding_form_versions WHERE template_id IN (SELECT id FROM onboarding_form_templates WHERE ownership='trainer');
+DELETE FROM onboarding_form_templates WHERE ownership='trainer';
 DELETE FROM user_identities;
 DELETE FROM user_roles;
 DELETE FROM trainer_profiles;
@@ -159,7 +170,7 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
   ];
 
   let phoneIndex = 1;
-  for (const account of DEMO_ACCOUNTS) {
+  for (const account of DEMO_ALL_ACCOUNTS) {
     if (account.role === "invite") {
       continue;
     }
@@ -169,10 +180,13 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
         ? ""
         : account.displayName ||
           titleCaseDemoName(account.email.split("@")[0]!.replace(/\./g, " "));
+    const cfg = personaConfig(account.email);
     const timezone =
-      account.email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
+      cfg?.timezone ?? (account.email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata");
     const bio =
-      account.role === "trainee" ? DEMO_TRAINEE_BIO[account.email] : undefined;
+      account.role === "trainee" ? DEMO_TRAINEE_BIO[account.email] ??
+          (cfg?.bio ? { ...cfg.bio, gender: cfg.sex } : undefined)
+        : undefined;
     parts.push(
       insertUser({
         email: account.email,
@@ -205,7 +219,7 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
     }),
   );
 
-  for (const account of DEMO_ACCOUNTS) {
+  for (const account of DEMO_ALL_ACCOUNTS) {
     parts.push(`-- ${account.email} (${account.state})`);
   }
 

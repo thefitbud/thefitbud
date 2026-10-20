@@ -15,6 +15,15 @@ import { rngFor, type Rng } from "./rng.js";
 import type { SeedRows } from "./sql.js";
 
 const HOUR = 3_600_000;
+
+const CLEARED_LOOKBACK = new Set([
+  "siddharth.yearly@demo.fitbud.test",
+  "ananya.newbie@demo.fitbud.test",
+  "rajesh.senior@demo.fitbud.test",
+  "divya.wedding@demo.fitbud.test",
+  "fatima.london@demo.fitbud.test",
+  "pooja.silent@demo.fitbud.test",
+]);
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export type WorldInput = {
@@ -343,7 +352,9 @@ export function addGeneratedPersona(input: WorldInput, cfg: PersonaConfig): void
   };
   const lookbackFrom = addDaysFromLocalDate(refDate, -2);
   const result = simulateActivity(ctx, { fromDate: startDate, toDate: refDate, assignUntil: addDaysFromLocalDate(refDate, 6), lookbackFrom, checkins: true });
-  coverLookback(ctx, result.items, lookbackFrom);
+  // SEED_DESIGN §4 distribution: these read on_track / no_recent_data, so the
+  // coach has already cleared every lookback item; the rest keep ≤4 open.
+  coverLookback(ctx, result.items, lookbackFrom, CLEARED_LOOKBACK.has(cfg.email) ? 0 : 4);
   addCurrentCheckins(input, ctx, result.lastCheckin);
   addCoachingTouches(input, ctx, result.items, { fromDate: startDate, toDate: refDate, openAsk: OPEN_ASKS[cfg.email] });
   addPlanChangeNotes(input, ctx, chain, refDate);
@@ -378,12 +389,13 @@ function addCurrentCheckins(input: WorldInput, ctx: ActivityContext, last: { id:
           checkin_form_version_id: ctx.checkinFormVersionId, answers_json: null, submitted_at: null, created_at: start, updated_at: start,
         });
         if (due >= addDaysFromLocalDate(input.refDate, -2)) {
+          const cleared = CLEARED_LOOKBACK.has(cfg.email);
           rows.add("exceptions", {
-            id: demoUuid("exception", ctx.relId, `checkin-${id}`), coaching_relationship_id: ctx.relId, type: "overdue_checkin", status: "active",
+            id: demoUuid("exception", ctx.relId, `checkin-${id}`), coaching_relationship_id: ctx.relId, type: "overdue_checkin", status: cleared ? "resolved" : "active",
             rule_version: "mvp.v2", source_entity_type: "checkin", source_entity_id: id, summary: "Overdue check-in",
             details_json: JSON.stringify(overdueCheckinCandidate({ checkinId: id, localDate: due, windowEndsAt: end }).details),
-            detected_at: iso(Date.parse(end) + 5 * 60_000), activated_at: iso(Date.parse(end) + 5 * 60_000), acknowledged_at: null, resolved_at: null,
-            created_at: iso(Date.parse(end) + 5 * 60_000), updated_at: iso(Date.parse(end) + 5 * 60_000), severity: "attention",
+            detected_at: iso(Date.parse(end) + 5 * 60_000), activated_at: iso(Date.parse(end) + 5 * 60_000), acknowledged_at: null, resolved_at: cleared ? input.now : null,
+            created_at: iso(Date.parse(end) + 5 * 60_000), updated_at: cleared ? input.now : iso(Date.parse(end) + 5 * 60_000), severity: "attention",
             resolution_outcome: null, resolution_note: null, closed_reason: null, source_logged_late_at: null,
           });
         }

@@ -128,7 +128,8 @@ export function foodByGrams(lib: DemoLibraryIndex, slug: string, grams: number) 
   const entry = lib.foods[slug];
   if (!entry) throw new Error(`Demo seed: food ${slug} not loaded`);
   const servings = entry.item.servings.filter((s) => s.conversionScaled != null);
-  const gramsOf = (conversionScaled: number) => (conversionScaled / NUTRIENT_SCALE) * 100;
+  // conversionScaled is grams per serving × NUTRIENT_SCALE (1 egg = 70_000_000).
+  const gramsOf = (conversionScaled: number) => conversionScaled / NUTRIENT_SCALE;
   let best = servings.find((s) => s.id === entry.defaultServingId) ?? servings[0]!;
   let bestQty = grams / gramsOf(best.conversionScaled!);
   for (const serving of servings) {

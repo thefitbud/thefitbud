@@ -645,7 +645,7 @@ function simulateCheckin(
  * 3-day lookback gets a seeded exception, so the API invents none. ≤10 open:
  * older extras are pre-resolved by the coach.
  */
-export function coverLookback(ctx: ActivityContext, items: GeneratedItem[], lookbackFrom: string): number {
+export function coverLookback(ctx: ActivityContext, items: GeneratedItem[], lookbackFrom: string, openLimit = 4): number {
   const rng = rngFor(ctx.cfg.email, "coverage");
   const candidates: Array<{ candidate: ExceptionCandidate; detectedAt: string; loggedLateAt: string | null }> = [];
   for (const item of items) {
@@ -687,8 +687,8 @@ export function coverLookback(ctx: ActivityContext, items: GeneratedItem[], look
       key: `lookback-${entry.candidate.type}-${entry.candidate.sourceEntityId}`,
       candidate: entry.candidate,
       detectedAt: entry.detectedAt,
-      open: index < 4,
+      open: index < openLimit,
     });
   });
-  return Math.min(4, candidates.length);
+  return Math.min(openLimit, candidates.length);
 }
