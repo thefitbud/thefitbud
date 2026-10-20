@@ -140,7 +140,9 @@ test("share a client-visible note", async ({ page }) => {
   await page.getByLabel(/visible to client/i).check();
   await page.locator("textarea").first().fill("E2E visible note for client");
   await page.getByRole("button", { name: /save note/i }).click();
-  await expect(page.getByText(/visible to client/i)).toBeVisible();
+  // Seeded history already has client-visible notes (answered coach asks); assert on the new one.
+  await expect(page.getByText("E2E visible note for client").first()).toBeVisible();
+  await expect(page.getByText(/visible to client/i).first()).toBeVisible();
 });
 
 test("end coaching then reactivate", async ({ page }) => {
