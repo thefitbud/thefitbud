@@ -67,6 +67,32 @@ describe("nextUp", () => {
     if (hero?.kind === "meal") expect(hero.reason).toBe("overdue");
   });
 
+  it("at night prefers the most recently overdue meal over morning breakfast", () => {
+    const hero = nextUp({
+      meals: [
+        meal({
+          id: "breakfast",
+          status: "overdue",
+          mealName: "Breakfast",
+          windowStartsAt: "2026-10-18T02:30:00.000Z",
+          windowEndsAt: "2026-10-18T03:30:00.000Z",
+        }),
+        meal({
+          id: "dinner",
+          status: "overdue",
+          mealName: "Dinner",
+          windowStartsAt: "2026-10-18T14:30:00.000Z",
+          windowEndsAt: "2026-10-18T15:30:00.000Z",
+        }),
+      ],
+      workout: null,
+      checkin: null,
+      now: new Date("2026-10-18T17:20:00.000Z"), // ~10:50 pm IST
+    });
+    expect(hero?.kind).toBe("meal");
+    if (hero?.kind === "meal") expect(hero.meal.id).toBe("dinner");
+  });
+
   it("prefers meal in ±60 min window over workout", () => {
     const now = new Date("2026-10-18T02:40:00.000Z");
     const hero = nextUp({

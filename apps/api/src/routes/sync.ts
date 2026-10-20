@@ -241,6 +241,119 @@ function statusFromHttp(
   return "rejected";
 }
 
+/**
+ * Persist a sync mutation result. Retries must never 500 on UNIQUE — return the
+ * prior stored result when the same mutationId / idempotency key already exists.
+ * First successful insert keeps status "applied"; only true retries become
+ * "already_applied".
+ */
+async function persistSyncMutationResult(
+  db: ReturnType<typeof createDb>,
+  input: {
+    actorUserId: string;
+    mutation: SyncMutationRequest;
+    result: SyncMutationResult;
+  },
+): Promise<SyncMutationResult> {
+  // Pre-check — avoid D1 quirks with RETURNING + ON CONFLICT (can 500 or
+  // mis-report first apply as already_applied).
+  const existingByMutation = await db
+    .select()
+    .from(syncMutations)
+    .where(
+      and(
+        eq(syncMutations.actorUserId, input.actorUserId),
+        eq(syncMutations.mutationId, input.mutation.mutationId),
+      ),
+    )
+    .limit(1);
+  if (existingByMutation[0]) {
+    const prior = mutationResultFromStored(existingByMutation[0].resultBody);
+    if (
+      prior.status === "applied" ||
+      prior.status === "already_applied"
+    ) {
+      return { ...prior, status: "already_applied" };
+    }
+    return prior;
+  }
+
+  const existingByKey = await db
+    .select()
+    .from(syncMutations)
+    .where(
+      and(
+        eq(syncMutations.actorUserId, input.actorUserId),
+        eq(syncMutations.idempotencyKey, input.mutation.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (existingByKey[0]) {
+    const prior = mutationResultFromStored(existingByKey[0].resultBody);
+    if (existingByKey[0].mutationId !== input.mutation.mutationId) {
+      return {
+        mutationId: input.mutation.mutationId,
+        status: "rejected",
+        recordId: prior.recordId,
+        serverVersion: prior.serverVersion,
+        entityType: prior.entityType,
+        error: {
+          code: "IDEMPOTENCY_KEY_REUSE",
+          message:
+            "Idempotency key was already used by a different mutation id.",
+        },
+      };
+    }
+    if (
+      prior.status === "applied" ||
+      prior.status === "already_applied"
+    ) {
+      return { ...prior, status: "already_applied" };
+    }
+    return prior;
+  }
+
+  try {
+    await db.insert(syncMutations).values({
+      id: createId(),
+      mutationId: input.mutation.mutationId,
+      actorUserId: input.actorUserId,
+      idempotencyKey: input.mutation.idempotencyKey,
+      operation: input.mutation.operation,
+      entityType: input.mutation.entityType,
+      recordId: input.result.recordId,
+      resultStatus: input.result.status,
+      serverVersion: input.result.serverVersion,
+      resultBody: JSON.stringify(input.result),
+      createdAt: nowIso(),
+    });
+    return input.result;
+  } catch {
+    // Race: another writer persisted first — return prior without 500.
+    const raced = await db
+      .select()
+      .from(syncMutations)
+      .where(
+        and(
+          eq(syncMutations.actorUserId, input.actorUserId),
+          eq(syncMutations.mutationId, input.mutation.mutationId),
+        ),
+      )
+      .limit(1);
+    if (raced[0]) {
+      const prior = mutationResultFromStored(raced[0].resultBody);
+      if (
+        prior.status === "applied" ||
+        prior.status === "already_applied"
+      ) {
+        return { ...prior, status: "already_applied" };
+      }
+      return prior;
+    }
+    return input.result;
+  }
+}
+
 syncRoutes.post(
   "/push",
   operation({
@@ -391,20 +504,13 @@ syncRoutes.post(
             details: json?.error?.details,
           },
         };
-        await db.insert(syncMutations).values({
-          id: createId(),
-          mutationId: mutation.mutationId,
-          actorUserId: actor.userId,
-          idempotencyKey: mutation.idempotencyKey,
-          operation: mutation.operation,
-          entityType: mutation.entityType,
-          recordId: mutation.recordId,
-          resultStatus: result.status,
-          serverVersion: null,
-          resultBody: JSON.stringify(result),
-          createdAt: nowIso(),
-        });
-        results.push(result);
+        results.push(
+          await persistSyncMutationResult(db, {
+            actorUserId: actor.userId,
+            mutation,
+            result,
+          }),
+        );
         continue;
       }
 
@@ -429,20 +535,13 @@ syncRoutes.post(
         });
       }
 
-      await db.insert(syncMutations).values({
-        id: createId(),
-        mutationId: mutation.mutationId,
-        actorUserId: actor.userId,
-        idempotencyKey: mutation.idempotencyKey,
-        operation: mutation.operation,
-        entityType: mutation.entityType,
-        recordId: result.recordId,
-        resultStatus: result.status,
-        serverVersion: result.serverVersion,
-        resultBody: JSON.stringify(result),
-        createdAt: nowIso(),
-      });
-      results.push(result);
+      results.push(
+        await persistSyncMutationResult(db, {
+          actorUserId: actor.userId,
+          mutation,
+          result,
+        }),
+      );
     }
 
     return ok(c, syncPushResponseSchema.parse({ results }));

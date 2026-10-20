@@ -5,7 +5,10 @@ import {
   updateMealTimesRequestSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client.js";
-import { coachingRelationships, mealTimeOverrides } from "../db/schema.js";
+import {
+  coachingRelationships,
+  mealTimeOverrides,
+} from "../db/schema.js";
 import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
 import { listMergedMealTimeSlots } from "../domain/meal-time-slots.js";

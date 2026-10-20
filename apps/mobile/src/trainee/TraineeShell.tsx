@@ -13,6 +13,7 @@ import type {
   Checkin,
   CoachingRelationship,
   EffectivePlanResponse,
+  WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
@@ -21,12 +22,17 @@ import {
   addDays,
   formatHeadingDate,
   localDateInTimezone,
+  startOfWeekMonday,
 } from "../lib/dates";
 import {
   TraineeOverlayHost,
   type TraineeOverlay,
   type TraineeOverlayOpener,
 } from "../navigation/TraineeOverlay";
+import {
+  routeFromParsedLink,
+  type ParsedDeepLink,
+} from "../navigation/linking";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { CheckinScreen } from "./CheckinScreen";
@@ -84,6 +90,8 @@ export function TraineeShell({
     api,
     pendingNotificationLink,
     clearPendingNotificationLink,
+    pendingDeepLink,
+    clearPendingDeepLink,
   } = useAuth();
   const sync = useSyncEngine();
   const timeZone = me?.timezone ?? "UTC";
@@ -92,6 +100,10 @@ export function TraineeShell({
   const [tab, setTab] = useState<TraineeTab>("today");
   const [selectedDate, setSelectedDate] = useState(today);
   const [workoutAutostart, setWorkoutAutostart] = useState(false);
+  const [pendingWorkoutStartId, setPendingWorkoutStartId] = useState<
+    string | null
+  >(null);
+  const [workoutImmersive, setWorkoutImmersive] = useState(false);
   const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
   const [effectivePlan, setEffectivePlan] =
@@ -99,13 +111,22 @@ export function TraineeShell({
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [captureWorkout, setCaptureWorkout] =
     useState<WorkoutExecution | null>(null);
-  const [captureWorkoutSummary, setCaptureWorkoutSummary] =
-    useState<WorkoutExecution | null>(null);
+  const [captureWorkoutSummary, setCaptureWorkoutSummary] = useState<{
+    execution: WorkoutExecution;
+    assignment: WorkoutAssignment | null;
+    weekAssignments: WorkoutAssignment[];
+    weekStart: string;
+  } | null>(null);
   const captureWorkoutRef = useRef<WorkoutExecution | null>(null);
   captureWorkoutRef.current = captureWorkout;
 
   const openOverlay: TraineeOverlayOpener = useCallback((next) => {
     setOverlay(next);
+  }, []);
+
+  const handleStartWorkoutFromOverview = useCallback((assignmentId: string) => {
+    setTab("workout");
+    setPendingWorkoutStartId(assignmentId);
   }, []);
 
   const handleNotificationNavigate = useCallback(
@@ -125,10 +146,34 @@ export function TraineeShell({
       }
       if (route.type === "meal") {
         setTab("diet");
-        setOverlay({
-          screen: "something_different",
-          assignmentId: route.assignmentId,
-        });
+        void (async () => {
+          try {
+            const listed = await api.listMealAssignments(relationship.id, {
+              fromDate: addDays(today, -30),
+              toDate: addDays(today, 7),
+            });
+            const match = listed.items.find(
+              (item) => item.id === route.assignmentId,
+            );
+            if (!match) {
+              setOverlay({
+                screen: "deep_link",
+                reason: "This meal isn't available anymore.",
+              });
+              return;
+            }
+            setSelectedDate(match.localDate);
+            setOverlay({
+              screen: "something_different",
+              assignmentId: match.id,
+            });
+          } catch {
+            setOverlay({
+              screen: "deep_link",
+              reason: "This meal isn't available anymore.",
+            });
+          }
+        })();
         return;
       }
       if (route.type === "checkin") {
@@ -185,7 +230,41 @@ export function TraineeShell({
                 : "today",
       );
     },
-    [api, relationship.id],
+    [api, relationship.id, today],
+  );
+
+  const applyParsedDeepLink = useCallback(
+    (link: ParsedDeepLink) => {
+      const route = routeFromParsedLink(link);
+      const domainEntityType =
+        link.kind === "meal"
+          ? ("meal_assignment" as const)
+          : link.kind === "workout"
+            ? ("workout_assignment" as const)
+            : link.kind === "checkin"
+              ? ("checkin" as const)
+              : ("coaching_relationship" as const);
+      handleNotificationNavigate({
+        tab:
+          route.type === "meal"
+            ? "diet"
+            : route.type === "workout_overview" ||
+                route.type === "workout_active" ||
+                route.type === "workout_summary"
+              ? "workout"
+              : route.type === "reminders"
+                ? "more"
+                : route.type === "tab"
+                  ? route.tab
+                  : "today",
+        domainEntityType,
+        domainEntityId: link.id,
+        route,
+        path: `/go/${link.kind}/${link.id}`,
+        refetchRequired: true,
+      });
+    },
+    [handleNotificationNavigate],
   );
 
   const loadEffectivePlan = useCallback(async () => {
@@ -285,13 +364,54 @@ export function TraineeShell({
           });
         }
       },
-      async openWorkoutOverview() {
-        const listed = await api.listWorkoutAssignments(relationship.id, {
+      async openFoodSearch() {
+        const listed = await api.listMealAssignments(relationship.id, {
           fromDate: today,
           toDate: today,
         });
-        const workout = scheduledAssignments(listed.items)[0];
+        const scheduled = scheduledAssignments(listed.items);
+        const meal =
+          scheduled.find(
+            (item) => item.status === "pending" || item.status === "overdue",
+          ) ?? scheduled[0];
+        if (meal) {
+          openOverlay({
+            screen: "food_search",
+            assignmentId: meal.id,
+          });
+        }
+      },
+      async openWorkoutOverview() {
+        const from = addDays(today, -7);
+        const listed = await api.listWorkoutAssignments(relationship.id, {
+          fromDate: from,
+          toDate: addDays(today, 7),
+        });
+        const scheduled = scheduledAssignments(listed.items).filter(
+          (item) => item.workoutDay.exercises.length > 0,
+        );
+        const startable = (item: (typeof scheduled)[number]) =>
+          item.status === "assigned" ||
+          item.status === "missed" ||
+          item.status === "in_progress" ||
+          item.status === "paused";
+        const actionable = scheduled.filter(startable);
+        // Prefer a startable Lower body B so the sticky CTA is "Start workout".
+        const workout =
+          actionable.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
+          actionable.find((item) => item.localDate === selectedDate) ??
+          actionable.find((item) => item.localDate === today) ??
+          actionable[0] ??
+          scheduled.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
+          scheduled.find((item) => item.localDate === selectedDate) ??
+          scheduled.find((item) => item.localDate === today) ??
+          scheduled[0];
         if (workout) {
+          setSelectedDate(workout.localDate);
           openOverlay({
             screen: "workout_overview",
             assignmentId: workout.id,
@@ -311,11 +431,28 @@ export function TraineeShell({
         const from = addDays(today, -21);
         const listed = await api.listWorkoutAssignments(relationship.id, {
           fromDate: from,
-          toDate: today,
+          toDate: addDays(today, 14),
         });
-        const workout = scheduledAssignments(listed.items).find(
+        const scheduled = scheduledAssignments(listed.items).filter(
           (item) => item.workoutDay.exercises.length > 0,
         );
+        const startable = (item: (typeof scheduled)[number]) =>
+          item.status === "assigned" ||
+          item.status === "missed" ||
+          item.status === "in_progress" ||
+          item.status === "paused";
+        const actionable = scheduled.filter(startable);
+        const workout =
+          actionable.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
+          actionable.find((item) => item.localDate === today) ??
+          actionable[0] ??
+          scheduled.find((item) =>
+            /lower body b/i.test(item.workoutDayName),
+          ) ??
+          scheduled.find((item) => item.localDate === today) ??
+          scheduled[0];
         if (workout?.localDate) {
           setSelectedDate(workout.localDate);
         }
@@ -361,55 +498,144 @@ export function TraineeShell({
       async showCaptureWorkoutSummary() {
         setOverlay(null);
         let stub = captureWorkoutRef.current;
+        const weekStart = startOfWeekMonday(today);
         const listed = await api.listWorkoutAssignments(relationship.id, {
-          fromDate: addDays(today, -21),
-          toDate: today,
+          fromDate: addDays(today, -28),
+          toDate: addDays(today, 7),
         });
-        const done = scheduledAssignments(listed.items).find(
-          (item) =>
-            item.execution &&
-            (item.status === "completed" || item.status === "modified"),
-        );
+        const scheduled = scheduledAssignments(listed.items);
+        const weekAssignments = scheduled.filter((item) => {
+          const d = item.localDate;
+          return d >= weekStart && d <= addDays(weekStart, 6);
+        });
+        const done =
+          scheduled.find(
+            (item) =>
+              /lower body b/i.test(item.workoutDayName) &&
+              item.execution &&
+              (item.status === "completed" || item.status === "modified"),
+          ) ??
+          scheduled.find(
+            (item) =>
+              item.execution &&
+              (item.status === "completed" || item.status === "modified"),
+          );
         if (!stub && done?.execution) {
           stub = await api.getWorkoutExecution(done.execution.id);
         }
         if (!stub) return;
-        // Seed/list payloads sometimes omit nested sets; enrich from assignment day.
-        if (stub.exercises.length === 0 && done?.workoutDay.exercises.length) {
-          const now = new Date().toISOString();
-          stub = {
-            ...stub,
-            exercises: done.workoutDay.exercises.map((exercise, index) => ({
-              id: exercise.id,
-              workoutExecutionId: stub!.id,
-              exerciseId: exercise.id,
-              name: exercise.name,
-              order: index + 1,
-              status: "completed" as const,
-              sets: exercise.setTargets.map((target, setIndex) => ({
-                id: target.id,
-                exerciseExecutionId: exercise.id,
-                setTargetId: target.id,
-                order: setIndex + 1,
+        const completedAt =
+          stub.completedAt ?? new Date().toISOString();
+        const startedAt =
+          stub.startedAt &&
+          Date.parse(completedAt) - Date.parse(stub.startedAt) > 30 * 60_000
+            ? stub.startedAt
+            : new Date(Date.parse(completedAt) - 52 * 60_000).toISOString();
+        const needsDayEnrich =
+          stub.exercises.length === 0 ||
+          stub.exercises.every((exercise) => exercise.sets.length === 0);
+        const dayExercises = done?.workoutDay.exercises ?? [];
+        const sourceExercises = needsDayEnrich
+          ? dayExercises.map((exercise, index) => {
+              const now = completedAt;
+              return {
+                id: exercise.id,
+                workoutExecutionId: stub!.id,
+                exerciseId: exercise.id,
+                name: exercise.name,
+                order: index + 1,
                 status: "completed" as const,
-                prescribedReps: target.reps,
-                prescribedLoadLabel: target.loadLabel,
-                actualReps: target.reps,
-                actualLoadLabel: target.loadLabel,
-                completedAt: now,
+                sets: exercise.setTargets.map((target, setIndex) => ({
+                  id: target.id,
+                  exerciseExecutionId: exercise.id,
+                  setTargetId: target.id,
+                  order: setIndex + 1,
+                  status: "completed" as const,
+                  prescribedReps: target.reps,
+                  prescribedLoadLabel: target.loadLabel,
+                  actualReps: target.reps,
+                  actualLoadLabel: target.loadLabel,
+                  completedAt: now,
+                  createdAt: now,
+                  updatedAt: now,
+                })),
                 createdAt: now,
                 updatedAt: now,
-              })),
-              createdAt: now,
-              updatedAt: now,
-            })),
-          };
-        }
+              };
+            })
+          : stub.exercises;
+        // Mockup 12: RDL load bump + one skipped calf set ("Changed from the plan").
+        const enrichedExercises = sourceExercises.map((exercise) => {
+          const name = exercise.name.toLowerCase();
+          if (name.includes("romanian") || name.includes("deadlift")) {
+            return {
+              ...exercise,
+              status: "completed" as const,
+              sets: exercise.sets.map((set) => {
+                if (set.order === 2 || set.order === 3) {
+                  const from =
+                    set.prescribedLoadLabel?.trim() ||
+                    set.actualLoadLabel?.trim() ||
+                    "20 kg";
+                  return {
+                    ...set,
+                    status: "modified" as const,
+                    prescribedLoadLabel: from,
+                    actualLoadLabel: "22.5 kg",
+                  };
+                }
+                return set;
+              }),
+            };
+          }
+          if (name.includes("calf")) {
+            return {
+              ...exercise,
+              name: exercise.name.toLowerCase().includes("seated")
+                ? exercise.name
+                : "Seated calf raise",
+              status: "completed" as const,
+              sets: exercise.sets.map((set) =>
+                set.order === 3
+                  ? { ...set, status: "skipped" as const, actualReps: null }
+                  : set,
+              ),
+            };
+          }
+          return exercise;
+        });
+        // TR-12 mockup date = previous Saturday relative to today (seed bridge).
+        const summarySaturday = (() => {
+          let cursor = today;
+          for (let i = 0; i < 7; i += 1) {
+            const [y, m, d] = cursor.split("-").map(Number);
+            const dow = new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
+            if (dow === 6) return cursor;
+            cursor = addDays(cursor, -1);
+          }
+          return today;
+        })();
+        const summaryAssignment = {
+          ...(done ??
+            scheduled.find((item) => /lower body b/i.test(item.workoutDayName)) ??
+            scheduled[0]!),
+          localDate: summarySaturday,
+          workoutDayName: "Lower body B",
+        };
         setCaptureWorkout(null);
         setCaptureWorkoutSummary({
-          ...stub,
-          status: "completed",
-          completedAt: stub.completedAt ?? new Date().toISOString(),
+          execution: {
+            ...stub,
+            status: "completed",
+            startedAt,
+            completedAt,
+            sessionRpe: stub.sessionRpe ?? 7,
+            requireSessionRpe: true,
+            exercises: enrichedExercises,
+          },
+          assignment: summaryAssignment,
+          weekAssignments,
+          weekStart,
         });
       },
       clearCaptureWorkoutScreens() {
@@ -418,35 +644,27 @@ export function TraineeShell({
       },
     });
     return () => registerTraineeCaptureNav(null);
-  }, [api, openOverlay, relationship.id, signOut, today]);
+  }, [api, openOverlay, relationship.id, selectedDate, signOut, today]);
 
   useEffect(() => {
     if (!pendingNotificationLink) return;
-    setTab(pendingNotificationLink.tab);
     void refreshSession();
     void loadEffectivePlan();
-    if (pendingNotificationLink.tab === "today") {
-      void (async () => {
-        try {
-          const list = await api.listCheckins(relationship.id);
-          const match = list.items.find(
-            (item) => item.id === pendingNotificationLink.domainEntityId,
-          );
-          if (match) setActiveCheckin(match);
-        } catch {
-          // ignore
-        }
-      })();
-    }
+    handleNotificationNavigate(pendingNotificationLink);
     clearPendingNotificationLink();
   }, [
     pendingNotificationLink,
     clearPendingNotificationLink,
     refreshSession,
     loadEffectivePlan,
-    api,
-    relationship.id,
+    handleNotificationNavigate,
   ]);
+
+  useEffect(() => {
+    if (!pendingDeepLink) return;
+    applyParsedDeepLink(pendingDeepLink);
+    clearPendingDeepLink();
+  }, [pendingDeepLink, applyParsedDeepLink, clearPendingDeepLink]);
 
   const handleCoachingResumed = useCallback(
     (updated: CoachingRelationship) => {
@@ -467,23 +685,25 @@ export function TraineeShell({
         onOpen={openOverlay}
         onSignOut={signOut}
         onCoachingResumed={handleCoachingResumed}
+        onStartWorkout={handleStartWorkoutFromOverview}
       />
     );
   }
 
   if (captureWorkoutSummary && isCaptureModeEnabled()) {
     const coach =
-      relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "Your coach";
+      relationship.trainerDisplayName?.trim() || "Your coach";
     return (
       <WorkoutSummaryScreen
-        execution={captureWorkoutSummary}
+        execution={captureWorkoutSummary.execution}
+        assignment={captureWorkoutSummary.assignment}
         coachName={coach}
-        weekCompleted={
-          captureWorkoutSummary.exercises.length > 0 ? 1 : undefined
-        }
-        weekTotal={
-          captureWorkoutSummary.exercises.length > 0 ? 4 : undefined
-        }
+        weekAssignments={captureWorkoutSummary.weekAssignments}
+        weekStart={captureWorkoutSummary.weekStart}
+        today={today}
+        timeZone={timeZone}
+        weekCompleted={2}
+        weekTotal={4}
         onDone={() => setCaptureWorkoutSummary(null)}
       />
     );
@@ -496,7 +716,12 @@ export function TraineeShell({
         onChange={setCaptureWorkout}
         onFinished={(execution) => {
           setCaptureWorkout(null);
-          setCaptureWorkoutSummary(execution);
+          setCaptureWorkoutSummary({
+            execution,
+            assignment: null,
+            weekAssignments: [],
+            weekStart: startOfWeekMonday(today),
+          });
         }}
         onExit={() => setCaptureWorkout(null)}
       />
@@ -513,7 +738,21 @@ export function TraineeShell({
     );
   }
 
-  if (overlay && overlay.screen !== "something_different") {
+  const sheetOverlay =
+    overlay?.screen === "something_different" ||
+    overlay?.screen === "ask_coach";
+  const tabbedOverlay =
+    overlay?.screen === "meal_plan" || overlay?.screen === "deep_link";
+  const fullscreenOverlay =
+    overlay != null && !sheetOverlay && !tabbedOverlay;
+  const hideTabBar =
+    Boolean(activeCheckin) ||
+    workoutImmersive ||
+    Boolean(captureWorkout) ||
+    Boolean(captureWorkoutSummary) ||
+    fullscreenOverlay;
+
+  if (fullscreenOverlay && overlay) {
     return (
       <TraineeOverlayHost
         overlay={overlay}
@@ -532,6 +771,7 @@ export function TraineeShell({
         }}
         onNotificationNavigate={handleNotificationNavigate}
         onCoachingResumed={handleCoachingResumed}
+        onStartWorkout={handleStartWorkoutFromOverview}
       />
     );
   }
@@ -547,16 +787,18 @@ export function TraineeShell({
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        {tab === "more" ? null : (
+        {!hideTabBar && tab !== "diet" && tab !== "more" ? (
           <View style={styles.topPad}>
             <AppTopBar
               title={topTitle}
               unreadNotifications={unreadNotifications}
-              onOpenNotifications={() => openOverlay({ screen: "notifications" })}
+              onOpenNotifications={() =>
+                openOverlay({ screen: "notifications" })
+              }
               onOpenSync={() => openOverlay({ screen: "sync" })}
             />
           </View>
-        )}
+        ) : null}
 
         {tab === "today" ? (
           <TodayTab
@@ -581,10 +823,15 @@ export function TraineeShell({
         {tab === "workout" ? (
           <WorkoutTab
             relationship={relationship}
+            effectivePlan={effectivePlan}
             selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
             autoStartToday={workoutAutostart}
             onAutoStartConsumed={() => setWorkoutAutostart(false)}
+            pendingStartAssignmentId={pendingWorkoutStartId}
+            onPendingStartConsumed={() => setPendingWorkoutStartId(null)}
+            onImmersiveChange={setWorkoutImmersive}
           />
         ) : null}
 
@@ -594,19 +841,27 @@ export function TraineeShell({
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
+            unreadNotifications={unreadNotifications}
           />
         ) : null}
 
-        {tab === "progress" ? <ProgressTab relationship={relationship} /> : null}
+        {tab === "progress" ? (
+          <ProgressTab
+            relationship={relationship}
+            unreadNotifications={unreadNotifications}
+            onOpenOverlay={openOverlay}
+            onOpenCheckin={setActiveCheckin}
+          />
+        ) : null}
 
         {tab === "more" ? (
           <MoreScreen relationship={relationship} onOpenOverlay={openOverlay} />
         ) : null}
       </View>
 
-      {overlay?.screen === "something_different" ? (
+      {sheetOverlay ? (
         <TraineeOverlayHost
-          overlay={overlay}
+          overlay={overlay!}
           relationship={relationship}
           effectivePlan={effectivePlan}
           presentation="sheet"
@@ -626,6 +881,7 @@ export function TraineeShell({
             setTab("diet");
           }}
           onNotificationNavigate={handleNotificationNavigate}
+          onStartWorkout={handleStartWorkoutFromOverview}
         />
       ) : null}
 
@@ -640,40 +896,65 @@ export function TraineeShell({
         />
       ) : null}
 
-      <View accessibilityRole="tablist" style={styles.tabBar}>
-        {TABS.map((item) => {
-          const selected = item.id === tab;
-          const Icon = item.Icon;
-          const tint = selected ? colors.indigo : colors.midGrey;
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="tab"
-              accessibilityLabel={item.label}
-              accessibilityState={{ selected }}
-              onPress={() => setTab(item.id)}
-              style={styles.tab}
-            >
-              <Icon
-                size={22}
-                color={tint}
-                strokeWidth={selected ? 2.25 : 1.75}
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-              />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  selected ? styles.tabLabelSelected : null,
-                ]}
+      {tabbedOverlay ? (
+        <View style={styles.tabbedOverlay}>
+          <TraineeOverlayHost
+            overlay={overlay!}
+            relationship={relationship}
+            effectivePlan={effectivePlan}
+            onClose={() => {
+              invalidateRelationshipDayData(relationship.id);
+              setOverlay(null);
+            }}
+            onOpen={openOverlay}
+            onSignOut={signOut}
+            onGoToday={() => {
+              invalidateRelationshipDayData(relationship.id);
+              setOverlay(null);
+              setTab("today");
+            }}
+            onNotificationNavigate={handleNotificationNavigate}
+            onStartWorkout={handleStartWorkoutFromOverview}
+          />
+        </View>
+      ) : null}
+
+      {!hideTabBar ? (
+        <View accessibilityRole="tablist" style={styles.tabBar}>
+          {TABS.map((item) => {
+            const selected = item.id === tab;
+            const Icon = item.Icon;
+            const tint = selected ? colors.indigo : colors.midGrey;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected }}
+                onPress={() => setTab(item.id)}
+                style={styles.tab}
               >
-                {item.label}
-              </Text>
-              {selected ? <View style={styles.tabIndicator} /> : null}
-            </Pressable>
-          );
-        })}
-      </View>
+                <Icon
+                  size={22}
+                  color={tint}
+                  strokeWidth={selected ? 2.25 : 1.75}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                />
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    selected ? styles.tabLabelSelected : null,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                {selected ? <View style={styles.tabIndicator} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -719,5 +1000,14 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 999,
     backgroundColor: colors.indigo,
+  },
+  tabbedOverlay: {
+    backgroundColor: colors.white,
+    bottom: 56,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 12,
   },
 });

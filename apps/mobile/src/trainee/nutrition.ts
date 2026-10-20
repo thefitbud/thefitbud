@@ -140,7 +140,8 @@ export function dayNutritionFromMeals(
   };
 
   // Prefer authoritative day kcal from /me/day when present (scaled sum, unscale once).
-  if (dayTotals?.kcalScaled != null) {
+  // Ignore zero — legacy confirms stored null compliance kcal and would wipe rings.
+  if (dayTotals?.kcalScaled != null && dayTotals.kcalScaled > 0) {
     logged.kcal = unscaleNutrient(dayTotals.kcalScaled);
   }
 

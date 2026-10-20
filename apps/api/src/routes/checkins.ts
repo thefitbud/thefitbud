@@ -83,6 +83,7 @@ import {
   notifyTraineeNoteShared,
   setTrainerNoteVisibility,
 } from "../domain/trainer-note-share.js";
+import { storeInboxNotification } from "../domain/inbox-notify.js";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -2149,6 +2150,16 @@ checkinRoutes.post(
       summary: `Check-in review: ${parsed.data.outcome}`,
       createdAt: now,
       updatedAt: now,
+    });
+
+    // Inbox row so the trainee sees "Acknowledged" / coach reply on Notifications.
+    await storeInboxNotification(db, {
+      recipientUserId: relationship.traineeUserId,
+      relationshipId: relationship.id,
+      notificationType: "checkin_reviewed",
+      domainEntityId: loaded.checkin.id,
+      domainEntityType: "checkin",
+      dedupeKey: `checkin_reviewed:${loaded.checkin.id}`,
     });
 
     const responseBody = {

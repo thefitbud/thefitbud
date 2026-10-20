@@ -45,6 +45,7 @@ import {
   mealKcalFromDayTotals,
   mealLockCopy,
 } from "./mealHelpers";
+import { estimateDurationMinutesFromDay } from "./workoutDuration";
 import { subscribeAll } from "./dataCache";
 import {
   buildNutritionRings,
@@ -121,12 +122,22 @@ function hasLivePlan(plan: EffectivePlanResponse | null): boolean {
 function mealStatusChip(
   meal: MealAssignment,
   nextId: string | undefined,
+  now = new Date(),
 ): { label: string; tone: "neutral" | "positive" | "attention" } {
   if (isMealLoggedForCount(meal.status)) {
     return { label: "Logged", tone: "positive" };
   }
+  if (
+    meal.status === "overdue" ||
+    now.getTime() > new Date(meal.windowEndsAt).getTime()
+  ) {
+    return { label: "Overdue", tone: "attention" };
+  }
   if (meal.id === nextId) {
     return { label: "Up next", tone: "attention" };
+  }
+  if (now.getTime() >= new Date(meal.windowStartsAt).getTime()) {
+    return { label: "Due", tone: "attention" };
   }
   return { label: "Later", tone: "neutral" };
 }
@@ -318,7 +329,9 @@ export function TodayTab({
   }, [me?.email]);
 
   const workoutExercises = workout?.workoutDay.exercises ?? [];
-  const workoutMins = Math.max(20, workoutExercises.length * 8);
+  const workoutMins = workout
+    ? estimateDurationMinutesFromDay(workout.workoutDay)
+    : null;
 
   return (
     <Screen
@@ -479,8 +492,8 @@ export function TodayTab({
                   {hero.workout.workoutDayName}
                 </Text>
                 <Text style={styles.heroItems}>
-                  {exerciseCountLabel(hero.workout.workoutDay.exercises.length)}{" "}
-                  · about {workoutMins} min
+                  {exerciseCountLabel(hero.workout.workoutDay.exercises.length)}
+                  {workoutMins != null ? ` · about ${workoutMins} min` : ""}
                 </Text>
                 <View style={styles.heroBtns}>
                   <Pressable
@@ -554,8 +567,8 @@ export function TodayTab({
               </View>
               <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
               <Text style={styles.body}>
-                {exerciseCountLabel(workoutExercises.length)} · about{" "}
-                {workoutMins} min
+                {exerciseCountLabel(workoutExercises.length)}
+                {workoutMins != null ? ` · about ${workoutMins} min` : ""}
               </Text>
               {workoutExercises.slice(0, 3).map((ex) => (
                 <Text key={ex.id} style={styles.exRow}>

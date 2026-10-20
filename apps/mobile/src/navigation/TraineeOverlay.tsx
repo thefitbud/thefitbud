@@ -40,7 +40,7 @@ export type TraineeOverlay =
   | { screen: "quiet_hours" }
   | { screen: "meal_times" }
   | { screen: "sync" }
-  | { screen: "food_search" }
+  | { screen: "food_search"; assignmentId: string }
   | { screen: "something_different"; assignmentId: string }
   | { screen: "meal_plan" }
   | { screen: "workout_overview"; assignmentId: string }
@@ -53,7 +53,15 @@ export type TraineeOverlay =
       topic?: string;
     }
   | { screen: "ended" }
-  | { screen: "deep_link"; reason?: string }
+  | {
+      screen: "deep_link";
+      reason?: string;
+      updatedOnLabel?: string;
+      replacement?: {
+        title: string;
+        subtitle: string;
+      };
+    }
   | { screen: "steps_settings" }
   | { screen: "profile" }
   | { screen: "past_coaching" }
@@ -76,6 +84,7 @@ type Props = {
   onOpenDiet?: () => void;
   onNotificationNavigate?: (link: NotificationDeepLink) => void;
   onCoachingResumed?: (relationship: CoachingRelationship) => void;
+  onStartWorkout?: (assignmentId: string) => void;
 };
 
 export function TraineeOverlayHost({
@@ -90,6 +99,7 @@ export function TraineeOverlayHost({
   onOpenDiet,
   onNotificationNavigate,
   onCoachingResumed,
+  onStartWorkout,
 }: Props) {
   const goToday = onGoToday ?? onClose;
   const { api, me } = useAuth();
@@ -124,7 +134,10 @@ export function TraineeOverlayHost({
   );
 
   useEffect(() => {
-    if (overlay.screen === "something_different") {
+    if (
+      overlay.screen === "something_different" ||
+      overlay.screen === "food_search"
+    ) {
       void loadMealAssignment(overlay.assignmentId);
     } else {
       setMealAssignment(null);
@@ -135,6 +148,7 @@ export function TraineeOverlayHost({
     case "notifications":
       return (
         <NotificationsScreen
+          coachName={coachName}
           onBack={onClose}
           coachName={coachName}
           onOpenSettings={() => onOpen({ screen: "reminder_settings" })}
@@ -171,7 +185,23 @@ export function TraineeOverlayHost({
     case "steps_settings":
       return <StepsSettingsScreen onBack={onClose} />;
     case "food_search":
-      return <FoodSearchScreen onBack={onClose} />;
+      if (!mealAssignment) {
+        return (
+          <DeepLinkUnavailableScreen
+            reason="Could not load this meal."
+            onGoToday={goToday}
+          />
+        );
+      }
+      return (
+        <FoodSearchScreen
+          assignment={mealAssignment}
+          relationshipId={relationship.id}
+          coachName={coachName}
+          onBack={onClose}
+          onSaved={onClose}
+        />
+      );
     case "something_different":
       if (!mealAssignment) {
         if (presentation === "sheet") {
@@ -198,19 +228,20 @@ export function TraineeOverlayHost({
       }
       if (presentation === "sheet") {
         return (
-          <BottomSheet
-            visible
-            title="What did you have instead?"
-            subtitle={`${mealAssignment.mealName} · log what you actually ate`}
-            onDismiss={onClose}
-          >
+          <BottomSheet visible headerless onDismiss={onClose}>
             <SomethingDifferentSheet
               variant="sheet"
               assignment={mealAssignment}
               relationshipId={relationship.id}
+              coachName={coachName}
               onDone={onClose}
               onCancel={onClose}
-              onOpenFoodSearch={() => onOpen({ screen: "food_search" })}
+              onOpenFoodSearch={() =>
+                onOpen({
+                  screen: "food_search",
+                  assignmentId: mealAssignment.id,
+                })
+              }
               onAskCoach={() =>
                 onOpen({
                   screen: "ask_coach",
@@ -235,13 +266,36 @@ export function TraineeOverlayHost({
       );
     case "meal_plan":
       return (
-        <AssignedMealPlanScreen effectivePlan={effectivePlan} onBack={onClose} />
+        <AssignedMealPlanScreen
+          effectivePlan={effectivePlan}
+          coachName={coachName}
+          insetTabBar
+          onBack={onClose}
+          onAskCoach={() =>
+            onOpen({
+              screen: "ask_coach",
+              itemType: "plan_version",
+              itemId: effectivePlan?.version?.id ?? "plan",
+              itemLabel: "Meal plan",
+              dateLabel: "Today",
+            })
+          }
+        />
       );
     case "workout_overview":
       return (
         <WorkoutOverviewScreen
           assignmentId={overlay.assignmentId}
+          coachName={coachName}
           onBack={onClose}
+          onStart={
+            onStartWorkout
+              ? (assignment) => {
+                  onClose();
+                  onStartWorkout(assignment.id);
+                }
+              : undefined
+          }
           onAskCoach={(assignment) =>
             onOpen({
               screen: "ask_coach",
@@ -283,7 +337,18 @@ export function TraineeOverlayHost({
       return (
         <DeepLinkUnavailableScreen
           reason={overlay.reason}
+          updatedOnLabel={overlay.updatedOnLabel}
+          replacement={
+            overlay.replacement
+              ? {
+                  ...overlay.replacement,
+                  onPress: goToday,
+                }
+              : null
+          }
+          insetTabBar
           onGoToday={goToday}
+          onBack={onClose}
         />
       );
     case "profile":

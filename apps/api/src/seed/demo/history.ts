@@ -418,13 +418,18 @@ function buildAssignmentsAndLogs(input: {
         }
       } else if (submitted) {
         // Keep only the most recent past Sunday awaiting review (inbox realism).
+        // Slipping (Rohan): review that Sunday too so Today can show the coach
+        // reply instead of "Waiting for Rahul" (Friday overlay also reviewed).
         const refDow = new Date(`${input.refDate}T12:00:00Z`).getUTCDay();
         const daysSinceSunday = refDow === 0 ? 7 : refDow;
         const latestPastSunday = addDaysFromLocalDate(
           input.refDate,
           -daysSinceSunday,
         );
-        if (localDate < latestPastSunday) {
+        if (
+          localDate < latestPastSunday ||
+          input.state === "slipping"
+        ) {
           lines.push(
             `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", checkinId))}, ${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(userId(input.trainerEmail))}, 'acknowledged', NULL, ${sqlQuote(submittedAt)}, ${sqlQuote(submittedAt)});`,
           );
@@ -498,6 +503,11 @@ function shouldLogWorkout(
   }
   if (state === "slipping") {
     const missFrom = addDaysFromLocalDate(refDate, -2);
+    // Leave the current-week Saturday (Lower body B) startable for TR-10 / TR-10b.
+    const dow = new Date(`${localDate}T12:00:00Z`).getUTCDay();
+    if (dow === 6 && localDate >= addDaysFromLocalDate(refDate, -6)) {
+      return false;
+    }
     if (localDate >= missFrom) return false;
     return "completed";
   }
@@ -577,6 +587,28 @@ function buildPersonaOverlays(input: HistoryInput): string {
   ).toISOString();
   lines.push(
     `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(ROHAN_RESOLVED_EXCEPTION_ID)}, ${sqlQuote(rohanRel)}, 'missed_workout', 'attention', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -10)))}, 'Missed workout', ${sqlQuote(rohanResolvedDetected)}, ${sqlQuote(rohanResolvedAt)}, 'talked', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+  );
+
+  // Unlogged past meal with resolved exception → Diet shows "Closed by …".
+  const rohanLockedMealId = demoUuid(
+    "meal-assignment",
+    "rohan.slipping@demo.fitbud.test",
+    addDaysFromLocalDate(refDate, -3),
+    MEAL_PRESCRIPTION_IDS.lunch,
+  );
+  const rohanLockedMealExceptionId = demoUuid(
+    "exception",
+    "rohan-resolved-meal",
+  );
+  const rohanLockedDetected = new Date(
+    Date.parse(now) - 3 * 86_400_000 - 5 * 3_600_000,
+  ).toISOString();
+  const rohanLockedResolved = new Date(
+    Date.parse(now) - 2 * 86_400_000,
+  ).toISOString();
+  lines.push(
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(rohanLockedMealId)};`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(rohanLockedMealExceptionId)}, ${sqlQuote(rohanRel)}, 'overdue_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(rohanLockedMealId)}, 'Missed lunch', ${sqlQuote(rohanLockedDetected)}, ${sqlQuote(rohanLockedResolved)}, 'talked', ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
   const meeraRel = relId("rahul.coach@demo.fitbud.test", "meera.ack@demo.fitbud.test");
@@ -755,6 +787,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     const dueEnd = new Date(Date.parse(now) + 22 * 3_600_000).toISOString();
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "meera-due"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("checkin-schedule", meeraRel))}, ${sqlQuote(refDate)}, ${sqlQuote(dueStart)}, ${sqlQuote(dueEnd)}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      // Prior weight so TR-14 step 1 shows "Last: …".
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "meera-weight", "latest"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'body_weight_kg', 62.4, 'kg', ${sqlQuote(localDayStartIso(addDaysFromLocalDate(refDate, -7), "08:15", "Asia/Kolkata"))}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
     const farhanRel = relId(
       "rahul.coach@demo.fitbud.test",
@@ -768,7 +802,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
   }
 
-  // Rohan: latest weekly (Friday) check-in submitted and still awaiting review.
+  // Rohan: latest weekly (Friday) check-in submitted and reviewed (Today + Progress).
   const rohanCheckinDate = previousWeekdayBefore(refDate, 5);
   const rohanCheckinStart = localDayStartIso(rohanCheckinDate, "09:00", "Asia/Kolkata");
   const rohanSubmittedAt = clampIsoToNow(
@@ -777,15 +811,76 @@ function buildPersonaOverlays(input: HistoryInput): string {
   );
   lines.push(
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Tired but okay. Missed two workouts this week.", notes: "Travel for work threw off lunches and I skipped Wednesday's session. Back on track from Monday." })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
+    `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledged', 'Solid effort this week — lock in sleep and we will rebuild training next.', ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanSubmittedAt)});`,
+    // Latest Sunday is also reviewed for slipping; give it the reply so Today prefers it.
+    `UPDATE checkin_reviews SET notes = 'Solid effort this week — lock in sleep and we will rebuild training next.', updated_at = ${sqlQuote(rohanSubmittedAt)} WHERE checkin_id = ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(refDate, 0)))};`,
   );
 
-  // Rohan reminders (last 14d) so responsiveness has enough data.
+  // Rohan waist for Progress measurements row (TR-13).
+  {
+    const waistDate = previousWeekdayBefore(refDate, 5);
+    const waistAt = clampIsoToNow(
+      localDayStartIso(waistDate, "08:25", "Asia/Kolkata"),
+      now,
+    );
+    const startWaistAt = clampIsoToNow(
+      localDayStartIso(addDaysFromLocalDate(waistDate, -49), "08:25", "Asia/Kolkata"),
+      now,
+    );
+    lines.push(
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "start"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 97, 'cm', ${sqlQuote(startWaistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(startWaistAt)}, ${sqlQuote(startWaistAt)});`,
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "latest"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 94, 'cm', ${sqlQuote(waistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(waistAt)}, ${sqlQuote(waistAt)});`,
+    );
+  }
+
+  // Rohan: weigh-in series for Progress chart (TR-13).
+  for (let weeksAgo = 0; weeksAgo < 8; weeksAgo += 1) {
+    const localDate = addDaysFromLocalDate(rohanCheckinDate, -7 * weeksAgo);
+    const weightKg = Number((86.4 + weeksAgo * 0.25).toFixed(1));
+    const observedAt = clampIsoToNow(
+      localDayStartIso(localDate, "08:20", "Asia/Kolkata"),
+      now,
+    );
+    const measurementId = demoUuid(
+      "measurement",
+      "rohan-weight",
+      "rohan.slipping@demo.fitbud.test",
+      localDate,
+    );
+    lines.push(
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(measurementId)}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'body_weight_kg', ${weightKg}, 'kg', ${sqlQuote(observedAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(observedAt)}, ${sqlQuote(observedAt)});`,
+    );
+  }
+
+
+  // Rohan inbox mix (TR-15): coach note, check-in review, workout — not only meals.
+  {
+    const coachNoteAt = clampIsoToNow(
+      localDayStartIso(refDate, "01:08", "Asia/Kolkata"),
+      now,
+    );
+    const workoutAt = clampIsoToNow(
+      localDayStartIso(addDaysFromLocalDate(refDate, -1), "18:40", "Asia/Kolkata"),
+      now,
+    );
+    const checkinAt = clampIsoToNow(
+      localDayStartIso(rohanCheckinDate, "20:05", "Asia/Kolkata"),
+      now,
+    );
+    lines.push(
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", "rohan-inbox-mixed-note"))}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, ${sqlQuote(rohanRel)}, 'trainer_note_shared', 'checkin', ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, 'delivered', ${sqlQuote("rohan-inbox-mixed-note")}, ${sqlQuote(coachNoteAt)}, NULL, ${jsonQuote({ summary: "About your check-in" })});`,
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", "rohan-inbox-mixed-checkin"))}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, ${sqlQuote(rohanRel)}, 'checkin_reviewed', 'checkin', ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, 'delivered', ${sqlQuote("checkin_reviewed:" + demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(checkinAt)}, NULL, ${jsonQuote({ summary: "Acknowledged" })});`,
+      `INSERT INTO notifications (id, recipient_user_id, coaching_relationship_id, notification_type, domain_entity_type, domain_entity_id, state, dedupe_key, created_at, read_at, payload_json) VALUES (${sqlQuote(demoUuid("notification", "rohan-inbox-mixed-workout"))}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, ${sqlQuote(rohanRel)}, 'workout_reminder', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", refDate))}, 'delivered', ${sqlQuote("rohan-inbox-mixed-workout")}, ${sqlQuote(workoutAt)}, NULL, ${jsonQuote({ summary: "Lower body B is planned for this evening" })});`,
+    );
+  }
+
+  // Rohan reminders (14d window) for responsiveness; inbox still leads with mixed types.
   const rohanReminders = [
     [3, MEAL_PRESCRIPTION_IDS.breakfast, true],
-    [3, MEAL_PRESCRIPTION_IDS.dinner, false],
+    [3, MEAL_PRESCRIPTION_IDS.dinner, true],
     [2, MEAL_PRESCRIPTION_IDS.lunch, true],
-    [1, MEAL_PRESCRIPTION_IDS.lunch, false],
-    [1, MEAL_PRESCRIPTION_IDS.dinner, true],
+    [1, MEAL_PRESCRIPTION_IDS.lunch, true],
+    [1, MEAL_PRESCRIPTION_IDS.dinner, false],
   ] as const;
   rohanReminders.forEach(([daysAgo, slot, opened], index) => {
     const day = addDaysFromLocalDate(refDate, -daysAgo);
@@ -862,6 +957,65 @@ export function buildDemoHistorySql(input: HistoryInput): string {
   const lines: string[] = [`-- history anchor ${refDate}`];
 
   lines.push(buildTrainerTemplates(now, input.libraryIndex));
+
+  // Insert-only form versions: add v2 for TR-14 (weight Last:, waist, Front/Side/Back).
+  lines.push(
+    `INSERT INTO checkin_form_versions (id, template_id, key, version, scope, trainer_user_id, schema_json, created_at) VALUES (${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${sqlQuote("c1000001-0000-4000-8000-000000000001")}, 'mvp', 2, 'global', NULL, ${sqlQuote(
+      JSON.stringify({
+        fields: [
+          {
+            id: "body_weight",
+            label: "Body weight",
+            type: "measurement",
+            measurementType: "body_weight_kg",
+            required: false,
+          },
+          {
+            id: "waist",
+            label: "Waist",
+            type: "measurement",
+            measurementType: "waist_cm",
+            required: false,
+          },
+          {
+            id: "photo_front",
+            label: "Front",
+            type: "photo_intent",
+            photoSlot: "front",
+            required: false,
+          },
+          {
+            id: "photo_side",
+            label: "Side",
+            type: "photo_intent",
+            photoSlot: "side",
+            required: false,
+          },
+          {
+            id: "photo_back",
+            label: "Back",
+            type: "photo_intent",
+            photoSlot: "back",
+            required: false,
+          },
+          {
+            id: "wellbeing",
+            label: "Wellbeing",
+            type: "short_text",
+            required: true,
+            maxLength: 1000,
+          },
+          {
+            id: "notes",
+            label: "Notes",
+            type: "long_text",
+            required: false,
+            maxLength: 2000,
+          },
+        ],
+      }),
+    )}, ${sqlQuote(now)}) ON CONFLICT(id) DO NOTHING;`,
+  );
 
   for (const account of DEMO_ACCOUNTS) {
     if (account.role !== "trainee" || !account.trainerEmail) continue;

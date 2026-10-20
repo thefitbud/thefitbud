@@ -18,6 +18,7 @@ import {
   type MealPhotoIntent,
 } from "@fitbud/contracts";
 import {
+  canLog,
   canRecordMealCompliance,
   formatLocalDate,
   mealPhotoIntentSatisfied,
@@ -37,6 +38,7 @@ import {
 import {
   mapMealAssignment,
   mapMealCompliance,
+  parseMealPrescriptionJson,
   parsePlanContentJson,
 } from "../domain/mappers";
 import {
@@ -76,6 +78,87 @@ export const mealRoutes = new Hono<{
 }>();
 
 type Db = ReturnType<typeof createDb>;
+
+/** Resolve trainee-facing logging lock for one or many meal assignments. */
+async function mealLockReasonsByAssignmentId(
+  db: Db,
+  input: {
+    relationshipId: string;
+    traineeUserId: string;
+    assignmentIds: string[];
+    rows: Array<{
+      assignment: typeof mealAssignments.$inferSelect;
+      compliance: typeof mealCompliance.$inferSelect | null;
+    }>;
+  },
+): Promise<Map<string, string>> {
+  const lockByAssignment = new Map<string, string>();
+  if (input.assignmentIds.length === 0) return lockByAssignment;
+
+  const exceptionRows = await db
+    .select({
+      sourceEntityId: exceptions.sourceEntityId,
+      status: exceptions.status,
+    })
+    .from(exceptions)
+    .where(
+      and(
+        eq(exceptions.coachingRelationshipId, input.relationshipId),
+        eq(exceptions.sourceEntityType, "meal_assignment"),
+      ),
+    );
+  const exceptionStatusById = new Map<string, string>();
+  for (const ex of exceptionRows) {
+    exceptionStatusById.set(ex.sourceEntityId, ex.status);
+    if (
+      ex.status === "resolved" &&
+      input.assignmentIds.includes(ex.sourceEntityId)
+    ) {
+      lockByAssignment.set(ex.sourceEntityId, "exception_resolved");
+    }
+  }
+
+  const timeZone = await loadTraineeTimezone(db, input.traineeUserId);
+  const now = nowIso();
+  for (const row of input.rows) {
+    if (lockByAssignment.has(row.assignment.id)) continue;
+    const prescription = parseMealPrescriptionJson(
+      row.assignment.mealPrescriptionJson,
+    );
+    const required = prescription.required !== false;
+    const exceptionStatus = exceptionStatusById.get(row.assignment.id);
+    const decision = canLog({
+      assignmentScheduleStatus:
+        row.assignment.scheduleStatus === "superseded"
+          ? "superseded"
+          : "scheduled",
+      exceptionStatus:
+        exceptionStatus === "active" ||
+        exceptionStatus === "resolved" ||
+        exceptionStatus === "acknowledged"
+          ? exceptionStatus
+          : null,
+      nowIso: now,
+      localDate: row.assignment.localDate,
+      traineeTimezone: timeZone,
+      required,
+      alreadyLogged: row.compliance != null,
+      windowEndsAt: row.assignment.windowEndsAt,
+    });
+    if (decision.decision === "locked" && decision.reason) {
+      lockByAssignment.set(row.assignment.id, decision.reason);
+    } else if (
+      decision.decision === "superseded" ||
+      decision.decision === "ended"
+    ) {
+      lockByAssignment.set(
+        row.assignment.id,
+        decision.reason ?? decision.decision,
+      );
+    }
+  }
+  return lockByAssignment;
+}
 
 async function loadReadyMealPhotoAsset(
   db: Db,
@@ -436,26 +519,15 @@ mealRoutes.get(
 
     const now = nowIso();
     const assignmentIds = rows.map((row) => row.assignment.id);
-    const lockByAssignment = new Map<string, string>();
-    if (assignmentIds.length > 0) {
-      const exceptionRows = await db
-        .select({
-          sourceEntityId: exceptions.sourceEntityId,
-          status: exceptions.status,
-        })
-        .from(exceptions)
-        .where(
-          and(
-            eq(exceptions.coachingRelationshipId, relationship.id),
-            eq(exceptions.sourceEntityType, "meal_assignment"),
-          ),
-        );
-      for (const ex of exceptionRows) {
-        if (ex.status === "resolved" && assignmentIds.includes(ex.sourceEntityId)) {
-          lockByAssignment.set(ex.sourceEntityId, "exception_resolved");
-        }
-      }
-    }
+    const lockByAssignment = await mealLockReasonsByAssignmentId(db, {
+      relationshipId: relationship.id,
+      traineeUserId: relationship.traineeUserId,
+      assignmentIds,
+      rows: rows.map((row) => ({
+        assignment: row.assignment,
+        compliance: row.compliance ?? null,
+      })),
+    });
     const items = rows
       .map((row) => {
         const reason = lockByAssignment.get(row.assignment.id) ?? null;
@@ -622,10 +694,27 @@ mealRoutes.get(
       return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
     }
 
+    const locks = await mealLockReasonsByAssignmentId(db, {
+      relationshipId: relationship.id,
+      traineeUserId: relationship.traineeUserId,
+      assignmentIds: [loaded.assignment.id],
+      rows: [
+        {
+          assignment: loaded.assignment,
+          compliance: loaded.compliance ?? null,
+        },
+      ],
+    });
+    const reason = locks.get(loaded.assignment.id) ?? null;
     return ok(
       c,
       mealAssignmentSchema.parse(
-        mapMealAssignment(loaded.assignment, loaded.compliance, nowIso()),
+        mapMealAssignment(
+          loaded.assignment,
+          loaded.compliance,
+          nowIso(),
+          { locked: reason != null, reason },
+        ),
       ),
     );
   },
@@ -799,6 +888,36 @@ async function recordCompliance(
       relationshipId: relationship.id,
       items: input.loggedFoodItems,
     });
+  } else if (input.outcome === "confirmed") {
+    const prescription = parseMealPrescriptionJson(
+      loaded.assignment.mealPrescriptionJson,
+    );
+    let kcalScaled = 0;
+    let proteinScaled = 0;
+    let carbsScaled = 0;
+    let fatScaled = 0;
+    for (const item of prescription.items) {
+      if (!("calculated" in item) || !item.calculated) continue;
+      const calc = item.calculated;
+      kcalScaled += calc.energyKcalScaled ?? 0;
+      proteinScaled += calc.proteinScaled ?? 0;
+      carbsScaled += calc.carbsScaled ?? 0;
+      fatScaled += calc.fatScaled ?? 0;
+    }
+    if (
+      kcalScaled > 0 ||
+      proteinScaled > 0 ||
+      carbsScaled > 0 ||
+      fatScaled > 0
+    ) {
+      macroFields = {
+        itemsJson: null,
+        kcalScaled,
+        proteinScaled,
+        carbsScaled,
+        fatScaled,
+      };
+    }
   }
 
   const row = {

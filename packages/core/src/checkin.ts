@@ -17,8 +17,43 @@ export const GLOBAL_CHECKIN_FORM_TEMPLATE_ID =
 export const GLOBAL_CHECKIN_FORM_VERSION_ID =
   "c1000001-0000-4000-8000-000000000011";
 
-/** Today's wellbeing, notes, body weight, and photo intent. */
+/** Step 1 measurements/photos; step 2–3 reflection (mockup 14). */
 export const GLOBAL_CHECKIN_FORM_FIELDS: CheckinFieldDefinition[] = [
+  {
+    id: "body_weight",
+    label: "Body weight",
+    type: "measurement",
+    measurementType: "body_weight_kg",
+    required: false,
+  },
+  {
+    id: "waist",
+    label: "Waist",
+    type: "measurement",
+    measurementType: "waist_cm",
+    required: false,
+  },
+  {
+    id: "photo_front",
+    label: "Front",
+    type: "photo_intent",
+    photoSlot: "front",
+    required: false,
+  },
+  {
+    id: "photo_side",
+    label: "Side",
+    type: "photo_intent",
+    photoSlot: "side",
+    required: false,
+  },
+  {
+    id: "photo_back",
+    label: "Back",
+    type: "photo_intent",
+    photoSlot: "back",
+    required: false,
+  },
   {
     id: "wellbeing",
     label: "Wellbeing",
@@ -33,20 +68,12 @@ export const GLOBAL_CHECKIN_FORM_FIELDS: CheckinFieldDefinition[] = [
     required: false,
     maxLength: 2000,
   },
-  {
-    id: "body_weight",
-    label: "Body weight",
-    type: "measurement",
-    measurementType: "body_weight_kg",
-    required: false,
-  },
-  {
-    id: "photo",
-    label: "Progress photo",
-    type: "photo_intent",
-    required: false,
-  },
 ];
+
+/** JSON for checkin_form_versions.definition_json (seed + migration drift). */
+export const GLOBAL_CHECKIN_FORM_DEFINITION_JSON = JSON.stringify({
+  fields: GLOBAL_CHECKIN_FORM_FIELDS,
+});
 
 const REQUIRED_DRAFT_KEYS = ["wellbeing"] as const;
 

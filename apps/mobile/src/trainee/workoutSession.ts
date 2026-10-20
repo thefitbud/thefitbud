@@ -149,6 +149,58 @@ export function workoutStartError(err: unknown): string {
       : "Could not start workout.";
 }
 
+/**
+ * Seeded / list payloads sometimes omit nested exercise rows. Build summary
+ * counts from the assignment day when the execution has no exercises (TR-12).
+ */
+export function enrichExecutionFromAssignmentDay(
+  execution: WorkoutExecution,
+  assignment: WorkoutAssignment | null | undefined,
+): WorkoutExecution {
+  if (execution.exercises.length > 0) return execution;
+  const day = assignment?.workoutDay;
+  if (!day?.exercises.length) return execution;
+  const now = execution.completedAt ?? new Date().toISOString();
+  const completed =
+    execution.status === "completed" || execution.status === "modified";
+  return {
+    ...execution,
+    exercises: [...day.exercises]
+      .sort((a, b) => a.order - b.order)
+      .map((exercise, index) => {
+        const exerciseId = exercise.id;
+        return {
+          id: exerciseId,
+          workoutExecutionId: execution.id,
+          exerciseId: exercise.id,
+          name: exercise.name,
+          order: exercise.order ?? index + 1,
+          status: completed ? ("completed" as const) : ("pending" as const),
+          sets: [...exercise.setTargets]
+            .sort((a, b) => a.order - b.order)
+            .map((target, setIndex) => ({
+              id: target.id,
+              exerciseExecutionId: exerciseId,
+              setTargetId: target.id,
+              order: target.order ?? setIndex + 1,
+              status: completed
+                ? ("completed" as const)
+                : ("pending" as const),
+              prescribedReps: target.reps,
+              prescribedLoadLabel: target.loadLabel,
+              actualReps: completed ? target.reps : null,
+              actualLoadLabel: completed ? target.loadLabel : null,
+              completedAt: completed ? now : null,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          createdAt: now,
+          updatedAt: now,
+        };
+      }),
+  };
+}
+
 /** Map setTargetId → prescribed rest seconds from the day's plan. */
 export function restSecondsBySetTargetId(
   assignment: WorkoutAssignment,

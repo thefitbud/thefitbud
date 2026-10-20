@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import {
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { Text } from "../../components/Text";
 import type {
   CoachingRelationship,
@@ -10,16 +17,16 @@ import {
   buildAskCoachMessage,
   whatsappHref,
 } from "@fitbud/core";
-import { colors, radii, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { colors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { stage1Api } from "../../lib/stage1Api";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
+import { M2CloseButton } from "../../components/m2";
+import { WhatsAppGlyph } from "../../components/m2/WhatsAppGlyph";
 
 type CoachAskItemType = CreateCoachAskRequest["itemType"];
 
-const TOPICS = [
+const MEAL_TOPICS = [
   "Swap a food",
   "Portion size",
   "Form check",
@@ -27,6 +34,32 @@ const TOPICS = [
   "Can't do this today",
   "Other",
 ] as const;
+
+const WORKOUT_TOPICS = [
+  "Form check",
+  "Pain or discomfort",
+  "Can't do this today",
+  "Other",
+] as const;
+
+const CHECKIN_TOPICS = ["Pain or discomfort", "Other"] as const;
+
+function topicsForItemType(itemType: CoachAskItemType): readonly string[] {
+  switch (itemType) {
+    case "meal_assignment":
+    case "plan_version":
+      return MEAL_TOPICS;
+    case "workout_assignment":
+    case "exercise_execution":
+      return WORKOUT_TOPICS;
+    case "checkin":
+      return CHECKIN_TOPICS;
+    default: {
+      const _exhaustive: never = itemType;
+      return _exhaustive;
+    }
+  }
+}
 
 type Props = {
   relationship?: CoachingRelationship;
@@ -37,7 +70,6 @@ type Props = {
   itemId: string;
   itemLabel: string;
   dateLabel: string;
-  /** @deprecated Prefer selecting a topic chip; kept for capture bridge. */
   topic?: string;
   onDone: () => void;
   onCancel: () => void;
@@ -91,13 +123,17 @@ export function AskCoachSheet({
     relationship?.trainerDisplayName?.trim() ||
     "Your coach";
   const coachShort = firstName(coach);
-  const phoneE164 =
-    phone ?? relationship?.trainerWhatsappE164 ?? null;
+  const phoneE164 = phone ?? relationship?.trainerWhatsappE164 ?? null;
 
-  const [topic, setTopic] = useState<string>(initialTopic ?? TOPICS[0]);
+  const topics = useMemo(() => topicsForItemType(itemType), [itemType]);
+  const defaultTopic = topics[0] ?? "Other";
+  const initialAllowed =
+    initialTopic && topics.some((t) => t.toLowerCase() === initialTopic.toLowerCase())
+      ? topics.find((t) => t.toLowerCase() === initialTopic!.toLowerCase())!
+      : defaultTopic;
+  const [topic, setTopic] = useState<string>(initialAllowed);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
   const [painAck, setPainAck] = useState(false);
 
   const hasNumber = Boolean(phoneE164 && phoneE164.replace(/\D/g, "").length >= 10);
@@ -105,13 +141,24 @@ export function AskCoachSheet({
 
   const preview = useMemo(() => {
     const link = askCoachGoLink(goKindForItem(itemType), itemId);
-    return buildAskCoachMessage({
+    const topicText =
+      topic.trim().toLowerCase() === itemLabel.trim().toLowerCase()
+        ? "a question"
+        : topic.toLowerCase();
+    const built = buildAskCoachMessage({
       coachName: coachShort,
       itemLabel,
       date: dateLabel,
-      topic: topic.toLowerCase(),
+      topic: topicText,
       link,
     });
+    const shortLink = link.includes("fitbud.app/go/")
+      ? "fitbud.app/go/…"
+      : link.length > 36
+        ? `${link.slice(0, 32)}…`
+        : link;
+    const plainText = built.hrefText.replace(link, "").trimEnd();
+    return { ...built, plainText, shortLink };
   }, [coachShort, dateLabel, itemId, itemLabel, itemType, topic]);
 
   async function openWhatsApp() {
@@ -142,11 +189,10 @@ export function AskCoachSheet({
       }
       onDone();
     } catch (err) {
-      setOffline(true);
       setError(
         err instanceof Error
           ? err.message
-          : "You're offline. WhatsApp will send when you're back online.",
+          : "You're offline. Try again when you're back online.",
       );
     } finally {
       setLoading(false);
@@ -154,102 +200,175 @@ export function AskCoachSheet({
   }
 
   return (
-    <Screen
-      chrome="app"
-      title={`Ask ${coachShort} about ${itemLabel} · ${dateLabel}`}
-      subtitle="Pick a topic, then open WhatsApp with a ready draft."
+    <Modal
+      animationType="slide"
+      transparent
+      visible
+      onRequestClose={onCancel}
+      statusBarTranslucent
     >
-      {error ? <ErrorBanner message={error} /> : null}
-      {offline ? (
-        <Text style={styles.offline}>
-          You're offline. WhatsApp will send when you're back online.
-        </Text>
-      ) : null}
-
-      <View style={styles.stack}>
-        <Text style={styles.sectionLabel} accessibilityRole="header">
-          Topic
-        </Text>
-        <View style={styles.chips}>
-          {TOPICS.map((option) => {
-            const selected = topic === option;
-            return (
-              <Pressable
-                key={option}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                accessibilityLabel={option}
-                style={[styles.chip, selected ? styles.chipOn : null]}
-                onPress={() => {
-                  setTopic(option);
-                  setPainAck(false);
-                }}
-              >
-                <Text
-                  style={[styles.chipLabel, selected ? styles.chipLabelOn : null]}
-                >
-                  {option}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Text style={styles.sectionLabel} accessibilityRole="header">
-          Message preview
-        </Text>
-        <View style={styles.preview}>
-          <Text style={styles.previewText}>{preview.hrefText}</Text>
-        </View>
-
-        {isPain && painAck ? (
-          <Text style={styles.safety}>
-            If it's sharp pain or you feel unwell, stop and get medical help.
-          </Text>
-        ) : null}
-
-        {!hasNumber ? (
-          <View style={styles.fallback}>
-            <Text style={styles.fallbackTitle}>
-              {coachShort} hasn't added a WhatsApp number yet.
-            </Text>
-            <Text style={styles.fallbackBody}>
-              Leave a note in your next check-in instead.
-            </Text>
-          </View>
-        ) : null}
-
-        <PrimaryButton
-          label={
-            isPain && !painAck
-              ? "Continue"
-              : loading
-                ? "Opening…"
-                : "Open WhatsApp"
-          }
-          variant="whatsapp"
-          loading={loading}
-          disabled={!hasNumber || loading || !resolvedRelationshipId}
-          onPress={() => void openWhatsApp()}
+      <View style={styles.root}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          style={styles.scrim}
+          onPress={onCancel}
         />
-        <Text style={styles.caption}>
-          Your message is sent from your WhatsApp. FitBud only notes that you
-          asked.
-        </Text>
-        <PrimaryButton label="Cancel" variant="ghost" onPress={onCancel} />
+        <View style={styles.sheet}>
+          <View style={styles.grab} />
+          <View style={styles.sheetHead}>
+            <View style={styles.sheetTitles}>
+              <Text style={styles.sheetTitle}>
+                Ask {coachShort} about {itemLabel} · {dateLabel}
+              </Text>
+              <Text style={styles.sheetSub}>
+                Pick a topic. WhatsApp opens with a draft you can edit.
+              </Text>
+            </View>
+            <M2CloseButton onPress={onCancel} />
+          </View>
+
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.sheetScroll}
+          >
+            {error ? <ErrorBanner message={error} /> : null}
+
+            <View style={styles.chips}>
+              {topics.map((option) => {
+                const selected = topic === option;
+                return (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      setTopic(option);
+                      setPainAck(false);
+                    }}
+                    style={[styles.chip, selected && styles.chipOn]}
+                  >
+                    <Text
+                      style={[styles.chipLabel, selected && styles.chipLabelOn]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.previewLabel}>Message preview</Text>
+            <View style={styles.waprev}>
+              <Text style={styles.waprevText} numberOfLines={4}>
+                {preview.plainText}
+              </Text>
+              {preview.shortLink ? (
+                <Text style={styles.waprevLink} numberOfLines={1}>
+                  {preview.shortLink}
+                </Text>
+              ) : null}
+            </View>
+
+            {isPain && painAck ? (
+              <Text style={styles.safety}>
+                If it&apos;s sharp pain or you feel unwell, stop and get medical
+                help.
+              </Text>
+            ) : null}
+
+            {!hasNumber ? (
+              <Text style={styles.fallback}>
+                {coachShort} hasn&apos;t added a WhatsApp number yet.
+              </Text>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={!hasNumber || loading || !resolvedRelationshipId}
+              onPress={() => void openWhatsApp()}
+              style={[
+                styles.waBtn,
+                (!hasNumber || loading) && styles.waBtnDisabled,
+              ]}
+            >
+              {loading ? (
+                <Text style={styles.waBtnLabel}>Opening…</Text>
+              ) : (
+                <>
+                  <WhatsAppGlyph size={22} />
+                  <Text style={styles.waBtnLabel}>
+                    {isPain && !painAck ? "Continue" : "Open WhatsApp"}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+            <Text style={styles.caption}>
+              Your message is sent from your WhatsApp. FitBud only notes that you
+              asked.
+            </Text>
+          </ScrollView>
+        </View>
       </View>
-    </Screen>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.md,
+  root: {
+    flex: 1,
+    justifyContent: "flex-end",
   },
-  sectionLabel: {
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 12, 40, 0.42)",
+  },
+  sheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "88%",
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    shadowColor: "#0F0C28",
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 40,
+  },
+  grab: {
+    alignSelf: "center",
+    backgroundColor: "#D5D6DE",
+    borderRadius: 3,
+    height: 5,
+    marginBottom: 10,
+    width: 36,
+  },
+  sheetHead: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  sheetTitles: {
+    flex: 1,
+  },
+  sheetTitle: {
     color: colors.deepNavy,
-    fontSize: 14,
+    fontSize: 22,
     fontWeight: "700",
+    letterSpacing: -0.3,
+    lineHeight: 28,
+  },
+  sheetSub: {
+    color: colors.midGrey,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  sheetScroll: {
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
   },
   chips: {
     flexDirection: "row",
@@ -257,36 +376,53 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
+    borderColor: "#D5D6DE",
+    borderRadius: 14,
     borderWidth: 1,
     justifyContent: "center",
     minHeight: touchTargetMin,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 14,
     paddingVertical: spacing.sm,
   },
   chipOn: {
-    backgroundColor: colors.paleLavender,
-    borderColor: colors.indigo,
+    backgroundColor: "#EDE9FF",
+    borderColor: "#C9BEFF",
   },
   chipLabel: {
     color: colors.nearBlack,
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 15,
+    fontWeight: "600",
   },
   chipLabelOn: {
     color: colors.indigo,
+  },
+  previewLabel: {
+    color: colors.midGrey,
+    fontSize: 13,
     fontWeight: "600",
+    marginTop: spacing.sm,
   },
-  preview: {
-    backgroundColor: colors.white,
-    borderRadius: radii.card,
-    padding: spacing.md,
+  waprev: {
+    backgroundColor: "#E7F8EE",
+    borderColor: "#C9EED8",
+    borderRadius: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  previewText: {
-    color: colors.darkGrey,
-    fontSize: 14,
-    lineHeight: 20,
+  waprevText: {
+    color: "#14321F",
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  waprevLink: {
+    color: "#3B6B4D",
+    fontSize: 13,
+    marginTop: 4,
   },
   safety: {
     color: colors.darkGrey,
@@ -294,29 +430,31 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   fallback: {
-    backgroundColor: colors.white,
-    borderRadius: radii.card,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
-  fallbackTitle: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  fallbackBody: {
     color: colors.midGrey,
     fontSize: 14,
-    lineHeight: 20,
   },
   caption: {
     color: colors.midGrey,
     fontSize: 13,
     lineHeight: 18,
+    textAlign: "center",
   },
-  offline: {
-    color: colors.midGrey,
-    fontSize: 13,
-    marginBottom: spacing.sm,
+  waBtn: {
+    alignItems: "center",
+    backgroundColor: colors.indigo,
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "center",
+    minHeight: 56,
+    paddingHorizontal: spacing.lg,
+  },
+  waBtnDisabled: {
+    opacity: 0.5,
+  },
+  waBtnLabel: {
+    color: colors.white,
+    fontSize: 17,
+    fontWeight: "700",
   },
 });

@@ -28,6 +28,15 @@ export const DEMO_LIBRARY_FOOD_SLUGS = [
 
 export const DEMO_LIBRARY_EXERCISE_SLUGS = [
   "push-up",
+  "bench-press-barbell",
+  "dumbbell-shoulder-press",
+  "barbell-curl",
+  "goblet-squat",
+  "romanian-deadlift-barbell",
+  "dumbbell-step-ups",
+  "leg-press",
+  "lying-leg-curls",
+  "calf-raise-bodyweight",
   "back-squat-barbell",
 ] as const;
 
@@ -208,9 +217,10 @@ const MEAL_PRESCRIPTION_IDS = {
 };
 
 const WORKOUT_DAY_IDS = {
-  monday: demoUuid("workout-day", "strength"),
-  wednesday: demoUuid("workout-day", "strength-wed"),
-  friday: demoUuid("workout-day", "strength-fri"),
+  monday: demoUuid("workout-day", "upper-a"),
+  tuesday: demoUuid("workout-day", "lower-a"),
+  thursday: demoUuid("workout-day", "upper-b"),
+  saturday: demoUuid("workout-day", "lower-b"),
 } as const;
 
 const WORKOUT_DAY_ID = WORKOUT_DAY_IDS.monday;
@@ -228,65 +238,195 @@ export function buildStandardPlanContent(
       Math.round(servings * NUTRIENT_SCALE),
     );
   };
-  const pushUp = lib.exercises["push-up"];
-  const squat = lib.exercises["back-squat-barbell"];
+  const ex = (slug: (typeof DEMO_LIBRARY_EXERCISE_SLUGS)[number]) =>
+    lib.exercises[slug];
   const exercise = (
     key: string,
     order: number,
-    ex: DemoLibraryExercise,
-    reps: number,
+    libraryEx: DemoLibraryExercise,
+    opts: {
+      sets: number;
+      reps: number;
+      loadLabel?: string | null;
+      restSeconds?: number | null;
+      instructions?: string | null;
+      name?: string;
+    },
   ) => ({
     id: demoUuid("plan-exercise", key),
     order,
-    name: ex.name,
-    instructions: null,
+    name: opts.name ?? libraryEx.name,
+    instructions: opts.instructions ?? null,
     primaryMuscles: [],
     secondaryMuscles: [],
     equipment: [],
     difficulty: null,
-    setTargets: [
-      {
-        id: demoUuid("set-target", `${key}-1`),
-        order: 1,
-        reps,
-        loadLabel: null,
-        rpe: null,
-      },
-    ],
-    sourceExerciseLibraryItemId: ex.id,
+    setTargets: Array.from({ length: opts.sets }, (_, i) => ({
+      id: demoUuid("set-target", `${key}-${i + 1}`),
+      order: i + 1,
+      reps: opts.reps,
+      loadLabel: opts.loadLabel ?? null,
+      rpe: null,
+      restSeconds: opts.restSeconds ?? null,
+    })),
+    sourceExerciseLibraryItemId: libraryEx.id,
   });
   const breakfastItems =
     variant === "v1"
       ? [food("oatmeal-cooked-with-water", 1), food("scrambled-egg", 2)]
       : [food("scrambled-egg", 2), food("chapati-roti", 3)];
   const everyDay = [0, 1, 2, 3, 4, 5, 6];
+  // Mockup week: Upper A / Lower A / Rest / Upper B / Rest / Lower B / Rest
+  // Lower body B = 6 exercises × 3 sets = 18 sets (TR-10 / TR-10b).
   return {
     workoutDays: [
       {
         id: WORKOUT_DAY_IDS.monday,
         order: 1,
-        name: "Upper body",
+        name: "Upper body A",
         weekday: 1,
         required: true,
-        exercises: [exercise("push-up", 1, pushUp, 10)],
-      },
-      {
-        id: WORKOUT_DAY_IDS.wednesday,
-        order: 2,
-        name: "Lower body",
-        weekday: 3,
-        required: true,
-        exercises: [exercise("back-squat", 1, squat, 8)],
-      },
-      {
-        id: WORKOUT_DAY_IDS.friday,
-        order: 3,
-        name: "Full body",
-        weekday: 5,
-        required: true,
+        instructions: "Push focus. Leave 1–2 reps in reserve.",
         exercises: [
-          exercise("push-up-fri", 1, pushUp, 12),
-          exercise("back-squat-fri", 2, squat, 10),
+          exercise("upper-a-bench", 1, ex("bench-press-barbell"), {
+            sets: 3,
+            reps: 8,
+            loadLabel: "40 kg",
+            restSeconds: 90,
+          }),
+          exercise("upper-a-ohp", 2, ex("dumbbell-shoulder-press"), {
+            sets: 3,
+            reps: 10,
+            loadLabel: "12 kg",
+            restSeconds: 75,
+          }),
+          exercise("upper-a-pushup", 3, ex("push-up"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "Bodyweight",
+            restSeconds: 60,
+          }),
+          exercise("upper-a-curl", 4, ex("barbell-curl"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "15 kg",
+            restSeconds: 60,
+          }),
+        ],
+      },
+      {
+        id: WORKOUT_DAY_IDS.tuesday,
+        order: 2,
+        name: "Lower body A",
+        weekday: 2,
+        required: true,
+        instructions: null,
+        exercises: [
+          exercise("lower-a-squat", 1, ex("back-squat-barbell"), {
+            sets: 3,
+            reps: 8,
+            loadLabel: "50 kg",
+            restSeconds: 120,
+          }),
+          exercise("lower-a-rdl", 2, ex("romanian-deadlift-barbell"), {
+            sets: 3,
+            reps: 10,
+            loadLabel: "40 kg",
+            restSeconds: 90,
+          }),
+          exercise("lower-a-legpress", 3, ex("leg-press"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "80 kg",
+            restSeconds: 90,
+          }),
+          exercise("lower-a-curl", 4, ex("lying-leg-curls"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "25 kg",
+            restSeconds: 60,
+          }),
+        ],
+      },
+      {
+        id: WORKOUT_DAY_IDS.thursday,
+        order: 3,
+        name: "Upper body B",
+        weekday: 4,
+        required: true,
+        instructions: null,
+        exercises: [
+          exercise("upper-b-pushup", 1, ex("push-up"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "Bodyweight",
+            restSeconds: 60,
+          }),
+          exercise("upper-b-ohp", 2, ex("dumbbell-shoulder-press"), {
+            sets: 3,
+            reps: 10,
+            loadLabel: "10 kg",
+            restSeconds: 75,
+          }),
+          exercise("upper-b-curl", 3, ex("barbell-curl"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "12 kg",
+            restSeconds: 60,
+          }),
+        ],
+      },
+      {
+        id: WORKOUT_DAY_IDS.saturday,
+        order: 4,
+        name: "Lower body B",
+        weekday: 6,
+        required: true,
+        instructions:
+          "Keep two reps in reserve on every set this week. Slow on the way down.",
+        exercises: [
+          exercise("lower-b-goblet", 1, ex("goblet-squat"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "14 kg",
+            restSeconds: 90,
+            instructions: "Sit between your heels, chest up.",
+          }),
+          exercise("lower-b-rdl", 2, ex("romanian-deadlift-barbell"), {
+            sets: 3,
+            reps: 10,
+            loadLabel: "20 kg",
+            restSeconds: 90,
+            instructions: "Soft knees, push the hips back.",
+            name: "Romanian deadlift",
+          }),
+          exercise("lower-b-stepups", 3, ex("dumbbell-step-ups"), {
+            sets: 3,
+            reps: 10,
+            loadLabel: "Bodyweight",
+            restSeconds: 60,
+            instructions:
+              "Replaces walking lunges until your knee settles.",
+            name: "Step-ups",
+          }),
+          exercise("lower-b-legpress", 4, ex("leg-press"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "70 kg",
+            restSeconds: 90,
+          }),
+          exercise("lower-b-curl", 5, ex("lying-leg-curls"), {
+            sets: 3,
+            reps: 12,
+            loadLabel: "20 kg",
+            restSeconds: 60,
+          }),
+          exercise("lower-b-calf", 6, ex("calf-raise-bodyweight"), {
+            sets: 3,
+            reps: 15,
+            loadLabel: "Bodyweight",
+            restSeconds: 45,
+          }),
         ],
       },
     ],
@@ -355,6 +495,8 @@ export function buildStandardPlanContent(
   };
 }
 
-export const DEMO_CHECKIN_FORM_VERSION_ID = GLOBAL_CHECKIN_FORM_VERSION_ID;
+/** v2: weight + waist + Front/Side/Back (mockup 14). Inserted by demo history seed. */
+export const DEMO_CHECKIN_FORM_VERSION_ID =
+  "c1000001-0000-4000-8000-000000000012";
 
 export { MEAL_PRESCRIPTION_IDS, WORKOUT_DAY_ID, WORKOUT_DAY_IDS };

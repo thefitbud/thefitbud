@@ -5,6 +5,7 @@ import { cleanFoodLabel } from "../trainee/mealHelpers";
 export type PlannedRow = {
   label: string;
   displayLabel: string;
+  unitLabel: string;
   quantity: number;
   foodId?: string;
   servingId?: string;
@@ -22,11 +23,12 @@ function foodItemQuantity(item: MealFoodItem): number {
   return 1;
 }
 
-function foodItemKcal(item: MealFoodItem, quantity: number): number | null {
+function foodItemKcal(item: MealFoodItem, _quantity: number): number | null {
   if ("snapshotKind" in item) {
+    // energyKcalScaled is already for this item's quantityScaled (not per unit).
     const kcal = item.calculated.energyKcalScaled;
     if (kcal == null) return null;
-    return Math.round((kcal / NUTRIENT_SCALE) * quantity);
+    return Math.round(kcal / NUTRIENT_SCALE);
   }
   return null;
 }
@@ -65,6 +67,7 @@ export function plannedRowsFromAssignment(
     return {
       label: name,
       displayLabel: label,
+      unitLabel: servingLabel || "serving",
       quantity,
       foodId,
       servingId,

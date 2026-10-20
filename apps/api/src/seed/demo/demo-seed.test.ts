@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mealAssignmentListResponseSchema,
   mealComplianceSummaryResponseSchema,
@@ -61,6 +61,9 @@ async function login(email: string): Promise<string> {
   return body.data.token;
 }
 
+/** Fixed IST morning so seed dates / API windows do not depend on wall clock. */
+const FROZEN_REFERENCE_INSTANT = "2026-10-17T14:30:00.000Z";
+
 describe("demo seed", () => {
   let db: Db;
   let close: () => void = () => {};
@@ -70,19 +73,20 @@ describe("demo seed", () => {
   >;
 
   beforeEach(async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(FROZEN_REFERENCE_INSTANT));
     const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
     sqliteExec = handle.sqlite.exec.bind(handle.sqlite);
     const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
     const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-    const referenceInstant = new Date().toISOString();
     refDate = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Kolkata",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-    }).format(new Date(referenceInstant));
+    }).format(new Date(FROZEN_REFERENCE_INSTANT));
     const sql = buildDemoSeedSql({
-      referenceInstant,
+      referenceInstant: FROZEN_REFERENCE_INSTANT,
       passwordHash,
       libraryIndex,
     });
@@ -95,6 +99,11 @@ describe("demo seed", () => {
   afterEach(() => {
     setTestDbOverride(null);
     close();
+    vi.useRealTimers();
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
   });
 
   it(
@@ -105,7 +114,7 @@ describe("demo seed", () => {
         const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
         const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
         const sql = buildDemoSeedSql({
-          referenceInstant: new Date().toISOString(),
+          referenceInstant: FROZEN_REFERENCE_INSTANT,
           passwordHash,
           libraryIndex,
         });
@@ -443,9 +452,9 @@ describe("demo seed", () => {
     expect(
       Number(
         rows(
-          `SELECT COUNT(*) FROM checkins c LEFT JOIN checkin_reviews r ON r.checkin_id = c.id
+          `SELECT COUNT(*) FROM checkins c JOIN checkin_reviews r ON r.checkin_id = c.id
            WHERE c.coaching_relationship_id = '${rohanRel}'
-             AND c.record_status = 'submitted' AND r.id IS NULL
+             AND c.record_status = 'submitted'
              AND strftime('%w', c.local_date) = '5'`,
         )[0]?.[0],
       ),
@@ -456,6 +465,15 @@ describe("demo seed", () => {
         rows(
           `SELECT COUNT(*) FROM notifications
            WHERE coaching_relationship_id = '${rohanRel}' AND notification_type = 'meal_reminder'`,
+        )[0]?.[0],
+      ),
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      Number(
+        rows(
+          `SELECT COUNT(*) FROM notifications
+           WHERE coaching_relationship_id = '${rohanRel}'
+             AND notification_type IN ('trainer_note_shared','checkin_reviewed','workout_reminder')`,
         )[0]?.[0],
       ),
     ).toBeGreaterThanOrEqual(3);
@@ -485,7 +503,7 @@ describe("demo seed", () => {
         )[0]?.[0],
       ),
     ) as PlanContent;
-    expect(content.workoutDays.map((day) => day.weekday)).toEqual([1, 3, 5]);
+    expect(content.workoutDays.map((day) => day.weekday)).toEqual([1, 2, 4, 6]);
     let kcal = 0;
     let protein = 0;
     for (const meal of content.mealPrescriptions) {

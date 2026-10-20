@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Check } from "lucide-react-native";
+import {
+  AlertTriangle,
+  CalendarClock,
+  Check,
+  Dumbbell,
+  Play,
+  X,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CoachingRelationship,
+  EffectivePlanResponse,
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
@@ -26,6 +34,7 @@ import {
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
+import { WorkoutOverviewScreen } from "./WorkoutOverviewScreen";
 import {
   cacheKey,
   getCached,
@@ -38,10 +47,20 @@ import { scheduledAssignments } from "./scheduledAssignments";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
 import { estimateDurationMinutesFromDay } from "./workoutDuration";
 import {
+  enrichExecutionFromAssignmentDay,
   openActiveWorkout,
   restSecondsBySetTargetId,
   workoutStartError,
 } from "./workoutSession";
+import {
+  assignmentDayEyebrow,
+  coachInitials,
+  missedLogHeadline,
+  shortWorkoutDayName,
+  totalSetsInDay,
+  weekPlanEyebrow,
+  weekStripStatus,
+} from "./workoutDisplay";
 
 const TARGET = 44;
 const SKIP_REASONS = [
@@ -51,16 +70,6 @@ const SKIP_REASONS = [
   "Injury",
   "Other",
 ] as const;
-
-function exerciseLine(
-  exercise: WorkoutAssignment["workoutDay"]["exercises"][number],
-): string {
-  const sets = exercise.setTargets.length;
-  const first = exercise.setTargets[0];
-  const reps = first?.reps != null ? String(first.reps) : "?";
-  const load = first?.loadLabel?.trim();
-  return load ? `${sets}×${reps} · ${load}` : `${sets}×${reps}`;
-}
 
 function continueCaption(
   assignment: WorkoutAssignment,
@@ -85,17 +94,28 @@ function continueCaption(
 
 export function WorkoutTab({
   relationship,
+  effectivePlan = null,
   selectedDate,
+  onSelectDate,
   onOpenOverlay,
   autoStartToday = false,
   onAutoStartConsumed,
+  pendingStartAssignmentId = null,
+  onPendingStartConsumed,
+  onImmersiveChange,
   coachName: coachNameProp,
 }: {
   relationship: CoachingRelationship;
+  effectivePlan?: EffectivePlanResponse | null;
   selectedDate?: string;
+  onSelectDate?: (localDate: string) => void;
   onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
   autoStartToday?: boolean;
   onAutoStartConsumed?: () => void;
+  pendingStartAssignmentId?: string | null;
+  onPendingStartConsumed?: () => void;
+  /** True while active workout or summary fills the tab (hide shell tab bar). */
+  onImmersiveChange?: (immersive: boolean) => void;
   /** Optional override; defaults to relationship.trainerDisplayName. */
   coachName?: string;
 }) {
@@ -123,6 +143,9 @@ export function WorkoutTab({
     done: number;
     total: number;
   } | null>(null);
+  const [dayDetailAssignmentId, setDayDetailAssignmentId] = useState<
+    string | null
+  >(null);
 
   const coachName =
     coachNameProp?.trim() ||
@@ -279,6 +302,7 @@ export function WorkoutTab({
   }, [assignments, closedMissedIds]);
 
   async function startOrContinue(assignment: WorkoutAssignment) {
+    setDayDetailAssignmentId(null);
     setActingId(assignment.id);
     setError(null);
     try {
@@ -299,6 +323,31 @@ export function WorkoutTab({
     } finally {
       setActingId(null);
     }
+  }
+
+  useEffect(() => {
+    if (!pendingStartAssignmentId || loading) return;
+    const assignment = assignments.find(
+      (item) => item.id === pendingStartAssignmentId,
+    );
+    if (assignment) {
+      void startOrContinue(assignment);
+    }
+    onPendingStartConsumed?.();
+  }, [pendingStartAssignmentId, loading, assignments, onPendingStartConsumed]);
+
+  function openDayDetail(assignment: WorkoutAssignment) {
+    onSelectDate?.(assignment.localDate);
+    // Prefer overlay so day-detail (mockup 10b) is a real navigation target,
+    // not a silent in-tab state that can look like the week overview stayed up.
+    if (onOpenOverlay) {
+      onOpenOverlay({
+        screen: "workout_overview",
+        assignmentId: assignment.id,
+      });
+      return;
+    }
+    setDayDetailAssignmentId(assignment.id);
   }
 
   async function confirmSkip(reason: string | null) {
@@ -330,6 +379,20 @@ export function WorkoutTab({
     }
   }
 
+  useEffect(() => {
+    onImmersiveChange?.(
+      Boolean(
+        summaryExecution || activeExecution || dayDetailAssignmentId,
+      ),
+    );
+    return () => onImmersiveChange?.(false);
+  }, [
+    summaryExecution,
+    activeExecution,
+    dayDetailAssignmentId,
+    onImmersiveChange,
+  ]);
+
   if (summaryExecution) {
     const alreadyCounted = assignments.some(
       (item) =>
@@ -337,10 +400,22 @@ export function WorkoutTab({
         (item.status === "completed" || item.status === "modified"),
     );
     const summaryWeekCompleted = weekCompleted + (alreadyCounted ? 0 : 1);
+    const sourceAssignment =
+      assignments.find((item) => item.execution?.id === summaryExecution.id) ??
+      activeAssignment;
+    const enriched = enrichExecutionFromAssignmentDay(
+      summaryExecution,
+      sourceAssignment,
+    );
     return (
       <WorkoutSummaryScreen
-        execution={summaryExecution}
+        execution={enriched}
+        assignment={sourceAssignment}
         coachName={coachName}
+        weekAssignments={assignments}
+        weekStart={weekStart}
+        timeZone={timeZone}
+        today={today}
         weekCompleted={summaryWeekCompleted}
         weekTotal={weekTotal > 0 ? weekTotal : undefined}
         offline={offline}
@@ -354,10 +429,38 @@ export function WorkoutTab({
     );
   }
 
+  if (dayDetailAssignmentId) {
+    return (
+      <WorkoutOverviewScreen
+        assignmentId={dayDetailAssignmentId}
+        coachName={coachName}
+        startLoading={actingId === dayDetailAssignmentId}
+        onBack={() => setDayDetailAssignmentId(null)}
+        onStart={(assignment) => {
+          void startOrContinue(assignment);
+        }}
+        onAskCoach={
+          onOpenOverlay
+            ? (assignment) =>
+                onOpenOverlay({
+                  screen: "ask_coach",
+                  itemType: "workout_assignment",
+                  itemId: assignment.id,
+                  itemLabel: assignment.workoutDayName,
+                  dateLabel: formatCivilDate(assignment.localDate),
+                })
+            : undefined
+        }
+      />
+    );
+  }
+
   if (activeExecution) {
     return (
       <ActiveWorkoutScreen
         execution={activeExecution}
+        assignment={activeAssignment ?? todayAssignment}
+        coachName={coachName}
         sessionName={
           activeAssignment?.workoutDayName ??
           todayAssignment?.workoutDayName
@@ -392,7 +495,6 @@ export function WorkoutTab({
                   itemId: activeAssignment.id,
                   itemLabel: activeAssignment.workoutDayName,
                   dateLabel: formatCivilDate(activeAssignment.localDate),
-                  topic: activeAssignment.workoutDayName,
                 })
             : undefined
         }
@@ -411,23 +513,66 @@ export function WorkoutTab({
     );
   }
 
+  const focusAssignment = byDate.get(focusDate) ?? null;
+
   const duration =
-    todayAssignment != null
-      ? estimateDurationMinutesFromDay(todayAssignment.workoutDay)
+    focusAssignment != null
+      ? estimateDurationMinutesFromDay(focusAssignment.workoutDay)
       : null;
 
+  const exerciseCount = focusAssignment?.workoutDay.exercises.length ?? 0;
+  const setCount =
+    focusAssignment != null ? totalSetsInDay(focusAssignment.workoutDay) : 0;
+
   const pausedCaption =
-    todayAssignment != null
+    focusAssignment != null
       ? continueCaption(
-          todayAssignment,
-          pausedProgress?.assignmentId === todayAssignment.id
+          focusAssignment,
+          pausedProgress?.assignmentId === focusAssignment.id
             ? pausedProgress
             : null,
         )
       : null;
-  const continueLabel = pausedCaption
-    ? `Continue · ${pausedCaption}`
-    : "Continue";
+
+  const startLabel = pausedCaption ? "Continue workout" : "Start workout";
+  const planEyebrow = weekPlanEyebrow(effectivePlan, weekStart);
+  const trainerInitials = coachInitials(
+    relationship.trainerDisplayName ?? coachName,
+  );
+  const heroInstructions = focusAssignment?.workoutDay.instructions?.trim();
+
+  const heroOverflowItems = focusAssignment
+    ? [
+        ...(focusAssignment.status === "assigned"
+          ? [
+              {
+                id: "not-today",
+                label: "Not today",
+                onSelect: () => {
+                  setSkipReason(null);
+                  setSkipTarget(focusAssignment);
+                },
+              },
+            ]
+          : []),
+        ...(onOpenOverlay
+          ? [
+              {
+                id: "ask",
+                label: "Ask coach",
+                onSelect: () =>
+                  onOpenOverlay({
+                    screen: "ask_coach",
+                    itemType: "workout_assignment",
+                    itemId: focusAssignment.id,
+                    itemLabel: focusAssignment.workoutDayName,
+                    dateLabel: formatCivilDate(focusAssignment.localDate),
+                  }),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   return (
     <Screen
@@ -444,60 +589,246 @@ export function WorkoutTab({
         <Text style={styles.offline}>Saved on phone · Not sent yet</Text>
       ) : null}
 
-      <View style={styles.weekStrip} accessibilityRole="summary">
+      <View style={styles.ttlrow}>
+        <View style={styles.lt2}>
+          {planEyebrow ? (
+            <Text style={styles.planEyebrow}>{planEyebrow}</Text>
+          ) : null}
+          <Text style={styles.pageTitle} accessibilityRole="header">
+            Workout
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.wks} accessibilityRole="summary">
         {weekDates.map((date) => {
           const assignment = byDate.get(date);
-          const isToday = date === today;
-          let caption = "Rest";
-          if (assignment) {
-            if (
-              assignment.status === "completed" ||
-              assignment.status === "modified"
-            ) {
-              caption = "✓";
-            } else {
-              caption = assignment.workoutDayName;
-            }
-          }
+          const status = weekStripStatus(date, today, assignment);
+          const isOn = date === focusDate;
+          const shortName = assignment
+            ? shortWorkoutDayName(assignment.workoutDayName)
+            : "Rest";
           return (
-            <View
+            <Pressable
               key={date}
-              style={[styles.weekDay, isToday ? styles.weekDayToday : null]}
+              accessibilityRole="button"
+              accessibilityLabel={`${weekdayShort(timeZone, date)} ${shortName}`}
+              disabled={!assignment}
+              onPress={() => {
+                if (assignment) openDayDetail(assignment);
+              }}
+              style={[styles.wksDay, isOn ? styles.wksDayOn : null]}
             >
-              <Text style={styles.weekDow}>
+              <Text style={[styles.wksDow, isOn ? styles.wksDowOn : null]}>
                 {weekdayShort(timeZone, date)}
               </Text>
-              {caption === "✓" ? (
-                <Check color={colors.success} size={16} />
-              ) : (
-                <Text
-                  style={styles.weekCaption}
-                  numberOfLines={2}
-                >
-                  {caption}
-                </Text>
-              )}
-            </View>
+              <View
+                style={[
+                  styles.wksIcon,
+                  status === "done" ? styles.wksIconDone : null,
+                  status === "miss" ? styles.wksIconMiss : null,
+                  status === "rest" ? styles.wksIconRest : null,
+                  status === "today" ? styles.wksIconToday : null,
+                  status === "future" ? styles.wksIconFut : null,
+                ]}
+              >
+                {status === "done" ? (
+                  <Check color={colors.white} size={15} strokeWidth={2.5} />
+                ) : null}
+                {status === "miss" ? (
+                  <X color={colors.coral} size={15} strokeWidth={2.5} />
+                ) : null}
+                {status === "today" ? (
+                  <Dumbbell color={colors.white} size={15} strokeWidth={2.5} />
+                ) : null}
+                {status === "rest" ? <View style={styles.wksDash} /> : null}
+              </View>
+              <Text
+                style={[
+                  styles.wksLabel,
+                  status === "rest" ? styles.wksLabelMuted : null,
+                ]}
+                numberOfLines={2}
+              >
+                {assignment ? shortName : "Rest"}
+              </Text>
+            </Pressable>
           );
         })}
       </View>
 
-      {lateLoggable.map((item) => (
-        <View key={`late-${item.id}`} style={styles.lateBanner}>
-          <Text style={styles.lateBody}>
-            {weekdayShort(timeZone, item.localDate)}'s workout wasn't logged. If
-            you did it, log it now.
+      {loading && assignments.length === 0 ? (
+        <Text style={styles.muted}>Loading workouts…</Text>
+      ) : focusAssignment ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${focusAssignment.workoutDayName}, workout details`}
+          onPress={() => openDayDetail(focusAssignment)}
+          style={styles.wheroWrap}
+        >
+          <View style={styles.whero}>
+            {heroOverflowItems.length > 0 ? (
+              <View style={styles.wheroMenu}>
+                <OverflowMenu label="Workout options" items={heroOverflowItems} />
+              </View>
+            ) : null}
+            <View style={styles.wheroChip}>
+              <CalendarClock color="rgba(255,255,255,0.9)" size={15} />
+              <Text style={styles.wheroChipText}>
+                {assignmentDayEyebrow(focusAssignment, timeZone, today)}
+              </Text>
+            </View>
+            <Text style={styles.wheroTitle}>{focusAssignment.workoutDayName}</Text>
+            <View style={styles.wheroMeta}>
+              <Text style={styles.wheroMetaText}>
+                <Text style={styles.wheroMetaB}>{exerciseCount}</Text>
+                {exerciseCount === 1 ? " exercise" : " exercises"}
+              </Text>
+              <Text style={styles.wheroMetaText}>
+                <Text style={styles.wheroMetaB}>{setCount}</Text>
+                {setCount === 1 ? " set" : " sets"}
+              </Text>
+              {duration != null ? (
+                <Text style={styles.wheroMetaText}>
+                  about <Text style={styles.wheroMetaB}>{duration}</Text> min
+                </Text>
+              ) : null}
+            </View>
+            {heroInstructions ? (
+              <View style={styles.wheroNote}>
+                <View style={styles.wheroAv}>
+                  <Text style={styles.wheroAvText}>{trainerInitials}</Text>
+                </View>
+                <Text style={styles.wheroNoteBody}>
+                  <Text style={styles.wheroNoteBold}>{coachName}:</Text>{" "}
+                  {heroInstructions}
+                </Text>
+              </View>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={startLabel}
+              disabled={
+                actingId === focusAssignment.id ||
+                !(
+                  focusAssignment.status === "assigned" ||
+                  focusAssignment.status === "missed" ||
+                  focusAssignment.status === "in_progress" ||
+                  focusAssignment.status === "paused"
+                )
+              }
+              onPress={(event) => {
+                event.stopPropagation();
+                void startOrContinue(focusAssignment);
+              }}
+              style={styles.wheroStart}
+            >
+              <Play color={colors.deepNavy} size={20} fill={colors.deepNavy} />
+              <Text style={styles.wheroStartText}>{startLabel}</Text>
+            </Pressable>
+            {focusAssignment.status === "completed" ||
+            focusAssignment.status === "modified" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="View summary"
+                onPress={(event) => {
+                  event.stopPropagation();
+                  void (async () => {
+                    if (!focusAssignment.execution) return;
+                    setActingId(focusAssignment.id);
+                    try {
+                      const execution = await api.getWorkoutExecution(
+                        focusAssignment.execution.id,
+                      );
+                      setSummaryExecution(
+                        enrichExecutionFromAssignmentDay(
+                          execution,
+                          focusAssignment,
+                        ),
+                      );
+                    } catch (err) {
+                      setError(
+                        err instanceof ApiClientError
+                          ? err.message
+                          : "Could not open summary.",
+                      );
+                    } finally {
+                      setActingId(null);
+                    }
+                  })();
+                }}
+                style={styles.wheroSecondary}
+              >
+                <Text style={styles.wheroSecondaryText}>View summary</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </Pressable>
+      ) : assignments.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle} accessibilityRole="header">
+            No plan yet
           </Text>
-          <PrimaryButton
-            label="Log it"
-            variant="tinted"
-            loading={actingId === item.id}
-            onPress={() => {
-              void startOrContinue(item);
-            }}
-          />
+          <Text style={styles.emptyBody}>
+            Workouts appear here when {coachName} publishes your plan.
+          </Text>
         </View>
-      ))}
+      ) : (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle} accessibilityRole="header">
+            Rest day
+          </Text>
+          <Text style={styles.emptyBody}>
+            No workout planned for this day. Enjoy the recovery.
+          </Text>
+        </View>
+      )}
+
+      {lateLoggable.length > 0 ? (
+        <View style={styles.missb}>
+          <View style={styles.missbHead}>
+            <AlertTriangle color={colors.warning} size={18} />
+            <Text style={styles.missbHeadText}>
+              {missedLogHeadline(lateLoggable.length)}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss missed workout reminder"
+              onPress={() => {
+                setClosedMissedIds((prev) => {
+                  const next = new Set(prev);
+                  for (const item of lateLoggable) {
+                    next.add(item.id);
+                  }
+                  return next;
+                });
+              }}
+              style={styles.missbClose}
+            >
+              <X size={20} color={colors.midGrey} strokeWidth={2.2} />
+            </Pressable>
+          </View>
+          {lateLoggable.map((item) => (
+            <View key={`late-${item.id}`} style={styles.missbRow}>
+              <View style={styles.missbTx}>
+                <Text style={styles.missbTitle}>
+                  {item.workoutDayName} · {weekdayShort(timeZone, item.localDate)}
+                </Text>
+                <Text style={styles.missbSub}>Missed · you can still log it</Text>
+              </View>
+              <PrimaryButton
+                label="Log it"
+                variant="tinted"
+                loading={actingId === item.id}
+                onPress={() => {
+                  void startOrContinue(item);
+                }}
+                style={styles.missbBtn}
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {closedMissed.map((item) => (
         <View key={`closed-${item.id}`} style={styles.closedBanner}>
@@ -507,158 +838,48 @@ export function WorkoutTab({
         </View>
       ))}
 
-      {loading && assignments.length === 0 ? (
-        <Text style={styles.muted}>Loading workouts…</Text>
-      ) : todayAssignment ? (
-        <View style={styles.sessionCard}>
-          <View style={styles.sessionHeader}>
-            <Text style={styles.kicker} accessibilityRole="header">
-              Today
+      {focusAssignment ? (
+        <>
+          <View style={styles.sh}>
+            <Text style={styles.shTitle} accessibilityRole="header">
+              Exercises
             </Text>
-            <OverflowMenu
-              label="Workout options"
-              items={[
-                ...(todayAssignment.status === "assigned"
-                  ? [
-                      {
-                        id: "not-today",
-                        label: "Not today",
-                        onSelect: () => {
-                          setSkipReason(null);
-                          setSkipTarget(todayAssignment);
-                        },
-                      },
-                    ]
-                  : []),
-                ...(onOpenOverlay
-                  ? [
-                      {
-                        id: "ask",
-                        label: "Ask coach",
-                        onSelect: () =>
-                          onOpenOverlay({
-                            screen: "ask_coach",
-                            itemType: "workout_assignment",
-                            itemId: todayAssignment.id,
-                            itemLabel: todayAssignment.workoutDayName,
-                            dateLabel: formatCivilDate(todayAssignment.localDate),
-                            topic: todayAssignment.workoutDayName,
-                          }),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
           </View>
-          <Text style={styles.bannerTitle} accessibilityRole="header">
-            {todayAssignment.workoutDayName}
-          </Text>
-          {duration != null ? (
-            <Text style={styles.bannerBody}>About {duration} min</Text>
-          ) : null}
-          {todayAssignment.workoutDay.instructions?.trim() ? (
-            <Text style={styles.trainerNote}>
-              {todayAssignment.workoutDay.instructions}
-            </Text>
-          ) : null}
-
-          {todayAssignment.workoutDay.exercises.map((exercise) => (
-            <View key={exercise.id} style={styles.exerciseRow}>
-              <Text style={styles.rowTitle}>{exercise.name}</Text>
-              <Text style={styles.rowMeta}>{exerciseLine(exercise)}</Text>
-            </View>
-          ))}
-
-          {onOpenOverlay ? (
-            <PrimaryButton
-              label="See workout overview"
-              variant="secondary"
-              onPress={() => {
-                onOpenOverlay({
-                  screen: "workout_overview",
-                  assignmentId: todayAssignment.id,
-                });
-              }}
-            />
-          ) : null}
-
-          {todayAssignment.status === "completed" ||
-          todayAssignment.status === "modified" ? (
-            <PrimaryButton
-              label="View summary"
-              onPress={() => {
-                void (async () => {
-                  if (!todayAssignment.execution) return;
-                  setActingId(todayAssignment.id);
-                  try {
-                    const execution = await api.getWorkoutExecution(
-                      todayAssignment.execution.id,
-                    );
-                    setSummaryExecution(execution);
-                  } catch (err) {
-                    setError(
-                      err instanceof ApiClientError
-                        ? err.message
-                        : "Could not open summary.",
-                    );
-                  } finally {
-                    setActingId(null);
-                  }
-                })();
-              }}
-            />
-          ) : null}
-
-          {todayAssignment.status === "assigned" ||
-          todayAssignment.status === "missed" ? (
-            <PrimaryButton
-              label="Start workout"
-              loading={actingId === todayAssignment.id}
-              onPress={() => {
-                void startOrContinue(todayAssignment);
-              }}
-            />
-          ) : null}
-
-          {todayAssignment.execution &&
-          (todayAssignment.status === "in_progress" ||
-            todayAssignment.status === "paused") ? (
-            <PrimaryButton
-              label={continueLabel}
-              loading={actingId === todayAssignment.id}
-              onPress={() => {
-                void startOrContinue(todayAssignment);
-              }}
-            />
-          ) : null}
-
-          {todayAssignment.status === "missed" &&
-          !closedMissedIds.has(todayAssignment.id) &&
-          todayAssignment.workoutDay.required !== false ? (
-            <Text style={styles.missedHint}>
-              Missed · you can still log it
-            </Text>
-          ) : null}
-        </View>
-      ) : assignments.length === 0 ? (
-        <View style={styles.sessionCard}>
-          <Text style={styles.bannerTitle} accessibilityRole="header">
-            No plan yet
-          </Text>
-          <Text style={styles.bannerBody}>
-            Workouts appear here when {coachName} publishes your plan.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.sessionCard}>
-          <Text style={styles.bannerTitle} accessibilityRole="header">
-            Rest day
-          </Text>
-          <Text style={styles.bannerBody}>
-            No workout planned for this day. Enjoy the recovery.
-          </Text>
-        </View>
-      )}
+          <View style={styles.exl}>
+            {focusAssignment.workoutDay.exercises.map((exercise, index) => {
+              const first = exercise.setTargets[0];
+              const reps = first?.reps != null ? String(first.reps) : "?";
+              const sets = exercise.setTargets.length;
+              const load = first?.loadLabel?.trim();
+              const rest = first?.restSeconds;
+              return (
+                <View
+                  key={exercise.id}
+                  style={[styles.exlRow, index > 0 ? styles.exlBorder : null]}
+                >
+                  <View style={styles.exlNum}>
+                    <Text style={styles.exlNumText}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.exlTx}>
+                    <Text style={styles.exlName}>{exercise.name}</Text>
+                    {rest != null && rest > 0 ? (
+                      <Text style={styles.exlSub}>Rest {rest} s</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.exlRight}>
+                    <Text style={styles.exlPres}>
+                      {sets} × {reps}
+                    </Text>
+                    {load ? (
+                      <Text style={styles.exlLoad}>{load}</Text>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
 
       <BottomSheet
         visible={skipTarget != null}
@@ -714,44 +935,270 @@ export function WorkoutTab({
 }
 
 const styles = StyleSheet.create({
-  weekStrip: {
+  ttlrow: {
     flexDirection: "row",
-    gap: spacing.xs,
-    marginBottom: spacing.lg,
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
   },
-  weekDay: {
+  lt2: {
+    flex: 1,
+  },
+  planEyebrow: {
+    color: colors.midGrey,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  pageTitle: {
+    color: colors.deepNavy,
+    fontSize: 30,
+    fontWeight: "700",
+    letterSpacing: -0.5,
+    lineHeight: 36,
+    marginTop: 2,
+  },
+  wks: {
+    flexDirection: "row",
+    gap: 4,
+    marginBottom: spacing.lg,
+    marginTop: 4,
+  },
+  wksDay: {
     alignItems: "center",
     flex: 1,
-    gap: 4,
-    minHeight: TARGET + 8,
+    gap: 5,
+    paddingVertical: 8,
+    borderRadius: 14,
   },
-  weekDayToday: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.control,
-    paddingVertical: spacing.xs,
+  wksDayOn: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderWidth: 1,
+    shadowColor: "#0F0C28",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
-  weekDow: {
+  wksDow: {
     color: colors.midGrey,
     fontSize: 12,
     fontWeight: "600",
   },
-  weekCaption: {
-    color: colors.deepNavy,
+  wksDowOn: {
+    color: colors.indigo,
+  },
+  wksIcon: {
+    alignItems: "center",
+    borderRadius: 15,
+    height: 30,
+    justifyContent: "center",
+    width: 30,
+  },
+  wksIconDone: {
+    backgroundColor: colors.deepNavy,
+  },
+  wksIconMiss: {
+    borderColor: colors.coral,
+    borderWidth: 1.5,
+  },
+  wksIconRest: {},
+  wksIconToday: {
+    backgroundColor: colors.indigo,
+    shadowColor: colors.indigo,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+  },
+  wksIconFut: {
+    borderColor: colors.lightGrey,
+    borderWidth: 1.5,
+  },
+  wksDash: {
+    backgroundColor: colors.midGrey,
+    borderRadius: 1,
+    height: 2,
+    width: 10,
+  },
+  wksLabel: {
+    color: colors.darkGrey,
     fontSize: 11,
     fontWeight: "600",
+    lineHeight: 13,
     textAlign: "center",
   },
-  lateBanner: {
-    backgroundColor: colors.softCoral,
-    borderRadius: radii.card,
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-    padding: spacing.lg,
+  wksLabelMuted: {
+    color: colors.midGrey,
+    fontWeight: "500",
   },
-  lateBody: {
+  wheroWrap: {
+    marginBottom: spacing.md,
+  },
+  whero: {
+    backgroundColor: "#1A1248",
+    borderRadius: 22,
+    overflow: "hidden",
+    padding: 18,
+    shadowColor: "#1A1248",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+  },
+  wheroMenu: {
+    position: "absolute",
+    right: 4,
+    top: 4,
+    zIndex: 2,
+  },
+  wheroChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 13,
+    flexDirection: "row",
+    gap: 6,
+    height: 26,
+    paddingHorizontal: 10,
+  },
+  wheroChipText: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  wheroTitle: {
+    color: colors.white,
+    fontSize: 26,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+    lineHeight: 32,
+    marginTop: 12,
+  },
+  wheroMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    marginTop: 6,
+  },
+  wheroMetaText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 15,
+  },
+  wheroMetaB: {
+    color: colors.white,
+    fontWeight: "700",
+  },
+  wheroNote: {
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+    padding: 12,
+  },
+  wheroAv: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    borderRadius: 14,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  wheroAvText: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  wheroNoteBody: {
+    color: "rgba(255,255,255,0.9)",
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  wheroNoteBold: {
+    color: colors.white,
+    fontWeight: "700",
+  },
+  wheroStart: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: radii.control,
+    flexDirection: "row",
+    gap: spacing.sm,
+    height: 56,
+    justifyContent: "center",
+    marginTop: 14,
+  },
+  wheroStartText: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  wheroSecondary: {
+    alignItems: "center",
+    marginTop: 10,
+    minHeight: TARGET,
+    justifyContent: "center",
+  },
+  wheroSecondaryText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 15,
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+  missb: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+    marginTop: spacing.sm,
+    overflow: "hidden",
+  },
+  missbHead: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    paddingBottom: 6,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 12,
+  },
+  missbClose: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    marginLeft: "auto",
+    width: 44,
+  },
+  missbHeadText: {
+    color: colors.darkGrey,
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  missbRow: {
+    alignItems: "center",
+    borderTopColor: colors.lightGrey,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+  },
+  missbTx: {
+    flex: 1,
+    minWidth: 0,
+  },
+  missbTitle: {
     color: colors.deepNavy,
     fontSize: 15,
-    lineHeight: 22,
+    fontWeight: "700",
+  },
+  missbSub: {
+    color: colors.midGrey,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  missbBtn: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
   },
   closedBanner: {
     backgroundColor: colors.white,
@@ -763,57 +1210,93 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 14,
   },
-  sessionCard: {
+  emptyCard: {
     backgroundColor: colors.white,
     borderRadius: radii.card,
     gap: spacing.sm,
+    marginBottom: spacing.md,
     padding: spacing.xl,
   },
-  sessionHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  kicker: {
-    color: colors.indigo,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  bannerTitle: {
+  emptyTitle: {
     color: colors.deepNavy,
     fontSize: 24,
     fontWeight: "700",
-    letterSpacing: -0.3,
   },
-  bannerBody: {
+  emptyBody: {
     color: colors.midGrey,
     fontSize: 15,
     lineHeight: 22,
   },
-  trainerNote: {
-    color: colors.darkGrey,
-    fontSize: 15,
-    lineHeight: 22,
+  sh: {
+    marginBottom: 10,
+    marginTop: spacing.sm,
+    paddingHorizontal: 4,
   },
-  exerciseRow: {
+  shTitle: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  exl: {
+    backgroundColor: colors.white,
+    borderColor: colors.lightGrey,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    marginBottom: spacing.xl,
+    overflow: "hidden",
+  },
+  exlRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+  },
+  exlBorder: {
     borderTopColor: colors.lightGrey,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
-    minHeight: TARGET,
-    paddingTop: spacing.sm,
   },
-  rowTitle: {
-    color: colors.nearBlack,
+  exlNum: {
+    alignItems: "center",
+    backgroundColor: "#F6F4FF",
+    borderColor: "#E6E0FF",
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  exlNumText: {
+    color: colors.indigo,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  exlTx: {
+    flex: 1,
+    minWidth: 0,
+  },
+  exlName: {
+    color: colors.deepNavy,
     fontSize: 16,
     fontWeight: "600",
   },
-  rowMeta: {
+  exlSub: {
     color: colors.midGrey,
     fontSize: 13,
+    marginTop: 2,
   },
-  missedHint: {
+  exlRight: {
+    alignItems: "flex-end",
+  },
+  exlPres: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  exlLoad: {
     color: colors.midGrey,
     fontSize: 13,
+    marginTop: 2,
   },
   muted: {
     color: colors.midGrey,

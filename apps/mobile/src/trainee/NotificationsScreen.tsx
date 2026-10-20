@@ -1,27 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import {
   Bell,
   CalendarCheck,
+  Check,
+  ChevronLeft,
   ClipboardList,
+  CloudMoon,
+  Dumbbell,
   MessageCircle,
+  Moon,
   Pause,
   RefreshCw,
+  Settings,
+  Settings2,
   Sun,
   Utensils,
-  Dumbbell,
-  AlertCircle,
-  Clock,
-  Settings,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Notification, NotificationType } from "@fitbud/contracts";
-import { colors, radii, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { colors, radii, semanticColors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { addDays, localDateInTimezone } from "../lib/dates";
 import { stage1Api } from "../lib/stage1Api";
 import {
   formatRelativeTime,
@@ -43,14 +46,21 @@ const CACHE_KEY = "notifications:inbox";
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type Props = {
+  coachName?: string;
   onBack: () => void;
   coachName?: string | null;
   onOpenSettings: () => void;
   onNavigate: (link: NotificationDeepLink) => void;
 };
 
-function isToday(iso: string, today: string): boolean {
-  return iso.slice(0, 10) === today;
+type TileTone = "default" | "navy" | "neu" | "info";
+
+function isToday(
+  iso: string,
+  today: string,
+  timeZone = "Asia/Kolkata",
+): boolean {
+  return localDateInTimezone(timeZone, new Date(iso)) === today;
 }
 
 function withinRetention(iso: string, now = Date.now()): boolean {
@@ -59,54 +69,155 @@ function withinRetention(iso: string, now = Date.now()): boolean {
   return now - t <= RETENTION_MS;
 }
 
-function iconForType(type: NotificationType) {
+function coachFirstFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts[0] ?? "Your coach";
+}
+
+function displayTitle(notification: Notification, coachFirst: string): string {
+  const base = notificationRowTitle(notification);
+  if (notification.type === "trainer_note_shared") {
+    return `${coachFirst} has a note for you`;
+  }
+  if (notification.type === "checkin_reviewed") {
+    return `${coachFirst} reviewed your check-in`;
+  }
+  return base;
+}
+
+function notificationDetail(
+  notification: Notification,
+  coachFirst: string,
+): string {
+  const body = notificationRowBody(notification);
+  const short = body.split(".")[0]?.trim() ?? "";
+  switch (notification.type) {
+    case "checkin_reviewed": {
+      // Match review outcome copy — default Acknowledged (most common Save).
+      const lower = body.toLowerCase();
+      if (lower.includes("follow")) return `${coachFirst} will follow up`;
+      if (lower.includes("updating") || lower.includes("adjust")) {
+        return `${coachFirst} is updating your plan`;
+      }
+      return "Acknowledged";
+    }
+    case "trainer_note_shared":
+      return "About your check-in";
+    case "plan_published":
+      return "See what's new";
+    case "workout_reminder":
+      return short.length > 48 ? `${short.slice(0, 48)}…` : short;
+    case "meal_reminder":
+      return short.length > 48 ? `${short.slice(0, 48)}…` : short;
+    default:
+      return short;
+  }
+}
+
+function timePrefix(
+  iso: string,
+  today: string,
+  now = new Date(),
+  timeZone = "Asia/Kolkata",
+): string {
+  // Compare trainee-local calendar days — never UTC date from the ISO prefix.
+  const day = localDateInTimezone(timeZone, new Date(iso));
+  if (day === today) {
+    return formatRelativeTime(iso, now);
+  }
+  const yesterday = addDays(today, -1);
+  if (day === yesterday) return "Yesterday";
+  const d = new Date(`${day}T12:00:00Z`);
+  const weekday = new Intl.DateTimeFormat("en-IN", {
+    weekday: "short",
+    timeZone: "UTC",
+  }).format(d);
+  if (day.slice(0, 7) === today.slice(0, 7)) return weekday;
+  return formatRelativeTime(iso, now);
+}
+
+function iconForType(type: NotificationType): {
+  Icon: typeof Bell;
+  tone: TileTone;
+} {
   switch (type) {
     case "meal_reminder":
-      return Utensils;
+      return { Icon: Utensils, tone: "default" };
     case "workout_reminder":
-      return Dumbbell;
+      return { Icon: Dumbbell, tone: "neu" };
     case "checkin_reminder":
-      return CalendarCheck;
+      return { Icon: CalendarCheck, tone: "info" };
     case "daily_summary":
-      return Sun;
+      return { Icon: Sun, tone: "neu" };
     case "activity_nudge":
-    case "trainer_note_shared":
-    case "coach_answered":
-    case "checkin_reviewed":
-    case "trainer_ask_coach":
-      return MessageCircle;
-    case "plan_published":
-      return ClipboardList;
-    case "reminders_paused":
-      return Pause;
-    case "relationship_ended":
-    case "reactivation_requested":
-      return RefreshCw;
+      return { Icon: CloudMoon, tone: "neu" };
     case "subscription_renewal_reminder":
     case "trainer_renewal":
-      return Bell;
+      return { Icon: Bell, tone: "default" };
+    case "plan_published":
+      return { Icon: ClipboardList, tone: "info" };
+    case "checkin_reviewed":
+      return { Icon: ClipboardList, tone: "info" };
+    case "coach_answered":
+    case "trainer_note_shared":
+    case "trainer_ask_coach":
+      return { Icon: MessageCircle, tone: "navy" };
+    case "reminders_paused":
+      return { Icon: Pause, tone: "neu" };
+    case "relationship_ended":
+    case "reactivation_requested":
+      return { Icon: RefreshCw, tone: "neu" };
     case "trainer_checkin_submitted":
     case "trainer_intake_submitted":
-      return ClipboardList;
+      return { Icon: ClipboardList, tone: "info" };
     case "trainer_critical_digest":
-      return AlertCircle;
+      return { Icon: Bell, tone: "default" };
     case "trainer_meal_times_changed":
-      return Clock;
+      return { Icon: Moon, tone: "neu" };
     case "admin_whatsapp_budget":
-      return Settings;
+      return { Icon: Settings, tone: "neu" };
+    default: {
+      const _exhaustive: never = type;
+      return { Icon: Bell, tone: "default" };
+    }
+  }
+}
+
+function tileStyle(tone: TileTone) {
+  switch (tone) {
+    case "navy":
+      return styles.tileNavy;
+    case "neu":
+      return styles.tileNeu;
+    case "info":
+      return styles.tileInfo;
     default:
-      return Bell;
+      return styles.tileDefault;
+  }
+}
+
+function iconColor(tone: TileTone) {
+  switch (tone) {
+    case "navy":
+      return colors.white;
+    case "neu":
+      return colors.midGrey;
+    case "info":
+      return semanticColors.info.text;
+    default:
+      return colors.indigo;
   }
 }
 
 export function NotificationsScreen({
   onBack,
-  coachName,
+  coachName = "Your coach",
   onOpenSettings,
   onNavigate,
 }: Props) {
   const { api, me, refreshSession } = useAuth();
   const s1 = stage1Api(api);
+  const coachFirst = coachFirstFromName(coachName);
   const [items, setItems] = useState<Notification[]>(
     () => getCached<Notification[]>(CACHE_KEY) ?? [],
   );
@@ -118,7 +229,10 @@ export function NotificationsScreen({
   const [quiet, setQuiet] = useState<QuietHoursInput>(() =>
     quietWindow(me?.timezone ?? "Asia/Kolkata"),
   );
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(
+    () => localDateInTimezone(me?.timezone ?? "Asia/Kolkata"),
+    [me?.timezone],
+  );
 
   const load = useCallback(
     async (opts?: { soft?: boolean }) => {
@@ -190,15 +304,16 @@ export function NotificationsScreen({
     [items],
   );
 
+  const timeZone = me?.timezone ?? "Asia/Kolkata";
   const { todayItems, earlierItems } = useMemo(() => {
     const todayRows: Notification[] = [];
     const earlier: Notification[] = [];
     for (const item of retained) {
-      if (isToday(item.createdAt, today)) todayRows.push(item);
+      if (isToday(item.createdAt, today, timeZone)) todayRows.push(item);
       else earlier.push(item);
     }
     return { todayItems: todayRows, earlierItems: earlier };
-  }, [retained, today]);
+  }, [retained, today, timeZone]);
 
   async function openItem(item: Notification) {
     if (item.readAt == null) {
@@ -250,6 +365,56 @@ export function NotificationsScreen({
     await load({ soft: true });
   }
 
+  function renderRow(item: Notification) {
+    const unread = item.readAt == null;
+    const suppressed = item.state === "suppressed";
+    const { Icon, tone } = iconForType(item.type);
+    const prefix = timePrefix(
+      item.createdAt,
+      today,
+      new Date(),
+      me?.timezone ?? "Asia/Kolkata",
+    );
+    const detail = notificationDetail(item, coachFirst);
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={displayTitle(item, coachFirst)}
+        style={[styles.nrow, unread ? styles.nrowUnread : styles.nrowRead]}
+        onPress={() => {
+          void openItem(item);
+        }}
+      >
+        <View style={[styles.tile, tileStyle(tone)]}>
+          <Icon size={19} color={iconColor(tone)} strokeWidth={1.75} />
+        </View>
+        <View style={styles.nrowBody}>
+          <Text style={[styles.nrowTitle, !unread && styles.nrowTitleRead]}>
+            {displayTitle(item, coachFirst)}
+          </Text>
+          {suppressed ? (
+            <View style={styles.okRow}>
+              <Text style={styles.okPrefix}>{prefix} ·</Text>
+              <Check
+                size={14}
+                color={semanticColors.positive.text}
+                strokeWidth={2.4}
+              />
+              <Text style={styles.okLabel}>Already logged</Text>
+            </View>
+          ) : (
+            <Text style={styles.nrowSub}>
+              {prefix} · {detail}
+            </Text>
+          )}
+        </View>
+        <View style={styles.nrowTrail}>
+          {unread ? <View style={styles.unreadDot} /> : null}
+        </View>
+      </Pressable>
+    );
+  }
+
   function renderSection(title: string, rows: Notification[]) {
     if (rows.length === 0) return null;
     return (
@@ -257,74 +422,39 @@ export function NotificationsScreen({
         <Text style={styles.sectionTitle} accessibilityRole="header">
           {title}
         </Text>
-        {rows.map((item) => {
-          const Icon = iconForType(item.type);
-          const title = notificationRowTitle(item, { coachName });
-          const body = notificationRowBody(item, { coachName });
-          const inner = (
-            <>
-              <View style={styles.rowTop}>
-                <Icon size={20} color={colors.indigo} strokeWidth={2} />
-                <Text style={styles.title}>{title}</Text>
-                {item.readAt == null ? <View style={styles.dot} /> : null}
-              </View>
-              <Text style={styles.body}>{body}</Text>
-              <Text style={styles.meta}>
-                {formatRelativeTime(item.createdAt)}
-              </Text>
-            </>
-          );
-          if (item.type === "meal_reminder") {
-            return (
-              <View
-                key={item.id}
-                style={[styles.row, item.readAt == null ? styles.unread : null]}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={title}
-                  onPress={() => {
-                    void openItem(item);
-                  }}
-                >
-                  {inner}
-                </Pressable>
+        <View style={styles.listCard}>
+          {rows.map((item, index) => (
+            <View
+              key={item.id}
+              style={index > 0 ? styles.nrowBorder : undefined}
+            >
+              {renderRow(item)}
+              {item.type === "meal_reminder" ? (
                 <MealInlineButtons
                   mealId={item.domainEntityId}
-                  title={title}
-                  body={body}
+                  title={displayTitle(item, coachFirst)}
+                  body={notificationDetail(item, coachFirst)}
                   quiet={quiet}
                   onOpen={() => {
                     void openItem(item);
                   }}
                   onSnoozed={setToast}
                 />
-              </View>
-            );
-          }
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="button"
-              accessibilityLabel={title}
-              style={[styles.row, item.readAt == null ? styles.unread : null]}
-              onPress={() => {
-                void openItem(item);
-              }}
-            >
-              {inner}
-            </Pressable>
-          );
-        })}
+              ) : null}
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
+
+  const allRead = retained.every((item) => item.readAt != null);
 
   return (
     <Screen
       chrome="app"
       title="Notifications"
-      subtitle="Reminders and coach updates"
+      showHeader={false}
       refreshing={refreshing || loading}
       onRefresh={() => {
         setRefreshing(true);
@@ -332,32 +462,41 @@ export function NotificationsScreen({
         void load({ soft: true });
       }}
     >
+      <View style={styles.topnav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to Today"
+          onPress={onBack}
+          style={styles.back}
+        >
+          <ChevronLeft size={24} color={colors.indigo} strokeWidth={2} />
+          <Text style={styles.backLabel}>Today</Text>
+        </Pressable>
+        <View style={styles.topnavSpacer} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Mark all read"
+          disabled={allRead}
+          onPress={() => {
+            void markAllRead();
+          }}
+          style={styles.markAllBtn}
+        >
+          <Text style={[styles.markAllLabel, allRead && styles.markAllDisabled]}>
+            Mark all read
+          </Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.h1} accessibilityRole="header">
+        Notifications
+      </Text>
+
       {error ? <ErrorBanner message={error} /> : null}
       {toast ? <Text accessibilityLiveRegion="polite">{toast}</Text> : null}
       {offline ? (
         <Text style={styles.offline}>Showing saved notifications</Text>
       ) : null}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Mark all read"
-        style={styles.markAll}
-        disabled={retained.every((item) => item.readAt != null)}
-        onPress={() => {
-          void markAllRead();
-        }}
-      >
-        <Text
-          style={[
-            styles.markAllLabel,
-            retained.every((item) => item.readAt != null)
-              ? styles.markAllDisabled
-              : null,
-          ]}
-        >
-          Mark all read
-        </Text>
-      </Pressable>
 
       {loading && retained.length === 0 ? (
         <Text style={styles.muted} accessibilityLabel="Loading notifications">
@@ -375,17 +514,71 @@ export function NotificationsScreen({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Notification settings"
-        style={styles.settingsLink}
+        style={styles.footlink}
         onPress={onOpenSettings}
       >
-        <Text style={styles.settingsLabel}>Notification settings</Text>
+        <Settings2 size={18} color={colors.indigo} strokeWidth={1.75} />
+        <Text style={styles.footlinkLabel}>Notification settings</Text>
       </Pressable>
-      <PrimaryButton label="Done" variant="ghost" onPress={onBack} />
     </Screen>
   );
 }
 
+const cardShadow = Platform.select({
+  ios: {
+    shadowColor: "#1A1248",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+  },
+  default: { elevation: 1 },
+});
+
 const styles = StyleSheet.create({
+  topnav: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: 48,
+    justifyContent: "space-between",
+    marginHorizontal: -6,
+    marginBottom: spacing.xs,
+  },
+  back: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 44,
+    paddingLeft: 2,
+  },
+  backLabel: {
+    color: colors.indigo,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  topnavSpacer: {
+    flex: 1,
+  },
+  markAllBtn: {
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 10,
+  },
+  markAllLabel: {
+    color: colors.indigo,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  markAllDisabled: {
+    color: colors.midGrey,
+  },
+  h1: {
+    color: colors.deepNavy,
+    fontSize: 30,
+    fontWeight: "700",
+    letterSpacing: -0.66,
+    lineHeight: 36,
+    marginBottom: spacing.sm,
+    paddingHorizontal: 4,
+  },
   muted: {
     color: colors.midGrey,
     fontSize: 15,
@@ -401,75 +594,120 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: spacing.sm,
   },
-  markAll: {
-    alignSelf: "flex-start",
-    justifyContent: "center",
-    minHeight: touchTargetMin,
-    marginBottom: spacing.sm,
-  },
-  markAllLabel: {
-    color: colors.indigo,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  markAllDisabled: {
-    color: colors.midGrey,
-  },
   list: {
-    gap: spacing.lg,
-    marginTop: spacing.md,
+    gap: spacing.md,
+    marginTop: spacing.xs,
   },
   section: {
     gap: spacing.sm,
   },
   sectionTitle: {
     color: colors.deepNavy,
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: "700",
-    textTransform: "uppercase",
+    paddingHorizontal: 4,
   },
-  row: {
+  listCard: {
     backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
     borderRadius: radii.card,
-    gap: spacing.xs,
-    minHeight: touchTargetMin,
-    padding: spacing.md,
+    borderWidth: 1,
+    overflow: "hidden",
+    ...cardShadow,
   },
-  unread: {
-    borderColor: colors.paleLavender,
-    borderWidth: 2,
-  },
-  rowTop: {
-    alignItems: "center",
+  nrow: {
+    alignItems: "flex-start",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
   },
-  dot: {
-    backgroundColor: colors.indigo,
-    borderRadius: 4,
-    height: 8,
-    width: 8,
+  nrowUnread: {
+    backgroundColor: "rgba(237, 234, 255, 0.55)",
   },
-  title: {
-    color: colors.deepNavy,
+  nrowRead: {
+    backgroundColor: colors.white,
+  },
+  nrowBorder: {
+    borderTopColor: "#E7E9F2",
+    borderTopWidth: 1,
+  },
+  tile: {
+    alignItems: "center",
+    borderRadius: 12,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  tileDefault: {
+    backgroundColor: colors.paleLavender,
+  },
+  tileNavy: {
+    backgroundColor: colors.deepNavy,
+  },
+  tileNeu: {
+    backgroundColor: colors.background,
+  },
+  tileInfo: {
+    backgroundColor: semanticColors.info.fill,
+  },
+  nrowBody: {
     flex: 1,
+    minWidth: 0,
+  },
+  nrowTitle: {
+    color: colors.deepNavy,
     fontSize: 16,
     fontWeight: "600",
+    lineHeight: 22,
   },
-  body: {
+  nrowTitleRead: {
     color: colors.darkGrey,
-    fontSize: 14,
+    fontWeight: "500",
   },
-  meta: {
+  nrowSub: {
     color: colors.midGrey,
-    fontSize: 12,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 1,
   },
-  settingsLink: {
+  okRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 1,
+  },
+  okPrefix: {
+    color: colors.midGrey,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  okLabel: {
+    color: semanticColors.positive.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  nrowTrail: {
+    alignItems: "flex-end",
+    minWidth: 10,
+    paddingTop: 7,
+  },
+  unreadDot: {
+    backgroundColor: colors.indigo,
+    borderRadius: 5,
+    height: 9,
+    width: 9,
+  },
+  footlink: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
     justifyContent: "center",
     marginTop: spacing.xl,
     minHeight: touchTargetMin,
+    paddingVertical: spacing.md,
   },
-  settingsLabel: {
+  footlinkLabel: {
     color: colors.indigo,
     fontSize: 15,
     fontWeight: "600",

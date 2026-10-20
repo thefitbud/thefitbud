@@ -9,6 +9,8 @@ export type TraineeCaptureNav = {
   openCheckin: (checkin: Checkin) => void;
   startTodayWorkout: () => Promise<void>;
   openSomethingDifferent: () => Promise<void>;
+  /** Opens food library search for a today's meal (mockup 09 / TR-26). */
+  openFoodSearch: () => Promise<void>;
   openWorkoutOverview: () => Promise<void>;
   openTodayCheckin: () => Promise<void>;
   closeOverlay: () => void;
@@ -40,9 +42,17 @@ export type AuthCaptureNav = {
 let traineeNav: TraineeCaptureNav | null = null;
 let trainerNav: TrainerCaptureNav | null = null;
 let authNav: AuthCaptureNav | null = null;
+/** IntakeScreen step index for TR-03 (Your routine = 1). Consumed once. */
+let pendingCaptureIntakeStep: number | null = null;
 
 export function registerTraineeCaptureNav(nav: TraineeCaptureNav | null) {
   traineeNav = nav;
+}
+
+export function consumeCaptureIntakeStep(): number | null {
+  const step = pendingCaptureIntakeStep;
+  pendingCaptureIntakeStep = null;
+  return step;
 }
 
 export function registerTrainerCaptureNav(nav: TrainerCaptureNav | null) {
@@ -83,6 +93,8 @@ export async function navigateCaptureScreen(
   }
 
   if (!skipAuth && id === "TR-03") {
+    // Mockup 21 = "Your routine" (step index 1), not Goals on step 0.
+    pendingCaptureIntakeStep = 1;
     await authNav?.signInWithPassword(
       "vikram.onboarding@demo.fitbud.test",
       "FitBud-demo-2026",
@@ -130,7 +142,18 @@ export async function navigateCaptureScreen(
         ? "lakshmi.foods@demo.fitbud.test"
         : id === "TR-08"
           ? "deepak.dubai@demo.fitbud.test"
-          : "aarav.ontrack@demo.fitbud.test";
+          : id === "TR-14"
+            ? "meera.ack@demo.fitbud.test"
+            : id === "TR-06" ||
+                id === "TR-10" ||
+                id === "TR-10B" ||
+                id === "TR-11" ||
+                id === "TR-11B" ||
+                id === "TR-12" ||
+                id === "TR-13" ||
+                id === "TR-15"
+              ? "rohan.slipping@demo.fitbud.test"
+              : "aarav.ontrack@demo.fitbud.test";
     await authNav?.signInWithPassword(traineeEmail, "FitBud-demo-2026");
     await wait(2500);
   }
@@ -171,6 +194,11 @@ export async function navigateCaptureScreen(
     case "TR-10":
       await traineeNav?.ensureWorkoutDay();
       traineeNav?.setTab("workout");
+      await wait(1200);
+      break;
+    case "TR-10B":
+      await traineeNav?.ensureWorkoutDay();
+      traineeNav?.setTab("workout");
       await wait(800);
       await traineeNav?.openWorkoutOverview();
       break;
@@ -202,6 +230,8 @@ export async function navigateCaptureScreen(
       traineeNav?.openOverlay({ screen: "quiet_hours" });
       break;
     case "TR-18":
+      traineeNav?.setTab("diet");
+      await wait(900);
       traineeNav?.openOverlay({
         screen: "ask_coach",
         itemType: "meal_assignment",
@@ -223,7 +253,12 @@ export async function navigateCaptureScreen(
     case "TR-23":
       traineeNav?.openOverlay({
         screen: "deep_link",
-        reason: "This link is no longer available.",
+        reason: "Rahul updated your plan, so this dinner was replaced.",
+        updatedOnLabel: "Sun 18 Oct",
+        replacement: {
+          title: "Dinner · 8:30 pm",
+          subtitle: "Paneer bhurji · 2 roti · salad · 700 kcal",
+        },
       });
       break;
     case "TR-24":
@@ -233,7 +268,8 @@ export async function navigateCaptureScreen(
       traineeNav?.openOverlay({ screen: "steps_settings" });
       break;
     case "TR-26":
-      traineeNav?.openOverlay({ screen: "food_search" });
+      await traineeNav?.openFoodSearch();
+      await wait(1200);
       break;
     case "TM-01":
       trainerNav?.setTab("attention");
