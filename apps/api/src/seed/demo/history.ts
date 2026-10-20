@@ -935,7 +935,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
 }
 
 function foodSnapshotJson(lib: DemoLibraryIndex, slug: keyof DemoLibraryIndex["foods"]) {
-  const food = lib.foods[slug];
+  const food = lib.foods[slug]!;
   return foodSnapshotFromLibrary(
     food.item,
     food.defaultServingId,
