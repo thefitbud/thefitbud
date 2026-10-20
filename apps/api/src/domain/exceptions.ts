@@ -26,6 +26,7 @@ import {
   workoutAssignments,
   workoutExecutions,
 } from "../db/schema";
+import { loadTraineeTimezone } from "./assignment-schedule";
 import { createId, nowIso } from "../lib/crypto";
 
 type Db = ReturnType<typeof createDb>;
@@ -34,9 +35,35 @@ type ExceptionRow = typeof exceptions.$inferSelect;
 /** Look back a short window so detection volume stays realistic (~a few/client). */
 const DETECTION_LOOKBACK_DAYS = 3;
 
-function detectionWindowStartLocalDate(nowIsoValue: string): string {
-  const today = formatLocalDate(new Date(nowIsoValue), "UTC");
+function detectionWindowStartLocalDate(
+  nowIsoValue: string,
+  timeZone: string,
+): string {
+  const today = formatLocalDate(new Date(nowIsoValue), timeZone);
   return addDaysToLocalDate(today, -(DETECTION_LOOKBACK_DAYS - 1));
+}
+
+/** One open item per type + civil day + slot. Duplicate plan versions share a day. */
+function dedupeSameDaySlot<T extends ExceptionCandidate>(candidates: T[]): T[] {
+  const seen = new Set<string>();
+  const next: T[] = [];
+  for (const candidate of candidates) {
+    const details = candidate.details ?? {};
+    const day = typeof details.localDate === "string" ? details.localDate : "";
+    const slot =
+      (typeof details.mealName === "string" && details.mealName) ||
+      (typeof details.workoutDayName === "string" && details.workoutDayName) ||
+      "";
+    if (!day || !slot) {
+      next.push(candidate);
+      continue;
+    }
+    const key = `${candidate.type}:${day}:${slot}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(candidate);
+  }
+  return next;
 }
 
 void ADHERENCE_WINDOW_DAYS;
@@ -45,9 +72,10 @@ async function collectCandidatesForRelationship(
   db: Db,
   relationshipId: string,
   now: string,
+  timeZone = "Asia/Kolkata",
 ): Promise<ExceptionCandidate[]> {
   const candidates: ExceptionCandidate[] = [];
-  const windowStart = detectionWindowStartLocalDate(now);
+  const windowStart = detectionWindowStartLocalDate(now, timeZone);
 
   const workoutRows = await db
     .select({
@@ -203,11 +231,20 @@ export async function evaluateRelationshipExceptions(
     .from(exceptions)
     .where(eq(exceptions.coachingRelationshipId, relationshipId));
 
-  const windowStart = detectionWindowStartLocalDate(now);
+  const relationship = await db
+    .select({ traineeUserId: coachingRelationships.traineeUserId })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, relationshipId))
+    .limit(1);
+  const timeZone = relationship[0]
+    ? await loadTraineeTimezone(db, relationship[0].traineeUserId)
+    : "Asia/Kolkata";
+  const windowStart = detectionWindowStartLocalDate(now, timeZone);
   const candidates = await collectCandidatesForRelationship(
     db,
     relationshipId,
     now,
+    timeZone,
   );
   const candidateKeys = new Set(candidates.map((candidate) => exceptionKey(candidate)));
 
@@ -245,10 +282,22 @@ export async function evaluateRelationshipExceptions(
       .map((row) => exceptionKey(row)),
   );
 
-  const freshCandidates = filterNewExceptionCandidates(candidates, blockedKeys);
+  const freshCandidates = dedupeSameDaySlot(
+    filterNewExceptionCandidates(candidates, blockedKeys),
+  );
+
+  const openAfterResolve = existingRows.filter(
+    (row) =>
+      isOpenExceptionStatus(row.status) &&
+      !resolvedRows.some((resolved) => resolved.id === row.id),
+  ).length;
+  // A paused client can already hold a full meal stack. Keep the open set ≤10.
+  let room = Math.max(0, 10 - openAfterResolve);
 
   const createdRows: ExceptionRow[] = [];
   for (const candidate of freshCandidates) {
+    if (room <= 0) break;
+    room -= 1;
     const row: ExceptionRow = {
       id: createId(),
       coachingRelationshipId: relationshipId,

@@ -223,7 +223,7 @@ describe("Batch 0 API fixes", () => {
     };
     for (const group of body.data.groups) {
       // Evaluate can surface a dense overdue stack for paused clients; keep bounded.
-      expect(group.items.length).toBeLessThanOrEqual(15);
+      expect(group.items.length).toBeLessThanOrEqual(10);
     }
   });
 

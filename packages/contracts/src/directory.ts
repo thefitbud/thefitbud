@@ -31,6 +31,10 @@ export const clientDirectoryItemSchema = z.object({
   renewsOn: localDateSchema.nullable(),
   /** When coaching ended (ISO instant), for ended roster chips. */
   endedAt: isoDateTimeSchema.nullable().optional(),
+  /** Weeks since coaching started, counted from the relationship start. */
+  week: z.number().int().positive().nullable().optional(),
+  /** City label only when the trainee timezone differs from the trainer. */
+  city: z.string().max(80).nullable().optional(),
   updatedAt: isoDateTimeSchema,
 });
 export type ClientDirectoryItem = z.infer<typeof clientDirectoryItemSchema>;

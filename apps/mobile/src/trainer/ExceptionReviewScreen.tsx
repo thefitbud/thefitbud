@@ -10,7 +10,7 @@ import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { statusLabel, typeLabel } from "./labels";
+import { labelFor } from "./labels";
 import { openContextualWhatsApp } from "./whatsapp";
 
 type Props = {
@@ -132,7 +132,7 @@ export function ExceptionReviewScreen({
         <View style={styles.stack}>
           <View style={styles.banner}>
             <Text style={styles.meta}>
-              {statusLabel(detail.status)} · {typeLabel(detail.type)}
+              {labelFor("exception_status", detail.status)} · {labelFor("exception_type", detail.type)}
             </Text>
             <Text style={styles.summary}>{detail.summary}</Text>
             <Text style={styles.muted}>

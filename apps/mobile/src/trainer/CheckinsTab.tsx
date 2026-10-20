@@ -8,7 +8,7 @@ import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
-import { statusLabel } from "./labels";
+import { labelFor } from "./labels";
 
 type Props = {
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
@@ -76,7 +76,7 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
                 Due {formatCivilDate(item.checkin.localDate)}
               </Text>
               <Text style={styles.meta}>
-                {statusLabel(item.checkin.status)} · Client
+                {labelFor("checkin_status", item.checkin.status)} · Client
               </Text>
               <Text style={styles.action}>Review</Text>
             </Pressable>

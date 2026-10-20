@@ -19,7 +19,7 @@ import { ApiClientError } from "@fitbud/api-client";
 import type { LoggedFoodItem, MealAssignment } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { formatKcal, formatNumber } from "@fitbud/core";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";

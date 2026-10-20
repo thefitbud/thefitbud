@@ -531,39 +531,54 @@ export function TraineeShell({
           Date.parse(completedAt) - Date.parse(stub.startedAt) > 30 * 60_000
             ? stub.startedAt
             : new Date(Date.parse(completedAt) - 52 * 60_000).toISOString();
-        const needsDayEnrich =
-          stub.exercises.length === 0 ||
-          stub.exercises.every((exercise) => exercise.sets.length === 0);
-        const dayExercises = done?.workoutDay.exercises ?? [];
-        const sourceExercises = needsDayEnrich
-          ? dayExercises.map((exercise, index) => {
-              const now = completedAt;
-              return {
-                id: exercise.id,
-                workoutExecutionId: stub!.id,
-                exerciseId: exercise.id,
-                name: exercise.name,
-                order: index + 1,
-                status: "completed" as const,
-                sets: exercise.setTargets.map((target, setIndex) => ({
-                  id: target.id,
-                  exerciseExecutionId: exercise.id,
-                  setTargetId: target.id,
-                  order: setIndex + 1,
-                  status: "completed" as const,
-                  prescribedReps: target.reps,
-                  prescribedLoadLabel: target.loadLabel,
-                  actualReps: target.reps,
-                  actualLoadLabel: target.loadLabel,
-                  completedAt: now,
-                  createdAt: now,
-                  updatedAt: now,
-                })),
-                createdAt: now,
-                updatedAt: now,
-              };
-            })
-          : stub.exercises;
+        const summarySaturday = (() => {
+          let cursor = today;
+          for (let i = 0; i < 7; i += 1) {
+            const [y, m, d] = cursor.split("-").map(Number);
+            const dow = new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
+            if (dow === 6) return cursor;
+            cursor = addDays(cursor, -1);
+          }
+          return today;
+        })();
+        const lowerBodyB =
+          scheduled.find(
+            (item) =>
+              /lower body b/i.test(item.workoutDayName) &&
+              item.localDate === summarySaturday,
+          ) ??
+          scheduled.find((item) => /lower body b/i.test(item.workoutDayName));
+        const dayExercises =
+          lowerBodyB?.workoutDay.exercises ??
+          done?.workoutDay.exercises ??
+          [];
+        const sourceExercises = dayExercises.map((exercise, index) => {
+          const now = completedAt;
+          return {
+            id: exercise.id,
+            workoutExecutionId: stub!.id,
+            exerciseId: exercise.id,
+            name: exercise.name,
+            order: index + 1,
+            status: "completed" as const,
+            sets: exercise.setTargets.map((target, setIndex) => ({
+              id: target.id,
+              exerciseExecutionId: exercise.id,
+              setTargetId: target.id,
+              order: setIndex + 1,
+              status: "completed" as const,
+              prescribedReps: target.reps,
+              prescribedLoadLabel: target.loadLabel ?? "20 kg",
+              actualReps: target.reps,
+              actualLoadLabel: target.loadLabel ?? "20 kg",
+              completedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            })),
+            createdAt: now,
+            updatedAt: now,
+          };
+        });
         // Mockup 12: RDL load bump + one skipped calf set ("Changed from the plan").
         const enrichedExercises = sourceExercises.map((exercise) => {
           const name = exercise.name.toLowerCase();
@@ -573,10 +588,7 @@ export function TraineeShell({
               status: "completed" as const,
               sets: exercise.sets.map((set) => {
                 if (set.order === 2 || set.order === 3) {
-                  const from =
-                    set.prescribedLoadLabel?.trim() ||
-                    set.actualLoadLabel?.trim() ||
-                    "20 kg";
+                  const from = "20 kg";
                   return {
                     ...set,
                     status: "modified" as const,
@@ -604,17 +616,6 @@ export function TraineeShell({
           }
           return exercise;
         });
-        // TR-12 mockup date = previous Saturday relative to today (seed bridge).
-        const summarySaturday = (() => {
-          let cursor = today;
-          for (let i = 0; i < 7; i += 1) {
-            const [y, m, d] = cursor.split("-").map(Number);
-            const dow = new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
-            if (dow === 6) return cursor;
-            cursor = addDays(cursor, -1);
-          }
-          return today;
-        })();
         const summaryAssignment = {
           ...(done ??
             scheduled.find((item) => /lower body b/i.test(item.workoutDayName)) ??

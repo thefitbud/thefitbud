@@ -703,10 +703,9 @@ describe("check-in loop", () => {
           fields: [
             ...GLOBAL_CHECKIN_FORM_FIELDS,
             {
-              id: "waist",
-              label: "Waist",
-              type: "measurement",
-              measurementType: "waist_cm",
+              id: "sleep",
+              label: "Sleep",
+              type: "scale_1_5",
               required: false,
             },
           ],

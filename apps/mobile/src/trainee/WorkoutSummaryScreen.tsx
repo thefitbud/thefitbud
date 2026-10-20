@@ -24,7 +24,6 @@ export function WorkoutSummaryScreen({
   coachName = "Your coach",
   weekAssignments = [],
   weekStart,
-  timeZone: _timeZone,
   today = "",
   weekCompleted,
   weekTotal,

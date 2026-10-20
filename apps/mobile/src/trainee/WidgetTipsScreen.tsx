@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import type { MealAssignment } from "@fitbud/contracts";
-import { formatCivilDate, formatHhMmTime, formatPersonName } from "@fitbud/core";
+import { formatHhMmTime, formatPersonName, greetingFor } from "@fitbud/core";
 import { brand, ink } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, radii } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
 import { addDays, localDateInTimezone } from "../lib/dates";
 import {
-  quietWindow,
   readHideLockDetails,
   writeHideLockDetails,
-  type QuietHoursInput,
 } from "../notifications/actions";
 import {
   checkinPushCopy,
@@ -29,13 +27,13 @@ import {
 import { confirmMealAssignment } from "./mealActions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { M2Button, M2Page, M2SwitchRow } from "./settings/m2";
+import { DevBuildNote, InAppBanner } from "./notifications/Surfaces";
 import {
-  DevBuildNote,
-  InAppBanner,
-  LockMessageCard,
-  MealNotificationCard,
-  WorkoutNotificationPreviews,
-} from "./notifications/Surfaces";
+  CoachLockCard,
+  LiveActivityCard,
+  LockFrame,
+  MealLockCard,
+} from "./notifications/LockFrames";
 
 type Props = {
   onBack: () => void;
@@ -66,11 +64,8 @@ export function WidgetTipsScreen({
   const [stale, setStale] = useState(false);
   const [showMealBanner, setShowMealBanner] = useState(true);
   const [showNoteBanner, setShowNoteBanner] = useState(true);
-  const [quiet, setQuiet] = useState<QuietHoursInput>(() =>
-    quietWindow(me?.timezone ?? "Asia/Kolkata"),
-  );
-  const [plan, setPlan] = useState<WorkoutPreviewPlan | null>(null);
-  const [planReady, setPlanReady] = useState(false);
+  const [, setPlan] = useState<WorkoutPreviewPlan | null>(null);
+  const [, setPlanReady] = useState(false);
   const planSet = useRef(false);
 
   const load = useCallback(async () => {
@@ -142,18 +137,6 @@ export function WidgetTipsScreen({
       setTotal(listed.items.length);
       setOffline(false);
       setStale(false);
-      try {
-        const prefs = await api.getNotificationPreferences();
-        setQuiet(
-          quietWindow(
-            me?.timezone ?? "Asia/Kolkata",
-            prefs.quietHoursStart,
-            prefs.quietHoursEnd,
-          ),
-        );
-      } catch {
-        setQuiet(quietWindow(me?.timezone ?? "Asia/Kolkata"));
-      }
     } catch {
       setError("Could not load the next item.");
       setStale(true);
@@ -189,15 +172,6 @@ export function WidgetTipsScreen({
   }
 
   const zone = me?.timezone ?? "Asia/Kolkata";
-  const lockDate = formatCivilDate(localDateInTimezone(zone));
-  const lockTime = new Intl.DateTimeFormat("en-US", {
-    timeZone: zone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  })
-    .format(new Date())
-    .replace(/\s*[AP]M$/i, "");
   const firstName =
     formatPersonName(me?.email?.split("@")[0]?.split(".")[0] ?? "") || "there";
 
@@ -223,47 +197,48 @@ export function WidgetTipsScreen({
       ) : null}
       {stale ? <Text style={styles.muted}>Updated 1 h ago</Text> : null}
 
-      <View style={styles.lock} accessibilityLabel="Lock screen">
-        <Text style={styles.lockDate}>{lockDate}</Text>
-        <Text style={styles.lockClock}>{lockTime}</Text>
-        <View style={styles.lockStack}>
-          <Text style={styles.lockCaption}>Workout on the lock screen</Text>
-          {plan ? (
-            <WorkoutNotificationPreviews plan={plan} onNotice={setToast} />
-          ) : (
-            <Text style={styles.onLock}>
-              {planReady ? "No workout planned." : "Loading…"}
-            </Text>
-          )}
-          <Text style={styles.lockCaption}>Meal notification</Text>
-          {meal ? (
-            <MealNotificationCard
-              mealId={meal.id}
-              mealLabel={mealLabel}
-              hideDetails={hideDetails}
-              quiet={quiet}
-              onOpen={openMeal}
-              onSnoozed={setToast}
-            />
-          ) : (
-            <Text style={styles.onLock}>Nothing left to log.</Text>
-          )}
-          <Text style={styles.lockCaption}>Check-in and coach note</Text>
-          <LockMessageCard
-            title={checkin.title}
-            body={checkin.body}
-            whenLabel="now"
-          />
-          <LockMessageCard
-            title={note.title}
-            body={note.body}
-            whenLabel="12 min ago"
-          />
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        accessibilityLabel="Lock screen previews"
+      >
+        <View style={styles.page}>
+          <LockFrame dateLabel="Monday 19 October" clock="7:24">
+            <LiveActivityCard logged={false} />
+          </LockFrame>
         </View>
+        <View style={styles.page}>
+          <LockFrame dateLabel="Monday 19 October" clock="7:26">
+            <LiveActivityCard logged />
+          </LockFrame>
+        </View>
+        <View style={styles.page}>
+          <LockFrame dateLabel="Monday 19 October" clock="2:15" banner="Snooze 30 min">
+            <MealLockCard
+              onOpen={openMeal}
+              onSnooze={() => setToast("Snoozed 30 min")}
+            />
+          </LockFrame>
+        </View>
+        <View style={styles.page}>
+          <LockFrame dateLabel="Monday 19 October" clock="6:05">
+            <CoachLockCard title={checkin.title} when="now" />
+            <CoachLockCard title={note.title} when="12m ago" />
+          </LockFrame>
+        </View>
+      </ScrollView>
+      <View style={styles.dots} accessibilityLabel="Preview pages">
+        <View style={styles.dot} />
+        <View style={styles.dot} />
+        <View style={styles.dot} />
+        <View style={styles.dot} />
       </View>
 
       <View style={styles.today} accessibilityLabel="Today">
-        <Text style={styles.snapGreeting}>{firstName}</Text>
+        <Text style={styles.snapGreeting}>
+          {greetingFor(firstName, zone)}
+        </Text>
         <Text style={styles.snapSub}>Here's your day.</Text>
         <Text style={styles.snapLine}>{title}</Text>
         {total > 0 ? (
@@ -354,6 +329,19 @@ export function WidgetTipsScreen({
 }
 
 const styles = StyleSheet.create({
+  page: { width: 361 },
+  dots: {
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  dot: {
+    backgroundColor: "#C4C0D8",
+    borderRadius: 4,
+    height: 6,
+    width: 6,
+  },
   lock: {
     backgroundColor: "#1A1248",
     borderRadius: 28,

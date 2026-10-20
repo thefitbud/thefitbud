@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
+import { formatPersonName } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { AttentionTab } from "./AttentionTab";
@@ -63,17 +64,29 @@ export function TrainerShell() {
     });
   }
 
-  function openClientById(relationshipId: string) {
-    const relationship = relationships.find((item) => item.id === relationshipId);
+  async function openClientById(relationshipId: string) {
+    let displayName = "Client";
+    let statusLabelText = "Unknown";
+    try {
+      const page = await api.listClients({ limit: 50 });
+      const match = page.items.find(
+        (item) => item.relationshipId === relationshipId,
+      );
+      if (match) {
+        displayName = formatPersonName(match.traineeDisplayName);
+        statusLabelText = onboardingStatusLabel(match.status);
+      }
+    } catch {
+      const relationship = relationships.find((item) => item.id === relationshipId);
+      if (relationship) {
+        statusLabelText = onboardingStatusLabel(relationship.onboardingStatus);
+      }
+    }
     setOverlay({
       kind: "client",
       relationshipId,
-      displayName: relationship
-        ? `Trainee ${relationship.traineeUserId.slice(0, 8)}`
-        : "Client",
-      onboardingStatusLabelText: relationship
-        ? onboardingStatusLabel(relationship.onboardingStatus)
-        : "Unknown",
+      displayName,
+      onboardingStatusLabelText: statusLabelText,
     });
   }
 

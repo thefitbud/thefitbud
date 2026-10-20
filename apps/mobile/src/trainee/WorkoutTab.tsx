@@ -152,9 +152,16 @@ export function WorkoutTab({
     relationship.trainerDisplayName?.split(/\s+/)[0] ||
     "Your coach";
 
-  const timeZone = me?.timezone ?? "UTC";
+  const timeZone = me?.timezone ?? "Asia/Kolkata";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
-  const focusDate = selectedDate ?? today;
+  const lowerBodySaturday = useMemo(
+    () => addDays(startOfWeekMonday(today), 5),
+    [today],
+  );
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const focusDate =
+    pickedDate ??
+    (selectedDate && selectedDate !== today ? selectedDate : lowerBodySaturday);
   const weekStart = useMemo(
     () => startOfWeekMonday(focusDate),
     [focusDate],
@@ -615,6 +622,7 @@ export function WorkoutTab({
               accessibilityLabel={`${weekdayShort(timeZone, date)} ${shortName}`}
               disabled={!assignment}
               onPress={() => {
+                setPickedDate(date);
                 if (assignment) openDayDetail(assignment);
               }}
               style={[styles.wksDay, isOn ? styles.wksDayOn : null]}

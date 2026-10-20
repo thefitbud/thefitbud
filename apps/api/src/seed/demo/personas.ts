@@ -2,10 +2,7 @@
 import type { AdherenceState } from "@fitbud/contracts";
 import type { FoodLibraryItem, PlanContent } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
-import {
-  foodSnapshotFromLibrary,
-  GLOBAL_CHECKIN_FORM_VERSION_ID,
-} from "@fitbud/core";
+import { foodSnapshotFromLibrary } from "@fitbud/core";
 import type { SqlJsCompatDatabase } from "../../test-support/memory-db.js";
 import { demoUuid } from "./ids.js";
 import { DEMO_ACCOUNTS, type DemoAccountSpec } from "./spec.js";
@@ -495,8 +492,8 @@ export function buildStandardPlanContent(
   };
 }
 
-/** v2: weight + waist + Front/Side/Back (mockup 14). Inserted by demo history seed. */
+/** Pinned to the global form version. Do not insert a second global version. */
 export const DEMO_CHECKIN_FORM_VERSION_ID =
-  "c1000001-0000-4000-8000-000000000012";
+  "c1000001-0000-4000-8000-000000000011";
 
 export { MEAL_PRESCRIPTION_IDS, WORKOUT_DAY_ID, WORKOUT_DAY_IDS };

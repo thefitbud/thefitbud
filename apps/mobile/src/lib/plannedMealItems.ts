@@ -23,7 +23,7 @@ function foodItemQuantity(item: MealFoodItem): number {
   return 1;
 }
 
-function foodItemKcal(item: MealFoodItem, _quantity: number): number | null {
+function foodItemKcal(item: MealFoodItem): number | null {
   if ("snapshotKind" in item) {
     // energyKcalScaled is already for this item's quantityScaled (not per unit).
     const kcal = item.calculated.energyKcalScaled;
@@ -71,7 +71,7 @@ export function plannedRowsFromAssignment(
       quantity,
       foodId,
       servingId,
-      kcalPreview: foodItemKcal(item, quantity),
+      kcalPreview: foodItemKcal(item),
     };
   });
 }

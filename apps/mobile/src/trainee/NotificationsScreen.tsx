@@ -46,7 +46,6 @@ const CACHE_KEY = "notifications:inbox";
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 type Props = {
-  coachName?: string;
   onBack: () => void;
   coachName?: string | null;
   onOpenSettings: () => void;
@@ -177,8 +176,7 @@ function iconForType(type: NotificationType): {
     case "admin_whatsapp_budget":
       return { Icon: Settings, tone: "neu" };
     default: {
-      const _exhaustive: never = type;
-      return { Icon: Bell, tone: "default" };
+      return { Icon: Bell, tone: "default" as const };
     }
   }
 }
@@ -217,7 +215,7 @@ export function NotificationsScreen({
 }: Props) {
   const { api, me, refreshSession } = useAuth();
   const s1 = stage1Api(api);
-  const coachFirst = coachFirstFromName(coachName);
+  const coachFirst = coachFirstFromName(coachName ?? "Your coach");
   const [items, setItems] = useState<Notification[]>(
     () => getCached<Notification[]>(CACHE_KEY) ?? [],
   );

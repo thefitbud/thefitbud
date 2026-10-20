@@ -196,8 +196,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!persisted.accessToken) return;
     void refreshSession();
-    // Hydrate once from persisted token on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore
   }, []);
 
   const selectRole = useCallback(

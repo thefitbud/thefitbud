@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MealAssignment } from "@fitbud/contracts";
-import { NUTRIENT_SCALE } from "@fitbud/contracts";
+import { NUTRIENT_SCALE, type MeDayResponse } from "@fitbud/contracts";
 import {
   buildNutritionRings,
   isMealLoggedForCount,
@@ -99,6 +99,31 @@ describe("buildNutritionRings", () => {
     const kcal = rings.find((r) => r.key === "kcal");
     expect(kcal?.logged).toBe(610);
     expect(kcal?.assigned).toBe(1000);
+  });
+
+  it("adds kcal for a confirmed meal the server totals have not counted yet", () => {
+    const confirmed = meal({ id: "a", status: "confirmed" });
+    const totals: MeDayResponse["totals"] = {
+      kcalScaled: 100 * NUTRIENT_SCALE,
+      perMeal: [],
+    };
+    const rings = buildNutritionRings([confirmed], totals);
+    expect(rings.find((ring) => ring.key === "kcal")?.logged).toBe(600);
+  });
+
+  it("does not double count a meal already present in perMeal", () => {
+    const confirmed = meal({ id: "a", status: "confirmed" });
+    const totals: MeDayResponse["totals"] = {
+      kcalScaled: 500 * NUTRIENT_SCALE,
+      perMeal: [
+        {
+          slotKey: confirmed.prescription.id,
+          kcalScaled: 500 * NUTRIENT_SCALE,
+        },
+      ],
+    };
+    const rings = buildNutritionRings([confirmed], totals);
+    expect(rings.find((ring) => ring.key === "kcal")?.logged).toBe(500);
   });
 
   it("does not add skipped meal macros but counts the meal as logged", () => {

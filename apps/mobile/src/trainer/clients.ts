@@ -134,16 +134,27 @@ export function clientListQueryForChip(
   }
 }
 
+export function clientSubtitle(item: ClientDirectoryItem): string {
+  const goal = item.goalShort?.trim() ?? "";
+  if (!goal) {
+    return item.relationshipId
+      ? "No goal set yet"
+      : onboardingStatusLabel(item.status);
+  }
+  const parts = [
+    goal,
+    item.city?.trim() || null,
+    item.week != null ? `week ${item.week}` : null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.join(" · ");
+}
+
 export function mapDirectoryItemToRow(
   item: ClientDirectoryItem,
 ): ClientDirectoryRow {
   const relationshipId = item.relationshipId;
   const invitationId = item.invitationId;
-  const goal = item.goalShort?.trim() ?? "";
-  const subtitle =
-    goal && goal.toLowerCase() !== "demo goal"
-      ? goal
-      : onboardingStatusLabel(item.status);
+  const subtitle = clientSubtitle(item);
   return {
     key: relationshipId
       ? `relationship:${relationshipId}`

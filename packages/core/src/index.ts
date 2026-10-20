@@ -95,6 +95,9 @@ export {
   workoutWindowForLocalDate,
 } from "./timezone.js";
 
+export { IST_TIME_ZONE, istDate, istInstantAt } from "./clock.js";
+export { greetingFor } from "./greeting.js";
+
 export {
   GLOBAL_CHECKIN_FORM_FIELDS,
   GLOBAL_CHECKIN_FORM_TEMPLATE_ID,

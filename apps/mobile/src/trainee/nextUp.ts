@@ -3,8 +3,6 @@ import type {
   MealAssignment,
   WorkoutAssignment,
 } from "@fitbud/contracts";
-import { formatClockTime } from "@fitbud/core";
-
 export type NextUpHero =
   | { kind: "meal"; meal: MealAssignment; reason: "overdue" | "window" }
   | { kind: "workout"; workout: WorkoutAssignment }

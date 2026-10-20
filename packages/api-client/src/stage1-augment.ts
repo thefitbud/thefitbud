@@ -189,7 +189,7 @@ proto.requestReactivation = async function requestReactivation(
 proto.getAttentionGroups = async function getAttentionGroups() {
   return this.request(
     "GET",
-    "/exceptions/attention?groupBy=relationship",
+    "/exceptions/attention?groupBy=relationship&limit=50",
     attentionGroupsResponseSchema,
     { auth: true },
   );

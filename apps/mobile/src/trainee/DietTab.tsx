@@ -259,13 +259,24 @@ export function DietTab({
       setOffline(false);
       setLockStateKnown(true);
     } catch (err) {
-      setOffline(true);
+      const network =
+        err instanceof TypeError ||
+        (err instanceof ApiClientError &&
+          (err.status === 0 || err.code === "NETWORK_ERROR")) ||
+        (err instanceof Error &&
+          /fetch|network|offline|aborted/i.test(err.message));
+      if (network) {
+        setOffline(true);
+        setError(null);
+      } else {
+        setOffline(false);
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Couldn't refresh diet. Pull to try again.",
+        );
+      }
       setLockStateKnown(false);
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't refresh diet. Pull to try again.",
-      );
     } finally {
       setLoading(false);
     }

@@ -13,6 +13,7 @@ import {
   formatKcal,
   formatNumber,
   formatPersonName,
+  greetingFor,
   labelFor,
 } from "@fitbud/core";
 import {
@@ -89,30 +90,6 @@ function mealItemLine(meal: MealAssignment): string {
 
 function exerciseCountLabel(count: number): string {
   return count === 1 ? "1 exercise" : `${count} exercises`;
-}
-
-/**
- * Trainee Today greeting (TR-06). Decision 22 (no greeting) is trainer-web
- * Home only — see DESIGN-NOTES / TW-04.11.
- * Hour is taken in the client's timezone, not the device's local clock.
- */
-function greetingFor(name: string, timeZone: string, now = new Date()): string {
-  const first = name.trim().split(/\s+/)[0] || "there";
-  let hour = now.getHours();
-  try {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      hour: "numeric",
-      hour12: false,
-    }).formatToParts(now);
-    const raw = parts.find((p) => p.type === "hour")?.value;
-    if (raw != null) hour = Number.parseInt(raw, 10) % 24;
-  } catch {
-    // fall back to device local hour
-  }
-  if (hour < 12) return `Good morning, ${first}`;
-  if (hour < 17) return `Good afternoon, ${first}`;
-  return `Good evening, ${first}`;
 }
 
 function hasLivePlan(plan: EffectivePlanResponse | null): boolean {
@@ -349,7 +326,7 @@ export function TodayTab({
             <Text style={styles.greetTitle} accessibilityRole="header">
               {allDone
                 ? "That's everything for today."
-                : greetingFor(displayName, timeZone)}
+                : greetingFor(displayName, timeZone || "Asia/Kolkata")}
             </Text>
             <Text style={styles.greetSub}>
               {allDone

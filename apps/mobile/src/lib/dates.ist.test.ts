@@ -5,7 +5,6 @@ import { addDays, localDateInTimezone } from "./dates";
 function timePrefixIst(
   iso: string,
   today: string,
-  now = new Date(),
   timeZone = "Asia/Kolkata",
 ): string {
   const day = localDateInTimezone(timeZone, new Date(iso));

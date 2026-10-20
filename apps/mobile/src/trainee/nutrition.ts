@@ -141,8 +141,19 @@ export function dayNutritionFromMeals(
 
   // Prefer authoritative day kcal from /me/day when present (scaled sum, unscale once).
   // Ignore zero — legacy confirms stored null compliance kcal and would wipe rings.
+  // Slots missing from perMeal are optimistic or still in the outbox: add their
+  // planned kcal once. Slots already listed are not added again.
   if (dayTotals?.kcalScaled != null && dayTotals.kcalScaled > 0) {
-    logged.kcal = unscaleNutrient(dayTotals.kcalScaled);
+    const present = new Set(
+      (dayTotals.perMeal ?? []).map((row) => row.slotKey),
+    );
+    let extraKcal = 0;
+    for (const meal of meals) {
+      if (!isMealLoggedForCount(meal.status)) continue;
+      if (present.has(meal.prescription.id)) continue;
+      extraKcal += loggedMacrosForMeal(meal).kcal;
+    }
+    logged.kcal = unscaleNutrient(dayTotals.kcalScaled) + extraKcal;
   }
 
   return { assigned, logged };

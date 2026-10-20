@@ -44,23 +44,23 @@ function jsonQuote(value: unknown): string {
 /** Varied roster goals (TW-06) — not the same caption on every row. */
 function demoGoalShort(traineeEmail: string, state: string): string {
   const byEmail: Record<string, string> = {
-    "aarav.ontrack@demo.fitbud.test": "Build race endurance",
-    "rohan.slipping@demo.fitbud.test": "Lose 4 kg by December",
-    "meera.ack@demo.fitbud.test": "Tone and stay consistent",
+    "aarav.ontrack@demo.fitbud.test": "Lean bulk",
+    "rohan.slipping@demo.fitbud.test": "Lose 6 kg",
+    "meera.ack@demo.fitbud.test": "PCOS-friendly fat loss",
     "farhan.paused@demo.fitbud.test": "Maintain muscle while traveling",
     "ishita.pushoff@demo.fitbud.test": "Rebuild morning routine",
-    "deepak.dubai@demo.fitbud.test": "Cut for summer photos",
-    "arjun.attention@demo.fitbud.test": "Hit 4 gym days / week",
-    "neha.attention@demo.fitbud.test": "Improve sleep and recovery",
-    "tanvi.attention@demo.fitbud.test": "Prep for half marathon",
+    "deepak.dubai@demo.fitbud.test": "Lose 8 kg",
+    "arjun.attention@demo.fitbud.test": "Build strength",
+    "neha.attention@demo.fitbud.test": "Lose 4 kg",
+    "tanvi.attention@demo.fitbud.test": "Stay consistent",
     "lakshmi.foods@demo.fitbud.test": "Stabilize weekday meals",
     "karan.dual@demo.fitbud.test": "Coach + train dual role",
     "kavya.ended@demo.fitbud.test": "Postpartum strength return",
     "nikhil.reactivate@demo.fitbud.test": "Restart after travel break",
   };
   if (byEmail[traineeEmail]) return byEmail[traineeEmail]!;
-  if (state === "slipping") return "Lose 4 kg by December";
-  if (state === "active_on_track") return "Build race endurance";
+  if (state === "slipping") return "Lose 6 kg";
+  if (state === "active_on_track") return "Lean bulk";
   return "Stay consistent this month";
 }
 
@@ -81,16 +81,6 @@ function demoStartedAt(
     ).toISOString();
   }
   return defaultStartedAt;
-}
-
-/** First civil date strictly after refDate that falls on `weekday` (0 = Sunday). */
-function nextWeekdayAfter(refDate: string, weekday: number): string {
-  let cursor = addDaysFromLocalDate(refDate, 1);
-  for (let i = 0; i < 7; i += 1) {
-    if (weekdayFromDate(cursor) === weekday) return cursor;
-    cursor = addDaysFromLocalDate(cursor, 1);
-  }
-  return cursor;
 }
 
 /** Most recent civil date strictly before refDate on `weekday`. */
@@ -765,7 +755,11 @@ function buildPersonaOverlays(input: HistoryInput): string {
     ["tanvi.attention@demo.fitbud.test", 0],
   ] as const;
   for (const [email, weekday] of upcomingCheckins) {
-    const nextCheckinDate = nextWeekdayAfter(refDate, weekday);
+    const lastDue = previousWeekdayBefore(refDate, weekday);
+    let nextCheckinDate = addDaysFromLocalDate(lastDue, 7);
+    if (nextCheckinDate <= refDate) {
+      nextCheckinDate = addDaysFromLocalDate(nextCheckinDate, 7);
+    }
     const trainer =
       email.startsWith("lakshmi.") || email.startsWith("karan.")
         ? "priya.coach@demo.fitbud.test"
@@ -806,11 +800,11 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const rohanCheckinDate = previousWeekdayBefore(refDate, 5);
   const rohanCheckinStart = localDayStartIso(rohanCheckinDate, "09:00", "Asia/Kolkata");
   const rohanSubmittedAt = clampIsoToNow(
-    localDayStartIso(rohanCheckinDate, "19:40", "Asia/Kolkata"),
+    localDayStartIso(rohanCheckinDate, "21:30", "Asia/Kolkata"),
     now,
   );
   lines.push(
-    `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Tired but okay. Missed two workouts this week.", notes: "Travel for work threw off lunches and I skipped Wednesday's session. Back on track from Monday." })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
+    `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Hit my protein most days. Walked after dinner four times.", notes: "Office travel Tue to Thu. Missed two sessions and ate out twice.", went_well: "Hit my protein most days. Walked after dinner four times.", was_hard: "Office travel Tue to Thu. Missed two sessions and ate out twice.", for_coach: "Can we move leg day to the weekend?", energy: 3, hunger: 4, stress: 4 })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
     `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledged', 'Solid effort this week — lock in sleep and we will rebuild training next.', ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanSubmittedAt)});`,
     // Latest Sunday is also reviewed for slipping; give it the reply so Today prefers it.
     `UPDATE checkin_reviews SET notes = 'Solid effort this week — lock in sleep and we will rebuild training next.', updated_at = ${sqlQuote(rohanSubmittedAt)} WHERE checkin_id = ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(refDate, 0)))};`,
@@ -830,13 +824,15 @@ function buildPersonaOverlays(input: HistoryInput): string {
     lines.push(
       `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "start"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 97, 'cm', ${sqlQuote(startWaistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(startWaistAt)}, ${sqlQuote(startWaistAt)});`,
       `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "latest"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 94, 'cm', ${sqlQuote(waistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(waistAt)}, ${sqlQuote(waistAt)});`,
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "prev"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 95, 'cm', ${sqlQuote(localDayStartIso(addDaysFromLocalDate(waistDate, -7), "08:25", "Asia/Kolkata"))}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO trainer_notes (id, coaching_relationship_id, trainer_user_id, checkin_id, body, visibility, subject_type, subject_id, shared_at, unshared_at, seen_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("note", "rohan-knee"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, NULL, 'Knee felt sore on walking lunges. Swapped to step-ups until the next check-in.', 'private', NULL, NULL, NULL, NULL, NULL, ${sqlQuote(localDayStartIso(addDaysFromLocalDate(refDate, -5), "10:00", "Asia/Kolkata"))}, ${sqlQuote(now)});`,
     );
   }
 
   // Rohan: weigh-in series for Progress chart (TR-13).
   for (let weeksAgo = 0; weeksAgo < 8; weeksAgo += 1) {
     const localDate = addDaysFromLocalDate(rohanCheckinDate, -7 * weeksAgo);
-    const weightKg = Number((86.4 + weeksAgo * 0.25).toFixed(1));
+    const weightKg = Number((86.4 + weeksAgo * 0.5).toFixed(1));
     const observedAt = clampIsoToNow(
       localDayStartIso(localDate, "08:20", "Asia/Kolkata"),
       now,
@@ -958,64 +954,8 @@ export function buildDemoHistorySql(input: HistoryInput): string {
 
   lines.push(buildTrainerTemplates(now, input.libraryIndex));
 
-  // Insert-only form versions: add v2 for TR-14 (weight Last:, waist, Front/Side/Back).
-  lines.push(
-    `INSERT INTO checkin_form_versions (id, template_id, key, version, scope, trainer_user_id, schema_json, created_at) VALUES (${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${sqlQuote("c1000001-0000-4000-8000-000000000001")}, 'mvp', 2, 'global', NULL, ${sqlQuote(
-      JSON.stringify({
-        fields: [
-          {
-            id: "body_weight",
-            label: "Body weight",
-            type: "measurement",
-            measurementType: "body_weight_kg",
-            required: false,
-          },
-          {
-            id: "waist",
-            label: "Waist",
-            type: "measurement",
-            measurementType: "waist_cm",
-            required: false,
-          },
-          {
-            id: "photo_front",
-            label: "Front",
-            type: "photo_intent",
-            photoSlot: "front",
-            required: false,
-          },
-          {
-            id: "photo_side",
-            label: "Side",
-            type: "photo_intent",
-            photoSlot: "side",
-            required: false,
-          },
-          {
-            id: "photo_back",
-            label: "Back",
-            type: "photo_intent",
-            photoSlot: "back",
-            required: false,
-          },
-          {
-            id: "wellbeing",
-            label: "Wellbeing",
-            type: "short_text",
-            required: true,
-            maxLength: 1000,
-          },
-          {
-            id: "notes",
-            label: "Notes",
-            type: "long_text",
-            required: false,
-            maxLength: 2000,
-          },
-        ],
-      }),
-    )}, ${sqlQuote(now)}) ON CONFLICT(id) DO NOTHING;`,
-  );
+  // Global form v1 is updated in migration 0029. Demo rows pin that version.
+
 
   for (const account of DEMO_ACCOUNTS) {
     if (account.role !== "trainee" || !account.trainerEmail) continue;

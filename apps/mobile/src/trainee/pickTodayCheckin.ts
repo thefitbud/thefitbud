@@ -42,15 +42,46 @@ export function pickTodayCheckin(
   return pickNextScheduledCheckin(items);
 }
 
-/** Earliest upcoming scheduled check-in (for "Next check-in <date>"). */
+function addDaysLocal(localDate: string, days: number): string {
+  const [year, month, day] = localDate.split("-").map(Number);
+  const next = new Date(Date.UTC(year!, month! - 1, day! + days));
+  const mm = String(next.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(next.getUTCDate()).padStart(2, "0");
+  return `${next.getUTCFullYear()}-${mm}-${dd}`;
+}
+
+function weekdayIndex(localDate: string): number {
+  const [year, month, day] = localDate.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay();
+}
+
+/**
+ * Next check-in follows the client's cadence from the last reviewed day
+ * (same weekday, at least one cadence interval later). A nearer draft on
+ * another weekday is not the next due day.
+ */
 export function pickNextScheduledCheckin(
   items: readonly Checkin[],
+  cadenceDays = 7,
 ): Checkin | null {
   const upcoming = items
     .filter((item) => item.status === "scheduled")
     .slice()
     .sort((a, b) => a.localDate.localeCompare(b.localDate));
-  return upcoming[0] ?? null;
+  const anchor = items
+    .filter((item) => hasCoachReview(item))
+    .slice()
+    .sort((a, b) => b.localDate.localeCompare(a.localDate))[0];
+  if (!anchor) return upcoming[0] ?? null;
+  const minDate = addDaysLocal(anchor.localDate, cadenceDays);
+  const anchorWeekday = weekdayIndex(anchor.localDate);
+  const onCadence = upcoming.filter(
+    (item) =>
+      item.localDate >= minDate &&
+      weekdayIndex(item.localDate) === anchorWeekday,
+  );
+  if (onCadence[0]) return onCadence[0];
+  return upcoming.find((item) => item.localDate >= minDate) ?? null;
 }
 
 /** Props for the Today check-in banner (shared by UI + integration tests). */
@@ -85,7 +116,7 @@ export function todayCheckinBanner(
     return {
       kind: "reviewed",
       title:
-        checkin.review?.outcome === "needs_attention"
+        checkin.review?.outcome === "needs_follow_up"
           ? `${coachFirst} wants a follow-up`
           : "Acknowledged",
       body: notes ?? `${coachFirst} reviewed your check-in.`,

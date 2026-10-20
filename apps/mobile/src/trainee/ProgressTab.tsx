@@ -12,7 +12,6 @@ import Svg, {
 } from "react-native-svg";
 import {
   Bell,
-  Camera,
   CheckCircle2,
   ChevronRight,
   MessageCircle,
@@ -26,7 +25,6 @@ import type {
   CoachingRelationship,
   Measurement,
   MeasurementType,
-  MediaAsset,
   ProgressSummary,
 } from "@fitbud/contracts";
 import { formatCivilDate } from "@fitbud/core";
@@ -38,10 +36,6 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { localDateInTimezone } from "../lib/dates";
-import {
-  MINIMAL_PNG_CONTENT_TYPE,
-  minimalPngBytes,
-} from "../lib/minimalPng";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
@@ -52,8 +46,6 @@ import {
   setCached,
   subscribe,
 } from "./dataCache";
-import { coachInitials } from "./workoutDisplay";
-
 const BODY_TYPES: MeasurementType[] = [
   "body_weight_kg",
   "waist_cm",
@@ -567,53 +559,6 @@ export function ProgressTab({
     }
   }
 
-  async function addProgressPhoto() {
-    setActing(true);
-    setError(null);
-    try {
-      await sync.enqueueFileUpload({
-        coachingRelationshipId: relationship.id,
-        mediaType: "progress_photo",
-        contentType: MINIMAL_PNG_CONTENT_TYPE,
-        localUri: "local://progress.png",
-        byteSize: minimalPngBytes().byteLength,
-      });
-      const target = await api.createUploadTarget(
-        {
-          coachingRelationshipId: relationship.id,
-          mediaType: "progress_photo",
-          contentType: MINIMAL_PNG_CONTENT_TYPE,
-          originalFilename: "progress.png",
-        },
-        createIdempotencyKey(),
-      );
-      await api.uploadMediaContent(
-        target.uploadUrl,
-        minimalPngBytes(),
-        MINIMAL_PNG_CONTENT_TYPE,
-      );
-      await api.createProgressEntry(
-        relationship.id,
-        {
-          entryType: "progress_photo",
-          title: "Progress photo",
-          mediaAssetId: target.mediaAsset.id,
-        },
-        createIdempotencyKey(),
-      );
-      await load({ soft: true });
-    } catch (err) {
-      setOffline(true);
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Photo queued · will upload when online.",
-      );
-    } finally {
-      setActing(false);
-    }
-  }
-
   const bodyMeasurements = BODY_TYPES.filter((t) => t !== "body_weight_kg")
     .map((type) => ({
       type,
@@ -621,17 +566,6 @@ export function ProgressTab({
       first: earliestOfType(measurements, type),
     }))
     .filter((row) => row.latest != null);
-
-  const photosByDate = useMemo(() => {
-    const groups = new Map<string, MediaAsset[]>();
-    for (const item of media.filter((m) => m.mediaType === "progress_photo")) {
-      const day = civilFromObservedAt(item.uploadedAt ?? item.createdAt, timeZone);
-      const list = groups.get(day) ?? [];
-      list.push(item);
-      groups.set(day, list);
-    }
-    return [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [media, timeZone]);
 
   const logUnit = logType === "body_weight_kg" ? "kg" : "cm";
   const logStep = logType === "body_weight_kg" ? 0.1 : 0.5;

@@ -31,9 +31,9 @@ export const DEMO_ACCOUNTS: DemoAccountSpec[] = [
   { email: "nikhil.reactivate@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "reactivation_pending", displayName: "Nikhil Kapoor" },
   { email: "deepak.dubai@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "dubai_meal_times", displayName: "Deepak Nair" },
   // Extra attention clients so Home Needs attention can show ~8 rows (mockup).
-  { email: "arjun.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Arjun Deshmukh" },
-  { email: "neha.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Neha Joshi" },
-  { email: "tanvi.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Tanvi Rao" },
+  { email: "arjun.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Arjun Kapoor" },
+  { email: "neha.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Neha Reddy" },
+  { email: "tanvi.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Priya Sharma" },
   { email: "lakshmi.foods@demo.fitbud.test", role: "trainee", trainerEmail: "priya.coach@demo.fitbud.test", state: "food_deviations", displayName: "Lakshmi Iyer" },
   { email: "karan.dual@demo.fitbud.test", role: "trainee", trainerEmail: "priya.coach@demo.fitbud.test", state: "dual_role", displayName: "Karan Mehra" },
 ];

@@ -41,7 +41,7 @@ function openLocalD1(): DatabaseSync {
   return new DatabaseSync(path.join(d1Dir, dbFile), { readOnly: true });
 }
 
-const referenceInstant = new Date().toISOString();
+const referenceInstant = process.env.NOW ?? new Date().toISOString();
 const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
 const sqlite = openLocalD1();
 const libraryIndex = loadDemoLibraryIndex({

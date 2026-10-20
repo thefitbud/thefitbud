@@ -1,6 +1,7 @@
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
-import { formatLocalDate } from "@fitbud/core";
+import { formatLocalDate, istDate } from "@fitbud/core";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
@@ -351,5 +352,32 @@ describe("read models", () => {
       logged: { kcal: 480, proteinG: 22, carbsG: 55, fatG: 11 },
       assigned: { kcal: 520, proteinG: 24, carbsG: 60, fatG: 12 },
     });
+  });
+
+  it("computes todayNutrition.date in the trainee timezone across the UTC date line", async () => {
+    const ctx = await reachCoachingReady("week-ist");
+    await db
+      .update(schema.users)
+      .set({ timezone: "Asia/Kolkata" })
+      .where(eq(schema.users.id, ctx.traineeUserId));
+
+    for (const instant of [
+      "2026-10-17T23:30:00.000Z",
+      "2026-10-17T19:00:00.000Z",
+    ]) {
+      vi.setSystemTime(new Date(instant));
+      const expected = istDate(new Date(instant));
+      const response = await app.request(
+        `/workspaces/relationships/${ctx.relationshipId}/week?start=${expected}`,
+        { headers: { Cookie: ctx.trainerCookie, "x-fitbud-role": "trainer" } },
+        testEnv(),
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        data: { todayNutrition: { date: string } };
+      };
+      expect(body.data.todayNutrition.date).toBe("2026-10-18");
+      expect(body.data.todayNutrition.date).toBe(expected);
+    }
   });
 });

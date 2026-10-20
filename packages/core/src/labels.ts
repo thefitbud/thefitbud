@@ -417,6 +417,12 @@ const LABELS = {
     due: "Due",
     expired: "Expired",
   },
+  client_chip: {
+    reviewed_still_open: "Reviewed, still open",
+    checkin_submitted: "Check-in submitted",
+    checkin_overdue: "Check-in overdue",
+    renewal_due: "Renewal due",
+  },
 } as const;
 
 export type LabelNamespace = keyof typeof LABELS;

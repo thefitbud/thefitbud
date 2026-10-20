@@ -802,7 +802,7 @@ checkinRoutes.post(
     const timezone = await loadTraineeTimezone(db, relationship.traineeUserId);
     const today = formatLocalDate(new Date(), timezone);
 
-    const openDraft = await db
+    const openDrafts = await db
       .select()
       .from(checkins)
       .where(
@@ -811,12 +811,32 @@ checkinRoutes.post(
           eq(checkins.recordStatus, "draft"),
         ),
       )
-      .orderBy(asc(checkins.localDate))
+      .orderBy(asc(checkins.localDate));
+
+    const latestSubmitted = await db
+      .select()
+      .from(checkins)
+      .where(
+        and(
+          eq(checkins.coachingRelationshipId, relationship.id),
+          eq(checkins.recordStatus, "submitted"),
+        ),
+      )
+      .orderBy(desc(checkins.localDate))
       .limit(1);
+    const cadenceFloor = latestSubmitted[0]
+      ? nextCheckinLocalDate({
+          fromLocalDate: latestSubmitted[0].localDate,
+          cadence: config.schedule.cadence,
+        })
+      : null;
+    const cadenceDraft = openDrafts.find(
+      (row) => !cadenceFloor || row.localDate >= cadenceFloor,
+    );
 
     let result: { row: typeof checkins.$inferSelect; created: boolean };
-    if (openDraft[0]) {
-      result = { row: openDraft[0], created: false };
+    if (cadenceDraft) {
+      result = { row: cadenceDraft, created: false };
     } else {
       const latest = await db
         .select()

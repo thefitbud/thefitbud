@@ -1,7 +1,17 @@
 /** Trainee-local calendar helpers (IANA timezone). */
 import { formatCivilDate, formatLocalDate as coreFormatLocalDate } from "@fitbud/core";
 
-export function localDateInTimezone(timeZone: string, instant = new Date()): string {
+function clockInstant(fallback: Date): Date {
+  const raw = process.env.EXPO_PUBLIC_DEMO_NOW;
+  if (!raw) return fallback;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+}
+
+export function localDateInTimezone(
+  timeZone: string,
+  instant = clockInstant(new Date()),
+): string {
   return coreFormatLocalDate(instant, timeZone);
 }
 

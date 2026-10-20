@@ -150,7 +150,6 @@ export function TraineeOverlayHost({
         <NotificationsScreen
           coachName={coachName}
           onBack={onClose}
-          coachName={coachName}
           onOpenSettings={() => onOpen({ screen: "reminder_settings" })}
           onNavigate={(link) => {
             onClose();

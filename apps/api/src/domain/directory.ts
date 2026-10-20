@@ -96,8 +96,10 @@ export async function loadClientDirectory(
             .select({
               userId: traineeProfiles.userId,
               displayName: traineeProfiles.displayName,
+              timezone: users.timezone,
             })
             .from(traineeProfiles)
+            .innerJoin(users, eq(users.id, traineeProfiles.userId))
             .where(inArray(traineeProfiles.userId, traineeIds)),
       relationshipIds.length === 0
         ? Promise.resolve([])
@@ -227,6 +229,10 @@ export async function loadClientDirectory(
       invitation?.recipientEmail ??
       "Client";
     const renewal = renewalByRelationship.get(relationship.id);
+    const traineeZone =
+      profiles.find((profile) => profile.userId === relationship.traineeUserId)
+        ?.timezone ?? null;
+    const trainerZone = trainer[0]?.timezone ?? "UTC";
     rows.push({
       id: `relationship:${relationship.id}`,
       relationshipId: relationship.id,
@@ -241,6 +247,11 @@ export async function loadClientDirectory(
       renewalState: renewal?.renewalState ?? null,
       renewsOn: renewal?.renewsOn ?? null,
       endedAt: relationship.endedAt ?? null,
+      week: coachingWeekNumber(relationship.startedAt, input.nowIso),
+      city:
+        traineeZone && traineeZone !== trainerZone
+          ? cityLabelForTimezone(traineeZone)
+          : null,
       updatedAt: relationship.updatedAt,
       email: invitation?.recipientEmail ?? null,
     } as DirectoryRow & { email: string | null });
@@ -342,9 +353,23 @@ export async function loadClientDirectory(
       renewalState: item.renewalState,
       renewsOn: item.renewsOn,
       endedAt: item.endedAt ?? undefined,
+      week: item.week ?? null,
+      city: item.city ?? null,
       updatedAt: item.updatedAt,
     })),
     facets,
     nextCursor: page.nextCursor,
   });
+}
+
+function coachingWeekNumber(startedAt: string, nowIso: string): number {
+  const elapsed = Date.parse(nowIso) - Date.parse(startedAt);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return 1;
+  return Math.max(1, Math.floor(elapsed / (7 * 24 * 60 * 60 * 1000)) + 1);
+}
+
+function cityLabelForTimezone(timeZone: string): string {
+  if (timeZone === "Asia/Dubai") return "Dubai";
+  const city = timeZone.split("/").pop()?.replaceAll("_", " ");
+  return city && city.length > 0 ? city : timeZone;
 }

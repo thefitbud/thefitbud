@@ -201,5 +201,12 @@
     "when": 1729785600000,
     "tag": "0028_checkin_preferred_form",
     "breakpoints": true
+  },
+  {
+    "idx": 29,
+    "version": "7",
+    "when": 1729872000000,
+    "tag": "0029_checkin_form_global_fields",
+    "breakpoints": true
   }
 ]
