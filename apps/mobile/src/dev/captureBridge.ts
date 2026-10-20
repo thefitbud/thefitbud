@@ -142,16 +142,18 @@ export async function navigateCaptureScreen(
         ? "lakshmi.foods@demo.fitbud.test"
         : id === "TR-08"
           ? "deepak.dubai@demo.fitbud.test"
-          : id === "TR-06" ||
-              id === "TR-10" ||
-              id === "TR-10B" ||
-              id === "TR-11" ||
-              id === "TR-11B" ||
-              id === "TR-12" ||
-              id === "TR-13" ||
-              id === "TR-15"
-            ? "rohan.slipping@demo.fitbud.test"
-            : "aarav.ontrack@demo.fitbud.test";
+          : id === "TR-14"
+            ? "meera.ack@demo.fitbud.test"
+            : id === "TR-06" ||
+                id === "TR-10" ||
+                id === "TR-10B" ||
+                id === "TR-11" ||
+                id === "TR-11B" ||
+                id === "TR-12" ||
+                id === "TR-13" ||
+                id === "TR-15"
+              ? "rohan.slipping@demo.fitbud.test"
+              : "aarav.ontrack@demo.fitbud.test";
     await authNav?.signInWithPassword(traineeEmail, "FitBud-demo-2026");
     await wait(2500);
   }

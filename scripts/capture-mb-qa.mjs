@@ -14,14 +14,12 @@ mkdirSync(EVIDENCE, { recursive: true });
 const SCREENS = [
   ["TR-02", "tr02-invite-393.png"],
   ["TR-03", "tr03-intake-393.png"],
+  ["TR-06", "tr06-today-393.png"],
   ["TR-10", "tr10-overview-393.png"],
   ["TR-10B", "tr10b-day-393.png"],
   ["TR-12", "tr12-summary-393.png"],
   ["TR-13", "tr13-progress-393.png"],
-  ["TR-15", "tr15-inbox-393.png"],
-  ["TR-18", "tr18-ask-393.png"],
-  ["TR-20", "tr20-more-393.png"],
-  ["TR-06", "tr06-today-393.png"],
+  ["TR-14", "tr14-checkin-393.png"],
 ];
 
 const browser = await chromium.launch({ headless: true });
@@ -53,13 +51,20 @@ for (const [id, file] of SCREENS) {
   }, id);
   await page.waitForTimeout(2200);
   if (id === "TR-06") {
-    // Check-in reply sits below the fold; scroll it into the 393×852 viewport.
+    // Check-in reply + Next check-in sit below the fold.
     await page.evaluate(() => {
       for (const n of document.querySelectorAll("div")) {
-        if (n.scrollHeight > n.clientHeight + 40) n.scrollTop = 900;
+        if (n.scrollHeight > n.clientHeight + 40) n.scrollTop = 1400;
       }
+      const hit = [...document.querySelectorAll("*")].find((el) =>
+        [...el.childNodes].some(
+          (c) =>
+            c.nodeType === 3 && /Acknowledged|Next check-in/i.test(c.textContent || ""),
+        ),
+      );
+      hit?.scrollIntoView({ block: "center" });
     });
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600);
   }
   const pathOut = join(OUT, file);
   const pathEv = join(EVIDENCE, file.replace("-393.png", ".png"));

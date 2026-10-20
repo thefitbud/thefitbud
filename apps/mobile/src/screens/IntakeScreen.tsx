@@ -517,15 +517,6 @@ export function IntakeScreen({ relationshipId }: Props) {
           </Card2>
         )}
 
-      {!readOnly ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void saveDraft()}
-          style={styles.saveDraft}
-        >
-          <Text style={styles.saveDraftText}>Save draft</Text>
-        </Pressable>
-      ) : null}
 </M2Screen>
   );
 }

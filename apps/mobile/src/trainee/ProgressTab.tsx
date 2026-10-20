@@ -823,46 +823,6 @@ export function ProgressTab({
       </View>
 
       <View style={styles.sh}>
-        <Text style={styles.shTitle}>Photos</Text>
-        {media.length >= 2 ? (
-          <Pressable accessibilityRole="button">
-            <Text style={styles.shLink}>Compare</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      <View style={styles.ph3}>
-        {(["Front", "Side"] as const).map((label) => (
-          <Pressable
-            key={label}
-            accessibilityRole="button"
-            accessibilityLabel={`Add ${label} photo`}
-            style={styles.phEmpty}
-            disabled={acting}
-            onPress={() => {
-              void addProgressPhoto();
-            }}
-          >
-            <Camera size={24} color={colors.indigo} strokeWidth={1.75} />
-            <Text style={styles.phEmptyTitle}>{label}</Text>
-          </Pressable>
-        ))}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add photos"
-          style={styles.phEmpty}
-          disabled={acting}
-          onPress={() => {
-            void addProgressPhoto();
-          }}
-        >
-          <Camera size={24} color={colors.indigo} strokeWidth={1.75} />
-          <Text style={styles.phEmptyTitle}>
-            {photosByDate.length > 0 ? "Add photos" : "Back"}
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.sh}>
         <Text style={styles.shTitle}>Check-ins</Text>
         {checkins.length > 0 && onOpenCheckin ? (
           <Pressable

@@ -1165,16 +1165,18 @@ export function TodayCheckinCard({
     );
   }
 
-  // API may keep record_status=submitted after a review row exists; prefer review UI.
-  if (checkin.review) {
+  // Prefer coach reply whenever status is reviewed or a review payload exists.
+  if (checkin.review || checkin.status === "reviewed") {
     const coach =
       relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "your coach";
     return (
       <View style={styles.banner}>
         <Text style={styles.bannerTitle} accessibilityRole="header">
-          {outcomeCopy(checkin.review.outcome, coach)}
+          {checkin.review
+            ? outcomeCopy(checkin.review.outcome, coach)
+            : "Acknowledged"}
         </Text>
-        {checkin.review.notes ? (
+        {checkin.review?.notes ? (
           <Text style={styles.bannerBody}>{checkin.review.notes}</Text>
         ) : (
           <Text style={styles.bannerBody}>

@@ -786,6 +786,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     const dueEnd = new Date(Date.parse(now) + 22 * 3_600_000).toISOString();
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "meera-due"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("checkin-schedule", meeraRel))}, ${sqlQuote(refDate)}, ${sqlQuote(dueStart)}, ${sqlQuote(dueEnd)}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      // Prior weight so TR-14 step 1 shows "Last: …".
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "meera-weight", "latest"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'body_weight_kg', 62.4, 'kg', ${sqlQuote(localDayStartIso(addDaysFromLocalDate(refDate, -7), "08:15", "Asia/Kolkata"))}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
     const farhanRel = relId(
       "rahul.coach@demo.fitbud.test",
@@ -954,6 +956,65 @@ export function buildDemoHistorySql(input: HistoryInput): string {
   const lines: string[] = [`-- history anchor ${refDate}`];
 
   lines.push(buildTrainerTemplates(now, input.libraryIndex));
+
+  // Insert-only form versions: add v2 for TR-14 (weight Last:, waist, Front/Side/Back).
+  lines.push(
+    `INSERT INTO checkin_form_versions (id, template_id, key, version, scope, trainer_user_id, schema_json, created_at) VALUES (${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${sqlQuote("c1000001-0000-4000-8000-000000000001")}, 'mvp', 2, 'global', NULL, ${sqlQuote(
+      JSON.stringify({
+        fields: [
+          {
+            id: "body_weight",
+            label: "Body weight",
+            type: "measurement",
+            measurementType: "body_weight_kg",
+            required: false,
+          },
+          {
+            id: "waist",
+            label: "Waist",
+            type: "measurement",
+            measurementType: "waist_cm",
+            required: false,
+          },
+          {
+            id: "photo_front",
+            label: "Front",
+            type: "photo_intent",
+            photoSlot: "front",
+            required: false,
+          },
+          {
+            id: "photo_side",
+            label: "Side",
+            type: "photo_intent",
+            photoSlot: "side",
+            required: false,
+          },
+          {
+            id: "photo_back",
+            label: "Back",
+            type: "photo_intent",
+            photoSlot: "back",
+            required: false,
+          },
+          {
+            id: "wellbeing",
+            label: "Wellbeing",
+            type: "short_text",
+            required: true,
+            maxLength: 1000,
+          },
+          {
+            id: "notes",
+            label: "Notes",
+            type: "long_text",
+            required: false,
+            maxLength: 2000,
+          },
+        ],
+      }),
+    )}, ${sqlQuote(now)}) ON CONFLICT(id) DO NOTHING;`,
+  );
 
   for (const account of DEMO_ACCOUNTS) {
     if (account.role !== "trainee" || !account.trainerEmail) continue;

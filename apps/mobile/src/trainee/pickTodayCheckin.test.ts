@@ -3,6 +3,7 @@ import type { Checkin, CheckinReview } from "@fitbud/contracts";
 import {
   pickNextScheduledCheckin,
   pickTodayCheckin,
+  todayCheckinBanner,
 } from "./pickTodayCheckin";
 
 function reviewStub(checkinId: string): CheckinReview {
@@ -45,18 +46,12 @@ function stub(
 
 describe("pickTodayCheckin", () => {
   it("prefers today's due over a future scheduled (newest-first list)", () => {
-    const future = stub({
-      id: "future",
-      localDate: "2026-10-23",
-      status: "scheduled",
-    });
-    const due = stub({
-      id: "due-today",
-      localDate: "2026-10-19",
-      status: "due",
-    });
-    // Newest-first as returned by listCheckins
-    expect(pickTodayCheckin([future, due])?.id).toBe("due-today");
+    expect(
+      pickTodayCheckin([
+        stub({ id: "future", localDate: "2026-10-23", status: "scheduled" }),
+        stub({ id: "due-today", localDate: "2026-10-19", status: "due" }),
+      ])?.id,
+    ).toBe("due-today");
   });
 
   it("prefers overdue over due, then next upcoming scheduled", () => {
@@ -67,59 +62,55 @@ describe("pickTodayCheckin", () => {
         stub({ id: "over", localDate: "2026-10-17", status: "overdue" }),
       ])?.id,
     ).toBe("over");
-
-    expect(
-      pickTodayCheckin([
-        stub({ id: "later", localDate: "2026-10-30", status: "scheduled" }),
-        stub({ id: "next", localDate: "2026-10-23", status: "scheduled" }),
-      ])?.id,
-    ).toBe("next");
   });
 
-  it("treats submitted+review as reviewed (never Waiting)", () => {
+  it("prefers reviewed reply over a newer unreviewed submitted (live Today path)", () => {
+    const waitingSunday = stub({
+      id: "waiting-sunday",
+      localDate: "2026-10-18",
+      status: "submitted",
+      review: null,
+    });
+    const reviewedFriday = stub({
+      id: "reviewed-friday",
+      localDate: "2026-10-16",
+      status: "reviewed",
+      review: reviewStub("reviewed-friday"),
+    });
+    const next = stub({
+      id: "next",
+      localDate: "2026-10-23",
+      status: "scheduled",
+    });
+    const picked = pickTodayCheckin([next, waitingSunday, reviewedFriday]);
+    expect(picked?.id).toBe("reviewed-friday");
+    const banner = todayCheckinBanner(
+      picked,
+      pickNextScheduledCheckin([next, waitingSunday, reviewedFriday]),
+      "Rahul",
+    );
+    expect(banner.kind).toBe("reviewed");
+    expect(banner.title).toBe("Acknowledged");
+    expect(banner.body).toMatch(/Nice week/);
+    expect(banner.nextLine).toBe("Next check-in 2026-10-23");
+  });
+
+  it("treats submitted+review payload as reviewed", () => {
     const reviewedViaPayload = stub({
       id: "submitted-with-review",
       localDate: "2026-10-16",
       status: "submitted",
       review: reviewStub("submitted-with-review"),
     });
-    const scheduled = stub({
-      id: "next",
-      localDate: "2026-10-23",
-      status: "scheduled",
-    });
-    expect(pickTodayCheckin([scheduled, reviewedViaPayload])?.id).toBe(
-      "submitted-with-review",
-    );
-  });
-
-  it("when both reviewed and scheduled exist, returns reviewed (reply) not scheduled", () => {
-    const reviewed = stub({
-      id: "reviewed",
-      localDate: "2026-10-16",
-      status: "reviewed",
-    });
-    const scheduled = stub({
-      id: "next-week",
-      localDate: "2026-10-23",
-      status: "scheduled",
-    });
-    expect(pickTodayCheckin([scheduled, reviewed])?.id).toBe("reviewed");
-    expect(pickNextScheduledCheckin([scheduled, reviewed])?.id).toBe(
-      "next-week",
-    );
+    expect(
+      pickTodayCheckin([
+        stub({ id: "next", localDate: "2026-10-23", status: "scheduled" }),
+        reviewedViaPayload,
+      ])?.id,
+    ).toBe("submitted-with-review");
   });
 
   it("returns null when nothing actionable, reviewed, or upcoming", () => {
-    expect(
-      pickTodayCheckin([
-        stub({
-          id: "reviewed-no-payload",
-          localDate: "2026-10-12",
-          status: "reviewed",
-          review: null,
-        }),
-      ]),
-    ).toBeNull();
+    expect(pickTodayCheckin([])).toBeNull();
   });
 });

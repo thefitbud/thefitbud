@@ -338,6 +338,15 @@ export function WorkoutTab({
 
   function openDayDetail(assignment: WorkoutAssignment) {
     onSelectDate?.(assignment.localDate);
+    // Prefer overlay so day-detail (mockup 10b) is a real navigation target,
+    // not a silent in-tab state that can look like the week overview stayed up.
+    if (onOpenOverlay) {
+      onOpenOverlay({
+        screen: "workout_overview",
+        assignmentId: assignment.id,
+      });
+      return;
+    }
     setDayDetailAssignmentId(assignment.id);
   }
 

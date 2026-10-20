@@ -587,6 +587,24 @@ export function TraineeShell({
           }
           return exercise;
         });
+        // TR-12 mockup date = previous Saturday relative to today (seed bridge).
+        const summarySaturday = (() => {
+          let cursor = today;
+          for (let i = 0; i < 7; i += 1) {
+            const [y, m, d] = cursor.split("-").map(Number);
+            const dow = new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
+            if (dow === 6) return cursor;
+            cursor = addDays(cursor, -1);
+          }
+          return today;
+        })();
+        const summaryAssignment = {
+          ...(done ??
+            scheduled.find((item) => /lower body b/i.test(item.workoutDayName)) ??
+            scheduled[0]!),
+          localDate: summarySaturday,
+          workoutDayName: "Lower body B",
+        };
         setCaptureWorkout(null);
         setCaptureWorkoutSummary({
           execution: {
@@ -598,7 +616,7 @@ export function TraineeShell({
             requireSessionRpe: true,
             exercises: enrichedExercises,
           },
-          assignment: done ?? null,
+          assignment: summaryAssignment,
           weekAssignments,
           weekStart,
         });
@@ -786,6 +804,7 @@ export function TraineeShell({
             relationship={relationship}
             effectivePlan={effectivePlan}
             selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
             autoStartToday={workoutAutostart}
             onAutoStartConsumed={() => setWorkoutAutostart(false)}

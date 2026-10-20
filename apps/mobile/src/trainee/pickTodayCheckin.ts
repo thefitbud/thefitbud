@@ -1,13 +1,17 @@
 import type { Checkin } from "@fitbud/contracts";
 
+function hasCoachReview(item: Checkin): boolean {
+  return Boolean(item.review) || item.status === "reviewed";
+}
+
 /**
- * Pick the most relevant check-in for Today.
- * Prefer due/overdue, else submitted (waiting for review), else a recent
- * reviewed reply, else the next upcoming scheduled.
+ * Pick the most relevant check-in for Today's banner.
+ * Prefer due/overdue, else a recent coach review (reply + next date),
+ * else submitted awaiting review, else the next scheduled.
  *
- * When both reviewed and scheduled exist, return the reviewed item so Today
- * can show the coach reply; callers should also use pickNextScheduledCheckin
- * for the "Next check-in <date>" line.
+ * Reviewed must beat unreviewed submitted — otherwise a newer Sunday
+ * "waiting" check-in hides Friday's coach reply while Progress still
+ * lists the reviewed row as Acknowledged.
  */
 export function pickTodayCheckin(
   items: readonly Checkin[],
@@ -23,18 +27,17 @@ export function pickTodayCheckin(
     });
   if (actionable[0]) return actionable[0];
 
-  // A review payload means the coach already replied — never show "Waiting".
-  const submitted = items
-    .filter((item) => item.status === "submitted" && !item.review)
-    .slice()
-    .sort((a, b) => b.localDate.localeCompare(a.localDate));
-  if (submitted[0]) return submitted[0];
-
   const reviewed = items
-    .filter((item) => Boolean(item.review))
+    .filter((item) => hasCoachReview(item))
     .slice()
     .sort((a, b) => b.localDate.localeCompare(a.localDate));
   if (reviewed[0]) return reviewed[0];
+
+  const submitted = items
+    .filter((item) => item.status === "submitted" && !hasCoachReview(item))
+    .slice()
+    .sort((a, b) => b.localDate.localeCompare(a.localDate));
+  if (submitted[0]) return submitted[0];
 
   return pickNextScheduledCheckin(items);
 }
@@ -48,4 +51,61 @@ export function pickNextScheduledCheckin(
     .slice()
     .sort((a, b) => a.localDate.localeCompare(b.localDate));
   return upcoming[0] ?? null;
+}
+
+/** Props for the Today check-in banner (shared by UI + integration tests). */
+export function todayCheckinBanner(
+  checkin: Checkin | null,
+  nextScheduled: Checkin | null,
+  coachFirst: string,
+): {
+  kind: "none" | "scheduled" | "reviewed" | "waiting" | "due";
+  title: string;
+  body: string | null;
+  nextLine: string | null;
+} {
+  if (!checkin) {
+    return {
+      kind: "none",
+      title: "Check-in",
+      body: "No check-in is due right now.",
+      nextLine: null,
+    };
+  }
+  if (checkin.status === "scheduled") {
+    return {
+      kind: "scheduled",
+      title: `Next check-in ${checkin.localDate}`,
+      body: "You can fill this in when it opens.",
+      nextLine: null,
+    };
+  }
+  if (hasCoachReview(checkin)) {
+    const notes = checkin.review?.notes?.trim() || null;
+    return {
+      kind: "reviewed",
+      title:
+        checkin.review?.outcome === "needs_attention"
+          ? `${coachFirst} wants a follow-up`
+          : "Acknowledged",
+      body: notes ?? `${coachFirst} reviewed your check-in.`,
+      nextLine: nextScheduled
+        ? `Next check-in ${nextScheduled.localDate}`
+        : null,
+    };
+  }
+  if (checkin.status === "submitted") {
+    return {
+      kind: "waiting",
+      title: "Check-in sent",
+      body: `Waiting for ${coachFirst} to review.`,
+      nextLine: null,
+    };
+  }
+  return {
+    kind: "due",
+    title: `Weekly check-in · Due ${checkin.localDate}`,
+    body: "Takes about 3 min",
+    nextLine: null,
+  };
 }

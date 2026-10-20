@@ -495,6 +495,8 @@ export function buildStandardPlanContent(
   };
 }
 
-export const DEMO_CHECKIN_FORM_VERSION_ID = GLOBAL_CHECKIN_FORM_VERSION_ID;
+/** v2: weight + waist + Front/Side/Back (mockup 14). Inserted by demo history seed. */
+export const DEMO_CHECKIN_FORM_VERSION_ID =
+  "c1000001-0000-4000-8000-000000000012";
 
 export { MEAL_PRESCRIPTION_IDS, WORKOUT_DAY_ID, WORKOUT_DAY_IDS };
