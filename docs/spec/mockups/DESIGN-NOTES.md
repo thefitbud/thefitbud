@@ -355,3 +355,28 @@ Trainer web reuses the 01/03 shell (240 px sidebar), workspace header and tabs. 
 5. Ended clients: MD1 dec. 5 shows no actions on mobile, but web TW-30 offers Reactivate. Is Reactivate web-only?
 6. Reminder responsiveness drawer (181) suggests a better reminder time. Is a suggestion acceptable, or should FitBud only show the numbers?
 7. Steps frames (93–95) are drawn behind steps_enabled (off). Keep them in the MVP handoff or move them to P2?
+
+---
+
+## Redesign · 21 Oct 2026 (user feedback, see AUDIT.md)
+
+Canonical style stays frames 01–30. Every change below re-uses the existing tokens, cards, chips and the sidebar/workspace header.
+
+**Decisions**
+1. **Client Plan tab = one page with two sub-tabs.** *Plans* (150, filtered 200, empty 151) and *Coaching setup* (148 draft, 149 active). The old 149 (Plan tab accordion of plans) and old 150 (stacked rows) contradicted each other; both were redrawn. Coaching setup no longer sits on Overview (old 148).
+2. **Coaching setup sections:** Goal (short, shown to client; detailed, private) · Basics · **Expectations** · Workouts · Nutrition · Check-ins · Reminders · Subscription. Expectations is a table *Expectation · Target · Raises a flag when* (workouts/week + log window, meals logged/week as a count, check-in cadence + window, weight-trend range, optional steps). Counts only, never %. Saving an active setup makes a new version from tomorrow.
+3. **Filters pattern** (same everywhere): search · segmented Type · dropdown chips (Owner, Status) · Clear filters · "N of M". Plan versions: Type All/Workout/Nutrition + Status. Templates: Type All/Workout/Nutrition/Intake form/Check-in form + Owner + Status. Clients unchanged.
+4. **One onboarding page** for a client who isn't coached yet, with a 4-step stepper Invited → Joined → Intake → Ready to coach: 144 (invited, only an *Invite* tab), 147 (joined, intake pending), 146 (intake submitted). Entry is always the Clients row (or Home › Getting started). 145 revoke is a modal over 144.
+5. **Overview › This week** gets ‹ › week (with a *This week* pill when away) and day selection with ‹ › on the nutrition line (03, 03b, iPad 192). Counts follow the selected week; the nutrition line follows the selected day.
+6. **Trainee Today, one layout** (04 iOS + Android): rings (kcal, P, C, F, + steps only when connected) → today's workout card → meals list. The next meal by device time (overdue unlogged first, else the one whose window is open or next) is the only expanded card with **Log** + *Something different*; other meals are collapsed rows with Logged / Logged · changed / Skipped / Upcoming / Waiting to send chips. The dark hero card is retired. States 96, 97, 104, 113, 115 and banners 29/29b use this layout. Old 04-full and 94 were removed.
+7. **Workout Live Activity = one activity, two states.** 27 collapsed (✓ logs the prefilled set, hint "Touch and hold to change kg or reps") ↔ 27b expanded (same card, kg/reps steppers, Open, Log set). 27c is collapsed while resting. Frames carry a dashed annotation naming the state. 27-android is the Android expanded equivalent.
+8. **Overlays sit on real screens.** Modals/sheets that had blank backgrounds (174, 175, 145, 99) and the note composer (188/189, now a drawer over Overview) render over the actual screen (iframe of the built page).
+9. **No invented insights.** Removed "Usually opens around 9:30 pm" and "A 6:00 am reminder may suit his week better" from 181; the panel shows the TW-31 label plus counts and the client's own settings only. The back-off pause copy (115, 78) is spec'd behaviour (P-PAUSE) and stays.
+
+**Small calls made without asking:** steps ring uses a coach target (8,000) because a ring needs a denominator; the iPad overview (192) uses a compact week strip instead of the full 03 card; the Plans sub-tab keeps *Adjust plan* as the single primary action.
+
+**Open questions (change behaviour or scope)**
+- Per-client Expectations driving Attention/Critical thresholds is new behaviour (thresholds are global today) – needs product sign-off and API (`configurations` + exception engine).
+- Steps target: should coaches set it in Expectations (as drawn) or should steps stay goal-free as TR-25 says?
+- Today drops the dedicated "Next up" hero; a due check-in or overdue workout now surfaces only in its own card. Confirm that's acceptable versus the old hero priority order.
+- In-person set (IP-07) still shows a separate *Configure* tab; align to Plan › Coaching setup when IP is promoted.

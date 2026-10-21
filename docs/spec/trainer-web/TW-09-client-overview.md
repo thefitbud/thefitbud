@@ -131,3 +131,11 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **1440×900** (desktop, Chromium). Save it as `docs/spec/evidence/TW-09.png`. This screen has mobile-web rules, so also save **390×844** as `docs/spec/evidence/TW-09-390.png`. Save extra states as `docs/spec/evidence/TW-09--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+**This week navigation** (mockups 03, 03b; iPad 192):
+- Card header: title ("This week" / "Week 5"), date range, ‹ previous week and › next week (› disabled on the current week), and a *This week* pill when another week is shown. Week 1 is the coaching start; ‹ is disabled before it.
+- Day selection: tapping a day column selects it (outlined). The nutrition line under the counts shows the **selected day** ("Wed 7 Oct · 3 of 4 meals" with kcal and macros) and has its own ‹ › to step one day; it crosses week boundaries and moves the strip.
+- Counts (workouts done, meals logged, check-in) always describe the **selected week**. Default = current week, today selected. Read-only; other cards (Needs attention, Plan, Notes) stay current.

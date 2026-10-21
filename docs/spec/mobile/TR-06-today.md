@@ -187,3 +187,15 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **393×852** (iPhone 15 profile, Expo web or a device). Save it as `docs/spec/evidence/TR-06.png`. Save extra states as `docs/spec/evidence/TR-06--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+Supersedes the order in §5 items 3–10 (user feedback 21 Oct). Mockups: `mockups/png/04-trainee-today-ios.png`, `04-trainee-today-android.png`; states 96, 97, 104, 113, 115; banners 29, 29b.
+
+1. **Top bar:** "Today" with the date and ‹ › day navigation (D27 behaviour unchanged: past days read-only except late-loggable items, future days preview), sync icon, bell.
+2. **Progress rings first:** kcal, Protein, Carbs, Fat (logged vs assigned, neutral ring tokens, overflow arc, no %), plus a **Steps** ring only when Health Connect / HealthKit is connected with permission (hidden otherwise). Footer: "2 of 5 meals logged" and *Diet ›*.
+3. **Today's workout card:** name, time, "6 exercises · about 50 min", first exercises, **Start** (straight into TR-11). Done → "· done 7:22 pm" with *View*. Rest day → "Rest day. Recovery is part of the plan."
+4. **Meals list:** one row per meal in time order. The **active meal** is the next unlogged meal whose time is closest to the device time (window −60 min … next meal's time; overdue unlogged meals win). It is the only expanded card: foods, kcal and macros, **Log** (= eaten as planned) and *Something different*. Every other meal is a collapsed row with time, name, short foods, kcal and a status chip: **Logged**, **Logged · changed**, **Skipped**, **Upcoming**, or **Waiting to send** (offline). Tapping a row expands it in place and collapses the previous one.
+5. The dark "Next up" hero card is removed; no single meal may take more than about a quarter of the first screen.
+6. "This week", "From your coach" and the check-in card stay below the meals list (unchanged rules).
