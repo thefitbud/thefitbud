@@ -1,4 +1,6 @@
 # User decisions, 21 Oct 2026, and v3 screen index
+
+**Status: all v3 screens and decisions LOCKED 21 Oct 2026 by Firoz.**
 Branch: design/today-rings-redesign (from origin/design/mvp-mockups-all-screens). Originals are untouched. Everything new is under docs/spec/redesign/.
 Brand (Confluence): Soft Coral #FFB0C3 and Pale Lavender #EDEAFF accents, Satoshi 400–700, 4 px spacing, light theme preferred, Today is not a dashboard. Product rules: Indian dates ("Wed 21 Oct"), counts not %, no streaks, no Refresh buttons, 44 pt targets, no ISO/enums, wa.me drafts only, never claim sent.
 
@@ -31,15 +33,15 @@ Every TR-11 mockup (v1 and v2, 11 and 11b) is **light**. The rest variant has on
 - Reminders arrive as notifications (15 min before calls, 45 min before sessions).
 - The week grid is continuous 6 am–9 pm with Sunday included, and calls are dashed teal so they're told apart by pattern, not colour alone.
 
-## Open questions
-1. Reminder lead times (15 min calls / 45 min sessions): confirm, or make them per coach?
-2. Does a group session with a client marked Late count as attended? (Assumed yes.)
-3. Is carry-over of unused sessions on renewal default off or on? (Shown as an option.)
-4. Is the Sessions tab shown to online-only coaches? (Recommended: hidden.)
-5. Should the Calendar be a separate web nav item, or live inside Sessions? (Shown inside Sessions.)
+## Resolved assumptions (LOCKED 21 Oct 2026 by Firoz)
+1. Reminders are fixed: 15 min before check-in calls, 45 min before in-person sessions.
+2. A client marked Late counts as attended (uses a session).
+3. Carry-over of unused sessions on renewal is **on by default** (the coach can turn it off).
+4. **Every coach gets the Sessions tab.** Online-only coaches use it to schedule and track check-in calls. They don't see roll-call, logging or packages. The empty state invites adding a call, with a light hint that in-person sessions appear there if they add an in-person client (screens 206, 206b, 207).
+5. The web calendar lives **inside Sessions** (no separate nav item).
 
 ## Compare sheets
-v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-states, P2-mobile-review-flow, P2-web-home-panel, P3-sessions-mobile, P3-ipad-group, P4-calendar-web, P4-calendar-mobile.
+v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-states, P2-mobile-review-flow, P2-web-home-panel, P3-sessions-mobile, P3-ipad-group, P4-calendar-web, P4-calendar-mobile, P5-sessions-online-only.
 
 ## Screen index
 | PNG | HTML source |
@@ -66,6 +68,9 @@ v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-s
 | v3/png/203-trainer-web-checkin-review-schedule-call-v3-web.png | v3/html/203-trainer-web-checkin-review-schedule-call-v3-web.html |
 | v3/png/204-trainer-web-assign-checkin-schedule-call-v3-web.png | v3/html/204-trainer-web-assign-checkin-schedule-call-v3-web.html |
 | v3/png/205-trainer-mobile-calendar-reminder-v3-ios.png | v3/html/205-trainer-mobile-calendar-reminder-v3-ios.html |
+| v3/png/206-trainer-mobile-sessions-online-v3-ios.png | v3/html/206-trainer-mobile-sessions-online-v3-ios.html |
+| v3/png/206b-trainer-mobile-sessions-online-empty-v3-ios.png | v3/html/206b-trainer-mobile-sessions-online-empty-v3-ios.html |
+| v3/png/207-trainer-web-sessions-online-v3-web.png | v3/html/207-trainer-web-sessions-online-v3-web.html |
 | v3/png/31-trainer-mobile-review-sheet-v3-all-resolved-ios.png | v3/html/31-trainer-mobile-review-sheet-v3-all-resolved-ios.html |
 | v3/png/31-trainer-mobile-review-sheet-v3-ios.png | v3/html/31-trainer-mobile-review-sheet-v3-ios.html |
 | v3/png/31-trainer-mobile-review-sheet-v3-item2-ios.png | v3/html/31-trainer-mobile-review-sheet-v3-item2-ios.html |
@@ -79,5 +84,7 @@ v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-s
 | v3/png/IP-15-trainer-mobile-package-v3-ios.png | v3/html/IP-15-trainer-mobile-package-v3-ios.html |
 | v3/png/IP-15b-trainer-mobile-renew-package-v3-ios.png | v3/html/IP-15b-trainer-mobile-renew-package-v3-ios.html |
 | v3/png/IP-16-trainee-suggest-change-v3-ios.png | v3/html/IP-16-trainee-suggest-change-v3-ios.html |
+
+Banned-strings check: `cd v3 && node check.mjs` (docs/spec/banned-strings.json over rendered text, device chrome excluded). 21 Oct: 38 files, 0 errors, 0 warnings.
 
 Regenerate: `cd v3 && python3 p1_today.py p2_review.py ... && node render.mjs` (the generators are p1–p4_*.py on fb.py; render needs repo node_modules Playwright).

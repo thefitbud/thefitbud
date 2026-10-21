@@ -87,8 +87,8 @@ h1{font-size:30px;font-weight:600;color:var(--navy);letter-spacing:-.3px}
 def page(body,w=393,h=852,extra=''):
     return f'<!doctype html><html lang="en-IN"><head><meta charset="utf-8"><link rel="stylesheet" href="{T}"><style>{CSS}{extra}</style></head><body style="width:{w}px;height:{h}px">{body}</body></html>'
 def sbar(os='ios',t='7:30'):
-    if os=='ios': return f'<div class="sb"><span>{t}</span><span class="isl"></span><span class="sbi"><svg width="18" height="12"><rect y="8" width="3" height="4" rx="1" fill="#111"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#111"/><rect x="10" y="2" width="3" height="10" rx="1" fill="#111"/><rect x="15" width="3" height="12" rx="1" fill="#111"/></svg><svg width="26" height="12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="#111"/><rect x="2" y="2" width="17" height="8" rx="2" fill="#111"/></svg></span></div>'
-    return f'<div class="sb and"><span>{t}</span><span class="isl"></span><span class="sbi">▾ ▴ ▮</span></div>'
+    if os=='ios': return f'<div class="sb" data-chrome><span>{t}</span><span class="isl"></span><span class="sbi"><svg width="18" height="12"><rect y="8" width="3" height="4" rx="1" fill="#111"/><rect x="5" y="5" width="3" height="7" rx="1" fill="#111"/><rect x="10" y="2" width="3" height="10" rx="1" fill="#111"/><rect x="15" width="3" height="12" rx="1" fill="#111"/></svg><svg width="26" height="12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="#111"/><rect x="2" y="2" width="17" height="8" rx="2" fill="#111"/></svg></span></div>'
+    return f'<div class="sb and" data-chrome><span>{t}</span><span class="isl"></span><span class="sbi">▾ ▴ ▮</span></div>'
 TT=[('Today','home'),('Workout','dumbbell'),('Diet','utensils'),('Progress','chart'),('More','more')]
 TC=[('Needs you','inbox'),('Sessions','cal'),('Clients','users'),('Check-ins','clip'),('More','more')]
 def tabbar(on,tabs=TT,os='ios',badges={}):

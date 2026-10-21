@@ -56,7 +56,7 @@ def addsheet(kind):
 <div class="field"><label>Meeting link · optional</label><div class="in ph2">{ic("link",16)}Paste a Meet, Zoom or WhatsApp link</div></div>
 <div class="field"><label>Note · optional</label><div class="in ph2">Talk about her sleep and lunch timing</div></div>
 <div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="sm">Remind me 15 min before</span><span class="tog"></span></div>
-<a class="btn p" style="width:100%">Add call · Thu 22 Oct, 12:00 pm</a><p class="xs muted" style="text-align:center;margin-top:8px">The call happens outside FitBud. Share the time with Meera on WhatsApp (you press Send).</p>'''
+<a class="btn p" style="width:100%">Add call · Thu 22 Oct, 12:00 pm</a><p class="xs muted" style="text-align:center;margin-top:8px">The call happens on WhatsApp, Meet or phone. Share the time with Meera on WhatsApp (you press Send).</p>'''
     else:
         f=f'''<div class="field"><label>Client or group</label><div class="in">{ic("users",16)}Morning strength · 4 clients</div></div>
 <div class="row" style="gap:10px"><div class="field sp"><label>Date</label><div class="in">Wed 21 Oct</div></div><div class="field sp"><label>Time</label><div class="in">7:30 am</div></div></div>
@@ -87,7 +87,7 @@ modal=f'''<div class="scrim"></div><div class="modal"><div class="row"><b class=
 <div class="field"><label>Meeting link · optional</label><div class="in ph2">Paste a Meet, Zoom or WhatsApp link</div></div><div class="field" style="margin:0"><label>Note · optional</label><div class="in ph2">Review his travel week</div></div></div>
 <div class="row" style="margin-top:16px;justify-content:flex-end;gap:8px"><a class="btn o sm">Cancel</a><a class="btn p sm">Assign check-in and add call</a></div></div>'''
 save('204-trainer-web-assign-checkin-schedule-call-v3-web',page(web('Clients / Arjun Kapoor','<div class="wbody"></div>'+modal,'Clients'),1440,900,X))
-lock=f'''<div class="lock"><div class="sb" style="color:#fff"><span>10:45</span><span class="isl"></span><span></span></div><div style="text-align:center;margin-top:20px"><div style="font-size:18px;font-weight:600">Monday 19 October</div><div style="font-size:84px;font-weight:600;line-height:1.05">10:45</div></div>
+lock=f'''<div class="lock"><div class="sb" data-chrome style="color:#fff"><span>10:45</span><span class="isl"></span><span></span></div><div data-chrome style="text-align:center;margin-top:20px"><div style="font-size:18px;font-weight:600">Monday 19 October</div><div style="font-size:84px;font-weight:600;line-height:1.05">10:45</div></div>
 <div style="position:absolute;left:0;right:0;bottom:120px"><div class="nt"><div class="h"><b style="color:var(--navy)">FitBud</b><span>Calendar</span><span class="sp"></span><span>now</span></div><b>Check-in call with Meera in 15 min</b><div class="sm">11:00 am · 30 min · Talk about sleep and lunch timing</div><div class="acts2"><a>Open link</a><a>Snooze 5 min</a></div></div>
 <div class="nt"><div class="h"><b style="color:var(--navy)">FitBud</b><span>Sessions</span><span class="sp"></span><span>6:45 am</span></div><b>Morning strength at 7:30 am</b><div class="sm">Gold's Gym Andheri · 4 booked · Neha has 1 session left</div></div></div></div>'''
 save('205-trainer-mobile-calendar-reminder-v3-ios',page(lock,extra=X))

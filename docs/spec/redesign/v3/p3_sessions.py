@@ -33,7 +33,7 @@ save('IP-09-trainer-mobile-sessions-v3-ios',ph(s1))
 R=[('RM','a1','Rohan Mehta','p','Present','3 left · expires Sun 15 Nov'),('NR','a2','Neha Reddy','l','Late','Joined 7:38 am · 1 left'),('DN','a3','Deepak Nair','p','Present','8 left'),('MI','a4','Meera Iyer','a','Absent','No-show · uses 1 of 6 left · <a>Waive</a>')]
 def tri(s): return '<div class="tri">'+''.join(f'<a class="{k if k==s else ""}">{n}</a>' for k,n in [('p','In'),('l','Late'),('a','Out')])+'</div>'
 rows=''.join(f'<div class="rc"><span class="av {k}">{a}</span><div class="sp"><b class="b" style="font-size:15px">{n}</b><div class="pol">{pol}</div></div>{tri(s)}</div>' for a,k,n,s,_,pol in R)
-s2=f'''<div class="row" style="padding:6px 0"><a class="icb" style="border:0">{ic("left")}</a><div class="sp"><div class="eb">Mon 19 Oct · 7:30–8:30 am · Gold's Gym Andheri</div><b class="b" style="font-size:20px">Morning strength</b></div></div>
+s2=f'''<div class="row" style="padding:6px 0"><a class="icb" style="border:0">{ic("left")}</a><div class="sp"><div class="eb">Mon 19 Oct · 7:30 am – 8:30 am · Gold's Gym Andheri</div><b class="b" style="font-size:20px">Morning strength</b></div></div>
 <div class="row" style="gap:6px;margin:6px 0 10px"><span class="chip navy">{ic("users",13)}Group</span><span class="chip neu">Lower body B · 5 exercises</span></div>
 <div class="sec" style="margin-top:6px"><h3>Roll-call</h3><span>3 of 4 here</span></div><div class="card">{rows}</div>
 <p class="xs muted" style="margin:10px 4px">Everyone starts as booked. Tap In, Late or Out. Absent uses a session (your rule: no-show counts). Late cancel within 12 h counts too. Change per client in Configure.</p>
