@@ -40,8 +40,15 @@ Every TR-11 mockup (v1 and v2, 11 and 11b) is **light**. The rest variant has on
 4. **Every coach gets the Sessions tab.** Online-only coaches use it to schedule and track check-in calls. They don't see roll-call, logging or packages. The empty state invites adding a call, with a light hint that in-person sessions appear there if they add an in-person client (screens 206, 206b, 207).
 5. The web calendar lives **inside Sessions** (no separate nav item).
 
+## Client workspace: Check-ins tab (added 21 Oct)
+Search result: the only existing list was mockups/png/162-trainer-web-client-checkins-web.png. It's weak: a schedule modal covers three bare rows with only Due + Remind/View. The off-brand figma reference docs/design/figma/07-checkins-tab.png uses % adherence and US dates. There's no iPad, mobile or v2 version. (163/164/198/19/75 are review screens, and 46–50/166–167 are the cross-client inbox.)
+- v3 design: summary (cadence "Every Sunday", next check-in, scheduled check-in call, "2 of 3 submitted"), Assign check-in, filter chips (All, To review, Reviewed, Missed with counts) and a list grouped by month, newest first.
+- Each row has the date, form, status (To review / Reviewed · outcome / Overdue / Missed / Upcoming), submitted time, key changes ("Weight 88.2 kg · down 0.6 kg"), note preview and linked call. Tapping a row opens the existing review screen.
+- Empty and ended (read-only) states. Mobile uses pull-to-refresh (no button).
+- Screens: 162-…-v3-web, 162b empty, 162c ended, 192b-ipad, 18b mobile, 18c mobile ended.
+
 ## Compare sheets
-v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-states, P2-mobile-review-flow, P2-web-home-panel, P3-sessions-mobile, P3-ipad-group, P4-calendar-web, P4-calendar-mobile, P5-sessions-online-only.
+v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-states, P2-mobile-review-flow, P2-web-home-panel, P3-sessions-mobile, P3-ipad-group, P4-calendar-web, P4-calendar-mobile, P5-sessions-online-only, P6-client-checkins-tab-web, P6-client-checkins-tab-ipad-mobile.
 
 ## Screen index
 | PNG | HTML source |
@@ -61,6 +68,12 @@ v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-s
 | v3/png/05-trainer-mobile-needs-you-v3-ios.png | v3/html/05-trainer-mobile-needs-you-v3-ios.html |
 | v3/png/05-trainer-mobile-needs-you-v3-reviewed-toast-ios.png | v3/html/05-trainer-mobile-needs-you-v3-reviewed-toast-ios.html |
 | v3/png/05-trainer-mobile-needs-you-v3-swipe-ios.png | v3/html/05-trainer-mobile-needs-you-v3-swipe-ios.html |
+| v3/png/162-trainer-web-client-checkins-v3-web.png | v3/html/162-trainer-web-client-checkins-v3-web.html |
+| v3/png/162b-trainer-web-client-checkins-empty-v3-web.png | v3/html/162b-trainer-web-client-checkins-empty-v3-web.html |
+| v3/png/162c-trainer-web-client-checkins-ended-v3-web.png | v3/html/162c-trainer-web-client-checkins-ended-v3-web.html |
+| v3/png/18b-trainer-mobile-client-checkins-v3-ios.png | v3/html/18b-trainer-mobile-client-checkins-v3-ios.html |
+| v3/png/18c-trainer-mobile-client-checkins-ended-v3-ios.png | v3/html/18c-trainer-mobile-client-checkins-ended-v3-ios.html |
+| v3/png/192b-ipad-client-checkins-v3-ipad.png | v3/html/192b-ipad-client-checkins-v3-ipad.html |
 | v3/png/200-trainer-web-calendar-v3-web.png | v3/html/200-trainer-web-calendar-v3-web.html |
 | v3/png/201-trainer-mobile-agenda-v3-ios.png | v3/html/201-trainer-mobile-agenda-v3-ios.html |
 | v3/png/202-trainer-mobile-add-session-v3-ios.png | v3/html/202-trainer-mobile-add-session-v3-ios.html |
@@ -85,6 +98,6 @@ v3/compare/: P1-sbs-today-current-vs-v3, P1-today-ios-states, P1-today-android-s
 | v3/png/IP-15b-trainer-mobile-renew-package-v3-ios.png | v3/html/IP-15b-trainer-mobile-renew-package-v3-ios.html |
 | v3/png/IP-16-trainee-suggest-change-v3-ios.png | v3/html/IP-16-trainee-suggest-change-v3-ios.html |
 
-Banned-strings check: `cd v3 && node check.mjs` (docs/spec/banned-strings.json over rendered text, device chrome excluded). 21 Oct: 38 files, 0 errors, 0 warnings.
+Banned-strings check: `cd v3 && node check.mjs` (docs/spec/banned-strings.json over rendered text, device chrome excluded). 21 Oct: 44 files, 0 errors, 0 warnings.
 
 Regenerate: `cd v3 && python3 p1_today.py p2_review.py ... && node render.mjs` (the generators are p1–p4_*.py on fb.py; render needs repo node_modules Playwright).
