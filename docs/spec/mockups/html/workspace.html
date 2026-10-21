@@ -89,6 +89,19 @@
   .notecard .nm { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ink-500); }
   .chip.xs { height: 20px; font-size: 11px; padding: 0 7px 0 6px; }
   .chip.xs svg.ic { width: 12px; height: 12px; }
+  .wnav{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .card-h .t-cap{white-space:nowrap}
+  .legend span{white-space:nowrap}
+  .legend{gap:10px!important;font-size:11.5px}
+  .wnav a.nb{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--ink-700);background:#fff}
+  .wnav a.nb svg.ic{width:16px;height:16px}
+  .wnav a.nb.dis{opacity:.4}
+  .wnav .pill{height:30px;padding:0 10px;border-radius:8px;background:var(--sel-bg);color:var(--indigo);font-size:13px;font-weight:600;display:flex;align-items:center}
+  .day.sel{outline:2px solid var(--indigo);outline-offset:-2px;border-radius:12px}
+  .nut .dnav{display:flex;align-items:center;gap:4px;margin-left:auto}
+  .nut .dnav a{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--ink-700)}
+  .nut .dnav a svg.ic{width:14px;height:14px}
+  .nut .dnav a.dis{opacity:.4}
 </style></head>
 <body>
 <div class="shell">
@@ -168,7 +181,7 @@
           <!-- This week -->
           <section class="card">
             <div class="card-h">
-              <div><h2 class="t-h3">This week</h2><div class="t-cap muted" style="margin-top:2px">Mon 12 Oct – Sun 18 Oct</div></div>
+              <div style="display:flex;align-items:center;gap:12px"><div><h2 class="t-h3">This week</h2><div class="t-cap muted" style="margin-top:2px">Mon 12 Oct – Sun 18 Oct · week 6</div></div><div class="wnav" aria-label="Week"><a class="nb" href="#" aria-label="Previous week"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a><a class="nb dis" href="#" aria-label="Next week" aria-disabled="true"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a></div></div>
               <div class="legend"><span><i style="background:var(--navy);border-radius:50%"></i>Workout done</span><span><i style="background:#fff;box-shadow:inset 0 0 0 1.5px var(--crit);border-radius:50%"></i>Missed</span><span><i style="background:var(--ring-kcal)"></i>Meal logged</span><span><i style="background:#fff;box-shadow:inset 0 0 0 1.5px var(--border-strong)"></i>Not logged</span></div>
             </div>
             <div class="week">
@@ -178,7 +191,7 @@
               <div class="day"><div class="dn">Thu</div><div class="dd">15</div><div class="wk miss"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></div><div class="wl">Upper B</div><div class="meals"><i></i><i class="no"></i><i></i><i class="no"></i></div><div class="ml">2 of 4</div></div>
               <div class="day"><div class="dn">Fri</div><div class="dd">16</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i class="no"></i><i></i><i class="no"></i></div><div class="ml">2 of 4</div></div>
               <div class="day"><div class="dn">Sat</div><div class="dd">17</div><div class="wk done"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div><div class="wl">Lower B</div><div class="meals"><i></i><i></i><i class="no"></i><i></i></div><div class="ml">3 of 4</div></div>
-              <div class="day today"><div class="dn">Today</div><div class="dd">18</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i class="later"></i><i class="later"></i><i class="later"></i></div><div class="ml">1 of 1 so far</div></div>
+              <div class="day today sel" aria-selected="true"><div class="dn">Today</div><div class="dd">18</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i class="later"></i><i class="later"></i><i class="later"></i></div><div class="ml">1 of 1 so far</div></div>
             </div>
             <div class="stats">
               <div class="stat"><div class="v">2 <small>of 4</small></div><div class="l">Workouts done</div></div>
@@ -186,12 +199,12 @@
               <div class="stat"><div class="v">Fri</div><div class="l">Check-in submitted</div></div>
             </div>
             <div class="nut">
-              <div class="lbl">Today's nutrition<span>Logged so far</span></div>
+              <div class="lbl">Today · Sun 18 Oct<span>Nutrition logged so far</span></div>
               <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-kcal)" stroke-width="5" stroke-linecap="round" stroke-dasharray="18.5 88"/></svg><span><b>410 / 1,950</b>kcal</span></div>
               <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-protein)" stroke-width="5" stroke-linecap="round" stroke-dasharray="15.5 88"/></svg><span><b>22 / 125 g</b>Protein</span></div>
               <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-carbs)" stroke-width="5" stroke-linecap="round" stroke-dasharray="21.3 88"/></svg><span><b>52 / 215 g</b>Carbs</span></div>
               <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-fat)" stroke-width="5" stroke-linecap="round" stroke-dasharray="17 88"/></svg><span><b>12 / 62 g</b>Fat</span></div>
-            </div>
+            <div class="dnav" aria-label="Day"><a href="#" aria-label="Previous day, Sat 17 Oct"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a><a class="dis" href="#" aria-label="Next day" aria-disabled="true"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a></div></div>
           </section>
 
           <!-- Recent activity -->
