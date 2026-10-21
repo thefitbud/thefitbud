@@ -386,3 +386,12 @@ Applies to 04 iOS/Android, 04b (new), 96, 97, 104, 113, 115, 29, 29b.
 - **Week strip at the top** under the "Today" title: Mon–Sun day chips with dates and a status dot (filled = all done, ring = some open), today highlighted (indigo), past days tappable, ‹ › and swipe for earlier weeks (› disabled on the current week). 04b shows a past day (Fri 16 Oct) selected: read-only banner "Viewing Fri 16 Oct · read-only. You can still log 1 item.", the open lunch keeps a *Log late* action (D23), title becomes the weekday and the strip keeps "Today" marked.
 - **Concentric rings left, legend right.** kcal outer → protein → carbs → fat → steps innermost (only when connected). Legend rows: colour dot, label, done / goal. Steps row hidden when not connected (113, 115). Footer "N of M meals logged · Diet ›".
 - **Workout card is the highlight:** navy filled card, white text, time pill, session name, exercises, white full-width **Start workout**. Done → "Done" pill + *View summary*; rest day → "Rest day · Recovery is part of the plan". Meals list below unchanged (next meal expanded, others collapsed).
+
+## Today visual polish · round 3 · 21 Oct 2026
+Structure unchanged (week strip → rings + legend → navy workout → meals). Visual system:
+- Rings: 164pt, concentric, 11pt stroke (9pt when the steps ring is shown), round caps, 1.4–2.2pt gaps. Hues with a gradient each: Calories coral→rose, Protein violet, Carbs amber, Fat teal, Steps green (innermost, only when connected). Tracks are 14% tints of their own hue. Centre shows kcal left (or kcal eaten once the goal is met).
+- Legend: dot, label, bold tabular value / muted goal, 4pt mini bar in the same hue. No percentages.
+- Week strip: no frame, single-letter day labels, pill chips, selected day is a filled brand gradient pill. A tiny dot shows completion (green = all done, amber = partial). Chevrons are muted. The week label was dropped (swipe is the gesture). The header shows "Today", or the date for a past day; the date appears only once (in the strip).
+- Workout highlight: navy gradient with a radial glow, a large faint dumbbell watermark, a 52pt icon tile, and a meta row (exercises, minutes, sets). The white pill Start button has a play icon. The "Today's workout" section header was removed (the card has its own time tag).
+- Cards use a 24pt radius and soft, layered shadows instead of borders. Spacing is on an 8pt grid.
+- 2x inspection crop: png/04-trainee-today-ring-card-2x.png

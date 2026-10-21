@@ -20,6 +20,7 @@ Frames: iOS 393 × 852 @3x, Android 412 × 915 @2.625x, web 1440 × 900 @2x, iPa
 | 03b | TW-09 | Client workspace · Overview | Previous week (week 5), Wed 7 Oct selected | /clients/:rid Overview | Clients row › Open; Home row › client name; ⌘K | `03b-trainer-web-client-overview-prev-week.png` |
 | 04 | TR-06 canonical | Today | Android | Today tab | App launch; tab bar | `04-trainee-today-android.png` |
 | 04 | TR-06 canonical | Today | rings, workout, meals (next meal expanded) | Today tab | App launch; tab bar | `04-trainee-today-ios.png` |
+| 04 |  | 04-trainee-today-ring-card-2x.png |  | — | — | `04-trainee-today-ring-card-2x.png` |
 | 04b | TR-06 D27 past day | Today | past day selected (Fri), read-only + log late | Today tab | App launch; tab bar | `04b-trainee-today-past-day-ios.png` |
 | 05 | TM-01 | Attention | Android | Attention tab | App launch (coach) | `05-trainer-mobile-attention-android.png` |
 | 05 | TM-01 | Attention | Default | Attention tab | App launch (coach) | `05-trainer-mobile-attention-ios.png` |

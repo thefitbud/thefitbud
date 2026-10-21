@@ -205,3 +205,9 @@ Supersedes the order in §5 items 3–10 (user feedback 21 Oct). Mockups: `mocku
 2. **Rings:** concentric, kcal outer then protein, carbs, fat, steps innermost (only when connected), on the left; legend on the right, one row per ring: colour dot, label, done / goal ("460 / 1,850 kcal"). No %.
 3. **Workout card** is the highlight: navy filled card with white text and a full-width **Start workout** button; done and rest-day variants keep the same card.
 
+
+### Amendment · visual polish round 3 (21 Oct 2026)
+- Rings: concentric rings 164pt across, ordered from outer to inner: kcal, protein, carbs, fat, steps (steps only when connected). Each ring has its own hue, with a track tinted to match. The centre shows kcal left, or kcal eaten once the goal is reached.
+- Legend rows: label, value / goal (tabular figures), and a mini bar in the ring's hue. No percentages.
+- Week strip: Mon–Sun pills. The selected day is filled. A completion dot shows green when all done and amber when partial. Swiping or the chevrons change the week; next week is disabled beyond today. The date is shown once. The title reads "Today", or the date when a past day is selected.
+- The workout card is the screen's highlight (navy). It has no separate section header.
