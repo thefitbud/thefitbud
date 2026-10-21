@@ -273,7 +273,12 @@ export function HomePage() {
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
   const undoTimer = useRef<number | null>(null);
 
-  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+  // One fetch at a time. A quiet refresh requested while another load is in
+  // flight is coalesced into a single follow-up run (no double-fetch).
+  const inFlight = useRef<Promise<void> | null>(null);
+  const rerunQueued = useRef(false);
+
+  const runLoad = useCallback(async (opts?: { quiet?: boolean }) => {
     const quiet = opts?.quiet === true;
     if (!quiet) {
       setLoading(true);
@@ -442,6 +447,36 @@ export function HomePage() {
     }
   }, [timeZone]);
 
+  /**
+   * Full load (skeleton) only for the first paint and explicit Retry. Every
+   * action-driven refresh passes `quiet: true` so rows stay mounted, header
+   * counts stay visible and scroll position is kept.
+   */
+  const load = useCallback(
+    async (opts?: { quiet?: boolean }): Promise<void> => {
+      if (inFlight.current) {
+        if (opts?.quiet) {
+          rerunQueued.current = true;
+          return inFlight.current;
+        }
+      }
+      const run = (async () => {
+        try {
+          await runLoad(opts);
+        } finally {
+          inFlight.current = null;
+          if (rerunQueued.current) {
+            rerunQueued.current = false;
+            void load({ quiet: true });
+          }
+        }
+      })();
+      inFlight.current = run;
+      return run;
+    },
+    [runLoad],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -538,15 +573,15 @@ export function HomePage() {
     showToast("Marked reviewed", () => {
       cancelled = true;
       setToast(null);
-      void load();
+      void load({ quiet: true });
     });
     // Move visually by refetch after delay unless undone
     window.setTimeout(() => {
       if (cancelled) return;
       void apiClient
         .acknowledgeException(exceptionId, { note: null }, key)
-        .then(() => load())
-        .catch(() => load());
+        .then(() => load({ quiet: true }))
+        .catch(() => load({ quiet: true }));
     }, 5000);
     // Immediate optimistic UI: remove from open by soft-filtering locally
     setGroups((prev) =>
@@ -893,7 +928,7 @@ export function HomePage() {
                           items={[
                             {
                               id: "ack",
-                              label: "Acknowledge",
+                              label: "Mark reviewed",
                               disabled: !online,
                               onSelect: () =>
                                 void acknowledgeFromOverflow(
@@ -1058,7 +1093,7 @@ export function HomePage() {
                       <div className="home-li-tx">
                         <b>{group.traineeDisplayName}</b>
                         <span>
-                          Acknowledged ·{" "}
+                          Reviewed ·{" "}
                           {items[0]?.summary ||
                             labelFor("exception_type", items[0]!.type)}
                         </span>
@@ -1293,7 +1328,7 @@ export function HomePage() {
             closeDrawer();
             rowRefs.current[focusIdx]?.focus();
           }}
-          onChanged={() => void load()}
+          onChanged={() => void load({ quiet: true })}
         />
       ) : null}
 
@@ -1307,7 +1342,7 @@ export function HomePage() {
             ) ?? "Client"
           }
           onClose={closeDrawer}
-          onChanged={() => void load()}
+          onChanged={() => void load({ quiet: true })}
         />
       ) : null}
 

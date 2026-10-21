@@ -102,6 +102,31 @@ function reasonHeading(
   return parts.join(" · ");
 }
 
+/**
+ * Source line under the item title. Workouts have a whole-day window (it
+ * closes at midnight), so "Due by 12:00 am" read as wrong: show the planned
+ * day and size instead. Meals and check-ins keep their real due time.
+ */
+export function dueLine(
+  detail: Pick<ExceptionDetail, "sourceEntityType" | "details">,
+  dueIso: string | null,
+  plannedLine: string | null,
+): string {
+  const localDate = detailString(detail.details, "localDate");
+  if (detail.sourceEntityType === "workout_assignment") {
+    const day = localDate ? `Planned for ${formatCivilDate(localDate)}` : "Planned";
+    return plannedLine ? `${day} · ${plannedLine}` : day;
+  }
+  if (!dueIso) return localDate ? `Due ${formatCivilDate(localDate)}` : "No due time";
+  const clock = formatClockTime(dueIso, VIEWER_TZ);
+  if (clock === "12:00 am" && localDate) {
+    return `Due by end of ${formatCivilDate(localDate)}`;
+  }
+  return localDate
+    ? `Due by ${clock} · ${formatCivilDate(localDate)}`
+    : `Due by ${clock}`;
+}
+
 export function ExceptionDrawer({
   exceptionId,
   onClose,
@@ -132,14 +157,16 @@ export function ExceptionDrawer({
   const [nudgeNow, setNudgeNow] = useState(() => Date.now());
   const [nudgePaused, setNudgePaused] = useState(false);
   const [dueByIso, setDueByIso] = useState<string | null>(null);
+  const [plannedLine, setPlannedLine] = useState<string | null>(null);
   const [quietHoursEnd, setQuietHoursEnd] = useState<string | null>(null);
   const online = useOnlineStatus();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const nudgeRef = useRef<() => void>(() => undefined);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    // Quiet reload after an action keeps the drawer content on screen.
+    if (!opts?.quiet) setLoading(true);
     setError(null);
     try {
       const result = await apiClient.getException(exceptionId);
@@ -157,6 +184,16 @@ export function ExceptionDrawer({
           );
           title = workout.workoutDayName;
           due = due ?? workout.windowEndsAt;
+          const exercises = workout.workoutDay?.exercises ?? [];
+          const sets = exercises.reduce(
+            (sum, ex) => sum + (ex.setTargets?.length ?? 0),
+            0,
+          );
+          setPlannedLine(
+            exercises.length > 0
+              ? `${exercises.length} exercise${exercises.length === 1 ? "" : "s"} · ${sets} set${sets === 1 ? "" : "s"}`
+              : null,
+          );
         } else if (result.sourceEntityType === "meal_assignment") {
           const meal = await apiClient.getMealAssignment(
             result.sourceEntityId,
@@ -237,7 +274,7 @@ export function ExceptionDrawer({
         createIdempotencyKey(),
       );
       setNote("");
-      await load();
+      await load({ quiet: true });
       onChanged?.();
     } catch (err) {
       setError(
@@ -252,6 +289,15 @@ export function ExceptionDrawer({
     setActing(true);
     setError(null);
     try {
+      if (detail && (detail.status === "detected" || detail.status === "active")) {
+        // The API resolves only reviewed items; Resolve on an open item marks
+        // it reviewed first so the trainer never needs two clicks.
+        await apiClient.acknowledgeException(
+          exceptionId,
+          { note: null },
+          createIdempotencyKey(),
+        );
+      }
       await apiClient.resolveException(
         exceptionId,
         {
@@ -484,9 +530,7 @@ export function ExceptionDrawer({
                     labelFor("exception_type", detail.type)}
                 </p>
                 <p className="muted" style={{ margin: 0 }}>
-                  {dueIso
-                    ? `Due by ${formatClockTime(dueIso, VIEWER_TZ)}`
-                    : "Due by —"}
+                  {dueLine(detail, dueIso, plannedLine)}
                 </p>
                 <p className="muted" style={{ margin: "6px 0 0" }}>
                   {loggedLine(detail)}
@@ -503,7 +547,7 @@ export function ExceptionDrawer({
                 </li>
                 {detail.acknowledgedAt ? (
                   <li>
-                    Acknowledged · you,{" "}
+                    Marked reviewed · you,{" "}
                     {formatInstant(detail.acknowledgedAt, VIEWER_TZ)}
                   </li>
                 ) : null}
@@ -558,9 +602,9 @@ export function ExceptionDrawer({
                       Mark reviewed
                     </Button>
                   ) : null}
-                  {acknowledged ? (
+                  {acknowledged || active ? (
                     <Button
-                      variant="primary"
+                      variant={acknowledged ? "primary" : "secondary"}
                       disabled={acting || !online}
                       onClick={() => {
                         if (!showResolveForm && !acknowledged) {
@@ -570,7 +614,7 @@ export function ExceptionDrawer({
                         void resolve();
                       }}
                     >
-                      Resolve
+                      {!acknowledged && !showResolveForm ? "Resolve…" : "Resolve"}
                     </Button>
                   ) : null}
                   {showNudge && (active || acknowledged) ? (
@@ -625,8 +669,9 @@ export function ExceptionDrawer({
                   />
                 </div>
                 <p className="drawer-helper">
-                  <em>Mark reviewed</em> keeps this on the list as seen.{" "}
-                  <em>Resolve</em> closes it. The original log isn&apos;t changed.
+                  <em>Mark reviewed</em> moves {clientName.split(" ")[0]} to Reviewed
+                  until every item is resolved. <em>Resolve</em> closes this item.
+                  The original log isn&apos;t changed.
                 </p>
                 <Link
                   className="link"
