@@ -199,3 +199,9 @@ Supersedes the order in §5 items 3–10 (user feedback 21 Oct). Mockups: `mocku
 4. **Meals list:** one row per meal in time order. The **active meal** is the next unlogged meal whose time is closest to the device time (window −60 min … next meal's time; overdue unlogged meals win). It is the only expanded card: foods, kcal and macros, **Log** (= eaten as planned) and *Something different*. Every other meal is a collapsed row with time, name, short foods, kcal and a status chip: **Logged**, **Logged · changed**, **Skipped**, **Upcoming**, or **Waiting to send** (offline). Tapping a row expands it in place and collapses the previous one.
 5. The dark "Next up" hero card is removed; no single meal may take more than about a quarter of the first screen.
 6. "This week", "From your coach" and the check-in card stay below the meals list (unchanged rules).
+
+### Revision · 21 Oct 2026 (round 2; supersedes items 1–3 above)
+1. **Week strip** below the title: Mon–Sun chips with date and status dot, today selected, past days tappable (read-only except late-loggable items, with a "Viewing Fri 16 Oct · read-only" banner), ‹ › and swipe for earlier weeks. Mockup 04b shows a past day.
+2. **Rings:** concentric, kcal outer then protein, carbs, fat, steps innermost (only when connected), on the left; legend on the right, one row per ring: colour dot, label, done / goal ("460 / 1,850 kcal"). No %.
+3. **Workout card** is the highlight: navy filled card with white text and a full-width **Start workout** button; done and rest-day variants keep the same card.
+

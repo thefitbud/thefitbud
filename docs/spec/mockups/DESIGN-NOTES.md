@@ -380,3 +380,9 @@ Canonical style stays frames 01–30. Every change below re-uses the existing to
 - Steps target: should coaches set it in Expectations (as drawn) or should steps stay goal-free as TR-25 says?
 - Today drops the dedicated "Next up" hero; a due check-in or overdue workout now surfaces only in its own card. Confirm that's acceptable versus the old hero priority order.
 - In-person set (IP-07) still shows a separate *Configure* tab; align to Plan › Coaching setup when IP is promoted.
+
+### Today revision · 21 Oct 2026 (feedback round 2)
+Applies to 04 iOS/Android, 04b (new), 96, 97, 104, 113, 115, 29, 29b.
+- **Week strip at the top** under the "Today" title: Mon–Sun day chips with dates and a status dot (filled = all done, ring = some open), today highlighted (indigo), past days tappable, ‹ › and swipe for earlier weeks (› disabled on the current week). 04b shows a past day (Fri 16 Oct) selected: read-only banner "Viewing Fri 16 Oct · read-only. You can still log 1 item.", the open lunch keeps a *Log late* action (D23), title becomes the weekday and the strip keeps "Today" marked.
+- **Concentric rings left, legend right.** kcal outer → protein → carbs → fat → steps innermost (only when connected). Legend rows: colour dot, label, done / goal. Steps row hidden when not connected (113, 115). Footer "N of M meals logged · Diet ›".
+- **Workout card is the highlight:** navy filled card, white text, time pill, session name, exercises, white full-width **Start workout**. Done → "Done" pill + *View summary*; rest day → "Rest day · Recovery is part of the plan". Meals list below unchanged (next meal expanded, others collapsed).

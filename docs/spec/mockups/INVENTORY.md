@@ -8,7 +8,7 @@ Frames: iOS 393 × 852 @3x, Android 412 × 915 @2.625x, web 1440 × 900 @2x, iPa
 
 **Removed in the redesign** (see `AUDIT.md`, `DESIGN-NOTES.md` § Redesign 21 Oct): 02b, 02c (rejected Home variants), 04-trainee-today-ios-full (old Today), 27b-trainee-dynamic-island (replaced by 27b expanded Live Activity), 94-trainee-steps-today (separate Today layout; steps are a ring on Today).
 
-**Same screen, several frames** (states, not alternatives): Plan tab = 150 (Plans), 200 (filtered), 151 (empty), 148/149 (Coaching setup draft/active). Onboarding page = 144 (Invited) → 147 (Joined, intake pending) → 146 (Intake submitted); 145 is the revoke confirm on 144. Today = 04 (iOS/Android) with states 96, 97, 104, 113, 115 and banners 29/29b. Live Activity = 27 (collapsed) ↔ 27b (expanded, touch and hold) and 27c (collapsed, resting); 27-android is the Android equivalent of the expanded state.
+**Same screen, several frames** (states, not alternatives): Plan tab = 150 (Plans), 200 (filtered), 151 (empty), 148/149 (Coaching setup draft/active). Onboarding page = 144 (Invited) → 147 (Joined, intake pending) → 146 (Intake submitted); 145 is the revoke confirm on 144. Today = 04 (iOS/Android), 04b (past day selected) with states 96, 97, 104, 113, 115 and banners 29/29b. Live Activity = 27 (collapsed) ↔ 27b (expanded, touch and hold) and 27c (collapsed, resting); 27-android is the Android equivalent of the expanded state.
 
 | # | Spec | Screen | State | Entry point (route / surface) | Reached from | PNG |
 |---|---|---|---|---|---|---|
@@ -20,6 +20,7 @@ Frames: iOS 393 × 852 @3x, Android 412 × 915 @2.625x, web 1440 × 900 @2x, iPa
 | 03b | TW-09 | Client workspace · Overview | Previous week (week 5), Wed 7 Oct selected | /clients/:rid Overview | Clients row › Open; Home row › client name; ⌘K | `03b-trainer-web-client-overview-prev-week.png` |
 | 04 | TR-06 canonical | Today | Android | Today tab | App launch; tab bar | `04-trainee-today-android.png` |
 | 04 | TR-06 canonical | Today | rings, workout, meals (next meal expanded) | Today tab | App launch; tab bar | `04-trainee-today-ios.png` |
+| 04b | TR-06 D27 past day | Today | past day selected (Fri), read-only + log late | Today tab | App launch; tab bar | `04b-trainee-today-past-day-ios.png` |
 | 05 | TM-01 | Attention | Android | Attention tab | App launch (coach) | `05-trainer-mobile-attention-android.png` |
 | 05 | TM-01 | Attention | Default | Attention tab | App launch (coach) | `05-trainer-mobile-attention-ios.png` |
 | 06 | TR-01 | Sign in | Password | Sign in | Signed-out launch | `06-trainee-signin-ios.png` |
