@@ -2,7 +2,7 @@
  * Day-by-day simulation of assignments, logs, executions, check-ins, weights and
  * historical exceptions for one persona over a date range (SEED_DESIGN.md §6.3–6.4).
  */
-import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
+import type { PlanContent } from "@fitbud/contracts";
 import {
   mealAdherenceCandidate,
   missedWorkoutCandidate,
