@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mealAssignmentListResponseSchema,
   mealComplianceSummaryResponseSchema,
@@ -17,6 +17,7 @@ import { DEMO_EXTRA_ACCOUNTS } from "./spec-extra.js";
 import { WORKOUT_TEMPLATES } from "./generator/templates/workouts.js";
 import { DIET_TEMPLATES } from "./generator/templates/diets.js";
 import { createMemoryDb } from "../../test-support/memory-db.js";
+import { createDemoSeededDb, prepareDemoSeededDb } from "../../test-support/seeded-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
 
 function testEnv(): Env {
@@ -75,25 +76,21 @@ describe("demo seed", () => {
     Awaited<ReturnType<typeof createMemoryDb>>["sqlite"]["exec"]
   >;
 
+  beforeAll(async () => {
+    await prepareDemoSeededDb(FROZEN_REFERENCE_INSTANT);
+  }, 60_000);
+
   beforeEach(async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(FROZEN_REFERENCE_INSTANT));
-    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    const handle = await createDemoSeededDb(FROZEN_REFERENCE_INSTANT);
     sqliteExec = handle.sqlite.exec.bind(handle.sqlite);
-    const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
-    const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
     refDate = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Kolkata",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     }).format(new Date(FROZEN_REFERENCE_INSTANT));
-    const sql = buildDemoSeedSql({
-      referenceInstant: FROZEN_REFERENCE_INSTANT,
-      passwordHash,
-      libraryIndex,
-    });
-    handle.sqlite.exec(sql);
     db = handle.db;
     close = handle.close;
     setTestDbOverride(db);
@@ -695,16 +692,14 @@ describe("demo seed", () => {
       );
     });
 
-    it("is deterministic for a fixed reference instant", async () => {
-      const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
-      try {
-        const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-        const build = () => buildDemoSeedSql({ referenceInstant: FROZEN_REFERENCE_INSTANT, passwordHash: "x", libraryIndex });
-        expect(build()).toBe(build());
-      } finally {
-        handle.close();
-      }
-    });
+    // Two full seed builds (~3 s idle); explicit limit matches the 30 s hook backstop so a
+    // loaded machine cannot trip the 5 s default. Library ids come from this test's seeded
+    // copy (global library rows are identical to a fresh library seed).
+    it("is deterministic for a fixed reference instant", () => {
+      const libraryIndex = loadDemoLibraryIndex({ exec: sqliteExec });
+      const build = () => buildDemoSeedSql({ referenceInstant: FROZEN_REFERENCE_INSTANT, passwordHash: "x", libraryIndex });
+      expect(build()).toBe(build());
+    }, 30_000);
 
     it("gives Rahul the template library, Priya a copy, Nova nothing", () => {
       const count = (email: string, table: string) =>
