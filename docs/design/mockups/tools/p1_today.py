@@ -44,17 +44,18 @@ S={
  'past':dict(k=1320,p=70,c=190,f=38,w=('Rest day','rs'),m=('4 of 5',''),s=('7,310',''),t='1:10',day=16),
 }
 MEALS=[('6:30 am','Early morning','Soaked almonds · 50 kcal'),('8:30 am','Breakfast','Vegetable poha, curd · 410 kcal'),('1:30 pm','Lunch','Roti, dal tadka, sabzi · 520 kcal'),('5:00 pm','Evening snack','Roasted chana, chai · 220 kcal'),('8:30 pm','Dinner','Paneer bhurji, 2 roti · 610 kcal')]
-def meals(n,past=False):
+def meals(n,past=False,over=None):
     o=''
     for i,(t,a,b) in enumerate(MEALS[:3]):
-        if i<n: c='<span class="chip pos">'+ic('check',14,w=2.2)+'Logged</span>'
+        if over and i in over: c=over[i]
+        elif i<n: c='<span class="chip pos">'+ic('check',14,w=2.2)+'Logged</span>'
         elif past: c='<span class="chip neu">Not logged</span>'
         elif i==n: c='<span class="chip sel">'+ic('clock',14)+'Up next</span>'
         else: c='<span class="chip neu">Later</span>'
         o+=f'<div class="mr"><span class="t">{t}</span><div class="n"><b>{a}</b><span>{b}</span></div>{c}</div>'
     return o
 DAYS=[('Mon',12),('Tue',13),('Wed',14),('Thu',15),('Fri',16),('Sat',17),('Sun',18)]
-def screen(st,os):
+def screen(st,os,pre='',after_wo='',overlay='',cloud=('cloud','All saved'),meal_chips=None,t=None):
     d=S[st];past=st=='past'
     wk='<div class="wk"><a class="ar" href="#" aria-label="Previous week">'+ic('left',18)+'</a>'
     for n,x in DAYS:
@@ -62,7 +63,7 @@ def screen(st,os):
         dot='n' if x>18 else ('o' if x in (14,16) else '')
         wk+=f'<a class="d {cls}" href="#" aria-label="{n} {x} Oct"><span>{"Today" if x==18 and not past else n}</span><b>{x}</b><i class="{dot}"></i></a>'
     wk+='<a class="ar" href="#" style="opacity:.35">'+ic('right',18)+'</a></div>'
-    top=f'<div class="top"><div><div class="eb">{"Fri 16 Oct" if past else "Sun 18 Oct"}</div><h1>{"Fri, 16 Oct" if past else "Today"}</h1></div><div class="row" style="gap:8px"><a class="icb" aria-label="All saved">{ic("cloud")}</a><a class="icb" aria-label="Notifications, 1 unread">{ic("bell")}<span class="d"></span></a></div></div>'
+    top=f'<div class="top"><div><div class="eb">{"Fri 16 Oct" if past else "Sun 18 Oct"}</div><h1>{"Fri, 16 Oct" if past else "Today"}</h1></div><div class="row" style="gap:8px"><a class="icb" aria-label="{cloud[1]}">{ic(cloud[0])}</a><a class="icb" aria-label="Notifications, 1 unread">{ic("bell")}<span class="d"></span></a></div></div>'
     pb=f'<div class="pb">{ic("clock",16)}Fri 16 Oct · you can still log it<a href="#">Back to today</a></div>' if past else ''
     pc=f'<section class="card pc" aria-label="Today\'s food and activity"><div class="pr">{ring(d["k"],1850)}{bars(d["p"],d["c"],d["f"])}</div>{chips(d["w"],d["m"],d["s"])}</section>'
     if st in('rest','past'):
@@ -71,8 +72,9 @@ def screen(st,os):
         wo=f'<div class="wo"><span class="tg">{ic("check",15,w=2.4)}Done · 7:22 pm</span><h2>Lower body B</h2><div class="m">6 of 6 exercises · 52 min</div><a class="btn w" href="#">View summary</a></div>'
     else:
         wo=f'<div class="wo"><span class="tg">{ic("clock",15)}Today · 6:30 pm</span><h2>Lower body B</h2><div class="m">6 exercises · about 50 min · 18 sets</div><a class="btn w" href="#">{ic("play",18)}Start workout</a></div>'
-    n={'empty':0,'partial':2,'done':5,'rest':2,'past':4}[st]
-    ml=f'<div class="sec"><h3>Meals</h3><span>{n} of 5 logged</span></div><div class="ml">{meals(min(n,3),past)}</div>'
-    return page(phone(top+wk+pb+pc+wo+ml,os=os,tab='Today',t=d['t']),extra=X)
-for os in ['ios','android']:
+    n={'empty':0,'partial':2,'done':5,'rest':2,'past':4}.get(st,d.get('n',0))
+    ml=f'<div class="sec"><h3>Meals</h3><span>{n} of 5 logged</span></div><div class="ml">{meals(min(n,3),past,meal_chips)}</div>'
+    return page(phone(pre+top+wk+pb+pc+wo+after_wo+ml,os=os,tab='Today',t=t or d['t'],overlay=overlay),extra=X)
+if __name__=='__main__':
+  for os in ['ios','android']:
     for st in S: save(f'04-trainee-today-{os}-v3-{st}',screen(st,os))

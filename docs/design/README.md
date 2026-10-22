@@ -72,8 +72,8 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 27b | Live Activity | expanded, touch and hold (state 2 of 2) | iOS | [27b-trainee-live-activity-expanded-ios.png](mockups/png/27b-trainee-live-activity-expanded-ios.png) | — | Approved |
 | 27c | Live Activity | collapsed, resting | iOS | [27c-trainee-lock-live-rest-ios.png](mockups/png/27c-trainee-lock-live-rest-ios.png) | — | Approved |
 | 28 | Lock · meal reminder | Open + Snooze | iOS | [28-trainee-lock-meal-push-ios.png](mockups/png/28-trainee-lock-meal-push-ios.png) | [html](mockups/html/28-trainee-lock-meal-push-ios.html) | Approved |
-| 29 | In-app banner | meal over Today | iOS | [29-trainee-inapp-meal-ios.png](mockups/png/29-trainee-inapp-meal-ios.png) | — | Approved · Today behind banner: card per v3 |
-| 29b | In-app banner | coach note over Today | iOS | [29b-trainee-inapp-note-ios.png](mockups/png/29b-trainee-inapp-note-ios.png) | — | Approved · Today behind banner: card per v3 |
+| 29 | In-app banner | meal over v3 Today | iOS | [29-trainee-inapp-meal-v3-ios.png](mockups/png/29-trainee-inapp-meal-v3-ios.png) | [html](mockups/html/29-trainee-inapp-meal-v3-ios.html) | Draft (22 Oct) · on v3 Today |
+| 29b | In-app banner | coach note over v3 Today | iOS | [29b-trainee-inapp-note-v3-ios.png](mockups/png/29b-trainee-inapp-note-v3-ios.png) | [html](mockups/html/29b-trainee-inapp-note-v3-ios.html) | Draft (22 Oct) · on v3 Today |
 | 30 | Lock · reminders | Check-in + note | iOS | [30-trainee-lock-coach-ios.png](mockups/png/30-trainee-lock-coach-ios.png) | [html](mockups/html/30-trainee-lock-coach-ios.html) | Approved |
 | 31 | Exception review sheet | all 3 resolved · Next client | iOS | [31-trainer-mobile-review-sheet-v3-all-resolved-ios.png](mockups/png/31-trainer-mobile-review-sheet-v3-all-resolved-ios.png) | [html](mockups/html/31-trainer-mobile-review-sheet-v3-all-resolved-ios.html) | **Locked** (v3, 21 Oct) |
 | 31 | Exception review sheet | item 1 of 3 | iOS | [31-trainer-mobile-review-sheet-v3-ios.png](mockups/png/31-trainer-mobile-review-sheet-v3-ios.png) | [html](mockups/html/31-trainer-mobile-review-sheet-v3-ios.html) | **Locked** (v3, 21 Oct) |
@@ -140,14 +140,14 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 92 | Request expired | Default | iOS | [92-trainee-reactivation-expired-ios.png](mockups/png/92-trainee-reactivation-expired-ios.png) | — | Approved |
 | 93 | Steps setup | Default | iOS | [93-trainee-steps-setup-ios.png](mockups/png/93-trainee-steps-setup-ios.png) | — | Approved |
 | 95 | Install Health Connect | Default | Android | [95-trainee-steps-health-connect-android.png](mockups/png/95-trainee-steps-health-connect-android.png) | — | Approved |
-| 96 | Today | loading | iOS | [96-trainee-today-loading-ios.png](mockups/png/96-trainee-today-loading-ios.png) | — | Approved · progress card per v3 Option B |
+| 96 | Today | loading skeleton (v3 layout) | iOS | [96-trainee-today-loading-v3-ios.png](mockups/png/96-trainee-today-loading-v3-ios.png) | [html](mockups/html/96-trainee-today-loading-v3-ios.html) | Draft (22 Oct) · on v3 Today |
 | 98 | Notifications | empty | iOS | [98-trainee-notifications-empty-ios.png](mockups/png/98-trainee-notifications-empty-ios.png) | — | Approved |
 | 99 | Workout | skip today sheet over Workout tab | iOS | [99-trainee-workout-not-today-ios.png](mockups/png/99-trainee-workout-not-today-ios.png) | — | Approved |
 | 100 | Check-in sent | Default | iOS | [100-trainee-checkin-sent-ios.png](mockups/png/100-trainee-checkin-sent-ios.png) | — | Approved |
 | 101 | Check-in reviewed with note | Default | iOS | [101-trainee-checkin-reviewed-ios.png](mockups/png/101-trainee-checkin-reviewed-ios.png) | — | Approved |
 | 102 | Diet | couldn't load | iOS | [102-trainee-diet-error-ios.png](mockups/png/102-trainee-diet-error-ios.png) | — | Approved |
 | 103 | Sign in | wrong password | iOS | [103-trainee-signin-error-ios.png](mockups/png/103-trainee-signin-error-ios.png) | — | Approved |
-| 104 | Today | offline (Android) | Android | [104-trainee-today-offline-android.png](mockups/png/104-trainee-today-offline-android.png) | — | Approved · progress card per v3 Option B |
+| 104 | Today | offline, 1 log waiting to send | Android | [104-trainee-today-offline-v3-android.png](mockups/png/104-trainee-today-offline-v3-android.png) | [html](mockups/html/104-trainee-today-offline-v3-android.html) | Draft (22 Oct) · on v3 Today |
 | 105 | Android | Lunch and Snack · Open, Snooze | Android | [105-notif-meal-merged-android.png](mockups/png/105-notif-meal-merged-android.png) | — | Approved |
 | 106 | Lock | Time for Lower body B? · Start, Not today | iOS | [106-notif-workout-reminder-lock-ios.png](mockups/png/106-notif-workout-reminder-lock-ios.png) | — | Approved |
 | 107 | Android | workout reminder | Android | [107-notif-workout-reminder-android.png](mockups/png/107-notif-workout-reminder-android.png) | — | Approved |
@@ -156,9 +156,9 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 110 | Android | check-in can still go in | Android | [110-notif-checkin-late-android.png](mockups/png/110-notif-checkin-late-android.png) | — | Approved |
 | 111 | Lock | Rahul's reminder | iOS | [111-notif-nudge-lock-ios.png](mockups/png/111-notif-nudge-lock-ios.png) | — | Approved |
 | 112 | Lock | plan updated | iOS | [112-notif-plan-lock-ios.png](mockups/png/112-notif-plan-lock-ios.png) | — | Approved |
-| 113 | Today | in-app banner check-in reviewed | iOS | [113-notif-checkin-reviewed-banner-ios.png](mockups/png/113-notif-checkin-reviewed-banner-ios.png) | — | Approved · progress card per v3 Option B |
+| 113 | Today | in-app banner check-in reviewed (rest day) | iOS | [113-notif-checkin-reviewed-banner-v3-ios.png](mockups/png/113-notif-checkin-reviewed-banner-v3-ios.png) | [html](mockups/html/113-notif-checkin-reviewed-banner-v3-ios.html) | Draft (22 Oct) · on v3 Today |
 | 114 | Inbox | coach answered | iOS | [114-notif-answered-inbox-ios.png](mockups/png/114-notif-answered-inbox-ios.png) | — | Approved |
-| 115 | Today | meal reminders paused card | iOS | [115-notif-paused-today-ios.png](mockups/png/115-notif-paused-today-ios.png) | — | Approved · progress card per v3 Option B |
+| 115 | Today | meal reminders paused card | iOS | [115-notif-paused-today-v3-ios.png](mockups/png/115-notif-paused-today-v3-ios.png) | [html](mockups/html/115-notif-paused-today-v3-ios.html) | Draft (22 Oct) · on v3 Today |
 | 116 | Android | 2 notes | Android | [116-notif-notes-merged-android.png](mockups/png/116-notif-notes-merged-android.png) | — | Approved |
 | 117 | Lock | restart coaching | iOS | [117-notif-reactivate-lock-ios.png](mockups/png/117-notif-reactivate-lock-ios.png) | — | Approved |
 | 118 | Lock | coaching ended | iOS | [118-notif-ended-lock-ios.png](mockups/png/118-notif-ended-lock-ios.png) | — | Approved |
