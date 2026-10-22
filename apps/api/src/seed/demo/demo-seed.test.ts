@@ -20,6 +20,9 @@ import { createMemoryDb } from "../../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../../test-support/seeded-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
 import { replenishRollingHorizons } from "../../domain/assignment-schedule.js";
+import { LEGACY_IMPLAUSIBLE_SERVINGS, mealPrescriptionsFor } from "./generator/content.js";
+import { buildPlanChain } from "./generator/plans.js";
+import { PERSONA_CONFIGS } from "./generator/personas.js";
 
 function testEnv(): Env {
   return {
@@ -693,16 +696,14 @@ describe("demo seed", () => {
       );
     });
 
-    it("is deterministic for a fixed reference instant", async () => {
-      const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
-      try {
-        const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-        const build = () => buildDemoSeedSql({ referenceInstant: FROZEN_REFERENCE_INSTANT, passwordHash: "x", libraryIndex });
-        expect(build()).toBe(build());
-      } finally {
-        handle.close();
-      }
-    });
+    // Two full seed builds (~3 s idle); explicit limit matches the 30 s hook backstop so a
+    // loaded machine cannot trip the 5 s default. Library ids come from this test's seeded
+    // copy (global library rows are identical to a fresh library seed).
+    it("is deterministic for a fixed reference instant", () => {
+      const libraryIndex = loadDemoLibraryIndex({ exec: sqliteExec });
+      const build = () => buildDemoSeedSql({ referenceInstant: FROZEN_REFERENCE_INSTANT, passwordHash: "x", libraryIndex });
+      expect(build()).toBe(build());
+    }, 30_000);
 
     it("gives Rahul the template library, Priya a copy, Nova nothing", () => {
       const count = (email: string, table: string) =>
@@ -798,6 +799,107 @@ describe("demo seed", () => {
       } finally {
         errors.mockRestore();
       }
+    });
+
+    // Prescribed meal items as the generator wrote them: plan versions, templates and assignment snapshots.
+    type SeededMeal = { instructions?: string | null; items?: Array<{ serving?: { label: string; unit: string } | null; sourceFoodLibraryItemId?: string | null; sourceServingId?: string | null }> };
+    const seededMeals = (): Array<{ where: string; meal: SeededMeal }> => {
+      const out: Array<{ where: string; meal: SeededMeal }> = [];
+      for (const table of ["plan_versions", "plan_templates"]) {
+        for (const [id, json] of q(`SELECT id, content_json FROM ${table}`)) {
+          const content = JSON.parse(String(json)) as { mealPrescriptions?: SeededMeal[] };
+          for (const meal of content.mealPrescriptions ?? []) out.push({ where: `${table} ${String(id)}`, meal });
+        }
+      }
+      for (const [id, json] of q("SELECT id, meal_prescription_json FROM meal_assignments")) {
+        out.push({ where: `meal_assignments ${String(id)}`, meal: JSON.parse(String(json)) as SeededMeal });
+      }
+      return out;
+    };
+    const QS1_FOODS = ["sprouted-moong-chaat", "tea-black-brewed"];
+    const foodIdsOf = (slugs: string[]) =>
+      new Map(q(`SELECT id, slug FROM food_library_items WHERE ownership = 'global' AND slug IN (${slugs.map((s) => `'${s}'`).join(",")})`).map(([id, slug]) => [String(id), String(slug)]));
+
+    it("never prescribes a plausible = 0 serving beyond the two legacy ones (QS1)", () => {
+      const implausible = new Map(
+        q(`SELECT s.id, f.slug || ' / ' || s.label FROM food_library_servings s JOIN food_library_items f ON f.id = s.food_library_item_id WHERE s.plausible = 0`).map(([id, name]) => [String(id), String(name)]),
+      );
+      const used = new Map<string, number>();
+      let checked = 0;
+      const note = (servingId: string | null | undefined) => {
+        if (!servingId) return;
+        checked += 1;
+        const name = implausible.get(servingId);
+        if (name) used.set(name, (used.get(name) ?? 0) + 1);
+      };
+      for (const { meal } of seededMeals()) for (const item of meal.items ?? []) note(item.sourceServingId);
+      for (const [json] of q("SELECT items_json FROM meal_compliance WHERE items_json IS NOT NULL")) {
+        for (const item of JSON.parse(String(json)) as Array<{ sourceServingId?: string | null }>) note(item.sourceServingId);
+      }
+      expect(checked).toBeGreaterThan(1000);
+      // Only the servings main already used (follow-up to replace them); none on the QS1 foods.
+      expect([...used.keys()].sort()).toEqual(
+        Object.entries(LEGACY_IMPLAUSIBLE_SERVINGS).map(([slug, label]) => `${slug} / ${label}`).sort(),
+      );
+      const touched = foodIdsOf(QS1_FOODS);
+      for (const { where, meal } of seededMeals()) {
+        for (const item of meal.items ?? []) {
+          if (touched.has(String(item.sourceFoodLibraryItemId))) expect(implausible.has(String(item.sourceServingId)), where).toBe(false);
+        }
+      }
+    });
+
+    it("keeps the instruction text in step with the serving for the QS1 foods", () => {
+      const touched = foodIdsOf(QS1_FOODS);
+      let checked = 0;
+      const mismatched: string[] = [];
+      for (const { where, meal } of seededMeals()) {
+        // Only meals where the generator wrote instructions (library-seed templates carry none).
+        if (!meal.instructions) continue;
+        const items = meal.items ?? [];
+        const parts = String(meal.instructions ?? "").split(" · ");
+        items.forEach((item, index) => {
+          if (!touched.has(String(item.sourceFoodLibraryItemId)) || !item.serving) return;
+          checked += 1;
+          // The generator writes one instruction part per item, in order.
+          const part = items.length === parts.length ? (parts[index] ?? "") : "";
+          const ok = item.serving.unit === "g" ? part === item.serving.label : part.includes(item.serving.unit);
+          if (!ok) mismatched.push(`${where}: "${part}" vs ${item.serving.label}`);
+        });
+      }
+      expect(checked).toBeGreaterThan(500);
+      expect(mismatched.slice(0, 5)).toEqual([]);
+    });
+
+    it("caps meal amounts at the contract limit only for the known persona scales (QS1)", () => {
+      const lib = loadDemoLibraryIndex({ exec: sqliteExec });
+      // Catalogue templates at scale 1 must already fit; a 150 g gram-only item would fail here.
+      for (const template of DIET_TEMPLATES) {
+        const clamps: string[] = [];
+        mealPrescriptionsFor(lib, template, { workout: null, diet: template.code, idKey: `qs1-${template.code}`, onClamp: (c) => clamps.push(c.slug) });
+        expect(clamps, template.code).toEqual([]);
+      }
+      const clamped = new Map<string, number[]>();
+      for (const cfg of PERSONA_CONFIGS) {
+        const chain = buildPlanChain({ lib, cfg, relId: `qs1-${cfg.email}`, refDate, legacyWindow: false, windowStart: refDate });
+        for (const version of chain) {
+          for (const clamp of version.quantityClamps) {
+            expect(clamp.cappedUnits).toBe(100);
+            expect(clamp.servingLabel).toBe("100 g");
+            const key = `${cfg.email.split("@")[0]} ${clamp.slug}`;
+            clamped.set(key, [...new Set([...(clamped.get(key) ?? []), clamp.requestedGrams])].sort((a, b) => a - b));
+          }
+        }
+      }
+      // Each is a 100 g template item × dietScale > 1; a new entry here means a template or scale grew past the cap.
+      expect(Object.fromEntries([...clamped].sort())).toEqual({
+        "arjun.attention sprouted-moong-chaat": [130],
+        "imran.nightshift sprouted-moong-chaat": [105],
+        "karan.dual tea-black-brewed": [110, 115],
+        "kavya.ended tea-black-brewed": [110],
+        "nikhil.reactivate sprouted-moong-chaat": [110],
+        "rohan.slipping sprouted-moong-chaat": [110],
+      });
     });
 
     it("builds months of history for the generated clients", () => {
