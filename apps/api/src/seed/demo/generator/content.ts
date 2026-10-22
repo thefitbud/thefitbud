@@ -123,6 +123,9 @@ export function workoutDaysFor(
   });
 }
 
+/** Contract max for a calculated item's quantityScaled (100 units). */
+export const MAX_QUANTITY_SCALED = NUTRIENT_SCALE * 100;
+
 /** Grams → library snapshot, preferring a household serving that divides evenly. */
 export function foodByGrams(lib: DemoLibraryIndex, slug: string, grams: number) {
   const entry = lib.foods[slug];
@@ -142,7 +145,10 @@ export function foodByGrams(lib: DemoLibraryIndex, slug: string, grams: number) 
       break;
     }
   }
-  const qtyScaled = Math.max(1, Math.round(bestQty * NUTRIENT_SCALE));
+  // The plan contract (and the plan editor) allow at most 100 units per item, so a
+  // gram-only food tops out at 100 g. Persona dietScale can push a template amount
+  // past that; cap it the way a coach would have to enter it.
+  const qtyScaled = Math.min(MAX_QUANTITY_SCALED, Math.max(1, Math.round(bestQty * NUTRIENT_SCALE)));
   return foodSnapshotFromLibrary(entry.item, best.id, qtyScaled);
 }
 

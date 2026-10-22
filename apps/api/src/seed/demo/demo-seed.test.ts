@@ -4,7 +4,7 @@ import {
   mealComplianceSummaryResponseSchema,
   meDayResponseSchema,
 } from "@fitbud/contracts";
-import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
+import { NUTRIENT_SCALE, planContentSchema, type PlanContent } from "@fitbud/contracts";
 import { demoUuid } from "./ids.js";
 import { hashPassword } from "../../auth/password.js";
 import { app } from "../../index.js";
@@ -19,6 +19,7 @@ import { DIET_TEMPLATES } from "./generator/templates/diets.js";
 import { createMemoryDb } from "../../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../../test-support/seeded-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
+import { replenishRollingHorizons } from "../../domain/assignment-schedule.js";
 
 function testEnv(): Env {
   return {
@@ -751,6 +752,52 @@ describe("demo seed", () => {
       expect(one("SELECT COUNT(*) FROM measurements WHERE type = 'body_weight_kg' AND (value < 40 OR value > 140)")).toBe(0);
       expect(one(`SELECT COUNT(*) FROM meal_compliance WHERE logged_at > '${FROZEN_REFERENCE_INSTANT}'`)).toBe(0);
       expect(one(`SELECT COUNT(*) FROM workout_executions WHERE created_at > '${FROZEN_REFERENCE_INSTANT}'`)).toBe(0);
+    });
+
+    it("keeps every seeded meal quantity inside the plan contract (QS1)", () => {
+      // planContentSchema caps a calculated item's quantityScaled at 100 units; one item over it
+      // made replenishRollingHorizons throw a ZodError on every cron for that client.
+      const max = NUTRIENT_SCALE * 100;
+      const sources: Array<[string, string]> = [
+        ["plan_versions", "SELECT id, content_json FROM plan_versions"],
+        ["plan_templates", "SELECT id, content_json FROM plan_templates"],
+        ["meal_assignments", "SELECT id, meal_prescription_json FROM meal_assignments"],
+      ];
+      const outOfRange: string[] = [];
+      let checked = 0;
+      for (const [table, sql] of sources) {
+        for (const [id, json] of q(sql)) {
+          for (const match of String(json).matchAll(/"quantityScaled":(-?[\d.e+]+)/g)) {
+            checked += 1;
+            const value = Number(match[1]);
+            if (!Number.isInteger(value) || value <= 0 || value > max) outOfRange.push(`${table} ${String(id)}: ${match[1]}`);
+          }
+        }
+      }
+      expect(checked).toBeGreaterThan(1000);
+      expect(outOfRange).toEqual([]);
+      for (const [id, json] of q("SELECT id, content_json FROM plan_versions")) {
+        const parsed = planContentSchema.safeParse(JSON.parse(String(json)));
+        expect(parsed.success, `plan_versions ${String(id)}: ${parsed.success ? "" : parsed.error.message}`).toBe(true);
+      }
+    });
+
+    it("lets the cron replenish every seeded client without a schema error (QS1)", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const watched = ["imran.nightshift@demo.fitbud.test", "rajesh.senior@demo.fitbud.test"].map(relOf);
+        const horizon = (rel: string) =>
+          String(q(`SELECT MAX(local_date) FROM meal_assignments WHERE coaching_relationship_id = '${rel}'`)[0]?.[0] ?? "");
+        const before = watched.map(horizon);
+        const later = new Date(Date.parse(FROZEN_REFERENCE_INSTANT) + 3 * 86_400_000).toISOString();
+        const result = await replenishRollingHorizons(db, later);
+        const failures = errors.mock.calls.map((c) => String(c[0])).filter((line) => line.includes("replenishment failed"));
+        expect(failures).toEqual([]);
+        expect(result.mealsCreated).toBeGreaterThan(0);
+        watched.forEach((rel, i) => expect(horizon(rel) > (before[i] ?? ""), rel).toBe(true));
+      } finally {
+        errors.mockRestore();
+      }
     });
 
     it("builds months of history for the generated clients", () => {
