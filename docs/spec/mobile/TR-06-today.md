@@ -191,7 +191,7 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 ## Design amendment · 21 Oct 2026 (mockups redesign)
 
-Supersedes the order in §5 items 3–10 (user feedback 21 Oct). Mockups: `mockups/png/04-trainee-today-ios.png`, `04-trainee-today-android.png`; states 96, 97, 104, 113, 115; banners 29, 29b.
+Supersedes the order in §5 items 3–10 (user feedback 21 Oct). Mockups (updated 22 Oct): `docs/design/mockups/png/04-trainee-today-{ios,android}-v3-{empty,partial,done,rest,past}.png` (Option B progress card, locked 21 Oct; replaces the concentric-rings card, the old 04/04b/97 frames and the ring-card crop); states 96, 104, 113, 115; banners 29, 29b (those state frames still show the old ring card, so build the card per the v3 frames).
 
 1. **Top bar:** "Today" with the date and ‹ › day navigation (D27 behaviour unchanged: past days read-only except late-loggable items, future days preview), sync icon, bell.
 2. **Progress rings first:** kcal, Protein, Carbs, Fat (logged vs assigned, neutral ring tokens, overflow arc, no %), plus a **Steps** ring only when Health Connect / HealthKit is connected with permission (hidden otherwise). Footer: "2 of 5 meals logged" and *Diet ›*.
