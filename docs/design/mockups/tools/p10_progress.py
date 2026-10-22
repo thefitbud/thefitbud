@@ -7,7 +7,7 @@ X='''.mc .pill2,.mc .seg2 a{white-space:nowrap}.mc svg{flex:none}
 .ml2{background:#fff;border:1px solid var(--border);border-radius:16px;padding:10px;overflow:hidden;display:flex;flex-direction:column;gap:2px}
 .ml2 .g{font-size:11px;font-weight:700;color:var(--ink-500);letter-spacing:.4px;padding:6px 10px 1px}
 .own{margin-top:auto;border-top:1px solid var(--border);padding:8px 10px 2px;font-size:12px;color:var(--ink-500);line-height:1.4}.own b{display:block;font-size:11px;letter-spacing:.4px;margin-bottom:2px}.own a{color:var(--indigo);font-weight:600;display:inline;min-height:0;padding:0}
-.ml2 a{display:flex;align-items:center;gap:10px;min-height:37px;flex:none;padding:0 10px;border-radius:10px;font-size:14px;color:var(--ink-700)}.ml2 a .v{margin-left:auto;font-size:13px;color:var(--navy);font-weight:600}.ml2 a .v.m{color:var(--ink-500);font-weight:400}
+.ml2 a{display:flex;align-items:center;gap:10px;min-height:35px;flex:none;padding:0 10px;border-radius:10px;font-size:14px;color:var(--ink-700)}.ml2 a .v{margin-left:auto;font-size:13px;color:var(--navy);font-weight:600}.ml2 a .v.m{color:var(--ink-500);font-weight:400}
 .ml2 a.on{background:var(--lavender);color:var(--indigo);font-weight:700}.ml2 a.on2{background:#E0F2F1;color:#0E7490;font-weight:700}.ml2 a .ck{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border-strong);flex:none;display:flex;align-items:center;justify-content:center}.ml2 a .ck.on{background:var(--indigo);border-color:var(--indigo);color:#fff}
 .mc{background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;min-height:0;overflow:hidden}
 .st{display:flex;gap:28px}.st div span{display:block;font-size:12px;color:var(--ink-500)}.st div b{font-size:20px;color:var(--navy);font-weight:600}.st div small{font-size:12px;color:var(--ink-500);margin-left:4px}
@@ -53,8 +53,8 @@ XL=[(0,'Mon 24 Aug'),(11,'Fri 4 Sep'),(25,'Fri 18 Sep'),(39,'Fri 2 Oct'),(53,'Fr
 WT=[89.1,88.9,88.4,88.3,87.9,87.6,None,86.9,86.4]
 SLEEP=[None,3,3,2,3,2,None,3,2];EN=[None,4,3,3,3,2,None,3,3];STR=[None,2,3,3,3,4,None,3,3]
 def mlist(on='Weight',on2=None,checks=None,ro=False,vals=None,own=True):
-    V=vals or {'Weight':'86.4 kg','Waist':'94 cm','Hip':'102 cm','Chest':'101 cm','Arm':'34 cm','Sleep quality':'2 of 5','Energy':'3 of 5','Stress':'3 of 5','Workouts completed':'21 of 26','Exercise progress':'6 lifts','Progress photos':'4 dates'}
-    G=[('WEIGHT · STANDARD QUESTION',['Weight']),('BODY MEASUREMENTS · PICKED IN FORM',['Waist','Hip','Chest','Arm']),('RATINGS 1 TO 5 · STANDARD',['Energy','Sleep quality','Stress']),('WORKOUTS · FROM LOGS',['Workouts completed','Exercise progress']),('PHOTOS · STANDARD QUESTION',['Progress photos'])]
+    V=vals or {'Weight':'86.4 kg','Waist':'94 cm','Hip':'102 cm','Chest':'101 cm','Arm':'34 cm','Sleep quality':'2 of 5','Energy':'3 of 5','Stress':'3 of 5','Hunger':'3 of 5','Workouts completed':'21 of 26','Exercise progress':'6 lifts','Progress photos':'4 dates'}
+    G=[('WEIGHT · STANDARD QUESTION',['Weight']),('BODY MEASUREMENTS · PICKED IN FORM',['Waist','Hip','Chest','Arm']),('RATINGS 1 TO 5 · STANDARD',['Energy','Sleep quality','Stress','Hunger']),('WORKOUTS · FROM LOGS',['Workouts completed','Exercise progress']),('PHOTOS · STANDARD QUESTION',['Progress photos'])]
     o='<nav class="ml2" aria-label="What to chart">'
     for g,items in G:
         o+=f'<div class="g">{g}</div>'
@@ -80,10 +80,10 @@ save('160-trainer-web-progress-v3-web',P('rohan',tools()+f'<div class="pg">{mlis
 # 160b check-in answers: Sleep + Energy + Stress (1–5), multi-select
 ch=svgchart([{'pts':list(zip(D,SLEEP)),'c':'#4527C6'},{'pts':list(zip(D,EN)),'c':'#0E7490','dash':'6 4'},{'pts':list(zip(D,STR)),'c':'#B45309','dash':'2 4'}],53,1,5,[1,2,3,4,5],h=320,xl=XL)
 lg='<div class="lg"><span><i style="background:#4527C6"></i>Sleep quality · solid</span><span><i style="background:#0E7490"></i>Energy · dashed</span><span><i style="background:#B45309"></i>Stress · dotted</span></div>'
-main=f'''<section class="mc"><div class="row"><div><b class="b" style="font-size:18px">Ratings, 1 to 5</b><div class="src2">{ic("clip",13)}Standard rating questions · Rohan\'s own answers · 1 very low, 5 very high · ratings, not hours or device data</div></div></div>{lg}{svgchart.__doc__ or ""}{ch}
+main=f'''<section class="mc"><div class="row"><div><b class="b" style="font-size:18px">Ratings, 1 to 5</b><div class="src2">{ic("clip",13)}Standard rating questions (energy, sleep quality, stress, hunger) · Rohan\'s own answers · 1 very low, 5 very high · ratings, not hours or device data</div></div></div>{lg}{svgchart.__doc__ or ""}{ch}
 <div class="st"><div><span>Sleep quality · latest</span><b>2</b><small>of 5 · Fri 16 Oct</small></div><div><span>Energy · latest</span><b>3</b><small>of 5</small></div><div><span>Stress · latest</span><b>3</b><small>of 5</small></div><div><span>Answered</span><b>7</b><small>of 8 weekly check-ins</small></div></div>
 <div class="lab">OWN QUESTION, NOT CHARTED · "WHAT WAS HARD?" · FRI 16 OCT</div><p class="sm">"Bit tired, work is hectic. Back to back client calls till 9 pm, skipped Thursday."</p></section>'''
-save('160b-trainer-web-progress-checkin-answers-v3-web',P('rohan',tools()+f'<div class="pg">{mlist("Sleep quality",checks=(["Sleep quality","Energy","Stress"],["Energy","Sleep quality","Stress"]))}{main}</div>'))
+save('160b-trainer-web-progress-checkin-answers-v3-web',P('rohan',tools()+f'<div class="pg">{mlist("Sleep quality",checks=(["Sleep quality","Energy","Stress"],["Energy","Sleep quality","Stress","Hunger"]))}{main}</div>'))
 # 160c measurements multi-line
 MD=[0,18,32,46];WA=[98,96.5,95,94];HI=[104,103,102.5,102];CHS=[102,101.5,101,101]
 ch=svgchart([{'pts':list(zip(MD,WA)),'c':'#4527C6'},{'pts':list(zip(MD,HI)),'c':'#0E7490','dash':'6 4'},{'pts':list(zip(MD,CHS)),'c':'#B45309','dash':'2 4'}],53,92,106,[92,94,96,98,100,102,104,106],h=330,yl=lambda v:f'{v} cm',xl=XL)
@@ -114,23 +114,23 @@ main=f'''<section class="mc"><div class="row"><div><b class="b" style="font-size
 <div class="row"><span class="lab">PICK TWO DATES TO COMPARE</span><span class="sp"></span><span class="xs muted">4 dates with photos · Fri 2 Oct has front only</span></div><div class="row" style="gap:10px">{strip}</div></section>'''
 save('160f-trainer-web-progress-photos-v3-web',P('rohan',tools('All')+f'<div class="pg">{mlist("Progress photos")}{main}</div>'))
 # 160g sparse: 2 points (intake + first check-in)
-SV={'Weight':'71.8 kg','Waist':'1 entry','Hip':'No entries','Chest':'No entries','Arm':'No entries','Sleep quality':'4 of 5','Energy':'3 of 5','Stress':'2 of 5','Workouts completed':'5 of 6','Exercise progress':'3 lifts','Progress photos':'No entries'}
+SV={'Weight':'71.8 kg','Waist':'1 entry','Hip':'No entries','Chest':'No entries','Arm':'No entries','Sleep quality':'4 of 5','Energy':'3 of 5','Stress':'2 of 5','Hunger':'2 of 5','Workouts completed':'5 of 6','Exercise progress':'3 lifts','Progress photos':'No entries'}
 ch=svgchart([{'pts':[(0,72.4),(13,71.8)],'c':'#4527C6'}],53,70,74,[70,71,72,73,74],yl=lambda v:f'{v} kg',xl=[(0,'Mon 5 Oct'),(13,'Sun 18 Oct'),(53,'Sun 29 Nov')],h=300)
 main=f'''<section class="mc"><div class="row"><div><b class="b" style="font-size:18px">Weight</b><div class="src2">{ic("clip",13)}1 from intake, 1 from check-in</div></div></div><div class="st"><div><span>Intake · Mon 5 Oct</span><b>72.4 kg</b></div><div><span>Latest · Sun 18 Oct</span><b>71.8 kg</b></div><div><span>Entries</span><b>2</b></div></div>{ch}
 <div class="ro">{ic("chart",16)}Two weigh-ins so far. The trend line gets useful after a few more weekly check-ins.</div></section>'''
 save('160g-trainer-web-progress-sparse-v3-web',P('ishita',tools('All')+f'<div class="pg">{mlist(vals=SV)}{main}</div>'))
 # 161 empty: no data yet
-EV={k:'No entries' for k in ['Weight','Waist','Hip','Chest','Arm','Energy','Sleep quality','Stress','Workouts completed','Exercise progress','Progress photos']}
+EV={k:'No entries' for k in ['Weight','Waist','Hip','Chest','Arm','Energy','Sleep quality','Stress','Hunger','Workouts completed','Exercise progress','Progress photos']}
 emp=f'''<section class="mc" style="align-items:center;justify-content:center;text-align:center;padding:60px"><span class="av" style="width:64px;height:64px;border-radius:32px;background:var(--lavender);color:var(--indigo)">{ic("chart",28)}</span><h2 style="font-size:20px;color:var(--navy);font-weight:600;margin-top:14px">No progress data yet</h2><p class="sm muted" style="max-width:460px">Charts follow the standard questions in her check-in form: weight, the measurements you picked, ratings and photos. Her first weekly check-in opens Sun 25 Oct. Workout progress appears after she logs her first workout.</p><div class="row" style="gap:8px;margin-top:6px"><a class="btn o sm">Open check-in settings</a><a class="btn s sm">See her check-in form</a></div></section>'''
 save('161-trainer-web-progress-empty-v3-web',P('priya',tools('All')+f'<div class="pg">{mlist(vals=EV)}{emp}</div>',count=0))
 # 160h ended client read-only
 KD=[0,14,28,42,56,70,84,89];KW=[68.2,67.6,67.1,66.8,66.2,65.8,65.4,65.1]
 ch=svgchart([{'pts':list(zip(KD,KW)),'c':'#4527C6'}],89,64,69,[64,65,66,67,68,69],yl=lambda v:f'{v} kg',xl=[(0,'Mon 6 Jul'),(28,'Mon 3 Aug'),(56,'Mon 31 Aug'),(89,'Sat 3 Oct')],h=330)
-KV={'Weight':'65.1 kg','Waist':'78 cm','Hip':'96 cm','Chest':'88 cm','Arm':'27 cm','Sleep quality':'4 of 5','Energy':'4 of 5','Stress':'2 of 5','Workouts completed':'41 of 52','Exercise progress':'5 lifts','Progress photos':'6 dates'}
+KV={'Weight':'65.1 kg','Waist':'78 cm','Hip':'96 cm','Chest':'88 cm','Arm':'27 cm','Sleep quality':'4 of 5','Energy':'4 of 5','Stress':'2 of 5','Hunger':'3 of 5','Workouts completed':'41 of 52','Exercise progress':'5 lifts','Progress photos':'6 dates'}
 main=f'''<section class="mc"><div class="row"><div><b class="b" style="font-size:18px">Weight</b><div class="src2">{ic("clip",13)}Coached period Mon 6 Jul – Sat 3 Oct · 8 entries</div></div></div><div class="st"><div><span>Start</span><b>68.2 kg</b></div><div><span>Last · Fri 2 Oct</span><b>65.1 kg</b></div><div><span>Change</span><b>−3.1 kg</b></div></div>{ch}</section>'''
 save('160h-trainer-web-progress-ended-v3-web',P('kavya',f'<div class="ro">{ic("lock",16)}Coaching with Kavya ended Sat 3 Oct. Her progress is read-only and stays here for your records.</div>'+tools('All').replace("Rohan","Kavya")+f'<div class="pg">{mlist(vals=KV,own=False)}{main}</div>',count=0))
 # 160i loading
 def sk(w,h,e=''): return f'<div class="sk" style="width:{w};height:{h}px;{e}"></div>'
-skl='<nav class="ml2" aria-busy="true">'+''.join(sk('60%',10,'margin:12px 10px 6px')+''.join(f'<div class="row" style="min-height:44px;padding:0 10px">{sk("50%",12)}<span class="sp"></span>{sk("50px",12)}</div>' for _ in range(n)) for n in (1,4,3,2,1))+'</nav>'
+skl='<nav class="ml2" aria-busy="true">'+''.join(sk('60%',10,'margin:12px 10px 6px')+''.join(f'<div class="row" style="min-height:44px;padding:0 10px">{sk("50%",12)}<span class="sp"></span>{sk("50px",12)}</div>' for _ in range(n)) for n in (1,4,4,2,1))+'</nav>'
 skm=f'<section class="mc" aria-busy="true" aria-label="Loading progress">{sk("180px",18)}{sk("320px",12)}<div class="row" style="gap:28px">'+''.join(f'<div>{sk("90px",10)}{sk("70px",20,"margin-top:6px")}</div>' for _ in range(4))+f'</div><div class="sk" style="height:300px;border-radius:14px;background:linear-gradient(180deg,#F3F2F8,#ECEBF3)"></div>{sk("100%",12)}{sk("100%",12)}{sk("70%",12)}</section>'
 save('160i-trainer-web-progress-loading-v3-web',P('rohan',tools()+f'<div class="pg">{skl}{skm}</div>'))

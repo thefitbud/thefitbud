@@ -32,8 +32,8 @@ def q(icon,name,meta,on=False,own=False,chip=''):
     return f'<div class="q {"on" if on else ""}"><span class="gp">{ic("grip",16)}</span><span class="qi {"o" if own else ""}">{ic(icon,16)}</span><div class="t"><b>{name}</b><span>{meta}</span></div>{chip}<a class="mo" aria-label="More for {name}">{ic("more",18)}</a></div>'
 CH='<span class="chip sel" style="height:24px">'+ic("chart",12)+'Charted</span>'
 def canvas(stress_added=False):
-    std=q('user','Weight','number, kg · required',chip=CH)+q('chart','Body measurements','waist, hip, chest, arm · cm · optional',on=True,chip=CH)+q('camera','Progress photos','front, side, back · optional',chip=CH)+q('chart','Energy','rating 1 to 5 · required',chip=CH)+q('moon','Sleep quality','rating 1 to 5 · how well you slept, not hours',chip=CH)+q('chart','Stress','rating 1 to 5 · optional',chip=CH)
-    sug=f'<div class="sug"><span class="xs muted" style="font-weight:600">Suggested, not in this form yet</span><a>{ic("plus",14)}Hunger, 1 to 5</a></div>'
+    std=q('user','Weight','number, kg · required',chip=CH)+q('chart','Body measurements','waist, hip, chest, arm · cm · optional',on=True,chip=CH)+q('camera','Progress photos','front, side, back · optional',chip=CH)+q('chart','Energy','rating 1 to 5 · required',chip=CH)+q('moon','Sleep quality','rating 1 to 5 · how well you slept, not hours',chip=CH)+q('chart','Stress','rating 1 to 5 · optional',chip=CH)+q('utensils','Hunger','rating 1 to 5 · optional',chip=CH)
+    sug=''  # removed standard questions reappear here as "+ add" chips; all 8 are in this form
     own=q('msg','What went well this week?','long text',own=True)+q('msg','What was hard?','long text',own=True)+q('alert','Anything hurting?','long text · shows first in review',own=True)
     return f'''<div class="cv"><div class="gh"><b>STANDARD QUESTIONS</b><span>Charted in Progress, same wording for every client</span></div>{std}{sug}
 <div class="gh" style="margin-top:10px"><b>YOUR OWN QUESTIONS</b><span>Shown in check-in review. Not charted.</span></div>{own}<a class="addq">{ic("plus",16)}Add your own question</a></div>'''

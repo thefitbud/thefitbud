@@ -356,8 +356,7 @@ Trainer web reuses the 01/03 shell (240 px sidebar), workspace header and tabs. 
 3. TR-17 says skipped reminders aren't saved, while Snooze resends; frames assume a snoozed reminder resends once and a skipped one is not stored. Confirm.
 4. Reminder line shows one workout reminder at 8:15 pm (spec: 1 a day) where MD2 mentioned "2 reminders". Which count is right?
 5. Ended clients: MD1 dec. 5 shows no actions on mobile, but web TW-30 offers Reactivate. Is Reactivate web-only?
-6. Reminder responsiveness drawer (181) suggests a better reminder time. Is a suggestion acceptable, or should FitBud only show the numbers?
-7. Steps frames (93–95) are drawn behind steps_enabled (off). Keep them in the MVP handoff or move them to P2?
+6. Steps frames (93–95) are drawn behind steps_enabled (off). Keep them in the MVP handoff or move them to P2?
 
 ---
 
@@ -379,10 +378,9 @@ Canonical style stays frames 01–30. Every change below re-uses the existing to
 **Small calls made without asking:** steps ring uses a coach target (8,000) because a ring needs a denominator; the iPad overview (192) uses a compact week strip instead of the full 03 card; the Plans sub-tab keeps *Adjust plan* as the single primary action.
 
 **Open questions (change behaviour or scope)**
-- Per-client Expectations driving Attention/Critical thresholds is new behaviour (thresholds are global today) – needs product sign-off and API (`configurations` + exception engine).
+*Resolved 22 Oct and removed: 181 reminder-time suggestion (dropped, numbers only); per-client flag thresholds (out of current scope, kept as 149-ref); IP-07 Configure tab (now Plan › Coaching setup, standard tabs). See DECISIONS-21OCT.md › 22 Oct.*
 - Steps target: should coaches set it in Expectations (as drawn) or should steps stay goal-free as TR-25 says?
 - Today drops the dedicated "Next up" hero; a due check-in or overdue workout now surfaces only in its own card. Confirm that's acceptable versus the old hero priority order.
-- In-person set (IP-07) still shows a separate *Configure* tab; align to Plan › Coaching setup when IP is promoted.
 
 ### Today revision · 21 Oct 2026 (feedback round 2)
 > **Superseded 21 Oct by v3 Option B** (kcal ring + macro bars + Workout/Meals/Steps chips). The concentric rings below are no longer the design; 04, 04b, 97 and the ring-card crop were removed. 96, 104, 113, 115, 29, 29b remain as state references; build their progress card per the v3 frames.
@@ -418,23 +416,23 @@ Generators: `mockups/tools/p7_today_states.py` (Today states), `p8_home_panel.py
 
 **Coaching setup (148, 149, IP-07).** Accordion with summaries; Basics → **Starting point** (start weight, diet preference); Subscription removed. A blue pointer line at the top links to Client settings. Hybrid/in-person clients get a **Coaching mode** section (mode cards, usual place, slot, group).
 
-### Data gaps found (for Firoz) · updated in round 2
+### Data gaps (updated 22 Oct after Firoz's decisions; see DECISIONS-21OCT.md › 22 Oct)
 - Body measurements: the coach picks them in the **standard Measurements question** (round 2, below), so every value has a type and Progress can chart it.
-- Sleep, energy, stress (and hunger) are **standard 1–5 rating questions**, charted as ratings, never hours or device data (TW-25 §5, TW-25.6).
-- Set loads are text (`actual_load_label`). Decision (round 2): **parse at chart time** and make new logs clean with the keypad (below). TW-18 says "no strength charts (deferred)", so 160e is still a spec change for Firoz to confirm.
-- **Payments are a confirmed non-goal.** Payment records in Client settings (209/209b, 211/211b, IP-08) are tracking only: "Payment record", Paid / Unpaid, method, date. No collect, pay, invoice or "remind to pay" actions anywhere. Packages count sessions only. These still need plain record fields (amount, status, method, date) in the schema.
+- Energy, sleep quality, stress and hunger are **standard 1–5 rating questions**, charted as ratings, never hours or device data (TW-25 §5, TW-25.6).
+- Set loads are text (`actual_load_label`): **parsed at chart time**, new logs kept numeric by the keypad (below). **Strength charts are in this version** (locked 22 Oct; overrides TW-18 "deferred"). Backend: derived `load_kg` / `load_kind` (implementation note below).
+- **Payments are a confirmed non-goal.** Payment records in Client settings (209/209b, 211/211b, IP-08) are tracking only: "Payment record", Paid / Unpaid, method, date. No collect, pay, invoice or "remind to pay" actions anywhere. Packages count sessions only. Record fields (amount, status, method, date) are locked as a later backend change.
 - Pause coaching isn't in any spec, so Client settings shows only End coaching / Reactivate.
 
 ## 22 Oct round 2 · standard check-in questions, clean set logs, payment records
 Generators: `tools/p14_checkin_forms.py` (171, 171b, 14, 14c), `tools/p15_workout_entry.py` (11, 11b rest timer, 11c); `p10_progress.py` and `p11_client_settings.py` updated.
 
-**Standard questions (171).** The check-in form builder has two groups. *Standard questions* have fixed wording and a "Charted" chip: Weight (number, kg), Body measurements, Progress photos (front, side, back), and 1–5 ratings: Energy, Sleep quality ("how well you slept, not hours"), Stress. Hunger 1–5 is offered as a suggestion chip (it is in the TW-25 base form). Missing standard questions appear as "+ add" suggestion chips. *Your own questions* are free (the 6 base field types); they show in check-in review and are listed, not charted, in Progress. The builder is web only (no trainer mobile building); the right column is a live client preview (TW-25.4).
+**Standard questions (171).** The check-in form builder has two groups. *Standard questions* have fixed wording and a "Charted" chip: Weight (number, kg), Body measurements, Progress photos (front, side, back), and 1–5 ratings: Energy, Sleep quality ("how well you slept, not hours"), Stress, Hunger (all standard and charted, locked 22 Oct). If the coach removes a standard question it reappears as a "+ add" suggestion chip. *Your own questions* are free (the 6 base field types); they show in check-in review and are listed, not charted, in Progress. The builder is web only (no trainer mobile building); the right column is a live client preview (TW-25.4).
 
-**Measurements question (171b).** One question; the coach picks which to collect from a fixed list, each with a how-to-measure hint: Waist (at the navel), Hip (widest part), Chest (nipple line), Arm (mid upper arm, relaxed), Thigh (widest part, standing), Neck (below the Adam's apple), Calf (widest part). Arm, thigh and calf have One / Left & right. Unit cm or inches, saved and charted in cm. **Body fat is left out**: TW-25 lists only weight, waist, hip, chest and custom, and a body-fat value reads like a % score, so it stays out unless Firoz adds it to the spec. TW-25 also mentions a "custom metric with unit": in this design a custom measurement is an own question and is **not charted** (spec change to confirm). Each value creates a typed measurement record (decision E).
+**Measurements question (171b).** One question; the coach picks which to collect from a fixed list, each with a how-to-measure hint: Waist (at the navel), Hip (widest part), Chest (nipple line), Arm (mid upper arm, relaxed), Thigh (widest part, standing), Neck (below the Adam's apple), Calf (widest part). Arm, thigh and calf have One / Left & right. Unit cm or inches, saved and charted in cm. **Body fat is left out**: TW-25 lists only weight, waist, hip, chest and custom, and a body-fat value reads like a % score, so it stays out unless Firoz adds it to the spec. TW-25 also mentions a "custom metric with unit": in this design a custom measurement is an own question and is **not charted** (locked 22 Oct). Each value creates a typed measurement record (decision E).
 
 **Trainee check-in (14, 14c).** Step 1 "Body and photos": weight stepper with last value, then only the measurements the coach picked, each with hint, last value and a number field (decimal keypad with Previous / Next / Done). Measurements are optional unless the coach made them required. Photos follow.
 
-**Progress (160 set).** The metric list mirrors the form: Weight · Body measurements (the picked ones only) · Ratings 1 to 5 · Workouts from logs · Photos, then a "Your own questions · not charted" footer linking to Check-ins. Ratings use a fixed 1–5 axis with "1 very low, 5 very high". Own-question answers can be quoted under a chart but are labelled "own question, not charted".
+**Progress (160 set).** The metric list mirrors the form: Weight · Body measurements (the picked ones only) · Ratings 1 to 5 (Energy, Sleep quality, Stress, Hunger) · Workouts from logs · Photos, then a "Your own questions · not charted" footer linking to Check-ins. Ratings use a fixed 1–5 axis with "1 very low, 5 very high". Own-question answers can be quoted under a chart but are labelled "own question, not charted".
 
 **Strength from logs (160e, 11, 11c).**
 - *Chart time:* read the first number in `actual_load_label` with its unit: "22.5", "22.5 kg" → kg; "50 lb" → converted to kg; "BW", "bodyweight" → bodyweight set, charted by reps; anything else ("RPE 8", "red band", "light") is **not charted** and counted: "2 sets not charted · See sets".

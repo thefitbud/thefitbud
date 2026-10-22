@@ -29,7 +29,7 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 - **149:** the new 149 (targets only) is the primary version; the old one with the "Raises a flag when" column is kept as `149-…-ref` (Reference, future scope).
 
 ### 22 Oct round 2 (drafts)
-- **Check-in forms have standard questions** (171, 171b): Weight, Body measurements (coach picks which from waist, hip, chest, arm, thigh, neck, calf), Progress photos, and 1 to 5 ratings (Energy, Sleep quality, Stress; Hunger suggested). Standard questions are charted in Progress; own questions are shown in check-in review only. No form building on trainer mobile.
+- **Check-in forms have standard questions** (171, 171b): Weight, Body measurements (coach picks which from waist, hip, chest, arm, thigh, neck, calf), Progress photos, and 1 to 5 ratings (Energy, Sleep quality, Stress, Hunger; all standard and charted, locked 22 Oct, see [DECISIONS-21OCT.md](DECISIONS-21OCT.md) › 22 Oct). Standard questions are charted in Progress; own questions are shown in check-in review only. No form building on trainer mobile.
 - **Trainee check-in** (14, 14c) shows only the measurements the coach picked, with last value and a number keypad.
 - **Progress** (160 set, 161) lists exactly the standard questions; ratings on a 1 to 5 axis; own questions listed, not charted.
 - **Workout logging** (11, 11b rest timer, 11c): number keypad with kg default and a Bodyweight toggle. Progress reads kg numbers from logged loads; bodyweight sets chart reps; text loads are left out with a count (160e).
