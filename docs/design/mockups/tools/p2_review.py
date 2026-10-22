@@ -66,26 +66,4 @@ save('31-trainer-mobile-review-sheet-v3-ios',rsheet(0))
 save('31-trainer-mobile-review-sheet-v3-resolved-ios',rsheet(0,resolved=True))
 save('31-trainer-mobile-review-sheet-v3-item2-ios',rsheet(1,state=True))
 save('31-trainer-mobile-review-sheet-v3-all-resolved-ios',rsheet(2,alldone=True))
-# web
-WX=X+'''.wl{flex:1;display:flex;flex-direction:column;gap:16px;min-width:0}.wr2{display:flex;align-items:center;gap:14px;height:60px;padding:0 18px;border-top:1px solid var(--border);font-size:14px}.wr2.sel{background:var(--lavender-50);box-shadow:inset 3px 0 0 var(--indigo)}
-.wr2 b{width:150px;color:var(--navy);font-weight:600}.wr2 .is{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wr2 .s{width:70px;color:var(--ink-500);font-size:13px}
-.panel{width:480px;background:#fff;border-left:1px solid var(--border);display:flex;flex-direction:column;flex:none}
-.ph2{padding:16px 20px;border-bottom:1px solid var(--border)}'''
-def whome(resolved=False):
-    rows=''
-    for j,c in enumerate(CL):
-        a,k,n,i,s,sl,cnt,since=c
-        rows+=f'<div class="wr2 {"sel" if j==0 else ""}"><span class="av {k}" style="width:32px;height:32px">{a}</span><b>{n}</b><span class="is">{i}{f" <span class=cnt>{cnt} open</span>" if cnt>1 else ""}</span><span class="chip {s}">{sl}</span><span class="s">{since}</span><a class="btn s sm" style="height:36px">Review</a></div>'
-    rv=''.join(f'<div class="wr2"><span class="av {k}" style="width:32px;height:32px">{a}</span><b>{n}</b><span class="is">{i}</span><span class="chip neu">Reviewed, still open</span><span class="s" style="width:200px">{m.split(" · ")[1]}</span></div>' for a,k,n,i,m in RV)
-    t,d,kv=EX[0]
-    status=f'<div class="resb" style="margin-top:12px">{ic("check",16,w=2.4)}Resolved by you · just now · Talked to client<a style="margin-left:auto;font-weight:700" href="#">Undo</a></div><a class="btn p" style="width:100%;margin-top:12px">Next item · 2 of 3 {ic("right",16)}</a>' if resolved else f'<div class="row" style="margin-top:16px;gap:8px"><a class="btn o sm">Nudge on WhatsApp…</a><a class="btn s sm">Mark reviewed</a><a class="btn p sm sp">Resolve…</a></div><p class="xs muted" style="margin-top:8px">Mark reviewed moves Rohan to Reviewed. He leaves Home when all 3 items are resolved.</p>'
-    dots=''.join(f'<i class="{"ok" if resolved and j==0 else ("on" if j==0 else "")}" style="width:40px"></i>' for j in range(3))
-    panel=f'''<aside class="panel"><div class="ph2"><div class="row"><span class="av a1">RM</span><div class="col sp"><b class="b" style="font-size:17px">Rohan Mehta</b><span class="xs muted">3 open items · Lose 6 kg · week 6</span></div><div class="stp"><a class="dis">{ic("left",18)}</a><span>1 of 3</span><a>{ic("right",18)}</a></div><a class="icb" style="border:0">{ic("x")}</a></div><div class="dots" style="justify-content:flex-start;margin:12px 0 0">{dots}</div></div>
-    <div style="padding:18px 20px"><span class="chip crit">Critical</span> <span class="xs muted">since 5 d</span><h4 style="font-size:20px;color:var(--navy);margin:10px 0 6px">{t}</h4><p class="sm">{d}</p><div class="kv" style="grid-template-columns:120px 1fr">{"".join(f"<span>{a}</span><span>{b}</span>" for a,b in kv)}</div>{status}
-    <div style="margin-top:22px" class="xs muted">Also open for Rohan</div><div class="lst" style="margin-top:8px"><div class="wr2" style="border-top:0">2 · Missed workout · Thu 15 Oct</div><div class="wr2">3 · Breakfast not logged · Sat 17 Oct</div></div></div></aside>'''
-    body=f'''<div style="display:flex;flex:1;min-height:0"><div class="wbody"><div class="wl"><div><div class="eb">Sun 18 Oct</div><h1 style="font-size:28px">Today</h1></div>
-    <div class="wc"><div class="row" style="padding:14px 18px"><h3 class="b" style="font-size:17px">Needs you</h3><span class="cnt">4</span><span class="sp"></span><span class="xs muted">Review opens the panel · arrows step through each client's items</span></div>{rows}</div>
-    <div class="wc"><div class="row" style="padding:14px 18px"><h3 class="b" style="font-size:17px">Reviewed</h3><span class="cnt" style="background:var(--neu-bg);color:var(--neu)">2</span><span class="sp"></span><span class="xs muted">Leaves when every item is resolved</span></div>{rv}</div></div></div>{panel}</div>'''
-    return page(web('Home',body),1440,900,WX)
-save('02-trainer-web-home-panel-v3-web',whome())
-save('02-trainer-web-home-panel-v3-resolved-web',whome(True))
+# web Home + side panel: see p8_home_panel.py
