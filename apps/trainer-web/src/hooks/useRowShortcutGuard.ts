@@ -6,7 +6,7 @@ import {
 } from "react";
 
 /** Single-key shortcuts are ignored for this long after a drawer closes. */
-export const SHORTCUT_QUIET_MS = 600;
+export const SHORTCUT_QUIET_MS = 1000;
 /** A focus event this soon after a Tab keydown counts as Tab navigation. */
 const TAB_FOCUS_WINDOW_MS = 250;
 
@@ -91,7 +91,14 @@ export function useRowShortcutGuard() {
     (ev: ReactKeyboardEvent<HTMLElement>): boolean => {
       if (ev.repeat) return false;
       if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return false;
-      if (ev.nativeEvent.isComposing || ev.key === "Process") return false;
+      // keyCode 229: Safari / WebKit IME keydowns can report isComposing false.
+      if (
+        ev.nativeEvent.isComposing ||
+        ev.nativeEvent.keyCode === 229 ||
+        ev.key === "Process"
+      ) {
+        return false;
+      }
       if (isEditableTarget(ev.target)) return false;
       if (Date.now() < quietUntilRef.current) return false;
       return armedRef.current;

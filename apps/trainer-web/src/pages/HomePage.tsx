@@ -4,7 +4,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -275,6 +277,10 @@ export function HomePage() {
     undo?: () => void;
   } | null>(null);
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  // HM4 F1: mirror of focusIdx, and a flag that tells the focusIdx effect not
+  // to move focus when the selection followed focus the trainer already moved.
+  const focusIdxRef = useRef(0);
+  const skipRowFocusRef = useRef(false);
   const {
     onGridFocus,
     onGridPointerDown,
@@ -734,7 +740,37 @@ export function HomePage() {
     }
   }
 
+  // HM4 F1: when focus (click, Tab, Shift+Tab) lands inside a row, that row
+  // becomes the selected one, so a / n / o act on the row that has focus.
+  function selectRowFromTarget(target: EventTarget | null) {
+    if (!target || typeof (target as Element).closest !== "function") return;
+    const rowEl = (target as Element).closest('[role="row"]');
+    if (!rowEl) return;
+    const idx = rowRefs.current.indexOf(rowEl as HTMLDivElement);
+    if (idx < 0 || idx >= visibleOpen.length) return;
+    if (idx === focusIdxRef.current) return;
+    focusIdxRef.current = idx;
+    skipRowFocusRef.current = true;
+    setFocusIdx(idx);
+  }
+
+  function onGridFocusIn(ev: ReactFocusEvent<HTMLDivElement>) {
+    selectRowFromTarget(ev.target);
+    onGridFocus();
+  }
+
+  function onGridPointerDownIn(ev: ReactPointerEvent<HTMLDivElement>) {
+    selectRowFromTarget(ev.target);
+    onGridPointerDown();
+  }
+
   useEffect(() => {
+    focusIdxRef.current = focusIdx;
+    if (skipRowFocusRef.current) {
+      // Focus is already inside this row (maybe on its button); keep it there.
+      skipRowFocusRef.current = false;
+      return;
+    }
     rowRefs.current[focusIdx]?.focus();
   }, [focusIdx]);
 
@@ -940,8 +976,8 @@ export function HomePage() {
                 aria-label="Needs attention"
                 tabIndex={0}
                 onKeyDown={onGridKey}
-                onFocus={onGridFocus}
-                onPointerDown={onGridPointerDown}
+                onFocus={onGridFocusIn}
+                onPointerDown={onGridPointerDownIn}
               >
                 {visibleOpen.map((row, idx) => {
                   const { group, primary } = row;

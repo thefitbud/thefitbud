@@ -12,6 +12,10 @@ const ROHAN_REL = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const FARHAN_REL = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const ROHAN_EXC = "11111111-1111-4111-8111-111111111111";
 const FARHAN_EXC = "22222222-2222-4222-8222-222222222222";
+const PRIYA_REL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const PRIYA_EXC = "33333333-3333-4333-8333-333333333333";
+const SANA_REL = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const SANA_EXC = "44444444-4444-4444-8444-444444444444";
 
 const api = vi.hoisted(() => ({
   getAttentionGroups: vi.fn(),
@@ -149,6 +153,8 @@ describe("HomePage row shortcuts guard (HM4)", () => {
       groups: [
         group(ROHAN_REL, "Rohan Mehta", ROHAN_EXC, "critical"),
         group(FARHAN_REL, "Farhan Ali", FARHAN_EXC, "attention"),
+        group(PRIYA_REL, "Priya Nair", PRIYA_EXC, "attention"),
+        group(SANA_REL, "Sana Khan", SANA_EXC, "attention"),
       ],
     });
     api.listCoachAsks.mockResolvedValue({ items: [] });
@@ -246,6 +252,95 @@ describe("HomePage row shortcuts guard (HM4)", () => {
     act(() => row.focus());
     type("o");
     expect(assignSpy).toHaveBeenCalledWith(`/clients/${ROHAN_REL}`);
+  });
+
+  it("click on row 3 then 'a' acknowledges row 3, not the last keyboard row", async () => {
+    await renderHome("/");
+    expect(rows()[2]!.textContent).toContain("Priya Nair");
+    const name = screen.getByText("Priya Nair");
+    fireEvent.pointerDown(name);
+    act(() => rows()[2]!.focus());
+    expect(rows()[2]!.className).toContain("is-focused");
+    expect(document.activeElement).toBe(rows()[2]);
+    type("a");
+    advance(5000);
+    expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
+    expect(api.acknowledgeException.mock.calls[0]?.[0]).toBe(PRIYA_EXC);
+  });
+
+  it("Shift+Tab onto row 3's More actions button then 'a' acknowledges row 3", async () => {
+    await renderHome("/");
+    const more = screen.getByRole("button", { name: "More actions for Priya Nair" });
+    fireEvent.keyDown(document.body, { key: "Tab", shiftKey: true });
+    act(() => more.focus());
+    // Selection follows focus without pulling focus off the button.
+    expect(document.activeElement).toBe(more);
+    expect(rows()[2]!.className).toContain("is-focused");
+    type("a");
+    advance(5000);
+    expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
+    expect(api.acknowledgeException.mock.calls[0]?.[0]).toBe(PRIYA_EXC);
+  });
+
+  it("j/k still move the selection and focus from a clicked row", async () => {
+    await renderHome("/");
+    fireEvent.pointerDown(screen.getByText("Farhan Ali"));
+    act(() => rows()[1]!.focus());
+    type("j");
+    expect(document.activeElement).toBe(rows()[2]);
+    type("j");
+    expect(document.activeElement).toBe(rows()[3]);
+    type("k");
+    expect(document.activeElement).toBe(rows()[2]);
+    type("o");
+    expect(assignSpy).toHaveBeenCalledWith(`/clients/${PRIYA_REL}`);
+  });
+
+  it("closing a drawer opened from row 3 restores focus to row 3, unarmed", async () => {
+    await renderHome("/");
+    const review = rows()[2]!.querySelector("button")!;
+    fireEvent.pointerDown(review);
+    act(() => review.focus());
+    await act(async () => {
+      fireEvent.click(review);
+    });
+    await closeExceptionDrawer();
+    expect(document.activeElement).toBe(rows()[2]);
+    advance(1000);
+    type("ano");
+    noActionTaken();
+  });
+
+  it("restored focus never arms, even right after a Tab keydown", async () => {
+    await renderHome(`/?exception=${ROHAN_EXC}`);
+    // A Tab keydown just before the drawer closes (well within 250 ms).
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    advance(100);
+    await closeExceptionDrawer();
+    expect(document.activeElement).toBe(rows()[0]);
+    advance(1000);
+    type("a");
+    noActionTaken();
+  });
+
+  it("the quiet window lasts 1000 ms after a drawer closes", async () => {
+    const grid = await renderHome(`/?exception=${ROHAN_EXC}`);
+    await closeExceptionDrawer();
+    advance(900);
+    tabInto(grid);
+    type("o");
+    expect(assignSpy).not.toHaveBeenCalled();
+    advance(150);
+    type("o");
+    expect(assignSpy).toHaveBeenCalledWith(`/clients/${ROHAN_REL}`);
+  });
+
+  it("ignores Safari IME keydowns (keyCode 229, isComposing false)", async () => {
+    const grid = await renderHome("/");
+    tabInto(grid);
+    type("a", { keyCode: 229 });
+    type("o", { keyCode: 229 });
+    noActionTaken();
   });
 
   it("ignores keys typed in a textarea inside the grid", async () => {
