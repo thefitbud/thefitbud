@@ -11,7 +11,7 @@ Everything design lives here. **One file per screen state; if it is not in `mock
 Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Meals/Steps chips); Active workout (11, 11b) is **light**; Mark reviewed moves the client to a Reviewed section until every item is resolved; every coach gets a Sessions tab (calendar lives inside Sessions on web); client Check-ins tab with an Overdue filter is web/iPad only (trainer-mobile check-in history removed; trainer mobile = quick jobs).
 
 ## Layout
-- `mockups/png/` — 270 frames (42 v3 locked, 41 v3 drafts from the 22 Oct rounds, 187 original incl. 1 reference). iOS 393 × 852, Android 412 × 915 (v3 Android 393 × 852 @2x), web 1440 × 900, iPad 1024 × 768 / 768 × 1024.
+- `mockups/png/` — 270 frames (42 v3 locked, 42 v3 drafts from the 22 Oct rounds, 186 original incl. 1 reference). iOS 393 × 852, Android 412 × 915 (v3 Android 393 × 852 @2x), web 1440 × 900, iPad 1024 × 768 / 768 × 1024.
 - `mockups/html/` — 114 HTML sources, named exactly like their PNG, plus shared `tokens.css`, `m2.css`, `l3.css`, `and6.css`, `fonts/`, `assets/`. Frames without HTML (most of 31–199 and the notification set) were rendered by a retired generator; the PNG is the source.
 - `mockups/compare/` — contact sheets of v3 screens; `P7`–`P11` are the 22 Oct round and `P12`–`P15` the 22 Oct round 2 (before vs after, old frames taken from git).
 - `mockups/tools/` — v3 generators (`p1…p15_*.py` on `fb.py`; client workspace frames on `cw.py`), `compare.py` (before/after grids), `render.mjs` (re-renders `*-v3*` only), `sheet.py` (contact sheets), `check.mjs` (banned strings). Run from `docs/design/mockups/`: `node tools/check.mjs`.
@@ -32,7 +32,7 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 - **Check-in forms have standard questions** (171, 171b): Weight, Body measurements (coach picks which from waist, hip, chest, arm, thigh, neck, calf), Progress photos, and 1 to 5 ratings (Energy, Sleep quality, Stress; Hunger suggested). Standard questions are charted in Progress; own questions are shown in check-in review only. No form building on trainer mobile.
 - **Trainee check-in** (14, 14c) shows only the measurements the coach picked, with last value and a number keypad.
 - **Progress** (160 set, 161) lists exactly the standard questions; ratings on a 1 to 5 axis; own questions listed, not charted.
-- **Workout logging** (11, 11c): number keypad with kg default and a Bodyweight toggle. Progress reads kg numbers from logged loads; bodyweight sets chart reps; text loads are left out with a count (160e).
+- **Workout logging** (11, 11b rest timer, 11c): number keypad with kg default and a Bodyweight toggle. Progress reads kg numbers from logged loads; bodyweight sets chart reps; text loads are left out with a count (160e).
 - **Payments are a non-goal:** 209/209b, 211/211b, IP-08 show payment records for tracking only (no collect, pay or invoice actions).
 
 ## Screen index
@@ -71,7 +71,7 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 10b | Workout day | Detail | iOS | [10b-trainee-workout-day-ios.png](mockups/png/10b-trainee-workout-day-ios.png) | [html](mockups/html/10b-trainee-workout-day-ios.html) | Approved |
 | 11 | Active workout | set entry · kg keypad | iOS | [11-trainee-active-workout-v3-ios.png](mockups/png/11-trainee-active-workout-v3-ios.png) | [html](mockups/html/11-trainee-active-workout-v3-ios.html) | Draft (22 Oct, round 2) · number keypad, kg default, Bodyweight toggle |
 | 11c | Active workout | set entry · Bodyweight (reps only) | iOS | [11c-trainee-active-workout-bodyweight-v3-ios.png](mockups/png/11c-trainee-active-workout-bodyweight-v3-ios.png) | [html](mockups/html/11c-trainee-active-workout-bodyweight-v3-ios.html) | Draft (22 Oct, round 2) |
-| 11b | Active workout | Rest timer | iOS | [11b-trainee-active-workout-rest-ios.png](mockups/png/11b-trainee-active-workout-rest-ios.png) | [html](mockups/html/11b-trainee-active-workout-rest-ios.html) | Approved |
+| 11b | Active workout | Rest timer | iOS | [11b-trainee-active-workout-rest-v3-ios.png](mockups/png/11b-trainee-active-workout-rest-v3-ios.png) | [html](mockups/html/11b-trainee-active-workout-rest-v3-ios.html) | Draft (22 Oct, round 2) · light rest card, matches 11/11c |
 | 12 | Workout summary | Done | iOS | [12-trainee-workout-summary-ios.png](mockups/png/12-trainee-workout-summary-ios.png) | [html](mockups/html/12-trainee-workout-summary-ios.html) | Approved |
 | 13 | Progress | Default | iOS | [13-trainee-progress-ios.png](mockups/png/13-trainee-progress-ios.png) | [html](mockups/html/13-trainee-progress-ios.html) | Approved |
 | 14 | Check-in | Step 1 · weight, picked measurements, photos | iOS | [14-trainee-check-in-v3-ios.png](mockups/png/14-trainee-check-in-v3-ios.png) | [html](mockups/html/14-trainee-check-in-v3-ios.html) | Draft (22 Oct, round 2) · measurements = the ones the coach picked in the form |

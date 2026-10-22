@@ -426,7 +426,7 @@ Generators: `mockups/tools/p7_today_states.py` (Today states), `p8_home_panel.py
 - Pause coaching isn't in any spec, so Client settings shows only End coaching / Reactivate.
 
 ## 22 Oct round 2 · standard check-in questions, clean set logs, payment records
-Generators: `tools/p14_checkin_forms.py` (171, 171b, 14, 14c), `tools/p15_workout_entry.py` (11, 11c); `p10_progress.py` and `p11_client_settings.py` updated.
+Generators: `tools/p14_checkin_forms.py` (171, 171b, 14, 14c), `tools/p15_workout_entry.py` (11, 11b rest timer, 11c); `p10_progress.py` and `p11_client_settings.py` updated.
 
 **Standard questions (171).** The check-in form builder has two groups. *Standard questions* have fixed wording and a "Charted" chip: Weight (number, kg), Body measurements, Progress photos (front, side, back), and 1–5 ratings: Energy, Sleep quality ("how well you slept, not hours"), Stress. Hunger 1–5 is offered as a suggestion chip (it is in the TW-25 base form). Missing standard questions appear as "+ add" suggestion chips. *Your own questions* are free (the 6 base field types); they show in check-in review and are listed, not charted, in Progress. The builder is web only (no trainer mobile building); the right column is a live client preview (TW-25.4).
 
