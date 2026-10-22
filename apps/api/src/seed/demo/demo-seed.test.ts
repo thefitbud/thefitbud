@@ -692,16 +692,14 @@ describe("demo seed", () => {
       );
     });
 
-    it("is deterministic for a fixed reference instant", async () => {
-      const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
-      try {
-        const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-        const build = () => buildDemoSeedSql({ referenceInstant: FROZEN_REFERENCE_INSTANT, passwordHash: "x", libraryIndex });
-        expect(build()).toBe(build());
-      } finally {
-        handle.close();
-      }
-    });
+    // Two full seed builds (~3 s idle); explicit limit matches the 30 s hook backstop so a
+    // loaded machine cannot trip the 5 s default. Library ids come from this test's seeded
+    // copy (global library rows are identical to a fresh library seed).
+    it("is deterministic for a fixed reference instant", () => {
+      const libraryIndex = loadDemoLibraryIndex({ exec: sqliteExec });
+      const build = () => buildDemoSeedSql({ referenceInstant: FROZEN_REFERENCE_INSTANT, passwordHash: "x", libraryIndex });
+      expect(build()).toBe(build());
+    }, 30_000);
 
     it("gives Rahul the template library, Priya a copy, Nova nothing", () => {
       const count = (email: string, table: string) =>
