@@ -33,8 +33,8 @@ def wrows(flt=None,ro=False):
 def head(name='Arjun Kapoor',ini='AK',meta='Build strength · week 6 · Every Sunday check-in',ended=False):
     chips='<span class="chip neu">Ended Sat 3 Oct</span>' if ended else '<span class="chip pos">Active</span>'
     acts='' if ended else f'<a class="btn o sm">{ic("msg",16)}Message on WhatsApp</a><a class="btn p sm">{ic("plus",16)}Assign check-in</a>'
-    tabs=''.join(f'<a class="{"on" if t=="Check-ins" else ""}">{t}{" <span class=cnt>2</span>" if t=="Check-ins" and not ended else ""}</a>' for t in ['Overview','Plan','Activity','Progress','Sessions','Check-ins','History'])
-    return f'<div class="wsh"><div class="row"><span class="av a5" style="width:52px;height:52px">{ini}</span><div class="sp"><div class="row" style="gap:8px"><b class="b" style="font-size:24px">{name}</b>{chips}</div><div class="sm muted">{meta}</div></div>{acts}</div><div class="tabs">{tabs}</div></div>'
+    tabs=''.join(f'<a class="{"on" if t=="Check-ins" else ""}">{t}{" <span class=cnt>2</span>" if t=="Check-ins" and not ended else ""}</a>' for t in ['Overview','Plan','Activity','Progress','Check-ins','History'])
+    return f'<div class="wsh"><div class="row"><span class="av a5" style="width:52px;height:52px">{ini}</span><div class="sp"><div class="row" style="gap:8px"><b class="b" style="font-size:24px">{name}</b>{chips}</div><div class="sm muted">{meta}</div></div>{acts}<a class="icb" style="border-radius:14px" aria-label="More for this client">{ic("more")}</a></div><div class="tabs">{tabs}</div></div>'
 def summ(ended=False):
     if ended: return f'<div class="ro">{ic("alert",16)}Coaching with Kavya ended Sat 3 Oct. Her check-ins are read-only.</div>'
     return f'''<div class="sum"><div><span>Cadence</span><b>Every Sunday · Weekly check-in</b></div><div><span>Next check-in</span><b>Sun 25 Oct</b></div><div><span>Check-in call</span><b style="color:#0E7490">Tue 20 Oct, 8:00 pm</b></div><div><span>This month</span><b>2 of 4 submitted</b></div></div>'''
