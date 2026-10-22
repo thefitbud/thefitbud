@@ -147,6 +147,38 @@ export function auditSeedTimestamps(
   return { findings, scannedColumns, unscopedTables };
 }
 
+export type OrderViolation = { table: string; rowKey: string; earlier: string; later: string; earlierValue: string; laterValue: string };
+
+/**
+ * Seeded rows where `earlier` is after `later` (both set). With no pairs given it checks
+ * created_at <= updated_at on every seeded table that has both columns.
+ */
+export function auditTimestampOrder(
+  db: SqlJsCompatDatabase,
+  options: { baseRowKeys: Map<string, Set<string>>; pairs?: Array<{ table: string; earlier: string; later: string }> },
+): { violations: OrderViolation[]; checkedTables: string[] } {
+  const pairs = options.pairs
+    ?? userTables(db)
+      .filter((table) => {
+        const columns = query(db, `select name from pragma_table_info('${table}')`).map((r) => String(r[0]));
+        return columns.includes("created_at") && columns.includes("updated_at");
+      })
+      .map((table) => ({ table, earlier: "created_at", later: "updated_at" }));
+  const violations: OrderViolation[] = [];
+  for (const { table, earlier, later } of pairs) {
+    const base = options.baseRowKeys.get(table);
+    const e = `t.${ident(earlier)}`, l = `t.${ident(later)}`;
+    const rows = query(
+      db,
+      `select ${pkExpr(db, table)}, ${e}, ${l} from ${ident(table)} t where ${e} is not null and ${l} is not null and julianday(${e}) > julianday(${l})`,
+    ).filter((r) => !base?.has(String(r[0])));
+    for (const [rowKey, ev, lv] of rows) {
+      violations.push({ table, rowKey: String(rowKey), earlier, later, earlierValue: String(ev), laterValue: String(lv) });
+    }
+  }
+  return { violations, checkedTables: [...new Set(pairs.map((p) => p.table))] };
+}
+
 /** One line per (kind, table.column): count plus the latest offending example. */
 export function summarizeFindings(findings: TimestampFinding[]): string[] {
   const groups = new Map<string, TimestampFinding[]>();
