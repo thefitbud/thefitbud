@@ -1,139 +1,115 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, expect, it, afterEach } from "vitest";
-import { useEffect, useRef } from "react";
-import { act, render, cleanup } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { CoachAsk } from "@fitbud/contracts";
 
-/**
- * Test that focus initialization happens only once on mount, not on
- * every onClose change. This was causing focus theft when the parent
- * re-rendered with a new onClose callback every ~4s during polling.
- */
-describe("Drawer focus behavior pattern", () => {
+const ASK_ID = "11111111-1111-4111-8111-111111111111";
+const REL_ID = "22222222-2222-4222-8222-222222222222";
+
+const api = vi.hoisted(() => ({
+  listCoachAsks: vi.fn(),
+  answerCoachAsk: vi.fn(),
+  getClientWorkspace: vi.fn(),
+}));
+
+vi.mock("../lib/stage1-api", () => ({
+  stage1Api: {
+    listCoachAsks: api.listCoachAsks,
+    answerCoachAsk: api.answerCoachAsk,
+  },
+}));
+vi.mock("../lib/api", () => ({
+  apiClient: { getClientWorkspace: api.getClientWorkspace },
+}));
+
+import { CoachAskDrawer } from "./CoachAskDrawer";
+
+const openAsk: CoachAsk = {
+  id: ASK_ID,
+  relationshipId: REL_ID,
+  itemType: "meal_assignment",
+  itemId: "33333333-3333-4333-8333-333333333333",
+  topic: "swap",
+  status: "open",
+  askCount: 1,
+  askedAt: "2026-10-22T08:00:00.000Z",
+  lastAskedAt: "2026-10-22T08:00:00.000Z",
+  itemLabel: "Lunch",
+  itemDate: "2026-10-22",
+};
+
+async function renderDrawer(onClose: () => void) {
+  const utils = render(
+    <CoachAskDrawer askId={ASK_ID} clientName="Rohan" onClose={onClose} />,
+  );
+  // Wait for the ask to load and the note field to appear.
+  const note = await screen.findByRole("textbox");
+  return { ...utils, note: note as HTMLTextAreaElement };
+}
+
+describe("CoachAskDrawer focus (HM1)", () => {
+  beforeEach(() => {
+    api.listCoachAsks.mockResolvedValue({ items: [openAsk] });
+    api.answerCoachAsk.mockResolvedValue({});
+    api.getClientWorkspace.mockResolvedValue({
+      header: { traineeDisplayName: "Rohan Mehta", clientWhatsappE164: null },
+    });
+  });
   afterEach(() => {
     cleanup();
+    vi.clearAllMocks();
   });
 
-  it("focus effect with empty deps does not re-run on prop changes", async () => {
-    const focusCalls: number[] = [];
-    
-    function TestDrawer({ onClose }: { onClose: () => void }) {
-      const closeRef = useRef<HTMLButtonElement>(null);
-      
-      // This is the pattern we're using in the fix
-      useEffect(() => {
-        closeRef.current?.focus();
-        focusCalls.push(Date.now());
-      }, []); // Empty deps = runs only on mount
-      
-      // Separate effect for keyboard handler that depends on onClose
-      useEffect(() => {
-        function onKey(ev: KeyboardEvent) {
-          if (ev.key === "Escape") {
-            onClose();
-          }
-        }
-        document.addEventListener("keydown", onKey);
-        return () => document.removeEventListener("keydown", onKey);
-      }, [onClose]);
-      
-      return (
-        <div>
-          <button ref={closeRef} data-testid="close">X</button>
-          <textarea data-testid="note" />
-        </div>
-      );
-    }
-
-    const { getByTestId, rerender } = render(
-      <TestDrawer onClose={() => console.log("close 1")} />
+  it("focuses the Close (X) button when it opens", async () => {
+    await renderDrawer(() => undefined);
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Close" }),
     );
-    
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 10));
-    });
-    
-    expect(focusCalls.length).toBe(1);
-    
-    // Focus the textarea
-    const textarea = getByTestId("note");
-    act(() => {
-      textarea.focus();
-    });
-    
-    expect(document.activeElement).toBe(textarea);
-    
-    // Re-render with new onClose (simulating parent re-render)
-    rerender(<TestDrawer onClose={() => console.log("close 2")} />);
-    
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 10));
-    });
-    
-    // Focus should still be on textarea
-    expect(document.activeElement).toBe(textarea);
-    // Focus effect should not have run again
-    expect(focusCalls.length).toBe(1);
   });
-  
-  it("focus effect WITH onClose dep would re-run (anti-pattern)", async () => {
-    const focusCalls: number[] = [];
-    
-    function BadDrawer({ onClose }: { onClose: () => void }) {
-      const closeRef = useRef<HTMLButtonElement>(null);
-      
-      // This is the OLD buggy pattern that causes focus theft
-      useEffect(() => {
-        closeRef.current?.focus();
-        focusCalls.push(Date.now());
-        
-        function onKey(ev: KeyboardEvent) {
-          if (ev.key === "Escape") {
-            onClose();
-          }
-        }
-        document.addEventListener("keydown", onKey);
-        return () => document.removeEventListener("keydown", onKey);
-      }, [onClose]); // onClose dependency causes re-run
-      
-      return (
-        <div>
-          <button ref={closeRef} data-testid="bad-close">X</button>
-          <textarea data-testid="bad-note" />
-        </div>
-      );
-    }
 
-    const { getByTestId, rerender } = render(
-      <BadDrawer onClose={() => console.log("close 1")} />
+  it("keeps focus in the note when the parent re-renders with a new onClose", async () => {
+    const { note, rerender } = await renderDrawer(() => undefined);
+    act(() => note.focus());
+    fireEvent.change(note, { target: { value: "Swap rice for roti" } });
+    expect(document.activeElement).toBe(note);
+
+    // Simulate three 4 s Home polls, each passing a fresh onClose.
+    for (let i = 0; i < 3; i += 1) {
+      rerender(
+        <CoachAskDrawer askId={ASK_ID} clientName="Rohan" onClose={() => undefined} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(document.activeElement).toBe(note);
+    }
+    expect(note.value).toBe("Swap rice for roti");
+  });
+
+  it("calls the latest onClose on Escape", async () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const { rerender } = await renderDrawer(first);
+    rerender(<CoachAskDrawer askId={ASK_ID} clientName="Rohan" onClose={latest} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(latest).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it("calls onClose from the X and after Mark answered saves", async () => {
+    const onClose = vi.fn();
+    await renderDrawer(onClose);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark answered" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
+    expect(api.answerCoachAsk).toHaveBeenCalledWith(
+      ASK_ID,
+      { note: null, visibleToClient: false },
+      expect.any(String),
     );
-    
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 10));
-    });
-    
-    expect(focusCalls.length).toBe(1);
-    
-    // Focus the textarea
-    const textarea = getByTestId("bad-note");
-    act(() => {
-      textarea.focus();
-    });
-    
-    expect(document.activeElement).toBe(textarea);
-    
-    // Re-render with new onClose
-    rerender(<BadDrawer onClose={() => console.log("close 2")} />);
-    
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 10));
-    });
-    
-    // With the buggy pattern, focus would be stolen back to the close button
-    const closeButton = getByTestId("bad-close");
-    expect(document.activeElement).toBe(closeButton);
-    // And the focus effect ran again
-    expect(focusCalls.length).toBe(2);
   });
 });
