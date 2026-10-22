@@ -5,6 +5,6 @@ import { sweepStaleTestDirs } from "./tmp-sweep.js";
 export default function setup(): void {
   const { removed } = sweepStaleTestDirs();
   if (removed.length > 0) {
-    console.log(`[api tests] removed ${removed.length} stale seeded-DB temp dir(s)`);
+    console.log(`[api tests] removed ${removed.length} stale seeded-DB temp dir(s):\n  ${removed.join("\n  ")}`);
   }
 }
