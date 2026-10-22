@@ -4,7 +4,8 @@ import { afterAll } from "vitest";
 // only files that seed should load the demo seed builder).
 const SEED_CLEANUP_KEY = "__fitbudReleaseDemoSeededDbs";
 
-// Runs once after each test file: removes that file's demo-seed template files.
+// Runs once after each test file: removes that file's demo-seed templates and any seeded
+// copies its tests left open.
 afterAll(async () => {
   const g = globalThis as typeof globalThis & { [SEED_CLEANUP_KEY]?: () => Promise<void> };
   const release = g[SEED_CLEANUP_KEY];

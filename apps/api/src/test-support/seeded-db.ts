@@ -16,14 +16,20 @@ import { hashPassword } from "../auth/password.js";
 import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
-import { createMemoryDb, type MemoryDbHandle, openMemoryDbCopy } from "./memory-db.js";
+import {
+  closeOpenMemoryDbCopies,
+  createMemoryDb,
+  type MemoryDbHandle,
+  openMemoryDbCopy,
+} from "./memory-db.js";
 
 const templates = new Map<string, Promise<string>>();
 let templateDir: string | undefined;
 
 function ensureTemplateDir(): string {
   if (!templateDir) {
-    templateDir = mkdtempSync(join(tmpdir(), "fitbud-demo-seed-"));
+    // The pid in the name lets the startup sweep (tmp-sweep.ts) tell live dirs from leftovers.
+    templateDir = mkdtempSync(join(tmpdir(), `fitbud-demo-seed-${process.pid}-`));
     // test-support/vitest-setup.ts calls this after the test file (without importing
     // this module, so files that never seed do not pay for loading the seed builder).
     (globalThis as SeedCleanupGlobal)[SEED_CLEANUP_KEY] = releaseDemoSeededDbs;
@@ -36,9 +42,13 @@ export type SeedCleanupGlobal = typeof globalThis & {
   [SEED_CLEANUP_KEY]?: () => Promise<void>;
 };
 
-/** Deletes this file's templates (~60 MB each). Called after each test file. */
+/**
+ * Deletes this file's templates and any seeded copies a test left open (~60 MB each).
+ * Called after each test file. Interrupted runs are cleaned by the startup sweep.
+ */
 export async function releaseDemoSeededDbs(): Promise<void> {
   await Promise.allSettled(templates.values());
+  closeOpenMemoryDbCopies();
   templates.clear();
   if (templateDir) {
     rmSync(templateDir, { recursive: true, force: true });
