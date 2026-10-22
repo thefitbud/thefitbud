@@ -5,6 +5,7 @@ import { demoUuid } from "./ids.js";
 import { createMemoryDb, type MemoryDbHandle } from "../../test-support/memory-db.js";
 import {
   auditSeedTimestamps,
+  auditTimestampOrder,
   snapshotRowKeys,
   summarizeFindings,
   type TimestampAudit,
@@ -16,14 +17,32 @@ import {
  * time of day of the reference instant (which local slots have started), so this
  * runs at several instants: the frozen test instant, QA's 21:06Z reset (02:36 IST,
  * just past local midnight), 02:00Z (before Dubai's 07:00 workout slot) and
- * 12:37Z (a long workout session's last sets would land just after now).
+ * 12:37Z (a long workout session's last sets would land just after now), 00:30Z
+ * (an exception acknowledged within hours of detection would land after now) and a
+ * Monday (start of the plan week).
  */
 const REFERENCE_INSTANTS = [
   "2026-10-17T14:30:00.000Z",
   "2026-10-22T21:06:00.000Z",
   "2026-10-22T02:00:00.000Z",
   "2026-10-22T12:37:00.000Z",
+  "2026-10-22T00:30:00.000Z",
+  "2026-10-26T00:30:00.000Z",
 ];
+
+/**
+ * Pre-existing created_at > updated_at rows outside QS2's exception scope, tracked as
+ * follow-ups. Anything else fails the test.
+ *  - plan_templates e9efffa5: a trainer-library template (generator/library-rows.ts)
+ *    whose updated_at offset is older than its created_at offset.
+ *  - checkin_reviews: history.ts's Rohan overlay copies the Friday reply onto his
+ *    latest Sunday review with updated_at = the Friday submission, before that review.
+ */
+const KNOWN_PLAN_TEMPLATE_FOLLOW_UPS = ["e9efffa5-29ac-4846-b1b9-870af8242cb4"];
+const ROHAN_SUNDAY_REVIEW_SQL = `select cr.id from checkin_reviews cr
+  join coaching_relationships r on r.id = cr.coaching_relationship_id
+  where r.trainee_user_id = '${demoUuid("user", "rohan.slipping@demo.fitbud.test")}'
+    and cr.notes = 'Solid effort this week — lock in sleep and we will rebuild training next.'`;
 
 /** Seeded tables that hold user- or trainer-level rows, not relationship activity. */
 const USER_LEVEL_TABLES = new Set([
@@ -51,11 +70,12 @@ const ENDED_RELATIONSHIPS = 2; // Kavya (ended) and Nikhil (reactivation pending
 describe.each(REFERENCE_INSTANTS)("demo seed timestamps at %s", (now) => {
   let handle: MemoryDbHandle;
   let audit: TimestampAudit;
+  let baseRowKeys: Map<string, Set<string>>;
   const q = (sql: string) => handle.sqlite.exec(sql)[0]?.values ?? [];
 
   beforeAll(async () => {
     handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
-    const baseRowKeys = snapshotRowKeys(handle.sqlite);
+    baseRowKeys = snapshotRowKeys(handle.sqlite);
     const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
     handle.sqlite.exec(buildDemoSeedSql({ referenceInstant: now, passwordHash: "qs2-test-hash", libraryIndex }));
     audit = auditSeedTimestamps(handle.sqlite, { now, baseRowKeys });
@@ -108,5 +128,32 @@ describe.each(REFERENCE_INSTANTS)("demo seed timestamps at %s", (now) => {
     expect(n(`select count(*) from reminder_states where paused_until > '${now}'`)).toBeGreaterThan(0);
     expect(n(`select count(*) from reactivation_requests where status = 'pending' and expires_at > '${now}'`)).toBeGreaterThan(0);
     expect(n(`select count(*) from client_invitations where expires_at > '${now}'`)).toBeGreaterThan(0);
+  });
+
+  it("never creates an exception after it was acknowledged or resolved", () => {
+    const { violations } = auditTimestampOrder(handle.sqlite, {
+      baseRowKeys,
+      pairs: [
+        { table: "exceptions", earlier: "created_at", later: "acknowledged_at" },
+        { table: "exceptions", earlier: "created_at", later: "resolved_at" },
+        { table: "exceptions", earlier: "detected_at", later: "acknowledged_at" },
+        { table: "exceptions", earlier: "detected_at", later: "resolved_at" },
+      ],
+    });
+    expect(violations).toEqual([]);
+    // The invariant is checked on real data, not an empty set.
+    expect(Number(q("select count(*) from exceptions where acknowledged_at is not null")[0]?.[0])).toBeGreaterThan(0);
+    expect(Number(q("select count(*) from exceptions where resolved_at is not null")[0]?.[0])).toBeGreaterThan(0);
+  });
+
+  it("never stamps created_at after updated_at", () => {
+    const { violations, checkedTables } = auditTimestampOrder(handle.sqlite, { baseRowKeys });
+    expect(checkedTables).toEqual(expect.arrayContaining(["exceptions", "meal_assignments", "workout_executions", "plans"]));
+    const known: Record<string, string[]> = {
+      plan_templates: KNOWN_PLAN_TEMPLATE_FOLLOW_UPS,
+      checkin_reviews: q(ROHAN_SUNDAY_REVIEW_SQL).map((r) => String(r[0])),
+    };
+    const unexpected = violations.filter((v) => !known[v.table]?.includes(v.rowKey));
+    expect(unexpected.map((v) => `${v.table} ${v.rowKey}: ${v.earlierValue} > ${v.laterValue}`)).toEqual([]);
   });
 });
