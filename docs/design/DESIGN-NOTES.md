@@ -308,7 +308,7 @@ Trainer web reuses the 01/03 shell (240 px sidebar), workspace header and tabs. 
 | 168 | Templates hub | TW-23 §6 | 168-trainer-web-templates-web.png |
 | 169 | Templates · Mine empty | TW-23 §7 | 169-trainer-web-templates-mine-empty-web.png |
 | 170 | Onboarding form builder | TW-24 §5 | 170-trainer-web-intake-form-builder-web.png |
-| 171 | Check-in form builder | TW-25 §5 | 171-trainer-web-checkin-form-builder-web.png |
+| 171 | Check-in form builder | TW-25 §5 | 171-trainer-web-checkin-form-builder-v3-web.png (22 Oct round 2) |
 | 172 | Libraries · Foods + drawer | TW-26 §5 | 172-trainer-web-library-foods-web.png |
 | 173 | Libraries · Exercises | TW-26 §5 | 173-trainer-web-library-exercises-web.png |
 | 174 | Use for client modal | TW-27 Use | 174-trainer-web-template-use-web.png |
@@ -412,15 +412,33 @@ Generators: `mockups/tools/p7_today_states.py` (Today states), `p8_home_panel.py
 
 **Plans (150).** One "current program" card: lavender header with the program name, week n of m and date range, then two parts divided by a dashed rule, each with a WORKOUT / NUTRITION label, its own version/date line, a 7-day strip and Open builder. The versions table stays below, with the column renamed Part.
 
-**Progress (160).** Left metric list grouped by source (Body · from check-ins, Check-in answers · 1 to 5, Workouts · from logs, Photos) with the latest value; multi-select checkboxes where lines share a scale. Main card: title + source line, stat row (start, latest, change, entries), SVG chart (gaps break the line and are labelled "no check-in"), latest entries table. Lines differ by pattern (solid / dashed / dotted), never colour alone. Compare uses two labelled scales and says FitBud doesn't link cause and effect. Neutral wording only: change, no good/bad, no red for gain.
+**Progress (160).** Left metric list grouped by standard check-in question (Weight, Body measurements picked in the form, Ratings 1 to 5, Workouts · from logs, Photos; see round 2) with the latest value; multi-select checkboxes where lines share a scale. Main card: title + source line, stat row (start, latest, change, entries), SVG chart (gaps break the line and are labelled "no check-in"), latest entries table. Lines differ by pattern (solid / dashed / dotted), never colour alone. Compare uses two labelled scales and says FitBud doesn't link cause and effect. Neutral wording only: change, no good/bad, no red for gain.
 
 **Client settings.** Page reached from the header ⋯ menu (Client settings is the first item), not a tab. Left section nav (Basic details · Subscription & package · Coaching relationship) plus a pointer to Plan › Coaching setup. Edits open a 560 px drawer with a sticky Cancel / Save footer; validation shows an error summary at the top, the field error inline, and disables Save. Payment records are plain records ("For your records only. FitBud doesn't take or track payments."). Package card (hybrid / in-person only): sessions dots, used / left, counts-as-used rules, Renew package, low-sessions notice with a WhatsApp draft. Ended clients: grey read-only banner, no Edit buttons, Reactivate stays in the header.
 
 **Coaching setup (148, 149, IP-07).** Accordion with summaries; Basics → **Starting point** (start weight, diet preference); Subscription removed. A blue pointer line at the top links to Client settings. Hybrid/in-person clients get a **Coaching mode** section (mode cards, usual place, slot, group).
 
-### Data gaps found (for Firoz)
-- Measurements have one untyped `other` type, so extra measurements (arm, thigh) can't be charted separately; the picker shows only weight, waist, hip, chest.
-- Sleep, energy and stress exist only as 1–5 answers in the check-in form (`fieldAnswers`), not hours; they show only if the client's form has those questions.
-- Set loads are stored as text labels (`actual_load_label`), so a top-set chart needs a numeric load field. TW-18 also says "no strength charts (deferred)"; 160e is designed on Firoz's request and needs a spec change.
-- Subscription has no amount or payment fields, and Confluence lists payments as a non-goal; payment records and packages follow the 21 Oct decision ("records only") and need new fields.
+### Data gaps found (for Firoz) · updated in round 2
+- Body measurements: the coach picks them in the **standard Measurements question** (round 2, below), so every value has a type and Progress can chart it.
+- Sleep, energy, stress (and hunger) are **standard 1–5 rating questions**, charted as ratings, never hours or device data (TW-25 §5, TW-25.6).
+- Set loads are text (`actual_load_label`). Decision (round 2): **parse at chart time** and make new logs clean with the keypad (below). TW-18 says "no strength charts (deferred)", so 160e is still a spec change for Firoz to confirm.
+- **Payments are a confirmed non-goal.** Payment records in Client settings (209/209b, 211/211b, IP-08) are tracking only: "Payment record", Paid / Unpaid, method, date. No collect, pay, invoice or "remind to pay" actions anywhere. Packages count sessions only. These still need plain record fields (amount, status, method, date) in the schema.
 - Pause coaching isn't in any spec, so Client settings shows only End coaching / Reactivate.
+
+## 22 Oct round 2 · standard check-in questions, clean set logs, payment records
+Generators: `tools/p14_checkin_forms.py` (171, 171b, 14, 14c), `tools/p15_workout_entry.py` (11, 11c); `p10_progress.py` and `p11_client_settings.py` updated.
+
+**Standard questions (171).** The check-in form builder has two groups. *Standard questions* have fixed wording and a "Charted" chip: Weight (number, kg), Body measurements, Progress photos (front, side, back), and 1–5 ratings: Energy, Sleep quality ("how well you slept, not hours"), Stress. Hunger 1–5 is offered as a suggestion chip (it is in the TW-25 base form). Missing standard questions appear as "+ add" suggestion chips. *Your own questions* are free (the 6 base field types); they show in check-in review and are listed, not charted, in Progress. The builder is web only (no trainer mobile building); the right column is a live client preview (TW-25.4).
+
+**Measurements question (171b).** One question; the coach picks which to collect from a fixed list, each with a how-to-measure hint: Waist (at the navel), Hip (widest part), Chest (nipple line), Arm (mid upper arm, relaxed), Thigh (widest part, standing), Neck (below the Adam's apple), Calf (widest part). Arm, thigh and calf have One / Left & right. Unit cm or inches, saved and charted in cm. **Body fat is left out**: TW-25 lists only weight, waist, hip, chest and custom, and a body-fat value reads like a % score, so it stays out unless Firoz adds it to the spec. TW-25 also mentions a "custom metric with unit": in this design a custom measurement is an own question and is **not charted** (spec change to confirm). Each value creates a typed measurement record (decision E).
+
+**Trainee check-in (14, 14c).** Step 1 "Body and photos": weight stepper with last value, then only the measurements the coach picked, each with hint, last value and a number field (decimal keypad with Previous / Next / Done). Measurements are optional unless the coach made them required. Photos follow.
+
+**Progress (160 set).** The metric list mirrors the form: Weight · Body measurements (the picked ones only) · Ratings 1 to 5 · Workouts from logs · Photos, then a "Your own questions · not charted" footer linking to Check-ins. Ratings use a fixed 1–5 axis with "1 very low, 5 very high". Own-question answers can be quoted under a chart but are labelled "own question, not charted".
+
+**Strength from logs (160e, 11, 11c).**
+- *Chart time:* read the first number in `actual_load_label` with its unit: "22.5", "22.5 kg" → kg; "50 lb" → converted to kg; "BW", "bodyweight" → bodyweight set, charted by reps; anything else ("RPE 8", "red band", "light") is **not charted** and counted: "2 sets not charted · See sets".
+- *Logging:* the set entry opens a number keypad with **kg** as default and a **Bodyweight** toggle (light theme, 44 pt keys, −2.5 / +2.5 quick steps, decimal; Bodyweight hides the decimal and logs reps only). Free text can't be typed into the load field, so new logs stay numeric.
+- *Implementation note:* store a derived number next to the label, e.g. `load_kg numeric null` and `load_kind` ('weight' | 'bodyweight' | 'other'). Fill them when a set is saved and backfill old rows with the same parser, so charts don't parse on every read. The label stays as the source of truth for display.
+
+**Payment records (209, 211, IP-08).** Wording: "Payment records · tracking only", "Payment record", status Paid / Unpaid (neutral chip, no red or amber), "Payment frequency" (was "Billing"). The footer says "FitBud doesn't collect payments, send invoices or remind clients to pay." Renew package stays: it renews a session count, not a payment.
