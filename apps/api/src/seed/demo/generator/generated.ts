@@ -2,7 +2,7 @@
  * Per-persona world building: deep pre-window history for the original
  * accounts and the full lifecycle for the 8 generated Rahul clients.
  */
-import { overdueCheckinCandidate } from "@fitbud/core";
+import { formatLocalDate, overdueCheckinCandidate } from "@fitbud/core";
 import { addDaysFromLocalDate, demoUuid, localDayStartIso } from "../ids.js";
 import type { DemoLibraryIndex } from "../personas.js";
 import { DEMO_CHECKIN_FORM_VERSION_ID } from "../personas.js";
@@ -361,7 +361,11 @@ export function addGeneratedPersona(input: WorldInput, cfg: PersonaConfig): void
     rows, lib: input.lib, cfg, relId, planId, chain, traineeId, trainerId, refDate, now, startDate,
     checkinScheduleId: scheduleId, checkinFormVersionId: checkinFormFor(cfg),
   };
-  const lookbackFrom = addDaysFromLocalDate(refDate, -2);
+  // Detection's 3-day lookback starts from the client's own local today
+  // (domain/exceptions.ts detectionWindowStartLocalDate), not the IST refDate:
+  // in the London evening the client is still a civil day behind IST, so an
+  // IST-based start would leave that day uncovered for the first read (QS4).
+  const lookbackFrom = addDaysFromLocalDate(formatLocalDate(new Date(now), cfg.timezone), -2);
   const result = simulateActivity(ctx, { fromDate: startDate, toDate: refDate, assignUntil: addDaysFromLocalDate(refDate, 6), lookbackFrom, checkins: true });
   // SEED_DESIGN §4 distribution: these read on_track / no_recent_data, so the
   // coach has already cleared every lookback item; the rest keep ≤4 open.
