@@ -402,3 +402,25 @@ Structure unchanged (week strip → rings + legend → navy workout → meals). 
 - Workout highlight: navy gradient with a radial glow, a large faint dumbbell watermark, a 52pt icon tile, and a meta row (exercises, minutes, sets). The white pill Start button has a play icon. The "Today's workout" section header was removed (the card has its own time tag).
 - Cards use a 24pt radius and soft, layered shadows instead of borders. Spacing is on an 8pt grid.
 - 2x inspection crop: png/04-trainee-today-ring-card-2x.png (removed 22 Oct with the rings card)
+
+## 22 Oct design round (drafts)
+Generators: `mockups/tools/p7_today_states.py` (Today states), `p8_home_panel.py` (Home side panel), `p9_plans.py` (150), `p10_progress.py` (160/161), `p11_client_settings.py` (03c, 181, 208–212, IP-08), `p13_coaching_setup.py` (148, 149, IP-07), all on `fb.py`; client workspace frames share `cw.py` (header, tabs, ⋯ menu, iPad rail). Render with `node tools/render.mjs <id-prefix>`.
+
+**Today states.** Every Today state reuses the locked Option B card (`p1_today.screen(...)` now takes `pre`, `after_wo`, `overlay`, `cloud`, `meal_chips`). In-app banner = white card, app mark, title + one line, chevron (44 pt). Offline = amber strip at the top, cloud-off icon, "Waiting to send" info chip on the unsent meal. Skeleton keeps the real header and week strip and greys the ring, bars, chips, workout card and meal rows in place.
+
+**Home side panel (web).** Docked 540 px panel, full height under the top bar, no scrim (the list stays readable and the selected row is marked). Header: avatar, name, meta, prev/next with "n of m", close; progress dashes with the state chip on the right. Body: title + age, source card (plan, window, logged), signals, Also open, timeline. Sticky footer holds the actions: Mark reviewed · Nudge on WhatsApp… · ⋯ · Resolve…; after resolving it becomes "n of m resolved · Next item". Resolve form = outcome chips + private note, footer Cancel / Resolve item with the lock helper. Nudge limit and client quiet hours are inline notices; Nudge is disabled, not hidden. Resolved items open read-only with the green resolution line. Missing item = empty state with Back to item / Next client.
+
+**Plans (150).** One "current program" card: lavender header with the program name, week n of m and date range, then two parts divided by a dashed rule, each with a WORKOUT / NUTRITION label, its own version/date line, a 7-day strip and Open builder. The versions table stays below, with the column renamed Part.
+
+**Progress (160).** Left metric list grouped by source (Body · from check-ins, Check-in answers · 1 to 5, Workouts · from logs, Photos) with the latest value; multi-select checkboxes where lines share a scale. Main card: title + source line, stat row (start, latest, change, entries), SVG chart (gaps break the line and are labelled "no check-in"), latest entries table. Lines differ by pattern (solid / dashed / dotted), never colour alone. Compare uses two labelled scales and says FitBud doesn't link cause and effect. Neutral wording only: change, no good/bad, no red for gain.
+
+**Client settings.** Page reached from the header ⋯ menu (Client settings is the first item), not a tab. Left section nav (Basic details · Subscription & package · Coaching relationship) plus a pointer to Plan › Coaching setup. Edits open a 560 px drawer with a sticky Cancel / Save footer; validation shows an error summary at the top, the field error inline, and disables Save. Payment records are plain records ("For your records only. FitBud doesn't take or track payments."). Package card (hybrid / in-person only): sessions dots, used / left, counts-as-used rules, Renew package, low-sessions notice with a WhatsApp draft. Ended clients: grey read-only banner, no Edit buttons, Reactivate stays in the header.
+
+**Coaching setup (148, 149, IP-07).** Accordion with summaries; Basics → **Starting point** (start weight, diet preference); Subscription removed. A blue pointer line at the top links to Client settings. Hybrid/in-person clients get a **Coaching mode** section (mode cards, usual place, slot, group).
+
+### Data gaps found (for Firoz)
+- Measurements have one untyped `other` type, so extra measurements (arm, thigh) can't be charted separately; the picker shows only weight, waist, hip, chest.
+- Sleep, energy and stress exist only as 1–5 answers in the check-in form (`fieldAnswers`), not hours; they show only if the client's form has those questions.
+- Set loads are stored as text labels (`actual_load_label`), so a top-set chart needs a numeric load field. TW-18 also says "no strength charts (deferred)"; 160e is designed on Firoz's request and needs a spec change.
+- Subscription has no amount or payment fields, and Confluence lists payments as a non-goal; payment records and packages follow the 21 Oct decision ("records only") and need new fields.
+- Pause coaching isn't in any spec, so Client settings shows only End coaching / Reactivate.

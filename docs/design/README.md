@@ -3,6 +3,7 @@
 Everything design lives here. **One file per screen state; if it is not in `mockups/png/`, it is not the design.** Consolidated 22 Oct 2026 from `docs/spec/mockups/`, `docs/spec/mockups-v2/`, `docs/spec/redesign/` (today-rings, v3) and `docs/design/figma/`; older versions, rejected options and superseded frames were removed (see git history of commit "design: single source of truth" if you ever need them).
 
 ## Precedence
+0. **Draft (22 Oct)** frames: the 22 Oct design round (see below). They replace the earlier frame with the same ID and wait for Firoz to lock them.
 1. **v3 frames** (`*-v3-*`, locked 21 Oct 2026 by Firoz): [DECISIONS-21OCT.md](DECISIONS-21OCT.md).
 2. **Original frames** (approved 18–21 Oct): [DESIGN-NOTES.md](DESIGN-NOTES.md). Where an original frame shows something a v3 decision changed (old Today ring card, old trainer tab bar "Attention · Clients · Check-ins · More", the exception drawer), follow the v3 decision; the Status column flags these.
 3. Content rules always apply: [../spec/01-product-rules.md](../spec/01-product-rules.md), [../spec/banned-strings.json](../spec/banned-strings.json).
@@ -10,13 +11,22 @@ Everything design lives here. **One file per screen state; if it is not in `mock
 Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Meals/Steps chips); Active workout (11, 11b) is **light**; Mark reviewed moves the client to a Reviewed section until every item is resolved; every coach gets a Sessions tab (calendar lives inside Sessions on web); client Check-ins tab with an Overdue filter is web/iPad only (trainer-mobile check-in history removed; trainer mobile = quick jobs).
 
 ## Layout
-- `mockups/png/` — 248 frames (42 v3 locked + 206 original). iOS 393 × 852, Android 412 × 915 (v3 Android 393 × 852 @2x), web 1440 × 900, iPad 1024 × 768 / 768 × 1024.
-- `mockups/html/` — 75 HTML sources, named exactly like their PNG, plus shared `tokens.css`, `m2.css`, `l3.css`, `and6.css`, `fonts/`, `assets/`. Frames without HTML (most of 31–199 and the notification set) were rendered by a retired generator; the PNG is the source.
-- `mockups/compare/` — contact sheets of final (v3) screens only.
-- `mockups/tools/` — v3 generators (`p1…p6_*.py` on `fb.py`), `render.mjs` (re-renders `*-v3*` only), `sheet.py` (contact sheets), `check.mjs` (banned strings). Run from `docs/design/mockups/`: `node tools/check.mjs`.
+- `mockups/png/` — 267 frames (42 v3 locked, 35 v3 drafts from the 22 Oct round, 190 original incl. 1 reference). iOS 393 × 852, Android 412 × 915 (v3 Android 393 × 852 @2x), web 1440 × 900, iPad 1024 × 768 / 768 × 1024.
+- `mockups/html/` — 110 HTML sources, named exactly like their PNG, plus shared `tokens.css`, `m2.css`, `l3.css`, `and6.css`, `fonts/`, `assets/`. Frames without HTML (most of 31–199 and the notification set) were rendered by a retired generator; the PNG is the source.
+- `mockups/compare/` — contact sheets of v3 screens; `P7`–`P11` are the 22 Oct round (before vs after, old frames taken from git).
+- `mockups/tools/` — v3 generators (`p1…p13_*.py` on `fb.py`; client workspace frames on `cw.py`), `compare.py` (before/after grids), `render.mjs` (re-renders `*-v3*` only), `sheet.py` (contact sheets), `check.mjs` (banned strings). Run from `docs/design/mockups/`: `node tools/check.mjs`.
 - [DESIGN-NOTES.md](DESIGN-NOTES.md) (tokens, components, per-set notes), [DECISIONS-21OCT.md](DECISIONS-21OCT.md) (locked v3 decisions), `reviews/` (audit and review rationale: AUDIT-21OCT, review-pre-v3, sessions-offline, PHASE0-ACTIVE-WORKOUT-THEME).
 
 **ID note:** `200` is used twice: `200-trainer-web-plan-filtered-web` (original, Plan tab) and `200-trainer-web-calendar-v3-web` (v3, Sessions calendar). File names are unique; refer to frames by file name.
+
+## 22 Oct design round (drafts, awaiting lock)
+- **Today states on v3 Today:** 29, 29b, 96 (skeleton mirrors v3 layout), 104, 113, 115 redrawn on Option B.
+- **Web Home side panel:** 02 (default, resolve form, resolved + Undo + Next), 131, 132, 133 redrawn as one fully open docked panel with a sticky action footer (clean states of the old drawer, v3 Mark reviewed → Reviewed model). The old drawer frames 129/130/134 were already removed on 22 Oct. Note: "01" is the sign-in screen and has no side panel; the side-panel frames are the two 02 frames plus 131–133.
+- **150 Plans:** the current workout and nutrition plans now sit in one "current program" card with a Workout part and a Nutrition part.
+- **160 Progress:** metric picker (body measurements, check-in answers 1–5, workouts from logs, photos), range 4 w / 12 w / All / Custom, Compare with…, and states 160–160i + 161.
+- **181 Reminders drawer:** entry is the client Overview **Reminders** side card → **Details** (TW-31), shown in 03c and drawn over the Overview in 181. Also reachable from a line in the review panel (TW-05) and check-in review (TW-20).
+- **Client workspace tabs** are always Overview · Plan · Activity · Progress · Check-ins · History (TW-09a). No Sessions / Packages / Configure tabs: coaching setup is Plan › Coaching setup (148, 149, IP-07 coaching mode); sessions live in the Sessions area; basic details and subscription & package live in **Client settings**, opened from the header ⋯ menu (208, 208b → 209–212, IP-08). The v3 Check-ins tab frames (162 set, 192b) were aligned (Sessions tab removed, ⋯ added).
+- **149:** the new 149 (targets only) is the primary version; the old one with the "Raises a flag when" column is kept as `149-…-ref` (Reference, future scope).
 
 ## Screen index
 | ID | Screen | State | Platform | PNG | HTML | Status |

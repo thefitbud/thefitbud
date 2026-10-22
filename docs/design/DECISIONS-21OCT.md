@@ -53,7 +53,7 @@ Search result: the only existing list was the original 162-trainer-web-client-ch
 - Screens (web/iPad only): 162-…-v3-web, 162b empty, 162c ended, 192b-ipad.
 
 ## Compare sheets
-mockups/compare/ (final screens only; the 21 Oct "current vs v3" sheets were dropped 22 Oct and P2-mobile, P2-web, P3-sessions-mobile, P4-web, P6-web regenerated without the old frames): P1-today-ios-states, P1-today-android-states, P2-mobile-review-flow, P2-web-home-panel, P3-sessions-mobile, P4-calendar-web, P4-calendar-mobile, P5-sessions-online-only, P6-client-checkins-tab-web, P6-client-checkins-tab-ipad. (P1-sbs-today-current-vs-v3 and P3-ipad-group dropped: they compared against removed frames.)
+mockups/compare/ (final screens only; the 21 Oct "current vs v3" sheets were dropped 22 Oct and P2-mobile, P2-web, P3-sessions-mobile, P4-web, P6-web regenerated without the old frames): P1-today-ios-states, P1-today-android-states, P2-mobile-review-flow, (P2-web-home-panel removed 22 Oct, replaced by P8-home-side-panel-old-vs-new), P3-sessions-mobile, P4-calendar-web, P4-calendar-mobile, P5-sessions-online-only, P6-client-checkins-tab-web, P6-client-checkins-tab-ipad. (P1-sbs-today-current-vs-v3 and P3-ipad-group dropped: they compared against removed frames.)
 
 ## Screen index
 | PNG | HTML source |
