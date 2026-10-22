@@ -422,7 +422,9 @@ export function OnboardingReviewPage() {
               variant="primary"
               onClick={() => navigate(`/clients/${relationshipId}/configure`)}
             >
-              Open configure
+              {onboardingStatus === "ended"
+                ? "View coaching setup"
+                : "Open configure"}
             </Button>
           ) : null}
           {thanksHref && submitted ? (
