@@ -548,14 +548,19 @@ export function HomePage() {
     });
   }
 
-  function closeDrawer() {
+  const closeDrawer = useCallback(() => {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("exception");
       next.delete("ask");
       return next;
     });
-  }
+  }, [setParams]);
+
+  const closeDrawerWithFocus = useCallback(() => {
+    closeDrawer();
+    rowRefs.current[focusIdx]?.focus();
+  }, [closeDrawer, focusIdx]);
 
   function showToast(message: string, undo?: () => void) {
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
@@ -1324,10 +1329,7 @@ export function HomePage() {
       {drawerExceptionId ? (
         <ExceptionDrawer
           exceptionId={drawerExceptionId}
-          onClose={() => {
-            closeDrawer();
-            rowRefs.current[focusIdx]?.focus();
-          }}
+          onClose={closeDrawerWithFocus}
           onChanged={() => void load({ quiet: true })}
         />
       ) : null}
