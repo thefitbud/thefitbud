@@ -38,9 +38,9 @@ max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 3
 
-# Evaluate due reminders from authoritative schedules (~every 15 minutes UTC).
+# Evaluate due reminders from authoritative schedules (~every 5 minutes UTC).
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/5 * * * *"]
 
 # Selected realtime: one DO room per coaching relationship (plan/execution/
 # compliance/check-in/exception hints). REST/sync remain authoritative.
@@ -59,3 +59,9 @@ SESSION_COOKIE_NAME = "fitbud_session"
 AUTH_MODE = "test"
 PUSH_PROVIDER_MODE = "test"
 MEDIA_SIGNING_SECRET = "local-dev-media-signing-secret"
+ENVIRONMENT = "local"
+EMAIL_PROVIDER = "dev_sink"
+SUPPORT_EMAIL = "tech@thefitbud.com"
+APP_HOST = "localhost:5173"
+SYSTEM_EMAIL_FROM = "FitBud <tech@thefitbud.com>"
+ADMIN_ALERT_EMAILS = "tech@thefitbud.com"

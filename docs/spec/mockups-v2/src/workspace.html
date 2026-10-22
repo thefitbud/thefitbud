@@ -1,0 +1,234 @@
+<!doctype html><html lang="en-IN"><head><meta charset="utf-8"><title>FitBud · Rohan Mehta</title><link rel="stylesheet" href="tokens.css">
+<style>
+  .wsh { background: #fff; border-bottom: 1px solid var(--border); }
+  .wsh-in { max-width: 1200px; padding: 22px 32px 0; }
+  .r1 { display: flex; align-items: flex-start; gap: 14px; }
+  .r1 .av.lg { width: 48px; height: 48px; font-size: 17px; }
+  .r1 .id { flex: 1; min-width: 0; }
+  .r1 .nm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 6px; margin-top: 6px; font-size: 13px; line-height: 18px; color: var(--ink-500); }
+  .meta > * + *::before { content: ""; display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: var(--ink-400); margin: 0 6px 0 0; vertical-align: middle; }
+  .meta > .chip::before { display: none; }
+  .meta > .chip { margin-left: 2px; }
+  .meta a { color: var(--indigo); font-weight: 600; }
+  .acts { display: flex; align-items: center; gap: 8px; padding-top: 6px; }
+  .tabs { display: flex; gap: 24px; margin-top: 20px; }
+  .tabs a { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 44px; font-size: 14px; font-weight: 500; color: var(--ink-500); }
+  .tabs a.on { color: var(--navy); font-weight: 600; }
+  .tabs a.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--indigo); }
+  .tabs .tc { min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--lavender); color: var(--indigo); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .g84 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .pad { padding: 0 20px 20px; }
+  /* attention card */
+  .att { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-top: 1px solid var(--border); }
+  .att .ico { width: 40px; height: 40px; border-radius: 12px; background: var(--crit-bg); color: var(--crit); display: flex; align-items: center; justify-content: center; flex: none; }
+  .att .ico svg.ic { width: 20px; height: 20px; }
+  .att .tx { flex: 1; min-width: 0; }
+  .att .tx b { display: block; font-size: 15px; line-height: 22px; font-weight: 600; color: var(--navy); }
+  .att .tx span { font-size: 13px; color: var(--ink-500); }
+  .card.accent { border-left: 3px solid var(--crit); }
+  /* week strip */
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 4px 16px 16px; }
+  .day { border-radius: 12px; padding: 10px 8px 12px; text-align: center; border: 1px solid transparent; }
+  .day.today { background: var(--lavender-50); border-color: #DCD5FF; }
+  .day .dn { font-size: 12px; font-weight: 600; color: var(--ink-500); }
+  .day .dd { font-size: 15px; font-weight: 700; color: var(--navy); margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .day.today .dn { color: var(--indigo); }
+  .wk { width: 34px; height: 34px; margin: 10px auto 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .wk svg.ic { width: 16px; height: 16px; stroke-width: 2.25; }
+  .wk.done { background: var(--navy); color: #fff; }
+  .wk.miss { border: 1.5px solid var(--crit); color: var(--crit); background: #fff; }
+  .wk.rest { color: var(--ink-400); }
+  .wk.rest::before { content: ""; width: 12px; height: 2px; border-radius: 2px; background: var(--ink-200); }
+  .wk.future { border: 1.5px dashed var(--border-strong); color: var(--ink-400); }
+  .wl { font-size: 12px; line-height: 16px; color: var(--ink-700); font-weight: 500; white-space: nowrap; }
+  .wl.m { color: var(--ink-500); }
+  .meals { display: flex; justify-content: center; gap: 3px; margin-top: 10px; }
+  .meals i { width: 9px; height: 9px; border-radius: 3px; background: var(--ring-kcal); }
+  .meals i.no { background: #fff; box-shadow: inset 0 0 0 1.5px var(--border-strong); }
+  .meals i.later { background: var(--ink-200); }
+  .ml { font-size: 11px; color: var(--ink-500); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); }
+  .stat { padding: 14px 20px; }
+  .stat + .stat { border-left: 1px solid var(--border); }
+  .stat .v { font-size: 18px; line-height: 24px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .stat .v small { font-size: 14px; font-weight: 500; color: var(--ink-500); letter-spacing: 0; }
+  .stat .l { font-size: 12px; color: var(--ink-500); font-weight: 500; margin-top: 2px; }
+  .nut { display: flex; align-items: center; gap: 22px; padding: 14px 20px 16px; border-top: 1px solid var(--border); background: #FCFCFE; border-radius: 0 0 16px 16px; }
+  .nut .lbl { font-size: 13px; font-weight: 600; color: var(--navy); width: 120px; }
+  .nut .lbl span { display: block; font-size: 12px; font-weight: 500; color: var(--ink-500); }
+  .mini { display: flex; align-items: center; gap: 8px; }
+  .mini svg { width: 30px; height: 30px; transform: rotate(-90deg); }
+  .mini b { display: block; font-size: 13px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .mini span { display: block; font-size: 11px; color: var(--ink-500); font-weight: 500; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-500); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+  /* activity */
+  .act { display: grid; grid-template-columns: 36px 1fr auto 96px; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--border); }
+  .act .ai { width: 36px; height: 36px; border-radius: 10px; background: var(--page-web); color: var(--ink-500); display: flex; align-items: center; justify-content: center; }
+  .act .ai svg.ic { width: 18px; height: 18px; }
+  .act b { display: block; font-size: 14px; font-weight: 600; color: var(--navy); }
+  .act span.s { display: block; font-size: 13px; color: var(--ink-500); }
+  .act .when { text-align: right; font-size: 13px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
+  /* side cards */
+  .sc { padding: 16px 18px; }
+  .sc-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .sc-h h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-500); letter-spacing: 0.01em; }
+  .sc-h h3 svg.ic { width: 16px; height: 16px; }
+  .sc .big { font-size: 15px; line-height: 22px; font-weight: 600; color: var(--navy); }
+  .sc .sub { font-size: 13px; line-height: 18px; color: var(--ink-500); margin-top: 2px; }
+  .kv { display: flex; justify-content: space-between; font-size: 13px; padding: 7px 0; border-top: 1px dashed var(--border); color: var(--ink-500); }
+  .kv b { color: var(--ink-700); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .wt { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .wt .n { font-size: 24px; line-height: 28px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .wt .n small { font-size: 14px; font-weight: 600; color: var(--ink-500); }
+  .notecard { padding: 12px 0; border-top: 1px solid var(--border); }
+  .notecard p { font-size: 13px; line-height: 19px; color: var(--ink-700); }
+  .notecard .nm { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ink-500); }
+  .chip.xs { height: 20px; font-size: 11px; padding: 0 7px 0 6px; }
+  .chip.xs svg.ic { width: 12px; height: 12px; }
+</style></head>
+<body>
+<div class="shell">
+  {{> side active="clients" mark="mark-white.svg"}}
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><span class="dim">Clients</span><span class="sep"><ic n="chevron-right" s="14"></ic></span>Rohan Mehta</div>
+      <div class="search"><ic n="search"></ic>Search clients<span class="kbd">⌘K</span></div>
+      <button class="bell" aria-label="Notifications, 3 unread"><ic n="bell"></ic></button>
+    </header>
+
+    <section class="wsh">
+      <div class="wsh-in">
+        <div class="r1">
+          <span class="av lg c3">RM</span>
+          <div class="id">
+            <div class="nm">
+              <h1 class="t-h1">Rohan Mehta</h1>
+              <span class="chip neu"><ic n="user-round-check"></ic>Active</span>
+              <span class="chip attn"><ic n="triangle-alert"></ic>Needs attention</span>
+            </div>
+            <div class="meta">
+              <span>Lose 6 kg</span>
+              <a href="#">Fat loss · Phase 2</a>
+              <span>Week 6</span>
+              <span>Next check-in Fri 23 Oct</span>
+              <span>29 · Male</span>
+              <span class="chip attn xs"><ic n="calendar-days"></ic>Renewal expired · Thu 15 Oct</span>
+            </div>
+          </div>
+          <div class="acts">
+            <button class="btn btn-secondary"><wa></wa>Message on WhatsApp</button>
+            <button class="btn btn-primary">Review issue</button>
+            <button class="btn-icon bordered" aria-label="More actions"><ic n="ellipsis"></ic></button>
+          </div>
+        </div>
+        <nav class="tabs" role="tablist">
+          <a class="on" href="#" role="tab" aria-selected="true">Overview</a>
+          <a href="#" role="tab">Plan</a>
+          <a href="#" role="tab">Activity</a>
+          <a href="#" role="tab">Progress</a>
+          <a href="#" role="tab">Check-ins <span class="tc">1</span></a>
+          <a href="#" role="tab">History</a>
+        </nav>
+      </div>
+    </section>
+
+    <main class="content" style="padding-top:24px">
+      <div class="g84">
+        <div class="col">
+          <!-- Needs attention: one open item -->
+          <section class="card">
+            <div class="card-h"><div class="ttl"><h2 class="t-h3">Needs attention</h2></div><span class="t-cap muted">Most severe open item</span></div>
+            <div class="att">
+              <span class="ico"><ic n="dumbbell"></ic></span>
+              <div class="tx"><b>Missed workout · Tue 13 Oct</b><span>Lower body A was planned for 7:00 pm and wasn't logged. Open 5 d, not reviewed yet.</span></div>
+              <span class="chip crit"><ic n="octagon-alert"></ic>Critical</span>
+              <button class="btn btn-soft">Review</button>
+            </div>
+          </section>
+
+          <!-- This week -->
+          <section class="card">
+            <div class="card-h">
+              <div><h2 class="t-h3">This week</h2><div class="t-cap muted" style="margin-top:2px">Mon 12 Oct – Sun 18 Oct</div></div>
+              <div class="legend"><span><i style="background:var(--navy);border-radius:50%"></i>Workout done</span><span><i style="background:#fff;box-shadow:inset 0 0 0 1.5px var(--crit);border-radius:50%"></i>Missed</span><span><i style="background:var(--ring-kcal)"></i>Meal logged</span><span><i style="background:#fff;box-shadow:inset 0 0 0 1.5px var(--border-strong)"></i>Not logged</span></div>
+            </div>
+            <div class="week">
+              <div class="day"><div class="dn">Mon</div><div class="dd">12</div><div class="wk done"><ic n="check"></ic></div><div class="wl">Upper A</div><div class="meals"><i></i><i></i><i></i><i></i></div><div class="ml">4 of 4</div></div>
+              <div class="day"><div class="dn">Tue</div><div class="dd">13</div><div class="wk miss"><ic n="x"></ic></div><div class="wl">Lower A</div><div class="meals"><i></i><i></i><i class="no"></i><i></i></div><div class="ml">3 of 4</div></div>
+              <div class="day"><div class="dn">Wed</div><div class="dd">14</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i></i><i></i><i class="no"></i></div><div class="ml">3 of 4</div></div>
+              <div class="day"><div class="dn">Thu</div><div class="dd">15</div><div class="wk miss"><ic n="x"></ic></div><div class="wl">Upper B</div><div class="meals"><i></i><i class="no"></i><i></i><i class="no"></i></div><div class="ml">2 of 4</div></div>
+              <div class="day"><div class="dn">Fri</div><div class="dd">16</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i class="no"></i><i></i><i class="no"></i></div><div class="ml">2 of 4</div></div>
+              <div class="day"><div class="dn">Sat</div><div class="dd">17</div><div class="wk done"><ic n="check"></ic></div><div class="wl">Lower B</div><div class="meals"><i></i><i></i><i class="no"></i><i></i></div><div class="ml">3 of 4</div></div>
+              <div class="day today"><div class="dn">Today</div><div class="dd">18</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i class="later"></i><i class="later"></i><i class="later"></i></div><div class="ml">1 of 1 so far</div></div>
+            </div>
+            <div class="stats">
+              <div class="stat"><div class="v">2 <small>of 4</small></div><div class="l">Workouts done</div></div>
+              <div class="stat"><div class="v">18 <small>of 25</small></div><div class="l">Meals logged so far</div></div>
+              <div class="stat"><div class="v">Fri</div><div class="l">Check-in submitted</div></div>
+            </div>
+            <div class="nut">
+              <div class="lbl">Today's nutrition<span>Logged so far</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-kcal)" stroke-width="5" stroke-linecap="round" stroke-dasharray="18.5 88"/></svg><span><b>410 / 1,950</b>kcal</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-protein)" stroke-width="5" stroke-linecap="round" stroke-dasharray="15.5 88"/></svg><span><b>22 / 125 g</b>Protein</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-carbs)" stroke-width="5" stroke-linecap="round" stroke-dasharray="21.3 88"/></svg><span><b>52 / 215 g</b>Carbs</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-fat)" stroke-width="5" stroke-linecap="round" stroke-dasharray="17 88"/></svg><span><b>12 / 62 g</b>Fat</span></div>
+            </div>
+          </section>
+
+          <!-- Recent activity -->
+          <section class="card">
+            <div class="card-h"><h2 class="t-h3">Recent activity</h2><a class="link t-sm" href="#">View all activity</a></div>
+            <div class="act"><span class="ai"><ic n="utensils"></ic></span><div><b>Breakfast · logged as planned</b><span class="s">Vegetable poha, 1 plate · curd, 1 katori · 410 kcal</span></div><span class="chip pos"><ic n="circle-check"></ic>Logged</span><span class="when" title="Sun 18 Oct, 8:20 am">1 h ago</span></div>
+            <div class="act"><span class="ai"><ic n="dumbbell"></ic></span><div><b>Lower body B · done</b><span class="s">6 of 6 exercises · 52 min · finished 7:52 pm</span></div><span class="chip pos"><ic n="circle-check"></ic>Done</span><span class="when" title="Sat 17 Oct, 7:52 pm">yesterday</span></div>
+            <div class="act"><span class="ai"><ic n="utensils"></ic></span><div><b>Dinner · something different</b><span class="s">Rajma, 1 katori · 2 roti · salad · 540 kcal</span></div><span class="chip neu"><ic n="pencil"></ic>Changed</span><span class="when" title="Sat 17 Oct, 9:05 pm">yesterday</span></div>
+            <div class="act"><span class="ai"><ic n="clipboard-check"></ic></span><div><b>Weekly check-in · submitted</b><span class="s">Weight 86.4 kg · 3 photos added · 6 answers</span></div><span class="chip info"><ic n="info"></ic>Submitted</span><span class="when" title="Fri 16 Oct, 9:30 pm">2 d ago</span></div>
+            <div class="act"><span class="ai"><ic n="utensils"></ic></span><div><b>Lunch · Fri 16 Oct</b><span class="s">Planned for 1:00 pm · no log</span></div><span class="chip attn"><ic n="triangle-alert"></ic>Not logged</span><span class="when" title="Fri 16 Oct, 1:00 pm">2 d ago</span></div>
+          </section>
+        </div>
+
+        <div class="col">
+          <section class="card sc">
+            <div class="sc-h"><h3><ic n="clipboard-check"></ic>Check-in</h3><a class="link t-sm" href="#">Open</a></div>
+            <div class="big">Weekly check-in</div>
+            <div class="sub">Submitted Fri 16 Oct, 9:30 pm · waiting for your review</div>
+            <div class="kv" style="margin-top:10px"><span>Next</span><b>Fri 23 Oct</b></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><ic n="layout-template"></ic>Plan</h3><a class="link t-sm" href="#">Open plan</a></div>
+            <div class="big">Fat loss · Phase 2</div>
+            <div class="sub">Effective since Mon 5 Oct · Version 3</div>
+            <div class="kv" style="margin-top:10px"><span>Workouts</span><b>4 a week</b></div>
+            <div class="kv"><span>Meals</span><b>4 a day · 1,950 kcal</b></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><ic n="bell-ring"></ic>Reminders</h3><a class="link t-sm" href="#">Details</a></div>
+            <div class="big">Responds to 3 of 9 reminders</div>
+            <div class="sub">This week · push on, quiet hours 10:00 pm – 7:00 am</div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><ic n="scale"></ic>Progress</h3><a class="link t-sm" href="#">View</a></div>
+            <div class="wt">
+              <div><div class="n">86.4 <small>kg</small></div><div class="sub">−2.1 kg since Mon 7 Sep</div></div>
+              <svg width="132" height="44" viewBox="0 0 132 44" aria-label="Weight trend, 7 weigh-ins"><polyline fill="none" stroke="var(--indigo)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="4,6 24,11 44,14 64,18 84,27 104,29 128,38"/><circle cx="128" cy="38" r="3.5" fill="var(--indigo)" stroke="#fff" stroke-width="2"/></svg>
+            </div>
+            <div class="kv" style="margin-top:10px"><span>Last weigh-in</span><b>Fri 16 Oct</b></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><ic n="calendar-days"></ic>Renewal</h3><a class="link t-sm" href="#">Open settings</a></div>
+            <div style="display:flex;align-items:center;gap:10px"><span class="chip attn"><ic n="triangle-alert"></ic>Expired</span><span class="t-sm muted">Ended Thu 15 Oct</span></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><ic n="notebook-pen"></ic>Coach notes</h3><a class="link t-sm" href="#">Add note</a></div>
+            <div class="notecard" style="border-top:0;padding-top:0"><p>Knee felt sore on walking lunges. Swapped to step-ups until the next check-in.</p><div class="nm"><span class="chip neu xs"><ic n="lock"></ic>Private</span>Tue 13 Oct</div></div>
+            <div class="notecard"><p>Breakfasts were spot on last week. Keep the 20-minute evening walk going on rest days.</p><div class="nm"><span class="chip info xs"><ic n="eye"></ic>Visible to client</span>Mon 12 Oct</div></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body></html>

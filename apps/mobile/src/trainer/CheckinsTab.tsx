@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
+import { formatCivilDate } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
-import { statusLabel } from "./labels";
+import { labelFor } from "./labels";
 
 type Props = {
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
@@ -44,17 +45,13 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
     <Screen
       title="Check-ins"
       subtitle="Due, overdue, and submitted check-ins across your clients."
+      refreshing={loading}
+      onRefresh={() => {
+        void refreshSession?.();
+        void load();
+      }}
     >
       {error ? <ErrorBanner message={error} /> : null}
-
-      <PrimaryButton
-        label="Refresh"
-        variant="secondary"
-        onPress={() => {
-          void refreshSession();
-          void load();
-        }}
-      />
 
       {loading ? (
         <Text style={styles.muted}>Loading check-ins…</Text>
@@ -71,14 +68,15 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
             <Pressable
               key={item.checkin.id}
               accessibilityRole="button"
-              accessibilityLabel={`Review check-in due ${item.checkin.localDate}`}
+              accessibilityLabel={`Review check-in due ${formatCivilDate(item.checkin.localDate)}`}
               onPress={() => onReviewCheckin(item)}
               style={styles.card}
             >
-              <Text style={styles.who}>Due {item.checkin.localDate}</Text>
+              <Text style={styles.who}>
+                Due {formatCivilDate(item.checkin.localDate)}
+              </Text>
               <Text style={styles.meta}>
-                {statusLabel(item.checkin.status)} · Client{" "}
-                {item.traineeUserId.slice(0, 8)}…
+                {labelFor("checkin_status", item.checkin.status)} · Client
               </Text>
               <Text style={styles.action}>Review</Text>
             </Pressable>

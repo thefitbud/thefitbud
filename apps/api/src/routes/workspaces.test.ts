@@ -1,43 +1,20 @@
-import initSqlJs from "sql.js";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/sql-js";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
+import * as schema from "../db/schema.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+
+
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of [
-    "0000_identity.sql",
-    "0001_relationship_onboarding.sql",
-    "0012_invitation_whatsapp.sql",
-    "0002_coaching_configuration.sql",
-    "0003_plans.sql",
-    "0004_workouts.sql",
-    "0005_meals.sql",
-    "0006_checkins.sql",
-    "0007_exceptions.sql",
-    "0008_progress_media.sql",
-    "0009_sync.sql",
-    "0010_notifications.sql",
-    "0013_domain_contracts.sql",
-    "0014_onboarding_form_templates.sql",
-  ]) {
-    sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-  }
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return { db, close: () => sqlite.close() };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function dummyD1(): D1Database {
@@ -86,6 +63,7 @@ function sampleContent() {
         id: "11111111-1111-4111-8111-111111111111",
         order: 1,
         name: "Day A",
+        weekday: 1,
         exercises: [
           {
             id: "22222222-2222-4222-8222-222222222222",
@@ -104,6 +82,52 @@ function sampleContent() {
           },
         ],
       },
+      {
+        id: "11111111-1111-4111-8111-111111111112",
+        order: 2,
+        name: "Day B",
+        weekday: 3,
+        exercises: [
+          {
+            id: "22222222-2222-4222-8222-222222222223",
+            order: 1,
+            name: "Bench press",
+            instructions: "Pause at the chest",
+            setTargets: [
+              {
+                id: "33333333-3333-4333-8333-333333333334",
+                order: 1,
+                reps: 5,
+                loadLabel: "RPE 7",
+                rpe: 7,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "11111111-1111-4111-8111-111111111113",
+        order: 3,
+        name: "Day C",
+        weekday: 5,
+        exercises: [
+          {
+            id: "22222222-2222-4222-8222-222222222224",
+            order: 1,
+            name: "Row",
+            instructions: "Pull to the lower chest",
+            setTargets: [
+              {
+                id: "33333333-3333-4333-8333-333333333335",
+                order: 1,
+                reps: 5,
+                loadLabel: "RPE 7",
+                rpe: 7,
+              },
+            ],
+          },
+        ],
+      },
     ],
     mealPrescriptions: [
       {
@@ -111,6 +135,7 @@ function sampleContent() {
         order: 1,
         name: "Lunch",
         scheduleHint: "12:30",
+        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
         instructions: "Dal and rice",
         photoRequired: false,
       },
@@ -228,7 +253,7 @@ async function reachActiveConfig(suffix: string, displayName: string) {
       },
       body: JSON.stringify({
         expectedVersion: 0,
-        primaryGoal: "Build strength",
+        goalShort: "Build strength",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 3,
@@ -279,8 +304,10 @@ type WorkspaceBody = {
     traineeDisplayName: string;
     onboardingStatus: string;
     effectivePlan: { id: string; title: string; effectiveFrom: string | null } | null;
-    primaryGoal: string | null;
+    goalShort: string | null;
     renewalState: string | null;
+    adherenceState: string;
+    traineeProfile: { displayName: string; age: number | null; gender: string | null };
   };
   overview: {
     openException: { id: string; type: string; status: string } | null;
@@ -290,7 +317,7 @@ type WorkspaceBody = {
   };
   plan: { plan: { id: string } | null; version: { id: string } | null };
   configuration: {
-    configuration: { primaryGoal: string | null } | null;
+    configuration: { goalShort: string | null } | null;
     subscription: { id: string; versionNumber: number; planName: string; renewalState: string } | null;
   };
   history: { relationshipId: string };
@@ -329,8 +356,15 @@ describe("client workspace", () => {
     expect(body.data.header.traineeDisplayName).toBe("Asha Menon");
     expect(body.data.header.onboardingStatus).toBe("onboarding_pending");
     expect(body.data.header.effectivePlan).toBeNull();
-    expect(body.data.header.primaryGoal).toBeNull();
+    expect(body.data.header.goalShort).toBeNull();
     expect(body.data.header.renewalState).toBeNull();
+    expect(body.data.header.adherenceState).toBe("not_available");
+    expect(body.data.header.traineeProfile).toEqual({
+      displayName: "Asha Menon",
+      age: null,
+      gender: null,
+    });
+    expect(body.data.header).not.toHaveProperty("dateOfBirth");
     expect(body.data.overview.openException).toBeNull();
     expect(body.data.overview.nextCheckin).toBeNull();
     expect(body.data.overview.recentActivity).toEqual([]);
@@ -401,14 +435,15 @@ describe("client workspace", () => {
     const beforeBody = (await beforeSubscription.json()) as { data: WorkspaceBody };
     expect(beforeBody.data.header.traineeDisplayName).toBe("Asha Menon");
     expect(beforeBody.data.header.onboardingStatus).toBe("active");
-    expect(beforeBody.data.header.primaryGoal).toBe("Build strength");
+    expect(beforeBody.data.header.goalShort).toBe("Build strength");
+    expect(beforeBody.data.header.adherenceState).toBe("no_recent_data");
     expect(beforeBody.data.header.effectivePlan).toMatchObject({
       id: createdBody.data.plan.id,
       title: "Foundation block",
     });
     expect(beforeBody.data.header.renewalState).toBeNull();
     expect(beforeBody.data.configuration.subscription).toBeNull();
-    expect(beforeBody.data.configuration.configuration?.primaryGoal).toBe(
+    expect(beforeBody.data.configuration.configuration?.goalShort).toBe(
       "Build strength",
     );
     expect(beforeBody.data.plan.version?.id).toBe(originalVersionId);

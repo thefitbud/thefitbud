@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -18,10 +19,17 @@ import type {
 } from "@fitbud/contracts";
 import { createMobileApiClient, resolveApiBaseUrl } from "../lib/api";
 import {
+  clearPersistedSession,
+  loadPersistedSession,
+  persistSession,
+} from "../lib/sessionStorage";
+import {
   resolveAppRoute,
   selectInitialMobileRole,
   type AppRoute,
 } from "../navigation/resolveRoute";
+import type { ParsedDeepLink } from "../navigation/linking";
+import { useAppDeepLinks } from "../navigation/useAppDeepLinks";
 import { registerLocalDeviceToken } from "../notifications/register";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { deepLinkFromNotificationPayload } from "../notifications/routing";
@@ -35,6 +43,7 @@ type AuthContextValue = {
   errorMessage: string | null;
   api: FitBudApiClient;
   pendingNotificationLink: NotificationDeepLink | null;
+  pendingDeepLink: ParsedDeepLink | null;
   signInWithToken: (token: string) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
@@ -44,6 +53,7 @@ type AuthContextValue = {
   /** Handle a push notification open. Payload is routing only — not domain state. */
   handleNotificationOpen: (rawPayload: unknown) => NotificationDeepLink | null;
   clearPendingNotificationLink: () => void;
+  clearPendingDeepLink: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -61,21 +71,33 @@ function messageFromError(error: unknown): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const persisted = loadPersistedSession();
+  const [accessToken, setAccessToken] = useState<string | null>(
+    persisted.accessToken,
+  );
+  const [selectedRole, setSelectedRole] = useState<Role | null>(
+    persisted.selectedRole,
+  );
   const [me, setMe] = useState<MeResponse | null>(null);
   const [relationships, setRelationships] = useState<CoachingRelationship[]>(
     [],
   );
   const [relationshipsLoaded, setRelationshipsLoaded] = useState(false);
   const [needsAccountLink, setNeedsAccountLink] = useState(false);
-  const [bootstrapping, setBootstrapping] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(
+    Boolean(persisted.accessToken),
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingNotificationLink, setPendingNotificationLink] =
     useState<NotificationDeepLink | null>(null);
+  const [pendingDeepLink, setPendingDeepLink] =
+    useState<ParsedDeepLink | null>(null);
+  const [sessionHydrated, setSessionHydrated] = useState(
+    !persisted.accessToken,
+  );
 
-  const accessTokenRef = useRef<string | null>(null);
-  const selectedRoleRef = useRef<Role | null>(null);
+  const accessTokenRef = useRef<string | null>(persisted.accessToken);
+  const selectedRoleRef = useRef<Role | null>(persisted.selectedRole);
   accessTokenRef.current = accessToken;
   selectedRoleRef.current = selectedRole;
 
@@ -124,7 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (role === "trainee" || role === "trainer") {
         await loadRelationships(client);
-        await registerPushToken(client);
+        // Device-token registration is trainer-facing in local demo; trainee
+        // calls were 403-ing and polluting the console — skip for trainees.
+        if (role === "trainer") {
+          await registerPushToken(client);
+        }
       } else {
         // Dual-role awaiting explicit selection.
         setRelationships([]);
@@ -143,11 +169,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const meResponse = await api.me();
       await applyMe(meResponse, selectedRoleRef.current, api);
+      persistSession({
+        accessToken: accessTokenRef.current,
+        selectedRole: selectedRoleRef.current,
+      });
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 401) {
         setMe(null);
         setSelectedRole(null);
         selectedRoleRef.current = null;
+        setAccessToken(null);
+        accessTokenRef.current = null;
+        clearPersistedSession();
         setRelationships([]);
         setRelationshipsLoaded(true);
         setNeedsAccountLink(true);
@@ -156,8 +189,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       setBootstrapping(false);
+      setSessionHydrated(true);
     }
   }, [api, applyMe]);
+
+  useEffect(() => {
+    if (!persisted.accessToken) return;
+    void refreshSession();
+  }, []);
 
   const selectRole = useCallback(
     async (role: Role) => {
@@ -191,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       accessTokenRef.current = trimmed;
       setAccessToken(trimmed);
+      persistSession({ accessToken: trimmed, selectedRole: null });
       setBootstrapping(true);
       setErrorMessage(null);
       setNeedsAccountLink(false);
@@ -205,6 +245,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         selectedRoleRef.current = null;
         const meResponse = await api.me();
         await applyMe(meResponse, null, api);
+        persistSession({
+          accessToken: trimmed,
+          selectedRole: selectedRoleRef.current,
+        });
       } catch (error) {
         if (error instanceof ApiClientError && error.status === 401) {
           // No FitBud user yet — accept invite will create/link the account.
@@ -213,10 +257,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setAccessToken(null);
           accessTokenRef.current = null;
+          clearPersistedSession();
           setErrorMessage(messageFromError(error));
         }
       } finally {
         setBootstrapping(false);
+        setSessionHydrated(true);
       }
     },
     [api, applyMe],
@@ -234,6 +280,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setErrorMessage(null);
     setBootstrapping(false);
     setPendingNotificationLink(null);
+    setPendingDeepLink(null);
+    clearPersistedSession();
   }, []);
 
   const setActiveRelationship = useCallback(
@@ -258,9 +306,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingNotificationLink(null);
   }, []);
 
+  const clearPendingDeepLink = useCallback(() => {
+    setPendingDeepLink(null);
+  }, []);
+
+  const onDeepLink = useCallback((link: ParsedDeepLink) => {
+    setPendingDeepLink(link);
+  }, []);
+  useAppDeepLinks(onDeepLink);
+
   const route = resolveAppRoute({
     accessToken,
-    bootstrapping,
+    bootstrapping: bootstrapping || !sessionHydrated,
     me,
     selectedRole,
     needsAccountLink,
@@ -277,6 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       errorMessage,
       api,
       pendingNotificationLink,
+      pendingDeepLink,
       signInWithToken,
       signOut,
       clearError: () => setErrorMessage(null),
@@ -285,6 +343,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveRelationship,
       handleNotificationOpen,
       clearPendingNotificationLink,
+      clearPendingDeepLink,
     }),
     [
       accessToken,
@@ -295,6 +354,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       errorMessage,
       api,
       pendingNotificationLink,
+      pendingDeepLink,
       signInWithToken,
       signOut,
       refreshSession,
@@ -302,6 +362,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setActiveRelationship,
       handleNotificationOpen,
       clearPendingNotificationLink,
+      clearPendingDeepLink,
     ],
   );
 

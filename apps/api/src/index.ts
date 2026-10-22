@@ -7,16 +7,21 @@ import {
   handleReminderQueueBatch,
   handleScheduledReminders,
 } from "./jobs/reminders";
+import { handleScheduledReplenishment } from "./jobs/replenishment";
+import { runCoachAskMaintenance } from "./domain/coach-asks";
+import { createDb } from "./db/client";
 import { ok } from "./lib/envelope";
 import { writeStructuredLog } from "./lib/log";
 import { requestIdMiddleware } from "./middleware/request-id";
 import { requestLogMiddleware } from "./middleware/request-log";
 import { authRoutes, meRoutes } from "./routes/auth";
+import { checkinFormTemplateRoutes } from "./routes/checkin-forms";
 import { checkinRoutes } from "./routes/checkins";
 import { configurationRoutes } from "./routes/configurations";
 import { exceptionRoutes } from "./routes/exceptions";
 import { fileRoutes } from "./routes/files";
 import { invitationRoutes } from "./routes/invitations";
+import { inviteLandingRoutes } from "./routes/invite-landing";
 import { onboardingRoutes } from "./routes/onboarding";
 import {
   subscriptionAttentionRoutes,
@@ -34,11 +39,25 @@ import { workoutRoutes } from "./routes/workouts";
 import { realtimeRoutes } from "./routes/realtime";
 import { templateRoutes } from "./routes/templates";
 import { libraryRoutes } from "./routes/libraries";
+import { clientRoutes } from "./routes/clients";
+import { configRoutes } from "./routes/config";
+import { devRoutes } from "./routes/dev";
+import { coachAskRoutes } from "./routes/coach-asks";
+import { activityFeedRoutes } from "./routes/activity-feed";
+import { linkRoutes } from "./routes/links";
+import { whatsappWebhookRoutes } from "./routes/webhooks-whatsapp";
 import { openApiRouteOptions, operation } from "./openapi/document";
 import type { Env, Variables } from "./types";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+app.use("*", async (c, next) => {
+  const pinned = c.env.NOW?.trim();
+  if (pinned && !Number.isNaN(Date.parse(pinned))) {
+    (globalThis as { FITBUD_NOW?: string }).FITBUD_NOW = pinned;
+  }
+  await next();
+});
 app.use("*", requestIdMiddleware);
 app.use("*", requestLogMiddleware);
 
@@ -63,9 +82,12 @@ app.get(
     ),
 );
 
+app.route("/config", configRoutes);
+app.route("/dev", devRoutes);
 app.route("/auth", authRoutes);
 app.route("/me", meRoutes);
 app.route("/invitations", invitationRoutes);
+app.route("/i", inviteLandingRoutes);
 app.route("/relationships", subscriptionRoutes);
 app.route("/relationships", relationshipRoutes);
 app.route("/subscriptions", subscriptionAttentionRoutes);
@@ -74,8 +96,10 @@ app.route("/configurations", configurationRoutes);
 app.route("/plans", planRoutes);
 app.route("/templates", templateRoutes);
 app.route("/libraries", libraryRoutes);
+app.route("/clients", clientRoutes);
 app.route("/workouts", workoutRoutes);
 app.route("/meals", mealRoutes);
+app.route("/checkins/form-templates", checkinFormTemplateRoutes);
 app.route("/checkins", checkinRoutes);
 app.route("/exceptions", exceptionRoutes);
 app.route("/progress", progressRoutes);
@@ -85,6 +109,10 @@ app.route("/files", fileRoutes);
 app.route("/sync", syncRoutes);
 app.route("/notifications", notificationRoutes);
 app.route("/realtime", realtimeRoutes);
+app.route("/coach-asks", coachAskRoutes);
+app.route("/activity", activityFeedRoutes);
+app.route("/links", linkRoutes);
+app.route("/webhooks/whatsapp", whatsappWebhookRoutes);
 bindSyncApp(app);
 
 const openApiDocumentSchema = z
@@ -145,12 +173,25 @@ app.onError((err, c) => {
     requestId: c.get("requestId"),
     errorName: err.name,
   });
+  const requestId = c.get("requestId") ?? "unknown";
+  if (c.env.ENVIRONMENT === "local") {
+    return c.json(
+      {
+        error: {
+          code: "LOCAL_DEV_ERROR",
+          message: err.message,
+          requestId,
+        },
+      },
+      500,
+    );
+  }
   return c.json(
     {
       error: {
         code: "INTERNAL_ERROR",
         message: "An unexpected server error occurred.",
-        requestId: c.get("requestId") ?? "unknown",
+        requestId,
       },
     },
     500,
@@ -164,6 +205,8 @@ const worker = {
     env: Env,
   ): Promise<void> {
     await handleScheduledReminders(env, new Date(controller.scheduledTime));
+    await handleScheduledReplenishment(env, new Date(controller.scheduledTime));
+    await runCoachAskMaintenance(createDb(env.DB));
   },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
     await handleReminderQueueBatch(batch, env);

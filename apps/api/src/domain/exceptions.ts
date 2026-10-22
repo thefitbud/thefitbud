@@ -1,16 +1,17 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import {
+  ADHERENCE_WINDOW_DAYS,
   MVP_EXCEPTION_RULE_VERSION,
+  addDaysToLocalDate,
   canActivateException,
   deriveCheckinStatus,
-  deriveMealAssignmentStatus,
-  deriveWorkoutAssignmentStatus,
   exceptionKey,
   filterNewExceptionCandidates,
+  formatLocalDate,
   isOpenExceptionStatus,
-  missedWorkoutCandidate,
+  mealAdherenceCandidate,
   overdueCheckinCandidate,
-  overdueMealCandidate,
+  workoutAdherenceCandidate,
   type ExceptionCandidate,
 } from "@fitbud/core";
 import { mapException } from "./mappers";
@@ -25,17 +26,56 @@ import {
   workoutAssignments,
   workoutExecutions,
 } from "../db/schema";
+import { loadTraineeTimezone } from "./assignment-schedule";
 import { createId, nowIso } from "../lib/crypto";
 
 type Db = ReturnType<typeof createDb>;
 type ExceptionRow = typeof exceptions.$inferSelect;
 
+/** Look back a short window so detection volume stays realistic (~a few/client). */
+const DETECTION_LOOKBACK_DAYS = 3;
+
+function detectionWindowStartLocalDate(
+  nowIsoValue: string,
+  timeZone: string,
+): string {
+  const today = formatLocalDate(new Date(nowIsoValue), timeZone);
+  return addDaysToLocalDate(today, -(DETECTION_LOOKBACK_DAYS - 1));
+}
+
+/** One open item per type + civil day + slot. Duplicate plan versions share a day. */
+function dedupeSameDaySlot<T extends ExceptionCandidate>(candidates: T[]): T[] {
+  const seen = new Set<string>();
+  const next: T[] = [];
+  for (const candidate of candidates) {
+    const details = candidate.details ?? {};
+    const day = typeof details.localDate === "string" ? details.localDate : "";
+    const slot =
+      (typeof details.mealName === "string" && details.mealName) ||
+      (typeof details.workoutDayName === "string" && details.workoutDayName) ||
+      "";
+    if (!day || !slot) {
+      next.push(candidate);
+      continue;
+    }
+    const key = `${candidate.type}:${day}:${slot}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(candidate);
+  }
+  return next;
+}
+
+void ADHERENCE_WINDOW_DAYS;
+
 async function collectCandidatesForRelationship(
   db: Db,
   relationshipId: string,
   now: string,
+  timeZone = "Asia/Kolkata",
 ): Promise<ExceptionCandidate[]> {
   const candidates: ExceptionCandidate[] = [];
+  const windowStart = detectionWindowStartLocalDate(now, timeZone);
 
   const workoutRows = await db
     .select({
@@ -47,23 +87,23 @@ async function collectCandidatesForRelationship(
       workoutExecutions,
       eq(workoutExecutions.assignmentId, workoutAssignments.id),
     )
-    .where(eq(workoutAssignments.coachingRelationshipId, relationshipId));
+    .where(
+      and(
+        eq(workoutAssignments.coachingRelationshipId, relationshipId),
+        eq(workoutAssignments.scheduleStatus, "scheduled"),
+        gte(workoutAssignments.localDate, windowStart),
+      ),
+    );
 
   for (const row of workoutRows) {
-    const status = deriveWorkoutAssignmentStatus({
-      nowIso: now,
+    const candidate = workoutAdherenceCandidate({
+      assignmentId: row.assignment.id,
+      localDate: row.assignment.localDate,
       windowEndsAt: row.assignment.windowEndsAt,
+      nowIso: now,
       executionStatus: row.execution?.status ?? null,
     });
-    if (status === "missed") {
-      candidates.push(
-        missedWorkoutCandidate({
-          assignmentId: row.assignment.id,
-          localDate: row.assignment.localDate,
-          windowEndsAt: row.assignment.windowEndsAt,
-        }),
-      );
-    }
+    if (candidate) candidates.push(candidate);
   }
 
   const mealRows = await db
@@ -76,25 +116,26 @@ async function collectCandidatesForRelationship(
       mealCompliance,
       eq(mealCompliance.assignmentId, mealAssignments.id),
     )
-    .where(eq(mealAssignments.coachingRelationshipId, relationshipId));
+    .where(
+      and(
+        eq(mealAssignments.coachingRelationshipId, relationshipId),
+        eq(mealAssignments.scheduleStatus, "scheduled"),
+        gte(mealAssignments.localDate, windowStart),
+      ),
+    );
 
   for (const row of mealRows) {
-    const status = deriveMealAssignmentStatus({
-      nowIso: now,
+    const candidate = mealAdherenceCandidate({
+      assignmentId: row.assignment.id,
+      localDate: row.assignment.localDate,
+      mealName: row.assignment.mealName,
       windowEndsAt: row.assignment.windowEndsAt,
+      nowIso: now,
       complianceOutcome: row.compliance?.outcome ?? null,
       loggedAt: row.compliance?.loggedAt ?? null,
+      deviationKind: row.compliance?.deviationKind ?? null,
     });
-    if (status === "overdue") {
-      candidates.push(
-        overdueMealCandidate({
-          assignmentId: row.assignment.id,
-          localDate: row.assignment.localDate,
-          mealName: row.assignment.mealName,
-          windowEndsAt: row.assignment.windowEndsAt,
-        }),
-      );
-    }
+    if (candidate) candidates.push(candidate);
   }
 
   const checkinRows = await db
@@ -104,7 +145,12 @@ async function collectCandidatesForRelationship(
     })
     .from(checkins)
     .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-    .where(eq(checkins.coachingRelationshipId, relationshipId));
+    .where(
+      and(
+        eq(checkins.coachingRelationshipId, relationshipId),
+        gte(checkins.localDate, windowStart),
+      ),
+    );
 
   for (const row of checkinRows) {
     const status = deriveCheckinStatus({
@@ -128,10 +174,46 @@ async function collectCandidatesForRelationship(
   return candidates;
 }
 
+/** True when the exception source still sits inside the detection lookback. */
+async function isSourceInDetectionWindow(
+  db: Db,
+  row: ExceptionRow,
+  windowStart: string,
+): Promise<boolean> {
+  if (row.sourceEntityType === "meal_assignment") {
+    const [assignment] = await db
+      .select({ localDate: mealAssignments.localDate })
+      .from(mealAssignments)
+      .where(eq(mealAssignments.id, row.sourceEntityId))
+      .limit(1);
+    return Boolean(assignment && assignment.localDate >= windowStart);
+  }
+  if (row.sourceEntityType === "workout_assignment") {
+    const [assignment] = await db
+      .select({ localDate: workoutAssignments.localDate })
+      .from(workoutAssignments)
+      .where(eq(workoutAssignments.id, row.sourceEntityId))
+      .limit(1);
+    return Boolean(assignment && assignment.localDate >= windowStart);
+  }
+  if (row.sourceEntityType === "checkin") {
+    const [checkin] = await db
+      .select({ localDate: checkins.localDate })
+      .from(checkins)
+      .where(eq(checkins.id, row.sourceEntityId))
+      .limit(1);
+    return Boolean(checkin && checkin.localDate >= windowStart);
+  }
+  // Unknown source types: only resolve when positively re-checked via candidates.
+  return false;
+}
+
 /**
  * Deterministic exception detection for one coaching relationship.
- * Creates Detected exceptions and promotes them to Active.
- * Does not rewrite workout, meal, or check-in source records.
+ * Creates Detected exceptions, promotes them to Active, and resolves an open
+ * exception only when its condition is gone. Acknowledged exceptions that are
+ * still true stay acknowledged. Does not rewrite workout, meal, or check-in
+ * source records.
  */
 export async function evaluateRelationshipExceptions(
   db: Db,
@@ -140,36 +222,87 @@ export async function evaluateRelationshipExceptions(
 ): Promise<{
   created: number;
   activated: number;
+  resolved: number;
   exceptions: ReturnType<typeof mapException>[];
+  resolvedExceptions: ReturnType<typeof mapException>[];
 }> {
-  const openRows = await db
+  const existingRows = await db
     .select()
     .from(exceptions)
     .where(eq(exceptions.coachingRelationshipId, relationshipId));
 
-  const openKeys = new Set(
-    openRows
-      .filter((row) => isOpenExceptionStatus(row.status))
-      .map((row) =>
-        exceptionKey({
-          type: row.type,
-          sourceEntityType: row.sourceEntityType,
-          sourceEntityId: row.sourceEntityId,
-        }),
-      ),
+  const relationship = await db
+    .select({ traineeUserId: coachingRelationships.traineeUserId })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, relationshipId))
+    .limit(1);
+  const timeZone = relationship[0]
+    ? await loadTraineeTimezone(db, relationship[0].traineeUserId)
+    : "Asia/Kolkata";
+  const windowStart = detectionWindowStartLocalDate(now, timeZone);
+  const candidates = await collectCandidatesForRelationship(
+    db,
+    relationshipId,
+    now,
+    timeZone,
+  );
+  const candidateKeys = new Set(candidates.map((candidate) => exceptionKey(candidate)));
+
+  const resolvedRows: ExceptionRow[] = [];
+  for (const row of existingRows) {
+    if (!isOpenExceptionStatus(row.status)) continue;
+    if (candidateKeys.has(exceptionKey(row))) continue;
+    // Lookback only limits new detection. Older open items stay open unless we
+    // positively re-check their source inside the window and the condition cleared.
+    if (!(await isSourceInDetectionWindow(db, row, windowStart))) continue;
+    await db
+      .update(exceptions)
+      .set({
+        status: "resolved",
+        resolvedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(exceptions.id, row.id));
+    resolvedRows.push({
+      ...row,
+      status: "resolved",
+      resolvedAt: now,
+      updatedAt: now,
+    });
+  }
+
+  // Skip sources that already have an open, acknowledged, or resolved item so
+  // evaluate/detect cannot recreate Critical rows ~ms after a Resolve.
+  const blockedKeys = new Set(
+    existingRows
+      .filter(
+        (row) =>
+          isOpenExceptionStatus(row.status) || row.status === "resolved",
+      )
+      .map((row) => exceptionKey(row)),
   );
 
-  const candidates = filterNewExceptionCandidates(
-    await collectCandidatesForRelationship(db, relationshipId, now),
-    openKeys,
+  const freshCandidates = dedupeSameDaySlot(
+    filterNewExceptionCandidates(candidates, blockedKeys),
   );
+
+  const openAfterResolve = existingRows.filter(
+    (row) =>
+      isOpenExceptionStatus(row.status) &&
+      !resolvedRows.some((resolved) => resolved.id === row.id),
+  ).length;
+  // A paused client can already hold a full meal stack. Keep the open set ≤10.
+  let room = Math.max(0, 10 - openAfterResolve);
 
   const createdRows: ExceptionRow[] = [];
-  for (const candidate of candidates) {
+  for (const candidate of freshCandidates) {
+    if (room <= 0) break;
+    room -= 1;
     const row: ExceptionRow = {
       id: createId(),
       coachingRelationshipId: relationshipId,
       type: candidate.type,
+      severity: candidate.severity,
       status: "detected",
       ruleVersion: MVP_EXCEPTION_RULE_VERSION,
       sourceEntityType: candidate.sourceEntityType,
@@ -182,6 +315,10 @@ export async function evaluateRelationshipExceptions(
       activatedAt: null,
       acknowledgedAt: null,
       resolvedAt: null,
+      resolutionOutcome: null,
+      resolutionNote: null,
+      closedReason: null,
+      sourceLoggedLateAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -191,7 +328,11 @@ export async function evaluateRelationshipExceptions(
 
   const detectedRows = [
     ...createdRows,
-    ...openRows.filter((row) => canActivateException(row.status)),
+    ...existingRows.filter(
+      (row) =>
+        canActivateException(row.status) &&
+        candidateKeys.has(exceptionKey(row)),
+    ),
   ];
 
   let activated = 0;
@@ -218,6 +359,7 @@ export async function evaluateRelationshipExceptions(
   return {
     created: createdRows.length,
     activated,
+    resolved: resolvedRows.length,
     exceptions: [
       ...createdRows.map((row) =>
         mapException({
@@ -231,6 +373,7 @@ export async function evaluateRelationshipExceptions(
         .filter((row) => !createdRows.some((created) => created.id === row.id))
         .map(mapException),
     ],
+    resolvedExceptions: resolvedRows.map(mapException),
   };
 }
 
@@ -260,6 +403,7 @@ export async function listAttentionExceptionsForTrainer(
   trainerUserId: string,
   limit: number,
   now = nowIso(),
+  options?: { groupByRelationship?: boolean },
 ): Promise<
   Array<{
     exception: ExceptionRow;
@@ -270,7 +414,12 @@ export async function listAttentionExceptionsForTrainer(
   const relationships = await db
     .select()
     .from(coachingRelationships)
-    .where(eq(coachingRelationships.trainerUserId, trainerUserId));
+    .where(
+      and(
+        eq(coachingRelationships.trainerUserId, trainerUserId),
+        eq(coachingRelationships.status, "active"),
+      ),
+    );
 
   for (const relationship of relationships) {
     await evaluateRelationshipExceptions(db, relationship.id, now);
@@ -280,6 +429,12 @@ export async function listAttentionExceptionsForTrainer(
 
   const relationshipIds = relationships.map((r) => r.id);
   const relationshipById = new Map(relationships.map((r) => [r.id, r]));
+
+  // When grouping by relationship, fetch enough rows to form groups; `limit`
+  // counts groups in the route handler, not raw exception rows.
+  const rowLimit = options?.groupByRelationship
+    ? Math.min(Math.max(limit, 1) * 40, 500)
+    : limit;
 
   const rows = await db
     .select()
@@ -291,7 +446,7 @@ export async function listAttentionExceptionsForTrainer(
       ),
     )
     .orderBy(desc(exceptions.detectedAt))
-    .limit(limit);
+    .limit(rowLimit);
 
   return rows.flatMap((exception) => {
     const relationship = relationshipById.get(exception.coachingRelationshipId);

@@ -90,6 +90,15 @@ export function resolveAppRoute(input: {
     return { name: "trainee_shell", relationship: ready };
   }
 
+  const ended = input.relationships.find(
+    (relationship) =>
+      relationship.status === "ended" ||
+      relationship.onboardingStatus === "ended",
+  );
+  if (ended) {
+    return { name: "trainee_shell", relationship: ended };
+  }
+
   return { name: "accept_invite" };
 }
 

@@ -6,23 +6,32 @@ import {
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import {
+  evaluateRemindersRequestSchema,
   evaluateRemindersResponseSchema,
   notificationListResponseSchema,
   notificationPreferencesSchema,
   notificationSchema,
+  nudgeActivityRequestSchema,
+  nudgeActivityResponseSchema,
+  reengagementCandidatesResponseSchema,
+  responsivenessResponseSchema,
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
   reminderRulesResponseSchema,
+  reminderStatusSchema,
   removeDeviceTokenRequestSchema,
   updateNotificationPreferencesRequestSchema,
   updateReminderRulesRequestSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
+import { getFlags } from "../config/flags.js";
 import {
   coachingRelationships,
   deviceTokens,
   notificationPreferences,
   reminderRules,
+  reminderStates,
+  users,
 } from "../db/schema";
 import {
   mapDeviceToken,
@@ -31,14 +40,21 @@ import {
   mapReminderRule,
 } from "../domain/mappers";
 import {
+  parseTrainerCategoriesJson,
+  serializeTrainerCategories,
+} from "../domain/trainer-categories.js";
+import {
+  createActivityNudge,
   ensureDefaultReminderRules,
   evaluateAndEnqueueReminders,
   listRecentNotifications,
   markNotificationRead,
   type ReminderQueue,
 } from "../domain/reminders";
+import { deriveReminderStatus } from "../domain/reminder-status.js";
 import { createId, nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -92,6 +108,9 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
     mealReminder: true,
     checkinReminder: true,
     subscriptionRenewalReminder: true,
+    dailySummaryReminder: true,
+    channelPreference: "app",
+    trainerCategoriesJson: "[]",
     quietHoursStart: null,
     quietHoursEnd: null,
     createdAt: now,
@@ -280,12 +299,129 @@ notificationRoutes.get(
     }
     const db = createDb(c.env.DB);
     const row = await ensurePreferences(db, actor.userId, nowIso());
+    const [userRow] = await db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, actor.userId))
+      .limit(1);
     return ok(
       c,
-      notificationPreferencesSchema.parse(mapNotificationPreferences(row)),
+      notificationPreferencesSchema.parse(
+        mapNotificationPreferences(row, userRow?.timezone ?? null),
+      ),
     );
   },
 );
+
+async function readReminderStatus(db: Db, userId: string) {
+  const now = nowIso();
+  const [state] = await db
+    .select()
+    .from(reminderStates)
+    .where(eq(reminderStates.traineeUserId, userId))
+    .limit(1);
+  const tokens = await db
+    .select({ status: deviceTokens.status })
+    .from(deviceTokens)
+    .where(eq(deviceTokens.userId, userId));
+  const rels = await db
+    .select()
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.traineeUserId, userId));
+  const rel =
+    rels.find((row) => row.status === "active") ??
+    rels.find((row) => row.status === "ended") ??
+    rels[0];
+  const rules = rel
+    ? await db
+        .select({
+          reminderType: reminderRules.reminderType,
+          enabled: reminderRules.enabled,
+        })
+        .from(reminderRules)
+        .where(eq(reminderRules.coachingRelationshipId, rel.id))
+    : [];
+  return reminderStatusSchema.parse(
+    deriveReminderStatus({
+      mode: state?.mode ?? "normal",
+      pausedUntil: state?.pausedUntil ?? null,
+      nowIso: now,
+      tokens,
+      rules,
+    }),
+  );
+}
+
+notificationRoutes.get(
+  "/reminder-status",
+  operation({
+    tag: "Notifications",
+    summary: "Trainee reminder status",
+    description:
+      "Pause, phone delivery, and trainer-disabled categories for the signed-in trainee.",
+    roles: ["trainee"],
+    response: reminderStatusSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    return ok(c, await readReminderStatus(db, actor.userId));
+  },
+);
+
+notificationRoutes.post(
+  "/reminder-status/resume",
+  operation({
+    tag: "Notifications",
+    summary: "Turn paused reminders back on",
+    description: "Clears a trainee reminder pause immediately.",
+    roles: ["trainee"],
+    response: reminderStatusSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const now = nowIso();
+    const [existing] = await db
+      .select()
+      .from(reminderStates)
+      .where(eq(reminderStates.traineeUserId, actor.userId))
+      .limit(1);
+    if (existing) {
+      await db
+        .update(reminderStates)
+        .set({
+          mode: "normal",
+          pausedUntil: null,
+          consecutiveIgnores: 0,
+          updatedAt: now,
+        })
+        .where(eq(reminderStates.traineeUserId, actor.userId));
+    }
+    return ok(c, await readReminderStatus(db, actor.userId));
+  },
+);
+
+function isValidIanaTimezone(zone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 notificationRoutes.put(
   "/preferences",
@@ -316,7 +452,69 @@ notificationRoutes.put(
 
     const db = createDb(c.env.DB);
     const now = nowIso();
+    const flags = await getFlags(c.env, db);
     const current = await ensurePreferences(db, actor.userId, now);
+    const nextTrainerCategories = parsed.data.trainerCategories
+      ? {
+          ...parseTrainerCategoriesJson(current.trainerCategoriesJson),
+          ...parsed.data.trainerCategories,
+        }
+      : parseTrainerCategoriesJson(current.trainerCategoriesJson);
+
+    let nextChannel = current.channelPreference;
+    if (parsed.data.channelPreference !== undefined) {
+      if (
+        parsed.data.channelPreference === "app_and_whatsapp" &&
+        !flags.wa_automation
+      ) {
+        return fail(
+          c,
+          400,
+          "FEATURE_DISABLED",
+          "WhatsApp automation is not enabled.",
+        );
+      }
+      nextChannel = parsed.data.channelPreference;
+    } else if (!flags.wa_automation && nextChannel === "app_and_whatsapp") {
+      nextChannel = "app";
+    }
+
+    let whatsappGranted = current.whatsappOptInGranted;
+    let whatsappAt = current.whatsappOptInAt;
+    let whatsappSource = current.whatsappOptInSource;
+    let whatsappTextVersion = current.whatsappOptInTextVersion;
+    if (parsed.data.whatsappOptIn !== undefined) {
+      if (parsed.data.whatsappOptIn.granted && !flags.wa_automation) {
+        return fail(
+          c,
+          400,
+          "FEATURE_DISABLED",
+          "WhatsApp opt-in is not available.",
+        );
+      }
+      whatsappGranted = parsed.data.whatsappOptIn.granted;
+      if (whatsappGranted) {
+        whatsappAt = now;
+        whatsappSource = parsed.data.whatsappOptIn.source ?? "settings";
+        whatsappTextVersion = parsed.data.whatsappOptIn.textVersion ?? null;
+      } else {
+        whatsappAt = null;
+        whatsappSource = null;
+        whatsappTextVersion = null;
+      }
+    }
+
+    if (parsed.data.traineeTimezone !== undefined) {
+      const zone = parsed.data.traineeTimezone;
+      if (zone !== null && !isValidIanaTimezone(zone)) {
+        return fail(c, 400, "INVALID_REQUEST", "Invalid traineeTimezone.");
+      }
+      await db
+        .update(users)
+        .set({ timezone: zone ?? "UTC", updatedAt: now })
+        .where(eq(users.id, actor.userId));
+    }
+
     await db
       .update(notificationPreferences)
       .set({
@@ -330,6 +528,21 @@ notificationRoutes.put(
         subscriptionRenewalReminder:
           parsed.data.categories?.subscriptionRenewalReminder ??
           current.subscriptionRenewalReminder,
+        dailySummaryReminder:
+          parsed.data.categories?.dailySummaryReminder ??
+          current.dailySummaryReminder,
+        channelPreference: nextChannel,
+        whatsappOptInGranted: whatsappGranted,
+        whatsappOptInAt: whatsappAt,
+        whatsappOptInSource: whatsappSource,
+        whatsappOptInTextVersion: whatsappTextVersion,
+        locale:
+          parsed.data.locale === undefined ? current.locale : parsed.data.locale,
+        trainerCategoriesJson: serializeTrainerCategories(nextTrainerCategories),
+        preferredWorkoutTime:
+          parsed.data.preferredWorkoutTime === undefined
+            ? current.preferredWorkoutTime
+            : parsed.data.preferredWorkoutTime,
         quietHoursStart:
           parsed.data.quietHoursStart === undefined
             ? current.quietHoursStart
@@ -347,10 +560,15 @@ notificationRoutes.put(
       .from(notificationPreferences)
       .where(eq(notificationPreferences.userId, actor.userId))
       .limit(1);
+    const [userRow] = await db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, actor.userId))
+      .limit(1);
     return ok(
       c,
       notificationPreferencesSchema.parse(
-        mapNotificationPreferences(updated[0]!),
+        mapNotificationPreferences(updated[0]!, userRow?.timezone ?? null),
       ),
     );
   },
@@ -404,6 +622,7 @@ notificationRoutes.post(
     summary: "Evaluates due reminders and enqueues delivery",
     description: "Evaluates due reminders and enqueues delivery. The handler rejects the call unless AUTH_MODE is test. Scheduled evaluation is not an HTTP route.",
     roles: ["trainer", "trainee"],
+    body: evaluateRemindersRequestSchema,
     response: evaluateRemindersResponseSchema,
   }),
   optionalAuthMiddleware,
@@ -418,9 +637,18 @@ notificationRoutes.post(
         "Manual reminder evaluation is only available in test mode.",
       );
     }
+    const parsed = evaluateRemindersRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid reminder evaluation request.", {
+        issues: parsed.error.issues,
+      });
+    }
     const db = createDb(c.env.DB);
     const queue = reminderQueueFromEnv(c.env);
     const result = await evaluateAndEnqueueReminders(db, {
+      now: parsed.data.now,
       queue,
       pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
       deliverInline: !queue,
@@ -505,13 +733,13 @@ notificationRoutes.put(
     tag: "Notifications",
     summary: "Notifications operation for PUT /notifications/relationships/:relationshipId/reminder-rules.",
     description: "Notifications operation for PUT /notifications/relationships/:relationshipId/reminder-rules.",
-    roles: ["trainer", "trainee"],
+    roles: ["trainer"],
     body: updateReminderRulesRequestSchema,
     response: reminderRulesResponseSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
-  requireRole("trainer", "trainee"),
+  requireRole("trainer"),
   async (c) => {
     const actor = c.get("actor");
     if (!actor?.selectedRole) {
@@ -532,7 +760,7 @@ notificationRoutes.put(
       c.req.param("relationshipId"),
       actor,
     );
-    if (!relationship) {
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
 
@@ -560,5 +788,173 @@ notificationRoutes.put(
         items: rows.map(mapReminderRule),
       }),
     );
+  },
+);
+
+notificationRoutes.post(
+  "/relationships/:relationshipId/nudges",
+  operation({
+    tag: "Notifications",
+    summary: "Trainer nudge for one unresolved activity",
+    description:
+      "Sends one activity nudge. Distinct from automatic reminders. Respects client preferences and quiet hours, and does not change execution or adherence.",
+    roles: ["trainer"],
+    body: nudgeActivityRequestSchema,
+    response: nudgeActivityResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = nudgeActivityRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid nudge request.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const writableNudge = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableNudge.ok) return writableNudge.response;
+    const result = await createActivityNudge(db, {
+      relationshipId: relationship.id,
+      trainerUserId: actor.userId,
+      activityType: parsed.data.activityType,
+      activityId: parsed.data.activityId,
+      now: c.env.AUTH_MODE === "test" ? parsed.data.now : undefined,
+      queue: reminderQueueFromEnv(c.env),
+      pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+      deliverInline: !c.env.REMINDER_QUEUE,
+    });
+    if (!result.ok) {
+      const status =
+        result.code === "NUDGE_LIMIT" || result.code === "NUDGE_RATE_LIMITED"
+          ? 429
+          : result.code === "ACTIVITY_NOT_FOUND" ||
+              result.code === "RELATIONSHIP_NOT_FOUND"
+            ? 404
+            : 409;
+      const retryAfter =
+        "retryAfter" in result ? result.retryAfter : undefined;
+      const retryMins =
+        typeof retryAfter === "number"
+          ? Math.max(1, Math.ceil(retryAfter / 60))
+          : null;
+      const message =
+        result.code === "RELATIONSHIP_ENDED"
+          ? "Ended relationships do not send nudges."
+          : result.code === "ACTIVITY_RESOLVED"
+            ? "This activity is already resolved."
+            : result.code === "REMINDERS_PAUSED"
+              ? "Client has paused reminders. Nudge isn't available."
+              : result.code === "NUDGE_LIMIT" ||
+                  result.code === "NUDGE_RATE_LIMITED"
+                ? retryMins
+                  ? `You can nudge again in ${retryMins} min`
+                  : "Nudge limit reached for this client or activity."
+                : "Activity not found.";
+      return fail(c, status, result.code, message, {
+        retryAfter,
+      });
+    }
+    return ok(
+      c,
+      nudgeActivityResponseSchema.parse({
+        notification: mapNotification(result.notification),
+        deduped: result.deduped,
+        deferredForQuietHours: result.deferredForQuietHours ?? false,
+        quietHoursEnd: result.quietHoursEnd ?? null,
+      }),
+    );
+  },
+);
+
+notificationRoutes.get(
+  "/relationships/:relationshipId/responsiveness",
+  operation({
+    tag: "Notifications",
+    summary: "Responsiveness label for one client",
+    description: "Returns a single responsiveness label and counts for the client.",
+    roles: ["trainer"],
+    response: responsivenessResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const days = Math.min(
+      Math.max(Number(c.req.query("days") ?? "14") || 14, 1),
+      90,
+    );
+    const { deriveResponsiveness } = await import("../domain/responsiveness.js");
+    const body = await deriveResponsiveness(db, {
+      relationshipId: relationship.id,
+      days,
+      nowIso: nowIso(),
+    });
+    return ok(c, responsivenessResponseSchema.parse(body));
+  },
+);
+
+notificationRoutes.get(
+  "/reengagement-candidates",
+  operation({
+    tag: "Notifications",
+    summary: "Clients eligible for trainer re-engagement via WhatsApp",
+    description: "Lists trainees with no recent logs and several unanswered reminders.",
+    roles: ["trainer"],
+    response: reengagementCandidatesResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const rels = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.trainerUserId, actor.userId));
+    const { deriveReengagementCandidates } = await import(
+      "../domain/responsiveness.js"
+    );
+    const items = await deriveReengagementCandidates(db, {
+      relationships: rels,
+      nowIso: nowIso(),
+    });
+    return ok(c, reengagementCandidatesResponseSchema.parse({ items }));
   },
 );

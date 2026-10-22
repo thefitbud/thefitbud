@@ -235,7 +235,7 @@ fileRoutes.post(
     const token = await signFileAccessToken({
       mediaAssetId,
       expiresAtUnix,
-      secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET),
+      secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET, c.env.ENVIRONMENT),
     });
     const expiresAt = new Date(expiresAtUnix * 1000).toISOString();
     const responseBody = {
@@ -288,7 +288,7 @@ fileRoutes.put(
         mediaAssetId,
         expiresAtUnix: Number(exp),
         token: sig,
-        secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET),
+        secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET, c.env.ENVIRONMENT),
       });
       if (!valid) {
         return fail(
@@ -594,7 +594,7 @@ fileRoutes.get(
     const token = await signFileAccessToken({
       mediaAssetId: loaded.asset.id,
       expiresAtUnix,
-      secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET),
+      secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET, c.env.ENVIRONMENT),
     });
     const expiresAt = new Date(expiresAtUnix * 1000).toISOString();
     return ok(
@@ -633,7 +633,7 @@ fileRoutes.get(
         mediaAssetId,
         expiresAtUnix: Number(exp),
         token: sig,
-        secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET),
+        secret: fileSigningSecret(c.env.MEDIA_SIGNING_SECRET, c.env.ENVIRONMENT),
       });
     } else {
       const actor = c.get("actor");

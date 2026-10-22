@@ -1,27 +1,41 @@
-import { z } from "zod";
 import {
   operation,
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, eq, gt, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 import {
   createExerciseLibraryItemRequestSchema,
   createFoodLibraryItemRequestSchema,
+  exerciseDifficultySchema,
   exerciseLibraryItemSchema,
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
+  scaleDecimal,
   updateExerciseLibraryItemRequestSchema,
   updateFoodLibraryItemRequestSchema,
 } from "@fitbud/contracts";
-import { createDb } from "../db/client";
-import { exerciseLibraryItems, foodLibraryItems } from "../db/schema";
+import { createDb, type Db } from "../db/client";
+import {
+  coachingRelationships,
+  exerciseLibraryItems,
+  foodLibraryItems,
+  foodLibraryServings,
+  traineeCustomFoods,
+} from "../db/schema";
+import { resolveLibraryId } from "../domain/library-redirects.js";
 import {
   mapExerciseLibraryItem,
   mapFoodLibraryItem,
 } from "../domain/mappers";
+import { buildFtsPrefixQuery, foodFtsMatchClause } from "../domain/library-search.js";
+import {
+  rebuildExerciseSearchFts,
+  rebuildFoodSearchFts,
+} from "../domain/library-fts.js";
 import { createId, nowIso } from "../lib/crypto";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";
@@ -37,16 +51,114 @@ export const libraryRoutes = new Hono<{
   Variables: Variables;
 }>();
 
+function likeContains(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+function nameContains(column: AnyColumn, q: string): SQL {
+  return sql`${column} like ${likeContains(q)} escape '\\'`;
+}
+
+function jsonListContains(column: AnyColumn, value: string): SQL {
+  return sql`exists (select 1 from json_each(${column}) where json_each.value = ${value})`;
+}
+
+function scaledOrNull(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  return scaleDecimal(value);
+}
+
+async function servingsByFoodId(db: Db, foodIds: string[]) {
+  const grouped = new Map<string, (typeof foodLibraryServings.$inferSelect)[]>();
+  if (foodIds.length === 0) return grouped;
+  const rows = await db
+    .select()
+    .from(foodLibraryServings)
+    .where(inArray(foodLibraryServings.foodLibraryItemId, foodIds))
+    .orderBy(asc(foodLibraryServings.label), asc(foodLibraryServings.id));
+  for (const row of rows) {
+    const current = grouped.get(row.foodLibraryItemId) ?? [];
+    current.push(row);
+    grouped.set(row.foodLibraryItemId, current);
+  }
+  return grouped;
+}
+
+async function insertServings(
+  db: Db,
+  foodId: string,
+  servings: { label: string; unit: string; conversion: number }[],
+  now: string,
+) {
+  for (const serving of servings) {
+    await db.insert(foodLibraryServings).values({
+      id: createId(),
+      foodLibraryItemId: foodId,
+      label: serving.label,
+      unit: serving.unit,
+      conversionScaled: scaleDecimal(serving.conversion),
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 libraryRoutes.get(
   "/exercises",
   operation({
     tag: "Libraries",
     summary: "Libraries operation for GET /libraries/exercises.",
-    description: "Libraries operation for GET /libraries/exercises.",
+    description:
+      "Active global and trainer-owned exercises. muscleGroup matches a primary or secondary muscle. Archived rows are omitted.",
     roles: ["trainer"],
     parameters: [
       limitParameter({ defaultValue: 50, maximum: 10 }),
       cursorParameter(),
+      {
+        name: "q",
+        in: "query",
+        required: false,
+        description: "Case-insensitive exercise name search.",
+        schema: { type: "string" },
+      },
+      {
+        name: "muscleGroup",
+        in: "query",
+        required: false,
+        description: "Exact match against a primary or secondary muscle group.",
+        schema: { type: "string" },
+      },
+      {
+        name: "primaryMuscle",
+        in: "query",
+        required: false,
+        description: "Exact match against a primary muscle group.",
+        schema: { type: "string" },
+      },
+      {
+        name: "secondaryMuscle",
+        in: "query",
+        required: false,
+        description: "Exact match against a secondary muscle group.",
+        schema: { type: "string" },
+      },
+      {
+        name: "equipment",
+        in: "query",
+        required: false,
+        description: "Exact match against one stored equipment label.",
+        schema: { type: "string" },
+      },
+      {
+        name: "difficulty",
+        in: "query",
+        required: false,
+        description: "Exact difficulty: beginner, intermediate, or advanced.",
+        schema: {
+          type: "string",
+          enum: ["beginner", "intermediate", "advanced"],
+        },
+      },
     ],
     response: exerciseLibraryListResponseSchema,
   }),
@@ -66,7 +178,33 @@ libraryRoutes.get(
     );
     const cursorParam = c.req.query("cursor");
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+    const q = c.req.query("q")?.trim();
+    const muscleGroup = c.req.query("muscleGroup")?.trim();
+    const primaryMuscle = c.req.query("primaryMuscle")?.trim();
+    const secondaryMuscle = c.req.query("secondaryMuscle")?.trim();
+    const equipment = c.req.query("equipment")?.trim();
+    const difficultyParam = c.req.query("difficulty")?.trim();
+    const difficulty = difficultyParam
+      ? exerciseDifficultySchema.safeParse(difficultyParam)
+      : null;
+    if (difficulty && !difficulty.success) {
+      return fail(
+        c,
+        400,
+        "INVALID_REQUEST",
+        "Exercise difficulty must be beginner, intermediate, or advanced.",
+      );
+    }
     const db = createDb(c.env.DB);
+    const eitherMuscle = muscleGroup
+      ? or(
+          jsonListContains(exerciseLibraryItems.primaryMusclesJson, muscleGroup),
+          jsonListContains(
+            exerciseLibraryItems.secondaryMusclesJson,
+            muscleGroup,
+          ),
+        )
+      : undefined;
 
     const ownershipFilter = or(
       eq(exerciseLibraryItems.ownership, "global"),
@@ -75,24 +213,41 @@ libraryRoutes.get(
         eq(exerciseLibraryItems.trainerUserId, actor.userId),
       ),
     );
+    const filters = [
+      ownershipFilter,
+      eq(exerciseLibraryItems.status, "active"),
+      q ? nameContains(exerciseLibraryItems.name, q) : undefined,
+      eitherMuscle,
+      primaryMuscle
+        ? jsonListContains(exerciseLibraryItems.primaryMusclesJson, primaryMuscle)
+        : undefined,
+      secondaryMuscle
+        ? jsonListContains(
+            exerciseLibraryItems.secondaryMusclesJson,
+            secondaryMuscle,
+          )
+        : undefined,
+      equipment
+        ? jsonListContains(exerciseLibraryItems.equipmentJson, equipment)
+        : undefined,
+      difficulty?.success
+        ? eq(exerciseLibraryItems.difficulty, difficulty.data)
+        : undefined,
+      cursor
+        ? or(
+            gt(exerciseLibraryItems.name, cursor.k),
+            and(
+              eq(exerciseLibraryItems.name, cursor.k),
+              gt(exerciseLibraryItems.id, cursor.id),
+            ),
+          )
+        : undefined,
+    ].filter((filter): filter is SQL => Boolean(filter));
 
     const rows = await db
       .select()
       .from(exerciseLibraryItems)
-      .where(
-        cursor
-          ? and(
-              ownershipFilter,
-              or(
-                gt(exerciseLibraryItems.name, cursor.k),
-                and(
-                  eq(exerciseLibraryItems.name, cursor.k),
-                  gt(exerciseLibraryItems.id, cursor.id),
-                ),
-              ),
-            )
-          : ownershipFilter,
-      )
+      .where(and(...filters))
       .orderBy(exerciseLibraryItems.name, exerciseLibraryItems.id)
       .limit(limit + 1);
 
@@ -110,7 +265,8 @@ libraryRoutes.post(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for POST /libraries/exercises.",
-    description: "Libraries operation for POST /libraries/exercises.",
+    description:
+      "Creates an independent trainer-owned exercise. Prescription targets are not stored.",
     roles: ["trainer"],
     body: createExerciseLibraryItemRequestSchema,
     successStatus: [201],
@@ -146,11 +302,15 @@ libraryRoutes.post(
       trainerUserId: actor.userId,
       name: parsed.data.name,
       instructions: parsed.data.instructions ?? null,
-      defaultLoadLabel: parsed.data.defaultLoadLabel ?? null,
-      defaultReps: parsed.data.defaultReps ?? null,
+      primaryMusclesJson: JSON.stringify(parsed.data.primaryMuscles ?? []),
+      secondaryMusclesJson: JSON.stringify(parsed.data.secondaryMuscles ?? []),
+      equipmentJson: JSON.stringify(parsed.data.equipment ?? []),
+      difficulty: parsed.data.difficulty ?? null,
+      status: "active",
       createdAt: now,
       updatedAt: now,
     });
+    await rebuildExerciseSearchFts(db, id);
 
     const [row] = await db
       .select()
@@ -174,7 +334,7 @@ libraryRoutes.put(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for PUT /libraries/exercises/:itemId.",
-    description: "Libraries operation for PUT /libraries/exercises/:itemId.",
+    description: "Updates a trainer-owned exercise. Global rows stay immutable.",
     roles: ["trainer"],
     body: updateExerciseLibraryItemRequestSchema,
     response: exerciseLibraryItemSchema,
@@ -226,8 +386,10 @@ libraryRoutes.put(
       .set({
         name: parsed.data.name,
         instructions: parsed.data.instructions ?? null,
-        defaultLoadLabel: parsed.data.defaultLoadLabel ?? null,
-        defaultReps: parsed.data.defaultReps ?? null,
+        primaryMusclesJson: JSON.stringify(parsed.data.primaryMuscles ?? []),
+        secondaryMusclesJson: JSON.stringify(parsed.data.secondaryMuscles ?? []),
+        equipmentJson: JSON.stringify(parsed.data.equipment ?? []),
+        difficulty: parsed.data.difficulty ?? null,
         updatedAt: nowIso(),
       })
       .where(eq(exerciseLibraryItems.id, itemId));
@@ -257,9 +419,10 @@ libraryRoutes.delete(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for DELETE /libraries/exercises/:itemId.",
-    description: "Libraries operation for DELETE /libraries/exercises/:itemId.",
+    description:
+      "Archives a trainer-owned exercise. Existing plan and template snapshots stay.",
     roles: ["trainer"],
-    response: z.object({ deleted: z.literal(true) }),
+    response: exerciseLibraryItemSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -292,9 +455,23 @@ libraryRoutes.delete(
     }
 
     await db
-      .delete(exerciseLibraryItems)
+      .update(exerciseLibraryItems)
+      .set({ status: "archived", updatedAt: nowIso() })
       .where(eq(exerciseLibraryItems.id, itemId));
-    return ok(c, { deleted: true });
+    const [updated] = await db
+      .select()
+      .from(exerciseLibraryItems)
+      .where(eq(exerciseLibraryItems.id, itemId))
+      .limit(1);
+    if (!updated) {
+      return fail(
+        c,
+        500,
+        "EXERCISE_LIBRARY_PERSIST_FAILED",
+        "Exercise library item could not be loaded.",
+      );
+    }
+    return ok(c, exerciseLibraryItemSchema.parse(mapExerciseLibraryItem(updated)));
   },
 );
 
@@ -303,11 +480,19 @@ libraryRoutes.get(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for GET /libraries/foods.",
-    description: "Libraries operation for GET /libraries/foods.",
+    description:
+      "Active global and trainer-owned foods with their servings. Archived rows are omitted.",
     roles: ["trainer"],
     parameters: [
       limitParameter({ defaultValue: 50, maximum: 10 }),
       cursorParameter(),
+      {
+        name: "q",
+        in: "query",
+        required: false,
+        description: "Case-insensitive food name search.",
+        schema: { type: "string" },
+      },
     ],
     response: foodLibraryListResponseSchema,
   }),
@@ -327,6 +512,7 @@ libraryRoutes.get(
     );
     const cursorParam = c.req.query("cursor");
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
+    const q = c.req.query("q")?.trim();
     const db = createDb(c.env.DB);
 
     const ownershipFilter = or(
@@ -336,33 +522,198 @@ libraryRoutes.get(
         eq(foodLibraryItems.trainerUserId, actor.userId),
       ),
     );
+    const ftsQuery = q && q.length >= 2 ? buildFtsPrefixQuery(q) : null;
+    const filters = [
+      ownershipFilter,
+      eq(foodLibraryItems.status, "active"),
+      ftsQuery ? foodFtsMatchClause(ftsQuery) : q ? nameContains(foodLibraryItems.name, q) : undefined,
+      !ftsQuery && cursor
+        ? or(
+            gt(foodLibraryItems.name, cursor.k),
+            and(
+              eq(foodLibraryItems.name, cursor.k),
+              gt(foodLibraryItems.id, cursor.id),
+            ),
+          )
+        : undefined,
+    ].filter((filter): filter is SQL => Boolean(filter));
 
-    const rows = await db
-      .select()
-      .from(foodLibraryItems)
-      .where(
+    let rows: (typeof foodLibraryItems.$inferSelect)[] = [];
+    if (ftsQuery) {
+      rows = await db
+        .select({ item: foodLibraryItems })
+        .from(foodLibraryItems)
+        .innerJoin(
+          sql`food_search_fts`,
+          sql`food_search_fts.food_id = ${foodLibraryItems.id}`,
+        )
+        .where(and(...filters))
+        .orderBy(sql`bm25(food_search_fts, 0, 10, 4, 1)`)
+        .limit(limit + 1)
+        .then((joined) => joined.map((row) => row.item));
+    }
+    if (!ftsQuery || rows.length === 0) {
+      const likeFilters = [
+        ownershipFilter,
+        eq(foodLibraryItems.status, "active"),
+        q ? nameContains(foodLibraryItems.name, q) : undefined,
         cursor
-          ? and(
-              ownershipFilter,
-              or(
-                gt(foodLibraryItems.name, cursor.k),
-                and(
-                  eq(foodLibraryItems.name, cursor.k),
-                  gt(foodLibraryItems.id, cursor.id),
-                ),
+          ? or(
+              gt(foodLibraryItems.name, cursor.k),
+              and(
+                eq(foodLibraryItems.name, cursor.k),
+                gt(foodLibraryItems.id, cursor.id),
               ),
             )
-          : ownershipFilter,
-      )
-      .orderBy(foodLibraryItems.name, foodLibraryItems.id)
-      .limit(limit + 1);
+          : undefined,
+      ].filter((filter): filter is SQL => Boolean(filter));
+      rows = await db
+        .select()
+        .from(foodLibraryItems)
+        .where(and(...likeFilters))
+        .orderBy(foodLibraryItems.name, foodLibraryItems.id)
+        .limit(limit + 1);
+    }
+    const servings = await servingsByFoodId(
+      db,
+      rows.map((row) => row.id),
+    );
 
     const page = buildPage(
-      rows.map((row) => mapFoodLibraryItem(row)),
+      rows.map((row) => mapFoodLibraryItem(row, servings.get(row.id) ?? [])),
       limit,
       (item) => item.name,
     );
     return ok(c, foodLibraryListResponseSchema.parse(page));
+  },
+);
+
+const foodLibraryItemDetailSchema = foodLibraryItemSchema.extend({
+  redirectedFrom: z.string().uuid().optional(),
+});
+
+const customLoggedFoodSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      kcalScaled: z.number().int(),
+      servingLabel: z.string(),
+      createdAt: z.string(),
+    }),
+  ),
+});
+
+libraryRoutes.get(
+  "/foods/custom-logged",
+  operation({
+    tag: "Libraries",
+    summary: "Trainee custom foods for a relationship",
+    description: "Trainer-visible custom foods logged by the trainee.",
+    roles: ["trainer"],
+    parameters: [
+      {
+        name: "rid",
+        in: "query",
+        required: true,
+        description: "Coaching relationship id",
+        schema: { type: "string", format: "uuid" },
+      },
+    ],
+    response: customLoggedFoodSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const rid = c.req.query("rid")?.trim();
+    if (!rid) {
+      return fail(c, 400, "INVALID_REQUEST", "rid query parameter is required.");
+    }
+    const db = createDb(c.env.DB);
+    const rel = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, rid))
+      .limit(1);
+    if (!rel[0] || rel[0].trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const rows = await db
+      .select()
+      .from(traineeCustomFoods)
+      .where(eq(traineeCustomFoods.relationshipId, rid));
+    return ok(
+      c,
+      customLoggedFoodSchema.parse({
+        items: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          kcalScaled: row.kcalScaled,
+          servingLabel: row.servingLabel,
+          createdAt: row.createdAt,
+        })),
+      }),
+    );
+  },
+);
+
+libraryRoutes.get(
+  "/foods/:itemId",
+  operation({
+    tag: "Libraries",
+    summary: "Get one food library item",
+    description: "Resolves legacy ids through library_id_redirects.",
+    roles: ["trainer"],
+    response: foodLibraryItemDetailSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const itemId = c.req.param("itemId");
+    const db = createDb(c.env.DB);
+    const resolved = await resolveLibraryId(db, itemId);
+    const rows = await db
+      .select()
+      .from(foodLibraryItems)
+      .where(
+        and(
+          eq(foodLibraryItems.id, resolved.id),
+          eq(foodLibraryItems.status, "active"),
+          or(
+            eq(foodLibraryItems.ownership, "global"),
+            and(
+              eq(foodLibraryItems.ownership, "trainer"),
+              eq(foodLibraryItems.trainerUserId, actor.userId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+    const row = rows[0];
+    if (!row) {
+      return fail(c, 404, "FOOD_NOT_FOUND", "Food not found.");
+    }
+    const servings = await servingsByFoodId(db, [row.id]);
+    const item = mapFoodLibraryItem(row, servings.get(row.id) ?? []);
+    return ok(
+      c,
+      foodLibraryItemDetailSchema.parse({
+        ...item,
+        ...(resolved.redirectedFrom
+          ? { redirectedFrom: resolved.redirectedFrom }
+          : {}),
+      }),
+    );
   },
 );
 
@@ -371,7 +722,8 @@ libraryRoutes.post(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for POST /libraries/foods.",
-    description: "Libraries operation for POST /libraries/foods.",
+    description:
+      "Creates a trainer-owned food with a classification, canonical basis, and at least one serving.",
     roles: ["trainer"],
     body: createFoodLibraryItemRequestSchema,
     successStatus: [201],
@@ -407,11 +759,20 @@ libraryRoutes.post(
       trainerUserId: actor.userId,
       name: parsed.data.name,
       cuisineRegion: "indian",
-      portionLabel: parsed.data.portionLabel,
+      classification: parsed.data.classification,
+      nutritionBasis: parsed.data.basis,
+      energyKcalScaled: scaledOrNull(parsed.data.energyKcal),
+      proteinScaled: scaledOrNull(parsed.data.proteinGrams),
+      carbsScaled: scaledOrNull(parsed.data.carbsGrams),
+      fatScaled: scaledOrNull(parsed.data.fatGrams),
       notes: parsed.data.notes ?? null,
+      description: parsed.data.description ?? null,
+      status: "active",
       createdAt: now,
       updatedAt: now,
     });
+    await insertServings(db, id, parsed.data.servings, now);
+    await rebuildFoodSearchFts(db, id);
 
     const [row] = await db
       .select()
@@ -426,7 +787,12 @@ libraryRoutes.post(
         "Food library item could not be loaded.",
       );
     }
-    return ok(c, foodLibraryItemSchema.parse(mapFoodLibraryItem(row)), 201);
+    const servings = await servingsByFoodId(db, [id]);
+    return ok(
+      c,
+      foodLibraryItemSchema.parse(mapFoodLibraryItem(row, servings.get(id) ?? [])),
+      201,
+    );
   },
 );
 
@@ -435,7 +801,8 @@ libraryRoutes.put(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for PUT /libraries/foods/:itemId.",
-    description: "Libraries operation for PUT /libraries/foods/:itemId.",
+    description:
+      "Replaces a trainer-owned food definition. Saved plan snapshots are not rewritten.",
     roles: ["trainer"],
     body: updateFoodLibraryItemRequestSchema,
     response: foodLibraryItemSchema,
@@ -482,15 +849,27 @@ libraryRoutes.put(
       );
     }
 
+    const now = nowIso();
     await db
       .update(foodLibraryItems)
       .set({
         name: parsed.data.name,
-        portionLabel: parsed.data.portionLabel,
+        classification: parsed.data.classification,
+        nutritionBasis: parsed.data.basis,
+        energyKcalScaled: scaledOrNull(parsed.data.energyKcal),
+        proteinScaled: scaledOrNull(parsed.data.proteinGrams),
+        carbsScaled: scaledOrNull(parsed.data.carbsGrams),
+        fatScaled: scaledOrNull(parsed.data.fatGrams),
         notes: parsed.data.notes ?? null,
-        updatedAt: nowIso(),
+        description: parsed.data.description ?? null,
+        updatedAt: now,
       })
       .where(eq(foodLibraryItems.id, itemId));
+    await rebuildFoodSearchFts(db, itemId);
+    await db
+      .delete(foodLibraryServings)
+      .where(eq(foodLibraryServings.foodLibraryItemId, itemId));
+    await insertServings(db, itemId, parsed.data.servings, now);
 
     const [updated] = await db
       .select()
@@ -505,7 +884,13 @@ libraryRoutes.put(
         "Food library item could not be loaded.",
       );
     }
-    return ok(c, foodLibraryItemSchema.parse(mapFoodLibraryItem(updated)));
+    const servings = await servingsByFoodId(db, [itemId]);
+    return ok(
+      c,
+      foodLibraryItemSchema.parse(
+        mapFoodLibraryItem(updated, servings.get(itemId) ?? []),
+      ),
+    );
   },
 );
 
@@ -514,9 +899,10 @@ libraryRoutes.delete(
   operation({
     tag: "Libraries",
     summary: "Libraries operation for DELETE /libraries/foods/:itemId.",
-    description: "Libraries operation for DELETE /libraries/foods/:itemId.",
+    description:
+      "Archives a trainer-owned food. Existing plan and template snapshots stay.",
     roles: ["trainer"],
-    response: z.object({ deleted: z.literal(true) }),
+    response: foodLibraryItemSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -548,7 +934,30 @@ libraryRoutes.delete(
       );
     }
 
-    await db.delete(foodLibraryItems).where(eq(foodLibraryItems.id, itemId));
-    return ok(c, { deleted: true });
+    await db
+      .update(foodLibraryItems)
+      .set({ status: "archived", updatedAt: nowIso() })
+      .where(eq(foodLibraryItems.id, itemId));
+    await rebuildFoodSearchFts(db, itemId);
+    const [updated] = await db
+      .select()
+      .from(foodLibraryItems)
+      .where(eq(foodLibraryItems.id, itemId))
+      .limit(1);
+    if (!updated) {
+      return fail(
+        c,
+        500,
+        "FOOD_LIBRARY_PERSIST_FAILED",
+        "Food library item could not be loaded.",
+      );
+    }
+    const servings = await servingsByFoodId(db, [itemId]);
+    return ok(
+      c,
+      foodLibraryItemSchema.parse(
+        mapFoodLibraryItem(updated, servings.get(itemId) ?? []),
+      ),
+    );
   },
 );

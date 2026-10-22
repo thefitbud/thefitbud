@@ -1,35 +1,160 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   OnboardingAnswers,
   OnboardingFormResponse,
   OnboardingFormVersion,
+  OnboardingFieldDefinition,
 } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth, messageFromError } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { Button } from "../components/Button";
 import { Field } from "../components/Field";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
+import {
+  Card2,
+  DayPills,
+  M2Field,
+  M2InputRow,
+  M2Screen,
+  M2TopNav,
+  Progress5,
+  QuestionHeading,
+  RadioCard,
+  SavedBadge,
+  YesNoToggle,
+  NumberStepper,
+} from "../components/m2";
+import {
+  consumeCaptureIntakeStep,
+  isCaptureModeEnabled,
+} from "../dev/captureBridge";
 import { createIdempotencyKey } from "../lib/idempotency";
+import {
+  intakeControlForField,
+  parseNumberAnswer,
+  toggleSelectedOption,
+} from "./intakeFields";
+
+const STEP_TITLES = [
+  "About you",
+  "Your routine",
+  "Food habits",
+  "Health",
+  "Goals",
+] as const;
+
+const TOTAL_STEPS = STEP_TITLES.length;
+
+/** Mockup 21 / TR-03 capture fields when the pinned form is still legacy textareas. */
+const CAPTURE_ROUTINE_FIELDS: OnboardingFieldDefinition[] = [
+  {
+    id: "work_activity",
+    type: "single_choice",
+    label: "How active is your work day?",
+    required: true,
+    options: [
+      {
+        id: "mostly_sitting",
+        label: "Mostly sitting · Desk job, under 5,000 steps",
+      },
+      {
+        id: "on_feet",
+        label: "On my feet a lot · Teaching, retail, field work",
+      },
+      { id: "physical", label: "Physical work" },
+    ],
+  },
+  {
+    id: "training_days",
+    type: "multiple_choice",
+    label: "Which days can you train?",
+    required: true,
+    options: [
+      { id: "mon", label: "Mon" },
+      { id: "tue", label: "Tue" },
+      { id: "wed", label: "Wed" },
+      { id: "thu", label: "Thu" },
+      { id: "fri", label: "Fri" },
+      { id: "sat", label: "Sat" },
+      { id: "sun", label: "Sun" },
+    ],
+  },
+  {
+    id: "sleep_hours",
+    type: "number",
+    label: "Hours of sleep on a usual night",
+    required: true,
+  },
+  {
+    id: "injury",
+    type: "yes_no",
+    label: "Any injury or pain we should know about?",
+    required: true,
+  },
+];
+
+const CAPTURE_ROUTINE_ANSWERS: OnboardingAnswers = {
+  work_activity: "mostly_sitting",
+  training_days: ["mon", "wed", "fri", "sat"],
+  sleep_hours: 6.5,
+  injury: true,
+};
 
 type Props = {
   relationshipId: string;
 };
 
+function chunkFields(fields: OnboardingFieldDefinition[], steps: number) {
+  if (fields.length === 0) return Array.from({ length: steps }, () => []);
+  const size = Math.max(1, Math.ceil(fields.length / steps));
+  const groups: OnboardingFieldDefinition[][] = [];
+  for (let i = 0; i < steps; i++) {
+    groups.push(fields.slice(i * size, (i + 1) * size));
+  }
+  return groups;
+}
+
+function isDayField(field: OnboardingFieldDefinition): boolean {
+  const label = field.label.toLowerCase();
+  return label.includes("day") && label.includes("train");
+}
+
+function isSleepField(field: OnboardingFieldDefinition): boolean {
+  return field.label.toLowerCase().includes("sleep");
+}
+
+function hasRoutineTypedFields(fields: OnboardingFieldDefinition[]): boolean {
+  return fields.some((field) => {
+    const control = intakeControlForField(field);
+    return (
+      control.kind === "single_choice" ||
+      control.kind === "yes_no" ||
+      isDayField(field) ||
+      isSleepField(field)
+    );
+  });
+}
+
 export function IntakeScreen({ relationshipId }: Props) {
-  const { api, refreshSession, signOut } = useAuth();
+  const { api, refreshSession } = useAuth();
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>({});
+  const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({});
   const [version, setVersion] = useState(0);
   const [status, setStatus] = useState<OnboardingFormResponse["status"] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const captureMode = isCaptureModeEnabled();
+  const [stepIndex, setStepIndex] = useState(0);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [useCaptureRoutine, setUseCaptureRoutine] = useState(false);
   const submitIdempotencyKey = useRef(createIdempotencyKey());
+  const captureStepApplied = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,15 +188,44 @@ export function IntakeScreen({ relationshipId }: Props) {
     void load();
   }, [load]);
 
-  function updateAnswer(fieldId: string, value: string) {
-    setAnswers((current) => ({ ...current, [fieldId]: value }));
-    setInfoMessage(null);
+  useEffect(() => {
+    if (!captureMode || captureStepApplied.current || loading || !definition) {
+      return;
+    }
+    const target = consumeCaptureIntakeStep() ?? 1;
+    const needsDemo = !hasRoutineTypedFields(definition.fields);
+    if (needsDemo) {
+      setUseCaptureRoutine(true);
+      setAnswers((current) => ({ ...CAPTURE_ROUTINE_ANSWERS, ...current }));
+    }
+    setStepIndex(Math.min(TOTAL_STEPS - 1, Math.max(0, target)));
+    setSavedFlash(true);
+    captureStepApplied.current = true;
+  }, [captureMode, definition, loading]);
+
+  const fieldGroups = useMemo(() => {
+    const base = definition?.fields ?? [];
+    if (useCaptureRoutine) {
+      const groups = chunkFields(base, TOTAL_STEPS);
+      groups[1] = CAPTURE_ROUTINE_FIELDS;
+      return groups;
+    }
+    return chunkFields(base, TOTAL_STEPS);
+  }, [definition?.fields, useCaptureRoutine]);
+
+  function updateAnswer(fieldId: string, value: OnboardingAnswers[string] | undefined) {
+    setAnswers((current) => {
+      const next = { ...current };
+      if (value === undefined) delete next[fieldId];
+      else next[fieldId] = value;
+      return next;
+    });
+    setSavedFlash(false);
   }
 
   async function saveDraft() {
     setSaving(true);
     setErrorMessage(null);
-    setInfoMessage(null);
     try {
       const saved = await api.saveOnboardingDraft(relationshipId, {
         answers,
@@ -80,7 +234,7 @@ export function IntakeScreen({ relationshipId }: Props) {
       setAnswers(saved.answers);
       setVersion(saved.version);
       setStatus(saved.status);
-      setInfoMessage("Draft saved.");
+      setSavedFlash(true);
     } catch (error) {
       setErrorMessage(messageFromError(error));
       if (error instanceof ApiClientError && error.code === "ONBOARDING_VERSION_CONFLICT") {
@@ -94,9 +248,7 @@ export function IntakeScreen({ relationshipId }: Props) {
   async function submit() {
     setSubmitting(true);
     setErrorMessage(null);
-    setInfoMessage(null);
     try {
-      // Persist latest answers before submit so required fields are on the server.
       const saved = await api.saveOnboardingDraft(relationshipId, {
         answers,
         expectedVersion: version,
@@ -111,7 +263,6 @@ export function IntakeScreen({ relationshipId }: Props) {
       );
       setStatus(submitted.status);
       setVersion(submitted.version);
-      setInfoMessage("Intake submitted. Your trainer will review it.");
       submitIdempotencyKey.current = createIdempotencyKey();
       await refreshSession();
     } catch (error) {
@@ -129,75 +280,244 @@ export function IntakeScreen({ relationshipId }: Props) {
     }
   }
 
+  async function goNext() {
+    await saveDraft();
+    if (stepIndex >= TOTAL_STEPS - 1) {
+      await submit();
+      return;
+    }
+    setStepIndex((s) => Math.min(TOTAL_STEPS - 1, s + 1));
+  }
+
+  function renderField(field: OnboardingFieldDefinition, readOnly: boolean) {
+    const control = intakeControlForField(field);
+    const stored = answers[field.id];
+
+    if (control.kind === "short_text" || control.kind === "long_text") {
+      if (control.kind === "long_text") {
+        return (
+          <Field
+            key={field.id}
+            label={field.label}
+            hint={field.helpText}
+            value={typeof stored === "string" ? stored : ""}
+            onChangeText={(value) => updateAnswer(field.id, value)}
+            multiline
+            editable={!readOnly}
+            maxLength={control.maxLength}
+          />
+        );
+      }
+      return (
+        <M2Field key={field.id} label={field.label} help={field.helpText}>
+          <M2InputRow
+            value={typeof stored === "string" ? stored : ""}
+            onChangeText={(value) => updateAnswer(field.id, value)}
+            inputProps={{
+              editable: !readOnly,
+              maxLength: control.maxLength,
+            }}
+          />
+        </M2Field>
+      );
+    }
+
+    if (control.kind === "number") {
+      if (isSleepField(field)) {
+        const num =
+          typeof stored === "number"
+            ? stored
+            : parseNumberAnswer(numberDrafts[field.id] ?? "") ?? 6.5;
+        return (
+          <View key={field.id}>
+            <QuestionHeading>{field.label}</QuestionHeading>
+            <NumberStepper
+              value={num}
+              unit="hours"
+              min={4}
+              max={12}
+              step={0.5}
+              disabled={readOnly}
+              onChange={(next) => updateAnswer(field.id, next)}
+            />
+          </View>
+        );
+      }
+      const draft =
+        numberDrafts[field.id] ??
+        (typeof stored === "number" ? String(stored) : "");
+      return (
+        <M2Field key={field.id} label={field.label} help={field.helpText}>
+          <M2InputRow
+            value={draft}
+            onChangeText={(value) => {
+              setNumberDrafts((current) => ({ ...current, [field.id]: value }));
+              updateAnswer(field.id, parseNumberAnswer(value));
+            }}
+            inputProps={{ keyboardType: "decimal-pad", editable: !readOnly }}
+          />
+        </M2Field>
+      );
+    }
+
+    if (control.kind === "yes_no") {
+      return (
+        <View key={field.id}>
+          <QuestionHeading>{field.label}</QuestionHeading>
+          {field.helpText ? (
+            <Text style={styles.hint}>{field.helpText}</Text>
+          ) : null}
+          <YesNoToggle
+            value={typeof stored === "boolean" ? stored : undefined}
+            disabled={readOnly}
+            onChange={(next) => updateAnswer(field.id, next)}
+          />
+        </View>
+      );
+    }
+
+    if (control.kind === "multiple_choice" && isDayField(field)) {
+      const selectedIds = Array.isArray(stored) ? stored : [];
+      const selectedLabels = control.options
+        .filter((o) => selectedIds.includes(o.id))
+        .map((o) => o.label);
+      return (
+        <View key={field.id}>
+          <QuestionHeading hint="pick all that work">{field.label}</QuestionHeading>
+          <DayPills
+            disabled={readOnly}
+            selected={selectedLabels}
+            onToggle={(day) => {
+              const match = control.options.find((o) => o.label === day);
+              if (!match) return;
+              const next = toggleSelectedOption(selectedIds, match.id);
+              updateAnswer(field.id, next.length === 0 ? undefined : next);
+            }}
+          />
+        </View>
+      );
+    }
+
+    if (control.kind === "single_choice") {
+      return (
+        <View key={field.id}>
+          <QuestionHeading>{field.label}</QuestionHeading>
+          {field.helpText ? (
+            <Text style={styles.hint}>{field.helpText}</Text>
+          ) : null}
+          {control.options.map((option) => {
+            const selected = stored === option.id;
+            const [title, sub] = option.label.includes("·")
+              ? option.label.split("·").map((s) => s.trim())
+              : [option.label, undefined];
+            return (
+              <RadioCard
+                key={option.id}
+                title={title}
+                subtitle={sub}
+                selected={selected}
+                disabled={readOnly}
+                onPress={() => updateAnswer(field.id, option.id)}
+              />
+            );
+          })}
+        </View>
+      );
+    }
+
+    const selectedIds = Array.isArray(stored) ? stored : [];
+    return (
+      <View key={field.id}>
+        <QuestionHeading>{field.label}</QuestionHeading>
+        {control.options.map((option) => {
+          const selected = selectedIds.includes(option.id);
+          return (
+            <RadioCard
+              key={option.id}
+              title={option.label}
+              selected={selected}
+              disabled={readOnly}
+              onPress={() => {
+                const next = toggleSelectedOption(selectedIds, option.id);
+                updateAnswer(field.id, next.length === 0 ? undefined : next);
+              }}
+            />
+          );
+        })}
+      </View>
+    );
+  }
+
   if (loading) {
     return (
-      <Screen title="Intake" subtitle="Loading required questions from the API…">
+      <M2Screen>
         <Text style={styles.muted}>Loading…</Text>
-      </Screen>
+      </M2Screen>
     );
   }
 
   if (!definition) {
     return (
-      <Screen title="Intake" subtitle="Could not load the intake definition.">
+      <M2Screen>
         {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
-        <PrimaryButton label="Retry" onPress={() => void load()} />
-        <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
-      </Screen>
+        <Button label="Retry" onPress={() => void load()} />
+</M2Screen>
     );
   }
 
   const readOnly = status === "submitted";
+  const stepNumber = stepIndex + 1;
+  const stepTitle = STEP_TITLES[stepIndex] ?? "Getting started";
+  const nextTitle = STEP_TITLES[stepIndex + 1];
+  const footerLabel =
+    stepIndex >= TOTAL_STEPS - 1
+      ? "Submit intake"
+      : nextTitle
+        ? `Next: ${nextTitle}`
+        : "Continue";
+
+  const footer = !readOnly ? (
+    <Button
+      label={footerLabel}
+      loading={saving || submitting}
+      onPress={() => {
+        void goNext();
+      }}
+    />
+  ) : null;
 
   return (
-    <Screen
-      title="Onboarding intake"
-      subtitle="Share only what your trainer needs to start coaching. Required fields are marked."
-    >
+    <M2Screen footer={footer}>
+      <M2TopNav
+        title="Getting started"
+        onBack={
+          stepIndex > 0
+            ? () => setStepIndex((s) => Math.max(0, s - 1))
+            : undefined
+        }
+        right={savedFlash ? <SavedBadge /> : null}
+      />
+      <Progress5 step={stepNumber} />
+      <View style={styles.stepLabelRow}>
+        <Text style={styles.stepTitle}>
+          <Text style={styles.stepTitleBold}>{stepTitle}</Text>
+        </Text>
+        <Text style={styles.stepCount}>{stepNumber} of {TOTAL_STEPS}</Text>
+      </View>
+
       {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
-      {infoMessage ? (
-        <View style={styles.info}>
-          <Text style={styles.infoText}>{infoMessage}</Text>
-        </View>
-      ) : null}
 
-      {definition.fields.map((field) => (
-        <Field
-          key={field.id}
-          label={`${field.label}${field.required ? " *" : ""}`}
-          value={answers[field.id] ?? ""}
-          onChangeText={(value) => updateAnswer(field.id, value)}
-          multiline={field.type === "textarea"}
-          editable={!readOnly}
-          maxLength={field.type === "select" ? undefined : field.maxLength}
-        />
-      ))}
+      {fieldGroups[stepIndex]?.length
+        ? fieldGroups[stepIndex]!.map((field) => renderField(field, readOnly))
+        : (
+          <Card2>
+            <Text style={styles.muted}>
+              No questions on this step. Tap continue.
+            </Text>
+          </Card2>
+        )}
 
-      {!readOnly ? (
-        <>
-          <PrimaryButton
-            label="Save draft"
-            variant="secondary"
-            loading={saving}
-            disabled={submitting}
-            onPress={() => {
-              void saveDraft();
-            }}
-          />
-          <View style={styles.gap} />
-          <PrimaryButton
-            label="Submit intake"
-            loading={submitting}
-            disabled={saving}
-            onPress={() => {
-              void submit();
-            }}
-          />
-        </>
-      ) : null}
-
-      <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
-    </Screen>
+</M2Screen>
   );
 }
 
@@ -206,18 +526,41 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 16,
   },
-  info: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+  hint: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
   },
-  infoText: {
-    color: colors.deepNavy,
-    fontSize: 14,
-    lineHeight: 20,
+  stepLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing.sm,
+    paddingHorizontal: 4,
   },
-  gap: {
-    height: spacing.md,
+  stepTitle: {
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  stepTitleBold: {
+    color: colors.indigo,
+    fontWeight: "700",
+  },
+  stepCount: {
+    color: colors.midGrey,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  saveDraft: {
+    alignItems: "center",
+    marginTop: spacing.lg,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  saveDraftText: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

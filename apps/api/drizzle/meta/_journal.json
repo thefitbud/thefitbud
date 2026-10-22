@@ -103,5 +103,110 @@
     "when": 1728576000000,
     "tag": "0014_onboarding_form_templates",
     "breakpoints": true
+  },
+  {
+    "idx": 15,
+    "version": "7",
+    "when": 1728662400000,
+    "tag": "0015_iteration_a",
+    "breakpoints": true
+  },
+  {
+    "idx": 16,
+    "version": "7",
+    "when": 1728748800000,
+    "tag": "0016_food_exercise_libraries",
+    "breakpoints": true
+  },
+  {
+    "idx": 17,
+    "version": "7",
+    "when": 1728835200000,
+    "tag": "0017_plan_template_ownership",
+    "breakpoints": true
+  },
+  {
+    "idx": 18,
+    "version": "7",
+    "when": 1728921600000,
+    "tag": "0018_assignment_schedule_status",
+    "breakpoints": true
+  },
+  {
+    "idx": 19,
+    "version": "7",
+    "when": 1729008000000,
+    "tag": "0019_checkin_form_templates",
+    "breakpoints": true
+  },
+  {
+    "idx": 20,
+    "version": "7",
+    "when": 1729094400000,
+    "tag": "0020_exception_severity",
+    "breakpoints": true
+  },
+  {
+    "idx": 21,
+    "version": "7",
+    "when": 1729180800000,
+    "tag": "0021_library_v2",
+    "breakpoints": true
+  },
+  {
+    "idx": 22,
+    "version": "7",
+    "when": 1729267200000,
+    "tag": "0022_auth_config",
+    "breakpoints": true
+  },
+  {
+    "idx": 23,
+    "version": "7",
+    "when": 1729353600000,
+    "tag": "0023_lifecycle_notes_asks",
+    "breakpoints": true
+  },
+  {
+    "idx": 24,
+    "version": "7",
+    "when": 1729440000000,
+    "tag": "0024_logging_mealtimes",
+    "breakpoints": true
+  },
+  {
+    "idx": 25,
+    "version": "7",
+    "when": 1729526400000,
+    "tag": "0025_preferences_reminders",
+    "breakpoints": true
+  },
+  {
+    "idx": 26,
+    "version": "7",
+    "when": 1729612800000,
+    "tag": "0026_whatsapp",
+    "breakpoints": true
+  },
+  {
+    "idx": 27,
+    "version": "7",
+    "when": 1729699200000,
+    "tag": "0027_daily_summary_preference",
+    "breakpoints": true
+  },
+  {
+    "idx": 28,
+    "version": "7",
+    "when": 1729785600000,
+    "tag": "0028_checkin_preferred_form",
+    "breakpoints": true
+  },
+  {
+    "idx": 29,
+    "version": "7",
+    "when": 1729872000000,
+    "tag": "0029_checkin_form_global_fields",
+    "breakpoints": true
   }
 ]

@@ -1,4 +1,11 @@
 export function nowIso(): string {
+  const injected =
+    (globalThis as { FITBUD_NOW?: string }).FITBUD_NOW ??
+    (typeof process !== "undefined" ? process.env.NOW : undefined);
+  if (injected) {
+    const parsed = Date.parse(injected);
+    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+  }
   return new Date().toISOString();
 }
 

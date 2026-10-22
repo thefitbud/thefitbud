@@ -38,6 +38,7 @@ export const createInvitationRequestSchema = z.object({
   recipientDisplayName: z.string().trim().min(1).max(120).optional(),
   /** WhatsApp number as entered by the trainer. Normalized to E.164 digits on the server. */
   recipientWhatsapp: z.string().trim().min(8).max(20).optional(),
+  sendEmail: z.boolean().optional(),
   expiresInDays: z.number().int().min(1).max(30).optional(),
   /**
    * When omitted, the server runs form resolution once and stores that version.
@@ -68,6 +69,7 @@ export type Invitation = z.infer<typeof invitationSchema>;
 export const createInvitationResponseSchema = invitationSchema.extend({
   /** Raw token returned once on create. Never stored or logged. */
   token: z.string().min(1),
+  inviteUrl: z.string().url(),
 });
 export type CreateInvitationResponse = z.infer<
   typeof createInvitationResponseSchema
@@ -77,8 +79,30 @@ export const acceptInvitationRequestSchema = z.object({
   token: z.string().min(1),
   displayName: z.string().trim().min(1).max(120).optional(),
   timezone: z.string().min(1).max(64).optional(),
+  mobileE164: z.string().trim().min(8).max(20).optional(),
+  password: z.string().min(8).max(64).optional(),
+  otpProof: z.string().min(1).optional(),
 });
+
+export const acceptInvitationWithTokenResponseSchema = z.object({
+  token: z.string(),
+  tokenKind: z.enum(["test_id_token", "firebase_custom_token"]),
+  userId: uuidSchema,
+  relationshipId: uuidSchema,
+});
+export type AcceptInvitationWithTokenResponse = z.infer<
+  typeof acceptInvitationWithTokenResponseSchema
+>;
 export type AcceptInvitationRequest = z.infer<typeof acceptInvitationRequestSchema>;
+
+export const pendingReactivationSchema = z.object({
+  requestId: uuidSchema,
+  expiresAt: isoDateTimeSchema,
+  /** When the trainer sent the reactivation request. */
+  sentAt: isoDateTimeSchema.optional(),
+  intakeUpdateRequested: z.boolean(),
+});
+export type PendingReactivation = z.infer<typeof pendingReactivationSchema>;
 
 export const coachingRelationshipSchema = z.object({
   id: uuidSchema,
@@ -91,6 +115,12 @@ export const coachingRelationshipSchema = z.object({
   endedAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
+  /** Trainer's display name when available (trainee-facing reads). */
+  trainerDisplayName: z.string().min(1).max(120).nullable().optional(),
+  /** Trainer WhatsApp E.164 digits (no +) for TR-18 Ask coach; null when unset. */
+  trainerWhatsappE164: z.string().min(10).max(15).nullable().optional(),
+  /** Present on relationship read when a trainee reactivation request is pending. */
+  pendingReactivation: pendingReactivationSchema.nullable().optional(),
 });
 export type CoachingRelationship = z.infer<typeof coachingRelationshipSchema>;
 
@@ -114,4 +144,24 @@ export const relationshipListResponseSchema = z.object({
 });
 export type RelationshipListResponse = z.infer<
   typeof relationshipListResponseSchema
+>;
+
+export const endRelationshipRequestSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+export type EndRelationshipRequest = z.infer<typeof endRelationshipRequestSchema>;
+
+export const reactivateRelationshipRequestSchema = z.object({
+  intakeUpdateRequested: z.boolean().optional(),
+});
+export type ReactivateRelationshipRequest = z.infer<
+  typeof reactivateRelationshipRequestSchema
+>;
+
+export const invitationPreviewResponseSchema = z.object({
+  trainerDisplayName: z.string().min(1),
+  status: invitationStatusSchema,
+});
+export type InvitationPreviewResponse = z.infer<
+  typeof invitationPreviewResponseSchema
 >;

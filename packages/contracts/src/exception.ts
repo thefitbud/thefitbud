@@ -11,15 +11,23 @@ export const exceptionStatusSchema = z.enum([
 export type ExceptionStatus = z.infer<typeof exceptionStatusSchema>;
 
 /**
- * Deterministic exception types from C3–C5 derived signals.
- * No opaque risk scores.
+ * Deterministic exception types. No opaque risk scores and no fifth
+ * client-adherence value.
  */
 export const exceptionTypeSchema = z.enum([
   "missed_workout",
+  "skipped_workout",
   "overdue_meal",
+  "skipped_meal",
+  "meal_deviation",
+  "meal_logged_later",
   "overdue_checkin",
 ]);
 export type ExceptionType = z.infer<typeof exceptionTypeSchema>;
+
+/** Stored activity severity. On track means no exception was created. */
+export const exceptionSeveritySchema = z.enum(["critical", "attention"]);
+export type ExceptionSeverity = z.infer<typeof exceptionSeveritySchema>;
 
 export const exceptionSourceEntityTypeSchema = z.enum([
   "workout_assignment",
@@ -46,6 +54,7 @@ export const exceptionSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
   type: exceptionTypeSchema,
+  severity: exceptionSeveritySchema,
   status: exceptionStatusSchema,
   ruleVersion: z.string().min(1).max(64),
   sourceEntityType: exceptionSourceEntityTypeSchema,
@@ -93,6 +102,7 @@ export type ExceptionListResponse = z.infer<typeof exceptionListResponseSchema>;
 export const evaluateExceptionsResponseSchema = z.object({
   created: z.number().int().nonnegative(),
   activated: z.number().int().nonnegative(),
+  resolved: z.number().int().nonnegative(),
   exceptions: z.array(exceptionSchema),
 });
 export type EvaluateExceptionsResponse = z.infer<
@@ -108,6 +118,7 @@ export type AcknowledgeExceptionRequest = z.infer<
 
 export const resolveExceptionRequestSchema = z.object({
   note: z.string().trim().max(2000).nullable().optional(),
+  outcome: z.enum(["talked", "plan_adjusted", "no_action", "other"]).optional(),
   interventionKind: z
     .enum(["note", "resolve", "plan_adjustment", "schedule_checkin"])
     .optional(),
@@ -151,6 +162,7 @@ export type InterventionListResponse = z.infer<
 export const activeExceptionSummarySchema = z.object({
   id: uuidSchema,
   type: exceptionTypeSchema,
+  severity: exceptionSeveritySchema,
   status: exceptionStatusSchema,
   summary: z.string(),
   sourceEntityType: exceptionSourceEntityTypeSchema,

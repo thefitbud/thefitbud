@@ -1,837 +1,892 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  CoachingConfiguration,
-  EffectivePlanResponse,
-  PlanTemplateSummary,
-  PlanVersion,
-  WorkoutDay,
-  WorkoutExercise,
+import {
+  planVersionStatusSchema,
+  type DietAdjustmentScope,
+  type PlanContent,
+  type PlanTemplateSummary,
+  type PlanVersionStatus,
+  type PlanWithVersions,
 } from "@fitbud/contracts";
+import {
+  consistencyFingerprint,
+  formatCivilDate,
+  formatHhMmTime,
+  formatLocalDate,
+  formatRelative,
+  labelFor,
+  planConsistencyWarnings,
+} from "@fitbud/core";
+import { useAuth } from "../auth/AuthProvider";
+import { WEEK_ORDER, weekdayShort } from "../components/builder/weekdays";
+import { publishIssues } from "../components/builder/validation";
+import { OverflowMenu } from "../components/OverflowMenu";
+import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
+import { AssignPlanModal } from "../components/plan/AssignPlanModal";
+import { createBlankPlanContent, sortedMealsByTime } from "../components/plan-composition";
+import { EmptyState, ErrorState, LoadingBlock } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
+import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { resolveTraineeTimezone } from "../lib/trainee-timezone";
+import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
 
-function newId(): string {
-  return crypto.randomUUID();
+type DraftRef = { planId: string; versionId: string; versionNumber: number; updatedAt: string; title: string };
+
+type AssignTarget = {
+  planId: string;
+  versionId: string;
+  content: PlanContent;
+};
+
+function mealSlotKey(meal: { mealType?: string | null; name: string }): string {
+  return meal.mealType ?? meal.name.toLowerCase().replace(/\s+/g, "_");
 }
 
-type WorkspaceOutlet = { refreshEpoch?: number };
-type PlanSurface = "summary" | "builder";
-
-function formatWhen(value: string | null | undefined): string {
-  if (!value) return "now";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
+function overrideAppliesToPattern(pattern: string): string {
+  if (pattern === "weekdays") return " (weekdays)";
+  if (pattern === "weekends") return " (weekends)";
+  return "";
 }
 
-function versionStatusLabel(status: PlanVersion["status"]): string {
-  return status.replace(/_/g, " ");
-}
-
-function dayBadge(day: WorkoutDay): string {
-  return `D${day.order}`;
-}
-
-function setCount(day: WorkoutDay): number {
-  return day.exercises.reduce((total, exercise) => {
-    return total + exercise.setTargets.length;
-  }, 0);
-}
-
-function applyExerciseToForm(
-  exercise: WorkoutExercise | undefined,
-  setters: {
-    setExerciseName: (value: string) => void;
-    setReps: (value: number) => void;
-    setLoadLabel: (value: string) => void;
-  },
-) {
-  if (!exercise) return;
-  setters.setExerciseName(exercise.name);
-  const set = exercise.setTargets[0];
-  if (set?.reps != null) setters.setReps(set.reps);
-  if (set?.loadLabel) setters.setLoadLabel(set.loadLabel);
-}
-
-function collectInstructions(version: PlanVersion): {
-  title: string;
-  body: string;
-}[] {
-  const notes: { title: string; body: string }[] = [];
-  for (const day of version.content.workoutDays) {
-    for (const exercise of day.exercises) {
-      const body = exercise.instructions?.trim();
-      if (body) {
-        notes.push({ title: exercise.name, body });
-      }
-    }
-  }
-  for (const meal of version.content.mealPrescriptions) {
-    const body = meal.instructions?.trim();
-    if (body) {
-      notes.push({ title: meal.name, body });
-    }
-  }
-  return notes;
-}
-
-function IconAdjust() {
+function WeekStrip({ content }: { content: PlanContent }) {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
+    <ol className="week-strip" aria-label="Plan week" data-testid="week-strip">
+      {WEEK_ORDER.map((weekday) => {
+        const session = content.workoutDays.find((day) => day.weekday === weekday);
+        const meals = content.mealPrescriptions.filter((meal) =>
+          (meal.applicableWeekdays ?? []).includes(weekday),
+        ).length;
+        return (
+          <li key={weekday} className="week-strip-day">
+            <span className="week-strip-name">{weekdayShort(weekday)}</span>
+            <span className={session ? "week-strip-session" : "week-strip-session is-rest"}>
+              {session ? session.name : "Rest"}
+            </span>
+            <span className="plan-chip">
+              {meals} {meals === 1 ? "meal" : "meals"}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function MealTimesPanel({
+  content,
+  overrides,
+  traineeFirstName,
+  timezone,
+}: {
+  content: PlanContent;
+  overrides: Array<{ slotKey: string; dayPattern: string; time: string; updatedAt?: string }>;
+  traineeFirstName: string;
+  timezone: string;
+}) {
+  const meals = sortedMealsByTime(content.mealPrescriptions);
+  if (meals.length === 0) return null;
+  return (
+    <section className="plan-card meal-times" aria-labelledby="meal-times-heading">
+      <h2 id="meal-times-heading">Meal times</h2>
+      <ul className="meal-times-list">
+        {meals.map((meal) => {
+          const planTime = meal.localTime ? formatHhMmTime(meal.localTime) : "no time set";
+          const slot = mealSlotKey(meal);
+          const changed = overrides.filter((row) => row.slotKey === slot && row.time !== meal.localTime);
+          return (
+            <li key={meal.id}>
+              <strong>{meal.name}</strong> · plan {planTime}
+              {changed.map((row) => (
+                <span key={`${row.slotKey}-${row.dayPattern}`} className="meal-time-override">
+                  {" "}
+                  · {traineeFirstName}: {formatHhMmTime(row.time)}
+                  {overrideAppliesToPattern(row.dayPattern)}
+                  {row.updatedAt
+                    ? ` (changed ${new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: timezone }).format(
+                        new Date(row.updatedAt),
+                      )})`
+                    : ""}
+                </span>
+              ))}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function TemplatePicker({
+  title,
+  confirmLabel,
+  busy,
+  onPick,
+  onClose,
+}: {
+  title: string;
+  confirmLabel: string;
+  busy: boolean;
+  onPick: (templateId: string) => void;
+  onClose: () => void;
+}) {
+  const [templates, setTemplates] = useState<PlanTemplateSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState("");
+
+  const load = useCallback(() => {
+    setError(null);
+    setTemplates(null);
+    apiClient
+      .listPlanTemplates({ limit: 50 })
+      .then((page) => {
+        setTemplates(page.items);
+        setSelected((current) => current || page.items[0]?.id || "");
+      })
+      .catch((err: unknown) =>
+        setError(err instanceof ApiClientError ? err.message : "Couldn't load templates."),
+      );
+  }, []);
+
+  useEffect(() => load(), [load]);
+
+  return (
+    <div className="modal-scrim" role="presentation">
+      <div className="modal-card" role="dialog" aria-modal="true" aria-label={title} data-testid="template-picker">
+        <h2>{title}</h2>
+        {error ? (
+          <ErrorState message={error} onRetry={load} screenId="TW-12" />
+        ) : !templates ? (
+          <LoadingBlock label="Loading templates…" />
+        ) : templates.length === 0 ? (
+          <p className="muted">
+            No templates yet. <Link to="/templates">Create one in Templates</Link>.
+          </p>
+        ) : (
+          <div className="radio-cards" role="radiogroup" aria-label="Template">
+            {templates.map((template) => (
+              <label
+                key={template.id}
+                className={selected === template.id ? "radio-card is-selected" : "radio-card"}
+              >
+                <input
+                  type="radio"
+                  name="template"
+                  checked={selected === template.id}
+                  onChange={() => setSelected(template.id)}
+                />
+                <span className="radio-card-copy">
+                  <span className="radio-card-title">{template.title}</span>
+                  <span className="radio-card-detail">
+                    {labelFor("plan_template_type", template.templateType)}
+                    {template.ownership === "global" ? " · FitBud template" : " · Yours"}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="assign-actions">
+          <button type="button" className="button-secondary" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="button-primary"
+            disabled={busy || !selected}
+            onClick={() => onPick(selected)}
+          >
+            {busy ? "Working…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VersionsTable({
+  relationshipId,
+  refreshEpoch,
+  timezone,
+}: {
+  relationshipId: string;
+  refreshEpoch: number;
+  timezone: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<"" | PlanVersionStatus>("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [rows, setRows] = useState<PlanWithVersions[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (next?: string | null) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await apiClient.listPlans(relationshipId, {
+          cursor: next ?? undefined,
+          limit: 20,
+          versionStatus: status || undefined,
+          effectiveFrom: civilDateStart(from),
+          effectiveTo: civilDateEnd(to),
+        });
+        setRows((current) => (next ? [...current, ...result.items] : result.items));
+        setCursor(result.nextCursor);
+      } catch (err) {
+        setError(err instanceof ApiClientError ? err.message : "Couldn't load plan versions.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [relationshipId, status, from, to],
+  );
+
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load, refreshEpoch]);
+
+  const day = (iso: string | null) =>
+    iso ? formatCivilDate(formatLocalDate(new Date(iso), timezone)) : null;
+  const filtersActive = Boolean(status || from || to);
+
+  return (
+    <section className="plan-card plan-versions" aria-labelledby="plan-versions-heading">
+      <button
+        type="button"
+        className="plan-versions-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <h2 id="plan-versions-heading">Versions</h2>
+        <span aria-hidden="true">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open ? (
+        <>
+          <form
+            className="workspace-filters"
+            aria-label="Plan version filters"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <label className="field">
+              <span>Status</span>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as "" | PlanVersionStatus)}
+              >
+                <option value="">Any status</option>
+                {planVersionStatusSchema.options.map((option) => (
+                  <option key={option} value={option}>
+                    {labelFor("plan_version_status", option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Effective from</span>
+              <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>Effective to</span>
+              <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            </label>
+            {filtersActive ? (
+              <button
+                type="button"
+                className="button-ghost"
+                onClick={() => {
+                  setStatus("");
+                  setFrom("");
+                  setTo("");
+                }}
+              >
+                Clear filters
+              </button>
+            ) : null}
+          </form>
+          {error ? <ErrorState message={error} onRetry={() => void load()} screenId="TW-12" /> : null}
+          {loading && rows.length === 0 ? <LoadingBlock label="Loading versions…" /> : null}
+          {!loading && !error && rows.length === 0 ? (
+            <p className="muted" role="status">
+              No plan versions for these filters.
+            </p>
+          ) : null}
+          {rows.length > 0 ? (
+            <div className="table-scroll">
+              <table className="versions-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Version</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Effective</th>
+                    <th scope="col">Published</th>
+                    <th scope="col">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.flatMap((row) =>
+                    row.versions.map((version) => (
+                      <tr key={version.id}>
+                        <td>
+                          {row.plan.title} · v{version.versionNumber}
+                        </td>
+                        <td>
+                          <span className={`status-pill status-${version.status}`}>
+                            {labelFor("plan_version_status", version.status)}
+                          </span>
+                        </td>
+                        <td>
+                          {day(version.effectiveFrom) ?? "—"}
+                          {version.effectiveTo ? ` → ${day(version.effectiveTo)}` : version.effectiveFrom ? " → ongoing" : ""}
+                        </td>
+                        <td>{version.publishedAt ? `You · ${day(version.publishedAt)}` : "—"}</td>
+                        <td>
+                          <Link
+                            className="button-secondary"
+                            to={`/clients/${relationshipId}/plan/${row.plan.id}/versions/${version.id}/edit`}
+                          >
+                            {version.status === "draft" ? "Edit draft" : "View"}
+                          </Link>
+                        </td>
+                      </tr>
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {cursor ? (
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={loading}
+              onClick={() => void load(cursor)}
+            >
+              {loading ? "Loading…" : "Load more"}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+    </section>
   );
 }
 
 export function ClientPlanPage() {
   const { relationshipId = "" } = useParams();
-  const { refreshEpoch = 0 } = useOutletContext<WorkspaceOutlet>();
-  const [effective, setEffective] = useState<EffectivePlanResponse | null>(
-    null,
-  );
-  const [configuration, setConfiguration] =
-    useState<CoachingConfiguration | null>(null);
-  const [templates, setTemplates] = useState<PlanTemplateSummary[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [draftPreview, setDraftPreview] = useState<PlanVersion | null>(null);
-  const [surface, setSurface] = useState<PlanSurface>("summary");
-  const [replaceIntent, setReplaceIntent] = useState(false);
-  const [selectedDayId, setSelectedDayId] = useState("");
-  const [title, setTitle] = useState("Training block");
-  const [dayName, setDayName] = useState("Day A");
-  const [exerciseName, setExerciseName] = useState("Squat");
-  const [reps, setReps] = useState(5);
-  const [loadLabel, setLoadLabel] = useState("RPE 7");
-  const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { me } = useAuth();
+  const {
+    workspace,
+    workspaceLoading,
+    workspaceError,
+    refreshEpoch = 0,
+    reloadWorkspace,
+    online = true,
+    ended = false,
+  } = useOutletContext<WorkspaceOutletContext>();
+
+  const [draft, setDraft] = useState<DraftRef | null>(null);
+  const [draftEpoch, setDraftEpoch] = useState(0);
+  const [acknowledged, setAcknowledged] = useState<string | null>(null);
+  const [dietScope, setDietScope] = useState<DietAdjustmentScope | null>(null);
+  const [discardConfirm, setDiscardConfirm] = useState(false);
+  const [picker, setPicker] = useState<null | "replace" | "start">(null);
+  const [assign, setAssign] = useState<AssignTarget | null>(null);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const didInitSurface = useRef(false);
+
+  const effective = workspace?.plan ?? null;
+  const effectiveVersion = effective?.version ?? null;
+  const effectivePlan = effective?.plan ?? null;
+  const configuration = workspace?.configuration.configuration ?? null;
+  const header = workspace?.header ?? null;
+  const timezone = header ? resolveTraineeTimezone(header).timezone : "UTC";
+  const traineeName = header?.traineeDisplayName ?? "";
+  const firstName = traineeName.split(" ")[0] ?? traineeName;
+  const canEdit = online && !ended && !acting;
+  const planPath = `/clients/${relationshipId}/plan`;
 
   useEffect(() => {
-    didInitSurface.current = false;
-  }, [relationshipId]);
-
-  const load = useCallback(async () => {
     if (!relationshipId) return;
-    setLoading(true);
-    setError(null);
-    let nextVersion: PlanVersion | null = null;
-    try {
-      const [result, templatePage, configResult] = await Promise.all([
-        apiClient.getEffectivePlan(relationshipId),
-        apiClient.listPlanTemplates(),
-        apiClient.getCoachingConfiguration(relationshipId).then(
-          (value) => value,
-          (err: unknown) => {
-            if (err instanceof ApiClientError && err.status === 404) {
-              return null;
-            }
-            throw err;
-          },
-        ),
-      ]);
-      setEffective(result);
-      setConfiguration(configResult);
-      setTemplates(templatePage.items);
-      setSelectedTemplateId(
-        (current) => current || templatePage.items[0]?.id || "",
-      );
-      if (result.plan) {
-        setTitle(result.plan.title);
-      }
-      nextVersion = result.version;
-      const firstDay = result.version?.content.workoutDays[0];
-      if (firstDay) {
-        setSelectedDayId((current) => current || firstDay.id);
-      }
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load effective plan.",
-      );
-    } finally {
-      setLoading(false);
-      if (!didInitSurface.current) {
-        didInitSurface.current = true;
-        setSurface(nextVersion ? "summary" : "builder");
-      }
-    }
-  }, [relationshipId]);
+    let cancelled = false;
+    apiClient
+      .listPlans(relationshipId, { limit: 20, versionStatus: "draft" })
+      .then((result) => {
+        if (cancelled) return;
+        const found = result.items
+          .flatMap((row) =>
+            row.versions
+              .filter((version) => version.status === "draft")
+              .map((version) => ({
+                planId: row.plan.id,
+                versionId: version.id,
+                versionNumber: version.versionNumber,
+                updatedAt: version.updatedAt,
+                title: row.plan.title,
+              })),
+          )
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+        setDraft(found ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setDraft(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [relationshipId, refreshEpoch, draftEpoch]);
 
   useEffect(() => {
-    void load();
-  }, [load, refreshEpoch]);
-
-  const version: PlanVersion | null = effective?.version ?? null;
-  const sourceVersion = draftPreview ?? version;
-  const splitDays = sourceVersion?.content.workoutDays ?? [];
-  const workoutDays = version?.content.workoutDays ?? [];
-  const meals = version?.content.mealPrescriptions ?? [];
-  const coachNotes = version ? collectInstructions(version) : [];
-  const selectedDay =
-    splitDays.find((day) => day.id === selectedDayId) ?? splitDays[0] ?? null;
-  const selectedExercise = selectedDay?.exercises[0];
-  const snapshotRpe = selectedExercise?.setTargets[0]?.rpe ?? null;
-
-  const selectedDayMeta = useMemo(() => {
-    if (!selectedDay) return null;
-    return {
-      exercises: selectedDay.exercises.length,
-      sets: setCount(selectedDay),
+    if (searchParams.get("assign") !== "1" || assign || !draft) return;
+    let cancelled = false;
+    apiClient
+      .getPlanVersion(draft.planId, draft.versionId)
+      .then((version) => {
+        if (!cancelled) {
+          setAssign({ planId: draft.planId, versionId: draft.versionId, content: version.content });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
     };
-  }, [selectedDay]);
+  }, [searchParams, draft, assign]);
 
-  function buildContent() {
-    return {
-      workoutDays: [
-        {
-          id: newId(),
-          order: 1,
-          name: dayName.trim() || "Day A",
-          exercises: [
-            {
-              id: newId(),
-              order: 1,
-              name: exerciseName.trim() || "Exercise",
-              instructions: selectedExercise?.instructions ?? null,
-              setTargets: [
-                {
-                  id: newId(),
-                  order: 1,
-                  reps,
-                  loadLabel: loadLabel.trim() || null,
-                  rpe: snapshotRpe,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-      mealPrescriptions: [] as never[],
-    };
-  }
-
-  function selectDay(day: WorkoutDay) {
-    setSelectedDayId(day.id);
-    setDayName(day.name);
-    applyExerciseToForm(day.exercises[0], {
-      setExerciseName,
-      setReps,
-      setLoadLabel,
+  const warnings = useMemo(() => {
+    if (!effectiveVersion || !configuration) return [];
+    return planConsistencyWarnings({
+      sessionsPerWeek: configuration.workout.sessionsPerWeek,
+      mealsPerDay: configuration.nutrition.mealsPerDay,
+      workoutDays: effectiveVersion.content.workoutDays,
+      mealPrescriptions: effectiveVersion.content.mealPrescriptions,
     });
+  }, [effectiveVersion, configuration]);
+  const fingerprint = consistencyFingerprint(warnings);
+
+  useEffect(() => {
+    if (!effectivePlan || !effectiveVersion) return;
+    let cancelled = false;
+    apiClient
+      .getPlanConsistency(effectivePlan.id, effectiveVersion.id)
+      .then((result) => {
+        if (cancelled) return;
+        setAcknowledged(result.acknowledged ? result.fingerprint : null);
+        setDietScope(result.dietAdjustmentScope ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAcknowledged(null);
+        setDietScope(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectivePlan, effectiveVersion, refreshEpoch, draftEpoch]);
+
+  function fail(err: unknown, fallback: string) {
+    setError(err instanceof ApiClientError ? err.message : fallback);
   }
 
-  async function onApplyTemplate(event: FormEvent) {
-    event.preventDefault();
-    if (!relationshipId || !selectedTemplateId) return;
+  async function adjustPlan() {
+    if (draft) {
+      navigate(`${planPath}/${draft.planId}/versions/${draft.versionId}/edit`);
+      return;
+    }
+    if (!effectivePlan || !effectiveVersion) return;
     setActing(true);
     setError(null);
-    setMessage(null);
+    try {
+      const created = await apiClient.createPlanDraftFromVersion(
+        effectivePlan.id,
+        { sourceVersionId: effectiveVersion.id, asAdjustment: true },
+        createIdempotencyKey(),
+      );
+      navigate(`${planPath}/${effectivePlan.id}/versions/${created.id}/edit`);
+    } catch (err) {
+      fail(err, "Couldn't start an adjustment.");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function startBlank() {
+    setActing(true);
+    setError(null);
+    try {
+      const created = await apiClient.createPlan(
+        relationshipId,
+        { title: "Training block", content: createBlankPlanContent() },
+        createIdempotencyKey(),
+      );
+      navigate(`${planPath}/${created.plan.id}/versions/${created.version.id}/edit`);
+    } catch (err) {
+      fail(err, "Couldn't create a blank plan.");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function pickTemplate(templateId: string) {
+    const mode = picker;
+    setActing(true);
+    setError(null);
     try {
       const result = await apiClient.applyPlanTemplate(
         relationshipId,
-        { templateId: selectedTemplateId },
+        { templateId },
         createIdempotencyKey(),
       );
-      setDraftPreview(result.version);
-      setTitle(result.plan.title);
-      const day = result.version.content.workoutDays[0];
-      if (day) {
-        setSelectedDayId(day.id);
-        setDayName(day.name);
-        applyExerciseToForm(day.exercises[0], {
-          setExerciseName,
-          setReps,
-          setLoadLabel,
+      setPicker(null);
+      setDraftEpoch((value) => value + 1);
+      if (mode === "replace") {
+        setAssign({
+          planId: result.plan.id,
+          versionId: result.version.id,
+          content: result.version.content,
         });
+      } else {
+        navigate(`${planPath}/${result.plan.id}/versions/${result.version.id}/edit`);
       }
-      setSurface("builder");
-      setMessage(
-        result.updatedExistingDraft
-          ? `Draft v${result.version.versionNumber} updated from template (copied). Customize below, then publish.`
-          : `Draft v${result.version.versionNumber} created from template (copied). Customize below, then publish.`,
-      );
     } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not apply template.",
-      );
+      fail(err, "Couldn't use that template.");
     } finally {
       setActing(false);
     }
   }
 
-  async function onPublish(event: FormEvent) {
-    event.preventDefault();
-    if (!relationshipId) return;
+  async function discardDraft() {
+    if (!draft) return;
     setActing(true);
     setError(null);
-    setMessage(null);
+    setDiscardConfirm(false);
     try {
-      const content = buildContent();
-      let planId: string;
-      let publishVersion: PlanVersion;
-
-      if (draftPreview) {
-        const updated = await apiClient.updatePlanDraft(
-          draftPreview.planId,
-          draftPreview.id,
-          {
-            expectedRecordVersion: draftPreview.recordVersion,
-            title: title.trim(),
-            content,
-          },
-        );
-        planId = draftPreview.planId;
-        publishVersion = await apiClient.publishPlanVersion(
-          planId,
-          updated.id,
-          {
-            expectedRecordVersion: updated.recordVersion,
-            mode: "immediate",
-          },
-          createIdempotencyKey(),
-        );
-        setDraftPreview(null);
-      } else if (effective?.plan && effective.version) {
-        const draft = await apiClient.createPlanDraftFromVersion(
-          effective.plan.id,
-          {
-            sourceVersionId: effective.version.id,
-            asAdjustment: true,
-          },
-          createIdempotencyKey(),
-        );
-        planId = effective.plan.id;
-        const updated = await apiClient.updatePlanDraft(planId, draft.id, {
-          expectedRecordVersion: draft.recordVersion,
-          title: title.trim(),
-          content,
-        });
-        publishVersion = await apiClient.publishPlanVersion(
-          planId,
-          updated.id,
-          {
-            expectedRecordVersion: updated.recordVersion,
-            mode: "immediate",
-          },
-          createIdempotencyKey(),
-        );
-        await apiClient.createIntervention(
-          relationshipId,
-          {
-            kind: "plan_adjustment",
-            summary: `Published plan adjustment v${publishVersion.versionNumber}`,
-            resultingPlanVersionId: publishVersion.id,
-          },
-          createIdempotencyKey(),
-        );
-      } else {
-        const created = await apiClient.createPlan(
-          relationshipId,
-          {
-            title: title.trim(),
-            content,
-          },
-          createIdempotencyKey(),
-        );
-        planId = created.plan.id;
-        publishVersion = await apiClient.publishPlanVersion(
-          planId,
-          created.version.id,
-          {
-            expectedRecordVersion: created.version.recordVersion,
-            mode: "immediate",
-          },
-          createIdempotencyKey(),
-        );
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const toDate = new Date(Date.now() + 13 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
-      await apiClient.generateWorkoutAssignments(
-        relationshipId,
-        { fromDate: today, toDate },
-        createIdempotencyKey(),
-      );
-      setMessage(
-        `Published plan version ${publishVersion.versionNumber} and generated assignments.`,
-      );
-      setSurface("summary");
-      await load();
+      await apiClient.discardPlanDraft(draft.planId, draft.versionId);
+      setDraft(null);
+      setDraftEpoch((value) => value + 1);
+      setMessage(`Draft v${draft.versionNumber} discarded.`);
     } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not publish plan.",
-      );
+      fail(err, "Couldn't discard the draft.");
     } finally {
       setActing(false);
     }
   }
 
-  const showSummary = surface === "summary" && Boolean(version);
+  async function duplicateAsTemplate() {
+    if (!effectivePlan || !effectiveVersion) return;
+    setActing(true);
+    setError(null);
+    try {
+      const hasWorkouts = effectiveVersion.content.workoutDays.length > 0;
+      const hasMeals = effectiveVersion.content.mealPrescriptions.length > 0;
+      const created = await apiClient.createPlanTemplateFromVersion(
+        {
+          planId: effectivePlan.id,
+          versionId: effectiveVersion.id,
+          title: `${effectivePlan.title} (copy)`,
+          templateType: hasWorkouts && hasMeals ? "combined" : hasMeals ? "nutrition" : "workout",
+        },
+        createIdempotencyKey(),
+      );
+      setMessage(`Saved “${created.title}” as a template.`);
+    } catch (err) {
+      fail(err, "Couldn't save this plan as a template.");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function acknowledge() {
+    if (!effectivePlan || !effectiveVersion) return;
+    setActing(true);
+    setError(null);
+    try {
+      const result = await apiClient.acknowledgePlanConsistency(
+        effectivePlan.id,
+        effectiveVersion.id,
+        { fingerprint },
+      );
+      setAcknowledged(result.fingerprint);
+      setMessage("The difference is acknowledged. Assignments are unchanged.");
+    } catch (err) {
+      fail(err, "Couldn't acknowledge the difference.");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  function closeAssign() {
+    setAssign(null);
+    if (searchParams.get("assign")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("assign");
+      setSearchParams(next, { replace: true });
+    }
+  }
+
+  const effectiveFromLabel = effectiveVersion?.effectiveFrom
+    ? formatCivilDate(formatLocalDate(new Date(effectiveVersion.effectiveFrom), timezone))
+    : null;
+  const effectiveToLabel = effectiveVersion?.effectiveTo
+    ? formatCivilDate(formatLocalDate(new Date(effectiveVersion.effectiveTo), timezone))
+    : null;
+
+  let body;
+  if (workspaceLoading && !workspace) {
+    body = <LoadingBlock label="Loading plan…" />;
+  } else if (workspaceError && !workspace) {
+    body = <ErrorState message={workspaceError} onRetry={reloadWorkspace} screenId="TW-12" />;
+  } else if (!effectivePlan || !effectiveVersion) {
+    body = (
+      <EmptyState
+        title="No plan yet"
+        action={
+          !ended ? (
+            <div className="plan-empty-actions">
+              <button
+                type="button"
+                className="button-primary"
+                disabled={!canEdit}
+                onClick={() => setPicker("start")}
+              >
+                Start from a template
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={!canEdit}
+                onClick={() => void startBlank()}
+              >
+                Start blank
+              </button>
+            </div>
+          ) : undefined
+        }
+      >
+        <p>
+          {ended
+            ? "Coaching has ended, and there was no plan."
+            : `Build ${firstName ? `${firstName}'s` : "a"} plan from a template or from scratch.`}
+        </p>
+      </EmptyState>
+    );
+  } else {
+    body = (
+      <>
+        <section className="plan-card current-plan" aria-labelledby="current-plan-heading">
+          <div className="current-plan-head">
+            <div>
+              <p className="plan-kicker">Current plan</p>
+              <h2 id="current-plan-heading">{effectivePlan.title}</h2>
+              <p className="muted" data-testid="plan-effective-line">
+                Effective since {effectiveFromLabel ?? "—"} · v{effectiveVersion.versionNumber} ·{" "}
+                {effectiveToLabel ? `ends ${effectiveToLabel}` : "ongoing"}
+              </p>
+              {dietScope === "today_only" ? (
+                <p className="muted" data-testid="today-only-note">
+                  Tomorrow&apos;s meals follow the previous version.
+                </p>
+              ) : null}
+            </div>
+            {!ended ? (
+              <div className="current-plan-actions">
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={!canEdit}
+                  onClick={() => void adjustPlan()}
+                >
+                  Adjust plan
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={!canEdit}
+                  onClick={() => setPicker("replace")}
+                >
+                  Replace from template
+                </button>
+                <OverflowMenu
+                  label="More plan actions"
+                  items={[
+                    {
+                      id: "duplicate",
+                      label: "Duplicate as template",
+                      disabled: !canEdit,
+                      onSelect: () => void duplicateAsTemplate(),
+                    },
+                  ]}
+                />
+              </div>
+            ) : (
+              <p className="muted">Coaching has ended. This plan is read-only.</p>
+            )}
+          </div>
+          <WeekStrip content={effectiveVersion.content} />
+        </section>
+        <MealTimesPanel
+          content={effectiveVersion.content}
+          overrides={header?.mealTimeOverrides ?? []}
+          traineeFirstName={firstName}
+          timezone={timezone}
+        />
+      </>
+    );
+  }
 
   return (
-    <div className="plan-page">
+    <div className="plan-page" data-testid="screen-TW-12">
+      {!online ? (
+        <p className="builder-banner is-offline" role="status">
+          You&apos;re offline. You can read the plan, but changes are paused.
+        </p>
+      ) : null}
       {error ? (
         <p className="form-error" role="alert">
           {error}
         </p>
       ) : null}
-      {message ? <p className="form-success">{message}</p> : null}
+      {message ? (
+        <p className="form-success" role="status">
+          {message}
+        </p>
+      ) : null}
 
-      {loading ? (
-        <p className="muted">Loading plan…</p>
-      ) : showSummary && version ? (
-        <div className="plan-tab">
-          <section className="plan-card plan-effective" aria-labelledby="effective-plan-heading">
-            <div className="plan-card-head">
-              <div>
-                <p className="plan-kicker">Current effective plan</p>
-                <h2 id="effective-plan-heading">{effective?.plan?.title}</h2>
-                <p className="plan-meta">
-                  <span className="plan-chip plan-chip-success">
-                    Effective {formatWhen(version.effectiveFrom)} (Version{" "}
-                    {version.versionNumber})
-                  </span>
-                  <span className="plan-status">
-                    {versionStatusLabel(version.status)}
-                  </span>
-                </p>
-              </div>
-              <div className="plan-head-actions">
-                <button
-                  type="button"
-                  className="button-primary"
-                  onClick={() => {
-                    setReplaceIntent(false);
-                    setSurface("builder");
-                  }}
-                >
-                  <IconAdjust />
-                  Modify plan
-                </button>
-                <button
-                  type="button"
-                  className="button-secondary"
-                  onClick={() => {
-                    setReplaceIntent(true);
-                    setSurface("builder");
-                  }}
-                >
-                  Replace plan
-                </button>
-                <Link
-                  className="button-ghost"
-                  to={`/clients/${relationshipId}/history?kind=plan_version`}
-                >
-                  View plan history
-                </Link>
-              </div>
-            </div>
-          </section>
-
-          <div className="plan-tab-grid">
-            <section className="plan-card" aria-labelledby="workout-protocol-heading">
-              <div className="plan-protocol-head">
-                <h3 id="workout-protocol-heading" className="plan-section-title">
-                  Workout
-                  {workoutDays.length > 0
-                    ? ` (${workoutDays.length}-day split)`
-                    : ""}
-                </h3>
-              </div>
-              {workoutDays.length === 0 ? (
-                <p className="muted">No workout days on this version.</p>
-              ) : (
-                <ul className="plan-protocol-list">
-                  {workoutDays.map((day) => (
-                    <li key={day.id} className="plan-protocol-row">
-                      <span className="plan-protocol-badge" aria-hidden="true">
-                        {dayBadge(day)}
-                      </span>
-                      <div className="plan-day-copy">
-                        <h4>{day.name}</h4>
-                        {day.exercises.length > 0 ? (
-                          <p className="muted">
-                            {day.exercises
-                              .slice(0, 3)
-                              .map((exercise) => exercise.name)
-                              .join(" · ")}
-                            {day.exercises.length > 3
-                              ? ` · +${day.exercises.length - 3}`
-                              : ""}
-                          </p>
-                        ) : (
-                          <p className="muted">No exercises on this day.</p>
-                        )}
-                      </div>
-                      <span className="plan-day-count">
-                        {day.exercises.length}{" "}
-                        {day.exercises.length === 1 ? "exercise" : "exercises"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="plan-card" aria-labelledby="nutrition-protocol-heading">
-              <h3 id="nutrition-protocol-heading" className="plan-section-title">
-                Nutrition
-              </h3>
-              {meals.length === 0 ? (
-                <p className="muted">No nutrition prescriptions on this version.</p>
-              ) : (
-                <ul className="plan-protocol-list">
-                  {meals.map((meal) => (
-                    <li key={meal.id} className="plan-protocol-row">
-                      <span
-                        className="plan-protocol-badge plan-protocol-badge-meal"
-                        aria-hidden="true"
-                      >
-                        {meal.order}
-                      </span>
-                      <div className="plan-day-copy">
-                        <h4>{meal.name}</h4>
-                        <p className="muted">
-                          {meal.scheduleHint ?? "Meal prescription"}
-                          {meal.photoRequired ? " · photo required" : ""}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="plan-card" aria-labelledby="coach-notes-heading">
-              <h3 id="coach-notes-heading" className="plan-section-title">
-                Instructions
-              </h3>
-              {coachNotes.length === 0 ? (
-                <p className="muted">No stored instructions on this version.</p>
-              ) : (
-                <ul className="plan-note-list">
-                  {coachNotes.map((note) => (
-                    <li key={`${note.title}:${note.body}`} className="plan-note">
-                      <h4>{note.title}</h4>
-                      <p>{note.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="plan-card" aria-labelledby="tracking-heading">
-              <h3 id="tracking-heading" className="plan-section-title">
-                Tracking expectations
-              </h3>
-              {configuration ? (
-                <dl className="workspace-facts">
-                  <div>
-                    <dt className="section-kicker">Workout</dt>
-                    <dd>
-                      {configuration.workout.sessionsPerWeek} sessions / week ·{" "}
-                      {configuration.workout.completionWindowHours}h window
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="section-kicker">Nutrition</dt>
-                    <dd>
-                      {configuration.nutrition.mealsPerDay} meals / day · photos{" "}
-                      {configuration.nutrition.photoRequirement.replace(
-                        /_/g,
-                        " ",
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="section-kicker">Check-ins</dt>
-                    <dd>
-                      {configuration.checkin.cadence} ·{" "}
-                      {configuration.checkin.dueWindowHours}h due window
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="section-kicker">Evidence</dt>
-                    <dd>
-                      {[
-                        configuration.tracking.requireBodyWeight
-                          ? "body weight"
-                          : null,
-                        configuration.tracking.requireProgressPhotos
-                          ? "progress photos"
-                          : null,
-                        configuration.tracking.requireSessionRpe
-                          ? "session RPE"
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "None required"}
-                    </dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="muted">
-                  Set tracking expectations in{" "}
-                  <Link to={`/clients/${relationshipId}/configure`}>
-                    client settings
-                  </Link>
-                  .
-                </p>
-              )}
-            </section>
+      {draft && !ended ? (
+        <section className="draft-banner" aria-label="Draft in progress" data-testid="draft-banner">
+          <p>
+            <strong>Draft v{draft.versionNumber}</strong> · edited {formatRelative(draft.updatedAt)}
+          </p>
+          <div className="draft-banner-actions">
+            <Link
+              className="button-secondary"
+              to={`${planPath}/${draft.planId}/versions/${draft.versionId}/edit`}
+            >
+              Continue editing
+            </Link>
+            <button
+              type="button"
+              className="button-ghost"
+              disabled={!canEdit}
+              onClick={() => setDiscardConfirm(true)}
+            >
+              Discard
+            </button>
           </div>
+        </section>
+      ) : null}
+
+      {effectiveVersion && configuration ? (
+        <PlanConsistencyNotice
+          warnings={warnings}
+          acknowledged={acknowledged === fingerprint}
+          acting={!canEdit}
+          onAcknowledge={ended ? undefined : () => void acknowledge()}
+          onAdjustPlan={() => void adjustPlan()}
+          planTo={planPath}
+          configureTo={`/clients/${relationshipId}/configure`}
+          showPlanLink={!ended}
+          showConfigureLink={!ended}
+        />
+      ) : null}
+
+      {body}
+
+      {effectivePlan ? (
+        <VersionsTable relationshipId={relationshipId} refreshEpoch={refreshEpoch} timezone={timezone} />
+      ) : null}
+
+      {discardConfirm && draft ? (
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onClick={() => setDiscardConfirm(false)}
+        >
+          <dialog
+            className="modal-card"
+            open
+            aria-labelledby="discard-draft-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="discard-draft-title">Discard draft v{draft.versionNumber}?</h2>
+            <p className="muted">This cannot be undone.</p>
+            <div className="button-row">
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setDiscardConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button-primary"
+                disabled={acting}
+                onClick={() => void discardDraft()}
+              >
+                Discard draft
+              </button>
+            </div>
+          </dialog>
         </div>
-      ) : error && !version ? null : (
-        <div className="plan-builder">
-          <aside className="plan-card plan-split" aria-labelledby="split-heading">
-            <p className="plan-kicker">Weekly split</p>
-            <h2 id="split-heading">Program cadence</h2>
-            {splitDays.length === 0 ? (
-              <p className="muted">
-                No days on a draft yet. Name the day in the editor, then publish.
-              </p>
-            ) : (
-              <ul className="plan-split-list">
-                {splitDays.map((day) => {
-                  const selected = day.id === (selectedDay?.id ?? "");
-                  return (
-                    <li key={day.id}>
-                      <button
-                        type="button"
-                        className={
-                          selected ? "plan-split-day is-selected" : "plan-split-day"
-                        }
-                        onClick={() => selectDay(day)}
-                      >
-                        <span className="plan-split-label">
-                          {dayBadge(day)} · {day.name}
-                        </span>
-                        <span className="muted">
-                          {day.exercises.length} ex · {setCount(day)} sets
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            <form
-              className="plan-form plan-split-apply"
-              onSubmit={(event) => void onApplyTemplate(event)}
-            >
-              <h3 className="plan-section-title">
-                {replaceIntent ? "Replace from template" : "Apply a template"}
-              </h3>
-              <p className="muted">
-                {replaceIntent
-                  ? "Copies a template into a new draft. Publishing creates a new immutable version; it does not edit the current published plan."
-                  : "Copies into a draft."}{" "}
-                <Link to="/templates">Manage templates</Link>
-              </p>
-              {templates.length === 0 ? (
-                <p className="muted">No templates yet.</p>
-              ) : (
-                <>
-                  <label className="field">
-                    <span>Template</span>
-                    <select
-                      value={selectedTemplateId}
-                      onChange={(event) =>
-                        setSelectedTemplateId(event.target.value)
-                      }
-                      required
-                    >
-                      {templates.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.title} ({item.templateType})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="submit"
-                    className="button-secondary"
-                    disabled={acting}
-                  >
-                    {acting ? "Applying…" : "Apply to draft"}
-                  </button>
-                </>
-              )}
-            </form>
-          </aside>
+      ) : null}
 
-          <section className="plan-card plan-composer" aria-labelledby="draft-change-heading">
-            <header className="plan-composer-head">
-              <div className="plan-composer-tags">
-                {draftPreview ? (
-                  <span className="plan-chip">Active draft</span>
-                ) : version ? (
-                  <span className="plan-chip">Adjustment</span>
-                ) : (
-                  <span className="plan-chip">New plan</span>
-                )}
-                {selectedDayMeta ? (
-                  <span className="muted">
-                    {selectedDayMeta.exercises} exercises · {selectedDayMeta.sets}{" "}
-                    sets on this day
-                  </span>
-                ) : null}
-              </div>
-              <label className="field plan-title-field">
-                <span className="sr-only">Title</span>
-                <input
-                  id="draft-change-heading"
-                  className="plan-title-input"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  required
-                />
-              </label>
-              <p className="muted">
-                {draftPreview
-                  ? `Draft from ${draftPreview.creationSource}. Publish creates an immutable version.`
-                  : version
-                    ? "Creates a new draft from the effective version, then publishes it. Does not edit published content."
-                    : "Creates a new immutable version. Does not edit published content."}
-              </p>
-            </header>
+      {picker ? (
+        <TemplatePicker
+          title={picker === "replace" ? "Replace from template" : "Start from a template"}
+          confirmLabel={picker === "replace" ? "Continue" : "Use this template"}
+          busy={acting}
+          onPick={(id) => void pickTemplate(id)}
+          onClose={() => setPicker(null)}
+        />
+      ) : null}
 
-            <form
-              className="plan-form"
-              onSubmit={(event) => void onPublish(event)}
-            >
-              <label className="field">
-                <span>Workout day</span>
-                <input
-                  value={dayName}
-                  onChange={(event) => setDayName(event.target.value)}
-                  required
-                />
-              </label>
-
-              <article className="plan-exercise-card">
-                <div className="plan-exercise-head">
-                  <span className="plan-protocol-badge" aria-hidden="true">
-                    1
-                  </span>
-                  <label className="field plan-exercise-name">
-                    <span className="sr-only">Exercise</span>
-                    <input
-                      value={exerciseName}
-                      onChange={(event) => setExerciseName(event.target.value)}
-                      required
-                    />
-                  </label>
-                </div>
-                <table className="plan-sets-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Set</th>
-                      <th scope="col">Load</th>
-                      <th scope="col">Reps</th>
-                      {snapshotRpe != null ? <th scope="col">RPE</th> : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>1</td>
-                      <td>
-                        <input
-                          value={loadLabel}
-                          onChange={(event) => setLoadLabel(event.target.value)}
-                          aria-label="Load"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={reps}
-                          onChange={(event) =>
-                            setReps(Number(event.target.value))
-                          }
-                          required
-                          aria-label="Reps"
-                        />
-                      </td>
-                      {snapshotRpe != null ? (
-                        <td>
-                          <span className="plan-rpe">{snapshotRpe}</span>
-                        </td>
-                      ) : null}
-                    </tr>
-                  </tbody>
-                </table>
-                {selectedExercise?.instructions ? (
-                  <p className="plan-cue">{selectedExercise.instructions}</p>
-                ) : null}
-              </article>
-
-              <div className="plan-composer-actions">
-                <button type="submit" className="button-primary" disabled={acting}>
-                  {acting
-                    ? "Publishing…"
-                    : draftPreview
-                      ? "Publish draft"
-                      : version
-                        ? "Publish adjustment"
-                        : "Publish plan"}
-                </button>
-                {version ? (
-                  <button
-                    type="button"
-                    className="button-ghost"
-                    onClick={() => {
-                      setReplaceIntent(false);
-                      setSurface("summary");
-                    }}
-                  >
-                    Back to plan
-                  </button>
-                ) : null}
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
+      {assign && header ? (
+        <AssignPlanModal
+          relationshipId={relationshipId}
+          planId={assign.planId}
+          versionId={assign.versionId}
+          content={assign.content}
+          traineeName={header.traineeDisplayName}
+          traineeTimezone={timezone}
+          trainerTimezone={me?.timezone ?? null}
+          activePlan={
+            effectivePlan && effectiveVersion && effectiveVersion.id !== assign.versionId
+              ? {
+                  title: effectivePlan.title,
+                  versionNumber: effectiveVersion.versionNumber,
+                  content: effectiveVersion.content,
+                }
+              : null
+          }
+          issues={publishIssues(
+            assign.content,
+            configuration
+              ? {
+                  sessionsPerWeek: configuration.workout.sessionsPerWeek,
+                  mealsPerDay: configuration.nutrition.mealsPerDay,
+                }
+              : null,
+          )}
+          ended={ended}
+          online={online}
+          onClose={closeAssign}
+          onAssigned={() => {
+            closeAssign();
+            setDraftEpoch((value) => value + 1);
+            setMessage("Plan published and scheduled.");
+            reloadWorkspace();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

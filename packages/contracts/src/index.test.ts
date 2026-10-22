@@ -3,6 +3,7 @@ import {
   coachingConfigurationSchema,
   createInvitationRequestSchema,
   healthResponseSchema,
+  onboardingAnswersSchema,
   onboardingFormDefinitionSchema,
   onboardingFormVersionSchema,
   meResponseSchema,
@@ -24,8 +25,12 @@ import {
   realtimeEventSchema,
   SAFE_REALTIME_EVENT_KEYS,
   planTemplateSchema,
+  createExerciseLibraryItemRequestSchema,
+  createFoodLibraryItemRequestSchema,
   exerciseLibraryItemSchema,
   foodLibraryItemSchema,
+  mealFoodItemSchema,
+  NUTRIENT_SCALE,
   applyPlanTemplateRequestSchema,
   workspaceActivityQuerySchema,
   planListFilterSchema,
@@ -115,13 +120,90 @@ describe("contracts", () => {
         ],
       }),
     ).toThrow();
+    expect(
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          { id: "goal", type: "short_text", label: "Goal", required: true, maxLength: 80 },
+          { id: "history", type: "long_text", label: "History", required: false },
+          {
+            id: "focus",
+            type: "single_choice",
+            label: "Focus",
+            required: true,
+            options: [
+              { id: "strength", label: "Strength" },
+              { id: "endurance", label: "Endurance" },
+            ],
+          },
+          {
+            id: "equipment",
+            type: "multiple_choice",
+            label: "Equipment",
+            required: false,
+            options: [
+              { id: "dumbbells", label: "Dumbbells" },
+              { id: "bands", label: "Bands" },
+            ],
+          },
+          { id: "sessions", type: "number", label: "Sessions", required: true },
+          { id: "injuries", type: "yes_no", label: "Injuries", required: true },
+        ],
+      }).fields.map((field) => field.type),
+    ).toEqual([
+      "short_text",
+      "long_text",
+      "single_choice",
+      "multiple_choice",
+      "number",
+      "yes_no",
+    ]);
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          {
+            id: "focus",
+            type: "single_choice",
+            label: "Focus",
+            required: true,
+            options: ["Strength"],
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      onboardingFormDefinitionSchema.parse({
+        fields: [
+          {
+            id: "focus",
+            type: "single_choice",
+            label: "Focus",
+            required: true,
+            options: [
+              { id: "strength", label: "Strength" },
+              { id: "strength", label: "Power" },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(
+      onboardingAnswersSchema.parse({
+        goal: "Get stronger",
+        focus: "strength",
+        equipment: ["dumbbells", "bands"],
+        sessions: 4,
+        injuries: false,
+      }),
+    ).toMatchObject({ sessions: 4, injuries: false, equipment: ["dumbbells", "bands"] });
+    expect(() => onboardingAnswersSchema.parse({ goal: { text: "no" } })).toThrow();
+    expect(() => onboardingAnswersSchema.parse({ sessions: Number.NaN })).toThrow();
   });
 
   it("validates coaching configuration draft request", () => {
     expect(
       saveConfigurationDraftRequestSchema.parse({
         expectedVersion: 0,
-        primaryGoal: "Strength",
+        goalShort: "Strength",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 3,
@@ -135,7 +217,7 @@ describe("contracts", () => {
           requireSessionRpe: false,
         },
       }),
-    ).toMatchObject({ expectedVersion: 0, primaryGoal: "Strength" });
+    ).toMatchObject({ expectedVersion: 0, goalShort: "Strength" });
   });
 
   it("validates coaching configuration response shape", () => {
@@ -146,7 +228,8 @@ describe("contracts", () => {
         status: "draft",
         versionNumber: 1,
         recordVersion: 1,
-        primaryGoal: "Strength",
+        goalShort: "Strength",
+        goalDescription: null,
         notes: null,
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
@@ -184,6 +267,22 @@ describe("contracts", () => {
     ).toMatchObject({
       workoutDays: [{ name: "Day A" }],
     });
+
+    expect(
+      planContentSchema.parse({
+        workoutDays: [],
+        mealPrescriptions: [
+          {
+            id: "44444444-4444-4444-8444-444444444444",
+            order: 1,
+            name: "Lunch",
+            scheduleHint: null,
+            instructions: null,
+            photoRequired: false,
+          },
+        ],
+      }).mealPrescriptions[0]?.items,
+    ).toEqual([]);
   });
 
   it("validates workout assignment with derived missed status", () => {
@@ -253,6 +352,7 @@ describe("contracts", () => {
         recordStatus: "draft",
         recordVersion: 0,
         definitionVersion: 1,
+        checkinFormVersionId: "c1000001-0000-4000-8000-000000000011",
         answers: null,
         submittedAt: null,
         status: "overdue",
@@ -269,6 +369,7 @@ describe("contracts", () => {
         id: "11111111-1111-4111-8111-111111111111",
         coachingRelationshipId: "22222222-2222-4222-8222-222222222222",
         type: "overdue_checkin",
+        severity: "attention",
         status: "active",
         ruleVersion: "mvp.v1",
         sourceEntityType: "checkin",
@@ -400,12 +501,68 @@ describe("contracts", () => {
           mealReminder: true,
           checkinReminder: true,
           subscriptionRenewalReminder: true,
+          dailySummaryReminder: true,
+        },
+        channelPreference: "app",
+        whatsappOptIn: {
+          granted: false,
+          at: null,
+          source: null,
+          textVersion: null,
+        },
+        traineeTimezone: "Asia/Kolkata",
+        locale: null,
+        trainerCategories: {
+          askCoach: true,
+          checkinSubmitted: true,
+          criticalDigest: true,
+          intakeSubmitted: true,
+          renewalsDue: true,
+          mealTimesChanged: true,
+          morningSummary: false,
         },
         quietHoursStart: null,
         quietHoursEnd: null,
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
     ).toMatchObject({ pushEnabled: true });
+  });
+
+  it("requires trainerCategories on notification preferences (TW-29)", () => {
+    const prefs = notificationPreferencesSchema.parse({
+      userId: "11111111-1111-4111-8111-111111111111",
+      pushEnabled: true,
+      categories: {
+        workoutReminder: true,
+        mealReminder: true,
+        checkinReminder: true,
+        subscriptionRenewalReminder: true,
+        dailySummaryReminder: false,
+      },
+      channelPreference: "app",
+      whatsappOptIn: {
+        granted: false,
+        at: null,
+        source: null,
+        textVersion: null,
+      },
+      traineeTimezone: "UTC",
+      locale: "en",
+      trainerCategories: {
+        askCoach: false,
+        checkinSubmitted: true,
+        criticalDigest: true,
+        intakeSubmitted: false,
+        renewalsDue: true,
+        mealTimesChanged: true,
+        morningSummary: true,
+      },
+      quietHoursStart: "22:00",
+      quietHoursEnd: "07:00",
+      updatedAt: "2026-09-26T00:00:00.000Z",
+    });
+    expect(prefs.trainerCategories.morningSummary).toBe(true);
+    expect(prefs.trainerCategories.askCoach).toBe(false);
   });
 
   it("validates realtime event envelope without sensitive fields", () => {
@@ -433,6 +590,7 @@ describe("contracts", () => {
     expect(
       planTemplateSchema.parse({
         id: "11111111-1111-4111-8111-111111111111",
+        ownership: "trainer",
         trainerUserId: "22222222-2222-4222-8222-222222222222",
         title: "Beginner strength",
         templateType: "workout",
@@ -451,7 +609,53 @@ describe("contracts", () => {
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
-    ).toMatchObject({ templateType: "workout" });
+    ).toMatchObject({ templateType: "workout", ownership: "trainer" });
+    expect(
+      planTemplateSchema.parse({
+        id: "11111111-1111-4111-8111-111111111111",
+        ownership: "global",
+        trainerUserId: null,
+        title: "Base full-body workout",
+        templateType: "workout",
+        content: {
+          workoutDays: [
+            {
+              id: "33333333-3333-4333-8333-333333333333",
+              order: 1,
+              name: "Day A",
+              exercises: [],
+            },
+          ],
+          mealPrescriptions: [],
+        },
+        recordVersion: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        updatedAt: "2026-09-26T00:00:00.000Z",
+      }),
+    ).toMatchObject({ ownership: "global", trainerUserId: null });
+    expect(() =>
+      planTemplateSchema.parse({
+        id: "11111111-1111-4111-8111-111111111111",
+        ownership: "global",
+        trainerUserId: "22222222-2222-4222-8222-222222222222",
+        title: "Base full-body workout",
+        templateType: "workout",
+        content: {
+          workoutDays: [
+            {
+              id: "33333333-3333-4333-8333-333333333333",
+              order: 1,
+              name: "Day A",
+              exercises: [],
+            },
+          ],
+          mealPrescriptions: [],
+        },
+        recordVersion: 1,
+        createdAt: "2026-09-26T00:00:00.000Z",
+        updatedAt: "2026-09-26T00:00:00.000Z",
+      }),
+    ).toThrow();
 
     expect(
       exerciseLibraryItemSchema.parse({
@@ -460,12 +664,24 @@ describe("contracts", () => {
         trainerUserId: null,
         name: "Goblet squat",
         instructions: null,
-        defaultLoadLabel: null,
-        defaultReps: 8,
+        primaryMuscles: ["quads"],
+        secondaryMuscles: ["glutes"],
+        equipment: ["dumbbell"],
+        difficulty: "beginner",
+        status: "active",
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
-    ).toMatchObject({ ownership: "global" });
+    ).toMatchObject({ ownership: "global", primaryMuscles: ["quads"] });
+    expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultReps");
+    expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultLoadLabel");
+    expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("parentExerciseId");
+    expect(
+      createExerciseLibraryItemRequestSchema.parse({
+        name: "Cable face pull",
+        defaultReps: 12,
+      }),
+    ).not.toHaveProperty("defaultReps");
 
     expect(
       foodLibraryItemSchema.parse({
@@ -474,12 +690,27 @@ describe("contracts", () => {
         trainerUserId: null,
         name: "Dal tadka",
         cuisineRegion: "indian",
-        portionLabel: "1 katori",
+        classification: "prepared_food",
+        basis: "per_100_g",
+        energyKcalScaled: 140 * NUTRIENT_SCALE,
+        proteinScaled: 8 * NUTRIENT_SCALE,
+        carbsScaled: 18 * NUTRIENT_SCALE,
+        fatScaled: 4 * NUTRIENT_SCALE,
+        servings: [
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            label: "1 katori",
+            unit: "katori",
+            conversionScaled: 180 * NUTRIENT_SCALE,
+          },
+        ],
         notes: null,
+        description: null,
+        status: "active",
         createdAt: "2026-09-26T00:00:00.000Z",
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
-    ).toMatchObject({ cuisineRegion: "indian" });
+    ).toMatchObject({ cuisineRegion: "indian", basis: "per_100_g" });
 
     expect(
       applyPlanTemplateRequestSchema.parse({
@@ -488,6 +719,62 @@ describe("contracts", () => {
     ).toMatchObject({
       templateId: "11111111-1111-4111-8111-111111111111",
     });
+  });
+
+  it("rejects a food without classification or basis and reads legacy snapshots", () => {
+    expect(
+      createFoodLibraryItemRequestSchema.safeParse({
+        name: "Dal tadka",
+        basis: "per_100_g",
+        servings: [{ label: "1 katori", unit: "katori", conversion: 180 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      createFoodLibraryItemRequestSchema.safeParse({
+        name: "Dal tadka",
+        classification: "prepared_food",
+        servings: [{ label: "1 katori", unit: "katori", conversion: 180 }],
+      }).success,
+    ).toBe(false);
+
+    const legacy = mealFoodItemSchema.parse({
+      name: "Dal",
+      portionLabel: "1 katori",
+      calories: 180,
+      proteinGrams: 9,
+      carbsGrams: 28,
+      fatGrams: 0,
+      sourceFoodLibraryItemId: "55555555-5555-4555-8555-555555555555",
+    });
+    expect(legacy).toMatchObject({
+      snapshotKind: "legacy",
+      quantityScaled: NUTRIENT_SCALE,
+      basis: null,
+      classification: null,
+      canonical: null,
+      serving: { label: "1 katori", conversionScaled: null },
+      calculated: {
+        energyKcalScaled: 180 * NUTRIENT_SCALE,
+        proteinScaled: 9 * NUTRIENT_SCALE,
+        fatScaled: 0,
+        partial: false,
+      },
+    });
+
+    const partial = mealFoodItemSchema.parse({
+      name: "Dal",
+      portionLabel: "1 katori",
+      calories: 180,
+      proteinGrams: null,
+      carbsGrams: 28,
+      fatGrams: 0,
+    });
+    expect(partial.snapshotKind === "legacy" && partial.calculated.proteinScaled).toBe(
+      null,
+    );
+    expect(partial.snapshotKind === "legacy" && partial.calculated.partial).toBe(
+      true,
+    );
   });
 
   it("rejects an activity state that does not belong to the type", () => {

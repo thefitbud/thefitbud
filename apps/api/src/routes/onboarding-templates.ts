@@ -115,15 +115,23 @@ onboardingFormTemplateRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const conditions = [
-      or(
-        eq(onboardingFormTemplates.ownership, "global"),
-        and(
-          eq(onboardingFormTemplates.ownership, "trainer"),
-          eq(onboardingFormTemplates.trainerUserId, actor.userId),
-        ),
-      )!,
-    ];
+    const scope = c.req.query("scope") ?? "all";
+    const visibility =
+      scope === "bases"
+        ? eq(onboardingFormTemplates.ownership, "global")
+        : scope === "mine"
+          ? and(
+              eq(onboardingFormTemplates.ownership, "trainer"),
+              eq(onboardingFormTemplates.trainerUserId, actor.userId),
+            )
+          : or(
+              eq(onboardingFormTemplates.ownership, "global"),
+              and(
+                eq(onboardingFormTemplates.ownership, "trainer"),
+                eq(onboardingFormTemplates.trainerUserId, actor.userId),
+              ),
+            )!;
+    const conditions = [visibility];
     if (decoded) {
       conditions.push(
         or(

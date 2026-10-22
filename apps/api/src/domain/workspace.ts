@@ -22,12 +22,15 @@ import {
   type WorkspaceActivityType,
 } from "@fitbud/contracts";
 import {
+  deriveAge,
   deriveCheckinStatus,
   deriveMealAssignmentStatus,
   deriveRenewalState,
   deriveWorkoutAssignmentStatus,
+  formatCivilDate,
   formatLocalDate,
 } from "@fitbud/core";
+import { deriveAdherenceForRelationships } from "./adherence";
 import type { Db } from "../db/client";
 import {
   checkinReviews,
@@ -47,7 +50,11 @@ import {
   checkinSchedules,
   trackingRequirements,
   traineeProfiles,
+  trainerProfiles,
+  userIdentities,
   users,
+  mealTimeOverrides,
+  reactivationRequests,
   workoutAssignments,
   workoutExecutions,
   workoutExpectations,
@@ -192,6 +199,7 @@ async function listWorkoutActivity(
 ): Promise<WorkspaceActivityItem[]> {
   const conditions = [
     eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+    eq(workoutAssignments.scheduleStatus, "scheduled"),
   ];
   if (input.occurredFrom) {
     conditions.push(gte(workoutAssignments.localDate, input.occurredFrom));
@@ -248,6 +256,7 @@ async function listMealActivity(
 ): Promise<WorkspaceActivityItem[]> {
   const conditions = [
     eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+    eq(mealAssignments.scheduleStatus, "scheduled"),
   ];
   if (input.occurredFrom) {
     conditions.push(gte(mealAssignments.localDate, input.occurredFrom));
@@ -344,7 +353,7 @@ async function listCheckinActivity(
       }),
       occurredAt: row.checkin.windowStartsAt,
       localDate: row.checkin.localDate,
-      title: `Check-in ${row.checkin.localDate}`,
+      title: `Check-in ${formatCivilDate(row.checkin.localDate)}`,
       planVersionId: null,
     });
   });
@@ -363,6 +372,13 @@ export async function listRelationshipActivity(
   return pageActivity(items, input.limit);
 }
 
+const FUTURE_ACTIVITY_STATES = new Set([
+  "pending",
+  "scheduled",
+  "upcoming",
+  "due",
+]);
+
 async function loadRecentActivity(
   db: Db,
   relationshipId: string,
@@ -370,7 +386,7 @@ async function loadRecentActivity(
 ): Promise<WorkspaceActivityItem[]> {
   const shared = {
     relationshipId,
-    limit: RECENT_ACTIVITY_LIMIT,
+    limit: RECENT_ACTIVITY_LIMIT * 3,
     cursor: null,
     nowIso,
   };
@@ -379,7 +395,14 @@ async function loadRecentActivity(
     listRelationshipActivity(db, { ...shared, type: "meal" }),
     listRelationshipActivity(db, { ...shared, type: "checkin" }),
   ]);
+  const nowMs = Date.parse(nowIso);
   return [...workouts.items, ...meals.items, ...checkinItems.items]
+    .filter((item) => {
+      // Exclude future slots and purely scheduled/pending items.
+      if (Date.parse(item.occurredAt) > nowMs) return false;
+      if (FUTURE_ACTIVITY_STATES.has(item.state)) return false;
+      return true;
+    })
     .sort((left, right) => {
       if (left.localDate !== right.localDate) {
         return left.localDate < right.localDate ? 1 : -1;
@@ -499,6 +522,10 @@ async function loadLatestSubscription(
   });
 }
 
+function severityRank(severity: string): number {
+  return severity === "critical" ? 0 : 1;
+}
+
 async function loadOpenException(db: Db, relationshipId: string) {
   const rows = await db
     .select()
@@ -509,13 +536,21 @@ async function loadOpenException(db: Db, relationshipId: string) {
         inArray(exceptions.status, ["detected", "active"]),
       ),
     )
-    .orderBy(desc(exceptions.detectedAt), desc(exceptions.id))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
+    .orderBy(asc(exceptions.detectedAt), asc(exceptions.id));
+  if (rows.length === 0) return null;
+  const row = [...rows].sort((a, b) => {
+    const sev = severityRank(a.severity) - severityRank(b.severity);
+    if (sev !== 0) return sev;
+    // Oldest first within the same severity (matches Home triage).
+    if (a.detectedAt !== b.detectedAt) {
+      return a.detectedAt < b.detectedAt ? -1 : 1;
+    }
+    return a.id < b.id ? -1 : 1;
+  })[0]!;
   return activeExceptionSummarySchema.parse({
     id: row.id,
     type: row.type,
+    severity: row.severity,
     status: row.status,
     summary: row.summary,
     sourceEntityType: row.sourceEntityType,
@@ -524,6 +559,7 @@ async function loadOpenException(db: Db, relationshipId: string) {
   });
 }
 
+/** Next scheduled check-in only (draft). Never past submitted / awaiting review. */
 async function loadNextCheckin(db: Db, relationshipId: string, nowIso: string) {
   const rows = await db
     .select({
@@ -544,6 +580,36 @@ async function loadNextCheckin(db: Db, relationshipId: string, nowIso: string) {
   const row = rows[0];
   if (!row) return null;
   return mapCheckin(row.checkin, null, nowIso);
+}
+
+/** Submitted check-in awaiting trainer review (for CTA / overview card). */
+async function loadPendingReviewCheckin(
+  db: Db,
+  relationshipId: string,
+  nowIso: string,
+  /** After reactivation, ignore submissions from the prior coaching period. */
+  reactivatedAt: string | null,
+) {
+  const conditions = [
+    eq(checkins.coachingRelationshipId, relationshipId),
+    eq(checkins.recordStatus, "submitted"),
+    isNull(checkinReviews.id),
+  ];
+  if (reactivatedAt) {
+    conditions.push(gte(checkins.submittedAt, reactivatedAt));
+  }
+  const submitted = await db
+    .select({
+      checkin: checkins,
+      review: checkinReviews,
+    })
+    .from(checkins)
+    .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+    .where(and(...conditions))
+    .orderBy(desc(checkins.submittedAt), desc(checkins.localDate))
+    .limit(1);
+  if (!submitted[0]) return null;
+  return mapCheckin(submitted[0].checkin, null, nowIso);
 }
 
 async function loadProgressSummary(db: Db, relationshipId: string) {
@@ -586,20 +652,54 @@ export async function loadClientWorkspace(
 ) {
   const [
     profile,
+    traineeUser,
+    trainerProfile,
+    clientIdentity,
+    mealOverrides,
     onboardingStatus,
     configuration,
     effectivePlan,
     subscription,
     openException,
     nextCheckin,
+    pendingReviewCheckin,
     recentActivity,
     progress,
+    pendingReactivationRow,
   ] = await Promise.all([
     db
-      .select({ displayName: traineeProfiles.displayName })
+      .select({
+        displayName: traineeProfiles.displayName,
+        dateOfBirth: traineeProfiles.dateOfBirth,
+        gender: traineeProfiles.gender,
+      })
       .from(traineeProfiles)
       .where(eq(traineeProfiles.userId, relationship.traineeUserId))
       .limit(1),
+    db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, relationship.traineeUserId))
+      .limit(1),
+    db
+      .select({ whatsappE164: trainerProfiles.whatsappE164 })
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, relationship.trainerUserId))
+      .limit(1),
+    db
+      .select({ mobileE164: userIdentities.mobileE164 })
+      .from(userIdentities)
+      .where(eq(userIdentities.userId, relationship.traineeUserId))
+      .limit(1),
+    db
+      .select({
+        id: mealTimeOverrides.slotKey,
+        dayPattern: mealTimeOverrides.dayPattern,
+        time: mealTimeOverrides.time,
+        updatedAt: mealTimeOverrides.updatedAt,
+      })
+      .from(mealTimeOverrides)
+      .where(eq(mealTimeOverrides.relationshipId, relationship.id)),
     onboardingStatusForRelationship(db, relationship),
     loadActiveConfiguration(db, relationship.id),
     loadEffectivePlan(db, relationship.id),
@@ -611,14 +711,39 @@ export async function loadClientWorkspace(
     ),
     loadOpenException(db, relationship.id),
     loadNextCheckin(db, relationship.id, nowIso),
+    loadPendingReviewCheckin(
+      db,
+      relationship.id,
+      nowIso,
+      relationship.reactivatedAt ?? null,
+    ),
     loadRecentActivity(db, relationship.id, nowIso),
     loadProgressSummary(db, relationship.id),
+    relationship.status === "ended"
+      ? db
+          .select()
+          .from(reactivationRequests)
+          .where(
+            and(
+              eq(reactivationRequests.relationshipId, relationship.id),
+              eq(reactivationRequests.status, "pending"),
+              gt(reactivationRequests.expiresAt, nowIso),
+            ),
+          )
+          .limit(1)
+      : Promise.resolve([]),
   ]);
 
-  const displayName = profile[0]?.displayName;
-  if (!displayName) {
+  const trainee = profile[0];
+  const displayName = trainee?.displayName;
+  if (!displayName || !trainee) {
     throw new Error("Trainee profile is missing for this coaching relationship.");
   }
+  const today = await trainerToday(db, relationship.trainerUserId, nowIso);
+  const adherence = await deriveAdherenceForRelationships(db, {
+    today,
+    relationships: [{ id: relationship.id, onboardingStatus }],
+  });
 
   return clientWorkspaceSchema.parse({
     header: {
@@ -632,12 +757,41 @@ export async function loadClientWorkspace(
             effectiveFrom: effectivePlan.version?.effectiveFrom ?? null,
           }
         : null,
-      primaryGoal: configuration?.primaryGoal ?? null,
+      goalShort: configuration?.goalShort ?? null,
       renewalState: subscription?.renewalState ?? null,
+      renewsOn: subscription?.renewsOn ?? null,
+      startedAt: relationship.startedAt ?? null,
+      adherenceState: adherence.get(relationship.id) ?? "not_available",
+      traineeProfile: {
+        displayName,
+        age: deriveAge(trainee.dateOfBirth, today),
+        gender: trainee.gender,
+      },
+      traineeTimezone: traineeUser[0]?.timezone ?? "UTC",
+      hasCustomMealTimes: mealOverrides.length > 0,
+      mealTimeOverrides: mealOverrides.map((row) => ({
+        slotKey: row.id,
+        dayPattern: row.dayPattern,
+        time: row.time,
+        updatedAt: row.updatedAt,
+      })),
+      trainerWhatsappE164: trainerProfile[0]?.whatsappE164 ?? null,
+      clientWhatsappE164: clientIdentity[0]?.mobileE164 ?? null,
+      endedAt: relationship.endedAt ?? null,
+      pendingReactivation: pendingReactivationRow[0]
+        ? {
+            requestId: pendingReactivationRow[0].id,
+            expiresAt: pendingReactivationRow[0].expiresAt,
+            sentAt: pendingReactivationRow[0].createdAt,
+            intakeUpdateRequested:
+              pendingReactivationRow[0].intakeUpdateRequested,
+          }
+        : null,
     },
     overview: {
       openException,
       nextCheckin,
+      pendingReviewCheckin,
       recentActivity,
       progress,
     },

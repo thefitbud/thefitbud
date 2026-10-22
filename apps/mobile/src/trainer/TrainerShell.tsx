@@ -1,11 +1,14 @@
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
+import { formatPersonName } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
 import { AttentionTab } from "./AttentionTab";
+import { TrainerMoreScreen } from "./MoreScreen";
+import { TrainerNotificationSettingsScreen } from "./TrainerNotificationSettingsScreen";
+import { TrainerProfileScreen } from "./TrainerProfileScreen";
 import { CheckinReviewScreen } from "./CheckinReviewScreen";
 import { CheckinsTab } from "./CheckinsTab";
 import {
@@ -15,6 +18,11 @@ import {
 import { ClientsTab } from "./ClientsTab";
 import { ClientStatusScreen } from "./ClientStatusScreen";
 import { ExceptionReviewScreen } from "./ExceptionReviewScreen";
+import {
+  isCaptureModeEnabled,
+  registerTrainerCaptureNav,
+} from "../dev/captureBridge";
+import { stage1Api } from "../lib/stage1Api";
 
 type TrainerTab = "attention" | "clients" | "checkins" | "more";
 
@@ -26,7 +34,9 @@ type Overlay =
       displayName: string;
       onboardingStatusLabelText: string;
     }
-  | { kind: "checkin"; checkinId: string; relationshipId: string };
+  | { kind: "checkin"; checkinId: string; relationshipId: string }
+  | { kind: "notifications" }
+  | { kind: "profile" };
 
 const TABS: Array<{ id: TrainerTab; label: string }> = [
   { id: "attention", label: "Attention" },
@@ -36,13 +46,12 @@ const TABS: Array<{ id: TrainerTab; label: string }> = [
 ];
 
 export function TrainerShell() {
-  const { me, signOut, selectRole, relationships } = useAuth();
+  const { relationships, api, signOut } = useAuth();
+  const s1 = stage1Api(api);
   const [tab, setTab] = useState<TrainerTab>("attention");
   const [overlay, setOverlay] = useState<Overlay | null>(null);
-
-  const canSwitchToTrainee = useMemo(
-    () => Boolean(me?.permittedRoles.includes("trainee")),
-    [me],
+  const [clientsSegment, setClientsSegment] = useState<"clients" | "activity">(
+    "clients",
   );
 
   function openClientFromRow(row: ClientDirectoryRow) {
@@ -55,17 +64,29 @@ export function TrainerShell() {
     });
   }
 
-  function openClientById(relationshipId: string) {
-    const relationship = relationships.find((item) => item.id === relationshipId);
+  async function openClientById(relationshipId: string) {
+    let displayName = "Client";
+    let statusLabelText = "Unknown";
+    try {
+      const page = await api.listClients({ limit: 50 });
+      const match = page.items.find(
+        (item) => item.relationshipId === relationshipId,
+      );
+      if (match) {
+        displayName = formatPersonName(match.traineeDisplayName);
+        statusLabelText = onboardingStatusLabel(match.status);
+      }
+    } catch {
+      const relationship = relationships.find((item) => item.id === relationshipId);
+      if (relationship) {
+        statusLabelText = onboardingStatusLabel(relationship.onboardingStatus);
+      }
+    }
     setOverlay({
       kind: "client",
       relationshipId,
-      displayName: relationship
-        ? `Trainee ${relationship.traineeUserId.slice(0, 8)}`
-        : "Client",
-      onboardingStatusLabelText: relationship
-        ? onboardingStatusLabel(relationship.onboardingStatus)
-        : "Unknown",
+      displayName,
+      onboardingStatusLabelText: statusLabelText,
     });
   }
 
@@ -76,6 +97,48 @@ export function TrainerShell() {
       relationshipId: item.coachingRelationshipId,
     });
   }
+
+  useEffect(() => {
+    if (!isCaptureModeEnabled()) return;
+    registerTrainerCaptureNav({
+      setTab,
+      signOut,
+      clearOverlay() {
+        setOverlay(null);
+        setClientsSegment("clients");
+      },
+      openActivity() {
+        setTab("clients");
+        setClientsSegment("activity");
+      },
+      async openFirstClient() {
+        const page = await api.listRelationships({ limit: 20 });
+        const ready = page.items.find(
+          (item) =>
+            item.onboardingStatus === "coaching_ready" ||
+            item.onboardingStatus === "active",
+        );
+        if (ready) {
+          openClientById(ready.id);
+        }
+      },
+      async openFirstException() {
+        const groups = await s1.getAttentionGroups();
+        const first = groups.groups[0]?.items?.[0];
+        if (first?.id) {
+          setOverlay({ kind: "exception", exceptionId: first.id });
+        }
+      },
+      async openFirstCheckin() {
+        const inbox = await api.listTrainerCheckinInbox();
+        const item = inbox.items.find(
+          (row) => row.checkin.status === "submitted",
+        );
+        if (item) openCheckin(item);
+      },
+    });
+    return () => registerTrainerCaptureNav(null);
+  }, [api, s1, signOut]);
 
   if (overlay?.kind === "exception") {
     return (
@@ -119,6 +182,16 @@ export function TrainerShell() {
     );
   }
 
+  if (overlay?.kind === "notifications") {
+    return (
+      <TrainerNotificationSettingsScreen onBack={() => setOverlay(null)} />
+    );
+  }
+
+  if (overlay?.kind === "profile") {
+    return <TrainerProfileScreen onBack={() => setOverlay(null)} />;
+  }
+
   return (
     <View style={styles.root}>
       <View style={styles.content}>
@@ -127,12 +200,16 @@ export function TrainerShell() {
             onReviewException={(exceptionId) =>
               setOverlay({ kind: "exception", exceptionId })
             }
+            onReviewCheckin={openCheckin}
             onOpenClients={() => setTab("clients")}
           />
         ) : null}
 
         {tab === "clients" ? (
-          <ClientsTab onOpenClient={openClientFromRow} />
+          <ClientsTab
+            onOpenClient={openClientFromRow}
+            initialSegment={clientsSegment}
+          />
         ) : null}
 
         {tab === "checkins" ? (
@@ -140,32 +217,10 @@ export function TrainerShell() {
         ) : null}
 
         {tab === "more" ? (
-          <Screen title="More" subtitle="Account and secondary actions.">
-            <View style={styles.banner}>
-              <Text style={styles.bannerTitle}>Selected role</Text>
-              <Text style={styles.bannerBody}>
-                Trainer · mobile · {me?.userId ?? "unknown"}
-              </Text>
-            </View>
-            <View style={styles.banner}>
-              <Text style={styles.bannerTitle}>Deep work</Text>
-              <Text style={styles.bannerBody}>
-                Plan builder, templates, and full client workspace remain on
-                trainer web. Mobile is for attention, lookup, check-ins, and
-                quick actions.
-              </Text>
-            </View>
-            {canSwitchToTrainee ? (
-              <PrimaryButton
-                label="Switch to trainee mode"
-                variant="secondary"
-                onPress={() => {
-                  void selectRole("trainee");
-                }}
-              />
-            ) : null}
-            <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
-          </Screen>
+          <TrainerMoreScreen
+            onOpenNotifications={() => setOverlay({ kind: "notifications" })}
+            onOpenProfile={() => setOverlay({ kind: "profile" })}
+          />
         ) : null}
       </View>
 
@@ -251,6 +306,6 @@ const styles = StyleSheet.create({
     width: 16,
     height: 3,
     borderRadius: 999,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.indigo,
   },
 });

@@ -1,0 +1,20 @@
+{
+  "ma": [
+    {
+      "app": "trainer-web",
+      "hardFailErrors": [],
+      "reportOnlyErrors": [],
+      "warns": [],
+      "errorCount": 0,
+      "warnCount": 0
+    },
+    {
+      "app": "expo-web",
+      "hardFailErrors": [],
+      "reportOnlyErrors": [],
+      "warns": [],
+      "errorCount": 0,
+      "warnCount": 0
+    }
+  ]
+}

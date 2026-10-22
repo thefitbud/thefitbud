@@ -1,4 +1,11 @@
 export {
+  DEFAULT_FEATURE_FLAGS,
+  FEATURE_FLAG_KEYS,
+  envFlagOverride,
+  type FeatureFlagKey,
+} from "./config.js";
+
+export {
   isRolePermittedOnSurface,
   resolveSelectedRole,
   rolesAllowedForSurface,
@@ -11,6 +18,8 @@ export {
   deriveClientOnboardingStatus,
   isPastOnboardingReview,
   canTrainerReadOnboardingTemplate,
+  formatOnboardingAnswer,
+  isBlankOnboardingAnswer,
   latestOnboardingFormVersion,
   missingRequiredOnboardingFields,
   onboardingAnswerErrors,
@@ -18,17 +27,20 @@ export {
   resolveOnboardingForm,
   type ClientOnboardingFacts,
   type OnboardingAnswerField,
+  type OnboardingAnswerValue,
   type OnboardingFormCandidate,
   type OnboardingTemplateVersionCandidate,
 } from "./onboarding.js";
 
 export {
+  COACHING_CONFIGURATION_DEFAULTS,
   canActivateConfiguration,
   canCreateConfigurationVersion,
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
-  hasPrimaryGoal,
+  hasGoalShort,
+  resolveConfigurationDraftExpectations,
 } from "./configuration.js";
 
 export {
@@ -57,6 +69,25 @@ export {
 } from "./template.js";
 
 export {
+  LibraryPrescriptionError,
+  aggregateNutrients,
+  calculateServingNutrients,
+  dayMacrosFromScaledItems,
+  displayNutrients,
+  foodSnapshotFromLibrary,
+  formatScaledQuantity,
+  librarySourceIds,
+  materializeFoodSnapshot,
+  materializePlanContent,
+  scaleNutrient,
+  unscaleNutrient,
+  type DayMacroTotals,
+  type DisplayNutrients,
+} from "./nutrition.js";
+
+export { possessivePronoun } from "./pronouns.js";
+
+export {
   checkinWindowForLocalDate,
   formatLocalDate,
   localDateTimeToUtcIso,
@@ -64,15 +95,25 @@ export {
   workoutWindowForLocalDate,
 } from "./timezone.js";
 
+export { IST_TIME_ZONE, istDate, istInstantAt } from "./clock.js";
+export { greetingFor } from "./greeting.js";
+
 export {
+  GLOBAL_CHECKIN_FORM_FIELDS,
+  GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
   MVP_CHECKIN_DEFINITION_VERSION,
   canRecordCheckinReview,
   canSaveCheckinDraft,
   canSubmitCheckin,
+  canTrainerReadCheckinFormTemplate,
   daysForCheckinCadence,
   deriveCheckinStatus,
+  latestCheckinFormVersion,
+  linkedMeasurementsForCheckin,
   missingRequiredCheckinAnswers,
   nextCheckinLocalDate,
+  parseCheckinFormFields,
 } from "./checkin.js";
 
 export {
@@ -90,10 +131,29 @@ export {
   isOpenWorkoutExecution,
   isQualifyingWorkoutExecution,
   resolveCompletedWorkoutStatus,
-  sessionWeekdaysForFrequency,
   setCompletionIsModified,
   weekdayFromLocalDate,
 } from "./workout.js";
+
+export {
+  clipInclusiveLocalRange,
+  consistencyFingerprint,
+  localDatesInRange,
+  mealsOnDates,
+  nextCalendarWeekRange,
+  nextSevenDayRange,
+  planConsistencyWarnings,
+  resolveAssignmentWindow,
+  supersedeFromLocalDate,
+  workoutScheduleSignature,
+  workoutSchedulesMatch,
+  workoutSessionsOnDates,
+  type AssignmentWindowMode,
+  type ConsistencyWarning,
+  type ConsistencyWarningCode,
+  type DietAdjustmentScope,
+  type LocalDateRange,
+} from "./schedule.js";
 
 export {
   canRecordMealCompliance,
@@ -104,16 +164,28 @@ export {
 } from "./meal.js";
 
 export {
+  ADHERENCE_EXCEPTION_SEVERITIES,
+  ADHERENCE_OPEN_EXCEPTION_STATUSES,
   MVP_EXCEPTION_RULE_VERSION,
   canAcknowledgeException,
   canActivateException,
   canResolveException,
+  exceptionCountsTowardNeedsAttention,
   exceptionKey,
   filterNewExceptionCandidates,
   isOpenExceptionStatus,
+  mealActivitySeverity,
+  mealAdherenceCandidate,
+  mealDeviationCandidate,
+  mealLoggedLaterCandidate,
   missedWorkoutCandidate,
   overdueCheckinCandidate,
   overdueMealCandidate,
+  skippedMealCandidate,
+  skippedWorkoutCandidate,
+  workoutActivitySeverity,
+  workoutAdherenceCandidate,
+  type ActivitySeverity,
   type ExceptionCandidate,
 } from "./exception.js";
 
@@ -139,19 +211,64 @@ export {
 } from "./sync.js";
 
 export {
+  ACTIVITY_NUDGE_HOURLY_LIMIT,
+  ACTIVITY_NUDGE_ITEM_COOLDOWN_HOURS,
+  DAILY_PUSH_CAP,
+  DAILY_SUMMARY_CAP_LOCAL_TIME,
+  DEFAULT_QUIET_HOURS_END,
+  DEFAULT_QUIET_HOURS_START,
   DEFAULT_REMINDER_TYPES,
+  HARD_STOP_LOCAL_TIME,
+  MEAL_REMINDER_AFTER_MINUTES,
+  MEAL_REMINDER_SNOOZE_MINUTES,
+  REMINDER_MERGE_WINDOW_MINUTES,
+  WORKOUT_FALLBACK_ANCHOR,
+  WORKOUT_REMINDER_AFTER_MINUTES,
+  WORKOUT_REMINDER_OFFSET_MINUTES,
+  WORKOUT_REMINDER_SLOT,
+  REMINDER_PAUSE_DURATION_DAYS,
+  REMINDER_PAUSE_IGNORE_THRESHOLD,
+  REMINDER_SOFT_IGNORER_THRESHOLD,
+  compareLocalTimeHhMm,
+  latestWorkoutReminderFireBeforeQuiet,
+  nextReminderStateAfterIgnore,
+  workoutReminderFireClock,
+  activityNudgeDedupeKey,
+  addMinutesToLocalClock,
   buildSafePushPayload,
+  dailySummaryDedupeKey,
+  deferredReminderDedupeKey,
+  deliveryDedupeKeyFromDeferred,
+  domainEntityTypeForActivity,
   domainEntityTypeForReminder,
+  dueMealReminderPhases,
+  dueWorkoutReminderTimes,
+  isActivityUnresolved,
   isCategoryEnabled,
   isCheckinReminderEligible,
-  isMealReminderEligible,
+  isAtOrAfterHardStopLocal,
+  isDailySummaryClockDue,
   isWithinQuietHours,
-  isWorkoutReminderEligible,
+  reminderDeliveryPriority,
+  shouldSkipReminderForBackoff,
+  isWorkoutResolved,
+  localClockToUtcIso,
+  localDateFromDailySummaryKey,
   localTimeHhMm,
+  mealReminderDedupeKey,
   pushPayloadContainsSensitiveKeys,
   pushPayloadHasOnlySafeKeys,
+  reminderDeliveryDecision,
   reminderDedupeKey,
+  reminderPreferenceForActivity,
+  reminderPreferenceForNotification,
   routeTargetFromPushPayload,
+  notificationInboxRoute,
+  workoutReminderDedupeKey,
+  type MealReminderPhase,
+  type NudgeActivityType,
+  type ReminderDeliveryDecision,
+  type WorkoutReminderLocalTime,
 } from "./reminder.js";
 
 export {
@@ -160,4 +277,48 @@ export {
   isAuthorizedRealtimeChannel,
 } from "./realtime.js";
 
-export { normalizeWhatsappE164, whatsappHref } from "./whatsapp.js";
+export {
+  askCoachGoLink,
+  buildAskCoachMessage,
+  normalizeWhatsappE164,
+  whatsappHref,
+} from "./whatsapp.js";
+
+export {
+  ADHERENCE_WINDOW_DAYS,
+  adherenceWindowStart,
+  deriveAdherenceState,
+  isQualifyingAdherenceObservation,
+  isWithinAdherenceWindow,
+  type AdherenceObservationKind,
+} from "./adherence.js";
+
+export { deriveAge } from "./profile.js";
+
+export {
+  formatCivilDate,
+  formatClockTime,
+  formatHhMmTime,
+  formatCount,
+  formatDateRange,
+  formatInstant,
+  formatKcal,
+  formatNumber,
+  formatPersonName,
+  formatRelative,
+  formatTimeDiff,
+  formatTimeRange,
+  formatWeight,
+  formatWindow,
+} from "./format.js";
+export {
+  LABELS,
+  allLabelEntries,
+  enumLabel,
+  labelFor,
+  sentenceCaseEnum,
+  type LabelNamespace,
+} from "./labels.js";
+export { routeForLinkKind, type LinkKind } from "./links.js";
+export { canLog, type LogDecision } from "./late-logging.js";
+export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";

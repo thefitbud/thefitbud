@@ -1,6 +1,33 @@
-# Local Worker secrets / overrides (gitignored via root .gitignore pattern).
-# AUTH_MODE=test uses the documented Firebase test double — never production credentials.
+# Copy to .dev.vars (gitignored). Fake values only — never production secrets.
+
 FIREBASE_PROJECT_ID=fitbud-local
 AUTH_MODE=test
-# Local push double only — never put production FCM credentials here.
 PUSH_PROVIDER_MODE=test
+MEDIA_SIGNING_SECRET=local-dev-media-signing-secret-change-me
+
+# Runtime environment: local enables dev mail sink and test auth.
+ENVIRONMENT=local
+EMAIL_PROVIDER=dev_sink
+SUPPORT_EMAIL=support@example.test
+APP_HOST=localhost:8787
+SYSTEM_EMAIL_FROM=FitBud <noreply@example.test>
+SYSTEM_EMAIL_REPLY_TO=support@example.test
+ADMIN_ALERT_EMAILS=alerts@example.test
+
+# Feature flag overrides (optional): 1/true or 0/false
+# FLAG_WA_OTP=0
+# FLAG_WA_AUTOMATION=0
+# FLAG_STEPS_ENABLED=0
+
+# WhatsApp Cloud (placeholders — not used while flags are off)
+WA_PHONE_NUMBER_ID=000000000000000
+WA_ACCESS_TOKEN=EAAG-placeholder-not-real
+WA_APP_SECRET=placeholder-app-secret
+WA_WEBHOOK_VERIFY_TOKEN=placeholder-verify-token
+WA_MONTHLY_BUDGET_INR=500
+WA_HARD_CAP_INR=1000
+WA_RATE_UTILITY_CENTIPAISE=1357
+WA_RATE_AUTH_CENTIPAISE=1357
+
+# Firebase custom tokens (optional; AUTH_MODE=firebase)
+# FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}

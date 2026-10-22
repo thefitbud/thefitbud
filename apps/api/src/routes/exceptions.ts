@@ -8,6 +8,7 @@ import { desc, eq } from "drizzle-orm";
 import {
   acknowledgeExceptionRequestSchema,
   attentionFeedResponseSchema,
+  attentionGroupsResponseSchema,
   createInterventionRequestSchema,
   evaluateExceptionsResponseSchema,
   exceptionDetailSchema,
@@ -37,6 +38,7 @@ import {
   exceptions,
   interventions,
   traineeProfiles,
+  userIdentities,
 } from "../db/schema";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
@@ -116,17 +118,108 @@ exceptionRoutes.get(
       : 20;
 
     const now = nowIso();
+    const groupByRelationship = c.req.query("groupBy") === "relationship";
     const attention = await listAttentionExceptionsForTrainer(
       db,
       actor.userId,
       limit,
       now,
+      { groupByRelationship },
     );
 
     const profileRows = await db.select().from(traineeProfiles);
     const nameByUserId = new Map(
       profileRows.map((row) => [row.userId, row.displayName]),
     );
+    const identityRows = await db
+      .select({
+        userId: userIdentities.userId,
+        mobileE164: userIdentities.mobileE164,
+      })
+      .from(userIdentities);
+    const phoneByUserId = new Map(
+      identityRows.map((row) => [row.userId, row.mobileE164]),
+    );
+
+    if (groupByRelationship) {
+      const grouped = new Map<
+        string,
+        {
+          relationshipId: string;
+          traineeDisplayName: string;
+          clientWhatsappE164: string | null;
+          items: Array<{
+            id: string;
+            type: string;
+            severity: string;
+            status: string;
+            ageMinutes: number;
+            summary: string;
+            details: Record<string, unknown> | null;
+          }>;
+        }
+      >();
+      for (const item of attention) {
+        const ex = mapException(item.exception);
+        const detectedMs = Date.parse(ex.detectedAt);
+        const ageMinutes = Number.isFinite(detectedMs)
+          ? Math.max(0, Math.floor((Date.parse(now) - detectedMs) / 60_000))
+          : 0;
+        const bucket = grouped.get(item.coachingRelationshipId) ?? {
+          relationshipId: item.coachingRelationshipId,
+          traineeDisplayName:
+            nameByUserId.get(item.traineeUserId) ?? "Client",
+          clientWhatsappE164: phoneByUserId.get(item.traineeUserId) ?? null,
+          items: [],
+        };
+        bucket.items.push({
+          id: ex.id,
+          type: ex.type,
+          severity: ex.severity,
+          status: ex.status,
+          ageMinutes,
+          summary: ex.summary,
+          details: ex.details ?? null,
+        });
+        grouped.set(item.coachingRelationshipId, bucket);
+      }
+      const groups = [...grouped.values()].map((group) => {
+        const items = group.items.sort((a, b) => {
+          if (a.severity !== b.severity) {
+            return a.severity === "critical" ? -1 : 1;
+          }
+          return b.ageMinutes - a.ageMinutes;
+        });
+        const mostSevere = items.some((i) => i.severity === "critical")
+          ? "critical"
+          : "attention";
+        const oldestDetectedAge = items.reduce(
+          (max, i) => Math.max(max, i.ageMinutes),
+          0,
+        );
+        return {
+          ...group,
+          items,
+          itemCount: items.length,
+          mostSevere,
+          oldestAgeMinutes: oldestDetectedAge,
+        };
+      });
+      groups.sort((a, b) => {
+        const aCrit = a.mostSevere === "critical" ? 1 : 0;
+        const bCrit = b.mostSevere === "critical" ? 1 : 0;
+        if (aCrit !== bCrit) return bCrit - aCrit;
+        if (a.oldestAgeMinutes !== b.oldestAgeMinutes) {
+          return b.oldestAgeMinutes - a.oldestAgeMinutes;
+        }
+        return a.traineeDisplayName.localeCompare(b.traineeDisplayName);
+      });
+      // `limit` counts groups (clients), not raw items.
+      return ok(
+        c,
+        attentionGroupsResponseSchema.parse({ groups: groups.slice(0, limit) }),
+      );
+    }
 
     return ok(
       c,
@@ -213,6 +306,15 @@ exceptionRoutes.post(
     for (const item of result.exceptions) {
       queueRealtimeHint(c.env, {
         eventType: "exception_created",
+        entityType: "exception",
+        entityId: item.id,
+        coachingRelationshipId: relationship.id,
+        serverVersion: 0,
+      });
+    }
+    for (const item of result.resolvedExceptions) {
+      queueRealtimeHint(c.env, {
+        eventType: "exception_resolved",
         entityType: "exception",
         entityId: item.id,
         coachingRelationshipId: relationship.id,
@@ -752,11 +854,15 @@ exceptionRoutes.post(
     }
 
     const now = nowIso();
+    const outcome = parsed.data.outcome ?? "other";
+    const noteText = parsed.data.note?.trim() || null;
     await db
       .update(exceptions)
       .set({
         status: "resolved",
         resolvedAt: now,
+        resolutionOutcome: outcome,
+        resolutionNote: noteText,
         updatedAt: now,
       })
       .where(eq(exceptions.id, row.id));
@@ -766,28 +872,45 @@ exceptionRoutes.post(
       exceptionId: row.id,
       trainerUserId: actor.userId,
       action: "resolve",
-      note: parsed.data.note ?? null,
+      note: noteText,
       createdAt: now,
     });
 
-    const kind = parsed.data.interventionKind ?? "resolve";
+    // Always store a resolve intervention with the chosen outcome.
     await db.insert(interventions).values({
       id: createId(),
       coachingRelationshipId: relationship.id,
       trainerUserId: actor.userId,
       exceptionId: row.id,
       checkinId: null,
-      kind,
-      summary: parsed.data.note?.trim() || `Resolved: ${row.summary}`,
+      kind: "resolve",
+      summary: `Resolved (${outcome}): ${row.summary}`,
       resultingPlanVersionId: parsed.data.resultingPlanVersionId ?? null,
       createdAt: now,
       updatedAt: now,
     });
+    // Plus a separate note intervention when text is entered.
+    if (noteText) {
+      await db.insert(interventions).values({
+        id: createId(),
+        coachingRelationshipId: relationship.id,
+        trainerUserId: actor.userId,
+        exceptionId: row.id,
+        checkinId: null,
+        kind: "note",
+        summary: noteText,
+        resultingPlanVersionId: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
     const updated = {
       ...row,
       status: "resolved" as const,
       resolvedAt: now,
+      resolutionOutcome: outcome,
+      resolutionNote: noteText,
       updatedAt: now,
     };
     const responseBody = {

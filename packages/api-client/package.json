@@ -19,7 +19,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fitbud/contracts": "workspace:*"
+    "@fitbud/contracts": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@fitbud/config": "workspace:*",

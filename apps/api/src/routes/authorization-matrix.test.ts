@@ -5,53 +5,23 @@
  * trainee role rejection (403) across major protected surfaces.
  * Domain lifecycle tests remain in per-route suites.
  */
-import initSqlJs from "sql.js";
-import { drizzle } from "drizzle-orm/sql-js";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
-
-const MIGRATIONS = [
-  "0000_identity.sql",
-  "0001_relationship_onboarding.sql",
-    "0012_invitation_whatsapp.sql",
-  "0002_coaching_configuration.sql",
-  "0003_plans.sql",
-  "0004_workouts.sql",
-  "0005_meals.sql",
-  "0006_checkins.sql",
-  "0007_exceptions.sql",
-  "0008_progress_media.sql",
-  "0009_sync.sql",
-  "0010_notifications.sql",
-    "0013_domain_contracts.sql",
-  "0014_onboarding_form_templates.sql",
-  "0011_templates_libraries.sql",
-] as const;
 
 const UNKNOWN_RELATIONSHIP = "00000000-0000-4000-8000-000000000099";
 const UNKNOWN_MEDIA = "00000000-0000-4000-8000-000000000098";
 
+
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of MIGRATIONS) {
-    sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-  }
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return {
-    db,
-    close: () => sqlite.close(),
-  };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function dummyD1(): D1Database {
@@ -197,7 +167,7 @@ async function reachCoachingReady(suffix: string) {
       },
       body: JSON.stringify({
         expectedVersion: 0,
-        primaryGoal: "Adherence",
+        goalShort: "Adherence",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 2,

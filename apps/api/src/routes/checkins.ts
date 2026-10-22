@@ -2,13 +2,18 @@ import {
   operation,
   dateWindowParameters,
 } from "../openapi/document";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
-import { Hono } from "hono";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { Hono, type Context } from "hono";
 import {
+  assignPreferredCheckinFormRequestSchema,
+  assignPreferredCheckinFormResponseSchema,
+  checkinFormVersionSchema,
   checkinListResponseSchema,
   checkinReviewContextSchema,
   checkinSchema,
   createTrainerNoteRequestSchema,
+  deleteTrainerNoteResponseSchema,
+  patchTrainerNoteRequestSchema,
   localDateSchema,
   recordCheckinReviewRequestSchema,
   saveCheckinDraftRequestSchema,
@@ -22,23 +27,30 @@ import {
   type CheckinDraftAnswers,
 } from "@fitbud/contracts";
 import {
-  MVP_CHECKIN_DEFINITION_VERSION,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
   addDaysToLocalDate,
   canRecordCheckinReview,
   canSaveCheckinDraft,
   canSubmitCheckin,
+  canTrainerReadCheckinFormTemplate,
   checkinWindowForLocalDate,
+  defaultUnitForMeasurementType,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
   formatLocalDate,
+  linkedMeasurementsForCheckin,
   missingRequiredCheckinAnswers,
   nextCheckinLocalDate,
+  parseCheckinFormFields,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
+  checkinFormTemplates,
+  checkinFormVersions,
   checkinReviews,
   checkinSchedules,
   checkins,
+  mediaAssets,
   coachingConfigurations,
   coachingRelationships,
   interventions,
@@ -48,6 +60,7 @@ import {
   plans,
   planVersions,
   trainerNotes,
+  traineeProfiles,
   users,
   workoutAssignments,
   workoutExecutions,
@@ -56,9 +69,21 @@ import {
   detectExceptionsForRelationship,
   listActiveExceptionsForRelationship,
 } from "../domain/exceptions";
-import { mapActiveExceptionSummary, mapCheckin, mapTrainerNote } from "../domain/mappers";
+import {
+  mapActiveExceptionSummary,
+  mapCheckin,
+  mapCheckinFormVersion,
+  mapMediaAsset,
+  mapTrainerNote,
+} from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
+import {
+  notifyTraineeNoteShared,
+  setTrainerNoteVisibility,
+} from "../domain/trainer-note-share.js";
+import { storeInboxNotification } from "../domain/inbox-notify.js";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -72,19 +97,30 @@ import { queueRealtimeHint } from "../realtime/emit";
 import { canAccessRelationship } from "./relationships";
 import type { ActorContext, Env, Variables } from "../types";
 
+type AppContext = Context<{ Bindings: Env; Variables: Variables }>;
+type Db = ReturnType<typeof createDb>;
+
+async function blockIfRelationshipEnded(
+  c: AppContext,
+  db: Db,
+  relationshipId: string,
+): Promise<Response | null> {
+  const writable = await requireWritableRelationship(c, db, relationshipId);
+  return writable.ok ? null : writable.response;
+}
+
 const SCHEDULE_OPERATION = "checkin.schedule";
 const SCHEDULE_NEXT_OPERATION = "checkin.schedule_next";
 const ENSURE_DUE_OPERATION = "checkin.ensure_due";
 const SUBMIT_OPERATION = "checkin.submit";
 const REVIEW_OPERATION = "checkin.review";
 const NOTE_OPERATION = "checkin.note.create";
+const NOTE_PATCH_OPERATION = "checkin.note.patch";
 
 export const checkinRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
 }>();
-
-type Db = ReturnType<typeof createDb>;
 
 async function loadAccessibleRelationship(
   db: Db,
@@ -166,6 +202,84 @@ function serializeAnswers(
   return JSON.stringify(answers);
 }
 
+async function resolveCheckinFormPin(
+  db: Db,
+  input: {
+    trainerUserId: string | null;
+    requestedVersionId?: string;
+    fallbackVersionId?: string | null;
+  },
+): Promise<
+  | { ok: true; id: string; version: number }
+  | { ok: false; status: 404 | 500; code: string; message: string }
+> {
+  const versionId =
+    input.requestedVersionId ??
+    input.fallbackVersionId ??
+    GLOBAL_CHECKIN_FORM_VERSION_ID;
+  const rows = await db
+    .select()
+    .from(checkinFormVersions)
+    .where(eq(checkinFormVersions.id, versionId))
+    .limit(1);
+  const version = rows[0];
+  if (!version) {
+    return {
+      ok: false,
+      status: input.requestedVersionId ? 404 : 500,
+      code: input.requestedVersionId
+        ? "CHECKIN_FORM_NOT_FOUND"
+        : "CHECKIN_FORM_MISSING",
+      message: input.requestedVersionId
+        ? "Check-in form version not found."
+        : "Check-in form version is missing.",
+    };
+  }
+  if (input.requestedVersionId) {
+    if (!input.trainerUserId) {
+      return {
+        ok: false,
+        status: 404,
+        code: "CHECKIN_FORM_NOT_FOUND",
+        message: "Check-in form version not found.",
+      };
+    }
+    const templates = await db
+      .select()
+      .from(checkinFormTemplates)
+      .where(eq(checkinFormTemplates.id, version.templateId))
+      .limit(1);
+    const template = templates[0];
+    if (
+      !template ||
+      !canTrainerReadCheckinFormTemplate(template, input.trainerUserId)
+    ) {
+      return {
+        ok: false,
+        status: 404,
+        code: "CHECKIN_FORM_NOT_FOUND",
+        message: "Check-in form version not found.",
+      };
+    }
+  }
+  return { ok: true, id: version.id, version: version.version };
+}
+
+async function loadPinnedCheckinForm(db: Db, versionId: string) {
+  const rows = await db
+    .select()
+    .from(checkinFormVersions)
+    .where(eq(checkinFormVersions.id, versionId))
+    .limit(1);
+  const version = rows[0];
+  if (!version) return null;
+  const parsed = parseCheckinFormFields(
+    (JSON.parse(version.schemaJson) as { fields?: unknown }).fields,
+  );
+  if (!parsed.ok) return null;
+  return { version, fields: parsed.fields };
+}
+
 async function createCheckinForLocalDate(
   db: Db,
   input: {
@@ -174,6 +288,8 @@ async function createCheckinForLocalDate(
     localDate: string;
     timeZone: string;
     dueWindowHours: number;
+    formVersionId: string;
+    definitionVersion: number;
   },
 ): Promise<{
   row: typeof checkins.$inferSelect;
@@ -208,7 +324,8 @@ async function createCheckinForLocalDate(
     windowEndsAt: window.windowEndsAt,
     recordStatus: "draft" as const,
     recordVersion: 0,
-    definitionVersion: MVP_CHECKIN_DEFINITION_VERSION,
+    definitionVersion: input.definitionVersion,
+    checkinFormVersionId: input.formVersionId,
     answersJson: null,
     submittedAt: null,
     createdAt: now,
@@ -329,6 +446,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedSchedule = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedSchedule) return endedSchedule;
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
     if (!config) {
@@ -341,12 +460,22 @@ checkinRoutes.post(
     }
 
     const timezone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const formPin = await resolveCheckinFormPin(db, {
+      trainerUserId: actor.userId,
+      requestedVersionId: parsed.data.checkinFormVersionId,
+      fallbackVersionId: config.schedule.preferredCheckinFormVersionId ?? null,
+    });
+    if (!formPin.ok) {
+      return fail(c, formPin.status, formPin.code, formPin.message);
+    }
     const { row, created } = await createCheckinForLocalDate(db, {
       relationshipId: relationship.id,
       scheduleId: config.schedule.id,
       localDate: parsed.data.localDate,
       timeZone: timezone,
       dueWindowHours: config.schedule.dueWindowHours,
+      formVersionId: formPin.id,
+      definitionVersion: formPin.version,
     });
 
     const responseBody = {
@@ -437,6 +566,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedScheduleNext = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedScheduleNext) return endedScheduleNext;
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
     if (!config) {
@@ -457,12 +588,33 @@ checkinRoutes.post(
       traineeTimeZone: timezone,
     });
 
+    let fallbackVersionId: string | null =
+      config.schedule.preferredCheckinFormVersionId ?? null;
+    if (!fallbackVersionId && parsed.data.fromCheckinId) {
+      const source = await db
+        .select({ formVersionId: checkins.checkinFormVersionId })
+        .from(checkins)
+        .where(eq(checkins.id, parsed.data.fromCheckinId))
+        .limit(1);
+      if (source[0]) fallbackVersionId = source[0].formVersionId;
+    }
+    const formPin = await resolveCheckinFormPin(db, {
+      trainerUserId: actor.userId,
+      requestedVersionId: parsed.data.checkinFormVersionId,
+      fallbackVersionId,
+    });
+    if (!formPin.ok) {
+      return fail(c, formPin.status, formPin.code, formPin.message);
+    }
+
     const { row, created } = await createCheckinForLocalDate(db, {
       relationshipId: relationship.id,
       scheduleId: config.schedule.id,
       localDate,
       timeZone: timezone,
       dueWindowHours: config.schedule.dueWindowHours,
+      formVersionId: formPin.id,
+      definitionVersion: formPin.version,
     });
 
     const responseBody = {
@@ -481,6 +633,95 @@ checkinRoutes.post(
       expiresAt: addDaysIso(7),
     });
     return c.json(responseBody, 200);
+  },
+);
+
+checkinRoutes.put(
+  "/relationships/:relationshipId/preferred-form",
+  operation({
+    tag: "Checkins",
+    summary:
+      "Assign a preferred check-in form version for a client's next scheduled check-ins.",
+    description:
+      "Updates the preferred form on every open or active check-in schedule for the relationship.",
+    roles: ["trainer"],
+    body: assignPreferredCheckinFormRequestSchema,
+    response: assignPreferredCheckinFormResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = assignPreferredCheckinFormRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(
+        c,
+        400,
+        "INVALID_REQUEST",
+        "Invalid preferred check-in form request.",
+        { issues: parsed.error.issues },
+      );
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const ended = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (ended) return ended;
+
+    const formPin = await resolveCheckinFormPin(db, {
+      trainerUserId: actor.userId,
+      requestedVersionId: parsed.data.checkinFormVersionId,
+    });
+    if (!formPin.ok) {
+      return fail(c, formPin.status, formPin.code, formPin.message);
+    }
+
+    const configs = await db
+      .select()
+      .from(coachingConfigurations)
+      .where(eq(coachingConfigurations.coachingRelationshipId, relationship.id));
+    const writable = configs.filter((row) =>
+      ["draft", "configured", "active"].includes(row.status),
+    );
+    if (writable.length === 0) {
+      return fail(
+        c,
+        422,
+        "NO_ACTIVE_CONFIGURATION",
+        "Save coaching configuration before assigning a check-in form.",
+      );
+    }
+
+    const now = nowIso();
+    for (const config of writable) {
+      await db
+        .update(checkinSchedules)
+        .set({
+          preferredCheckinFormVersionId: formPin.id,
+          updatedAt: now,
+        })
+        .where(eq(checkinSchedules.coachingConfigurationId, config.id));
+    }
+
+    return ok(
+      c,
+      assignPreferredCheckinFormResponseSchema.parse({
+        coachingRelationshipId: relationship.id,
+        checkinFormVersionId: formPin.id,
+      }),
+    );
   },
 );
 
@@ -545,6 +786,8 @@ checkinRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedEnsureDue = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedEnsureDue) return endedEnsureDue;
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
     if (!config) {
@@ -559,7 +802,7 @@ checkinRoutes.post(
     const timezone = await loadTraineeTimezone(db, relationship.traineeUserId);
     const today = formatLocalDate(new Date(), timezone);
 
-    const openDraft = await db
+    const openDrafts = await db
       .select()
       .from(checkins)
       .where(
@@ -568,12 +811,32 @@ checkinRoutes.post(
           eq(checkins.recordStatus, "draft"),
         ),
       )
-      .orderBy(asc(checkins.localDate))
+      .orderBy(asc(checkins.localDate));
+
+    const latestSubmitted = await db
+      .select()
+      .from(checkins)
+      .where(
+        and(
+          eq(checkins.coachingRelationshipId, relationship.id),
+          eq(checkins.recordStatus, "submitted"),
+        ),
+      )
+      .orderBy(desc(checkins.localDate))
       .limit(1);
+    const cadenceFloor = latestSubmitted[0]
+      ? nextCheckinLocalDate({
+          fromLocalDate: latestSubmitted[0].localDate,
+          cadence: config.schedule.cadence,
+        })
+      : null;
+    const cadenceDraft = openDrafts.find(
+      (row) => !cadenceFloor || row.localDate >= cadenceFloor,
+    );
 
     let result: { row: typeof checkins.$inferSelect; created: boolean };
-    if (openDraft[0]) {
-      result = { row: openDraft[0], created: false };
+    if (cadenceDraft) {
+      result = { row: cadenceDraft, created: false };
     } else {
       const latest = await db
         .select()
@@ -614,12 +877,25 @@ checkinRoutes.post(
         dueLocalDate = next;
       }
 
+      const formPin = await resolveCheckinFormPin(db, {
+        trainerUserId:
+          actor.selectedRole === "trainer" ? actor.userId : null,
+        fallbackVersionId:
+          config.schedule.preferredCheckinFormVersionId ??
+          latest[0]?.checkinFormVersionId ??
+          null,
+      });
+      if (!formPin.ok) {
+        return fail(c, formPin.status, formPin.code, formPin.message);
+      }
       result = await createCheckinForLocalDate(db, {
         relationshipId: relationship.id,
         scheduleId: config.schedule.id,
         localDate: dueLocalDate,
         timeZone: timezone,
         dueWindowHours: config.schedule.dueWindowHours,
+        formVersionId: formPin.id,
+        definitionVersion: formPin.version,
       });
     }
 
@@ -834,6 +1110,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const endedNote = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedNote) return endedNote;
 
     if (parsed.data.checkinId) {
       const linked = await loadCheckinWithReview(db, parsed.data.checkinId);
@@ -846,16 +1124,31 @@ checkinRoutes.post(
     }
 
     const now = nowIso();
+    const visibility = parsed.data.visibility ?? "private";
     const row = {
       id: createId(),
       coachingRelationshipId: relationship.id,
       trainerUserId: actor.userId,
       checkinId: parsed.data.checkinId ?? null,
       body: parsed.data.body,
+      visibility,
+      subjectType: parsed.data.subjectType ?? null,
+      subjectId: parsed.data.subjectId ?? null,
+      sharedAt: visibility === "client" ? now : null,
+      unsharedAt: null,
+      seenAt: null,
       createdAt: now,
       updatedAt: now,
     };
     await db.insert(trainerNotes).values(row);
+
+    if (visibility === "client") {
+      await notifyTraineeNoteShared(db, {
+        noteId: row.id,
+        relationshipId: relationship.id,
+        traineeUserId: relationship.traineeUserId,
+      });
+    }
 
     await db.insert(interventions).values({
       id: createId(),
@@ -886,6 +1179,199 @@ checkinRoutes.post(
   },
 );
 
+checkinRoutes.patch(
+  "/relationships/:relationshipId/notes/:noteId",
+  operation({
+    tag: "Checkins",
+    summary: "Share or unshare a trainer note with the client",
+    description:
+      "Updates note visibility. Sharing sends a trainer_note_shared notification (not for check-in review notes).",
+    roles: ["trainer"],
+    idempotency: true,
+    body: patchTrainerNoteRequestSchema,
+    response: trainerNoteSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const idempotencyKey = requireIdempotencyKey(c);
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
+
+    const parsed = patchTrainerNoteRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid note patch request.", {
+        issues: parsed.error.issues,
+      });
+    }
+
+    const db = createDb(c.env.DB);
+    const fingerprint = await sha256Hex(JSON.stringify(parsed.data));
+    const existing = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: NOTE_PATCH_OPERATION,
+      idempotencyKey,
+    });
+    if (existing) {
+      if (existing.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request.",
+        );
+      }
+      return c.json(
+        JSON.parse(existing.responseBody),
+        existing.responseStatus as 200,
+      );
+    }
+
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const endedPatch = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedPatch) return endedPatch;
+
+    const noteId = c.req.param("noteId");
+    const noteRows = await db
+      .select()
+      .from(trainerNotes)
+      .where(
+        and(
+          eq(trainerNotes.id, noteId),
+          eq(trainerNotes.coachingRelationshipId, relationship.id),
+        ),
+      )
+      .limit(1);
+    const existingNote = noteRows[0];
+    if (!existingNote) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    if (existingNote.trainerUserId !== actor.userId) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    if (parsed.data.body !== undefined && parsed.data.body !== existingNote.body) {
+      await db
+        .update(trainerNotes)
+        .set({ body: parsed.data.body, updatedAt: nowIso() })
+        .where(eq(trainerNotes.id, noteId));
+    }
+
+    let updated: typeof trainerNotes.$inferSelect | null | undefined =
+      existingNote;
+    if (parsed.data.visibility !== undefined) {
+      updated = await setTrainerNoteVisibility(db, {
+        noteId,
+        relationshipId: relationship.id,
+        trainerUserId: actor.userId,
+        visibility: parsed.data.visibility,
+        skipPush: Boolean(existingNote.checkinId),
+      });
+    } else if (parsed.data.body !== undefined) {
+      const refreshed = await db
+        .select()
+        .from(trainerNotes)
+        .where(eq(trainerNotes.id, noteId))
+        .limit(1);
+      updated = refreshed[0];
+    }
+    if (!updated) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    const responseBody = {
+      data: trainerNoteSchema.parse(mapTrainerNote(updated)),
+    };
+    await saveIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: NOTE_PATCH_OPERATION,
+      idempotencyKey,
+      requestFingerprint: fingerprint,
+      responseStatus: 200,
+      responseBody,
+      expiresAt: addDaysIso(7),
+    });
+    return c.json(responseBody, 200);
+  },
+);
+
+checkinRoutes.delete(
+  "/relationships/:relationshipId/notes/:noteId",
+  operation({
+    tag: "Checkins",
+    summary: "Delete a trainer note",
+    description:
+      "Permanently deletes a trainer note owned by the caller. Blocked when coaching has ended.",
+    roles: ["trainer"],
+    response: deleteTrainerNoteResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const db = createDb(c.env.DB);
+    const relationship = await loadAccessibleRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const ended = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (ended) return ended;
+
+    const noteId = c.req.param("noteId");
+    const rows = await db
+      .select()
+      .from(trainerNotes)
+      .where(
+        and(
+          eq(trainerNotes.id, noteId),
+          eq(trainerNotes.coachingRelationshipId, relationship.id),
+          eq(trainerNotes.trainerUserId, actor.userId),
+        ),
+      )
+      .limit(1);
+    if (!rows[0]) {
+      return fail(c, 404, "NOTE_NOT_FOUND", "Note not found.");
+    }
+
+    await db.delete(trainerNotes).where(eq(trainerNotes.id, noteId));
+    return ok(
+      c,
+      deleteTrainerNoteResponseSchema.parse({ id: noteId, deleted: true }),
+    );
+  },
+);
+
 checkinRoutes.get(
   "/inbox",
   operation({
@@ -910,6 +1396,8 @@ checkinRoutes.get(
         checkin: checkins,
         review: checkinReviews,
         relationship: coachingRelationships,
+        traineeTimezone: users.timezone,
+        traineeDisplayName: traineeProfiles.displayName,
       })
       .from(checkins)
       .innerJoin(
@@ -917,15 +1405,23 @@ checkinRoutes.get(
         eq(coachingRelationships.id, checkins.coachingRelationshipId),
       )
       .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+      .leftJoin(users, eq(users.id, coachingRelationships.traineeUserId))
+      .leftJoin(
+        traineeProfiles,
+        eq(traineeProfiles.userId, coachingRelationships.traineeUserId),
+      )
       .where(eq(coachingRelationships.trainerUserId, actor.userId))
       .orderBy(desc(checkins.localDate), desc(checkins.createdAt));
 
     const now = nowIso();
     const items = rows
+      .filter((row) => row.relationship.status !== "ended")
       .map((row) => ({
         checkin: mapCheckin(row.checkin, row.review ?? null, now),
         coachingRelationshipId: row.relationship.id,
         traineeUserId: row.relationship.traineeUserId,
+        traineeDisplayName: row.traineeDisplayName ?? "Client",
+        traineeTimezone: row.traineeTimezone ?? "UTC",
       }))
       .filter((item) =>
         ["due", "overdue", "submitted"].includes(item.checkin.status),
@@ -1014,6 +1510,19 @@ checkinRoutes.get(
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
 
+    const pinned = await loadPinnedCheckinForm(
+      db,
+      loaded.checkin.checkinFormVersionId,
+    );
+    if (!pinned) {
+      return fail(
+        c,
+        500,
+        "CHECKIN_FORM_MISSING",
+        "Pinned check-in form version is missing.",
+      );
+    }
+
     const now = nowIso();
     const mappedCheckin = mapCheckin(loaded.checkin, loaded.review, now);
     const fromDate = addDaysToLocalDate(loaded.checkin.localDate, -14);
@@ -1032,6 +1541,7 @@ checkinRoutes.get(
       .where(
         and(
           eq(workoutAssignments.coachingRelationshipId, relationship.id),
+          eq(workoutAssignments.scheduleStatus, "scheduled"),
           gte(workoutAssignments.localDate, fromDate),
           lte(workoutAssignments.localDate, toDate),
         ),
@@ -1070,6 +1580,7 @@ checkinRoutes.get(
       .where(
         and(
           eq(mealAssignments.coachingRelationshipId, relationship.id),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
           gte(mealAssignments.localDate, fromDate),
           lte(mealAssignments.localDate, toDate),
         ),
@@ -1139,24 +1650,53 @@ checkinRoutes.get(
     const measurementsForContext =
       measurementRows.length > 0
         ? measurementRows.map((row) => ({
+            id: row.id,
             type: row.type,
             value: String(row.value),
+            unit: row.unit,
             observedAt: row.observedAt,
+            mediaAssetId: row.mediaAssetId,
           }))
         : answers?.bodyWeightKg != null
           ? [
               {
                 type: "body_weight_kg",
                 value: String(answers.bodyWeightKg),
+                unit: "kg",
                 observedAt: mappedCheckin.submittedAt ?? mappedCheckin.updatedAt,
               },
             ]
           : [];
 
+    const photoRows = await db
+      .select()
+      .from(mediaAssets)
+      .where(
+        and(
+          eq(mediaAssets.coachingRelationshipId, relationship.id),
+          inArray(mediaAssets.mediaType, ["progress_photo", "checkin_photo"]),
+        ),
+      )
+      .orderBy(desc(mediaAssets.createdAt), desc(mediaAssets.id))
+      .limit(10);
+
     return ok(
       c,
       checkinReviewContextSchema.parse({
         checkin: mappedCheckin,
+        pinnedForm: mapCheckinFormVersion(pinned.version),
+        photos: photoRows.map((row) => {
+          const media = mapMediaAsset(row);
+          return {
+            id: media.id,
+            mediaType: media.mediaType,
+            status: media.status,
+            contentType: media.contentType,
+            createdAt: media.createdAt,
+            domainEntityType: media.domainEntityType,
+            domainEntityId: media.domainEntityId,
+          };
+        }),
         recentWorkoutAdherence,
         recentMealCompliance,
         activeExceptions: activeExceptionRows.map(mapActiveExceptionSummary),
@@ -1174,13 +1714,61 @@ checkinRoutes.get(
         currentConfiguration: config
           ? {
               id: config.configuration.id,
-              primaryGoal: config.configuration.primaryGoal,
+              goalShort: config.configuration.goalShort,
+              goalDescription: config.configuration.goalDescription,
               checkinCadence: config.schedule.cadence,
               dueWindowHours: config.schedule.dueWindowHours,
             }
           : null,
       }),
     );
+  },
+);
+
+checkinRoutes.get(
+  "/:checkinId/form",
+  operation({
+    tag: "Checkins",
+    summary: "Pinned check-in form fields for the trainee UI.",
+    description:
+      "Returns the immutable form version pinned on this check-in so the trainee app can render the questions.",
+    roles: ["trainee", "trainer"],
+    response: checkinFormVersionSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee", "trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const loaded = await loadCheckinWithReview(db, c.req.param("checkinId"));
+    if (!loaded) {
+      return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
+    }
+    const relationship = await loadAccessibleRelationship(
+      db,
+      loaded.checkin.coachingRelationshipId,
+      actor,
+    );
+    if (!relationship) {
+      return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
+    }
+    const pinned = await loadPinnedCheckinForm(
+      db,
+      loaded.checkin.checkinFormVersionId,
+    );
+    if (!pinned) {
+      return fail(
+        c,
+        500,
+        "CHECKIN_FORM_MISSING",
+        "Pinned check-in form version is missing.",
+      );
+    }
+    return ok(c, mapCheckinFormVersion(pinned.version));
   },
 );
 
@@ -1226,6 +1814,8 @@ checkinRoutes.put(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
+    const endedDraft = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedDraft) return endedDraft;
 
     if (!canSaveCheckinDraft({ recordStatus: loaded.checkin.recordStatus })) {
       return fail(
@@ -1345,6 +1935,8 @@ checkinRoutes.post(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
+    const endedSubmit = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedSubmit) return endedSubmit;
 
     const now = nowIso();
     if (
@@ -1371,7 +1963,23 @@ checkinRoutes.post(
       );
     }
 
-    const missing = missingRequiredCheckinAnswers(parsed.data.answers);
+    const pinned = await loadPinnedCheckinForm(
+      db,
+      loaded.checkin.checkinFormVersionId,
+    );
+    if (!pinned) {
+      return fail(
+        c,
+        500,
+        "CHECKIN_FORM_MISSING",
+        "Pinned check-in form version is missing.",
+      );
+    }
+
+    const missing = missingRequiredCheckinAnswers(
+      parsed.data.answers,
+      pinned.fields,
+    );
     if (missing.length > 0) {
       return fail(
         c,
@@ -1394,14 +2002,18 @@ checkinRoutes.post(
       })
       .where(eq(checkins.id, loaded.checkin.id));
 
-    if (parsed.data.answers.bodyWeightKg != null) {
+    const linked = linkedMeasurementsForCheckin({
+      fields: pinned.fields,
+      answers: parsed.data.answers,
+    });
+    for (const measurement of linked) {
       await db.insert(measurements).values({
         id: createId(),
         coachingRelationshipId: relationship.id,
         traineeUserId: actor.userId,
-        type: "body_weight_kg",
-        value: parsed.data.answers.bodyWeightKg,
-        unit: "kg",
+        type: measurement.type,
+        value: measurement.value,
+        unit: defaultUnitForMeasurementType(measurement.type),
         observedAt: now,
         source: "checkin",
         checkinId: loaded.checkin.id,
@@ -1517,6 +2129,8 @@ checkinRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "CHECKIN_NOT_FOUND", "Check-in not found.");
     }
+    const endedReview = await blockIfRelationshipEnded(c, db, relationship.id);
+    if (endedReview) return endedReview;
 
     if (
       !canRecordCheckinReview({
@@ -1556,6 +2170,16 @@ checkinRoutes.post(
       summary: `Check-in review: ${parsed.data.outcome}`,
       createdAt: now,
       updatedAt: now,
+    });
+
+    // Inbox row so the trainee sees "Acknowledged" / coach reply on Notifications.
+    await storeInboxNotification(db, {
+      recipientUserId: relationship.traineeUserId,
+      relationshipId: relationship.id,
+      notificationType: "checkin_reviewed",
+      domainEntityId: loaded.checkin.id,
+      domainEntityType: "checkin",
+      dedupeKey: `checkin_reviewed:${loaded.checkin.id}`,
     });
 
     const responseBody = {

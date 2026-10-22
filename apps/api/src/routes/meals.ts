@@ -18,29 +18,38 @@ import {
   type MealPhotoIntent,
 } from "@fitbud/contracts";
 import {
+  canLog,
   canRecordMealCompliance,
-  eachLocalDateInclusive,
+  formatLocalDate,
   mealPhotoIntentSatisfied,
-  mealWindowForLocalDate,
-  resolveMealPhotoRequired,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
   coachingConfigurations,
   coachingRelationships,
+  exceptions,
   mealAssignments,
   mealCompliance,
   mediaAssets,
   nutritionExpectations,
   plans,
   planVersions,
-  users,
 } from "../db/schema";
 import {
   mapMealAssignment,
   mapMealCompliance,
+  parseMealPrescriptionJson,
   parsePlanContentJson,
 } from "../domain/mappers";
+import {
+  insertMealAssignments,
+  loadTraineeTimezone,
+  resolveGenerationRange,
+} from "../domain/assignment-schedule";
+import {
+  assertMealLogAllowed,
+  buildLoggedFoodsCompliance,
+} from "../domain/compliance-logging.js";
 import { appendChangeLog } from "../domain/sync";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok, type AppContext } from "../lib/envelope";
@@ -48,6 +57,7 @@ import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
 } from "../lib/idempotency";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { queueRealtimeHint } from "../realtime/emit";
 import {
   optionalAuthMiddleware,
@@ -68,6 +78,87 @@ export const mealRoutes = new Hono<{
 }>();
 
 type Db = ReturnType<typeof createDb>;
+
+/** Resolve trainee-facing logging lock for one or many meal assignments. */
+async function mealLockReasonsByAssignmentId(
+  db: Db,
+  input: {
+    relationshipId: string;
+    traineeUserId: string;
+    assignmentIds: string[];
+    rows: Array<{
+      assignment: typeof mealAssignments.$inferSelect;
+      compliance: typeof mealCompliance.$inferSelect | null;
+    }>;
+  },
+): Promise<Map<string, string>> {
+  const lockByAssignment = new Map<string, string>();
+  if (input.assignmentIds.length === 0) return lockByAssignment;
+
+  const exceptionRows = await db
+    .select({
+      sourceEntityId: exceptions.sourceEntityId,
+      status: exceptions.status,
+    })
+    .from(exceptions)
+    .where(
+      and(
+        eq(exceptions.coachingRelationshipId, input.relationshipId),
+        eq(exceptions.sourceEntityType, "meal_assignment"),
+      ),
+    );
+  const exceptionStatusById = new Map<string, string>();
+  for (const ex of exceptionRows) {
+    exceptionStatusById.set(ex.sourceEntityId, ex.status);
+    if (
+      ex.status === "resolved" &&
+      input.assignmentIds.includes(ex.sourceEntityId)
+    ) {
+      lockByAssignment.set(ex.sourceEntityId, "exception_resolved");
+    }
+  }
+
+  const timeZone = await loadTraineeTimezone(db, input.traineeUserId);
+  const now = nowIso();
+  for (const row of input.rows) {
+    if (lockByAssignment.has(row.assignment.id)) continue;
+    const prescription = parseMealPrescriptionJson(
+      row.assignment.mealPrescriptionJson,
+    );
+    const required = prescription.required !== false;
+    const exceptionStatus = exceptionStatusById.get(row.assignment.id);
+    const decision = canLog({
+      assignmentScheduleStatus:
+        row.assignment.scheduleStatus === "superseded"
+          ? "superseded"
+          : "scheduled",
+      exceptionStatus:
+        exceptionStatus === "active" ||
+        exceptionStatus === "resolved" ||
+        exceptionStatus === "acknowledged"
+          ? exceptionStatus
+          : null,
+      nowIso: now,
+      localDate: row.assignment.localDate,
+      traineeTimezone: timeZone,
+      required,
+      alreadyLogged: row.compliance != null,
+      windowEndsAt: row.assignment.windowEndsAt,
+    });
+    if (decision.decision === "locked" && decision.reason) {
+      lockByAssignment.set(row.assignment.id, decision.reason);
+    } else if (
+      decision.decision === "superseded" ||
+      decision.decision === "ended"
+    ) {
+      lockByAssignment.set(
+        row.assignment.id,
+        decision.reason ?? decision.decision,
+      );
+    }
+  }
+  return lockByAssignment;
+}
 
 async function loadReadyMealPhotoAsset(
   db: Db,
@@ -146,15 +237,6 @@ async function loadActiveNutritionConfig(db: Db, relationshipId: string) {
   return rows[0] ?? null;
 }
 
-async function loadTraineeTimezone(db: Db, traineeUserId: string) {
-  const rows = await db
-    .select({ timezone: users.timezone })
-    .from(users)
-    .where(eq(users.id, traineeUserId))
-    .limit(1);
-  return rows[0]?.timezone ?? "UTC";
-}
-
 async function loadAssignmentWithCompliance(db: Db, assignmentId: string) {
   const assignmentRows = await db
     .select()
@@ -228,14 +310,6 @@ mealRoutes.post(
         issues: parsed.error.issues,
       });
     }
-    if (parsed.data.fromDate > parsed.data.toDate) {
-      return fail(
-        c,
-        400,
-        "INVALID_DATE_RANGE",
-        "fromDate must be on or before toDate.",
-      );
-    }
 
     const db = createDb(c.env.DB);
     const fingerprint = await sha256Hex(JSON.stringify(parsed.data));
@@ -267,6 +341,14 @@ mealRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const writable = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writable.ok) {
+      return writable.response;
+    }
 
     const effective = await loadEffectivePlanVersion(db, relationship.id);
     if (!effective) {
@@ -289,10 +371,7 @@ mealRoutes.post(
     }
 
     const content = parsePlanContentJson(effective.version.contentJson);
-    const prescriptions = content.mealPrescriptions
-      .slice()
-      .sort((a, b) => a.order - b.order);
-    if (prescriptions.length === 0) {
+    if (content.mealPrescriptions.length === 0) {
       return fail(
         c,
         422,
@@ -301,65 +380,54 @@ mealRoutes.post(
       );
     }
 
-    const timezone = await loadTraineeTimezone(db, relationship.traineeUserId);
-    const now = nowIso();
-    const createdRows: (typeof mealAssignments.$inferSelect)[] = [];
-
-    for (const localDate of eachLocalDateInclusive(
-      parsed.data.fromDate,
-      parsed.data.toDate,
-    )) {
-      for (const prescription of prescriptions) {
-        const existingAssignment = await db
-          .select()
-          .from(mealAssignments)
-          .where(
-            and(
-              eq(mealAssignments.coachingRelationshipId, relationship.id),
-              eq(mealAssignments.planVersionId, effective.version.id),
-              eq(mealAssignments.mealPrescriptionId, prescription.id),
-              eq(mealAssignments.localDate, localDate),
-            ),
-          )
-          .limit(1);
-        if (existingAssignment[0]) continue;
-
-        const window = mealWindowForLocalDate({
-          localDate,
-          timeZone: timezone,
-          confirmationWindowHours: config.nutrition.confirmationWindowHours,
-        });
-        const photoRequired = resolveMealPhotoRequired({
-          photoRequirement: config.nutrition.photoRequirement,
-          prescriptionPhotoRequired: prescription.photoRequired,
-        });
-
-        const row = {
-          id: createId(),
-          coachingRelationshipId: relationship.id,
-          planId: effective.plan.id,
-          planVersionId: effective.version.id,
-          mealPrescriptionId: prescription.id,
-          mealName: prescription.name,
-          mealPrescriptionJson: JSON.stringify(prescription),
-          localDate,
-          windowStartsAt: window.windowStartsAt,
-          windowEndsAt: window.windowEndsAt,
-          photoRequired,
-          createdAt: now,
-          updatedAt: now,
-        };
-        await db.insert(mealAssignments).values(row);
-        createdRows.push(row);
-      }
+    const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const today = formatLocalDate(new Date(), timeZone);
+    const resolved = resolveGenerationRange({
+      window: parsed.data.window,
+      today,
+      fromDate: parsed.data.fromDate,
+      toDate: parsed.data.toDate,
+      version: effective.version,
+      timeZone,
+    });
+    if (!resolved.ok) {
+      return fail(c, 400, "INVALID_DATE_RANGE", resolved.message);
     }
+    const dietScope = parsed.data.dietScope ?? "today_onward";
+    const dates =
+      dietScope === "today_only"
+        ? resolved.dates.filter((date) => date === today)
+        : resolved.dates;
+    const now = nowIso();
+    const createdRows = await insertMealAssignments(db, {
+      relationshipId: relationship.id,
+      planId: effective.plan.id,
+      planVersionId: effective.version.id,
+      content,
+      timeZone,
+      confirmationWindowHours: config.nutrition.confirmationWindowHours,
+      photoRequirement: config.nutrition.photoRequirement,
+      dates,
+      now,
+    });
 
+    const generated = createdRows
+      .map((row) => mapMealAssignment(row, null, now))
+      .sort((left, right) => {
+        if (left.localDate !== right.localDate) {
+          return left.localDate.localeCompare(right.localDate);
+        }
+        const leftTime =
+          left.prescription.localTime?.trim() || left.windowStartsAt;
+        const rightTime =
+          right.prescription.localTime?.trim() || right.windowStartsAt;
+        if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+        return left.mealName.localeCompare(right.mealName);
+      });
     const responseBody = {
       data: generateMealAssignmentsResponseSchema.parse({
-        created: createdRows.length,
-        assignments: createdRows.map((row) =>
-          mapMealAssignment(row, null, now),
-        ),
+        created: generated.length,
+        assignments: generated,
       }),
     };
     await saveIdempotencyRecord(db, {
@@ -423,6 +491,7 @@ mealRoutes.get(
 
     const conditions = [
       eq(mealAssignments.coachingRelationshipId, relationship.id),
+      eq(mealAssignments.scheduleStatus, "scheduled"),
     ];
     if (fromDate) {
       conditions.push(gte(mealAssignments.localDate, fromDate));
@@ -449,12 +518,41 @@ mealRoutes.get(
       );
 
     const now = nowIso();
+    const assignmentIds = rows.map((row) => row.assignment.id);
+    const lockByAssignment = await mealLockReasonsByAssignmentId(db, {
+      relationshipId: relationship.id,
+      traineeUserId: relationship.traineeUserId,
+      assignmentIds,
+      rows: rows.map((row) => ({
+        assignment: row.assignment,
+        compliance: row.compliance ?? null,
+      })),
+    });
+    const items = rows
+      .map((row) => {
+        const reason = lockByAssignment.get(row.assignment.id) ?? null;
+        return mapMealAssignment(row.assignment, row.compliance ?? null, now, {
+          locked: reason != null,
+          reason,
+        });
+      })
+      .sort((left, right) => {
+        if (left.localDate !== right.localDate) {
+          return left.localDate.localeCompare(right.localDate);
+        }
+        const leftTime =
+          left.prescription.localTime?.trim() || left.windowStartsAt;
+        const rightTime =
+          right.prescription.localTime?.trim() || right.windowStartsAt;
+        if (leftTime !== rightTime) return leftTime.localeCompare(rightTime);
+        const byName = left.mealName.localeCompare(right.mealName);
+        if (byName !== 0) return byName;
+        return left.id.localeCompare(right.id);
+      });
     return ok(
       c,
       mealAssignmentListResponseSchema.parse({
-        items: rows.map((row) =>
-          mapMealAssignment(row.assignment, row.compliance ?? null, now),
-        ),
+        items,
         nextCursor: null,
       }),
     );
@@ -497,6 +595,7 @@ mealRoutes.get(
 
     const conditions = [
       eq(mealAssignments.coachingRelationshipId, relationship.id),
+      eq(mealAssignments.scheduleStatus, "scheduled"),
     ];
     if (fromDate) conditions.push(gte(mealAssignments.localDate, fromDate));
     if (toDate) conditions.push(lte(mealAssignments.localDate, toDate));
@@ -595,10 +694,27 @@ mealRoutes.get(
       return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
     }
 
+    const locks = await mealLockReasonsByAssignmentId(db, {
+      relationshipId: relationship.id,
+      traineeUserId: relationship.traineeUserId,
+      assignmentIds: [loaded.assignment.id],
+      rows: [
+        {
+          assignment: loaded.assignment,
+          compliance: loaded.compliance ?? null,
+        },
+      ],
+    });
+    const reason = locks.get(loaded.assignment.id) ?? null;
     return ok(
       c,
       mealAssignmentSchema.parse(
-        mapMealAssignment(loaded.assignment, loaded.compliance, nowIso()),
+        mapMealAssignment(
+          loaded.assignment,
+          loaded.compliance,
+          nowIso(),
+          { locked: reason != null, reason },
+        ),
       ),
     );
   },
@@ -616,10 +732,13 @@ async function recordCompliance(
       | "repeat_recent"
       | "manual"
       | "other"
+      | "logged_foods"
       | null;
     notes?: string | null;
     photoIntent?: MealPhotoIntent | null;
     requirePhotoWhenConfigured: boolean;
+    clientLoggedAt?: string;
+    loggedFoodItems?: import("@fitbud/contracts").LoggedFoodItem[];
   },
 ) {
   const actor = c.get("actor");
@@ -686,6 +805,29 @@ async function recordCompliance(
     return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
   }
 
+  const writable = await requireWritableRelationship(c, db, relationship.id);
+  if (!writable.ok) {
+    return writable.response;
+  }
+
+  const now = nowIso();
+  const timeZone = await loadTraineeTimezone(db, actor.userId);
+  const logGuard = await assertMealLogAllowed(db, {
+    assignmentId,
+    relationshipId: relationship.id,
+    relationshipEnded: relationship.status === "ended",
+    traineeUserId: actor.userId,
+    traineeTimezone: timeZone,
+    clientLoggedAt: input.clientLoggedAt,
+    nowIso: now,
+    alreadyLogged: Boolean(loaded.compliance),
+  });
+  if (!logGuard.ok) {
+    return fail(c, 409, logGuard.code, "This meal cannot be logged.", {
+      reason: logGuard.reason,
+    });
+  }
+
   if (!canRecordMealCompliance({ hasCompliance: Boolean(loaded.compliance) })) {
     return fail(
       c,
@@ -729,7 +871,55 @@ async function recordCompliance(
     }
   }
 
-  const now = nowIso();
+  let macroFields = {
+    itemsJson: null as string | null,
+    kcalScaled: null as number | null,
+    proteinScaled: null as number | null,
+    carbsScaled: null as number | null,
+    fatScaled: null as number | null,
+  };
+  if (
+    input.deviationKind === "logged_foods" &&
+    input.loggedFoodItems &&
+    input.loggedFoodItems.length > 0
+  ) {
+    macroFields = await buildLoggedFoodsCompliance(db, {
+      traineeUserId: actor.userId,
+      relationshipId: relationship.id,
+      items: input.loggedFoodItems,
+    });
+  } else if (input.outcome === "confirmed") {
+    const prescription = parseMealPrescriptionJson(
+      loaded.assignment.mealPrescriptionJson,
+    );
+    let kcalScaled = 0;
+    let proteinScaled = 0;
+    let carbsScaled = 0;
+    let fatScaled = 0;
+    for (const item of prescription.items) {
+      if (!("calculated" in item) || !item.calculated) continue;
+      const calc = item.calculated;
+      kcalScaled += calc.energyKcalScaled ?? 0;
+      proteinScaled += calc.proteinScaled ?? 0;
+      carbsScaled += calc.carbsScaled ?? 0;
+      fatScaled += calc.fatScaled ?? 0;
+    }
+    if (
+      kcalScaled > 0 ||
+      proteinScaled > 0 ||
+      carbsScaled > 0 ||
+      fatScaled > 0
+    ) {
+      macroFields = {
+        itemsJson: null,
+        kcalScaled,
+        proteinScaled,
+        carbsScaled,
+        fatScaled,
+      };
+    }
+  }
+
   const row = {
     id: createId(),
     assignmentId: loaded.assignment.id,
@@ -744,6 +934,14 @@ async function recordCompliance(
     photoRequired: loaded.assignment.photoRequired,
     photoIntentJson: serializePhotoIntent(input.photoIntent),
     mediaAssetId: linkedMediaAssetId,
+    itemsJson: macroFields.itemsJson,
+    kcalScaled: macroFields.kcalScaled,
+    proteinScaled: macroFields.proteinScaled,
+    carbsScaled: macroFields.carbsScaled,
+    fatScaled: macroFields.fatScaled,
+    loggedLate: logGuard.loggedLate,
+    loggedAfterResolve: logGuard.loggedAfterResolve,
+    clientLoggedAt: input.clientLoggedAt ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -857,6 +1055,8 @@ mealRoutes.post(
       notes: parsed.data.notes ?? null,
       photoIntent: parsed.data.photoIntent ?? null,
       requirePhotoWhenConfigured: true,
+      clientLoggedAt: parsed.data.clientLoggedAt,
+      loggedFoodItems: parsed.data.items,
     });
   },
 );

@@ -1,75 +1,254 @@
+import { Eye, EyeOff, Info, Lock, Mail } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "./AuthProvider";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
+import { AuthFlowError, useAuth } from "./AuthProvider";
+import { AuthLayout } from "./AuthLayout";
+import { Button } from "../components/Button";
+import { useConfig, isWhatsAppOtpEnabled } from "../lib/config";
+import { useOnline } from "../hooks/useOnline";
+
+const DEMO_PASSWORD = "FitBud-demo-2026";
+const showDevHints =
+  import.meta.env.DEV && import.meta.env.VITE_SHOW_DEV_HINTS === "1";
+
+function looksLikeMobile(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 8 && !value.includes("@");
+}
 
 export function SignInPage() {
-  const { me, loading, signIn } = useAuth();
+  const { me, loading, signInWithPassword, signInDevTest } = useAuth();
   const location = useLocation();
-  const [email, setEmail] = useState("coach@example.com");
+  const [params] = useSearchParams();
+  const { config } = useConfig();
+  const online = useOnline();
+  const [identifier, setIdentifier] = useState(
+    showDevHints ? "rahul.coach@demo.fitbud.test" : "",
+  );
+  const [password, setPassword] = useState(showDevHints ? DEMO_PASSWORD : "");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [roleGate, setRoleGate] = useState(false);
+
+  const nextRaw =
+    params.get("next") ??
+    (location.state as { from?: string } | null)?.from ??
+    "/";
+  const next = nextRaw.startsWith("/") ? nextRaw : "/";
 
   if (!loading && me) {
-    const redirectTo =
-      (location.state as { from?: string } | null)?.from ?? "/";
-    return <Navigate to={redirectTo} replace />;
+    if (!me.permittedRoles.includes("trainer")) {
+      return (
+        <AuthLayout
+          title="Client account"
+          lead=""
+          screenTestId="screen-TW-01"
+          showGlimpse={false}
+        >
+          <div className="auth-role-gate" data-testid="trainee-only-gate">
+            <p role="alert">
+              This account is set up as a client. Open the FitBud app on your phone.
+            </p>
+            <div className="auth-store-links">
+              <a
+                className="button-secondary"
+                href="https://apps.apple.com/app/fitbud"
+              >
+                App Store
+              </a>
+              <a
+                className="button-secondary"
+                href="https://play.google.com/store/apps/details?id=com.thefitbud.app"
+              >
+                Google Play
+              </a>
+            </div>
+            <p className="auth-alt-links">
+              <Link to="/sign-in">Try another account</Link>
+            </p>
+          </div>
+        </AuthLayout>
+      );
+    }
+    return <Navigate to={next} replace />;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!online) return;
     setSubmitting(true);
     setError(null);
+    setRoleGate(false);
     try {
-      await signIn(email);
+      await signInWithPassword(identifier.trim(), password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed.");
+      if (err instanceof AuthFlowError && err.code === "role") {
+        setRoleGate(true);
+        setError(err.message);
+      } else if (err instanceof AuthFlowError) {
+        setError(err.message);
+      } else {
+        setError(err instanceof Error ? err.message : "Sign-in failed.");
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
-  return (
-    <main className="auth-page">
-      <div className="auth-panel">
-        <div className="brand-lockup">
-          <span className="brand-glyph" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path fill="currentColor" d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
-            </svg>
-          </span>
-          <span className="brand-copy">
-            <span className="brand-mark">FitBud Coach</span>
-            <span className="brand-tagline">Trainer sign in</span>
-          </span>
+  if (roleGate) {
+    return (
+      <AuthLayout
+        title="Client account"
+        lead=""
+        screenTestId="screen-TW-01"
+        showGlimpse={false}
+      >
+        <div className="auth-role-gate" data-testid="trainee-only-gate">
+          <p role="alert">
+            This account is set up as a client. Open the FitBud app on your phone.
+          </p>
+          <div className="auth-store-links">
+            <a
+              className="button-secondary"
+              href="https://apps.apple.com/app/fitbud"
+            >
+              App Store
+            </a>
+            <a
+              className="button-secondary"
+              href="https://play.google.com/store/apps/details?id=com.thefitbud.app"
+            >
+              Google Play
+            </a>
+          </div>
+          <p className="auth-alt-links">
+            <Link to="/sign-in">Try another account</Link>
+          </p>
         </div>
-        <h1>Welcome back</h1>
-        <p className="lede">
-          Local development uses the API test identity double. Enter a trainer
-          email to create a session against the running API.
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <AuthLayout title="Welcome back, coach" screenTestId="screen-TW-01">
+      {!online ? (
+        <p className="offline-inline" role="status">
+          You&apos;re offline. Connect to sign in.
         </p>
-        <form className="stack-form" onSubmit={onSubmit}>
-          <label className="field">
-            <span>Email</span>
+      ) : null}
+      <form className="auth-form" onSubmit={onSubmit}>
+        <label className="field">
+          <span>Mobile number or email</span>
+          <span className="input-shell">
+            <Mail size={16} strokeWidth={1.75} aria-hidden="true" />
             <input
-              type="email"
-              name="email"
+              type="text"
+              name="username"
               autoComplete="username"
               required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={submitting || loading}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              disabled={submitting || loading || !online}
             />
-          </label>
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
+          </span>
+          {looksLikeMobile(identifier) ? (
+            <span className="field-hint">+91 prefix applied for Indian mobiles</span>
           ) : null}
-          <button type="submit" className="button-primary" disabled={submitting || loading}>
-            {submitting ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
+        </label>
+        <label className="field">
+          <span className="field-label-row">
+            <span>Password</span>
+            <Link
+              className="link"
+              to={`/forgot-password?next=${encodeURIComponent(next)}`}
+            >
+              Forgot password?
+            </Link>
+          </span>
+          <span className="input-shell">
+            <Lock size={16} strokeWidth={1.75} aria-hidden="true" />
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              autoComplete="current-password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting || loading || !online}
+            />
+            <button
+              type="button"
+              className="input-icon-btn"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={() => setShowPassword((v) => !v)}
+            >
+              {showPassword ? (
+                <EyeOff size={16} strokeWidth={1.75} />
+              ) : (
+                <Eye size={16} strokeWidth={1.75} />
+              )}
+            </button>
+          </span>
+        </label>
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <Button
+          type="submit"
+          variant="primary"
+          className="btn-lg btn-block"
+          disabled={submitting || loading || !online}
+          data-testid="sign-in-submit"
+        >
+          {submitting ? "Signing in…" : "Sign in"}
+        </Button>
+        <div className="auth-or" aria-hidden="true">
+          or
+        </div>
+        <Link
+          to={`/sign-in/code?next=${encodeURIComponent(next)}`}
+          className="button-secondary btn-lg btn-block"
+        >
+          <Mail size={16} strokeWidth={1.75} aria-hidden="true" />
+          Sign in with a code instead
+        </Link>
+      </form>
+      <div className="auth-note">
+        <Info size={16} strokeWidth={1.75} aria-hidden="true" />
+        <span>Trainer accounts only. Clients use the FitBud app.</span>
       </div>
-    </main>
+      {showDevHints ? (
+        <details className="dev-auth-panel" data-testid="dev-test-identity">
+          <summary>Development test identity</summary>
+          <p className="muted">
+            Bypasses password login with the API test token double.
+          </p>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={submitting}
+            onClick={() => {
+              void signInDevTest(
+                identifier.trim() || "coach@example.com",
+              ).catch((err: unknown) => {
+                if (err instanceof AuthFlowError && err.code === "role") {
+                  setRoleGate(true);
+                }
+                setError(
+                  err instanceof Error ? err.message : "Test sign-in failed.",
+                );
+              });
+            }}
+          >
+            Use test identity
+          </button>
+        </details>
+      ) : null}
+      {!isWhatsAppOtpEnabled(config) ? null : null}
+    </AuthLayout>
   );
 }

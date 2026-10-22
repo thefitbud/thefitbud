@@ -1,39 +1,19 @@
-import initSqlJs from "sql.js";
-import { drizzle } from "drizzle-orm/sql-js";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
-import { setTestDbOverride, type Db } from "../db/client.js";
+import { getTestDbOverride, setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
+import * as schema from "../db/schema.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+
+
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of [
-    "0000_identity.sql",
-    "0001_relationship_onboarding.sql",
-    "0012_invitation_whatsapp.sql",
-    "0002_coaching_configuration.sql",
-    "0003_plans.sql",
-    "0009_sync.sql",
-    "0010_notifications.sql",
-    "0013_domain_contracts.sql",
-  "0014_onboarding_form_templates.sql",
-  ]) {
-    sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-  }
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return {
-    db,
-    close: () => sqlite.close(),
-  };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function dummyD1(): D1Database {
@@ -178,6 +158,7 @@ function sampleContent() {
         id: "11111111-1111-4111-8111-111111111111",
         order: 1,
         name: "Day A",
+        weekday: 1,
         exercises: [
           {
             id: "22222222-2222-4222-8222-222222222222",
@@ -202,6 +183,8 @@ function sampleContent() {
         id: "44444444-4444-4444-8444-444444444444",
         order: 1,
         name: "Lunch",
+        mealType: "lunch",
+        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
         scheduleHint: "12:30",
         instructions: "Dal + rice",
         photoRequired: false,
@@ -231,6 +214,39 @@ describe("plans and versions", () => {
       testEnv(),
     );
     expect(response.status).toBe(401);
+  });
+
+  it("discards a draft but never a published version", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("c2");
+    const created = await app.request(
+      `/plans/relationships/${relationshipId}`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "plan-discard-1",
+        },
+        body: JSON.stringify({ title: "Scratch", content: sampleContent() }),
+      },
+      testEnv(),
+    );
+    const body = (await created.json()) as {
+      data: { plan: { id: string }; version: { id: string; recordVersion: number } };
+    };
+    const { plan, version } = body.data;
+    const discard = await app.request(
+      `/plans/${plan.id}/versions/${version.id}`,
+      { method: "DELETE", headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(discard.status).toBe(200);
+    const gone = await app.request(
+      `/plans/${plan.id}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(gone.status).toBe(404);
   });
 
   it("creates, previews, publishes, rejects immutable edits, and supersedes", async () => {
@@ -640,5 +656,59 @@ describe("plans and versions", () => {
     }
     expect(cursor).toBeNull();
     expect(seen.size).toBe(3);
+  });
+
+  it("rejects publish after the relationship ends and still returns the plan", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("ended-plan");
+    const created = await app.request(
+      `/plans/relationships/${relationshipId}`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "ended-plan-create",
+        },
+        body: JSON.stringify({ title: "Closed block", content: sampleContent() }),
+      },
+      testEnv(),
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as {
+      data: { plan: { id: string }; version: { id: string; recordVersion: number } };
+    };
+    const now = new Date().toISOString();
+    const db = getTestDbOverride();
+    expect(db).toBeTruthy();
+    await db!
+      .update(schema.coachingRelationships)
+      .set({ status: "ended", endedAt: now, updatedAt: now })
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    const published = await app.request(
+      `/plans/${createdBody.data.plan.id}/versions/${createdBody.data.version.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "ended-plan-publish",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: createdBody.data.version.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(409);
+    expect(((await published.json()) as { error: { code: string } }).error.code).toBe(
+      "RELATIONSHIP_ENDED",
+    );
+    const history = await app.request(
+      `/plans/${createdBody.data.plan.id}/versions/${createdBody.data.version.id}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(history.status).toBe(200);
   });
 });

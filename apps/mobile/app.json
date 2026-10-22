@@ -5,19 +5,25 @@
   "orientation": "portrait",
   "userInterfaceStyle": "light",
   "scheme": "fitbud",
+  "icon": "../../packages/brand/app/icon.png",
   "splash": {
+    "image": "../../packages/brand/app/splash.png",
     "resizeMode": "contain",
-    "backgroundColor": "#F7F8FB"
+    "backgroundColor": "#FAF7F2"
   },
   "ios": {
     "supportsTablet": true,
     "bundleIdentifier": "com.thefitbud.mobile"
   },
+  "web": {
+    "bundler": "metro"
+  },
   "android": {
     "package": "com.thefitbud.mobile",
     "adaptiveIcon": {
-      "backgroundColor": "#F7F8FB"
+      "foregroundImage": "../../packages/brand/app/adaptive-foreground.png",
+      "backgroundColor": "#FAF7F2"
     }
   },
-  "plugins": ["expo-dev-client"]
+  "plugins": ["./plugins/withLiveActivity", "expo-dev-client"]
 }

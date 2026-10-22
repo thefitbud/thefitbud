@@ -1,0 +1,201 @@
+import { z } from "zod";
+import { exceptionSeveritySchema, exceptionStatusSchema, exceptionTypeSchema } from "./exception.js";
+import { uuidSchema } from "./identity.js";
+import { localDateSchema } from "./workout.js";
+
+export const weekDayStateSchema = z.enum([
+  "done",
+  "partial",
+  "missed",
+  "rest",
+  "future",
+]);
+export type WeekDayState = z.infer<typeof weekDayStateSchema>;
+
+export const meDayResponseSchema = z.object({
+  date: z.string(),
+  assignments: z.object({
+    workouts: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
+    meals: z.array(z.object({ id: z.string().uuid(), slotKey: z.string() })),
+  }),
+  logs: z.object({
+    workouts: z.number().int(),
+    meals: z.number().int(),
+  }),
+  totals: z.object({
+    kcalScaled: z.number().int(),
+    perMeal: z.array(
+      z.object({ slotKey: z.string(), kcalScaled: z.number().int() }),
+    ),
+  }),
+});
+export type MeDayResponse = z.infer<typeof meDayResponseSchema>;
+
+const weekNutritionMacrosSchema = z.object({
+  kcal: z.number().int().nonnegative(),
+  proteinG: z.number().int().nonnegative(),
+  carbsG: z.number().int().nonnegative(),
+  fatG: z.number().int().nonnegative(),
+});
+
+export const weekTodayNutritionSchema = z.object({
+  date: localDateSchema,
+  logged: weekNutritionMacrosSchema.extend({
+    hasUnknown: z.boolean().optional(),
+  }),
+  assigned: weekNutritionMacrosSchema.nullable(),
+});
+export type WeekTodayNutrition = z.infer<typeof weekTodayNutritionSchema>;
+
+export const weekMealSlotStateSchema = z.enum([
+  "logged",
+  "missed",
+  "later",
+  "upcoming",
+]);
+export type WeekMealSlotState = z.infer<typeof weekMealSlotStateSchema>;
+
+export const weekDaySchema = z.object({
+  date: localDateSchema,
+  /** Workout-day rollup: done / missed / rest / future / partial. */
+  state: weekDayStateSchema,
+  /** Short workout label ("Upper A") or "Rest". */
+  workoutLabel: z.string().optional(),
+  mealsLogged: z.number().int().nonnegative().optional(),
+  mealsAssigned: z.number().int().nonnegative().optional(),
+  /** Per-slot meal dots for the day strip. */
+  mealSlots: z.array(weekMealSlotStateSchema).optional(),
+});
+export type WeekDay = z.infer<typeof weekDaySchema>;
+
+export const weekReadModelSchema = z.object({
+  start: localDateSchema,
+  workouts: z.object({
+    assigned: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+  }),
+  meals: z.object({
+    assigned: z.number().int().nonnegative(),
+    logged: z.number().int().nonnegative(),
+  }),
+  days: z.array(weekDaySchema),
+  todayNutrition: weekTodayNutritionSchema,
+});
+export type WeekReadModel = z.infer<typeof weekReadModelSchema>;
+
+export const attentionGroupItemSchema = z.object({
+  id: uuidSchema,
+  type: exceptionTypeSchema,
+  severity: exceptionSeveritySchema,
+  status: exceptionStatusSchema,
+  ageMinutes: z.number().int().nonnegative(),
+  summary: z.string(),
+  /** Optional exception details (e.g. localDate) for weekday-aware reason lines. */
+  details: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+export type AttentionGroupItem = z.infer<typeof attentionGroupItemSchema>;
+
+export const attentionGroupSchema = z.object({
+  relationshipId: uuidSchema,
+  traineeDisplayName: z.string(),
+  /** Client WhatsApp for trainer→client wa.me links. Null when unknown. */
+  clientWhatsappE164: z.string().nullable().optional(),
+  items: z.array(attentionGroupItemSchema),
+  itemCount: z.number().int().nonnegative().optional(),
+  mostSevere: exceptionSeveritySchema.optional(),
+  oldestAgeMinutes: z.number().int().nonnegative().optional(),
+});
+export type AttentionGroup = z.infer<typeof attentionGroupSchema>;
+
+export const attentionGroupsResponseSchema = z.object({
+  groups: z.array(attentionGroupSchema),
+});
+export type AttentionGroupsResponse = z.infer<typeof attentionGroupsResponseSchema>;
+
+export const clientFacetsSchema = z.object({
+  status: z.record(z.string(), z.number().int().nonnegative()),
+  adherence: z.record(z.string(), z.number().int().nonnegative()),
+  renewal: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type ClientFacets = z.infer<typeof clientFacetsSchema>;
+
+export const clientDirectoryWithFacetsResponseSchema = z.object({
+  items: z.array(z.record(z.string(), z.unknown())),
+  facets: clientFacetsSchema,
+  nextCursor: z.string().nullable(),
+});
+
+export const responsivenessLabelSchema = z.enum([
+  "logs_on_own",
+  "responds",
+  "often_misses",
+  "reminders_paused",
+  "notifications_off",
+  "not_enough_data",
+]);
+export type ResponsivenessLabel = z.infer<typeof responsivenessLabelSchema>;
+
+export const responsivenessCategoryCountsSchema = z.object({
+  sent: z.number().int().nonnegative(),
+  /** Null when open/read tracking is unavailable for this category. */
+  opened: z.number().int().nonnegative().nullable(),
+  loggedAfter: z.number().int().nonnegative(),
+  loggedOnOwn: z.number().int().nonnegative(),
+  notLogged: z.number().int().nonnegative(),
+  suppressed: z.number().int().nonnegative(),
+});
+export type ResponsivenessCategoryCounts = z.infer<
+  typeof responsivenessCategoryCountsSchema
+>;
+
+export const responsivenessCategoriesSchema = z.object({
+  workouts: responsivenessCategoryCountsSchema,
+  meals: responsivenessCategoryCountsSchema,
+  checkins: responsivenessCategoryCountsSchema,
+});
+export type ResponsivenessCategories = z.infer<
+  typeof responsivenessCategoriesSchema
+>;
+
+export const responsivenessResponseSchema = z.object({
+  label: responsivenessLabelSchema,
+  counts: z.object({
+    sent: z.number().int().nonnegative(),
+    opened: z.number().int().nonnegative(),
+    loggedAfter: z.number().int().nonnegative(),
+    loggedBefore: z.number().int().nonnegative(),
+  }),
+  categories: responsivenessCategoriesSchema.optional(),
+  pausedUntil: z.string().nullable().optional(),
+  preferredWorkoutTime: z.string().nullable().optional(),
+  preferredWorkoutTimeSource: z.enum(["set", "learned"]).nullable().optional(),
+  /** Client push preference (notification_preferences). */
+  pushEnabled: z.boolean().optional(),
+  /** Client quiet hours (HH:mm) when set. */
+  quietHoursStart: z.string().nullable().optional(),
+  quietHoursEnd: z.string().nullable().optional(),
+});
+export type ResponsivenessResponse = z.infer<typeof responsivenessResponseSchema>;
+
+export const reengagementCandidateSchema = z.object({
+  relationshipId: uuidSchema,
+  traineeDisplayName: z.string(),
+  waMeUrl: z.string().url(),
+  /** Client WhatsApp used to build waMeUrl. Null when the button should be disabled. */
+  clientWhatsappE164: z.string().nullable().optional(),
+});
+export type ReengagementCandidate = z.infer<typeof reengagementCandidateSchema>;
+
+export const reengagementCandidatesResponseSchema = z.object({
+  items: z.array(reengagementCandidateSchema),
+});
+export type ReengagementCandidatesResponse = z.infer<
+  typeof reengagementCandidatesResponseSchema
+>;
+
+export const resolveExceptionOutcomeSchema = z.enum([
+  "talked",
+  "plan_adjusted",
+  "no_action",
+  "other",
+]);

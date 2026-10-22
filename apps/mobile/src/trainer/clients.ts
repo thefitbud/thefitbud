@@ -1,8 +1,11 @@
 import type {
+  AdherenceState,
+  ClientDirectoryItem,
   CoachingRelationship,
   Invitation,
   OnboardingStatus,
 } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 
 export type ClientDirectoryRow = {
   key: string;
@@ -17,24 +20,7 @@ export type ClientDirectoryRow = {
 };
 
 export function onboardingStatusLabel(status: OnboardingStatus): string {
-  switch (status) {
-    case "invited":
-      return "Invited";
-    case "onboarding_pending":
-      return "Onboarding pending";
-    case "onboarding_submitted":
-      return "Onboarding submitted";
-    case "coaching_ready":
-      return "Coaching ready";
-    case "active":
-      return "Active";
-    case "ended":
-      return "Ended";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+  return labelFor("onboarding_status", status);
 }
 
 function invitationDisplayName(invitation: Invitation): string {
@@ -111,13 +97,96 @@ export function buildClientDirectoryRows(input: {
   );
 }
 
+export type ClientListFilter =
+  | "all"
+  | "needs_attention"
+  | "checkin_due"
+  | "onboarding"
+  | "ended";
+
+export type ClientListApiQuery = {
+  q?: string;
+  status?: OnboardingStatus[];
+  adherenceState?: AdherenceState[];
+  limit?: number;
+};
+
+export function clientListQueryForChip(
+  chip: ClientListFilter,
+  query: string,
+): ClientListApiQuery {
+  const q = query.trim();
+  const base: ClientListApiQuery = { limit: 50, ...(q ? { q } : {}) };
+  switch (chip) {
+    case "needs_attention":
+      return { ...base, adherenceState: ["needs_attention"] };
+    case "onboarding":
+      return {
+        ...base,
+        status: ["invited", "onboarding_pending", "onboarding_submitted"],
+      };
+    case "ended":
+      return { ...base, status: ["ended"] };
+    case "checkin_due":
+      return { ...base, status: ["coaching_ready", "active"] };
+    default:
+      return base;
+  }
+}
+
+export function clientSubtitle(item: ClientDirectoryItem): string {
+  const goal = item.goalShort?.trim() ?? "";
+  if (!goal) {
+    return item.relationshipId
+      ? "No goal set yet"
+      : onboardingStatusLabel(item.status);
+  }
+  const parts = [
+    goal,
+    item.city?.trim() || null,
+    item.week != null ? `week ${item.week}` : null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.join(" · ");
+}
+
+export function mapDirectoryItemToRow(
+  item: ClientDirectoryItem,
+): ClientDirectoryRow {
+  const relationshipId = item.relationshipId;
+  const invitationId = item.invitationId;
+  const subtitle = clientSubtitle(item);
+  return {
+    key: relationshipId
+      ? `relationship:${relationshipId}`
+      : `invitation:${invitationId ?? item.traineeDisplayName}`,
+    kind: relationshipId ? "relationship" : "invitation",
+    name: item.traineeDisplayName,
+    subtitle,
+    onboardingStatus: item.status,
+    relationshipId,
+    invitationId,
+    traineeUserId: null,
+    updatedAt: item.updatedAt,
+  };
+}
+
 export function filterClientRows(
   rows: ClientDirectoryRow[],
   query: string,
+  chip: ClientListFilter = "all",
 ): ClientDirectoryRow[] {
+  let next = rows;
+  if (chip === "checkin_due") {
+    next = next.filter(
+      (row) =>
+        row.onboardingStatus === "coaching_ready" ||
+        row.onboardingStatus === "active",
+    );
+  }
+
   const trimmed = query.trim().toLowerCase();
-  if (!trimmed) return rows;
-  return rows.filter(
+  if (!trimmed) return next;
+  return next.filter(
     (row) =>
       row.name.toLowerCase().includes(trimmed) ||
       row.subtitle.toLowerCase().includes(trimmed) ||

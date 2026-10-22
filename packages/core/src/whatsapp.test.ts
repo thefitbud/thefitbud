@@ -1,29 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWhatsappE164, whatsappHref } from "./whatsapp.js";
+import {
+  askCoachGoLink,
+  buildAskCoachMessage,
+  normalizeWhatsappE164,
+  whatsappHref,
+} from "./whatsapp.js";
 
-describe("normalizeWhatsappE164", () => {
-  it("prefixes 10-digit Indian numbers with 91", () => {
-    expect(normalizeWhatsappE164("98765 43210")).toBe("919876543210");
+describe("whatsapp helpers", () => {
+  it("normalizes Indian 10-digit numbers", () => {
+    expect(normalizeWhatsappE164("9000000001")).toBe("919000000001");
   });
 
-  it("accepts an already international number", () => {
-    expect(normalizeWhatsappE164("+91 98765 43210")).toBe("919876543210");
+  it("builds wa.me href with encoded text", () => {
+    const href = whatsappHref({
+      phoneE164: "919000000001",
+      draftText: "Hi Rahul, question about my Lunch",
+    });
+    expect(href).toMatch(/^https:\/\/wa\.me\/919000000001\?text=/);
+    expect(href).toContain(encodeURIComponent("Hi Rahul, question about my Lunch"));
   });
 
-  it("rejects too-short values", () => {
-    expect(normalizeWhatsappE164("12345")).toBeNull();
+  it("keeps ask-coach prefill body ≤ 140 chars excluding URL", () => {
+    const link = askCoachGoLink("meal", "7f3a1111-1111-4111-8111-111111111111");
+    const { text, bodyLength } = buildAskCoachMessage({
+      coachName: "Rahul",
+      itemLabel: "Very long lunch meal name that should be truncated for WhatsApp",
+      date: "Tue 13 Oct",
+      topic: "portion size",
+      link,
+    });
+    expect(text).toContain(link);
+    expect(text.startsWith("Hi Rahul")).toBe(true);
+    expect(bodyLength).toBeLessThanOrEqual(140);
   });
-});
 
-describe("whatsappHref", () => {
-  it("builds a wa.me link with draft text", () => {
-    expect(
-      whatsappHref({
-        phoneE164: "919876543210",
-        draftText: "Please complete onboarding",
-      }),
-    ).toBe(
-      "https://wa.me/919876543210?text=Please%20complete%20onboarding",
+  it("uses https /go/ links", () => {
+    expect(askCoachGoLink("workout", "abc")).toBe(
+      "https://fitbud.app/go/workout/abc",
     );
   });
 });

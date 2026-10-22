@@ -30,6 +30,26 @@ export type Env = {
   PUSH_PROVIDER_MODE?: "test" | "fcm";
   /** HMAC secret for time-limited media upload/download URLs. */
   MEDIA_SIGNING_SECRET: string;
+  ENVIRONMENT?: "local" | "production" | "preview";
+  EMAIL_PROVIDER?: "dev_sink" | "disabled" | "resend" | "ses";
+  SYSTEM_EMAIL_FROM?: string;
+  SYSTEM_EMAIL_REPLY_TO?: string;
+  ADMIN_ALERT_EMAILS?: string;
+  SUPPORT_EMAIL?: string;
+  APP_HOST?: string;
+  FLAG_WA_OTP?: string;
+  FLAG_WA_AUTOMATION?: string;
+  FLAG_STEPS_ENABLED?: string;
+  LIBRARY_MEDIA_BASE_URL?: string;
+  FIREBASE_SERVICE_ACCOUNT_JSON?: string;
+  WA_PHONE_NUMBER_ID?: string;
+  WA_ACCESS_TOKEN?: string;
+  WA_APP_SECRET?: string;
+  WA_WEBHOOK_VERIFY_TOKEN?: string;
+  WA_MONTHLY_BUDGET_INR?: string;
+  WA_HARD_CAP_INR?: string;
+  /** Optional ISO instant for local demo captures. Unset in production. */
+  NOW?: string;
 };
 export type Variables = {
   requestId: string;

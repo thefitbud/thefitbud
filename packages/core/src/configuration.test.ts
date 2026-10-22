@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  COACHING_CONFIGURATION_DEFAULTS,
   canActivateConfiguration,
   canCreateConfigurationVersion,
   canEditCoachingConfiguration,
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
-  hasPrimaryGoal,
+  hasGoalShort,
+  resolveConfigurationDraftExpectations,
 } from "./configuration.js";
 
 describe("coaching configuration transitions", () => {
@@ -45,9 +47,42 @@ describe("coaching configuration transitions", () => {
     expect(canActivateConfiguration("active")).toBe(false);
   });
 
-  it("requires a non-empty primary goal", () => {
-    expect(hasPrimaryGoal("Build strength")).toBe(true);
-    expect(hasPrimaryGoal("  ")).toBe(false);
-    expect(hasPrimaryGoal(null)).toBe(false);
+  it("fills a new draft from the trainer-web defaults", () => {
+    expect(COACHING_CONFIGURATION_DEFAULTS).toEqual({
+      workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
+      nutrition: {
+        mealsPerDay: 3,
+        confirmationWindowHours: 6,
+        photoRequirement: "none",
+      },
+      checkin: { cadence: "weekly", dueWindowHours: 48, formVersionId: null },
+      tracking: {
+        requireBodyWeight: false,
+        requireProgressPhotos: false,
+        requireSessionRpe: false,
+      },
+    });
+    expect(resolveConfigurationDraftExpectations({})).toEqual(
+      COACHING_CONFIGURATION_DEFAULTS,
+    );
+    expect(
+      resolveConfigurationDraftExpectations({
+        workout: { sessionsPerWeek: 4, completionWindowHours: 12 },
+      }).workout.sessionsPerWeek,
+    ).toBe(4);
+    expect(
+      resolveConfigurationDraftExpectations({
+        existing: {
+          ...COACHING_CONFIGURATION_DEFAULTS,
+          workout: { sessionsPerWeek: 5, completionWindowHours: 24 },
+        },
+      }).workout.sessionsPerWeek,
+    ).toBe(5);
+  });
+
+  it("requires a non-empty short goal", () => {
+    expect(hasGoalShort("Build strength")).toBe(true);
+    expect(hasGoalShort("  ")).toBe(false);
+    expect(hasGoalShort(null)).toBe(false);
   });
 });

@@ -1,0 +1,59 @@
+/* Generated from src/tokens.ts — run pnpm build in @fitbud/tokens */
+:root {
+  --brand-indigo: #4527C6;
+  --brand-deep-navy: #1A1248;
+  --brand-coral: #FF587D;
+  --brand-soft-coral: #FFB0C3;
+  --brand-pale-lavender: #EDEAFF;
+  --brand-chalk: #FAF7F2;
+
+  --ink-900: #0F1115;
+  --ink-700: #25262B;
+  --ink-500: #5B616B;
+  --ink-200: #E6E8EB;
+
+  --surface-page-web: #F3F5FB;
+  --surface-page-mobile: #F6F5FB;
+  --surface-card: #FFFFFF;
+  --border-default: #E7E9F2;
+
+  --semantic-critical-fill: #FEF2F2;
+  --semantic-critical-text: #B91C1C;
+  --semantic-attention-fill: #FFFBEB;
+  --semantic-attention-text: #B45309;
+  --semantic-positive-fill: #ECFDF5;
+  --semantic-positive-text: #047857;
+  --semantic-info-fill: #EFF6FF;
+  --semantic-info-text: #1D4ED8;
+  --semantic-neutral-fill: #F3F4F6;
+  --semantic-neutral-text: #374151;
+  --semantic-brand-selected-fill: #EDEAFF;
+  --semantic-brand-selected-text: #4527C6;
+  --semantic-destructive: #B91C1C;
+
+  --ring-kcal: #4527C6;
+  --ring-protein: #1A1248;
+  --ring-carbs: #7C6CF0;
+  --ring-fat: #0E7490;
+  --ring-track: #E6E8EB;
+
+  --font-family: Satoshi, "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif;
+
+  /* Legacy aliases for trainer-web */
+  --deep-navy: var(--brand-deep-navy);
+  --indigo: var(--brand-indigo);
+  --coral: var(--brand-coral);
+  --soft-coral: var(--brand-soft-coral);
+  --pale-lavender: var(--brand-pale-lavender);
+  --near-black: var(--ink-900);
+  --dark-grey: var(--ink-700);
+  --mid-grey: var(--ink-500);
+  --light-grey: var(--ink-200);
+  --page-bg: var(--surface-page-web);
+  --surface: var(--surface-card);
+  --border: var(--border-default);
+  --success: var(--semantic-positive-text);
+  --warning: var(--semantic-attention-text);
+  --error: var(--semantic-critical-text);
+  --info: var(--semantic-info-text);
+}

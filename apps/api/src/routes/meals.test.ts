@@ -1,46 +1,20 @@
-import initSqlJs from "sql.js";
-import { drizzle } from "drizzle-orm/sql-js";
 import { eq } from "drizzle-orm";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
+import * as schema from "../db/schema.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+
+
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of [
-    "0000_identity.sql",
-    "0001_relationship_onboarding.sql",
-    "0012_invitation_whatsapp.sql",
-    "0002_coaching_configuration.sql",
-    "0003_plans.sql",
-    "0004_workouts.sql",
-    "0005_meals.sql",
-    "0006_checkins.sql",
-    "0007_exceptions.sql",
-    "0008_progress_media.sql",
-    "0009_sync.sql",
-    "0010_notifications.sql",
-    "0013_domain_contracts.sql",
-  "0014_onboarding_form_templates.sql",
-  ]) {
-    sqlite.exec(readFileSync(join(drizzleDir, file), "utf8"));
-  }
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return {
-    db,
-    close: () => sqlite.close(),
-  };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function dummyD1(): D1Database {
@@ -97,6 +71,9 @@ function sampleMealContent(photoRequired = false) {
         id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         order: 1,
         name: "Breakfast",
+        mealType: "breakfast",
+        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        localTime: "08:00",
         scheduleHint: "Morning",
         instructions: "Oats and eggs",
         photoRequired,
@@ -105,6 +82,9 @@ function sampleMealContent(photoRequired = false) {
         id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         order: 2,
         name: "Lunch",
+        mealType: "lunch",
+        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        localTime: "13:00",
         scheduleHint: "Midday",
         instructions: "Rice and dal",
         photoRequired: false,
@@ -119,6 +99,7 @@ async function reachEffectiveMealPlan(
     photoRequirement?: "none" | "selected_meals" | "all_meals";
     prescriptionPhotoRequired?: boolean;
     confirmationWindowHours?: number;
+    content?: ReturnType<typeof sampleMealContent>;
   } = {},
 ) {
   const photoRequirement = options.photoRequirement ?? "none";
@@ -226,7 +207,7 @@ async function reachEffectiveMealPlan(
       },
       body: JSON.stringify({
         expectedVersion: 0,
-        primaryGoal: "Nutrition adherence",
+        goalShort: "Nutrition adherence",
         workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
         nutrition: {
           mealsPerDay: 2,
@@ -281,7 +262,7 @@ async function reachEffectiveMealPlan(
       },
       body: JSON.stringify({
         title: "Nutrition foundation",
-        content: sampleMealContent(prescriptionPhotoRequired),
+        content: options.content ?? sampleMealContent(prescriptionPhotoRequired),
       }),
     },
     testEnv(),
@@ -330,6 +311,8 @@ async function reachEffectiveMealPlan(
     trainerCookie: trainer.cookie,
     traineeToken,
     relationshipId,
+    planId: planBody.data.plan.id,
+    versionId: planBody.data.version.id,
     today,
     toDate,
   };
@@ -740,5 +723,517 @@ describe("meal assignment and compliance", () => {
       data: { status: string };
     };
     expect(afterBody.data.status).toBe("logged_later");
+  });
+
+  it("ignores schedule hint when a meal has no applicable weekdays", async () => {
+    const hinted = sampleMealContent();
+    hinted.mealPrescriptions = [
+      {
+        ...hinted.mealPrescriptions[0]!,
+        applicableWeekdays: [],
+        scheduleHint: "Every morning",
+      },
+    ];
+    const { trainerCookie, relationshipId, today, toDate } = await reachEffectiveMealPlan(
+      "hint",
+      { content: hinted },
+    );
+    const listed = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const items = ((await listed.json()) as { data: { items: unknown[] } }).data.items;
+    expect(items).toEqual([]);
+  });
+
+  it("supersedes only today's unstarted meals when the diet scope is today only", async () => {
+    const {
+      trainerCookie,
+      traineeToken,
+      relationshipId,
+      planId,
+      versionId,
+      today,
+      toDate,
+    } = await reachEffectiveMealPlan("diet-scope");
+    const draft = await app.request(
+      `/plans/${planId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-draft-today",
+        },
+        body: JSON.stringify({ sourceVersionId: versionId, asAdjustment: true }),
+      },
+      testEnv(),
+    );
+    expect(draft.status).toBe(201);
+    const draftBody = (await draft.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const changed = sampleMealContent();
+    changed.mealPrescriptions[1]!.name = "Late lunch";
+    const saved = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: draftBody.data.recordVersion,
+          content: changed,
+        }),
+      },
+      testEnv(),
+    );
+    expect(saved.status).toBe(200);
+    const savedBody = (await saved.json()) as { data: { recordVersion: number } };
+    const published = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-publish-today",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: savedBody.data.recordVersion,
+          mode: "immediate",
+          dietScope: "today_only",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(200);
+
+    const tomorrow = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${toDate}&toDate=${toDate}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const tomorrowItems = (
+      (await tomorrow.json()) as {
+        data: { items: Array<{ planVersionId: string; scheduleStatus: string }> };
+      }
+    ).data.items;
+    expect(tomorrowItems.length).toBe(2);
+    expect(tomorrowItems.every((item) => item.planVersionId === versionId)).toBe(true);
+    expect(tomorrowItems.every((item) => item.scheduleStatus === "scheduled")).toBe(true);
+
+    const generated = await app.request(
+      `/meals/relationships/${relationshipId}/assignments/generate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-gen-today",
+        },
+        body: JSON.stringify({
+          fromDate: today,
+          toDate,
+          dietScope: "today_only",
+        }),
+      },
+      testEnv(),
+    );
+    expect(generated.status).toBe(200);
+    expect(((await generated.json()) as { data: { created: number } }).data.created).toBe(2);
+
+    const todayListed = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${today}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const todayItems = (
+      (await todayListed.json()) as {
+        data: {
+          items: Array<{ id: string; mealName: string; planVersionId: string }>;
+        };
+      }
+    ).data.items;
+    expect(todayItems.every((item) => item.planVersionId === draftBody.data.id)).toBe(true);
+    expect(todayItems.some((item) => item.mealName === "Late lunch")).toBe(true);
+
+    const breakfast = todayItems.find((item) => item.mealName === "Breakfast")!;
+    const confirmed = await app.request(
+      `/meals/assignments/${breakfast.id}/confirm`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "confirm-protect",
+        },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(confirmed.status).toBe(200);
+
+    const nextDraft = await app.request(
+      `/plans/${planId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-draft-onward",
+        },
+        body: JSON.stringify({ sourceVersionId: draftBody.data.id, asAdjustment: true }),
+      },
+      testEnv(),
+    );
+    const nextBody = (await nextDraft.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const onward = sampleMealContent();
+    onward.mealPrescriptions[0]!.name = "Early breakfast";
+    const onwardSaved = await app.request(
+      `/plans/${planId}/versions/${nextBody.data.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: nextBody.data.recordVersion,
+          content: onward,
+        }),
+      },
+      testEnv(),
+    );
+    const onwardSavedBody = (await onwardSaved.json()) as {
+      data: { recordVersion: number };
+    };
+    const onwardPublished = await app.request(
+      `/plans/${planId}/versions/${nextBody.data.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-publish-onward",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: onwardSavedBody.data.recordVersion,
+          mode: "immediate",
+          dietScope: "today_onward",
+        }),
+      },
+      testEnv(),
+    );
+    expect(onwardPublished.status).toBe(200);
+    const kept = await app.request(
+      `/meals/assignments/${breakfast.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const keptBody = (await kept.json()) as {
+      data: { planVersionId: string; scheduleStatus: string };
+    };
+    expect(keptBody.data.planVersionId).toBe(draftBody.data.id);
+    expect(keptBody.data.scheduleStatus).toBe("scheduled");
+  });
+
+  it("omits a superseded meal from the trainee current list and keeps it readable for the owning trainer", async () => {
+    const { trainerCookie, traineeToken, relationshipId, planId, versionId, today, toDate } =
+      await reachEffectiveMealPlan("hide-superseded");
+    const before = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const beforeItems = (
+      (await before.json()) as { data: { items: Array<{ id: string }> } }
+    ).data.items;
+    expect(beforeItems.length).toBeGreaterThan(0);
+    const supersededId = beforeItems[0]!.id;
+
+    const draft = await app.request(
+      `/plans/${planId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-draft-hide-superseded",
+        },
+        body: JSON.stringify({ sourceVersionId: versionId, asAdjustment: true }),
+      },
+      testEnv(),
+    );
+    expect(draft.status).toBe(201);
+    const draftBody = (await draft.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const changed = sampleMealContent();
+    changed.mealPrescriptions[0]!.name = "Early breakfast";
+    const saved = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: draftBody.data.recordVersion,
+          content: changed,
+        }),
+      },
+      testEnv(),
+    );
+    expect(saved.status).toBe(200);
+    const savedBody = (await saved.json()) as { data: { recordVersion: number } };
+    const published = await app.request(
+      `/plans/${planId}/versions/${draftBody.data.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-publish-hide-superseded",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: savedBody.data.recordVersion,
+          mode: "immediate",
+          dietScope: "today_onward",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(200);
+
+    const current = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const currentItems = (
+      (await current.json()) as {
+        data: { items: Array<{ id: string; scheduleStatus: string }> };
+      }
+    ).data.items;
+    expect(currentItems.some((item) => item.id === supersededId)).toBe(false);
+    expect(currentItems.every((item) => item.scheduleStatus === "scheduled")).toBe(true);
+
+    const history = await app.request(
+      `/meals/assignments/${supersededId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(history.status).toBe(200);
+    const historyBody = (await history.json()) as {
+      data: { id: string; scheduleStatus: string; planVersionId: string };
+    };
+    expect(historyBody.data.id).toBe(supersededId);
+    expect(historyBody.data.planVersionId).toBe(versionId);
+    expect(historyBody.data.scheduleStatus).toBe("superseded");
+
+    const retained = await db
+      .select()
+      .from(schema.mealAssignments)
+      .where(eq(schema.mealAssignments.id, supersededId));
+    expect(retained).toHaveLength(1);
+    expect(retained[0]?.scheduleStatus).toBe("superseded");
+  });
+
+  it("rejects meal generation after the relationship ends", async () => {
+    const { trainerCookie, relationshipId } = await reachEffectiveMealPlan("ended-meals");
+    const now = new Date().toISOString();
+    await db
+      .update(schema.coachingRelationships)
+      .set({ status: "ended", endedAt: now, updatedAt: now })
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    const generated = await app.request(
+      `/meals/relationships/${relationshipId}/assignments/generate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-gen-ended",
+        },
+        body: JSON.stringify({ window: "next_calendar_week" }),
+      },
+      testEnv(),
+    );
+    expect(generated.status).toBe(409);
+    expect(((await generated.json()) as { error: { code: string } }).error.code).toBe(
+      "RELATIONSHIP_ENDED",
+    );
+    const history = await app.request(
+      `/meals/relationships/${relationshipId}/assignments`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(history.status).toBe(200);
+  });
+
+  it("recreates unlogged meal slots after publish when today is partially logged", async () => {
+    const { trainerCookie, traineeToken, relationshipId, planId, today } =
+      await reachEffectiveMealPlan("partial-today");
+    const listed = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${today}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const before = (
+      (await listed.json()) as {
+        data: {
+          items: Array<{ id: string; mealName: string; planVersionId: string }>;
+        };
+      }
+    ).data.items;
+    expect(before.length).toBe(2);
+    const breakfast = before.find((item) => item.mealName === "Breakfast")!;
+    const lunchBefore = before.find((item) => item.mealName === "Lunch")!;
+    const effectiveVersionId = breakfast.planVersionId;
+
+    const confirm = await app.request(
+      `/meals/assignments/${breakfast.id}/confirm`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "confirm-partial-today",
+        },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(confirm.status).toBe(200);
+
+    const draftRes = await app.request(
+      `/plans/${planId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "meal-draft-partial-today",
+        },
+        body: JSON.stringify({
+          sourceVersionId: effectiveVersionId,
+          asAdjustment: true,
+        }),
+      },
+      testEnv(),
+    );
+    expect(draftRes.status).toBe(201);
+    const next = (await draftRes.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+
+    const dry = await app.request(
+      `/plans/${planId}/versions/${next.data.id}/assign`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "assign-partial-dry",
+        },
+        body: JSON.stringify({
+          window: 7,
+          effectiveFrom: new Date().toISOString(),
+          dietChangeScope: "today_onward",
+          dryRun: true,
+          notifyClient: false,
+        }),
+      },
+      testEnv(),
+    );
+    expect(dry.status).toBe(200);
+    const dryBody = (await dry.json()) as {
+      data: {
+        replaced: { workouts: number; meals: number };
+        created: { workouts: number; meals: number };
+      };
+    };
+    expect(dryBody.data.replaced.meals).toBeGreaterThan(0);
+    expect(dryBody.data.created.meals).toBeGreaterThan(0);
+
+    const assigned = await app.request(
+      `/plans/${planId}/versions/${next.data.id}/assign`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "assign-partial-real",
+        },
+        body: JSON.stringify({
+          window: 7,
+          effectiveFrom: new Date().toISOString(),
+          dietChangeScope: "today_onward",
+          dryRun: false,
+          notifyClient: false,
+        }),
+      },
+      testEnv(),
+    );
+    expect(assigned.status).toBe(200);
+    const assignedBody = (await assigned.json()) as {
+      data: {
+        replaced: { workouts: number; meals: number };
+        created: { workouts: number; meals: number };
+      };
+    };
+    // Dry-run must count today's recreated unlogged slots the same as publish.
+    expect(dryBody.data.created.meals).toBe(assignedBody.data.created.meals);
+    expect(dryBody.data.replaced.meals).toBe(assignedBody.data.replaced.meals);
+
+    const after = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${today}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const afterItems = (
+      (await after.json()) as {
+        data: {
+          items: Array<{
+            id: string;
+            mealName: string;
+            planVersionId: string;
+            compliance: { outcome: string } | null;
+          }>;
+        };
+      }
+    ).data.items;
+    expect(afterItems.length).toBe(2);
+    const keptBreakfast = afterItems.find((item) => item.mealName === "Breakfast");
+    const lunch = afterItems.find((item) => item.mealName === "Lunch");
+    expect(keptBreakfast?.id).toBe(breakfast.id);
+    expect(keptBreakfast?.compliance).not.toBeNull();
+    expect(lunch).toBeTruthy();
+    expect(lunch!.id).not.toBe(lunchBefore.id);
+    expect(lunch!.planVersionId).toBe(next.data.id);
   });
 });

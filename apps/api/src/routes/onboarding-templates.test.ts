@@ -1,18 +1,19 @@
-import initSqlJs, { type Database } from "sql.js";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/sql-js";
+import initSqlJs, { type Database } from "sql.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
+import { createMemoryDb } from "../test-support/memory-db.js";
+import * as schema from "../db/schema.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+
 const SEEDED_FORM_ID = "11111111-1111-4111-8111-111111111111";
 const DEFAULT_TEMPLATE_ID = "10111111-1111-4111-8111-111111111111";
 const TRAINER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -29,11 +30,6 @@ const MIGRATIONS_BEFORE = [
   "0002_coaching_configuration.sql",
   "0010_notifications.sql",
   "0013_domain_contracts.sql",
-];
-
-const APP_MIGRATIONS = [
-  ...MIGRATIONS_BEFORE,
-  "0014_onboarding_form_templates.sql",
 ];
 
 function applySql(sqlite: Database, file: string) {
@@ -172,11 +168,9 @@ describe("onboarding form template pinning", () => {
   let db: Db;
 
   beforeEach(async () => {
-    const SQL = await initSqlJs();
-    const sqlite = new SQL.Database();
-    for (const file of APP_MIGRATIONS) applySql(sqlite, file);
-    db = drizzle(sqlite, { schema }) as unknown as Db;
-    closeDb = () => sqlite.close();
+    const handle = await createMemoryDb();
+    db = handle.db;
+    closeDb = handle.close;
     setTestDbOverride(db);
   });
 
@@ -619,5 +613,156 @@ describe("onboarding form template pinning", () => {
     expect(submitted.status).toBe(200);
     expect(submittedBody.data.status).toBe("submitted");
     expect(submittedBody.data.onboardingFormVersionId).toBe(versionId);
+  });
+
+  it("accepts typed answers only when they match the pinned version", async () => {
+    const trainer = await trainerSession("typed-coach@example.com");
+    const createdTemplate = await app.request(
+      "/onboarding/form-templates",
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainer.cookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "create-typed",
+        },
+        body: JSON.stringify({
+          name: "Typed intake",
+          fields: [
+            { id: "goal", type: "short_text", label: "Goal", required: true, maxLength: 80 },
+            {
+              id: "focus",
+              type: "single_choice",
+              label: "Focus",
+              required: true,
+              options: [
+                { id: "strength", label: "Strength" },
+                { id: "endurance", label: "Endurance" },
+              ],
+            },
+            {
+              id: "equipment",
+              type: "multiple_choice",
+              label: "Equipment",
+              required: true,
+              options: [
+                { id: "dumbbells", label: "Dumbbells" },
+                { id: "bands", label: "Bands" },
+              ],
+            },
+            { id: "sessions", type: "number", label: "Sessions", required: true },
+            { id: "injuries", type: "yes_no", label: "Injuries", required: true },
+          ],
+        }),
+      },
+      testEnv(),
+    );
+    expect(createdTemplate.status).toBe(201);
+    const templateBody = (await createdTemplate.json()) as {
+      data: { id: string; versions: Array<{ id: string; fields: unknown[] }> };
+    };
+    const versionId = templateBody.data.versions[0]!.id;
+    const invited = await invite(trainer.cookie, "typed-trainee@example.com", {
+      onboardingFormTemplateId: templateBody.data.id,
+    });
+    expect(invited.onboardingFormTemplateVersionId).toBe(versionId);
+    const accepted = await accept("typed-trainee@example.com", invited.token);
+
+    const mismatched = await app.request(
+      `/onboarding/relationships/${accepted.relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accepted.traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedVersion: 0,
+          answers: {
+            goal: "Get stronger",
+            focus: "Strength",
+            equipment: ["Dumbbells"],
+            sessions: "4",
+            injuries: "no",
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(mismatched.status).toBe(201);
+    const mismatchedBody = (await mismatched.json()) as { data: { version: number } };
+    const rejected = await app.request(
+      `/onboarding/relationships/${accepted.relationshipId}/submit`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accepted.traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "typed-invalid",
+        },
+        body: JSON.stringify({ expectedVersion: mismatchedBody.data.version }),
+      },
+      testEnv(),
+    );
+    expect(rejected.status).toBe(422);
+    const rejectedBody = (await rejected.json()) as {
+      error: { details: { invalidFieldIds: string[] } };
+    };
+    expect(rejectedBody.error.details.invalidFieldIds).toEqual([
+      "focus",
+      "equipment",
+      "sessions",
+      "injuries",
+    ]);
+
+    const corrected = await app.request(
+      `/onboarding/relationships/${accepted.relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accepted.traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          expectedVersion: mismatchedBody.data.version,
+          answers: {
+            goal: "Get stronger",
+            focus: "strength",
+            equipment: ["dumbbells", "bands"],
+            sessions: 4,
+            injuries: false,
+          },
+        }),
+      },
+      testEnv(),
+    );
+    const correctedBody = (await corrected.json()) as {
+      data: { version: number; answers: { sessions: number; injuries: boolean } };
+    };
+    expect(corrected.status).toBe(200);
+    expect(correctedBody.data.answers).toMatchObject({
+      focus: "strength",
+      equipment: ["dumbbells", "bands"],
+      sessions: 4,
+      injuries: false,
+    });
+    const submitted = await app.request(
+      `/onboarding/relationships/${accepted.relationshipId}/submit`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accepted.traineeToken}`,
+          "x-fitbud-role": "trainee",
+          "Content-Type": "application/json",
+          "Idempotency-Key": "typed-valid",
+        },
+        body: JSON.stringify({ expectedVersion: correctedBody.data.version }),
+      },
+      testEnv(),
+    );
+    expect(submitted.status).toBe(200);
   });
 });

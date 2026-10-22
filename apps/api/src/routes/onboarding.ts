@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import {
   createOnboardingReviewRequestSchema,
   createOnboardingReviewResponseSchema,
+  onboardingAnswersSchema,
   onboardingFormDefinitionSchema,
   onboardingFormResponseSchema,
   onboardingFormVersionSchema,
@@ -46,6 +47,7 @@ import {
   requireAuthMiddleware,
   requireRole,
 } from "../middleware/auth";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { canAccessRelationship } from "./relationships";
 import type { Env, Variables } from "../types";
 
@@ -242,6 +244,11 @@ onboardingRoutes.put(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
+    const writableDraft = await requireWritableRelationship(c, db, relationshipId);
+    if (!writableDraft.ok) {
+      return writableDraft.response;
+    }
+
     const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
     if (!canSaveOnboardingDraft(onboardingStatus)) {
       return fail(
@@ -431,6 +438,11 @@ onboardingRoutes.post(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
 
+    const writableSubmit = await requireWritableRelationship(c, db, relationshipId);
+    if (!writableSubmit.ok) {
+      return writableSubmit.response;
+    }
+
     const responses = await db
       .select()
       .from(onboardingFormResponses)
@@ -508,8 +520,25 @@ onboardingRoutes.post(
         "Pinned onboarding form definition is invalid.",
       );
     }
-    const answers = JSON.parse(response.answersJson) as Record<string, string>;
-    const answerErrors = onboardingAnswerErrors(definition.data.fields, answers);
+    const storedAnswers = onboardingAnswersSchema.safeParse(
+      JSON.parse(response.answersJson),
+    );
+    if (!storedAnswers.success) {
+      return fail(
+        c,
+        422,
+        "ONBOARDING_INCOMPLETE",
+        "Required onboarding fields are missing.",
+        {
+          missingFieldIds: [],
+          invalidFieldIds: definition.data.fields.map((field) => field.id),
+        },
+      );
+    }
+    const answerErrors = onboardingAnswerErrors(
+      definition.data.fields,
+      storedAnswers.data,
+    );
     if (
       answerErrors.missingFieldIds.length > 0 ||
       answerErrors.invalidFieldIds.length > 0

@@ -1,21 +1,26 @@
 import type { OnboardingAnswers, OnboardingFormVersion } from "@fitbud/contracts";
 
+function textAnswer(answers: OnboardingAnswers, id: string): string {
+  const value = answers[id];
+  return typeof value === "string" ? value : "";
+}
+
 export function coachingPrefillFromIntake(answers: OnboardingAnswers): {
-  primaryGoal: string;
+  goalDescription: string;
   notes: string;
 } {
-  const primaryGoal = answers.goals?.trim() ?? "";
-  const sections: Array<[string, string | undefined]> = [
-    ["Schedule", answers.schedule],
-    ["Preferences", answers.preferences],
-    ["Relevant history", answers.relevant_history],
-    ["Limitations", answers.limitations],
+  const goalDescription = textAnswer(answers, "goals").trim();
+  const sections: Array<[string, string]> = [
+    ["Schedule", textAnswer(answers, "schedule")],
+    ["Preferences", textAnswer(answers, "preferences")],
+    ["Relevant history", textAnswer(answers, "relevant_history")],
+    ["Limitations", textAnswer(answers, "limitations")],
   ];
   const notes = sections
-    .filter(([, value]) => value?.trim())
-    .map(([label, value]) => `${label}:\n${value?.trim() ?? ""}`)
+    .filter(([, value]) => value.trim())
+    .map(([label, value]) => `${label}:\n${value.trim()}`)
     .join("\n\n");
-  return { primaryGoal, notes };
+  return { goalDescription, notes };
 }
 
 export function intakeFieldPreview(

@@ -12,6 +12,8 @@ import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
 import {
   compareHistoryItemsNewestFirst,
   isHistoryItemAfterCursor,
+  labelFor,
+  sentenceCaseEnum,
 } from "@fitbud/core";
 import type { createDb } from "../db/client";
 import {
@@ -45,10 +47,6 @@ export type HistoryReadFilter = {
   occurredFrom?: string;
   occurredTo?: string;
 };
-
-function humanize(value: string): string {
-  return value.replace(/_/g, " ");
-}
 
 /** Date bounds applied inside each source query, before that source's row cap. */
 function occurredBounds(
@@ -376,7 +374,7 @@ export async function assembleRelationshipHistory(
       kind: "subscription_revision",
       occurredAt: row.createdAt,
       title: `Subscription v${row.versionNumber}`,
-      summary: `${row.planName} renews ${row.renewsOn} (${humanize(row.paymentFrequency)}).`,
+      summary: `${row.planName} renews ${row.renewsOn} (${sentenceCaseEnum(row.paymentFrequency)}).`,
       sourceEntityType: "subscription_version",
       sourceEntityId: row.id,
       status: String(row.versionNumber),
@@ -403,9 +401,11 @@ export async function assembleRelationshipHistory(
       kind: "configuration_activated",
       occurredAt: row.activatedAt,
       title: "Coaching configuration activated",
-      summary: row.primaryGoal
-        ? `Active expectations with goal: ${row.primaryGoal}.`
-        : "Active coaching expectations are in effect.",
+      summary: row.goalShort
+        ? `Active expectations with goal: ${row.goalShort}.`
+        : row.goalDescription
+          ? `Active expectations with goal: ${row.goalDescription}.`
+          : "Active coaching expectations are in effect.",
       sourceEntityType: "coaching_configuration",
       sourceEntityId: row.id,
       status: row.status,
@@ -417,7 +417,7 @@ export async function assembleRelationshipHistory(
       row.version.publishedAt ??
       row.version.effectiveFrom ??
       row.version.updatedAt;
-    const statusLabel = humanize(row.version.status);
+    const statusLabel = labelFor("plan_version_status", row.version.status);
     items.push({
       id: row.version.id,
       kind: "plan_version",
@@ -437,7 +437,7 @@ export async function assembleRelationshipHistory(
   for (const row of workoutRows) {
     const occurredAt =
       row.execution.completedAt ?? row.execution.startedAt;
-    const statusLabel = humanize(row.execution.status);
+    const statusLabel = labelFor("workout_execution_status", row.execution.status);
     items.push({
       id: row.execution.id,
       kind: "workout_execution",
@@ -451,9 +451,12 @@ export async function assembleRelationshipHistory(
   }
 
   for (const row of mealRows) {
-    const statusLabel = humanize(row.compliance.outcome);
+    const statusLabel = labelFor(
+      "meal_compliance_outcome",
+      row.compliance.outcome,
+    );
     const deviation = row.compliance.deviationKind
-      ? ` (${humanize(row.compliance.deviationKind)})`
+      ? ` (${labelFor("meal_deviation_kind", row.compliance.deviationKind)})`
       : "";
     items.push({
       id: row.compliance.id,
@@ -487,7 +490,7 @@ export async function assembleRelationshipHistory(
       kind: "checkin_reviewed",
       occurredAt: row.createdAt,
       title: "Check-in reviewed",
-      summary: `Trainer recorded review outcome: ${humanize(row.outcome)}.`,
+      summary: `Trainer recorded review outcome: ${labelFor("checkin_review_outcome", row.outcome)}.`,
       sourceEntityType: "checkin_review",
       sourceEntityId: row.id,
       status: row.outcome,
@@ -499,8 +502,8 @@ export async function assembleRelationshipHistory(
       id: row.id,
       kind: "measurement",
       occurredAt: row.observedAt,
-      title: `Measurement · ${humanize(row.type)}`,
-      summary: `${row.value} ${row.unit} recorded (${humanize(row.source)}).`,
+      title: `Measurement · ${labelFor("measurement_type", row.type)}`,
+      summary: `${row.value} ${row.unit} recorded (${labelFor("measurement_source", row.source)}).`,
       sourceEntityType: "measurement",
       sourceEntityId: row.id,
       status: null,
@@ -512,8 +515,12 @@ export async function assembleRelationshipHistory(
       id: row.id,
       kind: "progress_entry",
       occurredAt: row.observedAt,
-      title: row.title?.trim() || `Progress · ${humanize(row.entryType)}`,
-      summary: row.body?.trim() || `Progress entry (${humanize(row.entryType)}).`,
+      title:
+        row.title?.trim() ||
+        `Progress · ${labelFor("progress_entry_type", row.entryType)}`,
+      summary:
+        row.body?.trim() ||
+        `Progress entry (${labelFor("progress_entry_type", row.entryType)}).`,
       sourceEntityType: "progress_entry",
       sourceEntityId: row.id,
       status: row.entryType,
@@ -539,8 +546,8 @@ export async function assembleRelationshipHistory(
       id: row.id,
       kind: "exception",
       occurredAt: row.detectedAt,
-      title: `Exception · ${humanize(row.type)}`,
-      summary: `${row.summary} (status: ${humanize(row.status)}).`,
+      title: `Exception · ${labelFor("exception_type", row.type)}`,
+      summary: `${row.summary} (status: ${labelFor("exception_status", row.status)}).`,
       sourceEntityType: "exception",
       sourceEntityId: row.id,
       status: row.status,
@@ -567,7 +574,7 @@ export async function assembleRelationshipHistory(
       id: row.id,
       kind: "intervention",
       occurredAt: row.createdAt,
-      title: `Intervention · ${humanize(row.kind)}`,
+      title: `Intervention · ${labelFor("intervention_kind", row.kind)}`,
       summary: row.summary,
       sourceEntityType: "intervention",
       sourceEntityId: row.id,

@@ -1,0 +1,60 @@
+[
+  {
+    "name": "TW-17-1280.png",
+    "width": 1280,
+    "height": 800,
+    "sidewaysScroll": false
+  },
+  {
+    "name": "TW-17-768.png",
+    "width": 768,
+    "height": 900,
+    "sidewaysScroll": false
+  },
+  {
+    "name": "TW-17-390.png",
+    "width": 390,
+    "height": 844,
+    "sidewaysScroll": false
+  },
+  {
+    "name": "TW-18-1280.png",
+    "width": 1280,
+    "height": 800,
+    "sidewaysScroll": false
+  },
+  {
+    "name": "TW-18-390.png",
+    "width": 390,
+    "height": 844,
+    "sidewaysScroll": false
+  },
+  {
+    "name": "TW-20-bar",
+    "barBottom": 900,
+    "viewportH": 900,
+    "barVisibleWithoutScroll": true
+  },
+  {
+    "name": "TW-22-names",
+    "hasUuid": false,
+    "sample": [
+      "DNDeepak Nair",
+      "Weekly check-in",
+      "19 Oct, 9:19 am",
+      "Submitted",
+      "Review",
+      "RMRohan Mehta",
+      "Weekly check-in",
+      "19 Oct, 9:19 am"
+    ]
+  },
+  {
+    "name": "TW-D-set-table-1280",
+    "sidewaysScroll": false
+  },
+  {
+    "name": "TW-D-set-table-1440",
+    "sidewaysScroll": false
+  }
+]

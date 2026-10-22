@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ExceptionDetail } from "@fitbud/contracts";
 import { colors, spacing } from "@fitbud/ui-mobile";
@@ -9,7 +10,7 @@ import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { statusLabel, typeLabel } from "./labels";
+import { labelFor } from "./labels";
 import { openContextualWhatsApp } from "./whatsapp";
 
 type Props = {
@@ -30,6 +31,9 @@ export function ExceptionReviewScreen({
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +41,14 @@ export function ExceptionReviewScreen({
     try {
       const result = await api.getException(exceptionId);
       setDetail(result);
+      try {
+        const workspace = await api.getClientWorkspace(
+          result.coachingRelationshipId,
+        );
+        setClientWhatsappE164(workspace.header.clientWhatsappE164 ?? null);
+      } catch {
+        setClientWhatsappE164(null);
+      }
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -120,7 +132,7 @@ export function ExceptionReviewScreen({
         <View style={styles.stack}>
           <View style={styles.banner}>
             <Text style={styles.meta}>
-              {statusLabel(detail.status)} · {typeLabel(detail.type)}
+              {labelFor("exception_status", detail.status)} · {labelFor("exception_type", detail.type)}
             </Text>
             <Text style={styles.summary}>{detail.summary}</Text>
             <Text style={styles.muted}>
@@ -137,23 +149,33 @@ export function ExceptionReviewScreen({
           />
 
           {(detail.status === "detected" || detail.status === "active") && (
-            <PrimaryButton
-              label="Acknowledge"
-              loading={acting}
-              onPress={() => {
-                void acknowledge();
-              }}
-            />
+            <>
+              <Text style={styles.sectionLabel}>
+                Acknowledge — note you've seen this; signals stay open.
+              </Text>
+              <PrimaryButton
+                label="Acknowledge"
+                loading={acting}
+                onPress={() => {
+                  void acknowledge();
+                }}
+              />
+            </>
           )}
 
           {detail.status === "acknowledged" && (
-            <PrimaryButton
-              label="Resolve"
-              loading={acting}
-              onPress={() => {
-                void resolve();
-              }}
-            />
+            <>
+              <Text style={styles.sectionLabel}>
+                Resolve — close this after you've followed up.
+              </Text>
+              <PrimaryButton
+                label="Resolve"
+                loading={acting}
+                onPress={() => {
+                  void resolve();
+                }}
+              />
+            </>
           )}
 
           <PrimaryButton
@@ -175,7 +197,8 @@ export function ExceptionReviewScreen({
             variant="ghost"
             onPress={() => {
               void openContextualWhatsApp({
-                draftText: "Following up from FitBud",
+                phoneE164: clientWhatsappE164,
+                draftText: "Following up from FitBud.",
               });
             }}
           />
@@ -212,6 +235,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     lineHeight: 24,
+  },
+  sectionLabel: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: spacing.sm,
   },
   muted: {
     color: colors.midGrey,

@@ -37,6 +37,8 @@ export type NutritionExpectations = z.infer<typeof nutritionExpectationsSchema>;
 export const checkinScheduleExpectationsSchema = z.object({
   cadence: checkinCadenceSchema,
   dueWindowHours: z.number().int().min(1).max(168),
+  /** Pinned check-in form version for newly scheduled check-ins. Null → FitBud base. */
+  formVersionId: uuidSchema.nullable().default(null),
 });
 export type CheckinScheduleExpectations = z.infer<
   typeof checkinScheduleExpectationsSchema
@@ -49,6 +51,18 @@ export const trackingRequirementsSchema = z.object({
 });
 export type TrackingRequirements = z.infer<typeof trackingRequirementsSchema>;
 
+const optionalTrimmedText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((value) => {
+      if (typeof value !== "string") return value;
+      return value.length === 0 ? null : value;
+    });
+
 export const coachingConfigurationSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
@@ -56,7 +70,8 @@ export const coachingConfigurationSchema = z.object({
   versionNumber: z.number().int().positive(),
   /** Optimistic concurrency token. Request expectedVersion means this field. */
   recordVersion: z.number().int().nonnegative(),
-  primaryGoal: z.string().max(500).nullable(),
+  goalShort: z.string().max(120).nullable(),
+  goalDescription: z.string().max(500).nullable(),
   notes: z.string().max(2000).nullable(),
   workout: workoutExpectationsSchema,
   nutrition: nutritionExpectationsSchema,
@@ -71,13 +86,22 @@ export type CoachingConfiguration = z.infer<typeof coachingConfigurationSchema>;
 
 export const saveConfigurationDraftRequestSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
-  primaryGoal: z.string().trim().max(500).nullable().optional(),
+  goalShort: optionalTrimmedText(120),
+  goalDescription: optionalTrimmedText(500),
   notes: z.string().trim().max(2000).nullable().optional(),
-  workout: workoutExpectationsSchema,
-  nutrition: nutritionExpectationsSchema,
-  checkin: checkinScheduleExpectationsSchema,
-  tracking: trackingRequirementsSchema,
+  /** Omitted sections use stored values, or the core defaults on a new draft. */
+  workout: workoutExpectationsSchema.optional(),
+  nutrition: nutritionExpectationsSchema.optional(),
+  checkin: checkinScheduleExpectationsSchema.optional(),
+  tracking: trackingRequirementsSchema.optional(),
 });
+
+export const copyConfigurationDraftRequestSchema = z.object({
+  sourceRelationshipId: uuidSchema,
+});
+export type CopyConfigurationDraftRequest = z.infer<
+  typeof copyConfigurationDraftRequestSchema
+>;
 export type SaveConfigurationDraftRequest = z.infer<
   typeof saveConfigurationDraftRequestSchema
 >;

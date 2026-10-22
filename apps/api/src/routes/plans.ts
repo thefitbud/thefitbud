@@ -6,13 +6,16 @@ import {
 } from "../openapi/document";
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 import {
+  acknowledgePlanConsistencyRequestSchema,
   createPlanDraftFromVersionRequestSchema,
   createPlanRequestSchema,
   createPlanResponseSchema,
   applyPlanTemplateRequestSchema,
   applyPlanTemplateResponseSchema,
   effectivePlanResponseSchema,
+  planConsistencyResponseSchema,
   planContentSchema,
   planListFilterSchema,
   planListResponseSchema,
@@ -20,21 +23,43 @@ import {
   planWithVersionsSchema,
   publishPlanRequestSchema,
   updatePlanDraftRequestSchema,
+  assignPlanVersionRequestSchema,
+  assignPlanVersionResponseSchema,
+  planVersionDiffResponseSchema,
 } from "@fitbud/contracts";
 import {
   canEditPlanVersion,
   canPromoteScheduledPlanVersion,
   canPublishPlanVersion,
+  consistencyFingerprint,
   copyPlanContent,
   isPastOnboardingReview,
+  planConsistencyWarnings,
 } from "@fitbud/core";
 import { onboardingStatusForRelationship } from "../domain/client-status";
+import { prepareWritablePlanContent } from "../domain/library-snapshots";
+import {
+  loadAssignmentPolicy,
+  reconcilePublishedPlan,
+  saveAssignmentPolicy,
+} from "../domain/assignment-schedule";
+import {
+  assignPlanVersion,
+  computePlanVersionDiff,
+  stableAssignFingerprint,
+} from "../domain/plan-version-assign";
+import { storeInboxNotification } from "../domain/inbox-notify";
+import { requireWritableRelationship } from "../lib/relationship-write-guard";
 import { createDb } from "../db/client";
 import {
+  coachingConfigurations,
   coachingRelationships,
+  nutritionExpectations,
+  planAssignmentPolicies,
   plans,
   planTemplates,
   planVersions,
+  workoutExpectations,
 } from "../db/schema";
 import {
   mapPlan,
@@ -63,6 +88,7 @@ const CREATE_PLAN_OPERATION = "plan.create";
 const PUBLISH_PLAN_OPERATION = "plan.publish";
 const CREATE_DRAFT_FROM_VERSION_OPERATION = "plan.draft_from_version";
 const APPLY_TEMPLATE_OPERATION = "plan.apply_template";
+const ASSIGN_PLAN_OPERATION = "plan.assign";
 
 export const planRoutes = new Hono<{
   Bindings: Env;
@@ -183,6 +209,7 @@ async function supersedeEffectiveVersions(
     .where(
       and(eq(planVersions.planId, planId), eq(planVersions.status, "effective")),
     );
+  const superseded = [];
   for (const row of effectiveRows) {
     if (exceptVersionId && row.id === exceptVersionId) continue;
     await db
@@ -193,7 +220,9 @@ async function supersedeEffectiveVersions(
         updatedAt: now,
       })
       .where(eq(planVersions.id, row.id));
+    superseded.push(row);
   }
+  return superseded;
 }
 
 export async function promoteDueScheduledVersions(
@@ -224,7 +253,14 @@ export async function promoteDueScheduledVersions(
     ) {
       continue;
     }
-    await supersedeEffectiveVersions(db, row.plan.id, now);
+    const relationships = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1);
+    const relationship = relationships[0];
+    if (!relationship || relationship.status === "ended") continue;
+    const previous = await supersedeEffectiveVersions(db, row.plan.id, now);
     await db
       .update(planVersions)
       .set({
@@ -232,6 +268,22 @@ export async function promoteDueScheduledVersions(
         updatedAt: now,
       })
       .where(eq(planVersions.id, row.version.id));
+    const policy = await loadAssignmentPolicy(db, row.version.id);
+    const [updated] = await db
+      .select()
+      .from(planVersions)
+      .where(eq(planVersions.id, row.version.id))
+      .limit(1);
+    if (updated) {
+      await reconcilePublishedPlan(db, {
+        relationshipId,
+        traineeUserId: relationship.traineeUserId,
+        newVersion: updated,
+        previousVersions: previous,
+        dietScope: policy?.dietAdjustmentScope ?? "today_onward",
+        now,
+      });
+    }
     if (env) {
       queueRealtimeHint(env, {
         eventType: "effective_plan_changed",
@@ -440,7 +492,12 @@ planRoutes.get(
       .limit(1);
 
     const row = rows[0];
-    if (!row) {
+    // Closed horizon (end coaching) leaves status=effective but effectiveTo in
+    // the past — treat as no live plan so reactivation shows the waiting state.
+    const closed =
+      row?.version.effectiveTo != null &&
+      Date.parse(row.version.effectiveTo) <= Date.parse(now);
+    if (!row || closed) {
       return ok(
         c,
         effectivePlanResponseSchema.parse({ plan: null, version: null }),
@@ -548,6 +605,15 @@ planRoutes.post(
       );
     }
 
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
     const now = nowIso();
     const planId = createId();
     const versionId = createId();
@@ -564,8 +630,9 @@ planRoutes.post(
       versionNumber: 1,
       status: "draft",
       recordVersion: 1,
-      contentJson: JSON.stringify(parsed.data.content),
+      contentJson: JSON.stringify(prepared.content),
       creationSource: "blank",
+      sourceTemplateId: null,
       publishedAt: null,
       effectiveFrom: null,
       effectiveTo: null,
@@ -702,7 +769,11 @@ planRoutes.post(
       .where(eq(planTemplates.id, parsed.data.templateId))
       .limit(1);
     const template = templates[0];
-    if (!template || template.trainerUserId !== actor.userId) {
+    if (
+      !template ||
+      (template.ownership !== "global" &&
+        template.trainerUserId !== actor.userId)
+    ) {
       return fail(c, 404, "TEMPLATE_NOT_FOUND", "Template not found.");
     }
 
@@ -743,6 +814,7 @@ planRoutes.post(
         recordVersion: 1,
         contentJson: JSON.stringify(content),
         creationSource: "template",
+        sourceTemplateId: template.id,
         publishedAt: null,
         effectiveFrom: null,
         effectiveTo: null,
@@ -781,13 +853,16 @@ planRoutes.post(
           .set({
             contentJson: JSON.stringify(content),
             creationSource: "template",
+            sourceTemplateId: template.id,
             recordVersion: draft.recordVersion + 1,
             updatedAt: now,
           })
           .where(eq(planVersions.id, draft.id));
+        // Keep the plan title: Use creates/updates a draft only. The published
+        // version card must not rename until the trainer publishes.
         await db
           .update(plans)
-          .set({ title, updatedAt: now })
+          .set({ updatedAt: now })
           .where(eq(plans.id, plan.id));
         versionId = draft.id;
         updatedExistingDraft = true;
@@ -809,6 +884,7 @@ planRoutes.post(
           recordVersion: 1,
           contentJson: JSON.stringify(content),
           creationSource: "template",
+          sourceTemplateId: template.id,
           publishedAt: null,
           effectiveFrom: null,
           effectiveTo: null,
@@ -817,7 +893,7 @@ planRoutes.post(
         });
         await db
           .update(plans)
-          .set({ title, updatedAt: now })
+          .set({ updatedAt: now })
           .where(eq(plans.id, plan.id));
       }
       const [refreshed] = await db
@@ -1024,6 +1100,16 @@ planRoutes.put(
       );
     }
 
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+      parsePlanContentJson(version.contentJson),
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
     const now = nowIso();
     if (parsed.data.title) {
       await db
@@ -1035,7 +1121,7 @@ planRoutes.put(
     await db
       .update(planVersions)
       .set({
-        contentJson: JSON.stringify(parsed.data.content),
+        contentJson: JSON.stringify(prepared.content),
         recordVersion: version.recordVersion + 1,
         updatedAt: now,
       })
@@ -1060,6 +1146,62 @@ planRoutes.put(
       );
     }
     return ok(c, planVersionSchema.parse(mapPlanVersion(updated)));
+  },
+);
+
+planRoutes.delete(
+  "/:planId/versions/:versionId",
+  operation({
+    tag: "Plans",
+    summary: "Discard a draft plan version.",
+    description:
+      "Deletes a draft plan version. Published, scheduled, effective, and superseded versions are immutable. A plan with no remaining versions is removed too.",
+    roles: ["trainer"],
+    response: z.object({ deleted: z.literal(true) }),
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const planId = c.req.param("planId");
+    const versionId = c.req.param("versionId");
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, planId, actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const writable = await requireWritableRelationship(c, db, owned.relationship.id);
+    if (!writable.ok) {
+      return writable.response;
+    }
+    const versions = await db
+      .select()
+      .from(planVersions)
+      .where(eq(planVersions.planId, planId));
+    const version = versions.find((row) => row.id === versionId);
+    if (!version) {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
+    if (version.status !== "draft") {
+      return fail(
+        c,
+        409,
+        "PLAN_VERSION_IMMUTABLE",
+        "Only draft plan versions can be discarded.",
+      );
+    }
+    await db
+      .delete(planAssignmentPolicies)
+      .where(eq(planAssignmentPolicies.planVersionId, versionId));
+    await db.delete(planVersions).where(eq(planVersions.id, versionId));
+    if (versions.length === 1) {
+      await db.delete(plans).where(eq(plans.id, planId));
+    }
+    return ok(c, { deleted: true as const });
   },
 );
 
@@ -1193,6 +1335,12 @@ planRoutes.post(
     if (!owned) {
       return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
     }
+    const writablePublish = await requireWritableRelationship(
+      c,
+      db,
+      owned.relationship.id,
+    );
+    if (!writablePublish.ok) return writablePublish.response;
 
     const versions = await db
       .select()
@@ -1270,8 +1418,10 @@ planRoutes.post(
       }
     }
 
+    let previousVersions: Awaited<ReturnType<typeof supersedeEffectiveVersions>> =
+      [];
     if (nextStatus === "effective") {
-      await supersedeEffectiveVersions(db, planId, now);
+      previousVersions = await supersedeEffectiveVersions(db, planId, now);
     }
 
     await db
@@ -1307,6 +1457,28 @@ planRoutes.post(
         "PLAN_VERSION_PERSIST_FAILED",
         "Plan version could not be loaded.",
       );
+    }
+
+    const dietScope = parsed.data.dietScope ?? "today_onward";
+    if (nextStatus === "effective") {
+      await reconcilePublishedPlan(db, {
+        relationshipId: owned.relationship.id,
+        traineeUserId: owned.relationship.traineeUserId,
+        newVersion: updated,
+        previousVersions,
+        dietScope,
+        now,
+      });
+    } else {
+      const existingPolicy = await loadAssignmentPolicy(db, updated.id);
+      await saveAssignmentPolicy(db, {
+        planVersionId: updated.id,
+        dietAdjustmentScope: dietScope,
+        dietScopeLocalDate: null,
+        futureMealPlanVersionId: null,
+        consistencyAckFingerprint:
+          existingPolicy?.consistencyAckFingerprint ?? null,
+      });
     }
 
     const data = planVersionSchema.parse(mapPlanVersion(updated));
@@ -1463,6 +1635,7 @@ planRoutes.post(
       recordVersion: 1,
       contentJson: source.contentJson,
       creationSource: parsed.data.asAdjustment ? "adjustment" : "previous_version",
+      sourceTemplateId: source.sourceTemplateId,
       publishedAt: null,
       effectiveFrom: null,
       effectiveTo: null,
@@ -1499,3 +1672,323 @@ planRoutes.post(
     return ok(c, data, 201);
   },
 );
+
+async function loadPlanConsistency(
+  db: Db,
+  version: typeof planVersions.$inferSelect,
+  relationshipId: string,
+) {
+  const content = parsePlanContentJson(version.contentJson);
+  const configRows = await db
+    .select({
+      sessionsPerWeek: workoutExpectations.sessionsPerWeek,
+      mealsPerDay: nutritionExpectations.mealsPerDay,
+    })
+    .from(coachingConfigurations)
+    .innerJoin(
+      workoutExpectations,
+      eq(workoutExpectations.coachingConfigurationId, coachingConfigurations.id),
+    )
+    .innerJoin(
+      nutritionExpectations,
+      eq(
+        nutritionExpectations.coachingConfigurationId,
+        coachingConfigurations.id,
+      ),
+    )
+    .where(
+      and(
+        eq(coachingConfigurations.coachingRelationshipId, relationshipId),
+        eq(coachingConfigurations.status, "active"),
+      ),
+    )
+    .limit(1);
+  const config = configRows[0];
+  const warnings = config
+    ? planConsistencyWarnings({
+        sessionsPerWeek: config.sessionsPerWeek,
+        mealsPerDay: config.mealsPerDay,
+        workoutDays: content.workoutDays,
+        mealPrescriptions: content.mealPrescriptions,
+      })
+    : [];
+  const fingerprint = consistencyFingerprint(warnings);
+  const policy = await loadAssignmentPolicy(db, version.id);
+  return planConsistencyResponseSchema.parse({
+    fingerprint,
+    acknowledged:
+      fingerprint.length > 0 &&
+      policy?.consistencyAckFingerprint === fingerprint,
+    warnings,
+    dietAdjustmentScope: policy?.dietAdjustmentScope ?? null,
+  });
+}
+
+planRoutes.get(
+  "/:planId/versions/:versionId/consistency",
+  operation({
+    tag: "Plans",
+    summary: "Compare plan content with active configuration expectations.",
+    description:
+      "Returns an actionable warning when weekday sessions or meal slots disagree with configuration. This is not an adherence exception.",
+    roles: ["trainer"],
+    response: planConsistencyResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, c.req.param("planId"), actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const versions = await db
+      .select()
+      .from(planVersions)
+      .where(
+        and(
+          eq(planVersions.id, c.req.param("versionId")),
+          eq(planVersions.planId, owned.plan.id),
+        ),
+      )
+      .limit(1);
+    const version = versions[0];
+    if (!version) {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
+    return ok(c, await loadPlanConsistency(db, version, owned.relationship.id));
+  },
+);
+
+planRoutes.post(
+  "/:planId/versions/:versionId/consistency-acknowledgement",
+  operation({
+    tag: "Plans",
+    summary: "Acknowledge a plan and configuration difference.",
+    description:
+      "Records that the trainer accepts the current difference. It does not change plan content, assignments, or exceptions.",
+    roles: ["trainer"],
+    body: acknowledgePlanConsistencyRequestSchema,
+    response: planConsistencyResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = acknowledgePlanConsistencyRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid acknowledgement.");
+    }
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, c.req.param("planId"), actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const writablePlan = await requireWritableRelationship(
+      c,
+      db,
+      owned.relationship.id,
+    );
+    if (!writablePlan.ok) return writablePlan.response;
+    const versions = await db
+      .select()
+      .from(planVersions)
+      .where(
+        and(
+          eq(planVersions.id, c.req.param("versionId")),
+          eq(planVersions.planId, owned.plan.id),
+        ),
+      )
+      .limit(1);
+    const version = versions[0];
+    if (!version) {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
+    const current = await loadPlanConsistency(
+      db,
+      version,
+      owned.relationship.id,
+    );
+    if (current.warnings.length === 0) {
+      return fail(
+        c,
+        422,
+        "NO_CONSISTENCY_WARNING",
+        "There is no configuration difference to acknowledge.",
+      );
+    }
+    if (parsed.data.fingerprint !== current.fingerprint) {
+      return fail(
+        c,
+        409,
+        "CONSISTENCY_FINGERPRINT_MISMATCH",
+        "The plan or configuration changed. Review the warning again.",
+      );
+    }
+    const existing = await loadAssignmentPolicy(db, version.id);
+    await saveAssignmentPolicy(db, {
+      planVersionId: version.id,
+      dietAdjustmentScope: existing?.dietAdjustmentScope ?? null,
+      dietScopeLocalDate: existing?.dietScopeLocalDate ?? null,
+      futureMealPlanVersionId: existing?.futureMealPlanVersionId ?? null,
+      consistencyAckFingerprint: current.fingerprint,
+    });
+    return ok(
+      c,
+      await loadPlanConsistency(db, version, owned.relationship.id),
+    );
+  },
+);
+
+planRoutes.post(
+  "/:planId/versions/:versionId/assign",
+  operation({
+    tag: "Plans",
+    summary: "Assign plan version",
+    description: "Publishes when needed and generates workout and meal assignments.",
+    roles: ["trainer"],
+    body: assignPlanVersionRequestSchema,
+    response: assignPlanVersionResponseSchema,
+    idempotency: true,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = c.req.header("Idempotency-Key")?.trim();
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = assignPlanVersionRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid assign request.");
+    }
+    if (parsed.data.window > 35) {
+      return fail(c, 400, "RANGE_TOO_LARGE", "Assignment window exceeds 35 days.");
+    }
+    const planId = c.req.param("planId");
+    const versionId = c.req.param("versionId");
+    const fingerprint = await sha256Hex(
+      stableAssignFingerprint(planId, versionId, parsed.data),
+    );
+    const db = createDb(c.env.DB);
+    const prior = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: ASSIGN_PLAN_OPERATION,
+      idempotencyKey,
+    });
+    if (prior) {
+      if (prior.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request payload.",
+        );
+      }
+      return c.json(JSON.parse(prior.responseBody), prior.responseStatus as 200);
+    }
+    const owned = await loadOwnedPlan(db, planId, actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    const writable = await requireWritableRelationship(c, db, owned.relationship.id);
+    if (!writable.ok) {
+      return writable.response;
+    }
+    try {
+      const result = await assignPlanVersion(db, {
+        planId,
+        versionId,
+        relationshipId: owned.relationship.id,
+        traineeUserId: owned.relationship.traineeUserId,
+        request: parsed.data,
+        dryRun: parsed.data.dryRun ?? false,
+      });
+      if (parsed.data.notifyClient && !parsed.data.dryRun) {
+        await storeInboxNotification(db, {
+          recipientUserId: owned.relationship.traineeUserId,
+          relationshipId: owned.relationship.id,
+          notificationType: "plan_published",
+          domainEntityId: versionId,
+          dedupeKey: `plan-published:${versionId}`,
+        });
+      }
+      const data = assignPlanVersionResponseSchema.parse(result);
+      const responseBody = { data };
+      await saveIdempotencyRecord(db, {
+        actorUserId: actor.userId,
+        operation: ASSIGN_PLAN_OPERATION,
+        idempotencyKey,
+        requestFingerprint: fingerprint,
+        responseStatus: 200,
+        responseBody,
+        expiresAt: addDaysIso(7),
+      });
+      return ok(c, data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "GENERATION_FAILED";
+      if (message === "PLAN_VERSION_NOT_FOUND") {
+        return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+      }
+      console.error("plan assign failed", error);
+      return fail(c, 422, "GENERATION_FAILED", "Couldn't create this week's schedule · Retry");
+    }
+  },
+);
+
+planRoutes.get(
+  "/:planId/versions/:versionId/diff",
+  operation({
+    tag: "Plans",
+    summary: "Plan version diff",
+    description: "Structural diff against the previous published version.",
+    roles: ["trainer"],
+    response: planVersionDiffResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const db = createDb(c.env.DB);
+    const owned = await loadOwnedPlan(db, c.req.param("planId"), actor.userId);
+    if (!owned) {
+      return fail(c, 404, "PLAN_NOT_FOUND", "Plan not found.");
+    }
+    try {
+      const diff = await computePlanVersionDiff(db, {
+        planId: c.req.param("planId"),
+        versionId: c.req.param("versionId"),
+      });
+      return ok(c, planVersionDiffResponseSchema.parse(diff));
+    } catch {
+      return fail(c, 404, "PLAN_VERSION_NOT_FOUND", "Plan version not found.");
+    }
+  },
+);
+

@@ -24,14 +24,11 @@ import {
   canSkipAssignedWorkout,
   canSkipOpenWorkoutExecution,
   canStartWorkoutAssignment,
-  eachLocalDateInclusive,
+  formatLocalDate,
   isOpenWorkoutExecution,
   isQualifyingWorkoutExecution,
   resolveCompletedWorkoutStatus,
-  sessionWeekdaysForFrequency,
   setCompletionIsModified,
-  weekdayFromLocalDate,
-  workoutWindowForLocalDate,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
 import {
@@ -42,7 +39,6 @@ import {
   planVersions,
   setExecutions,
   trackingRequirements,
-  users,
   workoutAssignments,
   workoutExecutions,
   workoutExpectations,
@@ -53,6 +49,11 @@ import {
   parsePlanContentJson,
   parseWorkoutDayJson,
 } from "../domain/mappers";
+import {
+  insertWorkoutAssignments,
+  loadTraineeTimezone,
+  resolveGenerationRange,
+} from "../domain/assignment-schedule";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import type { AppContext } from "../lib/envelope";
 import { fail, ok } from "../lib/envelope";
@@ -60,6 +61,11 @@ import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
 } from "../lib/idempotency";
+import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
+import {
+  RelationshipEndedError,
+  assertRelationshipWritable,
+} from "../domain/relationship-lifecycle.js";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -164,15 +170,6 @@ async function loadActiveWorkoutConfig(db: Db, relationshipId: string) {
   return rows[0] ?? null;
 }
 
-async function loadTraineeTimezone(db: Db, traineeUserId: string) {
-  const rows = await db
-    .select({ timezone: users.timezone })
-    .from(users)
-    .where(eq(users.id, traineeUserId))
-    .limit(1);
-  return rows[0]?.timezone ?? "UTC";
-}
-
 async function loadExecutionBundle(db: Db, executionId: string) {
   const executionRows = await db
     .select()
@@ -267,14 +264,6 @@ workoutRoutes.post(
         issues: parsed.error.issues,
       });
     }
-    if (parsed.data.fromDate > parsed.data.toDate) {
-      return fail(
-        c,
-        400,
-        "INVALID_DATE_RANGE",
-        "fromDate must be on or before toDate.",
-      );
-    }
 
     const db = createDb(c.env.DB);
     const fingerprint = await sha256Hex(JSON.stringify(parsed.data));
@@ -303,6 +292,14 @@ workoutRoutes.post(
     if (!relationship) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+    const writable = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writable.ok) {
+      return writable.response;
+    }
 
     const effective = await loadEffectivePlanVersion(db, relationship.id);
     if (!effective) {
@@ -325,10 +322,7 @@ workoutRoutes.post(
     }
 
     const content = parsePlanContentJson(effective.version.contentJson);
-    const workoutDays = content.workoutDays
-      .slice()
-      .sort((a, b) => a.order - b.order);
-    if (workoutDays.length === 0) {
+    if (content.workoutDays.length === 0) {
       return fail(
         c,
         422,
@@ -337,61 +331,30 @@ workoutRoutes.post(
       );
     }
 
-    const timezone = await loadTraineeTimezone(db, relationship.traineeUserId);
-    const weekdays = sessionWeekdaysForFrequency(
-      config.workout.sessionsPerWeek,
-    );
-    const now = nowIso();
-    let dayCycleIndex = 0;
-    const createdRows: (typeof workoutAssignments.$inferSelect)[] = [];
-
-    for (const localDate of eachLocalDateInclusive(
-      parsed.data.fromDate,
-      parsed.data.toDate,
-    )) {
-      const weekday = weekdayFromLocalDate(localDate);
-      if (!weekdays.includes(weekday)) continue;
-
-      const workoutDay = workoutDays[dayCycleIndex % workoutDays.length]!;
-      dayCycleIndex += 1;
-
-      const existingAssignment = await db
-        .select()
-        .from(workoutAssignments)
-        .where(
-          and(
-            eq(workoutAssignments.coachingRelationshipId, relationship.id),
-            eq(workoutAssignments.planVersionId, effective.version.id),
-            eq(workoutAssignments.workoutDayId, workoutDay.id),
-            eq(workoutAssignments.localDate, localDate),
-          ),
-        )
-        .limit(1);
-      if (existingAssignment[0]) continue;
-
-      const window = workoutWindowForLocalDate({
-        localDate,
-        timeZone: timezone,
-        completionWindowHours: config.workout.completionWindowHours,
-      });
-
-      const row = {
-        id: createId(),
-        coachingRelationshipId: relationship.id,
-        planId: effective.plan.id,
-        planVersionId: effective.version.id,
-        workoutDayId: workoutDay.id,
-        workoutDayName: workoutDay.name,
-        workoutDayJson: JSON.stringify(workoutDay),
-        localDate,
-        windowStartsAt: window.windowStartsAt,
-        windowEndsAt: window.windowEndsAt,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await db.insert(workoutAssignments).values(row);
-      createdRows.push(row);
+    const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const today = formatLocalDate(new Date(), timeZone);
+    const resolved = resolveGenerationRange({
+      window: parsed.data.window,
+      today,
+      fromDate: parsed.data.fromDate,
+      toDate: parsed.data.toDate,
+      version: effective.version,
+      timeZone,
+    });
+    if (!resolved.ok) {
+      return fail(c, 400, "INVALID_DATE_RANGE", resolved.message);
     }
+    const now = nowIso();
+    const createdRows = await insertWorkoutAssignments(db, {
+      relationshipId: relationship.id,
+      planId: effective.plan.id,
+      planVersionId: effective.version.id,
+      content,
+      timeZone,
+      completionWindowHours: config.workout.completionWindowHours,
+      dates: resolved.dates,
+      now,
+    });
 
     const responseBody = {
       data: generateWorkoutAssignmentsResponseSchema.parse({
@@ -462,6 +425,7 @@ workoutRoutes.get(
 
     const conditions = [
       eq(workoutAssignments.coachingRelationshipId, relationship.id),
+      eq(workoutAssignments.scheduleStatus, "scheduled"),
     ];
     if (fromDate) {
       conditions.push(gte(workoutAssignments.localDate, fromDate));
@@ -532,6 +496,7 @@ workoutRoutes.get(
 
     const conditions = [
       eq(workoutAssignments.coachingRelationshipId, relationship.id),
+      eq(workoutAssignments.scheduleStatus, "scheduled"),
     ];
     if (fromDate) conditions.push(gte(workoutAssignments.localDate, fromDate));
     if (toDate) conditions.push(lte(workoutAssignments.localDate, toDate));
@@ -705,6 +670,12 @@ workoutRoutes.post(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
     }
+    const writableStart = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableStart.ok) return writableStart.response;
 
     const now = nowIso();
     const assignmentStatus = mapWorkoutAssignment(
@@ -870,21 +841,45 @@ async function requireTraineeOwnedOpenExecution(
   ) {
     return { errorStatus: "not_found" as const };
   }
+  try {
+    await assertRelationshipWritable(db, relationship.id);
+  } catch (error) {
+    if (error instanceof RelationshipEndedError) {
+      return { errorStatus: "ended" as const };
+    }
+    throw error;
+  }
   return { actor, db, bundle, relationship } as const;
 }
 
 function isOwnershipFailure(
-  loaded: { errorStatus?: "unauthenticated" | "not_found" },
-): loaded is { errorStatus: "unauthenticated" | "not_found" } {
-  return loaded.errorStatus === "unauthenticated" || loaded.errorStatus === "not_found";
+  loaded: {
+    errorStatus?: "unauthenticated" | "not_found" | "ended";
+  },
+): loaded is {
+  errorStatus: "unauthenticated" | "not_found" | "ended";
+} {
+  return (
+    loaded.errorStatus === "unauthenticated" ||
+    loaded.errorStatus === "not_found" ||
+    loaded.errorStatus === "ended"
+  );
 }
 
 function ownershipError(
   c: AppContext,
-  loaded: { errorStatus: "unauthenticated" | "not_found" },
+  loaded: { errorStatus: "unauthenticated" | "not_found" | "ended" },
 ) {
   if (loaded.errorStatus === "unauthenticated") {
     return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+  }
+  if (loaded.errorStatus === "ended") {
+    return fail(
+      c,
+      409,
+      "RELATIONSHIP_ENDED",
+      "Coaching relationship has ended.",
+    );
   }
   return fail(c, 404, "EXECUTION_NOT_FOUND", "Execution not found.");
 }
@@ -1394,6 +1389,12 @@ workoutRoutes.post(
     if (!relationship || relationship.traineeUserId !== actor.userId) {
       return fail(c, 404, "ASSIGNMENT_NOT_FOUND", "Assignment not found.");
     }
+    const writableSkip = await requireWritableRelationship(
+      c,
+      db,
+      relationship.id,
+    );
+    if (!writableSkip.ok) return writableSkip.response;
 
     if (loaded.execution && isOpenWorkoutExecution(loaded.execution.status)) {
       if (!canSkipOpenWorkoutExecution(loaded.execution.status)) {

@@ -1,9 +1,10 @@
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { colors } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { SpecimensScreen } from "../dev/SpecimensScreen";
 import { AcceptInviteScreen } from "../screens/AcceptInviteScreen";
 import { AuthScreen } from "../screens/AuthScreen";
 import { IntakeScreen } from "../screens/IntakeScreen";
@@ -13,8 +14,17 @@ import { WaitingReviewScreen } from "../screens/WaitingReviewScreen";
 import { TrainerShell } from "../trainer/TrainerShell";
 import { TraineeShell } from "../trainee/TraineeShell";
 
+function isSpecimensPath(): boolean {
+  if (Platform.OS !== "web" || typeof window === "undefined") return false;
+  return window.location.pathname.includes("__specimens");
+}
+
 export function AppRouter() {
   const { route, errorMessage, refreshSession, signOut, clearError } = useAuth();
+
+  if (isSpecimensPath()) {
+    return <SpecimensScreen />;
+  }
 
   if (route.name === "loading") {
     return (

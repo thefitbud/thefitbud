@@ -1,0 +1,427 @@
+import { useState, type RefObject } from "react";
+import type {
+  ExerciseDifficulty,
+  ExerciseLibraryItem,
+  FoodLibraryItem,
+  MealPrescription,
+  WorkoutDay,
+} from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
+import { apiClient } from "../../lib/api";
+import { PLAN_COMPOSITION_LIMITS } from "../../components/plan-composition";
+import { useCursorPage, useDebounced } from "./useCursorPage";
+import { LibraryThumb } from "./LibraryThumb";
+
+const DIFFICULTIES: ExerciseDifficulty[] = [
+  "beginner",
+  "intermediate",
+  "advanced",
+];
+
+const MUSCLE_OPTIONS = [
+  "chest",
+  "upper_back",
+  "lower_back",
+  "lats",
+  "shoulders",
+  "front_delts",
+  "rear_delts",
+  "side_delts",
+  "biceps",
+  "triceps",
+  "forearms",
+  "core",
+  "abs",
+  "glutes",
+  "quads",
+  "hamstrings",
+  "calves",
+  "full_body",
+  "legs",
+  "back",
+] as const;
+
+const EQUIPMENT_OPTIONS = [
+  "barbell",
+  "dumbbell",
+  "kettlebell",
+  "machine",
+  "cable",
+  "bodyweight",
+  "band",
+  "smith_machine",
+  "medicine_ball",
+  "other",
+  "none",
+] as const;
+
+function difficultyLabel(value: ExerciseDifficulty): string {
+  return labelFor("exercise_difficulty", value);
+}
+
+function muscleLabel(value: string): string {
+  return labelFor("body_part", value);
+}
+
+function equipmentLabel(value: string): string {
+  return labelFor("equipment", value);
+}
+
+export type LibraryPaneChrome = {
+  /** Drawer layout: no long help copy, "Add to session" / "Add to meal" wording. */
+  compact?: boolean;
+  searchRef?: RefObject<HTMLInputElement>;
+};
+
+function InitialThumb({ name }: { name: string }) {
+  return <LibraryThumb name={name} kind="exercise" />;
+}
+
+export function ExerciseSearchPane({
+  day,
+  onAdd,
+  compact = false,
+  searchRef,
+}: {
+  day: WorkoutDay | null;
+  onAdd: (item: ExerciseLibraryItem) => void;
+} & LibraryPaneChrome) {
+  const [q, setQ] = useState("");
+  const [muscleGroup, setMuscleGroup] = useState("");
+  const [equipment, setEquipment] = useState("");
+  const [difficulty, setDifficulty] = useState<ExerciseDifficulty | "">("");
+  const nameQuery = useDebounced(q);
+  const muscleQuery = useDebounced(muscleGroup);
+  const equipmentQuery = useDebounced(equipment);
+  const queryKey = JSON.stringify({
+    q: nameQuery.trim(),
+    muscleGroup: muscleQuery.trim(),
+    equipment: equipmentQuery.trim(),
+    difficulty,
+  });
+  const page = useCursorPage(queryKey, (cursor) =>
+    apiClient.listExerciseLibrary({
+      cursor,
+      limit: 50,
+      q: nameQuery.trim() || undefined,
+      muscleGroup: muscleQuery.trim() || undefined,
+      equipment: equipmentQuery.trim() || undefined,
+      difficulty: difficulty || undefined,
+    }),
+  );
+  const atLimit =
+    day != null && day.exercises.length >= PLAN_COMPOSITION_LIMITS.exercisesPerDay;
+
+  return (
+    <div className={compact ? "templates-library-pane is-compact" : "templates-library-pane"}>
+      {compact ? null : (
+        <>
+          <h4>Exercise library</h4>
+          <p className="muted">
+            Add copies the name, instructions, and muscles into the selected day.
+            Set targets are entered on the draft. The draft keeps a snapshot, not a live link.
+          </p>
+        </>
+      )}
+      <label className="field">
+        <span>Name</span>
+        <input
+          ref={searchRef}
+          type="search"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+          onKeyDown={(event) => {
+            const first = page.items[0];
+            if (event.key === "Enter" && first && day && !atLimit) {
+              event.preventDefault();
+              onAdd(first);
+            }
+          }}
+          placeholder={compact ? "Search exercises (press /)" : "Search by name"}
+          autoComplete="off"
+        />
+      </label>
+      <label className="field">
+        <span>Muscle group</span>
+        <select
+          value={muscleGroup}
+          onChange={(event) => setMuscleGroup(event.target.value)}
+        >
+          <option value="">Any muscle</option>
+          {MUSCLE_OPTIONS.map((value) => (
+            <option key={value} value={value}>
+              {muscleLabel(value)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Equipment</span>
+        <select
+          value={equipment}
+          onChange={(event) => setEquipment(event.target.value)}
+        >
+          <option value="">Any equipment</option>
+          {EQUIPMENT_OPTIONS.map((value) => (
+            <option key={value} value={value}>
+              {equipmentLabel(value)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Difficulty</span>
+        <select
+          value={difficulty}
+          onChange={(event) =>
+            setDifficulty(event.target.value as ExerciseDifficulty | "")
+          }
+        >
+          <option value="">Any difficulty</option>
+          {DIFFICULTIES.map((value) => (
+            <option key={value} value={value}>
+              {difficultyLabel(value)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {!day ? (
+        <p className="muted">
+          {compact
+            ? "Select a session before adding an exercise."
+            : "Select a day before adding an exercise."}
+        </p>
+      ) : null}
+      {atLimit ? (
+        <p className="muted">This day already has the maximum number of exercises.</p>
+      ) : null}
+      {page.error ? (
+        <p className="form-error" role="alert">
+          {page.error}{" "}
+          <button type="button" className="button-link" onClick={page.reload}>
+            Retry
+          </button>
+        </p>
+      ) : null}
+      {page.loading ? (
+        <p className="muted" aria-busy="true">
+          Searching exercises…
+        </p>
+      ) : page.items.length === 0 ? (
+        <p className="muted" role="status">
+          No exercises match these filters.
+        </p>
+      ) : (
+        <ul className="templates-search-list">
+          {page.items.map((item, index) => (
+            <li
+              key={item.id}
+              className={compact && index === 0 ? "lib-row is-highlighted" : compact ? "lib-row" : undefined}
+            >
+              {compact ? <InitialThumb name={item.name} /> : null}
+              <div className="lib-row-copy">
+                <p className="templates-name">{item.name}</p>
+                <p className="muted">
+                  {item.ownership === "global" ? "Global" : "Yours"}
+                  {item.difficulty ? ` · ${difficultyLabel(item.difficulty)}` : ""}
+                  {item.primaryMuscles.length > 0
+                    ? ` · ${item.primaryMuscles.map(muscleLabel).join(", ")}`
+                    : ""}
+                  {compact && item.secondaryMuscles.length > 0
+                    ? ` · also ${item.secondaryMuscles.map(muscleLabel).join(", ")}`
+                    : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={compact ? "button-tinted button-sm" : "button-secondary"}
+                disabled={!day || atLimit}
+                onClick={() => onAdd(item)}
+              >
+                {compact ? "Add to session" : "Add to day"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {page.nextCursor ? (
+        <button
+          type="button"
+          className="button-ghost"
+          disabled={page.loadingMore}
+          onClick={page.loadMore}
+        >
+          {page.loadingMore ? "Loading…" : "Load more exercises"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function FoodRow({
+  item,
+  disabled,
+  onAdd,
+}: {
+  item: FoodLibraryItem;
+  disabled: boolean;
+  onAdd: (item: FoodLibraryItem, servingId: string) => void;
+}) {
+  const servings = item.servings.filter((serving) => serving.conversionScaled != null);
+  const [servingId, setServingId] = useState(servings[0]?.id ?? "");
+  return (
+    <li className="lib-row">
+      <InitialThumb name={item.name} />
+      <div className="lib-row-copy">
+        <p className="templates-name">{item.name}</p>
+        {servings.length === 0 ? (
+          <p className="muted">Add a serving conversion before prescribing this food.</p>
+        ) : (
+          <select
+            aria-label={`Serving for ${item.name}`}
+            value={servingId}
+            onChange={(event) => setServingId(event.target.value)}
+          >
+            {servings.map((serving) => (
+              <option key={serving.id} value={serving.id}>
+                {serving.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <button
+        type="button"
+        className="button-tinted button-sm"
+        disabled={disabled || servings.length === 0 || !servingId}
+        onClick={() => onAdd(item, servingId)}
+      >
+        Add to meal
+      </button>
+    </li>
+  );
+}
+
+export function FoodSearchPane({
+  meal,
+  onAdd,
+  compact = false,
+  searchRef,
+}: {
+  meal: MealPrescription | null;
+  onAdd: (item: FoodLibraryItem, servingId: string) => void;
+} & LibraryPaneChrome) {
+  const [q, setQ] = useState("");
+  const nameQuery = useDebounced(q);
+  const page = useCursorPage(nameQuery.trim(), (cursor) =>
+    apiClient.listFoodLibrary({
+      cursor,
+      limit: 50,
+      q: nameQuery.trim() || undefined,
+    }),
+  );
+  const atLimit =
+    meal != null && (meal.items ?? []).length >= PLAN_COMPOSITION_LIMITS.itemsPerMeal;
+
+  return (
+    <div className={compact ? "templates-library-pane is-compact" : "templates-library-pane"}>
+      {compact ? null : (
+        <>
+          <h4>Food library</h4>
+          <p className="muted">
+            Add copies a serving and quantity into the selected meal. Nutrition is
+            calculated from the food's canonical basis and stored on the snapshot.
+          </p>
+        </>
+      )}
+      <label className="field">
+        <span>Name</span>
+        <input
+          ref={searchRef}
+          type="search"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+          placeholder={compact ? "Search foods (press /)" : "Search foods"}
+          autoComplete="off"
+        />
+      </label>
+      {!meal ? <p className="muted">Select a meal before adding a food.</p> : null}
+      {atLimit ? (
+        <p className="muted">This meal already has the maximum number of foods.</p>
+      ) : null}
+      {page.error ? (
+        <p className="form-error" role="alert">
+          {page.error}{" "}
+          <button type="button" className="button-link" onClick={page.reload}>
+            Retry
+          </button>
+        </p>
+      ) : null}
+      {page.loading ? (
+        <p className="muted" aria-busy="true">
+          Searching foods…
+        </p>
+      ) : page.items.length === 0 ? (
+        <p className="muted" role="status">
+          No foods match that search.
+        </p>
+      ) : (
+        <ul className="templates-search-list">
+          {page.items.map((item) =>
+            compact ? (
+              <FoodRow
+                key={item.id}
+                item={item}
+                disabled={!meal || atLimit}
+                onAdd={onAdd}
+              />
+            ) : (
+            <li key={item.id}>
+              <p className="templates-name">{item.name}</p>
+              <p className="muted">
+                {item.classification
+                  ? labelFor("food_classification", item.classification)
+                  : "Needs classification"}
+                {item.basis === "per_100_g"
+                  ? " · per 100 g"
+                  : item.basis === "per_100_ml"
+                    ? " · per 100 ml"
+                    : ""}
+                {item.ownership === "global" ? " · Global" : " · Yours"}
+              </p>
+              {item.servings.filter((serving) => serving.conversionScaled != null)
+                .length === 0 ? (
+                <p className="muted">Add a serving conversion before prescribing this food.</p>
+              ) : (
+                item.servings
+                  .filter((serving) => serving.conversionScaled != null)
+                  .map((serving) => (
+                    <button
+                      key={serving.id}
+                      type="button"
+                      className="button-secondary"
+                      disabled={!meal || atLimit}
+                      onClick={() => onAdd(item, serving.id)}
+                    >
+                      Add {serving.label}
+                    </button>
+                  ))
+              )}
+            </li>
+            ),
+          )}
+        </ul>
+      )}
+      {page.nextCursor ? (
+        <button
+          type="button"
+          className="button-ghost"
+          disabled={page.loadingMore}
+          onClick={page.loadMore}
+        >
+          {page.loadingMore ? "Loading…" : "Load more foods"}
+        </button>
+      ) : null}
+    </div>
+  );
+}

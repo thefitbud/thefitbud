@@ -2,7 +2,8 @@
   "extends": "@fitbud/config/tsconfig/react.json",
   "compilerOptions": {
     "jsx": "react-jsx",
+    "resolveJsonModule": true,
     "types": ["react"]
   },
-  "include": ["App.tsx", "index.js", "src"]
+  "include": ["App.tsx", "index.js", "src", "src/types/**/*.d.ts"]
 }

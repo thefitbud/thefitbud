@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { CoachingRelationship, Invitation } from "@fitbud/contracts";
+import type {
+  ClientDirectoryItem,
+  CoachingRelationship,
+  Invitation,
+} from "@fitbud/contracts";
 import {
   buildClientDirectoryRows,
   filterClientRows,
+  mapDirectoryItemToRow,
 } from "./clients.js";
 
 const invitation: Invitation = {
@@ -51,7 +56,47 @@ describe("buildClientDirectoryRows", () => {
       relationships: [relationship],
     });
     expect(filterClientRows(rows, "alex")).toHaveLength(1);
-    expect(filterClientRows(rows, "coaching")).toHaveLength(1);
+    expect(filterClientRows(rows, "ready")).toHaveLength(1);
     expect(filterClientRows(rows, "zzz")).toHaveLength(0);
+  });
+});
+
+describe("mapDirectoryItemToRow", () => {
+  it("shows the real goal, city, and week — never a placeholder goal", () => {
+    const item = {
+      relationshipId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      invitationId: null,
+      traineeDisplayName: "Deepak Nair",
+      status: "active",
+      goalShort: "Lose 8 kg",
+      nextCheckin: null,
+      effectivePlan: null,
+      adherenceState: "on_track",
+      renewalState: null,
+      renewsOn: null,
+      week: 5,
+      city: "Dubai",
+      updatedAt: "2026-10-18T04:10:00.000Z",
+    } satisfies ClientDirectoryItem;
+    const row = mapDirectoryItemToRow(item);
+    expect(row.subtitle).toBe("Lose 8 kg · Dubai · week 5");
+    expect(row.subtitle.toLowerCase()).not.toContain("demo goal");
+  });
+
+  it("uses a plain fallback when an active client has no goal", () => {
+    const item = {
+      relationshipId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      invitationId: null,
+      traineeDisplayName: "Rohan Mehta",
+      status: "active",
+      goalShort: null,
+      nextCheckin: null,
+      effectivePlan: null,
+      adherenceState: "needs_attention",
+      renewalState: null,
+      renewsOn: null,
+      updatedAt: "2026-10-18T04:10:00.000Z",
+    } satisfies ClientDirectoryItem;
+    expect(mapDirectoryItemToRow(item).subtitle).toBe("No goal set yet");
   });
 });

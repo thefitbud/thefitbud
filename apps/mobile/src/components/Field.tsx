@@ -1,5 +1,13 @@
-import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
-import { colors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import {
+  colors,
+  defaultTextStyle,
+  fontFamily,
+  fontFamilyMedium,
+  spacing,
+  touchTargetMin,
+} from "@fitbud/ui-mobile";
+import { Text } from "./Text";
 
 type Props = TextInputProps & {
   label: string;
@@ -28,12 +36,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   label: {
+    fontFamily: fontFamilyMedium,
     color: colors.deepNavy,
     fontSize: 14,
     fontWeight: "500",
     marginBottom: spacing.sm,
   },
   input: {
+    ...defaultTextStyle,
     minHeight: touchTargetMin,
     borderWidth: 1,
     borderColor: colors.lightGrey,
@@ -49,6 +59,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   hint: {
+    fontFamily,
     marginTop: spacing.sm,
     color: colors.midGrey,
     fontSize: 13,

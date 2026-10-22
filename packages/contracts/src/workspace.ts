@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { adherenceStateSchema } from "./adherence.js";
 import { checkinSchema, checkinStatusSchema } from "./checkin.js";
 import { coachingConfigurationSchema } from "./configuration.js";
 import { activeExceptionSummarySchema } from "./exception.js";
@@ -6,7 +7,10 @@ import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { mealAssignmentStatusSchema } from "./meal.js";
 import { effectivePlanResponseSchema } from "./plan.js";
 import { progressSummarySchema } from "./progress.js";
-import { onboardingStatusSchema } from "./relationship.js";
+import {
+  onboardingStatusSchema,
+  pendingReactivationSchema,
+} from "./relationship.js";
 import { renewalStateSchema, subscriptionSchema } from "./subscription.js";
 import { localDateSchema, workoutAssignmentStatusSchema } from "./workout.js";
 
@@ -87,19 +91,57 @@ export type WorkspaceEffectivePlanSummary = z.infer<
   typeof workspaceEffectivePlanSummarySchema
 >;
 
+export const workspaceTraineeProfileSchema = z.object({
+  displayName: z.string().min(1).max(120),
+  age: z.number().int().nonnegative().nullable(),
+  gender: z.string().max(64).nullable(),
+});
+export type WorkspaceTraineeProfile = z.infer<
+  typeof workspaceTraineeProfileSchema
+>;
+
 export const workspaceHeaderSchema = z.object({
   relationshipId: uuidSchema,
   traineeDisplayName: z.string().min(1).max(120),
   onboardingStatus: onboardingStatusSchema,
   effectivePlan: workspaceEffectivePlanSummarySchema.nullable(),
-  primaryGoal: z.string().max(500).nullable(),
+  goalShort: z.string().max(120).nullable(),
   renewalState: renewalStateSchema.nullable(),
+  /** Subscription renewal date (civil) for the header renewal chip. */
+  renewsOn: localDateSchema.nullable().optional(),
+  /** Coaching relationship start (ISO instant) for "Week N". */
+  startedAt: isoDateTimeSchema.nullable().optional(),
+  adherenceState: adherenceStateSchema,
+  traineeProfile: workspaceTraineeProfileSchema,
+  traineeTimezone: z.string().min(1).max(64),
+  hasCustomMealTimes: z.boolean(),
+  /** Client-set meal time overrides (read-only for trainers). */
+  mealTimeOverrides: z
+    .array(
+      z.object({
+        slotKey: z.string(),
+        dayPattern: z.string(),
+        time: z.string(),
+        updatedAt: z.string().optional(),
+      }),
+    )
+    .optional(),
+  trainerWhatsappE164: z.string().nullable(),
+  /** Client WhatsApp for trainer→client wa.me links. Null when unknown. */
+  clientWhatsappE164: z.string().nullable(),
+  /** When coaching ended (ISO instant). */
+  endedAt: isoDateTimeSchema.nullable().optional(),
+  /** Pending trainee confirmation for reactivation (ended relationships only). */
+  pendingReactivation: pendingReactivationSchema.nullable().optional(),
 });
 export type WorkspaceHeader = z.infer<typeof workspaceHeaderSchema>;
 
 export const workspaceOverviewSchema = z.object({
   openException: activeExceptionSummarySchema.nullable(),
+  /** Next scheduled (draft) check-in — never a past submitted one. */
   nextCheckin: checkinSchema.nullable(),
+  /** Submitted check-in awaiting review, if any. */
+  pendingReviewCheckin: checkinSchema.nullable().optional(),
   recentActivity: z.array(workspaceActivityItemSchema).max(5),
   progress: progressSummarySchema,
 });

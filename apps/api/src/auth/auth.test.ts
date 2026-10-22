@@ -1,11 +1,5 @@
-import initSqlJs from "sql.js";
-import { drizzle } from "drizzle-orm/sql-js";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import {
@@ -15,46 +9,11 @@ import {
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 
-const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
-const identityMigration = join(drizzleDir, "0000_identity.sql");
-const relationshipMigration = join(
-  drizzleDir,
-  "0001_relationship_onboarding.sql",
-);
-const configurationMigration = join(
-  drizzleDir,
-  "0002_coaching_configuration.sql",
-);
-const plansMigration = join(drizzleDir, "0003_plans.sql");
-const syncMigration = join(drizzleDir, "0009_sync.sql");
-const notificationsMigration = join(drizzleDir, "0010_notifications.sql");
-const domainContractsMigration = join(drizzleDir, "0013_domain_contracts.sql");
-const formTemplatesMigration = join(
-  drizzleDir,
-  "0014_onboarding_form_templates.sql",
-);
-const invitationWhatsappMigration = join(
-  drizzleDir,
-  "0012_invitation_whatsapp.sql",
-);
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  sqlite.exec(readFileSync(identityMigration, "utf8"));
-  sqlite.exec(readFileSync(relationshipMigration, "utf8"));
-  sqlite.exec(readFileSync(invitationWhatsappMigration, "utf8"));
-  sqlite.exec(readFileSync(configurationMigration, "utf8"));
-  sqlite.exec(readFileSync(plansMigration, "utf8"));
-  sqlite.exec(readFileSync(syncMigration, "utf8"));
-  sqlite.exec(readFileSync(notificationsMigration, "utf8"));
-  sqlite.exec(readFileSync(domainContractsMigration, "utf8"));
-  sqlite.exec(readFileSync(formTemplatesMigration, "utf8"));
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return {
-    db,
-    close: () => sqlite.close(),
-  };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function dummyD1(): D1Database {
@@ -630,7 +589,7 @@ describe("intake and onboarding", () => {
 });
 
 const SAMPLE_DRAFT = {
-  primaryGoal: "Build strength",
+  goalShort: "Build strength",
   notes: "Focus on compound lifts",
   workout: { sessionsPerWeek: 4, completionWindowHours: 24 },
   nutrition: {
@@ -809,7 +768,7 @@ describe("coaching configuration", () => {
         status: string;
         recordVersion: number;
         versionNumber: number;
-        primaryGoal: string;
+        goalShort: string;
         workout: { sessionsPerWeek: number };
         nutrition: { photoRequirement: string };
         tracking: { requireSessionRpe: boolean };
@@ -818,7 +777,7 @@ describe("coaching configuration", () => {
     expect(draftBody.data.status).toBe("draft");
     expect(draftBody.data.recordVersion).toBe(1);
     expect(draftBody.data.versionNumber).toBe(1);
-    expect(draftBody.data.primaryGoal).toBe("Build strength");
+    expect(draftBody.data.goalShort).toBe("Build strength");
     expect(draftBody.data.workout.sessionsPerWeek).toBe(4);
     expect(draftBody.data.nutrition.photoRequirement).toBe("selected_meals");
     expect(draftBody.data.tracking.requireSessionRpe).toBe(true);
@@ -873,10 +832,10 @@ describe("coaching configuration", () => {
     );
     expect(get.status).toBe(200);
     const getBody = (await get.json()) as {
-      data: { status: string; primaryGoal: string };
+      data: { status: string; goalShort: string };
     };
     expect(getBody.data.status).toBe("active");
-    expect(getBody.data.primaryGoal).toBe("Build strength");
+    expect(getBody.data.goalShort).toBe("Build strength");
 
     const editActive = await app.request(
       `/configurations/relationships/${owner.relationshipId}/draft`,
@@ -889,7 +848,7 @@ describe("coaching configuration", () => {
         body: JSON.stringify({
           expectedVersion: configuredBody.data.recordVersion + 1,
           ...SAMPLE_DRAFT,
-          primaryGoal: "Should fail",
+          goalShort: "Should fail",
         }),
       },
       testEnv(),
@@ -914,7 +873,7 @@ describe("coaching configuration", () => {
         body: JSON.stringify({
           expectedVersion: 0,
           ...SAMPLE_DRAFT,
-          primaryGoal: null,
+          goalShort: null,
         }),
       },
       testEnv(),

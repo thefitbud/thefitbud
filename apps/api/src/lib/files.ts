@@ -2,10 +2,17 @@ import { sha256Hex } from "./crypto";
 
 const DEFAULT_TEST_SIGNING_SECRET = "fitbud-local-file-signing-secret";
 
-export function fileSigningSecret(envSecret: string | undefined): string {
-  return envSecret && envSecret.length > 0
-    ? envSecret
-    : DEFAULT_TEST_SIGNING_SECRET;
+export function fileSigningSecret(
+  envSecret: string | undefined,
+  environment?: string,
+): string {
+  if (envSecret && envSecret.length > 0) {
+    return envSecret;
+  }
+  if (environment === "local") {
+    return DEFAULT_TEST_SIGNING_SECRET;
+  }
+  throw new Error("MEDIA_SIGNING_SECRET is required outside local environments.");
 }
 
 export async function signFileAccessToken(input: {

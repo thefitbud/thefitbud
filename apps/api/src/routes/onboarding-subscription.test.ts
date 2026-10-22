@@ -1,6 +1,5 @@
-import initSqlJs, { type Database } from "sql.js";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/sql-js";
+import initSqlJs, { type Database } from "sql.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,14 +7,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { pushPayloadSchema } from "@fitbud/contracts";
 import { addDaysToLocalDate, formatLocalDate, pushPayloadHasOnlySafeKeys } from "@fitbud/core";
 import { app } from "../index.js";
-import * as schema from "../db/schema.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { routingPayloadForNotification } from "../lib/push-provider.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
+import * as schema from "../db/schema.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
+
 const SEEDED_GLOBAL_FORM_ID = "11111111-1111-4111-8111-111111111111";
 const HIGHER_GLOBAL_TEMPLATE_ID = "22222222-2222-4222-8222-222222222221";
 const HIGHER_GLOBAL_FORM_ID = "22222222-2222-4222-8222-222222222222";
@@ -142,6 +142,25 @@ describe("migration 0013 backfill", () => {
     ).toBe(1);
 
     sqlite.run(
+      `UPDATE coaching_configurations
+       SET primary_goal = 'Add 10 kg to the squat while holding body weight steady'`,
+    );
+    applySql(sqlite, "0011_templates_libraries.sql");
+    applySql(sqlite, "0015_iteration_a.sql");
+    expect(
+      scalar(sqlite, "SELECT goal_description FROM coaching_configurations"),
+    ).toBe("Add 10 kg to the squat while holding body weight steady");
+    expect(scalar(sqlite, "SELECT goal_short FROM coaching_configurations")).toBe(
+      null,
+    );
+    const goalColumns = sqlite.exec("PRAGMA table_info(coaching_configurations)")[0]!;
+    const goalNameIndex = goalColumns.columns.indexOf("name");
+    const goalNames = goalColumns.values.map((row) => row[goalNameIndex]);
+    expect(goalNames).not.toContain("primary_goal");
+    expect(goalNames).toContain("goal_description");
+    expect(goalNames).toContain("goal_short");
+
+    sqlite.run(
       `INSERT INTO onboarding_form_versions (id, key, version, scope, trainer_user_id, schema_json, created_at)
        VALUES ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'coach', 1, 'global', NULL, '{}', '2026-10-01T00:00:00.000Z')`,
     );
@@ -160,29 +179,11 @@ describe("migration 0013 backfill", () => {
   });
 });
 
-const APP_MIGRATIONS = [
-  "0000_identity.sql",
-  "0001_relationship_onboarding.sql",
-  "0012_invitation_whatsapp.sql",
-  "0002_coaching_configuration.sql",
-  "0003_plans.sql",
-  "0004_workouts.sql",
-  "0005_meals.sql",
-  "0006_checkins.sql",
-  "0007_exceptions.sql",
-  "0008_progress_media.sql",
-  "0009_sync.sql",
-  "0010_notifications.sql",
-  "0013_domain_contracts.sql",
-  "0014_onboarding_form_templates.sql",
-];
+import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const SQL = await initSqlJs();
-  const sqlite = new SQL.Database();
-  for (const file of APP_MIGRATIONS) applySql(sqlite, file);
-  const db = drizzle(sqlite, { schema }) as unknown as Db;
-  return { db, close: () => sqlite.close() };
+  const handle = await createSharedMemoryDb();
+  return { db: handle.db, close: handle.close };
 }
 
 function testEnv(): Env {
@@ -426,7 +427,7 @@ describe("onboarding resolution and subscription", () => {
         },
         body: JSON.stringify({
           expectedVersion: 0,
-          primaryGoal: "Strength",
+          goalShort: "Strength",
           workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
           nutrition: {
             mealsPerDay: 3,
@@ -515,7 +516,7 @@ describe("onboarding resolution and subscription", () => {
         },
         body: JSON.stringify({
           expectedVersion: active!.recordVersion,
-          primaryGoal: "Should fail",
+          goalShort: "Should fail",
           workout: { sessionsPerWeek: 9, completionWindowHours: 24 },
           nutrition: {
             mealsPerDay: 3,
@@ -720,7 +721,7 @@ describe("onboarding resolution and subscription", () => {
     );
     expect(reminder?.domainEntityType).toBe("coaching_relationship");
     expect(reminder?.domainEntityId).toBe(relationshipId);
-    expect(reminder?.dedupeKey).toBe(
+    expect(reminder?.dedupeKey.replace(/^deferred:/, "")).toBe(
       `subscription_renewal_reminder:${relationshipId}:${renewsOn}:upcoming`,
     );
     const payload = routingPayloadForNotification({

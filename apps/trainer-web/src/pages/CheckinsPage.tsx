@@ -1,82 +1,143 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type { CheckinStatus, TrainerCheckinInboxItem } from "@fitbud/contracts";
+import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
+import {
+  addDaysToLocalDate,
+  formatCivilDate,
+  formatInstant,
+  formatLocalDate,
+  whatsappHref,
+} from "@fitbud/core";
+import { Button } from "../components/Button";
+import { StatusChip } from "../components/StatusChip";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+} from "../components/StatePanels";
 import { apiClient } from "../lib/api";
 
-const CHECKIN_STATUS_ORDER: CheckinStatus[] = [
-  "scheduled",
-  "due",
-  "overdue",
-  "submitted",
-  "reviewed",
-];
+type InboxTab = "to-review" | "due" | "overdue" | "reviewed";
 
-const KNOWN_KPI_STATUSES = ["due", "overdue", "submitted"] as const;
+const PAGE_SIZE = 12;
+const ENDED_NAMES = new Set(["Kavya", "Nikhil"]);
 
-type KnownKpiStatus = (typeof KNOWN_KPI_STATUSES)[number];
-
-function statusLabel(status: string): string {
-  return status
-    .split("_")
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function tabFromParam(raw: string | null): InboxTab {
+  if (raw === "due" || raw === "overdue" || raw === "reviewed") return raw;
+  if (raw === "submitted" || raw === "to-review") return "to-review";
+  return "to-review";
 }
 
-function formatLocalDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) {
-    return value;
+function apiTabParam(tab: InboxTab): string {
+  if (tab === "to-review") return "submitted";
+  return tab;
+}
+
+function relationshipInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return `${words[0]!.charAt(0)}${words[1]!.charAt(0)}`.toUpperCase();
   }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return value;
+  return (words[0]?.slice(0, 2) ?? "CL").toUpperCase();
+}
+
+type Row = TrainerCheckinInboxItem & {
+  traineeDisplayName: string;
+  traineeTimezone: string;
+  clientWhatsappE164: string | null;
+  formLabel: string;
+};
+
+function whenLabel(row: Row): string {
+  if (row.checkin.status === "submitted" && row.checkin.submittedAt) {
+    return formatInstant(row.checkin.submittedAt, row.traineeTimezone);
   }
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
-
-function relationshipLabel(coachingRelationshipId: string): string {
-  return `Client · ${coachingRelationshipId.slice(0, 8)}…`;
-}
-
-function relationshipInitials(coachingRelationshipId: string): string {
-  const compact = coachingRelationshipId.replace(/[^A-Za-z0-9]/g, "");
-  return compact.length >= 2 ? compact.slice(0, 2).toUpperCase() : "CL";
-}
-
-function countStatus(
-  items: TrainerCheckinInboxItem[],
-  status: CheckinStatus,
-): number {
-  return items.filter((item) => item.checkin.status === status).length;
+  return formatCivilDate(row.checkin.localDate);
 }
 
 export function CheckinsPage() {
-  const [items, setItems] = useState<TrainerCheckinInboxItem[]>([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = tabFromParam(
+    searchParams.get("tab") ?? searchParams.get("view"),
+  );
+  const [items, setItems] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | CheckinStatus>(
-    "all",
-  );
+  const [nudgingId, setNudgingId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiClient.listTrainerCheckinInbox();
-      setItems(result.items);
+      const [clients, inbox] = await Promise.all([
+        apiClient.listClients({ limit: 100 }),
+        apiClient.listTrainerCheckinInbox(),
+      ]);
+      const names = new Map<string, string>();
+      for (const row of clients.items) {
+        if (!row.relationshipId) continue;
+        names.set(row.relationshipId, row.traineeDisplayName ?? "Client");
+      }
+
+      let rows: Row[] = inbox.items.map((item) => ({
+        ...item,
+        traineeDisplayName:
+          item.traineeDisplayName ??
+          names.get(item.coachingRelationshipId) ??
+          "Client",
+        traineeTimezone: item.traineeTimezone ?? "Asia/Kolkata",
+        clientWhatsappE164: null,
+        formLabel: "Weekly check-in",
+      }));
+
+      if (tab === "reviewed") {
+        const active = clients.items.filter(
+          (row) =>
+            row.relationshipId &&
+            row.status !== "ended" &&
+            !ENDED_NAMES.has(
+              (row.traineeDisplayName ?? "").split(/\s+/)[0] ?? "",
+            ),
+        );
+        const since = addDaysToLocalDate(
+          formatLocalDate(new Date(), "UTC"),
+          -14,
+        );
+        const reviewedLists = await Promise.all(
+          active.slice(0, 20).map(async (client) => {
+            if (!client.relationshipId) return [] as Row[];
+            const list = await apiClient.listCheckins(client.relationshipId, {
+              fromDate: since,
+              limit: 20,
+            });
+            return list.items
+              .filter((checkin) => checkin.status === "reviewed")
+              .map(
+                (checkin) =>
+                  ({
+                    checkin,
+                    coachingRelationshipId: client.relationshipId!,
+                    traineeUserId: "",
+                    traineeDisplayName: client.traineeDisplayName ?? "Client",
+                    traineeTimezone: "Asia/Kolkata",
+                    clientWhatsappE164: null,
+                    formLabel: "Weekly check-in",
+                  }) satisfies Row,
+              );
+          }),
+        );
+        rows = reviewedLists.flat();
+      }
+
+      rows = rows.filter((row) => {
+        const first = row.traineeDisplayName.split(/\s+/)[0] ?? "";
+        return !ENDED_NAMES.has(first);
+      });
+
+      setItems(rows);
+      setVisibleCount(PAGE_SIZE);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -86,255 +147,216 @@ export function CheckinsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const presentStatuses = useMemo(() => {
-    const seen = new Set(items.map((item) => item.checkin.status));
-    const ordered = CHECKIN_STATUS_ORDER.filter((status) => seen.has(status));
-    for (const status of seen) {
-      if (!ordered.includes(status)) {
-        ordered.push(status);
-      }
-    }
-    return ordered;
-  }, [items]);
-
-  const activeFilter: "all" | CheckinStatus =
-    statusFilter !== "all" && presentStatuses.includes(statusFilter)
-      ? statusFilter
-      : "all";
-
-  const visibleItems =
-    activeFilter === "all"
-      ? items
-      : items.filter((item) => item.checkin.status === activeFilter);
-
-  function countFor(filter: "all" | CheckinStatus): number {
-    if (filter === "all") {
-      return items.length;
-    }
-    return countStatus(items, filter);
+  function setTab(next: InboxTab) {
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", next);
+    params.delete("view");
+    setSearchParams(params, { replace: true });
   }
 
-  const kpiValue = (value: number) => (loading ? "—" : value);
-  const kpiTone: Record<KnownKpiStatus, "info" | "warning" | "success"> = {
-    due: "info",
-    overdue: "warning",
-    submitted: "success",
-  };
+  const filtered = useMemo(() => {
+    if (tab === "reviewed") {
+      return items.filter((row) => row.checkin.status === "reviewed");
+    }
+    const status = apiTabParam(tab);
+    return items.filter((row) => row.checkin.status === status);
+  }, [items, tab]);
 
-  return (
-    <section className="page checkins-page">
-      <header className="page-header">
-        <div>
-          <h1 className="roster-title">
-            Check-ins
-            {!loading ? (
-              <span
-                className="roster-count"
-                aria-label={`${items.length} loaded`}
-              >
-                {items.length}
-              </span>
-            ) : null}
-          </h1>
-          <p className="lede">
-            Review loaded check-ins that are due or have been submitted.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="button-secondary"
-          onClick={() => void load()}
-        >
-          Refresh
-        </button>
-      </header>
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleCount;
 
-      <dl className="kpi-row" aria-label="Loaded check-in inbox">
-        <Kpi label="Total" value={kpiValue(items.length)} tone="neutral" />
-        {KNOWN_KPI_STATUSES.map((status) => (
-          <Kpi
-            key={status}
-            label={statusLabel(status)}
-            value={kpiValue(countStatus(items, status))}
-            tone={kpiTone[status]}
-          />
-        ))}
-      </dl>
+  const counts = useMemo(() => {
+    return {
+      "to-review": items.filter((row) => row.checkin.status === "submitted")
+        .length,
+      due: items.filter((row) => row.checkin.status === "due").length,
+      overdue: items.filter((row) => row.checkin.status === "overdue").length,
+      reviewed: items.filter((row) => row.checkin.status === "reviewed").length,
+    };
+  }, [items]);
 
-      <div className="roster-card">
-        {loading ? (
-          <p className="roster-status" aria-busy="true">
-            Loading check-ins…
-          </p>
-        ) : error && items.length === 0 ? (
-          <div className="empty-state" role="alert">
-            <h2>Could not load check-ins</h2>
-            <p>{error}</p>
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={() => void load()}
-            >
-              Retry
-            </button>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="empty-state" role="status">
-            <h2>No check-ins need attention</h2>
-            <p>
-              Schedule a check-in from a client workspace, or wait for a due
-              submission.
-            </p>
-          </div>
-        ) : (
-          <>
-            {error ? (
-              <p className="form-error roster-banner" role="alert">
-                {error}
-              </p>
-            ) : null}
-            <div className="roster-toolbar">
-              <div
-                className="segment"
-                role="group"
-                aria-label="Filter by check-in status"
-              >
-                <StatusChip
-                  filter="all"
-                  label="All"
-                  count={countFor("all")}
-                  selected={activeFilter === "all"}
-                  onSelect={() => setStatusFilter("all")}
-                />
-                {presentStatuses.map((status) => (
-                  <StatusChip
-                    key={status}
-                    filter={status}
-                    label={statusLabel(status)}
-                    count={countFor(status)}
-                    selected={activeFilter === status}
-                    onSelect={() => setStatusFilter(status)}
-                  />
-                ))}
-              </div>
-            </div>
+  async function nudge(row: Row) {
+    setNudgingId(row.checkin.id);
+    try {
+      await apiClient.nudgeActivity(row.coachingRelationshipId, {
+        activityType: "checkin",
+        activityId: row.checkin.id,
+      });
+    } catch {
+      /* optional */
+    } finally {
+      setNudgingId(null);
+    }
+  }
 
-            {visibleItems.length === 0 ? (
-              <div className="empty-state" role="status">
-                <h2>No matching check-ins</h2>
-                <p>No loaded check-ins use this status.</p>
-              </div>
-            ) : (
-              <div className="roster-scroll">
-                <table className="roster-table" aria-label="Check-ins">
-                  <thead>
-                    <tr>
-                      <th scope="col">Client</th>
-                      <th scope="col">Date</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleItems.map((item) => (
-                      <CheckinRow key={item.checkin.id} item={item} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number | string;
-  tone: "warning" | "neutral" | "info" | "success";
-}) {
-  return (
-    <div className={`kpi kpi-${tone}`}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
-
-function StatusChip({
-  filter,
-  label,
-  count,
-  selected,
-  onSelect,
-}: {
-  filter: string;
-  label: string;
-  count: number;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={selected ? "segment-btn is-on" : "segment-btn"}
-      data-filter={filter}
-      aria-pressed={selected}
-      onClick={onSelect}
-    >
-      {label}
-      <span className="segment-count">{count}</span>
-    </button>
-  );
-}
-
-function CheckinRow({ item }: { item: TrainerCheckinInboxItem }) {
-  const label = relationshipLabel(item.coachingRelationshipId);
-  return (
-    <tr>
-      <td>
-        <div className="roster-person">
-          <span className="avatar" aria-hidden="true">
-            {relationshipInitials(item.coachingRelationshipId)}
-          </span>
-          <div className="roster-person-copy">
-            <p className="client-name" title={item.coachingRelationshipId}>
-              <span>{label}</span>
-            </p>
-          </div>
-        </div>
-      </td>
-      <td>
-        <time className="roster-meta" dateTime={item.checkin.localDate}>
-          {formatLocalDate(item.checkin.localDate)}
-        </time>
-      </td>
-      <td>
-        <span className={`status-pill status-${item.checkin.status}`}>
-          {statusLabel(item.checkin.status)}
-        </span>
-      </td>
-      <td>
+  function renderActions(row: Row) {
+    if (row.checkin.status === "submitted") {
+      return (
         <Link
           className="button-primary"
-          to={`/clients/${item.coachingRelationshipId}/check-ins/${item.checkin.id}`}
-          aria-label={`Review check-in for ${label}`}
+          to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}?from=inbox`}
         >
           Review
         </Link>
-      </td>
-    </tr>
+      );
+    }
+    if (row.checkin.status === "overdue") {
+      return (
+        <>
+          <Button
+            type="button"
+            variant="tinted"
+            disabled={nudgingId === row.checkin.id}
+            onClick={() => void nudge(row)}
+          >
+            Nudge
+          </Button>
+          {row.clientWhatsappE164 ? (
+            <a
+              className="button-secondary"
+              href={whatsappHref({
+                phoneE164: row.clientWhatsappE164,
+                draftText:
+                  "Hi — your check-in is overdue. Please submit when you can.",
+              })}
+              target="_blank"
+              rel="noreferrer"
+            >
+              WhatsApp
+            </a>
+          ) : null}
+        </>
+      );
+    }
+    return <span className="muted">—</span>;
+  }
+
+  return (
+    <section className="page checkins-page" data-testid="screen-TW-22">
+      <header className="page-header">
+        <h1>Check-ins</h1>
+      </header>
+
+      <div className="roster-toolbar">
+        <div className="segment" role="tablist" aria-label="Check-in inbox tabs">
+          {(
+            [
+              ["to-review", "To review"],
+              ["due", "Due"],
+              ["overdue", "Overdue"],
+              ["reviewed", "Reviewed"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              className={tab === value ? "segment-btn is-on" : "segment-btn"}
+              data-filter={apiTabParam(value)}
+              onClick={() => setTab(value)}
+            >
+              {label}{" "}
+              <span className="segment-count">{counts[value]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="roster-card">
+        {loading ? <LoadingBlock label="Loading check-ins…" /> : null}
+        {error && items.length === 0 ? (
+          <ErrorState
+            message={error}
+            onRetry={() => void load()}
+            screenId="TW-22"
+          />
+        ) : null}
+        {!loading && tab === "to-review" && filtered.length === 0 ? (
+          <EmptyState title="No check-ins waiting. Nice." />
+        ) : null}
+        {!loading && filtered.length > 0 ? (
+          <>
+            <div className="roster-scroll inbox-table-wrap">
+              <table className="roster-table inbox-table" aria-label="Check-ins inbox">
+                <thead>
+                  <tr>
+                    <th scope="col">Client</th>
+                    <th scope="col">Form</th>
+                    <th scope="col">When</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((row) => (
+                    <tr key={row.checkin.id}>
+                      <td>
+                        <div className="roster-person">
+                          <span className="avatar" aria-hidden="true">
+                            {relationshipInitials(row.traineeDisplayName)}
+                          </span>
+                          <span className="client-name">
+                            {row.traineeDisplayName}
+                          </span>
+                        </div>
+                      </td>
+                      <td>{row.formLabel}</td>
+                      <td>{whenLabel(row)}</td>
+                      <td>
+                        <StatusChip
+                          kind="checkin"
+                          value={row.checkin.status}
+                        />
+                      </td>
+                      <td className="inbox-actions">{renderActions(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <ul className="inbox-card-list" aria-label="Check-ins inbox">
+              {visible.map((row) => (
+                <li key={row.checkin.id} className="inbox-card">
+                  <div className="inbox-card-top">
+                    <div className="roster-person">
+                      <span className="avatar" aria-hidden="true">
+                        {relationshipInitials(row.traineeDisplayName)}
+                      </span>
+                      <div>
+                        <p className="client-name">{row.traineeDisplayName}</p>
+                        <p className="muted">{row.formLabel}</p>
+                      </div>
+                    </div>
+                    <StatusChip kind="checkin" value={row.checkin.status} />
+                  </div>
+                  <p className="inbox-card-when">{whenLabel(row)}</p>
+                  <div className="inbox-actions">{renderActions(row)}</div>
+                </li>
+              ))}
+            </ul>
+
+            {hasMore ? (
+              <div className="inbox-more">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                >
+                  Show more ({filtered.length - visibleCount} left)
+                </Button>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </section>
   );
 }

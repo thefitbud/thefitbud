@@ -1,10 +1,17 @@
+import { z } from "zod";
 import {
   apiErrorBodySchema,
   acceptInvitationRequestSchema,
+  authOtpStartRequestSchema,
+  authOtpStartResponseSchema,
+  authOtpVerifyRequestSchema,
+  authOtpVerifyResponseSchema,
   acceptInvitationResponseSchema,
+  acceptInvitationWithTokenResponseSchema,
   activateConfigurationRequestSchema,
   coachingConfigurationSchema,
   configureConfigurationRequestSchema,
+  copyConfigurationDraftRequestSchema,
   createInvitationRequestSchema,
   createInvitationResponseSchema,
   createOnboardingReviewRequestSchema,
@@ -28,17 +35,20 @@ import {
   exceptionDetailSchema,
   exceptionListResponseSchema,
   exceptionSchema,
+  clientDirectoryListResponseSchema,
   exerciseLibraryItemSchema,
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
   clientWorkspaceSchema,
+  configResponseSchema,
   healthResponseSchema,
   historyListResponseSchema,
   workspaceActivityListResponseSchema,
   createOnboardingFormTemplateRequestSchema,
   createOnboardingFormTemplateVersionRequestSchema,
   forkOnboardingFormTemplateRequestSchema,
+  forkPlanTemplateRequestSchema,
   onboardingFormResponseSchema,
   onboardingFormTemplateDetailSchema,
   onboardingFormTemplateListResponseSchema,
@@ -48,6 +58,10 @@ import {
   interventionListResponseSchema,
   interventionSchema,
   meResponseSchema,
+  traineeProfileSchema,
+  updateTraineeProfileRequestSchema,
+  acknowledgePlanConsistencyRequestSchema,
+  planConsistencyResponseSchema,
   planListResponseSchema,
   planTemplateListResponseSchema,
   planTemplateSchema,
@@ -67,10 +81,14 @@ import {
   syncPushRequestSchema,
   syncPushResponseSchema,
   evaluateRemindersResponseSchema,
+  nudgeActivityRequestSchema,
+  nudgeActivityResponseSchema,
   notificationListResponseSchema,
   notificationPreferencesSchema,
   registerDeviceTokenRequestSchema,
   registerDeviceTokenResponseSchema,
+  reminderRulesResponseSchema,
+  updateReminderRulesRequestSchema,
   updateNotificationPreferencesRequestSchema,
   updatePlanTemplateRequestSchema,
   updateExerciseLibraryItemRequestSchema,
@@ -81,11 +99,20 @@ import {
   updatePlanDraftRequestSchema,
   completeSetRequestSchema,
   completeWorkoutRequestSchema,
+  assignPreferredCheckinFormRequestSchema,
+  assignPreferredCheckinFormResponseSchema,
+  checkinFormTemplateDetailSchema,
+  checkinFormTemplateListResponseSchema,
+  checkinFormVersionSchema,
   checkinListResponseSchema,
   checkinReviewContextSchema,
   checkinSchema,
+  createCheckinFormTemplateRequestSchema,
+  createCheckinFormTemplateVersionRequestSchema,
+  forkCheckinFormTemplateRequestSchema,
   confirmMealRequestSchema,
   createTrainerNoteRequestSchema,
+  deleteTrainerNoteResponseSchema,
   createMeasurementRequestSchema,
   createProgressEntryRequestSchema,
   createUploadTargetRequestSchema,
@@ -120,8 +147,13 @@ import {
   workoutAssignmentListResponseSchema,
   workoutAssignmentSchema,
   workoutExecutionSchema,
+  type AuthOtpStartRequest,
+  type AuthOtpStartResponse,
+  type AuthOtpVerifyRequest,
+  type AuthOtpVerifyResponse,
   type AcceptInvitationRequest,
   type AcceptInvitationResponse,
+  type AcceptInvitationWithTokenResponse,
   type AcknowledgeExceptionRequest,
   type ActivateConfigurationRequest,
   type AttentionFeedResponse,
@@ -133,7 +165,14 @@ import {
   type CompleteSetRequest,
   type CompleteWorkoutRequest,
   type ConfirmMealRequest,
+  type CheckinFormTemplateDetail,
+  type CheckinFormTemplateListResponse,
+  type CheckinFormVersion,
   type ConfigureConfigurationRequest,
+  type CopyConfigurationDraftRequest,
+  type CreateCheckinFormTemplateRequest,
+  type CreateCheckinFormTemplateVersionRequest,
+  type ForkCheckinFormTemplateRequest,
   type CreateInterventionRequest,
   type CreateInvitationRequest,
   type CreateInvitationResponse,
@@ -151,6 +190,7 @@ import {
   type CreateFoodLibraryItemRequest,
   type CreateProgressEntryRequest,
   type CreateTrainerNoteRequest,
+  type DeleteTrainerNoteResponse,
   type CreateUploadTargetRequest,
   type CreateUploadTargetResponse,
   type CreateWebSessionRequest,
@@ -162,6 +202,9 @@ import {
   type Exception,
   type ExceptionDetail,
   type ExceptionListResponse,
+  type AdherenceState,
+  type ClientDirectoryListResponse,
+  type ExerciseDifficulty,
   type ExerciseLibraryItem,
   type ExerciseLibraryListResponse,
   type FoodLibraryItem,
@@ -180,6 +223,8 @@ import {
   type CreateOnboardingFormTemplateRequest,
   type CreateOnboardingFormTemplateVersionRequest,
   type ForkOnboardingFormTemplateRequest,
+  type ForkPlanTemplateRequest,
+  type OnboardingStatus,
   type OnboardingFormResponse,
   type OnboardingFormTemplateDetail,
   type OnboardingFormTemplateListResponse,
@@ -196,6 +241,8 @@ import {
   type MeasurementListResponse,
   type MediaAsset,
   type MeResponse,
+  type AcknowledgePlanConsistencyRequest,
+  type PlanConsistencyResponse,
   type PlanListResponse,
   type PlanTemplate,
   type PlanTemplateListResponse,
@@ -212,6 +259,8 @@ import {
   type SaveConfigurationDraftRequest,
   type SaveOnboardingDraftRequest,
   type SaveSubscriptionRequest,
+  type AssignPreferredCheckinFormRequest,
+  type AssignPreferredCheckinFormResponse,
   type ScheduleCheckinRequest,
   type ScheduleCheckinResponse,
   type ScheduleNextCheckinRequest,
@@ -224,13 +273,19 @@ import {
   type SyncPushRequest,
   type SyncPushResponse,
   type EvaluateRemindersResponse,
+  type NudgeActivityRequest,
+  type NudgeActivityResponse,
   type NotificationListResponse,
   type NotificationPreferences,
   type RegisterDeviceTokenRequest,
   type RegisterDeviceTokenResponse,
+  type ReminderRulesResponse,
+  type UpdateReminderRulesRequest,
   type UpdateNotificationPreferencesRequest,
   type RealtimeEvent,
   type RealtimeSubscriptionTarget,
+  type TraineeProfile,
+  type UpdateTraineeProfileRequest,
   type TrainerCheckinInboxResponse,
   type TrainerNote,
   type TrainerNoteListResponse,
@@ -280,6 +335,8 @@ export class FitBudApiClient {
   private readonly getIdempotencyKey?: ApiClientOptions["getIdempotencyKey"];
   private readonly getSelectedRole?: ApiClientOptions["getSelectedRole"];
   private readonly fetchImpl: typeof fetch;
+  private configCache: { fetchedAt: number; value: import("@fitbud/contracts").ConfigResponse } | null =
+    null;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -293,6 +350,21 @@ export class FitBudApiClient {
 
   async health(): Promise<HealthResponse> {
     return this.request("GET", "/health", healthResponseSchema);
+  }
+
+  /** Public feature flags; cached for 1 hour unless `force` is true. */
+  async getConfig(force = false): Promise<import("@fitbud/contracts").ConfigResponse> {
+    const ttlMs = 60 * 60 * 1000;
+    if (
+      !force &&
+      this.configCache &&
+      Date.now() - this.configCache.fetchedAt < ttlMs
+    ) {
+      return this.configCache.value;
+    }
+    const value = await this.request("GET", "/config", configResponseSchema);
+    this.configCache = { fetchedAt: Date.now(), value };
+    return value;
   }
 
   async me(): Promise<MeResponse> {
@@ -313,6 +385,20 @@ export class FitBudApiClient {
 
   async endWebSession(): Promise<void> {
     await this.request("DELETE", "/auth/session", undefined, { auth: true });
+  }
+
+  async startOtp(body: AuthOtpStartRequest): Promise<AuthOtpStartResponse> {
+    const parsed = authOtpStartRequestSchema.parse(body);
+    return this.request("POST", "/auth/otp/start", authOtpStartResponseSchema, {
+      body: parsed,
+    });
+  }
+
+  async verifyOtp(body: AuthOtpVerifyRequest): Promise<AuthOtpVerifyResponse> {
+    const parsed = authOtpVerifyRequestSchema.parse(body);
+    return this.request("POST", "/auth/otp/verify", authOtpVerifyResponseSchema, {
+      body: parsed,
+    });
   }
 
   async createInvitation(
@@ -353,16 +439,64 @@ export class FitBudApiClient {
     );
   }
 
-  async acceptInvitation(
-    body: AcceptInvitationRequest,
-  ): Promise<AcceptInvitationResponse> {
-    const parsed = acceptInvitationRequestSchema.parse(body);
+  async reissueInvitation(
+    invitationId: string,
+  ): Promise<CreateInvitationResponse> {
     return this.request(
       "POST",
-      "/invitations/accept",
-      acceptInvitationResponseSchema,
-      { auth: true, body: parsed },
+      `/invitations/${encodeURIComponent(invitationId)}/reissue`,
+      createInvitationResponseSchema,
+      { auth: true },
     );
+  }
+
+  async revokeInvitation(invitationId: string): Promise<Invitation> {
+    return this.request(
+      "POST",
+      `/invitations/${encodeURIComponent(invitationId)}/revoke`,
+      invitationSchema,
+      { auth: true },
+    );
+  }
+
+  async cancelReactivation(relationshipId: string): Promise<{ status: "cancelled" }> {
+    return this.request(
+      "POST",
+      `/relationships/${encodeURIComponent(relationshipId)}/reactivate/cancel`,
+      z.object({ status: z.literal("cancelled") }),
+      { auth: true },
+    );
+  }
+
+  async confirmReactivation(
+    relationshipId: string,
+  ): Promise<CoachingRelationship> {
+    return this.request(
+      "POST",
+      `/relationships/${encodeURIComponent(relationshipId)}/reactivate/confirm`,
+      coachingRelationshipSchema,
+      { auth: true },
+    );
+  }
+
+  async acceptInvitation(
+    body: AcceptInvitationRequest,
+  ): Promise<AcceptInvitationResponse | AcceptInvitationWithTokenResponse> {
+    const parsed = acceptInvitationRequestSchema.parse(body);
+    // New accounts accept with password + otpProof (no session yet).
+    // Returning trainees accept while authenticated.
+    const needsSession = !(parsed.password && parsed.otpProof);
+    const unionSchema = {
+      parse: (value: unknown) => {
+        const withToken = acceptInvitationWithTokenResponseSchema.safeParse(value);
+        if (withToken.success) return withToken.data;
+        return acceptInvitationResponseSchema.parse(value);
+      },
+    };
+    return this.request("POST", "/invitations/accept", unionSchema, {
+      auth: needsSession,
+      body: parsed,
+    });
   }
 
   async listRelationships(query?: {
@@ -526,12 +660,22 @@ export class FitBudApiClient {
 
   async getCoachingConfiguration(
     relationshipId: string,
-  ): Promise<CoachingConfiguration> {
+  ): Promise<CoachingConfiguration>;
+  async getCoachingConfiguration(
+    relationshipId: string,
+    options: { notFoundAsNull: true },
+  ): Promise<CoachingConfiguration | null>;
+  async getCoachingConfiguration(
+    relationshipId: string,
+    options?: { notFoundAsNull?: boolean },
+  ): Promise<CoachingConfiguration | null> {
     return this.request(
       "GET",
       `/configurations/relationships/${relationshipId}`,
-      coachingConfigurationSchema,
-      { auth: true },
+      options?.notFoundAsNull
+        ? coachingConfigurationSchema.nullable()
+        : coachingConfigurationSchema,
+      { auth: true, notFoundAsNull: options?.notFoundAsNull === true },
     );
   }
 
@@ -545,6 +689,20 @@ export class FitBudApiClient {
       `/configurations/relationships/${relationshipId}/draft`,
       coachingConfigurationSchema,
       { auth: true, body: parsed },
+    );
+  }
+
+  async copyConfigurationDraft(
+    relationshipId: string,
+    body: CopyConfigurationDraftRequest,
+    idempotencyKey: string,
+  ): Promise<CoachingConfiguration> {
+    const parsed = copyConfigurationDraftRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/configurations/relationships/${relationshipId}/copy`,
+      coachingConfigurationSchema,
+      { auth: true, body: parsed, idempotencyKey },
     );
   }
 
@@ -576,12 +734,22 @@ export class FitBudApiClient {
     );
   }
 
-  async getSubscription(relationshipId: string): Promise<Subscription> {
+  async getSubscription(relationshipId: string): Promise<Subscription>;
+  async getSubscription(
+    relationshipId: string,
+    options: { notFoundAsNull: true },
+  ): Promise<Subscription | null>;
+  async getSubscription(
+    relationshipId: string,
+    options?: { notFoundAsNull?: boolean },
+  ): Promise<Subscription | null> {
     return this.request(
       "GET",
       `/relationships/${relationshipId}/subscription`,
-      subscriptionSchema,
-      { auth: true },
+      options?.notFoundAsNull
+        ? subscriptionSchema.nullable()
+        : subscriptionSchema,
+      { auth: true, notFoundAsNull: options?.notFoundAsNull === true },
     );
   }
 
@@ -704,6 +872,15 @@ export class FitBudApiClient {
     );
   }
 
+  async discardPlanDraft(planId: string, versionId: string): Promise<void> {
+    await this.request(
+      "DELETE",
+      `/plans/${planId}/versions/${versionId}`,
+      undefined,
+      { auth: true },
+    );
+  }
+
   async previewPlanVersion(
     planId: string,
     versionId: string,
@@ -728,6 +905,32 @@ export class FitBudApiClient {
       `/plans/${planId}/versions/${versionId}/publish`,
       planVersionSchema,
       { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async getPlanConsistency(
+    planId: string,
+    versionId: string,
+  ): Promise<PlanConsistencyResponse> {
+    return this.request(
+      "GET",
+      `/plans/${planId}/versions/${versionId}/consistency`,
+      planConsistencyResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async acknowledgePlanConsistency(
+    planId: string,
+    versionId: string,
+    body: AcknowledgePlanConsistencyRequest,
+  ): Promise<PlanConsistencyResponse> {
+    const parsed = acknowledgePlanConsistencyRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/plans/${planId}/versions/${versionId}/consistency-acknowledgement`,
+      planConsistencyResponseSchema,
+      { auth: true, body: parsed },
     );
   }
 
@@ -762,10 +965,16 @@ export class FitBudApiClient {
   async listPlanTemplates(query?: {
     cursor?: string;
     limit?: number;
+    scope?: "all" | "bases" | "mine";
+    templateType?: string;
+    q?: string;
   }): Promise<PlanTemplateListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.scope) params.set("scope", query.scope);
+    if (query?.templateType) params.set("templateType", query.templateType);
+    if (query?.q) params.set("q", query.q);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
@@ -822,19 +1031,85 @@ export class FitBudApiClient {
     );
   }
 
+  async forkPlanTemplate(
+    templateId: string,
+    body: ForkPlanTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<PlanTemplate> {
+    const parsed = forkPlanTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/templates/${templateId}/fork`,
+      planTemplateSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
   async deletePlanTemplate(templateId: string): Promise<void> {
     await this.request("DELETE", `/templates/${templateId}`, undefined, {
       auth: true,
     });
   }
 
+  async listClients(query?: {
+    q?: string;
+    status?: OnboardingStatus[];
+    adherenceState?: AdherenceState[];
+    goal?: string[];
+    renewal?: Array<"upcoming" | "due" | "expired">;
+    cursor?: string;
+    limit?: number;
+  }): Promise<ClientDirectoryListResponse> {
+    const params = new URLSearchParams();
+    if (query?.q) params.set("q", query.q);
+    for (const status of query?.status ?? []) params.append("status", status);
+    for (const state of query?.adherenceState ?? []) {
+      params.append("adherenceState", state);
+    }
+    for (const goal of query?.goal ?? []) params.append("goal", goal);
+    for (const renewal of query?.renewal ?? []) params.append("renewal", renewal);
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request(
+      "GET",
+      `/clients${suffix}`,
+      clientDirectoryListResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async getTraineeProfile(): Promise<TraineeProfile> {
+    return this.request("GET", "/me/trainee-profile", traineeProfileSchema, {
+      auth: true,
+    });
+  }
+
+  async updateTraineeProfile(
+    body: UpdateTraineeProfileRequest,
+  ): Promise<TraineeProfile> {
+    const parsed = updateTraineeProfileRequestSchema.parse(body);
+    return this.request("PUT", "/me/trainee-profile", traineeProfileSchema, {
+      auth: true,
+      body: parsed,
+    });
+  }
+
   async listExerciseLibrary(query?: {
     cursor?: string;
     limit?: number;
+    q?: string;
+    muscleGroup?: string;
+    equipment?: string;
+    difficulty?: ExerciseDifficulty;
   }): Promise<ExerciseLibraryListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.q) params.set("q", query.q);
+    if (query?.muscleGroup) params.set("muscleGroup", query.muscleGroup);
+    if (query?.equipment) params.set("equipment", query.equipment);
+    if (query?.difficulty) params.set("difficulty", query.difficulty);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
@@ -881,10 +1156,12 @@ export class FitBudApiClient {
   async listFoodLibrary(query?: {
     cursor?: string;
     limit?: number;
+    q?: string;
   }): Promise<FoodLibraryListResponse> {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.q) params.set("q", query.q);
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
@@ -1168,11 +1445,18 @@ export class FitBudApiClient {
 
   async listCheckins(
     relationshipId: string,
-    query?: { fromDate?: string; toDate?: string },
+    query?: {
+      fromDate?: string;
+      toDate?: string;
+      cursor?: string;
+      limit?: number;
+    },
   ): Promise<CheckinListResponse> {
     const params = new URLSearchParams();
     if (query?.fromDate) params.set("fromDate", query.fromDate);
     if (query?.toDate) params.set("toDate", query.toDate);
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
     const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
@@ -1231,6 +1515,19 @@ export class FitBudApiClient {
     );
   }
 
+  async assignPreferredCheckinForm(
+    relationshipId: string,
+    body: AssignPreferredCheckinFormRequest,
+  ): Promise<AssignPreferredCheckinFormResponse> {
+    const parsed = assignPreferredCheckinFormRequestSchema.parse(body);
+    return this.request(
+      "PUT",
+      `/checkins/relationships/${relationshipId}/preferred-form`,
+      assignPreferredCheckinFormResponseSchema,
+      { auth: true, body: parsed },
+    );
+  }
+
   async getCheckin(checkinId: string): Promise<Checkin> {
     return this.request("GET", `/checkins/${checkinId}`, checkinSchema, {
       auth: true,
@@ -1273,6 +1570,85 @@ export class FitBudApiClient {
     );
   }
 
+  async getCheckinForm(checkinId: string): Promise<CheckinFormVersion> {
+    return this.request(
+      "GET",
+      `/checkins/${checkinId}/form`,
+      checkinFormVersionSchema,
+      { auth: true },
+    );
+  }
+
+  async listCheckinFormTemplates(query?: {
+    cursor?: string;
+    limit?: number;
+    scope?: "all" | "bases" | "mine";
+  }): Promise<CheckinFormTemplateListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.scope) params.set("scope", query.scope);
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request(
+      "GET",
+      `/checkins/form-templates${suffix}`,
+      checkinFormTemplateListResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async getCheckinFormTemplate(
+    templateId: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    return this.request(
+      "GET",
+      `/checkins/form-templates/${templateId}`,
+      checkinFormTemplateDetailSchema,
+      { auth: true },
+    );
+  }
+
+  async createCheckinFormTemplate(
+    body: CreateCheckinFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    const parsed = createCheckinFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      "/checkins/form-templates",
+      checkinFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async forkCheckinFormTemplate(
+    templateId: string,
+    body: ForkCheckinFormTemplateRequest,
+    idempotencyKey: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    const parsed = forkCheckinFormTemplateRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/checkins/form-templates/${templateId}/fork`,
+      checkinFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async createCheckinFormTemplateVersion(
+    templateId: string,
+    body: CreateCheckinFormTemplateVersionRequest,
+    idempotencyKey: string,
+  ): Promise<CheckinFormTemplateDetail> {
+    const parsed = createCheckinFormTemplateVersionRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/checkins/form-templates/${templateId}/versions`,
+      checkinFormTemplateDetailSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
   async recordCheckinReview(
     checkinId: string,
     body: RecordCheckinReviewRequest,
@@ -1309,6 +1685,18 @@ export class FitBudApiClient {
       `/checkins/relationships/${relationshipId}/notes`,
       trainerNoteSchema,
       { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  async deleteTrainerNote(
+    relationshipId: string,
+    noteId: string,
+  ): Promise<DeleteTrainerNoteResponse> {
+    return this.request(
+      "DELETE",
+      `/checkins/relationships/${relationshipId}/notes/${noteId}`,
+      deleteTrainerNoteResponseSchema,
+      { auth: true },
     );
   }
 
@@ -1486,10 +1874,15 @@ export class FitBudApiClient {
 
   async listMeasurements(
     relationshipId: string,
+    query?: { cursor?: string; limit?: number },
   ): Promise<MeasurementListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
-      `/progress/relationships/${relationshipId}/measurements`,
+      `/progress/relationships/${relationshipId}/measurements${suffix}`,
       measurementListResponseSchema,
       { auth: true },
     );
@@ -1511,10 +1904,15 @@ export class FitBudApiClient {
 
   async listProgressEntries(
     relationshipId: string,
+    query?: { cursor?: string; limit?: number },
   ): Promise<ProgressEntryListResponse> {
+    const params = new URLSearchParams();
+    if (query?.cursor) params.set("cursor", query.cursor);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
     return this.request(
       "GET",
-      `/progress/relationships/${relationshipId}/entries`,
+      `/progress/relationships/${relationshipId}/entries${suffix}`,
       progressEntryListResponseSchema,
       { auth: true },
     );
@@ -1707,6 +2105,43 @@ export class FitBudApiClient {
     );
   }
 
+  async getReminderRules(
+    relationshipId: string,
+  ): Promise<ReminderRulesResponse> {
+    return this.request(
+      "GET",
+      `/notifications/relationships/${relationshipId}/reminder-rules`,
+      reminderRulesResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async saveReminderRules(
+    relationshipId: string,
+    body: UpdateReminderRulesRequest,
+  ): Promise<ReminderRulesResponse> {
+    const parsed = updateReminderRulesRequestSchema.parse(body);
+    return this.request(
+      "PUT",
+      `/notifications/relationships/${relationshipId}/reminder-rules`,
+      reminderRulesResponseSchema,
+      { auth: true, body: parsed },
+    );
+  }
+
+  async nudgeActivity(
+    relationshipId: string,
+    body: NudgeActivityRequest,
+  ): Promise<NudgeActivityResponse> {
+    const parsed = nudgeActivityRequestSchema.parse(body);
+    return this.request(
+      "POST",
+      `/notifications/relationships/${relationshipId}/nudges`,
+      nudgeActivityResponseSchema,
+      { auth: true, body: parsed },
+    );
+  }
+
   /**
    * Fetch authorized realtime subscription metadata.
    * Events are refetch/sync hints — REST and sync remain authoritative.
@@ -1809,7 +2244,7 @@ export class FitBudApiClient {
     };
   }
 
-  private async request<T>(
+  async request<T>(
     method: string,
     path: string,
     schema: { parse: (value: unknown) => T } | undefined,
@@ -1817,6 +2252,8 @@ export class FitBudApiClient {
       auth?: boolean;
       body?: unknown;
       idempotencyKey?: string;
+      /** When true, HTTP 404 returns null instead of throwing (empty resource). */
+      notFoundAsNull?: boolean;
     } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
@@ -1855,6 +2292,9 @@ export class FitBudApiClient {
     const json: unknown = await response.json().catch(() => null);
 
     if (!response.ok) {
+      if (options.notFoundAsNull && response.status === 404) {
+        return null as T;
+      }
       const parsedError = apiErrorBodySchema.safeParse(json);
       if (parsedError.success) {
         throw new ApiClientError({
@@ -1881,3 +2321,6 @@ export class FitBudApiClient {
     return schema.parse(envelope.data);
   }
 }
+
+import { installStage1ClientMethods } from "./stage1-augment.js";
+installStage1ClientMethods(FitBudApiClient);

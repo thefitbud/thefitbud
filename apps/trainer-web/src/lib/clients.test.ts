@@ -1,59 +1,200 @@
 import { describe, expect, it } from "vitest";
-import type { CoachingRelationship, Invitation } from "@fitbud/contracts";
-import { buildClientDirectoryRows } from "./clients";
+import type { ClientDirectoryItem } from "@fitbud/contracts";
+import {
+  adherenceStateLabel,
+  checkinStatusLabel,
+  clientDirectoryFilterKey,
+  clientDirectoryFiltersFromKey,
+  clientDirectoryListQuery,
+  directoryWorkspaceHref,
+  distinctGoalShorts,
+  emptyClientDirectoryFilters,
+  hasClientDirectoryFilters,
+  onboardingStatusLabel,
+  pageClientDirectory,
+  parseClientDirectoryFilters,
+  primaryActionForStatus,
+  toggleClientDirectoryValue,
+  writeClientDirectoryFilters,
+  CLIENT_STATUS_FILTERS,
+  type ClientDirectoryFilters,
+} from "./clients";
 
-const baseInvitation: Invitation = {
-  id: "11111111-1111-4111-8111-111111111111",
-  trainerUserId: "22222222-2222-4222-8222-222222222222",
-  recipientEmail: "alex@example.com",
-  recipientDisplayName: "Alex",
-  recipientWhatsappE164: null,
-  status: "pending",
-  expiresAt: "2030-01-01T00:00:00.000Z",
-  acceptedUserId: null,
-  coachingRelationshipId: null,
-  onboardingFormTemplateVersionId: "66666666-6666-4666-8666-666666666666",
-  onboardingStatus: "invited",
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-02T00:00:00.000Z",
-};
+const relationshipId = "33333333-3333-4333-8333-333333333333";
+const invitationId = "06b54e81-016c-4220-a9a8-31195324669b";
 
-const baseRelationship: CoachingRelationship = {
-  id: "33333333-3333-4333-8333-333333333333",
-  trainerUserId: "22222222-2222-4222-8222-222222222222",
-  traineeUserId: "44444444-4444-4444-8444-444444444444",
-  status: "active",
-  onboardingStatus: "onboarding_submitted",
-  invitationId: "55555555-5555-4555-8555-555555555555",
-  startedAt: "2026-01-01T00:00:00.000Z",
-  endedAt: null,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-03T00:00:00.000Z",
-};
+function directoryItem(
+  overrides: Partial<ClientDirectoryItem> = {},
+): ClientDirectoryItem {
+  return {
+    relationshipId,
+    invitationId: null,
+    traineeDisplayName: "Priya Sharma",
+    status: "active",
+    goalShort: "Build strength",
+    nextCheckin: null,
+    effectivePlan: null,
+    adherenceState: "on_track",
+    renewalState: null,
+    renewsOn: null,
+    updatedAt: "2026-04-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
 
-describe("buildClientDirectoryRows", () => {
-  it("keeps pending invitations and joins names onto relationships", () => {
-    const acceptedInvite: Invitation = {
-      ...baseInvitation,
-      id: "55555555-5555-4555-8555-555555555555",
-      status: "accepted",
-      recipientDisplayName: "Jordan",
-      recipientEmail: "jordan@example.com",
-      coachingRelationshipId: baseRelationship.id,
-      onboardingStatus: "onboarding_submitted",
-      updatedAt: "2026-01-03T00:00:00.000Z",
-    };
+describe("client directory filters", () => {
+  it("keeps repeated status, adherence, and goal values and drops unknown ones", () => {
+    const params = new URLSearchParams();
+    params.set("q", "priya");
+    params.append("status", "active");
+    params.append("status", "not-a-status");
+    params.append("status", "invited");
+    params.append("status", "active");
+    params.append("adherenceState", "needs_attention");
+    params.append("adherenceState", "score");
+    params.append("goal", " Build strength ");
+    params.append("goal", "Build strength");
+    params.append("goal", "");
+    params.set("cursor", "stale-page");
+    params.set("view", "roster");
 
-    const roster = buildClientDirectoryRows({
-      invitations: [baseInvitation, acceptedInvite],
-      relationships: [baseRelationship],
+    const filters = parseClientDirectoryFilters(params);
+
+    expect(filters).toEqual({
+      q: "priya",
+      status: ["invited", "active"],
+      adherenceState: ["needs_attention"],
+      goal: ["Build strength"],
+      renewal: [],
+      segment: "current",
     });
+    expect(hasClientDirectoryFilters(filters)).toBe(true);
+    expect(hasClientDirectoryFilters(emptyClientDirectoryFilters())).toBe(
+      false,
+    );
 
-    expect(roster).toHaveLength(2);
-    expect(roster[0]?.name).toBe("Jordan");
-    expect(roster[0]?.relationshipId).toBe(baseRelationship.id);
-    expect(roster[1]?.onboardingStatus).toBe("invited");
-    expect(roster[1]?.name).toBe("Alex");
-    expect(roster[1]?.recipientWhatsappE164).toBeNull();
+    const written = writeClientDirectoryFilters(params, filters);
+    expect(written.get("q")).toBe("priya");
+    expect(written.getAll("status")).toEqual(["invited", "active"]);
+    expect(written.getAll("adherenceState")).toEqual(["needs_attention"]);
+    expect(written.getAll("goal")).toEqual(["Build strength"]);
+    expect(written.has("cursor")).toBe(false);
+    expect(written.get("view")).toBe("roster");
+  });
+
+  it("maps status=ended to the Ended segment", () => {
+    const params = new URLSearchParams("status=ended");
+    const filters = parseClientDirectoryFilters(params);
+    expect(filters.segment).toBe("ended");
+    expect(filters.status).toEqual(["ended"]);
+    const written = writeClientDirectoryFilters(new URLSearchParams(), filters);
+    expect(written.get("segment")).toBe("ended");
+    expect(written.getAll("status")).toEqual(["ended"]);
+  });
+
+  it("current list query never includes ended", () => {
+    const query = clientDirectoryListQuery(emptyClientDirectoryFilters(), {
+      limit: 30,
+    });
+    expect(query.status).toEqual([...CLIENT_STATUS_FILTERS]);
+    expect(query.status?.includes("ended")).toBe(false);
+  });
+
+  it("round-trips a filter key and omits the cursor when a filter page starts over", () => {
+    const filters: ClientDirectoryFilters = {
+      q: "  ada ",
+      status: ["active"],
+      adherenceState: ["no_recent_data"],
+      goal: ["Fat loss"],
+      renewal: ["due"],
+      segment: "current",
+    };
+    const key = clientDirectoryFilterKey(filters);
+    expect(clientDirectoryFiltersFromKey(key)).toEqual(filters);
+    expect(clientDirectoryFiltersFromKey("{")).toEqual(
+      emptyClientDirectoryFilters(),
+    );
+
+    expect(
+      clientDirectoryListQuery(filters, { cursor: null, limit: 30 }),
+    ).toEqual({
+      q: "ada",
+      status: ["active"],
+      adherenceState: ["no_recent_data"],
+      goal: ["Fat loss"],
+      renewal: ["due"],
+      limit: 30,
+    });
+  });
+
+  it("labels and primary actions match TW-06", () => {
+    expect(onboardingStatusLabel("invited")).toMatch(/invited/i);
+    expect(adherenceStateLabel("needs_attention")).toMatch(/attention/i);
+    expect(checkinStatusLabel("submitted")).toMatch(/submitted/i);
+    expect(primaryActionForStatus("invited", invitationId)).toEqual({
+      label: "Resend invite",
+      href: `/invitations/${invitationId}`,
+    });
+    expect(primaryActionForStatus("active").label).toBe("Open");
+    expect(primaryActionForStatus("coaching_ready").label).toBe("Set up plan");
+    expect(primaryActionForStatus("onboarding_submitted").label).toBe(
+      "Review intake",
+    );
+  });
+
+  it("invited rows open invitation detail, not a workspace", () => {
+    expect(
+      directoryWorkspaceHref({
+        relationshipId: null,
+        invitationId,
+        status: "invited",
+      }),
+    ).toBe(`/invitations/${invitationId}`);
+    expect(
+      directoryWorkspaceHref({
+        relationshipId,
+        invitationId: null,
+        status: "active",
+      }),
+    ).toBe(`/clients/${relationshipId}/overview`);
+  });
+
+  it("distinct goals ignore blanks", () => {
+    expect(
+      distinctGoalShorts([
+        { goalShort: "Fat loss" },
+        { goalShort: null },
+        { goalShort: "  " },
+        { goalShort: "Fat loss" },
+        { goalShort: "Strength" },
+      ]),
+    ).toEqual(["Fat loss", "Strength"]);
+  });
+
+  it("toggle keeps canonical order", () => {
+    expect(
+      toggleClientDirectoryValue(CLIENT_STATUS_FILTERS, ["active"], "invited"),
+    ).toEqual(["invited", "active"]);
+  });
+
+  it("pages the directory until exhausted", async () => {
+    const pages = [
+      {
+        items: [directoryItem({ traineeDisplayName: "A" })],
+        nextCursor: "c1",
+      },
+      {
+        items: [directoryItem({ traineeDisplayName: "B" })],
+        nextCursor: null,
+      },
+    ];
+    let calls = 0;
+    const items = await pageClientDirectory(async () => {
+      const page = pages[calls]!;
+      calls += 1;
+      return page;
+    });
+    expect(items.map((i) => i.traineeDisplayName)).toEqual(["A", "B"]);
+    expect(calls).toBe(2);
   });
 });

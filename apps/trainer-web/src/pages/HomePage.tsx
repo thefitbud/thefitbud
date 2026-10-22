@@ -1,46 +1,124 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode, type SVGProps } from "react";
-import { Link } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import {
+  CalendarDays,
+  ClipboardCheck,
+  Info,
+  OctagonAlert,
+  Sun,
+} from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
+import {
+  formatCivilDate,
+  formatLocalDate,
+  formatRelative,
+  labelFor,
+} from "@fitbud/core";
 import type {
-  AttentionItem,
-  CoachingRelationship,
-  ExceptionType,
-  Invitation,
+  AttentionGroupsResponse,
+  CoachAsk,
+  ReengagementCandidatesResponse,
+  SubscriptionAttentionItem,
   TrainerCheckinInboxItem,
 } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
+import { Button } from "../components/Button";
+import { ExceptionDrawer } from "../components/ExceptionDrawer";
+import { CoachAskDrawer } from "../components/CoachAskDrawer";
+import { OverflowMenu } from "../components/OverflowMenu";
+import { useOnlineStatus } from "../components/OfflineBanner";
+import { StatusChip } from "../components/StatusChip";
+import {
+  ErrorState,
+  errorKindFromFailure,
+  type ErrorKind,
+} from "../components/StatePanels";
 import { apiClient } from "../lib/api";
+import { createIdempotencyKey } from "../lib/idempotency";
+import { stage1Api } from "../lib/stage1-api";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 
-type HomeFilter = "all" | "attention" | "checkins";
-
-const ACTIONABLE_CHECKIN_STATUSES = new Set(["due", "overdue", "submitted"]);
-
-const EXCEPTION_TYPE_LABEL: Record<ExceptionType, string> = {
-  missed_workout: "Missed workout",
-  overdue_meal: "Meal gap",
-  overdue_checkin: "Check-in",
+type AttentionGroup = AttentionGroupsResponse["groups"][number];
+type AttentionItem = AttentionGroup["items"][number];
+type ReengagementCandidate = ReengagementCandidatesResponse["items"][number];
+type ActivityEvent = {
+  id: string;
+  traineeDisplayName: string | null;
+  summary: string;
+  occurredAt: string;
+  traineeLocalTime: string | null;
 };
 
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiClientError ? err.message : fallback;
+const ATTENTION_CAP = 8;
+const SECTION_CAP = 5;
+
+type FilterKey = "all" | "attention" | "checkins" | "renewals";
+
+function severityRank(severity: "critical" | "attention"): number {
+  return severity === "critical" ? 0 : 1;
 }
 
-function trainerName(email: string | null): string {
-  const local = email?.split("@")[0]?.trim();
-  if (!local) return "Trainer";
-  return local
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function pickPrimaryItem(group: AttentionGroup): AttentionItem | undefined {
+  const open = group.items.filter(
+    (i) => i.status === "detected" || i.status === "active",
+  );
+  const pool = open.length > 0 ? open : group.items;
+  return [...pool].sort((a, b) => {
+    const sev = severityRank(a.severity) - severityRank(b.severity);
+    if (sev !== 0) return sev;
+    return b.ageMinutes - a.ageMinutes;
+  })[0];
 }
 
-function greeting(now: Date): string {
-  const hour = now.getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+function oldestOpenAge(group: AttentionGroup): number {
+  const open = group.items.filter(
+    (i) => i.status === "detected" || i.status === "active",
+  );
+  if (open.length === 0) return group.items[0]?.ageMinutes ?? 0;
+  return Math.max(...open.map((i) => i.ageMinutes));
+}
+
+/** Short ages for Home rows: "since 1 d", "20 h", "12 min". */
+function formatAttentionAge(ageMinutes: number): string {
+  if (ageMinutes < 60) {
+    const mins = Math.max(0, ageMinutes);
+    return mins === 1 ? "since 1 min" : `since ${mins} min`;
+  }
+  if (ageMinutes < 24 * 60) {
+    const hours = Math.round(ageMinutes / 60);
+    return hours === 1 ? "1 h" : `${hours} h`;
+  }
+  const days = Math.round(ageMinutes / (24 * 60));
+  return days === 1 ? "since 1 d" : `since ${days} d`;
+}
+
+function weekdayShortFromCivil(localDate: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
+  if (!match) return null;
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-GB", {
+    weekday: "short",
+    timeZone: "UTC",
+  });
+}
+
+function localDateFromDetails(
+  details: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!details) return null;
+  const value = details.localDate;
+  return typeof value === "string" ? value : null;
 }
 
 function initials(name: string): string {
@@ -48,653 +126,1201 @@ function initials(name: string): string {
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
+    .map((p) => p.charAt(0).toUpperCase())
     .join("");
 }
 
-function statusLabel(status: string): string {
-  return status
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function avatarClass(name: string): string {
+  const n = name.charCodeAt(0) + (name.charCodeAt(1) || 0);
+  return `home-av c${(n % 8) + 1}`;
 }
 
-function formatLocalDate(localDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return localDate;
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
-  );
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(date);
-}
-
-function groupAttentionByClient(items: AttentionItem[]): Array<{
-  item: AttentionItem;
-  otherCount: number;
-}> {
-  const groups = new Map<string, AttentionItem[]>();
-  const order: string[] = [];
-  for (const item of items) {
-    const key = item.coachingRelationshipId;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.push(item);
-    } else {
-      groups.set(key, [item]);
-      order.push(key);
-    }
-  }
-  return order.flatMap((key) => {
-    const group = groups.get(key) ?? [];
-    const item = group[0];
-    if (!item) return [];
-    return [
-      {
-        item,
-        otherCount: Math.max(0, group.length - 1),
-      },
-    ];
-  });
-}
-
-function checkinWorkTitle(status: string): string {
-  if (status === "submitted") return "Check-in Awaiting Review";
-  if (status === "due") return "Check-in Due";
-  if (status === "overdue") return "Check-in Overdue";
-  return `Check-in ${statusLabel(status)}`;
-}
-
-function SummaryText({
-  text,
-  omitDetails = false,
-}: {
+function issueLine(group: AttentionGroup, primary: AttentionItem): {
   text: string;
-  omitDetails?: boolean;
-}) {
-  const idx = text.indexOf(":");
-  if (omitDetails && idx > 0) {
-    return <strong>{text.slice(0, idx)}</strong>;
-  }
-  if (idx <= 0 || idx > 56) return text;
-  return (
-    <>
-      <strong>{text.slice(0, idx + 1)}</strong>
-      {text.slice(idx + 1)}
-    </>
+  more: number;
+  title: string;
+} {
+  const open = group.items.filter(
+    (i) => i.status === "detected" || i.status === "active",
   );
+  const items = open.length > 0 ? open : group.items;
+  const workouts = items.filter(
+    (i) => i.type === "missed_workout" || i.type === "skipped_workout",
+  );
+  const meals = items.filter(
+    (i) =>
+      i.type === "overdue_meal" ||
+      i.type === "skipped_meal" ||
+      i.type === "meal_logged_later",
+  );
+  const sameType = items.filter((i) => i.type === primary.type);
+  const related =
+    primary.type === "missed_workout" || primary.type === "skipped_workout"
+      ? workouts
+      : primary.type === "overdue_meal" ||
+          primary.type === "skipped_meal" ||
+          primary.type === "meal_logged_later"
+        ? meals
+        : sameType;
+  const weekdays = related
+    .map((i) => localDateFromDetails(i.details))
+    .filter((d): d is string => Boolean(d))
+    .map((d) => weekdayShortFromCivil(d))
+    .filter((d): d is string => Boolean(d));
+  const uniqueWeekdays = [...new Set(weekdays)];
+
+  let text =
+    primary.summary?.trim() || labelFor("exception_type", primary.type);
+
+  const dayList =
+    uniqueWeekdays.length > 0 ? uniqueWeekdays.join(", ") : null;
+  if (
+    related.length >= 2 &&
+    (primary.type === "missed_workout" || primary.type === "skipped_workout")
+  ) {
+    text = dayList
+      ? `Missed ${related.length} workouts (${dayList})`
+      : `Missed ${related.length} workouts`;
+  } else if (
+    related.length >= 2 &&
+    (primary.type === "overdue_meal" ||
+      primary.type === "skipped_meal" ||
+      primary.type === "meal_logged_later")
+  ) {
+    text = dayList
+      ? `Missed ${related.length} meals (${dayList})`
+      : `Missed ${related.length} meals`;
+  } else if (dayList && !/\([A-Z][a-z]{2}/.test(text)) {
+    text = `${text} (${dayList})`;
+  }
+
+  const more = Math.max(0, items.length - 1);
+  const title = items
+    .map((i) => i.summary || labelFor("exception_type", i.type))
+    .join("; ");
+  return { text, more, title };
+}
+
+function askItemLabel(ask: CoachAsk): string {
+  return (
+    ask.itemLabel?.trim() ||
+    labelFor("coach_ask_item_type", ask.itemType) ||
+    "an item"
+  );
+}
+
+function askDateLabel(ask: CoachAsk): string | null {
+  if (ask.itemDate) return formatCivilDate(ask.itemDate);
+  return null;
 }
 
 export function HomePage() {
-  const { email } = useAuth();
-  const [items, setItems] = useState<AttentionItem[]>([]);
+  const { me } = useAuth();
+  const online = useOnlineStatus();
+  const timeZone =
+    me?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone ??
+    "UTC";
+  const todayLabel = formatCivilDate(formatLocalDate(new Date(), timeZone));
+  const [params, setParams] = useSearchParams();
+  const drawerExceptionId = params.get("exception");
+  const drawerAskId = params.get("ask");
+  const showAllParam = params.get("all") === "1";
+  const groupParam = params.get("group");
+
+  const [groups, setGroups] = useState<AttentionGroup[]>([]);
+  const [coachAsks, setCoachAsks] = useState<CoachAsk[]>([]);
+  const [reengage, setReengage] = useState<ReengagementCandidate[]>([]);
+  const [renewals, setRenewals] = useState<SubscriptionAttentionItem[]>([]);
   const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
-  const [relationships, setRelationships] = useState<CoachingRelationship[]>([]);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [gettingStarted, setGettingStarted] = useState<
+    Array<{
+      id: string;
+      kind: "intake" | "invite";
+      name: string;
+      subtitle: string;
+      href?: string;
+      inviteId?: string;
+    }>
+  >([]);
+  const [nameByRid, setNameByRid] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [checkinError, setCheckinError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<HomeFilter>("all");
-  const now = useMemo(() => new Date(), []);
+  const [error, setError] = useState<{
+    message: string;
+    requestId?: string | null;
+    kind?: ErrorKind;
+  } | null>(null);
+  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>(
+    {},
+  );
+  const [filter, setFilter] = useState<FilterKey>(
+    groupParam === "attention"
+      ? "attention"
+      : groupParam === "checkins"
+        ? "checkins"
+        : groupParam === "renewals"
+          ? "renewals"
+          : "all",
+  );
+  const [showAllAttention, setShowAllAttention] = useState(showAllParam);
+  const [reviewedOpen, setReviewedOpen] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(0);
+  const [toast, setToast] = useState<{
+    message: string;
+    undo?: () => void;
+  } | null>(null);
+  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const undoTimer = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setCheckinError(null);
-
-    const [attentionOutcome, relationshipsOutcome, inboxOutcome, invitationOutcome] =
-      await Promise.all([
-        apiClient.getAttentionFeed({ limit: 50 }).then(
-          (value) => ({ ok: true as const, value }),
-          (err: unknown) => ({ ok: false as const, err }),
-        ),
-        apiClient.listRelationships({ limit: 50 }).then(
-          (value) => ({ ok: true as const, value }),
-          () => ({ ok: false as const }),
-        ),
-        apiClient.listTrainerCheckinInbox().then(
-          (value) => ({ ok: true as const, value }),
-          (err: unknown) => ({ ok: false as const, err }),
-        ),
-        apiClient.listInvitations().then(
-          (value) => ({ ok: true as const, value }),
-          () => ({ ok: false as const }),
-        ),
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    const quiet = opts?.quiet === true;
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+      setSectionErrors({});
+    }
+    const nextErrors: Record<string, string> = {};
+    try {
+      const results = await Promise.allSettled([
+        stage1Api.getAttentionGroups(),
+        stage1Api.listCoachAsks({ status: "open" }) as Promise<{
+          items: CoachAsk[];
+        }>,
+        stage1Api.getReengagementCandidates(),
+        apiClient.listSubscriptionAttention(),
+        apiClient.listTrainerCheckinInbox(),
+        apiClient.listClients({ limit: 100 }),
+        apiClient.listInvitations(),
+        stage1Api.getActivityFeed({ limit: 8 }) as Promise<{
+          events: ActivityEvent[];
+        }>,
       ]);
 
-    if (attentionOutcome.ok) {
-      setItems(attentionOutcome.value.items);
-    } else {
-      setItems([]);
-      setError(errorMessage(attentionOutcome.err, "Could not load attention feed."));
-    }
+      const attention =
+        results[0].status === "fulfilled" ? results[0].value : null;
+      if (!attention) {
+        nextErrors.attention = "Couldn't load needs attention";
+        if (!quiet) setGroups([]);
+      } else {
+        setGroups(attention.groups);
+      }
 
-    if (relationshipsOutcome.ok) {
-      setRelationships(relationshipsOutcome.value.items);
-    } else {
-      setRelationships([]);
-    }
+      if (results[1].status === "fulfilled") {
+        setCoachAsks(results[1].value.items);
+      } else {
+        nextErrors.asks = "Couldn't load asked-coach items";
+        if (!quiet) setCoachAsks([]);
+      }
 
-    if (invitationOutcome.ok) {
-      setInvitations(invitationOutcome.value.items);
-    } else {
-      setInvitations([]);
-    }
+      if (results[2].status === "fulfilled") {
+        setReengage(results[2].value.items);
+      } else if (!quiet) {
+        setReengage([]);
+      }
 
-    if (inboxOutcome.ok) {
-      setCheckins(inboxOutcome.value.items);
-    } else {
-      setCheckins([]);
-      setCheckinError(errorMessage(inboxOutcome.err, "Could not load check-ins."));
-    }
+      if (results[3].status === "fulfilled") {
+        setRenewals(results[3].value.items);
+      } else {
+        nextErrors.renewals = "Couldn't load renewals";
+        if (!quiet) setRenewals([]);
+      }
 
-    setLoading(false);
-  }, []);
+      if (results[4].status === "fulfilled") {
+        setCheckins(
+          results[4].value.items.filter(
+            (i) => i.checkin.status === "submitted",
+          ),
+        );
+      } else {
+        nextErrors.checkins = "Couldn't load check-ins";
+        if (!quiet) setCheckins([]);
+      }
+
+      const names = new Map<string, string>();
+      const started: typeof gettingStarted = [];
+      if (results[5].status === "fulfilled") {
+        for (const row of results[5].value.items) {
+          if (row.relationshipId && row.traineeDisplayName) {
+            names.set(row.relationshipId, row.traineeDisplayName);
+          }
+          if (row.status === "onboarding_submitted") {
+            started.push({
+              id: `intake-${row.relationshipId}`,
+              kind: "intake",
+              name: row.traineeDisplayName,
+              subtitle: "Intake submitted",
+              href: `/clients/${row.relationshipId}/onboarding`,
+            });
+          }
+        }
+      }
+      if (results[6].status === "fulfilled") {
+        for (const inv of results[6].value.items) {
+          if (inv.status !== "pending") continue;
+          started.push({
+            id: `invite-${inv.id}`,
+            kind: "invite",
+            name: inv.recipientDisplayName || inv.recipientEmail || "Invite",
+            subtitle: inv.createdAt
+              ? `Invite sent ${formatCivilDate(formatLocalDate(new Date(inv.createdAt), timeZone))} · not accepted yet`
+              : "Invite not accepted yet",
+            inviteId: inv.id,
+          });
+        }
+      }
+      setGettingStarted(started.slice(0, SECTION_CAP));
+
+      if (attention) {
+        for (const g of attention.groups) {
+          names.set(g.relationshipId, g.traineeDisplayName);
+        }
+      }
+      if (!quiet) {
+        setNameByRid(names);
+      } else if (names.size > 0) {
+        setNameByRid((prev) => {
+          const merged = new Map(prev);
+          for (const [k, v] of names) merged.set(k, v);
+          return merged;
+        });
+      }
+
+      if (results[7].status === "fulfilled") {
+        setActivity(results[7].value.events.slice(0, 6));
+      } else if (!quiet) {
+        setActivity([]);
+      }
+
+      if (!quiet) {
+        setSectionErrors(nextErrors);
+        if (!attention) {
+          const attentionErr =
+            results[0].status === "rejected" ? results[0].reason : null;
+          const kind =
+            attentionErr instanceof ApiClientError
+              ? errorKindFromFailure({
+                  status: attentionErr.status,
+                  code: attentionErr.code,
+                  message: attentionErr.message,
+                })
+              : "server";
+          setError({
+            message:
+              attentionErr instanceof ApiClientError
+                ? attentionErr.message
+                : "Could not load your home feed.",
+            requestId:
+              attentionErr instanceof ApiClientError
+                ? attentionErr.requestId
+                : null,
+            kind,
+          });
+        }
+      }
+    } catch (err) {
+      if (!quiet) {
+        const kind =
+          err instanceof ApiClientError
+            ? errorKindFromFailure({
+                status: err.status,
+                code: err.code,
+                message: err.message,
+              })
+            : "server";
+        setError({
+          message:
+            err instanceof ApiClientError
+              ? err.message
+              : "Could not load your home feed.",
+          requestId: err instanceof ApiClientError ? err.requestId : null,
+          kind,
+        });
+      }
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, [timeZone]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const relationshipIds = relationships.map((item) => item.id);
-  useRealtimeHints(apiClient, relationshipIds, () => {
-    void load();
+  // Quiet poll so new coach asks / attention appear within ~5s.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void load({ quiet: true });
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  useRealtimeHints(apiClient, [...nameByRid.keys()], () => {
+    void load({ quiet: true });
   });
 
-  const actionableCheckins = checkins.filter((item) =>
-    ACTIONABLE_CHECKIN_STATUSES.has(item.checkin.status),
-  );
-  const coachingReady = relationships.filter(
-    (item) =>
-      item.onboardingStatus === "coaching_ready" ||
-      item.onboardingStatus === "active",
-  ).length;
-  const pendingInvites = invitations.filter((item) => item.status === "pending");
-  const intakeReviews = relationships.filter(
-    (item) => item.onboardingStatus === "onboarding_submitted",
-  );
-  const clientTotal = relationships.length + pendingInvites.length;
-  const name = trainerName(email);
-  const showAttention = filter === "all" || filter === "attention";
-  const showCheckins = filter === "all" || filter === "checkins";
-  const todayWorkCount =
-    actionableCheckins.length + pendingInvites.length + intakeReviews.length;
-  const kpiValue = (value: number) => (loading ? "—" : value);
+  const openGroups = useMemo(() => {
+    return groups
+      .map((g) => ({
+        group: g,
+        primary: pickPrimaryItem(g),
+        openItems: g.items.filter(
+          (i) => i.status === "detected" || i.status === "active",
+        ),
+      }))
+      .filter((row) => row.primary && row.openItems.length > 0)
+      .sort((a, b) => {
+        const sev =
+          severityRank(a.primary!.severity) - severityRank(b.primary!.severity);
+        if (sev !== 0) return sev;
+        const age = oldestOpenAge(b.group) - oldestOpenAge(a.group);
+        if (age !== 0) return age;
+        return a.group.traineeDisplayName.localeCompare(
+          b.group.traineeDisplayName,
+        );
+      });
+  }, [groups]);
 
-  const attentionCards = useMemo(() => groupAttentionByClient(items), [items]);
+  const reviewedGroups = useMemo(
+    () =>
+      groups
+        .map((g) => ({
+          group: g,
+          items: g.items.filter((i) => i.status === "acknowledged"),
+        }))
+        .filter((g) => g.items.length > 0),
+    [groups],
+  );
 
-  const nameByRelationship = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const item of items) {
-      if (item.traineeDisplayName) {
-        names.set(item.coachingRelationshipId, item.traineeDisplayName);
-      }
+  const visibleOpen = showAllAttention
+    ? openGroups
+    : openGroups.slice(0, ATTENTION_CAP);
+
+  function openException(id: string) {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("exception", id);
+      next.delete("ask");
+      return next;
+    });
+  }
+
+  function openAsk(id: string) {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("ask", id);
+      next.delete("exception");
+      return next;
+    });
+  }
+
+  function closeDrawer() {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("exception");
+      next.delete("ask");
+      return next;
+    });
+  }
+
+  function showToast(message: string, undo?: () => void) {
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    setToast({ message, undo });
+    undoTimer.current = window.setTimeout(() => setToast(null), 5000);
+  }
+
+  async function acknowledgeFromOverflow(
+    exceptionId: string,
+    relationshipId: string,
+  ) {
+    const key = createIdempotencyKey();
+    // Optimistic: delay POST 5s for Undo (TW-05).
+    let cancelled = false;
+    showToast("Marked reviewed", () => {
+      cancelled = true;
+      setToast(null);
+      void load();
+    });
+    // Move visually by refetch after delay unless undone
+    window.setTimeout(() => {
+      if (cancelled) return;
+      void apiClient
+        .acknowledgeException(exceptionId, { note: null }, key)
+        .then(() => load())
+        .catch(() => load());
+    }, 5000);
+    // Immediate optimistic UI: remove from open by soft-filtering locally
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.relationshipId !== relationshipId
+          ? g
+          : {
+              ...g,
+              items: g.items.map((i) =>
+                i.id === exceptionId
+                  ? { ...i, status: "acknowledged" as const }
+                  : i,
+              ),
+            },
+      ),
+    );
+  }
+
+  async function nudgeClient(relationshipId: string, exceptionId: string) {
+    try {
+      const detail = await apiClient.getException(exceptionId);
+      const activityType =
+        detail.sourceEntityType === "workout_assignment"
+          ? "workout"
+          : detail.sourceEntityType === "meal_assignment"
+            ? "meal"
+            : "checkin";
+      await apiClient.nudgeActivity(relationshipId, {
+        activityType,
+        activityId: detail.sourceEntityId,
+      });
+      showToast("Nudge queued");
+    } catch {
+      showToast("Could not nudge right now");
     }
-    return names;
-  }, [items]);
+  }
 
-  const calloutParts = [
-    `${items.length} items need intervention`,
-    actionableCheckins.length > 0
-      ? `${actionableCheckins.length} scheduled tasks today`
-      : null,
-  ].filter(Boolean);
+  function onGridKey(ev: ReactKeyboardEvent<HTMLDivElement>) {
+    const max = visibleOpen.length - 1;
+    if (max < 0) return;
+    const key = ev.key.toLowerCase();
+    if (key === "arrowdown" || key === "j") {
+      ev.preventDefault();
+      setFocusIdx((i) => Math.min(max, i + 1));
+    } else if (key === "arrowup" || key === "k") {
+      ev.preventDefault();
+      setFocusIdx((i) => Math.max(0, i - 1));
+    } else if (key === "home") {
+      ev.preventDefault();
+      setFocusIdx(0);
+    } else if (key === "end") {
+      ev.preventDefault();
+      setFocusIdx(max);
+    } else if (key === "enter") {
+      ev.preventDefault();
+      const row = visibleOpen[focusIdx];
+      if (row?.primary) openException(row.primary.id);
+    } else if (key === "a") {
+      ev.preventDefault();
+      if (!online) return;
+      const row = visibleOpen[focusIdx];
+      if (row?.primary) {
+        void acknowledgeFromOverflow(row.primary.id, row.group.relationshipId);
+      }
+    } else if (key === "o") {
+      ev.preventDefault();
+      const row = visibleOpen[focusIdx];
+      if (row) {
+        window.location.assign(`/clients/${row.group.relationshipId}`);
+      }
+    } else if (key === "n") {
+      ev.preventDefault();
+      if (!online) return;
+      const row = visibleOpen[focusIdx];
+      if (row?.primary) {
+        void nudgeClient(row.group.relationshipId, row.primary.id);
+      }
+    } else if (key === "escape" && drawerExceptionId) {
+      closeDrawer();
+      rowRefs.current[focusIdx]?.focus();
+    }
+  }
+
+  useEffect(() => {
+    rowRefs.current[focusIdx]?.focus();
+  }, [focusIdx]);
+
+  const attentionCount = openGroups.length;
+  const checkinCount = checkins.length;
+  const renewalCount = renewals.length;
+  const firstNames = openGroups
+    .slice(0, 2)
+    .map((r) => r.group.traineeDisplayName.split(" ")[0])
+    .filter(Boolean);
+  const summary = error
+    ? null
+    : loading
+      ? "Loading your day…"
+      : attentionCount === 0
+        ? "You're all caught up. Nothing needs your attention right now."
+        : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
+            firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
+          }`;
+
+  const showAttention = filter === "all" || filter === "attention";
+  const showCheckinsRail = filter === "all" || filter === "checkins";
+  const showRenewalsRail = filter === "all" || filter === "renewals";
+
+  const allClear =
+    !loading &&
+    !error &&
+    openGroups.length === 0 &&
+    coachAsks.length === 0 &&
+    reengage.length === 0 &&
+    renewals.length === 0 &&
+    checkins.length === 0 &&
+    gettingStarted.length === 0 &&
+    reviewedGroups.length === 0;
+
+  const tileNum = (n: number) =>
+    loading || error ? "—" : String(n);
 
   return (
-    <div className="cockpit">
-      <header className="cockpit-hero">
-        <div className="cockpit-hero-main">
-          <div className="cockpit-intro">
-            <div className="cockpit-title-row">
-              <h1>
-                {greeting(now)}, <span className="cockpit-name">{name}</span>
-              </h1>
-              <p className={items.length > 0 ? "callout is-hot" : "callout"}>
-                {items.length > 0 ? <IconWarn /> : null}
-                <span>{calloutParts.join(" • ")}</span>
-              </p>
-            </div>
+    <div className="home-triage" data-testid="screen-TW-04">
+      <header className="home-hdr">
+        <div>
+          <div className="home-eyebrow">
+            <Sun size={14} strokeWidth={1.75} aria-hidden />
+            {todayLabel}
           </div>
-          <dl className="kpi-cluster" aria-label="Coaching snapshot">
-            <Kpi label="Active Trainees" value={kpiValue(clientTotal)} tone="neutral" />
-            <Kpi label="Quietly On Track" value={kpiValue(coachingReady)} tone="success" />
-            <Kpi
-              label="Exceptions Surfaced"
-              value={loading || error ? "—" : items.length}
-              tone="warning"
-            />
-          </dl>
+          <h1 className="home-title">Today</h1>
+          {summary ? <p className="home-summary">{summary}</p> : null}
         </div>
-        <p className="cockpit-sub">
-          Operational snapshot. Normal client activity remains silent. Meaningful
-          deviations are surfaced below.
-        </p>
+        <div className="home-tiles" role="group" aria-label="Filter by">
+          <button
+            type="button"
+            className={`home-tile${filter === "attention" ? " is-active" : ""}`}
+            onClick={() =>
+              setFilter((f) => (f === "attention" ? "all" : "attention"))
+            }
+          >
+            <span
+              className="home-tile-icon"
+              style={{ background: "#FEF2F2", color: "#B91C1C" }}
+            >
+              <OctagonAlert size={18} strokeWidth={1.75} aria-hidden />
+            </span>
+            <span>
+              <span className="home-tile-lbl">Needs attention</span>
+              <span className="home-tile-num">{tileNum(attentionCount)}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`home-tile${filter === "checkins" ? " is-active" : ""}`}
+            onClick={() =>
+              setFilter((f) => (f === "checkins" ? "all" : "checkins"))
+            }
+          >
+            <span
+              className="home-tile-icon"
+              style={{ background: "#EFF6FF", color: "#1D4ED8" }}
+            >
+              <ClipboardCheck size={18} strokeWidth={1.75} aria-hidden />
+            </span>
+            <span>
+              <span className="home-tile-lbl">Check-ins to review</span>
+              <span className="home-tile-num">{tileNum(checkinCount)}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`home-tile${filter === "renewals" ? " is-active" : ""}`}
+            onClick={() =>
+              setFilter((f) => (f === "renewals" ? "all" : "renewals"))
+            }
+          >
+            <span
+              className="home-tile-icon"
+              style={{ background: "#FFFBEB", color: "#B45309" }}
+            >
+              <CalendarDays size={18} strokeWidth={1.75} aria-hidden />
+            </span>
+            <span>
+              <span className="home-tile-lbl">Renewals due</span>
+              <span className="home-tile-num">{tileNum(renewalCount)}</span>
+            </span>
+          </button>
+        </div>
       </header>
 
-      <div className="quick-row">
-        <span className="section-kicker">Quick actions</span>
-        <Link className="pill-btn is-solid" to="/clients/add">
-          <IconPlus />
-          Add Client
-        </Link>
-        <Link className="pill-btn" to="/templates">
-          <IconTemplates />
-          Create Plan Template
-        </Link>
-        <Link className="pill-btn" to="/clients">
-          <IconClients />
-          Open roster
-        </Link>
-        <Link className="pill-btn" to="/checkins">
-          <IconCalendar />
-          Review check-ins
-        </Link>
-      </div>
+      {error ? (
+        <ErrorState
+          kind={error.kind}
+          message={error.message}
+          requestId={error.requestId}
+          onRetry={() => void load()}
+        />
+      ) : null}
 
-      <div className="filter-bar">
-        <div className="segment" role="group" aria-label="Home sections">
-          <Segment pressed={filter === "all"} onClick={() => setFilter("all")}>
-            <span className="chip-dot" aria-hidden="true" />
-            All Overview
-          </Segment>
-          <Segment pressed={filter === "attention"} onClick={() => setFilter("attention")}>
-            <IconWarn />
-            Needs Attention
-            <span className="segment-count is-attention">{items.length}</span>
-          </Segment>
-          <Segment pressed={filter === "checkins"} onClick={() => setFilter("checkins")}>
-            <IconClock />
-            Today&apos;s Work
-            <span className="segment-count is-work">{todayWorkCount}</span>
-          </Segment>
+      {!error && loading ? (
+        <div className="home-grid" aria-busy="true" aria-label="Loading">
+          <div className="home-col">
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-skel home-skel-title" />
+              </div>
+              <div className="home-rows">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="home-row home-skel-row">
+                    <div className="home-skel home-skel-av" />
+                    <div className="home-skel home-skel-line" />
+                    <div className="home-skel home-skel-chip" />
+                    <div className="home-skel home-skel-age" />
+                    <div className="home-skel home-skel-btn" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+          <div className="home-col home-rail">
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-skel home-skel-title" />
+              </div>
+              <div className="home-list">
+                {[0, 1].map((i) => (
+                  <div key={i} className="home-li">
+                    <div className="home-skel home-skel-av" />
+                    <div className="home-li-tx">
+                      <div className="home-skel home-skel-line" />
+                      <div className="home-skel home-skel-sub" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
-        <p className="filter-note">
-          <IconLayers />
-          Showing the loaded cockpit
-        </p>
-      </div>
-
-      {loading ? (
-        <p className="muted" aria-busy="true">
-          Loading the coaching snapshot…
-        </p>
       ) : null}
 
-      {showAttention ? (
-        <section className="cockpit-section" aria-labelledby="attention-heading">
-          <div className="section-head">
-            <div>
-              <h2 id="attention-heading">
-                <span className="warn-mark" aria-hidden="true">
-                  <IconWarn />
-                </span>
-                Needs Attention
-                <span className="flag-pill">Action Required ({items.length})</span>
-              </h2>
-              <p>
-                Client deviations requiring coach intervention. Silent clients remain
-                unlisted.
-              </p>
-            </div>
-            <p className="prioritized">Prioritized by Urgency</p>
-          </div>
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {!loading && !error && items.length === 0 ? (
-            <div className="work-panel">
-              <p className="panel-empty">No open exceptions. Invite a client to begin coaching.</p>
-            </div>
-          ) : null}
-          {items.length > 0 ? (
-            <ul className="attention-grid">
-              {attentionCards.map(({ item, otherCount }) => (
-                <AttentionCard
-                  key={item.coachingRelationshipId}
-                  item={item}
-                  otherCount={otherCount}
-                />
-              ))}
-            </ul>
-          ) : null}
-        </section>
+      {!error && allClear ? (
+        <div className="home-card" style={{ padding: 24 }}>
+          <h2 className="home-title" style={{ fontSize: 18 }}>
+            All clear
+          </h2>
+          <p className="home-summary">
+            You&apos;re all caught up. Nothing needs your attention right now.
+          </p>
+          <Link className="button-primary" to="/clients/add">
+            Invite a client
+          </Link>
+        </div>
       ) : null}
 
-      {showCheckins ? (
-        <section className="cockpit-section" aria-labelledby="work-heading">
-          <div className="section-head">
-            <div>
-              <h2 id="work-heading">
-                <span className="work-mark" aria-hidden="true">
-                  <IconClock />
+      {!error && !loading ? (
+      <div className="home-grid">
+        <div className="home-col">
+          {showAttention && openGroups.length > 0 ? (
+            <section className="home-card" aria-labelledby="na">
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="na">Needs attention</h2>
+                  <span className="home-count">{attentionCount}</span>
+                </div>
+                <span
+                  className="home-sort"
+                  title="Sorted by severity, then how long it's been open."
+                >
+                  <Info size={14} strokeWidth={1.75} aria-hidden />
+                  Sorted by severity, then age
                 </span>
-                Today&apos;s Work
-                <span className="commit-pill">{todayWorkCount} Commitments</span>
-              </h2>
-              <p>Due check-ins, invitations, and onboarding waiting for you.</p>
-            </div>
-            <Link className="text-link" to="/checkins">
-              View all check-ins →
-            </Link>
-          </div>
-          <div className="work-panel">
-            {checkinError ? (
-              <p className="form-error" role="alert">
-                {checkinError}
-              </p>
-            ) : null}
-            {pendingInvites.map((invite) => {
-              const label =
-                invite.recipientDisplayName?.trim() || invite.recipientEmail;
-              return (
-                <article key={invite.id} className="work-row">
-                  <span className="work-icon" aria-hidden="true">
-                    {initials(label)}
-                  </span>
-                  <div>
-                    <p className="work-title">
-                      Invitation waiting
-                      <span className="person-chip">{label}</span>
-                      <span className="person-chip">Invited</span>
-                    </p>
-                    <p className="work-copy">{invite.recipientEmail}</p>
-                  </div>
-                  <Link className="pill-btn" to="/clients">
-                    Open roster
-                  </Link>
-                </article>
-              );
-            })}
-            {intakeReviews.map((relationship) => {
-              const invite = invitations.find(
-                (item) =>
-                  item.coachingRelationshipId === relationship.id ||
-                  item.id === relationship.invitationId,
-              );
-              const label =
-                invite?.recipientDisplayName?.trim() ||
-                invite?.recipientEmail ||
-                `Client ${relationship.id.slice(0, 8)}`;
-              return (
-                <article key={relationship.id} className="work-row">
-                  <span className="work-icon" aria-hidden="true">
-                    {initials(label)}
-                  </span>
-                  <div>
-                    <p className="work-title">
-                      Onboarding ready to review
-                      <span className="person-chip">{label}</span>
-                      <span className="person-chip">Submitted</span>
-                    </p>
-                    <p className="work-copy">
-                      Review the answers, then configure coaching.
-                    </p>
-                  </div>
-                  <Link
-                    className="pill-btn is-solid"
-                    to={`/clients/${relationship.id}/onboarding`}
-                  >
-                    Review intake →
-                  </Link>
-                </article>
-              );
-            })}
-            {!loading &&
-            !checkinError &&
-            actionableCheckins.length === 0 &&
-            pendingInvites.length === 0 &&
-            intakeReviews.length === 0 ? (
-              <p className="panel-empty">Nothing is due, overdue, or submitted right now.</p>
-            ) : null}
-            {actionableCheckins.map((item) => {
-              const person =
-                nameByRelationship.get(item.coachingRelationshipId) ??
-                `Client ${item.coachingRelationshipId.slice(0, 8)}`;
-              return (
-                <article key={item.checkin.id} className="work-row">
-                  <span className={`work-icon work-${item.checkin.status}`} aria-hidden="true">
-                    {item.checkin.status === "submitted" ? <IconDoc /> : <IconCalendar />}
-                  </span>
-                  <div>
-                    <p className="work-title">
-                      {checkinWorkTitle(item.checkin.status)}
-                      <span className="person-chip">{person}</span>
-                      <time
-                        className={`date-chip date-${item.checkin.status}`}
-                        dateTime={item.checkin.localDate}
+              </div>
+              {sectionErrors.attention ? (
+                <p className="form-error" role="alert">
+                  {sectionErrors.attention} ·{" "}
+                  <button type="button" className="text-link" onClick={() => void load()}>
+                    Retry
+                  </button>
+                </p>
+              ) : null}
+              <div
+                className="home-rows"
+                role="grid"
+                aria-label="Needs attention"
+                tabIndex={0}
+                onKeyDown={onGridKey}
+              >
+                {visibleOpen.map((row, idx) => {
+                  const { group, primary } = row;
+                  if (!primary) return null;
+                  const issue = issueLine(group, primary);
+                  const age = formatAttentionAge(oldestOpenAge(group));
+                  const absTitle = `Open since ${formatRelative(
+                    new Date(
+                      Date.now() - oldestOpenAge(group) * 60_000,
+                    ).toISOString(),
+                  )}`;
+                  return (
+                    <div
+                      key={group.relationshipId}
+                      className={`home-row${focusIdx === idx ? " is-focused" : ""}`}
+                      role="row"
+                      tabIndex={-1}
+                      ref={(el) => {
+                        rowRefs.current[idx] = el;
+                      }}
+                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}. Review button.`}
+                    >
+                      <div className="home-who" role="gridcell">
+                        <span className={avatarClass(group.traineeDisplayName)}>
+                          {initials(group.traineeDisplayName)}
+                        </span>
+                        <b>{group.traineeDisplayName}</b>
+                      </div>
+                      <div
+                        className="home-issue"
+                        role="gridcell"
+                        title={issue.title}
                       >
-                        {formatLocalDate(item.checkin.localDate)}
-                      </time>
-                    </p>
-                    <p className="work-copy">
-                      Review this check-in in the client workspace.
-                    </p>
+                        <span className="home-issue-txt">{issue.text}</span>
+                        {issue.more > 0 ? (
+                          <span className="home-more">+{issue.more} more</span>
+                        ) : null}
+                      </div>
+                      <div role="gridcell">
+                        <StatusChip kind="severity" value={primary.severity} />
+                      </div>
+                      <div className="home-age" role="gridcell" title={absTitle}>
+                        {age}
+                      </div>
+                      <div role="gridcell">
+                        <Button
+                          variant="tinted"
+                          className="button-sm"
+                          onClick={() => openException(primary.id)}
+                        >
+                          Review
+                        </Button>
+                      </div>
+                      <div role="gridcell">
+                        <OverflowMenu
+                          label={`More actions for ${group.traineeDisplayName}`}
+                          items={[
+                            {
+                              id: "ack",
+                              label: "Acknowledge",
+                              disabled: !online,
+                              onSelect: () =>
+                                void acknowledgeFromOverflow(
+                                  primary.id,
+                                  group.relationshipId,
+                                ),
+                            },
+                            {
+                              id: "nudge",
+                              label: "Nudge",
+                              disabled: !online,
+                              onSelect: () =>
+                                void nudgeClient(
+                                  group.relationshipId,
+                                  primary.id,
+                                ),
+                            },
+                            {
+                              id: "open",
+                              label: "Open client",
+                              onSelect: () =>
+                                window.location.assign(
+                                  `/clients/${group.relationshipId}`,
+                                ),
+                            },
+                            {
+                              id: "wa",
+                              label: "WhatsApp",
+                              onSelect: () => {
+                                const digits = (
+                                  group.clientWhatsappE164 ?? ""
+                                ).replace(/\D/g, "");
+                                if (!digits) {
+                                  showToast("No WhatsApp number on file");
+                                  return;
+                                }
+                                window.open(
+                                  `https://wa.me/${digits}`,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
+                              },
+                            },
+                          ]}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {openGroups.length > ATTENTION_CAP ? (
+                <div className="home-foot">
+                  <span className="muted">
+                    Showing {visibleOpen.length} of {openGroups.length}
+                    {!showAllAttention ? (
+                      <>
+                        {" · "}
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => setShowAllAttention(true)}
+                        >
+                          View all
+                        </button>
+                      </>
+                    ) : null}
+                  </span>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {filter === "all" && coachAsks.length > 0 ? (
+            <section
+              className="home-card"
+              aria-labelledby="asks-heading"
+              data-testid="screen-TW-32-section"
+            >
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="asks-heading">Asked you on WhatsApp</h2>
+                  <span className="home-count">{coachAsks.length}</span>
+                </div>
+              </div>
+              <div className="home-list">
+                {coachAsks.slice(0, SECTION_CAP).map((ask) => {
+                  const name = nameByRid.get(ask.relationshipId) ?? "Client";
+                  const item = askItemLabel(ask);
+                  const date = askDateLabel(ask);
+                  return (
+                    <div key={ask.id} className="home-li">
+                      <span className={avatarClass(name)}>
+                        {initials(name)}
+                      </span>
+                      <div className="home-li-tx">
+                        <b>
+                          {name} asked about {item}
+                          {date ? ` · ${date}` : ""}{" "}
+                          <StatusChip
+                            kind="ask"
+                            value="open"
+                            label={`Asked coach · ${formatRelative(ask.askedAt).replace(/ ago$/, "")}`}
+                            className="home-ask-inline"
+                          />
+                        </b>
+                        <span>
+                          <span className="home-topic">
+                            {labelFor("coach_ask_topic", ask.topic)}
+                          </span>{" "}
+                          · Opened WhatsApp from their log
+                        </span>
+                      </div>
+                      <Button
+                        variant="tinted"
+                        className="button-sm"
+                        disabled={!online}
+                        onClick={() => openAsk(ask.id)}
+                      >
+                        Mark answered
+                      </Button>
+                      <OverflowMenu
+                        items={[
+                          {
+                            id: "open",
+                            label: "Open item",
+                            onSelect: () => openAsk(ask.id),
+                          },
+                        ]}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {filter === "all" && reviewedGroups.length > 0 ? (
+            <section className="home-card">
+              <button
+                type="button"
+                className="home-collapsed"
+                aria-expanded={reviewedOpen}
+                onClick={() => setReviewedOpen((v) => !v)}
+              >
+                <span aria-hidden>{reviewedOpen ? "▾" : "▸"}</span>
+                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                  Reviewed, still open
+                </h2>
+                <span className="home-count">{reviewedGroups.length}</span>
+                <span className="muted" style={{ fontSize: 13 }}>
+                  {reviewedGroups.length} reviewed item
+                  {reviewedGroups.length === 1 ? "" : "s"} still open
+                </span>
+              </button>
+              {reviewedOpen ? (
+                <div className="home-list">
+                  {reviewedGroups.slice(0, SECTION_CAP).map(({ group, items }) => (
+                    <div key={group.relationshipId} className="home-li">
+                      <span className={avatarClass(group.traineeDisplayName)}>
+                        {initials(group.traineeDisplayName)}
+                      </span>
+                      <div className="home-li-tx">
+                        <b>{group.traineeDisplayName}</b>
+                        <span>
+                          Acknowledged ·{" "}
+                          {items[0]?.summary ||
+                            labelFor("exception_type", items[0]!.type)}
+                        </span>
+                      </div>
+                      <Button
+                        variant="tinted"
+                        className="button-sm"
+                        disabled={!online}
+                        onClick={() => items[0] && openException(items[0].id)}
+                      >
+                        Resolve
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {filter === "all" && gettingStarted.length > 0 ? (
+            <section className="home-card" aria-labelledby="gs">
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="gs">Getting started</h2>
+                  <span className="home-count">{gettingStarted.length}</span>
+                </div>
+              </div>
+              <div className="home-list">
+                {gettingStarted.map((row) => (
+                  <div key={row.id} className="home-li">
+                    <span className={avatarClass(row.name)}>
+                      {initials(row.name)}
+                    </span>
+                    <div className="home-li-tx">
+                      <b>{row.name}</b>
+                      <span>{row.subtitle}</span>
+                    </div>
+                    <StatusChip
+                      kind="lifecycle"
+                      value={
+                        row.kind === "intake"
+                          ? "onboarding_submitted"
+                          : "invited"
+                      }
+                      label={
+                        row.kind === "intake" ? "Awaiting review" : "Invited"
+                      }
+                    />
+                    {row.kind === "intake" && row.href ? (
+                      <Link className="button-tinted button-sm" to={row.href}>
+                        Review intake
+                      </Link>
+                    ) : (
+                      <Button
+                        variant="tinted"
+                        className="button-sm"
+                        disabled={!online}
+                      >
+                        Resend invite
+                      </Button>
+                    )}
                   </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {filter === "all" && reengage.length > 0 ? (
+            <section className="home-card" aria-labelledby="re">
+              <div className="home-card-h">
+                <div className="home-card-ttl">
+                  <h2 id="re">Re-engage on WhatsApp</h2>
+                  <span className="home-count">
+                    {Math.min(reengage.length, SECTION_CAP)}
+                  </span>
+                </div>
+              </div>
+              <div className="home-list">
+                {reengage.slice(0, SECTION_CAP).map((item) => (
+                  <div key={item.relationshipId} className="home-li">
+                    <span className={avatarClass(item.traineeDisplayName)}>
+                      {initials(item.traineeDisplayName)}
+                    </span>
+                    <div className="home-li-tx">
+                      <b>{item.traineeDisplayName}</b>
+                      <span>No logs recently · reminders unanswered</span>
+                    </div>
+                    <a
+                      className="button-secondary button-sm"
+                      href={item.waMeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() =>
+                        showToast("Opened WhatsApp · today")
+                      }
+                    >
+                      Open WhatsApp
+                    </a>
+                  </div>
+                ))}
+              </div>
+              <div className="home-note">
+                <Info size={14} strokeWidth={1.75} aria-hidden />
+                Opens WhatsApp with a message written as you. You can edit it,
+                and you press Send.
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        <div className="home-col home-rail">
+          {showCheckinsRail && checkins.length > 0 ? (
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-card-ttl h3">
+                  <h2>Check-ins to review</h2>
+                  <span className="home-count">{checkinCount}</span>
+                </div>
+                <Link className="link" to="/checkins" style={{ fontSize: 13 }}>
+                  All
+                </Link>
+              </div>
+              <div className="home-list">
+                {checkins.slice(0, SECTION_CAP).map((row) => {
+                  const name =
+                    nameByRid.get(row.coachingRelationshipId) ?? "Client";
+                  return (
+                    <div key={row.checkin.id} className="home-li">
+                      <span className={avatarClass(name)}>
+                        {initials(name)}
+                      </span>
+                      <div className="home-li-tx">
+                        <b>{name}</b>
+                        <span>
+                          Submitted{" "}
+                          {row.checkin.submittedAt
+                            ? formatRelative(row.checkin.submittedAt)
+                            : "recently"}
+                        </span>
+                      </div>
+                      <Link
+                        className="button-tinted button-sm"
+                        to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
+                      >
+                        Review
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {showRenewalsRail && renewals.length > 0 ? (
+            <section className="home-card">
+              <div className="home-card-h">
+                <div className="home-card-ttl h3">
+                  <h2>Renewals</h2>
+                  <span className="home-count">{renewalCount}</span>
+                </div>
+              </div>
+              <div className="home-list">
+                {renewals.slice(0, SECTION_CAP).map((item) => {
+                  const name =
+                    nameByRid.get(item.coachingRelationshipId) ??
+                    item.planName;
+                  return (
+                    <div key={item.coachingRelationshipId} className="home-li">
+                      <div className="home-li-tx">
+                        <b>{name}</b>
+                        <span>
+                          {item.renewalState === "expired" ? "Ended" : "Due"}{" "}
+                          {formatCivilDate(item.renewsOn)}
+                        </span>
+                      </div>
+                      <StatusChip
+                        kind="renewal"
+                        value={item.renewalState}
+                        label={labelFor("renewal_state", item.renewalState)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="home-foot" style={{ padding: "10px 16px" }}>
+                <span className="muted">Open settings to renew</span>
+                {renewals[0] ? (
                   <Link
-                    className="pill-btn is-solid"
-                    to={`/clients/${item.coachingRelationshipId}/check-ins/${item.checkin.id}`}
+                    className="link"
+                    to={`/clients/${renewals[0].coachingRelationshipId}/configure`}
                   >
-                    Review now →
+                    Open settings
                   </Link>
-                </article>
-              );
-            })}
-          </div>
-        </section>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {filter === "all" && activity.length > 0 ? (
+            <section className="home-card">
+              <div className="home-card-h">
+                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                  Recent activity
+                </h2>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Client time
+                </span>
+              </div>
+              <div className="home-feed">
+                {activity.map((ev) => (
+                  <div key={ev.id} className="home-ev">
+                    <span className="home-ev-dot" />
+                    <span>
+                      <b>{ev.traineeDisplayName ?? "Client"}</b> {ev.summary}
+                      <span className="home-ev-when">
+                        {formatRelative(ev.occurredAt)}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
+      ) : null}
+
+      {drawerExceptionId ? (
+        <ExceptionDrawer
+          exceptionId={drawerExceptionId}
+          onClose={() => {
+            closeDrawer();
+            rowRefs.current[focusIdx]?.focus();
+          }}
+          onChanged={() => void load()}
+        />
+      ) : null}
+
+      {drawerAskId ? (
+        <CoachAskDrawer
+          askId={drawerAskId}
+          clientName={
+            nameByRid.get(
+              coachAsks.find((a) => a.id === drawerAskId)?.relationshipId ??
+                "",
+            ) ?? "Client"
+          }
+          onClose={closeDrawer}
+          onChanged={() => void load()}
+        />
+      ) : null}
+
+      {toast ? (
+        <div className="home-toast" role="status">
+          <span>{toast.message}</span>
+          {toast.undo ? (
+            <button type="button" onClick={toast.undo}>
+              Undo
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
-  );
-}
-
-function AttentionCard({
-  item,
-  otherCount,
-}: {
-  item: AttentionItem;
-  otherCount: number;
-}) {
-  const name = item.traineeDisplayName ?? "Trainee";
-  const type = item.exception.type;
-  return (
-    <li className={`exception-card is-linked tone-${type}`}>
-      <Link className="exception-card-link" to={`/exceptions/${item.exception.id}`}>
-        <div className="exception-top">
-          <span className="avatar" aria-hidden="true">
-            {initials(name)}
-          </span>
-          <div className="exception-id">
-            <p className="exception-name">{name}</p>
-            <span className={`status-pill status-${item.exception.status}`}>
-              {statusLabel(item.exception.status)}
-            </span>
-          </div>
-          <span className="exception-type-meta">
-            <span className={`category-pill type-${type}`}>{EXCEPTION_TYPE_LABEL[type]}</span>
-            {otherCount > 0 ? (
-              <span className="exception-more">
-                +{otherCount}
-                <span className="sr-only"> other exceptions</span>
-              </span>
-            ) : null}
-          </span>
-        </div>
-        <p className="exception-summary">
-          <span className="exception-type-icon" aria-hidden="true">
-            <TypeIcon type={type} />
-          </span>
-          <span>
-            <SummaryText
-              text={item.exception.summary}
-              omitDetails={type === "overdue_meal"}
-            />
-          </span>
-        </p>
-      </Link>
-    </li>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number | string;
-  tone: "warning" | "neutral" | "info" | "success";
-}) {
-  return (
-    <div className={`kpi kpi-${tone}`}>
-      <dd>{value}</dd>
-      <dt>{label}</dt>
-    </div>
-  );
-}
-
-function Segment({
-  pressed,
-  onClick,
-  children,
-}: {
-  pressed: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      className={pressed ? "segment-btn is-on" : "segment-btn"}
-      aria-pressed={pressed}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function iconProps(): SVGProps<SVGSVGElement> {
-  return {
-    width: 16,
-    height: 16,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    "aria-hidden": true,
-    focusable: false,
-  };
-}
-
-function IconPlus() {
-  return (
-    <svg {...iconProps()}>
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function IconTemplates() {
-  return (
-    <svg {...iconProps()}>
-      <rect x="4" y="4" width="7" height="7" rx="1.5" />
-      <rect x="13" y="4" width="7" height="7" rx="1.5" />
-      <rect x="4" y="13" width="7" height="7" rx="1.5" />
-      <rect x="13" y="13" width="7" height="7" rx="1.5" />
-    </svg>
-  );
-}
-
-function IconClients() {
-  return (
-    <svg {...iconProps()}>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
-      <circle cx="9.5" cy="7" r="3" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 4.13a3 3 0 0 1 0 5.75" />
-    </svg>
-  );
-}
-
-function IconCalendar() {
-  return (
-    <svg {...iconProps()}>
-      <rect x="4" y="5" width="16" height="15" rx="2" />
-      <path d="M8 3v4M16 3v4M4 10h16" />
-    </svg>
-  );
-}
-
-function IconWarn() {
-  return (
-    <svg {...iconProps()} width={14} height={14}>
-      <path d="M12 3 3 20h18L12 3z" />
-      <path d="M12 10v5M12 17h.01" />
-    </svg>
-  );
-}
-
-function IconClock() {
-  return (
-    <svg {...iconProps()} width={14} height={14}>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 8v5l3 2" />
-    </svg>
-  );
-}
-
-function IconDoc() {
-  return (
-    <svg {...iconProps()} width={14} height={14}>
-      <path d="M7 4h7l4 4v12H7z" />
-      <path d="M14 4v4h4M9 13h6M9 17h4" />
-    </svg>
-  );
-}
-
-function IconLayers() {
-  return (
-    <svg {...iconProps()} width={14} height={14}>
-      <path d="M12 4 4 8l8 4 8-4-8-4z" />
-      <path d="m4 12 8 4 8-4" />
-    </svg>
-  );
-}
-
-function TypeIcon({ type }: { type: ExceptionType }) {
-  if (type === "overdue_meal") {
-    return (
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <rect x="3" y="2" width="2" height="8" rx="1" fill="currentColor" />
-        <rect x="6" y="2" width="2" height="8" rx="1" fill="currentColor" />
-        <path fill="currentColor" d="M3 10h5v1.5A2.5 2.5 0 0 1 5.5 14h-1A2.5 2.5 0 0 1 2 11.5V10h1z" />
-        <rect x="11" y="2" width="2.5" height="12" rx="1.2" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (type === "overdue_checkin") {
-    return (
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <rect x="3" y="2" width="10" height="12" rx="2" fill="currentColor" opacity="0.2" />
-        <rect x="3" y="2" width="10" height="12" rx="2" stroke="currentColor" fill="none" strokeWidth="1.4" />
-        <path stroke="currentColor" strokeWidth="1.4" d="M6 6h4M6 9h4M6 12h2" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <circle cx="4" cy="5" r="2" fill="currentColor" />
-      <circle cx="12" cy="5" r="2" fill="currentColor" />
-      <circle cx="4" cy="11" r="2" fill="currentColor" />
-      <circle cx="12" cy="11" r="2" fill="currentColor" />
-      <rect x="5.5" y="4.25" width="5" height="1.5" fill="currentColor" />
-      <rect x="5.5" y="10.25" width="5" height="1.5" fill="currentColor" />
-    </svg>
   );
 }

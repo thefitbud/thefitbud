@@ -2,21 +2,43 @@ import type {
   NotificationDomainEntityType,
   NotificationType,
   PushPayload,
+  ReminderType,
+  WorkoutExecutionStatus,
 } from "@fitbud/contracts";
 import {
   SAFE_PUSH_PAYLOAD_KEYS,
   pushPayloadSchema,
 } from "@fitbud/contracts";
 import { deriveCheckinStatus } from "./checkin.js";
-import { deriveMealAssignmentStatus } from "./meal.js";
-import {
-  deriveWorkoutAssignmentStatus,
-  isQualifyingWorkoutExecution,
-} from "./workout.js";
-import type { WorkoutExecutionStatus } from "@fitbud/contracts";
-import type { MealComplianceOutcome } from "@fitbud/contracts";
+import { routeForLinkKind } from "./links.js";
+import { addDaysToLocalDate, isQualifyingWorkoutExecution } from "./workout.js";
+import { formatLocalDate, localDateTimeToUtcIso } from "./timezone.js";
 
-export const DEFAULT_REMINDER_TYPES: readonly NotificationType[] = [
+/** Reminder engine v2 (§3.6) — system clocks; trainers only enable categories. */
+/** Minutes after preferred (or fallback) workout time to nudge if still unlogged (60–90; default 75). */
+export const WORKOUT_REMINDER_AFTER_MINUTES = 75;
+/** @deprecated Use WORKOUT_REMINDER_AFTER_MINUTES — offset is after the anchor, not before. */
+export const WORKOUT_REMINDER_OFFSET_MINUTES = WORKOUT_REMINDER_AFTER_MINUTES;
+export const WORKOUT_FALLBACK_ANCHOR = "18:00";
+/** Meal nudge fires in the 30–45 min window after mealtime (default 40). */
+export const MEAL_REMINDER_AFTER_MINUTES = 40;
+export const MEAL_REMINDER_SNOOZE_MINUTES = 30;
+export const DAILY_SUMMARY_CAP_LOCAL_TIME = "21:30";
+export const HARD_STOP_LOCAL_TIME = "22:00";
+export const DEFAULT_QUIET_HOURS_START = "22:00";
+export const DEFAULT_QUIET_HOURS_END = "07:00";
+export const DAILY_PUSH_CAP = 5;
+export const REMINDER_MERGE_WINDOW_MINUTES = 30;
+export const ACTIVITY_NUDGE_HOURLY_LIMIT = 3;
+export const ACTIVITY_NUDGE_ITEM_COOLDOWN_HOURS = 4;
+
+export type MealReminderPhase = "after" | "snooze";
+export type WorkoutReminderLocalTime = "primary";
+export const WORKOUT_REMINDER_SLOT: WorkoutReminderLocalTime = "primary";
+export type ReminderDeliveryDecision = "deliver" | "defer" | "suppress";
+export type NudgeActivityType = "workout" | "meal" | "checkin";
+
+export const DEFAULT_REMINDER_TYPES: readonly ReminderType[] = [
   "workout_reminder",
   "meal_reminder",
   "checkin_reminder",
@@ -31,8 +53,59 @@ export function reminderDedupeKey(input: {
   return `${input.type}:${input.domainEntityId}`;
 }
 
+export function mealReminderDedupeKey(
+  assignmentId: string,
+  phase: MealReminderPhase,
+): string {
+  return `meal_reminder:${assignmentId}:${phase}`;
+}
+
+export function workoutReminderDedupeKey(
+  assignmentId: string,
+  localTime: WorkoutReminderLocalTime,
+): string {
+  return `workout_reminder:${assignmentId}:${localTime}`;
+}
+
+export function dailySummaryDedupeKey(
+  relationshipId: string,
+  localDate: string,
+): string {
+  return `daily_summary:${relationshipId}:${localDate}`;
+}
+
+export function activityNudgeDedupeKey(
+  activityId: string,
+  traineeLocalDate: string,
+): string {
+  return `activity_nudge:${activityId}:${traineeLocalDate}`;
+}
+
+/** Deferred rows must not occupy the delivery dedupe key. */
+export function deferredReminderDedupeKey(deliveryDedupeKey: string): string {
+  return `deferred:${deliveryDedupeKey}`;
+}
+
+export function deliveryDedupeKeyFromDeferred(
+  deferredKey: string,
+): string | null {
+  const prefix = "deferred:";
+  if (!deferredKey.startsWith(prefix)) return null;
+  const logical = deferredKey.slice(prefix.length);
+  if (!logical || logical.startsWith("deferred:")) return null;
+  return logical;
+}
+
+export function localDateFromDailySummaryKey(dedupeKey: string): string | null {
+  const match = /^daily_summary:[0-9a-f-]{36}:(\d{4}-\d{2}-\d{2})$/i.exec(
+    dedupeKey,
+  );
+  return match?.[1] ?? null;
+}
+
 export function domainEntityTypeForReminder(
   type: NotificationType,
+  activityType?: NudgeActivityType,
 ): NotificationDomainEntityType {
   switch (type) {
     case "workout_reminder":
@@ -42,61 +115,447 @@ export function domainEntityTypeForReminder(
     case "checkin_reminder":
       return "checkin";
     case "subscription_renewal_reminder":
+    case "daily_summary":
       return "coaching_relationship";
+    case "activity_nudge":
+      return domainEntityTypeForActivity(activityType ?? "checkin");
+    case "checkin_reviewed":
+      return "checkin";
+    case "plan_published":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return "coaching_relationship";
+  }
+}
+
+export function domainEntityTypeForActivity(
+  activityType: NudgeActivityType,
+): NotificationDomainEntityType {
+  switch (activityType) {
+    case "workout":
+      return "workout_assignment";
+    case "meal":
+      return "meal_assignment";
+    case "checkin":
+      return "checkin";
     default: {
-      const _exhaustive: never = type;
+      const _exhaustive: never = activityType;
+      return _exhaustive;
+    }
+  }
+}
+
+export function reminderPreferenceForActivity(
+  activityType: NudgeActivityType,
+): ReminderType {
+  switch (activityType) {
+    case "workout":
+      return "workout_reminder";
+    case "meal":
+      return "meal_reminder";
+    case "checkin":
+      return "checkin_reminder";
+    default: {
+      const _exhaustive: never = activityType;
       return _exhaustive;
     }
   }
 }
 
 /**
- * Workout reminder when the window has opened and there is no qualifying completion.
- * Missed after window end is still eligible once (deduped) so trainees get one nudge.
+ * Preference category used at delivery time.
+ * Daily summary uses push enablement; the item mix was chosen when it was created.
  */
-export function isWorkoutReminderEligible(input: {
-  nowIso: string;
-  windowStartsAt: string;
-  windowEndsAt: string;
-  executionStatus: WorkoutExecutionStatus | null;
-}): boolean {
-  if (input.nowIso < input.windowStartsAt) return false;
-  if (
-    input.executionStatus &&
-    isQualifyingWorkoutExecution(input.executionStatus)
-  ) {
-    return false;
+export function reminderPreferenceForNotification(input: {
+  notificationType: NotificationType;
+  domainEntityType: NotificationDomainEntityType;
+}): ReminderType | "daily_summary" | null {
+  switch (input.notificationType) {
+    case "workout_reminder":
+    case "meal_reminder":
+    case "checkin_reminder":
+    case "subscription_renewal_reminder":
+      return input.notificationType;
+    case "daily_summary":
+      return "daily_summary";
+    case "activity_nudge":
+      if (input.domainEntityType === "workout_assignment") {
+        return "workout_reminder";
+      }
+      if (input.domainEntityType === "meal_assignment") return "meal_reminder";
+      if (input.domainEntityType === "checkin") return "checkin_reminder";
+      return null;
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return null;
   }
-  const status = deriveWorkoutAssignmentStatus({
-    nowIso: input.nowIso,
-    windowEndsAt: input.windowEndsAt,
-    executionStatus: input.executionStatus,
-  });
+}
+
+export function isWorkoutResolved(
+  executionStatus: WorkoutExecutionStatus | null,
+): boolean {
   return (
-    status === "assigned" ||
-    status === "in_progress" ||
-    status === "paused" ||
-    status === "missed"
+    executionStatus !== null && isQualifyingWorkoutExecution(executionStatus)
   );
 }
 
-/** Meal reminder when the confirmation window has opened and compliance is absent. */
-export function isMealReminderEligible(input: {
-  nowIso: string;
-  windowStartsAt: string;
-  windowEndsAt: string;
-  complianceOutcome: MealComplianceOutcome | null;
-  loggedAt: string | null;
+export function isActivityUnresolved(input: {
+  activityType: NudgeActivityType;
+  workoutExecutionStatus: WorkoutExecutionStatus | null;
+  mealLogged: boolean;
+  checkinRecordStatus: "draft" | "submitted" | null;
 }): boolean {
-  if (input.nowIso < input.windowStartsAt) return false;
-  if (input.complianceOutcome && input.loggedAt) return false;
-  const status = deriveMealAssignmentStatus({
-    nowIso: input.nowIso,
-    windowEndsAt: input.windowEndsAt,
-    complianceOutcome: input.complianceOutcome,
-    loggedAt: input.loggedAt,
+  switch (input.activityType) {
+    case "workout":
+      return !isWorkoutResolved(input.workoutExecutionStatus);
+    case "meal":
+      return !input.mealLogged;
+    case "checkin":
+      return input.checkinRecordStatus === "draft";
+    default: {
+      const _exhaustive: never = input.activityType;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Category-off is a final suppression. Quiet hours defer and leave the
+ * delivery dedupe key free so the same reminder can send later.
+ */
+export function reminderDeliveryDecision(input: {
+  categoryEnabled: boolean;
+  withinQuietHours: boolean;
+}): ReminderDeliveryDecision {
+  if (!input.categoryEnabled) return "suppress";
+  if (input.withinQuietHours) return "defer";
+  return "deliver";
+}
+
+export type ReminderBackoffMode =
+  | "normal"
+  | "self_logger"
+  | "soft_ignorer"
+  | "paused"
+  | "push_failed";
+
+export const REMINDER_SOFT_IGNORER_THRESHOLD = 3;
+export const REMINDER_PAUSE_IGNORE_THRESHOLD = 5;
+export const REMINDER_PAUSE_DURATION_DAYS = 7;
+
+export function compareLocalTimeHhMm(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
+/** Latest same-day fire time before quiet hours / hard stop (21:59 with default 22:00 quiet start). */
+export function latestWorkoutReminderFireBeforeQuiet(
+  assignmentLocalDate: string,
+  quietHoursStart: string = DEFAULT_QUIET_HOURS_START,
+): { localDate: string; localTime: string } {
+  return addMinutesToLocalClock({
+    localDate: assignmentLocalDate,
+    localTime: quietHoursStart,
+    deltaMinutes: -1,
   });
-  return status === "pending" || status === "overdue";
+}
+
+/**
+ * When to fire the post-workout "still unlogged" nudge: anchor + 75 min,
+ * clamped to the latest slot before quiet hours if that would cross 22:00.
+ */
+export function workoutReminderFireClock(input: {
+  assignmentLocalDate: string;
+  workoutAnchorLocalTime: string;
+  quietHoursStart?: string;
+}): { localDate: string; localTime: string } | null {
+  const quietStart = input.quietHoursStart ?? DEFAULT_QUIET_HOURS_START;
+  if (compareLocalTimeHhMm(input.workoutAnchorLocalTime, quietStart) >= 0) {
+    return null;
+  }
+  const scheduled = addMinutesToLocalClock({
+    localDate: input.assignmentLocalDate,
+    localTime: input.workoutAnchorLocalTime,
+    deltaMinutes: WORKOUT_REMINDER_AFTER_MINUTES,
+  });
+  const crossesQuiet =
+    compareLocalTimeHhMm(scheduled.localTime, quietStart) >= 0 ||
+    compareLocalTimeHhMm(scheduled.localTime, HARD_STOP_LOCAL_TIME) >= 0;
+  if (!crossesQuiet) {
+    return scheduled;
+  }
+  const latest = latestWorkoutReminderFireBeforeQuiet(
+    input.assignmentLocalDate,
+    quietStart,
+  );
+  if (
+    compareLocalTimeHhMm(latest.localTime, input.workoutAnchorLocalTime) <= 0
+  ) {
+    return null;
+  }
+  return latest;
+}
+
+export function nextReminderStateAfterIgnore(input: {
+  consecutiveIgnores: number;
+  mode: ReminderBackoffMode;
+  nowIso: string;
+}): {
+  mode: ReminderBackoffMode;
+  consecutiveIgnores: number;
+  pausedUntil: string | null;
+  emitRemindersPaused: boolean;
+} {
+  const consecutiveIgnores = input.consecutiveIgnores + 1;
+  if (consecutiveIgnores >= REMINDER_PAUSE_IGNORE_THRESHOLD) {
+    const pausedUntil = new Date(
+      Date.parse(input.nowIso) + REMINDER_PAUSE_DURATION_DAYS * 86_400_000,
+    ).toISOString();
+    return {
+      mode: "paused",
+      consecutiveIgnores,
+      pausedUntil,
+      emitRemindersPaused: true,
+    };
+  }
+  if (consecutiveIgnores >= REMINDER_SOFT_IGNORER_THRESHOLD) {
+    return {
+      mode: "soft_ignorer",
+      consecutiveIgnores,
+      pausedUntil: null,
+      emitRemindersPaused: false,
+    };
+  }
+  return {
+    mode: "normal",
+    consecutiveIgnores,
+    pausedUntil: null,
+    emitRemindersPaused: false,
+  };
+}
+
+/** Higher priority reminders are delivered first when the daily push cap applies. */
+export function reminderDeliveryPriority(type: NotificationType): number {
+  switch (type) {
+    case "activity_nudge":
+      return 0;
+    case "meal_reminder":
+      return 1;
+    case "workout_reminder":
+      return 2;
+    case "checkin_reminder":
+      return 3;
+    case "daily_summary":
+      return 4;
+    case "subscription_renewal_reminder":
+      return 5;
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return 10;
+    default:
+      return 9;
+  }
+}
+
+export function shouldSkipReminderForBackoff(input: {
+  mode: ReminderBackoffMode | string;
+  preferenceType: ReminderType | null;
+  pausedUntil?: string | null;
+  nowIso: string;
+  softIgnorerSkipTick?: boolean;
+}): boolean {
+  if (input.mode === "paused") {
+    if (input.pausedUntil && input.pausedUntil > input.nowIso) {
+      return true;
+    }
+  }
+  if (input.mode === "push_failed") return true;
+  if (input.mode === "self_logger") {
+    return (
+      input.preferenceType === "meal_reminder" ||
+      input.preferenceType === "workout_reminder"
+    );
+  }
+  if (input.mode === "soft_ignorer" && input.softIgnorerSkipTick) {
+    return input.preferenceType !== null;
+  }
+  return false;
+}
+
+export function addMinutesToLocalClock(input: {
+  localDate: string;
+  localTime: string;
+  deltaMinutes: number;
+}): { localDate: string; localTime: string } {
+  const [hour, minute] = input.localTime.split(":").map(Number);
+  if (
+    hour === undefined ||
+    minute === undefined ||
+    Number.isNaN(hour) ||
+    Number.isNaN(minute)
+  ) {
+    throw new Error("Invalid local time");
+  }
+  let total = hour * 60 + minute + input.deltaMinutes;
+  let dayOffset = 0;
+  while (total < 0) {
+    total += 24 * 60;
+    dayOffset -= 1;
+  }
+  while (total >= 24 * 60) {
+    total -= 24 * 60;
+    dayOffset += 1;
+  }
+  return {
+    localDate: addDaysToLocalDate(input.localDate, dayOffset),
+    localTime: `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`,
+  };
+}
+
+export function localClockToUtcIso(input: {
+  localDate: string;
+  localTime: string;
+  timeZone: string;
+}): string {
+  const [hour, minute] = input.localTime.split(":").map(Number);
+  return localDateTimeToUtcIso(
+    input.localDate,
+    input.timeZone,
+    hour ?? 0,
+    minute ?? 0,
+    0,
+  );
+}
+
+/**
+ * Timed meals: one reminder MEAL_REMINDER_AFTER_MINUTES after the slot time.
+ * Meals without a local time have no clock reminder.
+ */
+export function dueMealReminderPhases(input: {
+  nowIso: string;
+  localDate: string;
+  timeZone: string;
+  localTime: string | null;
+  logged: boolean;
+  windowEndsAt: string;
+}): MealReminderPhase[] {
+  if (input.logged || !input.localTime) return [];
+  const afterClock = addMinutesToLocalClock({
+    localDate: input.localDate,
+    localTime: input.localTime,
+    deltaMinutes: MEAL_REMINDER_AFTER_MINUTES,
+  });
+  const afterAt = localClockToUtcIso({
+    ...afterClock,
+    timeZone: input.timeZone,
+  });
+  const snoozeClock = addMinutesToLocalClock({
+    localDate: input.localDate,
+    localTime: input.localTime,
+    deltaMinutes: MEAL_REMINDER_AFTER_MINUTES + MEAL_REMINDER_SNOOZE_MINUTES,
+  });
+  const snoozeAt = localClockToUtcIso({
+    ...snoozeClock,
+    timeZone: input.timeZone,
+  });
+  if (input.nowIso > input.windowEndsAt) return [];
+  if (input.nowIso < afterAt) return [];
+  if (input.nowIso >= snoozeAt) {
+    return ["snooze"];
+  }
+  return ["after"];
+}
+
+/** Post-workout nudge when still unlogged, WORKOUT_REMINDER_AFTER_MINUTES after anchor. */
+export function dueWorkoutReminderTimes(input: {
+  nowIso: string;
+  assignmentLocalDate: string;
+  timeZone: string;
+  resolved: boolean;
+  workoutStartLocalTime?: string | null;
+  quietHoursStart?: string | null;
+}): WorkoutReminderLocalTime[] {
+  if (input.resolved) return [];
+  const today = formatLocalDate(new Date(input.nowIso), input.timeZone);
+  if (today !== input.assignmentLocalDate) return [];
+  const anchor = input.workoutStartLocalTime ?? WORKOUT_FALLBACK_ANCHOR;
+  const fireClock = workoutReminderFireClock({
+    assignmentLocalDate: input.assignmentLocalDate,
+    workoutAnchorLocalTime: anchor,
+    quietHoursStart: input.quietHoursStart ?? undefined,
+  });
+  if (!fireClock) return [];
+  const reminderAt = localClockToUtcIso({
+    ...fireClock,
+    timeZone: input.timeZone,
+  });
+  if (input.nowIso >= reminderAt) {
+    return [WORKOUT_REMINDER_SLOT];
+  }
+  return [];
+}
+
+/** End-of-day summary at min(lastMeal+60, 21:30) trainee-local. */
+export function isAtOrAfterHardStopLocal(
+  nowIso: string,
+  timeZone: string,
+): boolean {
+  const local = localTimeHhMm(nowIso, timeZone);
+  if (local === null) return false;
+  return local >= HARD_STOP_LOCAL_TIME;
+}
+
+export function isDailySummaryClockDue(input: {
+  nowIso: string;
+  timeZone: string;
+  lastMealLocalTime?: string | null;
+}): boolean {
+  if (isAtOrAfterHardStopLocal(input.nowIso, input.timeZone)) return false;
+  const local = localTimeHhMm(input.nowIso, input.timeZone);
+  if (local === null) return false;
+  let target = DAILY_SUMMARY_CAP_LOCAL_TIME;
+  if (input.lastMealLocalTime) {
+    const plus60 = addMinutesToLocalClock({
+      localDate: formatLocalDate(new Date(input.nowIso), input.timeZone),
+      localTime: input.lastMealLocalTime,
+      deltaMinutes: 60,
+    }).localTime;
+    target = plus60 < DAILY_SUMMARY_CAP_LOCAL_TIME ? plus60 : DAILY_SUMMARY_CAP_LOCAL_TIME;
+  }
+  return local >= target;
 }
 
 /** Check-in reminder when due or overdue and not yet submitted. */
@@ -126,7 +585,7 @@ export function isCategoryEnabled(input: {
     checkinReminder: boolean;
     subscriptionRenewalReminder: boolean;
   };
-  type: NotificationType;
+  type: ReminderType;
 }): boolean {
   if (!input.pushEnabled) return false;
   switch (input.type) {
@@ -177,7 +636,7 @@ export function isWithinQuietHours(input: {
   const current = input.localTimeHhMm;
   const start = input.quietHoursStart;
   const end = input.quietHoursEnd;
-  if (start === end) return true;
+  if (start === end) return false;
   if (start < end) {
     return current >= start && current < end;
   }
@@ -241,39 +700,65 @@ export function pushPayloadContainsSensitiveKeys(
  * Mobile deep-link target from a validated routing payload.
  * Clients must refetch authoritative state after navigation — payload is not state.
  */
+/** Mobile inbox row deep-link path (refetch after navigation). */
+export function notificationInboxRoute(payload: PushPayload): string {
+  switch (payload.domainEntityType) {
+    case "meal_assignment":
+      return routeForLinkKind("meal", payload.domainEntityId, "today");
+    case "workout_assignment":
+      return routeForLinkKind("workout", payload.domainEntityId, "today");
+    case "checkin":
+      return routeForLinkKind("checkin", payload.domainEntityId);
+    case "coaching_relationship":
+      if (payload.notificationType === "reactivation_requested") {
+        return routeForLinkKind("reactivate", payload.domainEntityId);
+      }
+      return routeForLinkKind("today", payload.domainEntityId);
+    default:
+      return routeForLinkKind("today", payload.domainEntityId);
+  }
+}
+
 export function routeTargetFromPushPayload(payload: PushPayload): {
   tab: "workout" | "diet" | "today";
   domainEntityType: NotificationDomainEntityType;
   domainEntityId: string;
 } {
+  const target = {
+    domainEntityType: payload.domainEntityType,
+    domainEntityId: payload.domainEntityId,
+  };
   switch (payload.notificationType) {
     case "workout_reminder":
-      return {
-        tab: "workout",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
+      return { tab: "workout", ...target };
     case "meal_reminder":
-      return {
-        tab: "diet",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
+      return { tab: "diet", ...target };
     case "checkin_reminder":
-      return {
-        tab: "today",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
     case "subscription_renewal_reminder":
-      return {
-        tab: "today",
-        domainEntityType: payload.domainEntityType,
-        domainEntityId: payload.domainEntityId,
-      };
-    default: {
-      const _exhaustive: never = payload.notificationType;
-      return _exhaustive;
-    }
+    case "daily_summary":
+      return { tab: "today", ...target };
+    case "activity_nudge":
+      if (payload.domainEntityType === "workout_assignment") {
+        return { tab: "workout", ...target };
+      }
+      if (payload.domainEntityType === "meal_assignment") {
+        return { tab: "diet", ...target };
+      }
+      return { tab: "today", ...target };
+    case "plan_published":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "trainer_note_shared":
+    case "reactivation_requested":
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_critical_digest":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "admin_whatsapp_budget":
+      return { tab: "today", ...target };
   }
 }

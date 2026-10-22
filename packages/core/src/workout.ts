@@ -137,21 +137,6 @@ export function setCompletionIsModified(input: {
   );
 }
 
-/** Prefer Mon/Wed/Fri… pattern scaled to sessionsPerWeek. */
-export function sessionWeekdaysForFrequency(sessionsPerWeek: number): number[] {
-  const clamped = Math.min(Math.max(Math.trunc(sessionsPerWeek), 1), 7);
-  const patterns: Record<number, number[]> = {
-    1: [3],
-    2: [1, 4],
-    3: [1, 3, 5],
-    4: [1, 2, 4, 5],
-    5: [1, 2, 3, 4, 5],
-    6: [1, 2, 3, 4, 5, 6],
-    7: [0, 1, 2, 3, 4, 5, 6],
-  };
-  return patterns[clamped] ?? patterns[3]!;
-}
-
 /** JS getUTCDay()-style weekday: 0=Sun … 6=Sat for a YYYY-MM-DD. */
 export function weekdayFromLocalDate(localDate: string): number {
   const [y, m, d] = localDate.split("-").map(Number);

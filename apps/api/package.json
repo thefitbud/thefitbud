@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter thefitbud build:packages",
+    "predb:reset": "pnpm --filter thefitbud build:packages",
+    "presetup:local": "pnpm --filter thefitbud build:packages",
     "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 0.0.0.0",
     "build": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src scripts --max-warnings=0",
@@ -12,7 +15,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply fitbud --local --persist-to .wrangler/state",
     "db:migrate": "wrangler d1 migrations apply fitbud",
-    "db:seed:dev": "node scripts/seed-dev.ts"
+    "db:seed:library": "tsx scripts/library-seed.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "setup:local": "tsx scripts/ensure-dev-vars.ts"
   },
   "dependencies": {
     "@fitbud/contracts": "workspace:*",
@@ -34,6 +40,7 @@
     "sql.js": "^1.13.0",
     "typescript": "catalog:",
     "typescript-eslint": "^8.29.1",
+    "tsx": "^4.19.4",
     "vitest": "catalog:",
     "wrangler": "^4.12.0"
   }

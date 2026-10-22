@@ -1,7 +1,14 @@
+import { parseTrainerCategoriesJson } from "./trainer-categories.js";
 import {
+  checkinFormDefinitionSchema,
+  mealPrescriptionSchema,
+  onboardingAnswersSchema,
   onboardingFormDefinitionSchema,
+  planContentSchema,
   type Checkin,
   type CheckinDraftAnswers,
+  type CheckinFormTemplateDetail,
+  type CheckinFormVersion,
   type CheckinReview,
   type CoachingConfiguration,
   type CoachingRelationship,
@@ -12,6 +19,7 @@ import {
   type OnboardingFormVersion,
   type MealAssignment,
   type MealCompliance,
+  type MealComplianceLoggedItem,
   type MealPhotoIntent,
   type MealPrescription,
   type OnboardingReview,
@@ -37,14 +45,21 @@ import {
   type PlanTemplateSummary,
   type ExerciseLibraryItem,
   type FoodLibraryItem,
+  type NotificationType,
 } from "@fitbud/contracts";
 import {
   deriveCheckinStatus,
   deriveClientOnboardingStatus,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
+  labelFor,
+  materializePlanContent,
+  notificationInboxRoute,
+  unscaleNutrient,
 } from "@fitbud/core";
 import type {
+  checkinFormTemplates,
+  checkinFormVersions,
   checkinReviews,
   checkinSchedules,
   checkins,
@@ -76,6 +91,7 @@ import type {
   planTemplates,
   exerciseLibraryItems,
   foodLibraryItems,
+  foodLibraryServings,
 } from "../db/schema";
 
 type InvitationRow = typeof clientInvitations.$inferSelect;
@@ -94,6 +110,7 @@ type PlanVersionRow = typeof planVersions.$inferSelect;
 type PlanTemplateRow = typeof planTemplates.$inferSelect;
 type ExerciseLibraryItemRow = typeof exerciseLibraryItems.$inferSelect;
 type FoodLibraryItemRow = typeof foodLibraryItems.$inferSelect;
+type FoodLibraryServingRow = typeof foodLibraryServings.$inferSelect;
 type WorkoutAssignmentRow = typeof workoutAssignments.$inferSelect;
 type WorkoutExecutionRow = typeof workoutExecutions.$inferSelect;
 type ExerciseExecutionRow = typeof exerciseExecutions.$inferSelect;
@@ -103,6 +120,8 @@ type MealComplianceRow = typeof mealCompliance.$inferSelect;
 type ExceptionRow = typeof exceptions.$inferSelect;
 type ExceptionActionRow = typeof exceptionActions.$inferSelect;
 type InterventionRow = typeof interventions.$inferSelect;
+type CheckinFormTemplateRow = typeof checkinFormTemplates.$inferSelect;
+type CheckinFormVersionRow = typeof checkinFormVersions.$inferSelect;
 type CheckinRow = typeof checkins.$inferSelect;
 type CheckinReviewRow = typeof checkinReviews.$inferSelect;
 type TrainerNoteRow = typeof trainerNotes.$inferSelect;
@@ -151,6 +170,10 @@ export function mapInvitation(
 export function mapRelationship(
   row: RelationshipRow,
   onboardingStatus: OnboardingStatus,
+  extras?: {
+    trainerDisplayName?: string | null;
+    trainerWhatsappE164?: string | null;
+  },
 ): CoachingRelationship {
   return {
     id: row.id,
@@ -163,6 +186,8 @@ export function mapRelationship(
     endedAt: row.endedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    trainerDisplayName: extras?.trainerDisplayName ?? null,
+    trainerWhatsappE164: extras?.trainerWhatsappE164 ?? null,
   };
 }
 
@@ -207,7 +232,7 @@ export function mapOnboardingFormTemplateDetail(
 export function mapOnboardingFormResponse(
   row: OnboardingFormResponseRow,
 ): OnboardingFormResponse {
-  const answers = JSON.parse(row.answersJson) as Record<string, string>;
+  const answers = onboardingAnswersSchema.parse(JSON.parse(row.answersJson));
   return {
     id: row.id,
     coachingRelationshipId: row.coachingRelationshipId,
@@ -247,7 +272,8 @@ export function mapCoachingConfiguration(input: {
     status: configuration.status,
     versionNumber: configuration.versionNumber,
     recordVersion: configuration.recordVersion,
-    primaryGoal: configuration.primaryGoal,
+    goalShort: configuration.goalShort,
+    goalDescription: configuration.goalDescription,
     notes: configuration.notes,
     workout: {
       sessionsPerWeek: workout.sessionsPerWeek,
@@ -261,6 +287,7 @@ export function mapCoachingConfiguration(input: {
     checkin: {
       cadence: checkin.cadence,
       dueWindowHours: checkin.dueWindowHours,
+      formVersionId: checkin.preferredCheckinFormVersionId ?? null,
     },
     tracking: {
       requireBodyWeight: tracking.requireBodyWeight,
@@ -284,8 +311,27 @@ export function mapPlan(row: PlanRow): Plan {
   };
 }
 
+function withMealItems(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const content = value as { mealPrescriptions?: unknown };
+  if (!Array.isArray(content.mealPrescriptions)) return value;
+  return {
+    ...content,
+    mealPrescriptions: content.mealPrescriptions.map((meal) => {
+      if (!meal || typeof meal !== "object") return meal;
+      const row = meal as { items?: unknown };
+      return {
+        ...row,
+        items: Array.isArray(row.items) ? row.items : [],
+      };
+    }),
+  };
+}
+
 export function parsePlanContentJson(contentJson: string): PlanContent {
-  return JSON.parse(contentJson) as PlanContent;
+  return materializePlanContent(
+    planContentSchema.parse(withMealItems(JSON.parse(contentJson))),
+  );
 }
 
 export function mapPlanVersion(row: PlanVersionRow): PlanVersion {
@@ -297,6 +343,7 @@ export function mapPlanVersion(row: PlanVersionRow): PlanVersion {
     recordVersion: row.recordVersion,
     content: parsePlanContentJson(row.contentJson),
     creationSource: row.creationSource,
+    sourceTemplateId: row.sourceTemplateId,
     publishedAt: row.publishedAt,
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo,
@@ -313,6 +360,7 @@ export function mapPlanVersionSummary(row: PlanVersionRow): PlanVersionSummary {
     status: row.status,
     recordVersion: row.recordVersion,
     creationSource: row.creationSource,
+    sourceTemplateId: row.sourceTemplateId,
     publishedAt: row.publishedAt,
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo,
@@ -324,6 +372,7 @@ export function mapPlanVersionSummary(row: PlanVersionRow): PlanVersionSummary {
 export function mapPlanTemplate(row: PlanTemplateRow): PlanTemplate {
   return {
     id: row.id,
+    ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     title: row.title,
     templateType: row.templateType,
@@ -339,6 +388,7 @@ export function mapPlanTemplateSummary(
 ): PlanTemplateSummary {
   return {
     id: row.id,
+    ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     title: row.title,
     templateType: row.templateType,
@@ -348,31 +398,103 @@ export function mapPlanTemplateSummary(
   };
 }
 
+function parseLabelList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
+}
+
+const EXERCISE_DIFFICULTIES = new Set([
+  "beginner",
+  "intermediate",
+  "advanced",
+]);
+
 export function mapExerciseLibraryItem(
   row: ExerciseLibraryItemRow,
 ): ExerciseLibraryItem {
+  const difficulty =
+    row.difficulty && EXERCISE_DIFFICULTIES.has(row.difficulty)
+      ? row.difficulty
+      : null;
   return {
     id: row.id,
     ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     name: row.name,
     instructions: row.instructions,
-    defaultLoadLabel: row.defaultLoadLabel,
-    defaultReps: row.defaultReps,
+    primaryMuscles: parseLabelList(row.primaryMusclesJson),
+    secondaryMuscles: parseLabelList(row.secondaryMusclesJson),
+    equipment: parseLabelList(row.equipmentJson),
+    difficulty,
+    status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-export function mapFoodLibraryItem(row: FoodLibraryItemRow): FoodLibraryItem {
+const FOOD_CLASSIFICATIONS = new Set([
+  "raw_ingredient",
+  "generic_food",
+  "prepared_food",
+  "branded_product",
+]);
+const NUTRITION_BASES = new Set(["per_100_g", "per_100_ml"]);
+const FOOD_CUISINE_REGIONS = new Set(["indian", "indian_pantry", "global"]);
+
+function mapFoodCuisineRegion(
+  row: FoodLibraryItemRow,
+): FoodLibraryItem["cuisineRegion"] {
+  if (FOOD_CUISINE_REGIONS.has(row.cuisineRegion)) {
+    return row.cuisineRegion as FoodLibraryItem["cuisineRegion"];
+  }
+  if (row.cuisine && FOOD_CUISINE_REGIONS.has(row.cuisine)) {
+    return row.cuisine as FoodLibraryItem["cuisineRegion"];
+  }
+  return "indian";
+}
+
+export function mapFoodLibraryItem(
+  row: FoodLibraryItemRow,
+  servings: FoodLibraryServingRow[],
+): FoodLibraryItem {
+  const classification =
+    row.classification && FOOD_CLASSIFICATIONS.has(row.classification)
+      ? row.classification
+      : null;
+  const basis =
+    row.nutritionBasis && NUTRITION_BASES.has(row.nutritionBasis)
+      ? row.nutritionBasis
+      : null;
   return {
     id: row.id,
     ownership: row.ownership,
     trainerUserId: row.trainerUserId,
     name: row.name,
-    cuisineRegion: row.cuisineRegion,
-    portionLabel: row.portionLabel,
+    cuisineRegion: mapFoodCuisineRegion(row),
+    classification,
+    basis,
+    energyKcalScaled: row.energyKcalScaled,
+    proteinScaled: row.proteinScaled,
+    carbsScaled: row.carbsScaled,
+    fatScaled: row.fatScaled,
+    servings: servings
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((serving) => ({
+        id: serving.id,
+        label: serving.label,
+        unit: serving.unit,
+        conversionScaled: serving.conversionScaled,
+      })),
     notes: row.notes,
+    description: row.description,
+    status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -474,6 +596,9 @@ export function mapWorkoutAssignment(
       windowEndsAt: row.windowEndsAt,
       executionStatus: execution?.status ?? null,
     }),
+    scheduleStatus: row.scheduleStatus,
+    supersededAt: row.supersededAt,
+    supersededByPlanVersionId: row.supersededByPlanVersionId,
     workoutDay: parseWorkoutDayJson(row.workoutDayJson),
     execution: execution ? mapWorkoutExecutionSummary(execution) : null,
     createdAt: row.createdAt,
@@ -484,7 +609,11 @@ export function mapWorkoutAssignment(
 export function parseMealPrescriptionJson(
   mealPrescriptionJson: string,
 ): MealPrescription {
-  return JSON.parse(mealPrescriptionJson) as MealPrescription;
+  const parsed = JSON.parse(mealPrescriptionJson) as { items?: unknown };
+  return mealPrescriptionSchema.parse({
+    ...parsed,
+    items: Array.isArray(parsed.items) ? parsed.items : [],
+  });
 }
 
 export function parseMealPhotoIntentJson(
@@ -494,8 +623,92 @@ export function parseMealPhotoIntentJson(
   return JSON.parse(photoIntentJson) as MealPhotoIntent;
 }
 
+function parseLoggedMealItems(
+  itemsJson: string | null,
+): MealComplianceLoggedItem[] {
+  if (!itemsJson) return [];
+  try {
+    const raw = JSON.parse(itemsJson) as unknown;
+    if (!Array.isArray(raw)) return [];
+    const out: MealComplianceLoggedItem[] = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object") continue;
+      const row = entry as Record<string, unknown>;
+      const custom =
+        row.customFood && typeof row.customFood === "object"
+          ? (row.customFood as Record<string, unknown>)
+          : null;
+      const nameFromCustom =
+        typeof custom?.name === "string" ? custom.name.trim() : "";
+      const nameFromRow =
+        typeof row.name === "string"
+          ? row.name.trim()
+          : typeof row.foodName === "string"
+            ? row.foodName.trim()
+            : "";
+      const name = nameFromCustom || nameFromRow;
+      if (!name) continue;
+      const quantity =
+        typeof row.quantity === "number"
+          ? row.quantity
+          : typeof custom?.quantity === "number"
+            ? custom.quantity
+            : null;
+      const servingLabel =
+        typeof row.servingLabel === "string"
+          ? row.servingLabel
+          : typeof custom?.servingLabel === "string"
+            ? custom.servingLabel
+            : null;
+      const energyKcal =
+        typeof custom?.kcal === "number"
+          ? custom.kcal
+          : typeof row.kcal === "number"
+            ? row.kcal
+            : typeof row.energyKcal === "number"
+              ? row.energyKcal
+              : null;
+      out.push({
+        name,
+        quantity,
+        servingLabel,
+        energyKcal,
+        proteinG:
+          typeof custom?.protein === "number"
+            ? custom.protein
+            : typeof row.protein === "number"
+              ? row.protein
+              : null,
+        carbsG:
+          typeof custom?.carbs === "number"
+            ? custom.carbs
+            : typeof row.carbs === "number"
+              ? row.carbs
+              : null,
+        fatG:
+          typeof custom?.fat === "number"
+            ? custom.fat
+            : typeof row.fat === "number"
+              ? row.fat
+              : null,
+        custom: Boolean(custom) || row.custom === true,
+        foodId: typeof row.foodId === "string" ? row.foodId : undefined,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export function mapMealCompliance(row: MealComplianceRow): MealCompliance {
   const photoIntent = parseMealPhotoIntentJson(row.photoIntentJson);
+  const loggedItems = parseLoggedMealItems(row.itemsJson);
+  const hasScaled =
+    row.kcalScaled != null ||
+    row.proteinScaled != null ||
+    row.carbsScaled != null ||
+    row.fatScaled != null;
   return {
     id: row.id,
     assignmentId: row.assignmentId,
@@ -517,6 +730,23 @@ export function mapMealCompliance(row: MealComplianceRow): MealCompliance {
           }
         : null),
     mediaAssetId: row.mediaAssetId ?? null,
+    ...(loggedItems.length > 0 ? { loggedItems } : {}),
+    ...(hasScaled
+      ? {
+          loggedTotals: {
+            energyKcal:
+              row.kcalScaled != null ? unscaleNutrient(row.kcalScaled) : null,
+            proteinG:
+              row.proteinScaled != null
+                ? unscaleNutrient(row.proteinScaled)
+                : null,
+            carbsG:
+              row.carbsScaled != null ? unscaleNutrient(row.carbsScaled) : null,
+            fatG:
+              row.fatScaled != null ? unscaleNutrient(row.fatScaled) : null,
+          },
+        }
+      : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -526,6 +756,7 @@ export function mapMealAssignment(
   row: MealAssignmentRow,
   compliance: MealComplianceRow | null,
   nowIso: string,
+  lock?: { locked: boolean; reason: string | null },
 ): MealAssignment {
   return {
     id: row.id,
@@ -544,8 +775,13 @@ export function mapMealAssignment(
       complianceOutcome: compliance?.outcome ?? null,
       loggedAt: compliance?.loggedAt ?? null,
     }),
+    scheduleStatus: row.scheduleStatus,
+    supersededAt: row.supersededAt,
+    supersededByPlanVersionId: row.supersededByPlanVersionId,
     prescription: parseMealPrescriptionJson(row.mealPrescriptionJson),
     compliance: compliance ? mapMealCompliance(compliance) : null,
+    loggingLocked: lock?.locked ?? false,
+    loggingLockReason: lock?.reason ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -556,6 +792,44 @@ export function parseCheckinAnswersJson(
 ): CheckinDraftAnswers | null {
   if (!answersJson) return null;
   return JSON.parse(answersJson) as CheckinDraftAnswers;
+}
+
+export function mapCheckinFormVersion(
+  row: CheckinFormVersionRow,
+): CheckinFormVersion {
+  const stored = JSON.parse(row.schemaJson) as { fields?: unknown };
+  const definition = checkinFormDefinitionSchema.parse({
+    fields: stored.fields ?? [],
+  });
+  return {
+    id: row.id,
+    templateId: row.templateId,
+    key: row.key,
+    version: row.version,
+    scope: row.scope,
+    fields: definition.fields,
+    createdAt: row.createdAt,
+  };
+}
+
+export function mapCheckinFormTemplateDetail(
+  template: CheckinFormTemplateRow,
+  versions: CheckinFormVersionRow[],
+): CheckinFormTemplateDetail {
+  const ordered = [...versions].sort((left, right) => left.version - right.version);
+  const latest = ordered[ordered.length - 1]!;
+  return {
+    id: template.id,
+    ownership: template.ownership,
+    trainerUserId: template.trainerUserId,
+    name: template.name,
+    description: template.description,
+    latestVersionId: latest.id,
+    latestVersionNumber: latest.version,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
+    versions: ordered.map(mapCheckinFormVersion),
+  };
 }
 
 export function mapCheckinReview(row: CheckinReviewRow): CheckinReview {
@@ -586,6 +860,7 @@ export function mapCheckin(
     recordStatus: row.recordStatus,
     recordVersion: row.recordVersion,
     definitionVersion: row.definitionVersion,
+    checkinFormVersionId: row.checkinFormVersionId,
     answers: parseCheckinAnswersJson(row.answersJson),
     submittedAt: row.submittedAt,
     status: deriveCheckinStatus({
@@ -608,6 +883,11 @@ export function mapTrainerNote(row: TrainerNoteRow): TrainerNote {
     trainerUserId: row.trainerUserId,
     checkinId: row.checkinId,
     body: row.body,
+    visibility: row.visibility,
+    subjectType: row.subjectType,
+    subjectId: row.subjectId,
+    sharedAt: row.sharedAt,
+    seenAt: row.seenAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -620,23 +900,52 @@ function parseExceptionDetailsJson(
   return JSON.parse(detailsJson) as Record<string, unknown>;
 }
 
+/**
+ * Coerce date-only (`YYYY-MM-DD`) or partial timestamps into full ISO instants
+ * so Zod `datetime({ offset: true })` accepts seed/legacy rows.
+ */
+export function coerceIsoInstant(
+  value: string | null | undefined,
+): string | null {
+  if (value == null || value === "") return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `${value}T00:00:00.000Z`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value)) {
+    return `${value}${value.includes("Z") || /[+-]\d{2}:\d{2}$/.test(value) ? "" : "Z"}`;
+  }
+  const parsed = Date.parse(value);
+  if (Number.isFinite(parsed)) {
+    return new Date(parsed).toISOString();
+  }
+  return value;
+}
+
+function requireIsoInstant(value: string): string {
+  return coerceIsoInstant(value) ?? value;
+}
+
 export function mapException(row: ExceptionRow): Exception {
+  const typeLabel = labelFor("exception_type", row.type);
+  const summary =
+    !row.summary || row.summary === row.type ? typeLabel : row.summary;
   return {
     id: row.id,
     coachingRelationshipId: row.coachingRelationshipId,
     type: row.type,
+    severity: row.severity,
     status: row.status,
     ruleVersion: row.ruleVersion,
     sourceEntityType: row.sourceEntityType,
     sourceEntityId: row.sourceEntityId,
-    summary: row.summary,
+    summary,
     details: parseExceptionDetailsJson(row.detailsJson),
-    detectedAt: row.detectedAt,
-    activatedAt: row.activatedAt,
-    acknowledgedAt: row.acknowledgedAt,
-    resolvedAt: row.resolvedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    detectedAt: requireIsoInstant(row.detectedAt),
+    activatedAt: coerceIsoInstant(row.activatedAt),
+    acknowledgedAt: coerceIsoInstant(row.acknowledgedAt),
+    resolvedAt: coerceIsoInstant(row.resolvedAt),
+    createdAt: requireIsoInstant(row.createdAt),
+    updatedAt: requireIsoInstant(row.updatedAt),
   };
 }
 
@@ -672,6 +981,7 @@ export function mapActiveExceptionSummary(
   return {
     id: row.id,
     type: row.type,
+    severity: row.severity,
     status: row.status,
     summary: row.summary,
     sourceEntityType: row.sourceEntityType,
@@ -764,17 +1074,31 @@ export function mapDeviceToken(row: {
   };
 }
 
-export function mapNotificationPreferences(row: {
-  userId: string;
-  pushEnabled: boolean;
-  workoutReminder: boolean;
-  mealReminder: boolean;
-  checkinReminder: boolean;
-  subscriptionRenewalReminder: boolean;
-  quietHoursStart: string | null;
-  quietHoursEnd: string | null;
-  updatedAt: string;
-}) {
+export function mapNotificationPreferences(
+  row: {
+    userId: string;
+    pushEnabled: boolean;
+    workoutReminder: boolean;
+    mealReminder: boolean;
+    checkinReminder: boolean;
+    subscriptionRenewalReminder: boolean;
+    dailySummaryReminder: boolean;
+    channelPreference: string;
+    whatsappOptInGranted: boolean;
+    whatsappOptInAt: string | null;
+    whatsappOptInSource: string | null;
+    whatsappOptInTextVersion: string | null;
+    trainerCategoriesJson: string;
+    preferredWorkoutTime: string | null;
+    locale: string | null;
+    quietHoursStart: string | null;
+    quietHoursEnd: string | null;
+    updatedAt: string;
+  },
+  userTimezone: string | null,
+) {
+  const channelPreference =
+    row.channelPreference === "app_and_whatsapp" ? "app_and_whatsapp" : "app";
   return {
     userId: row.userId,
     pushEnabled: row.pushEnabled,
@@ -783,7 +1107,19 @@ export function mapNotificationPreferences(row: {
       mealReminder: row.mealReminder,
       checkinReminder: row.checkinReminder,
       subscriptionRenewalReminder: row.subscriptionRenewalReminder,
+      dailySummaryReminder: row.dailySummaryReminder,
     },
+    channelPreference,
+    whatsappOptIn: {
+      granted: row.whatsappOptInGranted,
+      at: row.whatsappOptInAt,
+      source: row.whatsappOptInSource,
+      textVersion: row.whatsappOptInTextVersion,
+    },
+    traineeTimezone: userTimezone,
+    locale: row.locale,
+    trainerCategories: parseTrainerCategoriesJson(row.trainerCategoriesJson),
+    preferredWorkoutTime: row.preferredWorkoutTime,
     quietHoursStart: row.quietHoursStart,
     quietHoursEnd: row.quietHoursEnd,
     updatedAt: row.updatedAt,
@@ -816,11 +1152,7 @@ export function mapNotification(row: {
   id: string;
   recipientUserId: string;
   coachingRelationshipId: string | null;
-  notificationType:
-    | "workout_reminder"
-    | "meal_reminder"
-    | "checkin_reminder"
-    | "subscription_renewal_reminder";
+  notificationType: NotificationType;
   domainEntityType:
     | "workout_assignment"
     | "meal_assignment"
@@ -833,7 +1165,8 @@ export function mapNotification(row: {
     | "delivered"
     | "read"
     | "failed"
-    | "suppressed";
+    | "suppressed"
+    | "deferred";
   dedupeKey: string;
   createdAt: string;
   readAt: string | null;
@@ -857,5 +1190,12 @@ export function mapNotification(row: {
       domainEntityId: row.domainEntityId,
       createdAt: row.createdAt,
     },
+    route: notificationInboxRoute({
+      notificationId: row.id,
+      notificationType: row.notificationType,
+      domainEntityType: row.domainEntityType,
+      domainEntityId: row.domainEntityId,
+      createdAt: row.createdAt,
+    }),
   };
 }

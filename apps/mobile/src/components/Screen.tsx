@@ -1,6 +1,20 @@
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import type { ReactNode } from "react";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import {
+  colors,
+  fontFamily,
+  fontFamilyBold,
+  fontFamilySemiBold,
+  spacing,
+} from "@fitbud/ui-mobile";
+import { BrandMark } from "./BrandMark";
+import { Text } from "./Text";
 
 type Props = {
   title: string;
@@ -9,6 +23,16 @@ type Props = {
   footer?: ReactNode;
   /** `app` matches the trainee design: no product stamp, canvas background. */
   chrome?: "page" | "app";
+  /** Auth screens use the Honest Week mark instead of the wordmark. */
+  brandDisplay?: "text" | "mark" | "none";
+  /** When false, omit the in-screen title block (shell provides AppTopBar). */
+  showHeader?: boolean;
+  refreshing?: boolean;
+  /**
+   * Pull-to-refresh handler. List screens should pass this (with `refreshing`)
+   * instead of a manual Refresh button; screens that omit it still render fine.
+   */
+  onRefresh?: () => void;
 };
 
 export function Screen({
@@ -17,31 +41,59 @@ export function Screen({
   children,
   footer,
   chrome = "page",
+  brandDisplay,
+  showHeader = true,
+  refreshing,
+  onRefresh,
 }: Props) {
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} accessibilityRole="summary">
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} />
+          ) : undefined
+        }
       >
-        {chrome === "page" ? (
-          <Text style={styles.brand} accessibilityRole="header">
-            FitBud
-          </Text>
-        ) : null}
-        <Text
-          style={[styles.title, chrome === "app" ? styles.titleApp : null]}
-          accessibilityRole="header"
-          accessibilityLabel={title}
+        <View
+          // RN types omit landmark roles; Expo web maps this to <main>.
+          accessibilityRole={"main" as "summary"}
+          style={styles.main}
         >
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text style={styles.subtitle} accessibilityRole="text">
-            {subtitle}
-          </Text>
-        ) : null}
-        <View style={styles.body}>{children}</View>
+          {showHeader ? (
+            <>
+              {chrome === "page"
+                ? (() => {
+                    const display = brandDisplay ?? "text";
+                    if (display === "none") return null;
+                    if (display === "mark") {
+                      return <BrandMark size={36} />;
+                    }
+                    return (
+                      <Text style={styles.brand} accessibilityRole="header">
+                        FitBud
+                      </Text>
+                    );
+                  })()
+                : null}
+              <Text
+                style={[styles.title, chrome === "app" ? styles.titleApp : null]}
+                accessibilityRole="header"
+                accessibilityLabel={title}
+              >
+                {title}
+              </Text>
+              {subtitle ? (
+                <Text style={styles.subtitle} accessibilityRole="text">
+                  {subtitle}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+          <View style={styles.body}>{children}</View>
+        </View>
       </ScrollView>
       {footer ? <View style={styles.footer}>{footer}</View> : null}
     </SafeAreaView>
@@ -58,7 +110,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xxl,
     paddingBottom: spacing.xxxl,
   },
+  main: {
+    flexGrow: 1,
+  },
   brand: {
+    fontFamily: fontFamilySemiBold,
     color: colors.indigo,
     fontSize: 13,
     fontWeight: "600",
@@ -67,6 +123,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   title: {
+    fontFamily: fontFamilyBold,
     color: colors.deepNavy,
     fontSize: 28,
     fontWeight: "700",
@@ -78,6 +135,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   subtitle: {
+    fontFamily,
     color: colors.midGrey,
     fontSize: 16,
     lineHeight: 22,

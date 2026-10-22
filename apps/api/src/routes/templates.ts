@@ -4,13 +4,15 @@ import {
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   createPlanTemplateFromVersionRequestSchema,
   createPlanTemplateRequestSchema,
+  forkPlanTemplateRequestSchema,
   planTemplateListResponseSchema,
   planTemplateSchema,
+  planTemplateTypeSchema,
   updatePlanTemplateRequestSchema,
 } from "@fitbud/contracts";
 import {
@@ -24,6 +26,7 @@ import {
   planTemplates,
   planVersions,
 } from "../db/schema";
+import { prepareWritablePlanContent } from "../domain/library-snapshots";
 import {
   mapPlanTemplate,
   mapPlanTemplateSummary,
@@ -45,6 +48,14 @@ import type { Env, Variables } from "../types";
 
 const CREATE_TEMPLATE_OPERATION = "template.create";
 const CREATE_TEMPLATE_FROM_VERSION_OPERATION = "template.create_from_version";
+const FORK_TEMPLATE_OPERATION = "template.fork";
+
+function canTrainerReadPlanTemplate(
+  row: { ownership: "global" | "trainer"; trainerUserId: string | null },
+  trainerUserId: string,
+): boolean {
+  return row.ownership === "global" || row.trainerUserId === trainerUserId;
+}
 
 export const templateRoutes = new Hono<{
   Bindings: Env;
@@ -82,13 +93,47 @@ templateRoutes.get(
     const cursor = cursorParam ? decodeCursor(cursorParam) : null;
     const db = createDb(c.env.DB);
 
+    const scope = c.req.query("scope") ?? "all";
+    const templateTypeRaw = c.req.query("templateType")?.trim();
+    const templateTypeParsed = templateTypeRaw
+      ? planTemplateTypeSchema.safeParse(templateTypeRaw)
+      : null;
+    if (templateTypeParsed && !templateTypeParsed.success) {
+      return fail(
+        c,
+        400,
+        "VALIDATION_ERROR",
+        "templateType must be a valid plan template type.",
+      );
+    }
+    const templateType = templateTypeParsed?.success
+      ? templateTypeParsed.data
+      : undefined;
+    const q = c.req.query("q")?.trim().toLowerCase();
+    const visibleToActor =
+      scope === "bases"
+        ? eq(planTemplates.ownership, "global")
+        : scope === "mine"
+          ? eq(planTemplates.trainerUserId, actor.userId)
+          : or(
+              eq(planTemplates.ownership, "global"),
+              eq(planTemplates.trainerUserId, actor.userId),
+            );
+    const filters = [visibleToActor];
+    if (templateType) {
+      filters.push(eq(planTemplates.templateType, templateType));
+    }
+    if (q && q.length >= 1) {
+      filters.push(sql`lower(${planTemplates.title}) LIKE ${`%${q}%`}`);
+    }
+    const visibilityFilter = and(...filters);
     const rows = await db
       .select()
       .from(planTemplates)
       .where(
         cursor
           ? and(
-              eq(planTemplates.trainerUserId, actor.userId),
+              visibilityFilter,
               or(
                 lt(planTemplates.updatedAt, cursor.k),
                 and(
@@ -97,7 +142,7 @@ templateRoutes.get(
                 ),
               ),
             )
-          : eq(planTemplates.trainerUserId, actor.userId),
+          : visibilityFilter,
       )
       .orderBy(desc(planTemplates.updatedAt), desc(planTemplates.id))
       .limit(limit + 1);
@@ -190,13 +235,23 @@ templateRoutes.post(
       );
     }
 
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
     const now = nowIso();
     const id = createId();
     // Store a copied snapshot so later edits to the request payload cannot
     // mutate the persisted template through shared object references.
-    const content = copyPlanContent(parsed.data.content, createId);
+    const content = copyPlanContent(prepared.content, createId);
     await db.insert(planTemplates).values({
       id,
+      ownership: "trainer",
       trainerUserId: actor.userId,
       title: parsed.data.title,
       templateType: parsed.data.templateType,
@@ -344,6 +399,7 @@ templateRoutes.post(
     const id = createId();
     await db.insert(planTemplates).values({
       id,
+      ownership: "trainer",
       trainerUserId: actor.userId,
       title: parsed.data.title,
       templateType: parsed.data.templateType,
@@ -408,10 +464,137 @@ templateRoutes.get(
       .where(eq(planTemplates.id, templateId))
       .limit(1);
     const row = rows[0];
-    if (!row || row.trainerUserId !== actor.userId) {
+    if (!row || !canTrainerReadPlanTemplate(row, actor.userId)) {
       return fail(c, 404, "TEMPLATE_NOT_FOUND", "Template not found.");
     }
     return ok(c, planTemplateSchema.parse(mapPlanTemplate(row)));
+  },
+);
+
+templateRoutes.post(
+  "/:templateId/fork",
+  operation({
+    tag: "Templates",
+    summary: "Templates operation for POST /templates/:templateId/fork.",
+    description:
+      "Copies a global plan template into a new trainer-owned template. Applying a template does not fork it.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: forkPlanTemplateRequestSchema,
+    successStatus: [201],
+    response: planTemplateSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = forkPlanTemplateRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid fork template request.", {
+        issues: parsed.error.issues,
+      });
+    }
+
+    const idempotencyKey = c.req.header("Idempotency-Key");
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
+
+    const templateId = c.req.param("templateId");
+    const fingerprint = await sha256Hex(
+      JSON.stringify({ templateId, title: parsed.data.title ?? null }),
+    );
+    const db = createDb(c.env.DB);
+    const prior = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: FORK_TEMPLATE_OPERATION,
+      idempotencyKey,
+    });
+    if (prior) {
+      if (prior.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request payload.",
+        );
+      }
+      return c.json(JSON.parse(prior.responseBody), prior.responseStatus as 201);
+    }
+
+    const rows = await db
+      .select()
+      .from(planTemplates)
+      .where(eq(planTemplates.id, templateId))
+      .limit(1);
+    const source = rows[0];
+    if (!source || !canTrainerReadPlanTemplate(source, actor.userId)) {
+      return fail(c, 404, "TEMPLATE_NOT_FOUND", "Template not found.");
+    }
+    if (source.ownership !== "global") {
+      return fail(
+        c,
+        409,
+        "TEMPLATE_NOT_FORKABLE",
+        "Only a global plan template can be forked.",
+      );
+    }
+
+    const content = copyPlanContent(
+      parsePlanContentJson(source.contentJson),
+      createId,
+    );
+    const now = nowIso();
+    const id = createId();
+    await db.insert(planTemplates).values({
+      id,
+      ownership: "trainer",
+      trainerUserId: actor.userId,
+      title: parsed.data.title ?? source.title,
+      templateType: source.templateType,
+      contentJson: JSON.stringify(content),
+      recordVersion: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const [row] = await db
+      .select()
+      .from(planTemplates)
+      .where(eq(planTemplates.id, id))
+      .limit(1);
+    if (!row) {
+      return fail(
+        c,
+        500,
+        "TEMPLATE_PERSIST_FAILED",
+        "Template could not be loaded.",
+      );
+    }
+
+    const data = planTemplateSchema.parse(mapPlanTemplate(row));
+    const responseBody = { data };
+    await saveIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: FORK_TEMPLATE_OPERATION,
+      idempotencyKey,
+      requestFingerprint: fingerprint,
+      responseStatus: 201,
+      responseBody,
+      expiresAt: addDaysIso(7),
+    });
+    return ok(c, data, 201);
   },
 );
 
@@ -467,8 +650,19 @@ templateRoutes.put(
       .where(eq(planTemplates.id, templateId))
       .limit(1);
     const row = rows[0];
-    if (!row || row.trainerUserId !== actor.userId) {
+    if (
+      !row ||
+      (row.ownership !== "global" && row.trainerUserId !== actor.userId)
+    ) {
       return fail(c, 404, "TEMPLATE_NOT_FOUND", "Template not found.");
+    }
+    if (row.ownership === "global") {
+      return fail(
+        c,
+        403,
+        "GLOBAL_TEMPLATE_IMMUTABLE",
+        "Global plan templates cannot be edited.",
+      );
     }
 
     if (row.recordVersion !== parsed.data.expectedRecordVersion) {
@@ -490,7 +684,17 @@ templateRoutes.put(
       );
     }
 
-    const content = copyPlanContent(parsed.data.content, createId);
+    const prepared = await prepareWritablePlanContent(
+      db,
+      actor.userId,
+      parsed.data.content,
+      parsePlanContentJson(row.contentJson),
+    );
+    if ("code" in prepared) {
+      return fail(c, prepared.status, prepared.code, prepared.message);
+    }
+
+    const content = copyPlanContent(prepared.content, createId);
     const now = nowIso();
     await db
       .update(planTemplates)
@@ -546,8 +750,19 @@ templateRoutes.delete(
       .where(eq(planTemplates.id, templateId))
       .limit(1);
     const row = rows[0];
-    if (!row || row.trainerUserId !== actor.userId) {
+    if (
+      !row ||
+      (row.ownership !== "global" && row.trainerUserId !== actor.userId)
+    ) {
       return fail(c, 404, "TEMPLATE_NOT_FOUND", "Template not found.");
+    }
+    if (row.ownership === "global") {
+      return fail(
+        c,
+        403,
+        "GLOBAL_TEMPLATE_IMMUTABLE",
+        "Global plan templates cannot be deleted.",
+      );
     }
 
     await db.delete(planTemplates).where(eq(planTemplates.id, templateId));
