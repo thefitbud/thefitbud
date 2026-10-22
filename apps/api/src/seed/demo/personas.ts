@@ -44,6 +44,8 @@ export type DemoLibraryFood = {
   slug: string;
   defaultServingId: string;
   item: FoodLibraryItem;
+  /** Servings the library flags plausible = 0 (e.g. odd INDB recipe portions). */
+  implausibleServingIds: string[];
 };
 
 export type DemoLibraryExercise = {
@@ -165,7 +167,7 @@ export function loadDemoLibraryIndex(
     const foodId = String(head[0]);
     const defaultServingId = String(head[2]);
     const servingRows = sqlite.exec(
-      `SELECT id, label, unit, conversion_scaled FROM food_library_servings
+      `SELECT id, label, unit, conversion_scaled, plausible FROM food_library_servings
        WHERE food_library_item_id = '${foodId.replace(/'/g, "''")}' ORDER BY sort_order`,
     );
     const servings = (servingRows[0]?.values ?? []).map((row) => ({
@@ -177,6 +179,9 @@ export function loadDemoLibraryIndex(
     if (servings.length === 0) {
       throw new Error(`Demo seed: food "${slug}" has no servings`);
     }
+    const implausibleServingIds = (servingRows[0]?.values ?? [])
+      .filter((row) => Number(row[4]) === 0)
+      .map((row) => String(row[0]));
     const item: FoodLibraryItem = {
       id: foodId,
       ownership: "global",
@@ -201,6 +206,7 @@ export function loadDemoLibraryIndex(
       slug,
       defaultServingId,
       item,
+      implausibleServingIds,
     };
   }
 

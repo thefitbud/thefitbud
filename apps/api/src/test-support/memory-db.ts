@@ -198,7 +198,8 @@ export function openMemoryDbCopy(
   options?: { foreignKeys?: boolean },
 ): MemoryDbHandle {
   assertFts5Available();
-  const dir = mkdtempSync(join(tmpdir(), "fitbud-test-db-"));
+  // The pid in the name lets the startup sweep (tmp-sweep.ts) tell live dirs from leftovers.
+  const dir = mkdtempSync(join(tmpdir(), `fitbud-test-db-${process.pid}-`));
   const copyPath = join(dir, "db.sqlite");
   copyFileSync(templatePath, copyPath);
   const sqlite = new DatabaseSync(copyPath);
@@ -209,14 +210,33 @@ export function openMemoryDbCopy(
   const files = migrationFiles();
   const handle = buildHandle(sqlite, files, new Set(files));
   const closeDb = handle.close;
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
+    openCopies.delete(close);
     try {
       closeDb();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   };
+  openCopies.add(close);
   return { ...handle, close, sqlite: { ...handle.sqlite, close } };
+}
+
+/** Close functions of copies from `openMemoryDbCopy` that a test has not closed yet. */
+const openCopies = new Set<() => void>();
+
+/** Closes and deletes every copy still open in this test file (safety net for tests that forget). */
+export function closeOpenMemoryDbCopies(): void {
+  for (const close of [...openCopies]) {
+    try {
+      close();
+    } catch {
+      // Already closed by the test through another path; the dir is removed either way.
+    }
+  }
 }
 
 function buildHandle(
