@@ -187,10 +187,12 @@ export function WorkspaceHeader({
     navigate(primary.to);
   }
 
+  // Ended relationships: Configure is read-only (CE1) and the reminders
+  // drawer only reports history, so label both as view-only (CE2).
   const overflowItems = [
     {
       id: "configure",
-      label: "Configure coaching",
+      label: ended ? "View coaching setup" : "Configure coaching",
       onSelect: () => navigate(`/clients/${relationshipId}/configure`),
     },
     {
@@ -200,7 +202,9 @@ export function WorkspaceHeader({
     },
     {
       id: "reminders",
-      label: "Reminder settings for this client",
+      label: ended
+        ? "View reminder settings"
+        : "Reminder settings for this client",
       onSelect: () => onOpenModal({ type: "responsiveness" }),
     },
     ...(!ended
