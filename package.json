@@ -21,6 +21,7 @@
     "db:migrate": "pnpm --filter @fitbud/api db:migrate",
     "db:seed:library": "pnpm --filter @fitbud/api db:seed:library",
     "seed:demo": "pnpm --filter @fitbud/api seed:demo",
+    "db:seed:local": "pnpm --filter @fitbud/api db:seed:local",
     "db:reset": "pnpm --filter @fitbud/api db:reset",
     "setup:local": "pnpm --filter @fitbud/api setup:local"
   },

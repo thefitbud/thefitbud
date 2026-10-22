@@ -12,6 +12,17 @@ import {
   type DemoLibraryIndex,
 } from "./personas.js";
 import { MEAL_PRESCRIPTION_IDS } from "./personas.js";
+import { DEMO_EXTRA_ACCOUNTS } from "./spec-extra.js";
+import {
+  SeedRows,
+  addGeneratedPersona,
+  addLegacyDeepHistory,
+  addTrainerLibrary,
+  buildPlanChain,
+  personaConfig,
+  rowsToSql,
+  startedAtFor,
+} from "./generator/index.js";
 import {
   addDaysFromLocalDate,
   demoUuid,
@@ -925,17 +936,17 @@ function buildPersonaOverlays(input: HistoryInput): string {
 
   const pendingHash = sha256HexSync(DEMO_ANITA_PENDING_INVITE_TOKEN);
   lines.push(
-    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, recipient_whatsapp_e164, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "anita-pending"))}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'anita.invite@demo.fitbud.test', 'Anita Desai', '919876501111', ${sqlQuote(pendingHash)}, 'pending', ${sqlQuote(new Date(Date.parse(now) + 5 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "anita-expired"))}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'anita.expired@demo.fitbud.test', 'Anita Desai', ${sqlQuote(sha256HexSync("demo-anita-expired"))}, 'expired', ${sqlQuote(new Date(Date.parse(now) - 2 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "anita-revoked"))}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'anita.revoked@demo.fitbud.test', 'Anita Desai', ${sqlQuote(sha256HexSync("demo-anita-revoked"))}, 'revoked', ${sqlQuote(new Date(Date.parse(now) + 3 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "kavya-priya"))}, ${sqlQuote(userId("priya.coach@demo.fitbud.test"))}, 'kavya.ended@demo.fitbud.test', 'Kavya Menon', ${sqlQuote(sha256HexSync("demo-kavya-priya-invite"))}, 'pending', ${sqlQuote(new Date(Date.parse(now) + 6 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, recipient_whatsapp_e164, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "anita-pending"))}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'anita.invite@demo.fitbud.test', 'Anita Desai', '919876501111', ${sqlQuote(pendingHash)}, 'pending', ${sqlQuote(new Date(Date.parse(now) + 5 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions WHERE scope='global' ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "anita-expired"))}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'anita.expired@demo.fitbud.test', 'Anita Desai', ${sqlQuote(sha256HexSync("demo-anita-expired"))}, 'expired', ${sqlQuote(new Date(Date.parse(now) - 2 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions WHERE scope='global' ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "anita-revoked"))}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'anita.revoked@demo.fitbud.test', 'Anita Desai', ${sqlQuote(sha256HexSync("demo-anita-revoked"))}, 'revoked', ${sqlQuote(new Date(Date.parse(now) + 3 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions WHERE scope='global' ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO client_invitations (id, trainer_user_id, recipient_email, recipient_display_name, token_hash, status, expires_at, onboarding_form_template_version_id, created_at, updated_at) VALUES (${sqlQuote(demoUuid("invite", "kavya-priya"))}, ${sqlQuote(userId("priya.coach@demo.fitbud.test"))}, 'kavya.ended@demo.fitbud.test', 'Kavya Menon', ${sqlQuote(sha256HexSync("demo-kavya-priya-invite"))}, 'pending', ${sqlQuote(new Date(Date.parse(now) + 6 * 86_400_000).toISOString())}, (SELECT id FROM onboarding_form_versions WHERE scope='global' ORDER BY version DESC LIMIT 1), ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
   return lines.join("\n");
 }
 
 function foodSnapshotJson(lib: DemoLibraryIndex, slug: keyof DemoLibraryIndex["foods"]) {
-  const food = lib.foods[slug];
+  const food = lib.foods[slug]!;
   return foodSnapshotFromLibrary(
     food.item,
     food.defaultServingId,
@@ -1052,8 +1063,82 @@ export function buildDemoHistorySql(input: HistoryInput): string {
   }
 
   lines.push(buildPersonaOverlays(input));
+  lines.push(buildRealisticWorld(input));
 
   return lines.join("\n");
 }
 
 export const DEMO_PENDING_INVITE_TOKEN = DEMO_ANITA_PENDING_INVITE_TOKEN;
+
+/**
+ * SEED_DESIGN.md §6: trainer library, deep pre-window history for the
+ * original accounts, and the 8 generated Rahul clients. Runs after the
+ * legacy 28-day window so fixed ids used by E2E stay untouched.
+ */
+function buildRealisticWorld(input: HistoryInput): string {
+  const refDate = input.referenceDate;
+  const now = input.referenceInstant;
+  const rows = new SeedRows();
+  const world = { rows, lib: input.libraryIndex, refDate, now, userId, relId };
+  const sql: string[] = ["-- realistic world (generator)"];
+  addTrainerLibrary(rows, input.libraryIndex, refDate, now, userId);
+  const windowStart = addDaysFromLocalDate(refDate, -27);
+
+  for (const account of DEMO_ACCOUNTS) {
+    if (account.role !== "trainee" || !account.trainerEmail) continue;
+    if (account.state === "onboarding_incomplete" || account.state === "awaiting_review") continue;
+    const cfg = personaConfig(account.email);
+    if (!cfg) continue;
+    const rid = relId(account.trainerEmail, account.email);
+    const planId = demoUuid("plan", rid);
+    const chain = buildPlanChain({ lib: input.libraryIndex, cfg, relId: rid, refDate, legacyWindow: true, windowStart });
+    const startedAt = startedAtFor(cfg, refDate);
+    if (startedAt.slice(0, 10) >= windowStart) continue;
+    sql.push(
+      `UPDATE coaching_relationships SET started_at = ${sqlQuote(startedAt)}, created_at = ${sqlQuote(startedAt)} WHERE id = ${sqlQuote(rid)};`,
+      `UPDATE plans SET created_at = ${sqlQuote(startedAt)} WHERE id = ${sqlQuote(planId)};`,
+      `UPDATE subscription_versions SET starts_on = ${sqlQuote(startedAt.slice(0, 10))} WHERE id = ${sqlQuote(demoUuid("subscription", rid))} AND starts_on > ${sqlQuote(startedAt.slice(0, 10))};`,
+    );
+    const n = chain.length;
+    if (n >= 2) {
+      const v1 = chain[n - 2]!;
+      const v1Id = demoUuid("plan-version", rid, "v1");
+      const v2Id = demoUuid("plan-version", rid, "v2");
+      sql.push(
+        `UPDATE plan_versions SET version_number = ${n} WHERE id = ${sqlQuote(v2Id)};`,
+        `UPDATE plan_versions SET version_number = ${n - 1}, effective_from = MIN(effective_from, ${sqlQuote(`${v1.fromDate}T00:00:00.000Z`)}), published_at = MIN(published_at, ${sqlQuote(`${v1.fromDate}T00:00:00.000Z`)}) WHERE id = ${sqlQuote(v1Id)};`,
+      );
+      for (const version of chain.slice(0, n - 2)) {
+        const isLastHistoric = version.number === n - 2;
+        const toDate = isLastHistoric ? addDaysFromLocalDate(v1.fromDate, -1) : version.toDate;
+        if (isLastHistoric) version.toDate = toDate;
+        const from = `${version.fromDate}T00:00:00.000Z`;
+        rows.add("plan_versions", {
+          id: version.id,
+          plan_id: planId,
+          version_number: version.number,
+          status: "superseded",
+          record_version: 0,
+          content_json: JSON.stringify(version.content),
+          creation_source: version.number === 1 ? "template" : "adjustment",
+          source_template_id: null,
+          published_at: from,
+          effective_from: from,
+          effective_to: `${toDate}T00:00:00.000Z`,
+          created_at: from,
+          updated_at: now,
+        });
+      }
+    }
+    addLegacyDeepHistory(world, cfg, chain, planId);
+  }
+
+  for (const account of DEMO_EXTRA_ACCOUNTS) {
+    const cfg = personaConfig(account.email);
+    if (!cfg) throw new Error(`Demo seed: no persona config for ${account.email}`);
+    addGeneratedPersona(world, cfg);
+  }
+
+  sql.push(rowsToSql(rows));
+  return sql.join("\n");
+}

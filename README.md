@@ -151,7 +151,7 @@ pnpm setup:local
 pnpm db:reset
 ```
 
-`setup:local` ensures `apps/api/.dev.vars` exists. `db:reset` applies migrations, loads the **FitBud Tech v2** library (manifest `2026.10.2`), and seeds demo personas. After reset, confirm library counts (global templates are **10**; demo may add trainer-owned templates):
+`setup:local` ensures `apps/api/.dev.vars` exists. `db:reset` applies migrations, loads the **FitBud Tech v2** library (manifest `2026.10.2`), and seeds the realistic demo world (27 accounts, up to 8 months of history; see [docs/LOCAL_TESTING.md](docs/LOCAL_TESTING.md#realistic-demo-world) and [docs/seed/SEED_DESIGN.md](docs/seed/SEED_DESIGN.md)). Re-seed without re-migrating with `pnpm db:seed:local`. Both work from the repo root in PowerShell and bash; reset takes ~2.5 min. After reset, confirm library counts (global templates are **10**; demo may add trainer-owned templates):
 
 ```sh
 cd apps/api

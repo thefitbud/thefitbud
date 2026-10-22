@@ -13,6 +13,9 @@ import { createMemoryR2Bucket } from "../../lib/memory-r2.js";
 import type { Env } from "../../types.js";
 import { buildDemoSeedSql } from "./build.js";
 import { DEMO_ACCOUNTS, DEMO_PASSWORD_PLAINTEXT } from "./spec.js";
+import { DEMO_EXTRA_ACCOUNTS } from "./spec-extra.js";
+import { WORKOUT_TEMPLATES } from "./generator/templates/workouts.js";
+import { DIET_TEMPLATES } from "./generator/templates/diets.js";
 import { createMemoryDb } from "../../test-support/memory-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
 
@@ -94,7 +97,7 @@ describe("demo seed", () => {
     db = handle.db;
     close = handle.close;
     setTestDbOverride(db);
-  });
+  }, 60_000);
 
   afterEach(() => {
     setTestDbOverride(null);
@@ -135,7 +138,7 @@ describe("demo seed", () => {
   );
 
   it("logs in every demo account with the dev password", async () => {
-    for (const account of DEMO_ACCOUNTS) {
+    for (const account of [...DEMO_ACCOUNTS, ...DEMO_EXTRA_ACCOUNTS]) {
       if (account.role === "invite") continue;
       const token = await login(account.email);
       expect(token.length).toBeGreaterThan(10);
@@ -517,12 +520,18 @@ describe("demo seed", () => {
     expect(protein).toBeGreaterThanOrEqual(90);
     expect(protein).toBeLessThanOrEqual(140);
 
-    const mismatched = rows(
-      `SELECT cr.id, we.sessions_per_week FROM coaching_relationships cr
+    // Original accounts keep 3 sessions/week; generated clients follow their template (1–6).
+    const legacyEmails = new Set(DEMO_ACCOUNTS.map((a) => a.email));
+    const sessions = rows(
+      `SELECT ui.email_norm, we.sessions_per_week FROM coaching_relationships cr
+       JOIN user_identities ui ON ui.user_id = cr.trainee_user_id
        JOIN coaching_configurations cc ON cc.coaching_relationship_id = cr.id
        JOIN workout_expectations we ON we.coaching_configuration_id = cc.id`,
-    ).filter((row) => Number(row[1]) !== 3);
-    expect(mismatched.length).toBe(0);
+    );
+    const mismatched = sessions.filter((row) =>
+      legacyEmails.has(String(row[0])) ? Number(row[1]) !== 3 : Number(row[1]) < 1 || Number(row[1]) > 6,
+    );
+    expect(mismatched).toEqual([]);
 
     const rohanToken = await login("rahul.coach@demo.fitbud.test");
     const responsiveness = await app.request(
@@ -667,4 +676,112 @@ describe("demo seed", () => {
       }
     }
   }, 120_000);
+
+  describe("realistic world (SEED_DESIGN.md)", () => {
+    const q = (sql: string) => sqliteExec(sql)[0]?.values ?? [];
+    const one = (sql: string) => Number(q(sql)[0]?.[0] ?? 0);
+    const relOf = (email: string) =>
+      String(
+        q(`SELECT cr.id FROM coaching_relationships cr JOIN user_identities ui ON ui.user_id = cr.trainee_user_id WHERE ui.email_norm = '${email}'`)[0]?.[0] ?? "",
+      );
+
+    it("keeps original account ids and emails stable", () => {
+      for (const account of DEMO_ACCOUNTS) {
+        if (account.role === "invite") continue;
+        expect(one(`SELECT COUNT(*) FROM user_identities WHERE user_id = '${demoUuid("user", account.email)}' AND email = '${account.email}'`), account.email).toBe(1);
+      }
+      expect(one("SELECT COUNT(*) FROM users")).toBe(
+        [...DEMO_ACCOUNTS, ...DEMO_EXTRA_ACCOUNTS].filter((a) => a.role !== "invite").length,
+      );
+    });
+
+    it("is deterministic for a fixed reference instant", async () => {
+      const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+      try {
+        const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
+        const build = () => buildDemoSeedSql({ referenceInstant: FROZEN_REFERENCE_INSTANT, passwordHash: "x", libraryIndex });
+        expect(build()).toBe(build());
+      } finally {
+        handle.close();
+      }
+    });
+
+    it("gives Rahul the template library, Priya a copy, Nova nothing", () => {
+      const count = (email: string, table: string) =>
+        one(`SELECT COUNT(*) FROM ${table} WHERE ownership = 'trainer' AND trainer_user_id = '${demoUuid("user", email)}'`);
+      // Rahul also keeps the two legacy E2E templates (rahul-workout / rahul-diet).
+      const rahul = "rahul.coach@demo.fitbud.test";
+      const priya = "priya.coach@demo.fitbud.test";
+      expect(count(priya, "plan_templates")).toBeGreaterThanOrEqual(WORKOUT_TEMPLATES.length + DIET_TEMPLATES.length);
+      expect(count(rahul, "plan_templates")).toBe(count(priya, "plan_templates") + 2);
+      for (const table of ["onboarding_form_templates", "checkin_form_templates"]) {
+        expect(count(rahul, table), table).toBeGreaterThan(0);
+        expect(count(priya, table), table).toBe(count(rahul, table));
+      }
+      for (const table of ["plan_templates", "onboarding_form_templates", "checkin_form_templates"]) {
+        expect(count("nova.coach@demo.fitbud.test", table), table).toBe(0);
+      }
+      expect(one(`SELECT COUNT(*) FROM coaching_relationships WHERE trainer_user_id = '${demoUuid("user", "nova.coach@demo.fitbud.test")}'`)).toBe(0);
+    });
+
+    it("leaves photos empty", () => {
+      expect(one("SELECT COUNT(*) FROM media_assets")).toBe(0);
+      expect(one("SELECT COUNT(*) FROM meal_compliance WHERE media_asset_id IS NOT NULL")).toBe(0);
+      expect(one("SELECT COUNT(*) FROM measurements WHERE media_asset_id IS NOT NULL")).toBe(0);
+    });
+
+    it("models Imran's break as a pause + reactivation with notes", () => {
+      const rel = relOf("imran.nightshift@demo.fitbud.test");
+      expect(one(`SELECT COUNT(*) FROM coaching_relationships WHERE id = '${rel}' AND status = 'active' AND reactivated_at IS NOT NULL`)).toBe(1);
+      expect(one(`SELECT COUNT(*) FROM coaching_relationships cr JOIN user_identities ui ON ui.user_id = cr.trainee_user_id WHERE ui.email_norm = 'imran.nightshift@demo.fitbud.test'`)).toBe(1);
+      const notes = q(`SELECT body FROM trainer_notes WHERE coaching_relationship_id = '${rel}'`).map((r) => String(r[0]));
+      expect(notes.some((b) => /pause/i.test(b))).toBe(true);
+      expect(notes.some((b) => /reactivated/i.test(b))).toBe(true);
+    });
+
+    it("has believable nutrition, weights and no negatives", () => {
+      const plans = q("SELECT content_json FROM plan_versions");
+      for (const [json] of plans) {
+        const content = JSON.parse(String(json)) as PlanContent;
+        if (content.mealPrescriptions.length === 0) continue;
+        let kcal = 0;
+        for (const meal of content.mealPrescriptions) for (const item of meal.items ?? []) kcal += (item.calculated.energyKcalScaled ?? 0) / NUTRIENT_SCALE;
+        expect(kcal).toBeGreaterThan(1000);
+        expect(kcal).toBeLessThan(3800);
+      }
+      expect(one("SELECT COUNT(*) FROM meal_compliance WHERE kcal_scaled < 0 OR protein_scaled < 0 OR carbs_scaled < 0 OR fat_scaled < 0")).toBe(0);
+      expect(one("SELECT COUNT(*) FROM measurements WHERE value <= 0")).toBe(0);
+      expect(one("SELECT COUNT(*) FROM measurements WHERE type = 'body_weight_kg' AND (value < 40 OR value > 140)")).toBe(0);
+      expect(one(`SELECT COUNT(*) FROM meal_compliance WHERE logged_at > '${FROZEN_REFERENCE_INSTANT}'`)).toBe(0);
+      expect(one(`SELECT COUNT(*) FROM workout_executions WHERE created_at > '${FROZEN_REFERENCE_INSTANT}'`)).toBe(0);
+    });
+
+    it("builds months of history for the generated clients", () => {
+      for (const account of DEMO_EXTRA_ACCOUNTS) {
+        if (account.state === "coaching_ready") continue;
+        const rel = relOf(account.email);
+        expect(one(`SELECT COUNT(*) FROM meal_assignments WHERE coaching_relationship_id = '${rel}'`), account.email).toBeGreaterThan(100);
+        expect(one(`SELECT COUNT(*) FROM checkins WHERE coaching_relationship_id = '${rel}' AND record_status = 'submitted'`), account.email).toBeGreaterThan(2);
+      }
+    });
+
+    it("keeps open exceptions under the per-client cap and the API invents none", async () => {
+      const capped = q("SELECT coaching_relationship_id, COUNT(*) c FROM exceptions WHERE status IN ('active','acknowledged') GROUP BY 1 HAVING c > 10");
+      // Farhan's legacy overlay predates the realistic world; only generated clients are held to the cap here.
+      const generatedRels = new Set(DEMO_EXTRA_ACCOUNTS.map((a) => relOf(a.email)));
+      expect(capped.filter((r) => generatedRels.has(String(r[0])))).toEqual([]);
+      const before = one("SELECT COUNT(*) FROM exceptions");
+      const trainerToken = await login("rahul.coach@demo.fitbud.test");
+      const roster = await app.request("/clients", { headers: { Authorization: `Bearer ${trainerToken}`, "x-fitbud-role": "trainer" } }, testEnv());
+      expect(roster.status).toBe(200);
+      for (const account of DEMO_EXTRA_ACCOUNTS) {
+        const token = await login(account.email);
+        const res = await app.request(`/me/day/${refDate}`, { headers: { Authorization: `Bearer ${token}`, "x-fitbud-role": "trainee" } }, testEnv());
+        expect(res.status, account.email).toBe(200);
+        const text = await res.text();
+        expect(text, account.email).not.toMatch(/"kcalScaled":-/);
+      }
+      expect(one("SELECT COUNT(*) FROM exceptions")).toBe(before);
+    }, 120_000);
+  });
 });

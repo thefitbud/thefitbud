@@ -37,6 +37,80 @@ All passwords are **`FitBud-demo-2026`**. Emails are `@demo.fitbud.test`.
 | `deepak.dubai@demo.fitbud.test` | Trainee | `dubai_meal_times` | Cross-timezone meal-time display vs trainer |
 | `lakshmi.foods@demo.fitbud.test` | Trainee | `food_deviations` | Meal logging and “what did you have instead?” from library |
 | `karan.dual@demo.fitbud.test` | Trainee (+ trainer) | `dual_role` | Same person coaches and is coached — role picker |
+| `nova.coach@demo.fitbud.test` | Trainer | `first_run` | Brand-new trainer: empty roster, no templates or forms (first-run states) |
+| `siddharth.yearly@demo.fitbud.test` | Trainee | `maintenance_yearly` | Yearly plan, 8 months of history, prediabetes goal |
+| `ananya.newbie@demo.fitbud.test` | Trainee | `honeymoon_beginner` | 5-week beginner, renewal upcoming, open form question |
+| `imran.nightshift@demo.fitbud.test` | Trainee | `reactivated_shift` | Paused for ~5 weeks then reactivated (same relationship, history notes); night-shift meal times |
+| `pooja.silent@demo.fitbud.test` | Trainee | `silent_lapsed` | Stopped logging: no recent data, overdue check-in, expired renewal |
+| `rajesh.senior@demo.fitbud.test` | Trainee | `senior_maintenance` | 61-year-old, knee-friendly plan, open pain ask |
+| `fatima.london@demo.fitbud.test` | Trainee | `london_timezone` | Europe/London client: cross-timezone windows |
+| `harpreet.ready@demo.fitbud.test` | Trainee | `coaching_ready` | Approved intake, no plan published yet |
+| `divya.wedding@demo.fitbud.test` | Trainee | `deadline_wedding` | Deadline goal, festival ask, renewal upcoming |
+
+## Realistic demo world
+
+`pnpm db:reset` (or `pnpm db:seed:local` on an already-migrated DB) builds a deterministic world from [docs/seed/SEED_DESIGN.md](seed/SEED_DESIGN.md). Dates are relative to the reset day in IST, so data is always "fresh"; the same day gives byte-identical SQL. Both commands work from the repo root on Windows PowerShell and Linux/macOS.
+
+- Up to 8 months of history per client: plan versions, subscriptions/renewals, meal and workout logs (sets, loads), weekly/bi-weekly/monthly check-ins with reviews, weigh-ins, trainer notes, coach asks, reminders.
+- Every exception the API would detect in its 3-day lookback is pre-seeded, so opening the app creates none.
+- Progress photos are intentionally empty (no media assets).
+- Original account ids, emails and the password are unchanged.
+
+| Persona | Coach | City | Goal | Tenure | Plan history (workout + diet) |
+|---|---|---|---|---|---|
+| Aarav Shah | Rahul | Ahmedabad | Lean bulk | 22 wk | W01+N05 → W03+N05 → W02+N05 |
+| Rohan Mehta | Rahul | Delhi | Lose 6 kg | 14 wk | W02+N06 |
+| Meera Iyer | Rahul | Chennai | PCOS-friendly fat loss | 26 wk | W05+N02 → W01+N02 |
+| Farhan Qureshi | Rahul | Bengaluru | Maintain muscle while traveling | 30 wk | W06+N09 |
+| Ishita Banerjee | Rahul | Kolkata | Rebuild morning routine | 10 wk | W05+N10 → W01+N10 |
+| Kavya Menon | Rahul (ended) | Kochi | Postpartum strength return | 17 wk | W07+N07 |
+| Nikhil Kapoor | Rahul (ended) | Gurugram | Restart after travel break | 19 wk | W02+N06 |
+| Deepak Nair | Rahul | Dubai | Lose 8 kg | 13 wk | W02+N07 |
+| Arjun Kapoor | Rahul | Chandigarh | Build strength | 20 wk | W04+N06 |
+| Neha Reddy | Rahul | Hyderabad | Lose 4 kg | 7 wk | W05+N01 |
+| Tanvi | Rahul | Jaipur | Stay consistent | 12 wk | W10+N03 |
+| Siddharth Jain | Rahul | Indore | Reverse prediabetes | 34 wk | W08+N03 → W01+N03 |
+| Ananya Bose | Rahul | Bengaluru | First pull-up | 5 wk | W11+N04 |
+| Imran Sheikh | Rahul | Lucknow | Lose 8 kg | 19 wk (with pause) | W10+N06 |
+| Pooja Agarwal | Rahul | Noida | Lose post-pregnancy weight | 9 wk | W05+N01 |
+| Rajesh Pillai | Rahul | Thiruvananthapuram | Mobility + BP control | 28 wk | W08+N07 |
+| Fatima Khan | Rahul | London | Glute & strength focus | 15 wk | W09+N09 |
+| Harpreet Singh | Rahul | Ludhiana | Strength + 1.6 km under 6 min | 4 days | — (coaching ready) |
+| Divya Nair | Rahul | Mumbai | Lose 5 kg before wedding | 10 wk | W02+N04 → W05+N04 |
+| Lakshmi | Priya | Coimbatore | Stabilize weekday meals | 11 wk | W01+N02 |
+| Karan | Priya | Mumbai | Coach + train dual role | 9 wk | W02+N07 |
+
+Within the latest 28 days the original personas keep their fixed E2E fixtures (standard plan, Mon/Tue/Thu/Sat); deep history is added before that window.
+
+### Trainer templates and forms
+
+Rahul owns the library below (plus the two legacy E2E templates *Demo strength block* / *Demo Indian meals*); Priya has identical copies; Nova has none.
+
+| Code | Workout template | Code | Diet template |
+|---|---|---|---|
+| W01 | Beginner Full Body · Gym · 3x (A/B) | N01 | North Indian Veg · Fat Loss |
+| W02 | Upper/Lower Hypertrophy · 4x | N02 | South Indian Veg · PCOS-friendly |
+| W03 | Push/Pull/Legs · 6x (lean bulk) | N03 | Jain Veg · Metabolic Health |
+| W04 | Strength Block · 4x (SBD + OHP) | N04 | Eggetarian · High Protein |
+| W05 | Home Dumbbell Fat-Loss · 4x | N05 | Eggetarian Gujarati · Lean Bulk |
+| W06 | Hotel Gym Express · 3x 35 min | N06 | North Indian Non-veg · Fat Loss |
+| W07 | Postpartum Return to Strength · 3x | N07 | Kerala Non-veg · Fish & Rice |
+| W08 | Active Ageing · Knee-friendly · 3x | N08 | Veg (no eggs) · High Protein Bulk |
+| W09 | Glute & Lower Focus · 4x | N09 | Travel & Eating-out · Non-veg |
+| W10 | Duty-Day Express · 25 min · 3x | N10 | Bengali Fish · Balanced |
+| W11 | First Pull-up Program · 3x | N11 | Navratri / Vrat Day |
+| W12 | Police Fitness Prep · Strength + Run · 4x | | |
+
+Forms: onboarding **FitBud Intake** (v1, v2) and **Quick intake — returning client**; check-in **Weekly coaching check-in** (v1, v2), **Strength check-in**, **Monthly maintenance review**.
+
+### Seed commands
+
+```sh
+pnpm db:reset          # migrate + v2 library + demo world (~2.5 min on Linux)
+pnpm db:seed:local     # re-seed demo world only (wipes app data, keeps library)
+```
+
+The seed runs locally only (`--remote` is refused). SQL is written to `apps/api/.wrangler/demo-seed.sql` (~37 MB).
 
 ## Workflow walkthroughs
 

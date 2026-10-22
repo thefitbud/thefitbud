@@ -6,6 +6,8 @@ import { foodSnapshotFromLibrary } from "@fitbud/core";
 import type { SqlJsCompatDatabase } from "../../test-support/memory-db.js";
 import { demoUuid } from "./ids.js";
 import { DEMO_ACCOUNTS, type DemoAccountSpec } from "./spec.js";
+import { DIET_TEMPLATE_SLUGS } from "./generator/templates/diets.js";
+import { WORKOUT_TEMPLATE_SLUGS } from "./generator/templates/workouts.js";
 
 export const DEMO_ANITA_PENDING_INVITE_TOKEN =
   "fitbud-demo-anita-invite-pending";
@@ -50,13 +52,37 @@ export type DemoLibraryExercise = {
   name: string;
 };
 
+/** Restaurant / swap dishes used for realistic meal deviations. */
+export const DEMO_DEVIATION_FOOD_SLUGS = [
+  "butter-chicken",
+  "naan",
+  "vegetable-biryani",
+  "pav-bhaji",
+  "plain-dosa",
+  "vegetable-samosa",
+  "mutton-biryani",
+] as const;
+
 export type DemoLibraryIndex = {
-  foods: Record<(typeof DEMO_LIBRARY_FOOD_SLUGS)[number], DemoLibraryFood>;
-  exercises: Record<
-    (typeof DEMO_LIBRARY_EXERCISE_SLUGS)[number],
-    DemoLibraryExercise
-  >;
+  foods: Record<string, DemoLibraryFood>;
+  exercises: Record<string, DemoLibraryExercise>;
 };
+
+/** Every slug the seed resolves (base personas + template catalogue + deviations). */
+export function demoLibrarySlugs(): { foods: string[]; exercises: string[] } {
+  return {
+    foods: [
+      ...new Set<string>([
+        ...DEMO_LIBRARY_FOOD_SLUGS,
+        ...DIET_TEMPLATE_SLUGS,
+        ...DEMO_DEVIATION_FOOD_SLUGS,
+      ]),
+    ],
+    exercises: [
+      ...new Set<string>([...DEMO_LIBRARY_EXERCISE_SLUGS, ...WORKOUT_TEMPLATE_SLUGS]),
+    ],
+  };
+}
 
 export type DemoPersonaKey =
   | "main_trainer"
@@ -121,8 +147,9 @@ export function personaByEmail(email: string): DemoPersonaSpec | undefined {
 export function loadDemoLibraryIndex(
   sqlite: Pick<SqlJsCompatDatabase, "exec">,
 ): DemoLibraryIndex {
+  const slugs = demoLibrarySlugs();
   const foods = {} as DemoLibraryIndex["foods"];
-  for (const slug of DEMO_LIBRARY_FOOD_SLUGS) {
+  for (const slug of slugs.foods) {
     const rows = sqlite.exec(
       `SELECT id, slug, default_serving_id, name, classification, nutrition_basis,
         energy_kcal_scaled, protein_grams_scaled, carbs_grams_scaled, fat_grams_scaled,
@@ -178,7 +205,7 @@ export function loadDemoLibraryIndex(
   }
 
   const exercises = {} as DemoLibraryIndex["exercises"];
-  for (const slug of DEMO_LIBRARY_EXERCISE_SLUGS) {
+  for (const slug of slugs.exercises) {
     const rows = sqlite.exec(
       `SELECT id, slug, name FROM exercise_library_items
        WHERE slug = '${slug.replace(/'/g, "''")}' AND ownership = 'global' AND status = 'active' LIMIT 1`,
@@ -227,8 +254,8 @@ export function buildStandardPlanContent(
   lib: DemoLibraryIndex,
   variant: "v1" | "v2" = "v2",
 ): PlanContent {
-  const food = (slug: keyof DemoLibraryIndex["foods"], servings: number) => {
-    const entry = lib.foods[slug];
+  const food = (slug: (typeof DEMO_LIBRARY_FOOD_SLUGS)[number], servings: number) => {
+    const entry = lib.foods[slug]!;
     return foodSnapshotFromLibrary(
       entry.item,
       entry.defaultServingId,
@@ -236,7 +263,7 @@ export function buildStandardPlanContent(
     );
   };
   const ex = (slug: (typeof DEMO_LIBRARY_EXERCISE_SLUGS)[number]) =>
-    lib.exercises[slug];
+    lib.exercises[slug]!;
   const exercise = (
     key: string,
     order: number,
