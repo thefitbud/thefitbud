@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Measurement, MeasurementType, ProgressEntry } from "@fitbud/contracts";
-import { formatCivilDate, formatInstant, labelFor } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { LinkedMedia } from "../components/LinkedMedia";
 import {
   MEASUREMENT_SERIES,

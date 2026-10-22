@@ -132,7 +132,6 @@ export function AssignPlanModal({
 
   const formError = effectiveFromError ?? effectiveToError ?? customError;
   const blocked = issues.blocking.length > 0 || Boolean(formError) || ended || !online;
-  const effectiveDates = nutritionOnly && dietScope === "today_only" ? [today] : datesInWindow;
 
   const payload = useCallback(
     (dryRunFlag: boolean) => {
