@@ -47,12 +47,12 @@ def basic(name,rows,ro=False,src='From intake · Mon 24 Aug'):
     return f'<section class="card2"><div class="ch"><b>Basic details</b><span class="xs muted">{src}</span><span class="sp" style="flex:1"></span>{ed}</div><div class="kv2" style="grid-template-columns:150px 1fr 150px 1fr">'+''.join(f'<span>{a}</span><span>{b}</span>' for a,b in rows)+'</div></section>'
 RB=[('Name','Rohan Mehta'),('Phone · WhatsApp','+91 90000 00008'),('Email','mehta.r29@gmail.com'),('Date of birth','Fri 14 Mar 1997 · 29'),('Sex','Male'),('Height','176 cm'),('City','Pune'),('Time zone','India (IST)')]
 def payrows(rows,ro=False): return '<table class="t2"><tr><th>Date</th><th>For</th><th>Amount</th><th>Status</th><th>Method</th></tr>'+''.join(f'<tr><td>{d}</td><td>{f}</td><td><b>{a}</b></td><td>{s}</td><td>{m}</td></tr>' for d,f,a,s,m in rows)+'</table>'
-PAID='<span class="chip pos">Paid</span>';DUE='<span class="chip attn">Due</span>'
+PAID='<span class="chip pos">Paid</span>';DUE='<span class="chip neu">Unpaid</span>'
 def subs(plan,freq,start,renew,renchip,pays,pkg,ro=False):
     ed='' if ro else f'<a class="btn o sm">{ic("edit",15)}Edit</a>'
     add='' if ro else '<a style="color:var(--indigo);font-weight:600;font-size:14px;min-height:44px;display:flex;align-items:center">+ Add payment record</a>'
-    return f'''<section class="card2"><div class="ch"><b>Subscription & package</b>{renchip}<span class="sp" style="flex:1"></span>{ed}</div><div class="kv2" style="grid-template-columns:150px 1fr 150px 1fr"><span>Plan</span><span>{plan}</span><span>Billing</span><span>{freq}</span><span>Started</span><span>{start}</span><span>Renews</span><span>{renew}</span></div>
-{pkg}<div class="row" style="margin-top:16px"><div class="lab">PAYMENT RECORDS</div><span class="sp"></span>{add}</div>{payrows(pays)}<p class="xs muted" style="margin-top:8px">For your records only. FitBud doesn\'t take or track payments.</p></section>'''
+    return f'''<section class="card2"><div class="ch"><b>Subscription & package</b>{renchip}<span class="sp" style="flex:1"></span>{ed}</div><div class="kv2" style="grid-template-columns:150px 1fr 150px 1fr"><span>Plan</span><span>{plan}</span><span>Payment frequency</span><span>{freq}</span><span>Started</span><span>{start}</span><span>Renews</span><span>{renew}</span></div>
+{pkg}<div class="row" style="margin-top:16px"><div class="lab">PAYMENT RECORDS · TRACKING ONLY</div><span class="sp"></span>{add}</div>{payrows(pays)}<p class="xs muted" style="margin-top:8px">Payment records are for your own tracking. FitBud doesn\'t collect payments, send invoices or remind clients to pay.</p></section>'''
 NOPKG='<div class="ro" style="margin-top:14px">'+ic("cal",16)+'No session package. Rohan is coached online; packages are for in-person or hybrid clients.<a style="margin-left:auto;color:var(--indigo);font-weight:600">Add package</a></div>'
 def rel(since,ended=False):
     if ended: return f'<section class="card2"><div class="ch"><b>Coaching relationship</b></div><div class="kv2"><span>Coached</span><span>Mon 6 Jul – Sat 3 Oct</span><span>Reason</span><span>Completed program</span></div><p class="xs muted" style="margin-top:10px">To coach Kavya again, use Reactivate coaching in the header.</p></section>'
@@ -87,13 +87,13 @@ def subedit(err=False):
     es=f'<div class="errsum" role="alert">{ic("alert",16)}Fix 1 field to save: Renewal date</div>' if err else ''
     save_btn='<a class="btn dis sm" aria-disabled="true">Save changes</a>' if err else '<a class="btn p sm">Save changes</a>'
     return f'''<div class="scrimw"></div><aside class="drw" aria-label="Edit subscription and package"><div class="dh"><b class="b" style="font-size:18px">Edit subscription & package</b><span class="sp"></span><a class="icb" style="border:0" aria-label="Close">{ic("x")}</a></div><div class="db" style="gap:14px">{es}
-{wf('Plan name','Hybrid coaching')}<div class="wf"><label>Billing</label><div class="seg2"><a>Weekly</a><a class="on">Monthly</a><a>Quarterly</a><a>Yearly</a></div></div>
+{wf('Plan name','Hybrid coaching')}<div class="wf"><label>Payment frequency</label><div class="seg2"><a>Weekly</a><a class="on">Monthly</a><a>Quarterly</a><a>Yearly</a></div></div>
 <div class="g2">{wf('Start date','Mon 7 Sep'+ic("cal",15).replace('class="ic"','class="ic" style="margin-left:auto"'))}{rd}</div>
 <div class="lab" style="margin-top:4px">PACKAGE · IN-PERSON SESSIONS · MON 7 SEP – MON 30 NOV</div><div class="g3">{wf('Sessions included','12')}{wf('Used so far','11',hp='Counted from Sessions',dis=True)}{wf('Carried over','0')}</div>
 <div class="wf"><label>Counts as used</label><div class="ch2"><a class="on">{ic("check",14,w=2.4)}Attended</a><a class="on">{ic("check",14,w=2.4)}Late cancel under 12 h</a><a class="on">{ic("check",14,w=2.4)}No-show</a></div></div>
 <div class="row"><span class="sm">Carry unused sessions into the next package</span><span class="sp"></span><span class="tog"></span></div>
-<div class="lab" style="margin-top:4px">PAYMENT RECORD · FOR YOUR RECORDS ONLY</div><div class="g3">{wf('Amount','₹ 18,000')}<div class="wf"><label>Status</label><div class="seg2"><a class="on">Paid</a><a>Due</a></div></div>{wf('Paid on','Mon 7 Sep')}</div><div class="wf"><label>Method</label><div class="ch2"><a>Cash</a><a class="on">UPI</a><a>Bank</a><a>Other</a></div></div>
-</div><div class="df"><span class="xs muted">FitBud doesn\'t take payments.</span><span class="sp"></span><a class="btn o sm">Cancel</a>{save_btn}</div></aside>'''
+<div class="lab" style="margin-top:4px">PAYMENT RECORD · TRACKING ONLY</div><div class="g3">{wf('Amount','₹ 18,000')}<div class="wf"><label>Status</label><div class="seg2"><a class="on">Paid</a><a>Unpaid</a></div></div>{wf('Paid on','Mon 7 Sep')}</div><div class="wf"><label>Method</label><div class="ch2"><a>Cash</a><a class="on">UPI</a><a>Bank</a><a>Other</a></div></div>
+</div><div class="df"><span class="xs muted">Tracking only. FitBud doesn\'t collect payments.</span><span class="sp"></span><a class="btn o sm">Cancel</a>{save_btn}</div></aside>'''
 save('211-trainer-web-client-subscription-edit-v3-web',settings_page('neha','Subscription & package',neha_subs+recent,overlay=subedit()))
 save('211b-trainer-web-client-subscription-error-v3-web',settings_page('neha','Subscription & package',neha_subs+recent,overlay=subedit(True)))
 # 212 ended client read-only (Kavya)
