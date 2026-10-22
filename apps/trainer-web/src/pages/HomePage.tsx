@@ -562,6 +562,45 @@ export function HomePage() {
     rowRefs.current[focusIdx]?.focus();
   }, [closeDrawer, focusIdx]);
 
+  // Ask drawer: remember whether the open ask was just answered so the close
+  // handler can skip its (soon to be removed) row and pick a neighbour.
+  const answeredAskIdRef = useRef<string | null>(null);
+  const homeTitleRef = useRef<HTMLHeadingElement>(null);
+
+  const markAskChanged = useCallback(() => {
+    answeredAskIdRef.current = drawerAskId;
+    void load({ quiet: true });
+  }, [drawerAskId, load]);
+
+  const closeAskDrawerWithFocus = useCallback(() => {
+    const askId = drawerAskId;
+    const answered = askId != null && answeredAskIdRef.current === askId;
+    answeredAskIdRef.current = null;
+    closeDrawer();
+    const visibleIds = coachAsks.slice(0, SECTION_CAP).map((a) => a.id);
+    const idx = askId ? visibleIds.indexOf(askId) : -1;
+    const candidates: string[] = [];
+    if (askId && !answered) candidates.push(askId);
+    if (idx >= 0) {
+      // Neighbours that stay on screen after a refresh.
+      for (const id of [...visibleIds.slice(idx + 1), ...visibleIds.slice(0, idx).reverse()]) {
+        candidates.push(id);
+      }
+    }
+    for (const id of candidates) {
+      const btn = document.querySelector<HTMLButtonElement>(
+        `button[data-ask-answer="${CSS.escape(id)}"]`,
+      );
+      if (btn && !btn.disabled) {
+        btn.focus();
+        return;
+      }
+    }
+    // Fallback: the page title (not a row, so stray typing cannot hit the
+    // Home grid shortcuts).
+    homeTitleRef.current?.focus();
+  }, [closeDrawer, coachAsks, drawerAskId]);
+
   function showToast(message: string, undo?: () => void) {
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
     setToast({ message, undo });
@@ -717,7 +756,9 @@ export function HomePage() {
             <Sun size={14} strokeWidth={1.75} aria-hidden />
             {todayLabel}
           </div>
-          <h1 className="home-title">Today</h1>
+          <h1 className="home-title" ref={homeTitleRef} tabIndex={-1}>
+            Today
+          </h1>
           {summary ? <p className="home-summary">{summary}</p> : null}
         </div>
         <div className="home-tiles" role="group" aria-label="Filter by">
@@ -1050,6 +1091,7 @@ export function HomePage() {
                         variant="tinted"
                         className="button-sm"
                         disabled={!online}
+                        data-ask-answer={ask.id}
                         onClick={() => openAsk(ask.id)}
                       >
                         Mark answered
@@ -1328,6 +1370,7 @@ export function HomePage() {
 
       {drawerExceptionId ? (
         <ExceptionDrawer
+          key={drawerExceptionId}
           exceptionId={drawerExceptionId}
           onClose={closeDrawerWithFocus}
           onChanged={() => void load({ quiet: true })}
@@ -1343,8 +1386,8 @@ export function HomePage() {
                 "",
             ) ?? "Client"
           }
-          onClose={closeDrawer}
-          onChanged={() => void load({ quiet: true })}
+          onClose={closeAskDrawerWithFocus}
+          onChanged={markAskChanged}
         />
       ) : null}
 
