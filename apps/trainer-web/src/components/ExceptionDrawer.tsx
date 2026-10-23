@@ -135,10 +135,16 @@ export function dueLine(
 
 export function ExceptionDrawer({
   exceptionId,
+  openSeq,
   onClose,
   onChanged,
 }: {
   exceptionId: string;
+  /**
+   * Bumped by the parent on every open, including a quick reopen of the same
+   * item before the previous close has committed (DR1 QA F2).
+   */
+  openSeq?: number;
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -175,16 +181,23 @@ export function ExceptionDrawer({
   // is set, the listener ignores every key.
   const closingRef = useRef(false);
 
-  // A new item shown in the same drawer instance is a fresh open.
+  // A new item, or the same item opened again, in the same drawer instance
+  // is a fresh open. Layout effect: reset before any key can reach the
+  // listener for the newly committed open.
   useLayoutEffect(() => {
     closingRef.current = false;
-  }, [exceptionId]);
+  }, [exceptionId, openSeq]);
+
+  /** Leaving the drawer by any route: from now on no shortcut may act. */
+  const markClosing = useCallback(() => {
+    closingRef.current = true;
+  }, []);
 
   /** Every close path goes through here (Esc, X, backdrop, Close, Resolve). */
   const requestClose = useCallback(() => {
-    closingRef.current = true;
+    markClosing();
     onClose();
-  }, [onClose]);
+  }, [markClosing, onClose]);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     // Quiet reload after an action keeps the drawer content on screen.
@@ -334,7 +347,7 @@ export function ExceptionDrawer({
         createIdempotencyKey(),
       );
       setNote("");
-      closingRef.current = true;
+      markClosing();
       onChanged?.();
       requestClose();
     } catch (err) {
@@ -666,7 +679,7 @@ export function ExceptionDrawer({
                         label: "Adjust plan",
                         onSelect: () => {
                           // Leaving the page: treat as closing (DR1).
-                          closingRef.current = true;
+                          markClosing();
                           window.location.assign(
                             `/clients/${detail.coachingRelationshipId}/plan`,
                           );
@@ -690,7 +703,7 @@ export function ExceptionDrawer({
                         id: "client",
                         label: "Open client",
                         onSelect: () => {
-                          closingRef.current = true;
+                          markClosing();
                           window.location.assign(
                             `/clients/${detail.coachingRelationshipId}`,
                           );
@@ -708,6 +721,20 @@ export function ExceptionDrawer({
                   className="link"
                   to={`/clients/${detail.coachingRelationshipId}`}
                   style={{ fontSize: 13 }}
+                  onClick={(ev) => {
+                    // DR1 QA F1: a plain click navigates away in-app, so the
+                    // drawer is closing. Ctrl/Cmd/Shift/middle clicks open a
+                    // new tab or window and leave the drawer open here.
+                    if (
+                      ev.button === 0 &&
+                      !ev.metaKey &&
+                      !ev.ctrlKey &&
+                      !ev.shiftKey &&
+                      !ev.altKey
+                    ) {
+                      markClosing();
+                    }
+                  }}
                 >
                   Open client
                 </Link>

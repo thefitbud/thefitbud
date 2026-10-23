@@ -22,6 +22,8 @@ const AARAV_EXC = "55555555-5555-4555-8555-555555555555";
 
 // HM5: the realtime hint callback triggers the same quiet refetch as the poll.
 const hints = vi.hoisted(() => ({ refresh: null as null | (() => void) }));
+// DR1 QA F2: the open token Home last passed to the exception drawer.
+const drawerProps = vi.hoisted(() => ({ openSeq: undefined as number | undefined }));
 
 const api = vi.hoisted(() => ({
   getAttentionGroups: vi.fn(),
@@ -69,13 +71,16 @@ vi.mock("../realtime/useRealtimeHints", () => ({
 }));
 // Stub drawers: only the close path matters here.
 vi.mock("../components/ExceptionDrawer", () => ({
-  ExceptionDrawer: ({ onClose }: { onClose: () => void }) => (
+  ExceptionDrawer: ({ onClose, openSeq }: { onClose: () => void; openSeq?: number }) => {
+    drawerProps.openSeq = openSeq;
+    return (
     <div role="dialog" aria-label="Exception">
       <button type="button" onClick={onClose}>
         Close exception drawer
       </button>
     </div>
-  ),
+    );
+  },
 }));
 vi.mock("../components/CoachAskDrawer", () => ({
   CoachAskDrawer: () => null,
@@ -683,5 +688,48 @@ describe("HomePage row selection follows the client (HM5)", () => {
     expect(ringedNames()).toEqual(["Priya Nair"]);
     type("a");
     expectAcked(PRIYA_EXC);
+  });
+  // DR1 QA F3 (F2b): the grid's own Escape branch must fall back to the page
+  // title when the selected row's element can't be found, like the drawer
+  // close path does. The missing row element is simulated by hiding row
+  // elements from Map lookups (rowRefs) while the Escape is handled.
+  it("DR1/F3: Escape in the grid with no row element to restore focuses the page title", async () => {
+    await renderHome(`/?exception=${ROHAN_EXC}`);
+    const row = rowOf("Rohan Mehta");
+    act(() => row.focus());
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    const realGet = Map.prototype.get;
+    const spy = vi
+      .spyOn(Map.prototype, "get")
+      .mockImplementation(function (this: Map<unknown, unknown>, key: unknown) {
+        const value = realGet.call(this, key);
+        return value instanceof HTMLElement && value.getAttribute("role") === "row"
+          ? undefined
+          : value;
+      });
+    try {
+      fireEvent.keyDown(row, { key: "Escape" });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement?.tagName).toBe("H1");
+  });
+
+  // DR1 QA F2: Esc then Enter on the same row before the close commits keeps
+  // the same drawer mounted; Home must hand it a new open token.
+  it("DR1/F2: Esc then Enter on the same row gives the drawer a new open token", async () => {
+    await renderHome("/");
+    clickRow("Rohan Mehta");
+    fireEvent.keyDown(rowOf("Rohan Mehta"), { key: "Enter" });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    const first = drawerProps.openSeq;
+    expect(typeof first).toBe("number");
+    act(() => {
+      fireEvent.keyDown(rowOf("Rohan Mehta"), { key: "Escape" });
+      fireEvent.keyDown(rowOf("Rohan Mehta"), { key: "Enter" });
+    });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(drawerProps.openSeq).toBeGreaterThan(first!);
   });
 });

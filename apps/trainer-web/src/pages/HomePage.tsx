@@ -278,6 +278,8 @@ export function HomePage() {
   // row key), not by index, so a poll or a re-sort keeps the same client
   // selected. null = nothing picked yet; the first row is selected implicitly.
   const [selectedRid, setSelectedRid] = useState<string | null>(null);
+  // DR1 QA F2: bumped on every exception drawer open (see openException).
+  const [drawerOpenSeq, setDrawerOpenSeq] = useState(0);
   const [toast, setToast] = useState<{
     message: string;
     undo?: () => void;
@@ -571,6 +573,10 @@ export function HomePage() {
   };
 
   function openException(id: string) {
+    // DR1 QA F2: a quick reopen of the same item can land before the close
+    // commits, so the drawer never remounts; the new token tells it this is
+    // a fresh open.
+    setDrawerOpenSeq((n) => n + 1);
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("exception", id);
@@ -1540,6 +1546,7 @@ export function HomePage() {
         <ExceptionDrawer
           key={drawerExceptionId}
           exceptionId={drawerExceptionId}
+          openSeq={drawerOpenSeq}
           onClose={closeDrawerWithFocus}
           onChanged={() => void load({ quiet: true })}
         />
