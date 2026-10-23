@@ -19,6 +19,7 @@ import {
   addGeneratedPersona,
   addLegacyDeepHistory,
   addTrainerLibrary,
+  askInsideWindowMs,
   buildPlanChain,
   personaConfig,
   rowsToSql,
@@ -551,6 +552,12 @@ type OverlaySlot = {
 };
 
 /**
+ * "opened": the window has started; "askable": it started at least an hour ago,
+ * so a coach ask can sit an hour into it (QS6); "closed": it has ended.
+ */
+type SlotEdge = "opened" | "askable" | "closed";
+
+/**
  * Overlay anchors (QS3). A seeded log or ask needs its slot's window to have
  * opened by `now`; an overdue / skipped / missed exception needs it to have
  * closed. Walk back from refDate to the latest legacy slot that fits instead
@@ -559,15 +566,17 @@ type OverlaySlot = {
  */
 function overlaySlotFinder(input: {
   email: string;
-  timezone: string;
   refDate: string;
   now: string;
   content: PlanContent;
 }) {
   const nowMs = Date.parse(input.now);
+  // Same zone buildAssignmentsAndLogs builds the client's windows in (QS6): an
+  // overlay must never compute its slot in a zone of its own.
+  const timezone = legacyTimezoneFor(input.email);
   const workoutWeekdays = new Set(input.content.workoutDays.map((day) => day.weekday));
   const pick = (
-    edge: "opened" | "closed",
+    edge: SlotEdge,
     skip: number,
     windowFor: (localDate: string) => OverlaySlot | null,
     what: string,
@@ -579,7 +588,9 @@ function overlaySlotFinder(input: {
       const fits =
         edge === "opened"
           ? Date.parse(slot.startsAt) <= nowMs
-          : Date.parse(slot.endsAt) < nowMs;
+          : edge === "askable"
+            ? Date.parse(slot.startsAt) + 3_600_000 <= nowMs
+            : Date.parse(slot.endsAt) < nowMs;
       if (!fits) continue;
       if (found === skip) return slot;
       found += 1;
@@ -588,7 +599,7 @@ function overlaySlotFinder(input: {
   };
   const workoutOn = (localDate: string): OverlaySlot | null => {
     if (!workoutWeekdays.has(weekdayFromDate(localDate))) return null;
-    const startsAt = localDayStartIso(localDate, "07:00", input.timezone);
+    const startsAt = localDayStartIso(localDate, "07:00", timezone);
     return {
       localDate,
       assignmentId: demoUuid("workout-assignment", input.email, localDate),
@@ -597,11 +608,11 @@ function overlaySlotFinder(input: {
     };
   };
   return {
-    meal(mealId: string, edge: "opened" | "closed", skip = 0): OverlaySlot {
+    meal(mealId: string, edge: SlotEdge, skip = 0): OverlaySlot {
       const meal = input.content.mealPrescriptions.find((entry) => entry.id === mealId);
       if (!meal) throw new Error(`Demo seed: no meal ${mealId} in standard plan`);
       return pick(edge, skip, (localDate) => {
-        const startsAt = localDayStartIso(localDate, meal.localTime ?? "08:00", input.timezone);
+        const startsAt = localDayStartIso(localDate, meal.localTime ?? "08:00", timezone);
         return {
           localDate,
           assignmentId: demoUuid("meal-assignment", input.email, localDate, mealId),
@@ -610,7 +621,7 @@ function overlaySlotFinder(input: {
         };
       }, meal.name);
     },
-    workout(edge: "opened" | "closed", skip = 0): OverlaySlot {
+    workout(edge: SlotEdge, skip = 0): OverlaySlot {
       return pick(edge, skip, workoutOn, "workout");
     },
     /** The legacy workout slot on `localDate`, or null on a rest day. */
@@ -659,9 +670,13 @@ function skippedMealSql(input: {
   ];
 }
 
-/** Timezone of a legacy demo account; buildAssignmentsAndLogs builds its windows in it. */
+/**
+ * Timezone of a legacy demo account; buildAssignmentsAndLogs builds its windows
+ * in it, and build.ts writes it to users.timezone. A persona config's zone wins
+ * (QS6), so the config is the client's real timezone everywhere.
+ */
 export function legacyTimezoneFor(email: string): string {
-  return email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
+  return personaConfig(email)?.timezone ?? (email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata");
 }
 
 function buildPersonaOverlays(input: HistoryInput): string {
@@ -670,8 +685,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const lines: string[] = [];
 
   const standardContent = materializePlanContent(buildStandardPlanContent(input.libraryIndex, "v2"));
-  const slotsFor = (email: string, timezone = "Asia/Kolkata") =>
-    overlaySlotFinder({ email, timezone, refDate, now, content: standardContent });
+  // Slots are always in the client's own timezone (legacyTimezoneFor), never a literal (QS6).
+  const slotsFor = (email: string) => overlaySlotFinder({ email, refDate, now, content: standardContent });
 
   const rohanEmail = "rohan.slipping@demo.fitbud.test";
   const rohanRel = relId("rahul.coach@demo.fitbud.test", rohanEmail);
@@ -849,7 +864,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   // shows Critical/Attention across 8 clients; Aarav stays On track.
   const deepakRel = relId("rahul.coach@demo.fitbud.test", "deepak.dubai@demo.fitbud.test");
   // Latest closed Dubai workout, with the client's skip behind the exception.
-  const deepakWorkout = slotsFor("deepak.dubai@demo.fitbud.test", "Asia/Dubai").workout("closed");
+  const deepakWorkout = slotsFor("deepak.dubai@demo.fitbud.test").workout("closed");
   const deepakDetected = stampBetween(hoursBefore(now, 30), deepakWorkout.endsAt, now);
   lines.push(
     ...skippedWorkoutSql({
@@ -881,7 +896,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     // the client's own timezone, as buildAssignmentsAndLogs builds it. That day
     // is inside detection's client-local 3-day lookback for any timezone. On a
     // rest day there is no hole.
-    const holeWorkout = slotsFor(email, legacyTimezoneFor(email)).workoutOn(addDaysFromLocalDate(refDate, -1));
+    const holeWorkout = slotsFor(email).workoutOn(addDaysFromLocalDate(refDate, -1));
     if (holeWorkout && Date.parse(holeWorkout.endsAt) < Date.parse(now)) {
       const missed = missedWorkoutCandidate({
         assignmentId: holeWorkout.assignmentId,
@@ -896,13 +911,19 @@ function buildPersonaOverlays(input: HistoryInput): string {
   }
 
   const ishitaRel = relId("rahul.coach@demo.fitbud.test", "ishita.pushoff@demo.fitbud.test");
-  // Ask on the latest lunch that has opened; overdue on the latest closed dinner.
+  // Ask on the latest lunch that opened at least an hour ago; overdue on the latest closed dinner.
   const ishitaSlots = slotsFor("ishita.pushoff@demo.fitbud.test");
-  const ishitaLunch = ishitaSlots.meal(MEAL_PRESCRIPTION_IDS.lunch, "opened");
+  const ishitaLunch = ishitaSlots.meal(MEAL_PRESCRIPTION_IDS.lunch, "askable");
   const ishitaDinner = ishitaSlots.meal(MEAL_PRESCRIPTION_IDS.dinner, "closed");
   const ishitaMealId = ishitaLunch.assignmentId;
   const ishitaDinnerId = ishitaDinner.assignmentId;
-  const ishitaAskedAt = stampBetween(hoursBefore(now, 1), ishitaLunch.startsAt, now);
+  // An hour back, but at least an hour into the lunch window and before it closed (QS6).
+  const ishitaAskedAt = new Date(
+    Math.min(
+      Date.parse(now),
+      askInsideWindowMs({ windowStartsAt: ishitaLunch.startsAt, windowEndsAt: ishitaLunch.endsAt }, Date.parse(hoursBefore(now, 1))),
+    ),
+  ).toISOString();
   const ishitaDetected = stampBetween(hoursBefore(now, 16), ishitaDinner.endsAt, now);
   lines.push(
     `INSERT INTO device_tokens (id, user_id, platform, provider, token, installation_id, status, last_seen_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("device-token", "ishita"))}, ${sqlQuote(userId("ishita.pushoff@demo.fitbud.test"))}, 'android', 'fcm', 'demo-ishita-revoked', 'demo-ishita-install', 'revoked', ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
