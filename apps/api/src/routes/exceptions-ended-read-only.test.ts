@@ -458,22 +458,126 @@ describe("EC1b ended relationships are read-only for exception writes", () => {
     expect(await snapshot(relationshipId)).toEqual(before);
   });
 
-  it("still answers 404 (not 409) to another trainer for an ended relationship's exception", async () => {
+  it("still answers 404 (not 409) to another trainer on every exception write of an ended relationship", async () => {
     const { trainer, relationshipId } = await reachActive("owner");
     const stranger = { Cookie: await createTrainerSession("ec1b-stranger@example.com") };
     await endCoaching(trainer, relationshipId, "ec1b-owner-end");
     const rows = openRows(relationshipId, "abcdabcd");
     await db.insert(schema.exceptions).values(Object.values(rows));
+    const before = await snapshot(relationshipId);
 
-    const ack = await post(`/exceptions/${rows.active.id}/acknowledge`, stranger, {}, "ec1b-stranger-ack");
-    expect(ack.status).toBe(404);
-    const evaluate = await post(
-      `/exceptions/relationships/${relationshipId}/evaluate`,
-      stranger,
-      {},
-      "ec1b-stranger-eval",
+    const expectNotFound = async (response: Response, code: string) => {
+      expect(response.status).toBe(404);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe(code);
+    };
+    await expectNotFound(
+      await post(`/exceptions/${rows.active.id}/acknowledge`, stranger, {}, "ec1b-stranger-ack"),
+      "EXCEPTION_NOT_FOUND",
     );
-    expect(evaluate.status).toBe(404);
+    await expectNotFound(
+      await post(
+        `/exceptions/${rows.acknowledged.id}/resolve`,
+        stranger,
+        { outcome: "plan_adjusted" },
+        "ec1b-stranger-resolve",
+      ),
+      "EXCEPTION_NOT_FOUND",
+    );
+    await expectNotFound(
+      await post(`/exceptions/relationships/${relationshipId}/evaluate`, stranger, {}, "ec1b-stranger-eval"),
+      "RELATIONSHIP_NOT_FOUND",
+    );
+    await expectNotFound(
+      await post(
+        `/exceptions/relationships/${relationshipId}/interventions`,
+        stranger,
+        { kind: "note", summary: "Free note" },
+        "ec1b-stranger-int",
+      ),
+      "RELATIONSHIP_NOT_FOUND",
+    );
+    expect(await snapshot(relationshipId)).toEqual(before);
+  });
+
+  it("checks ended before the transition rule: ack/resolve of an already-resolved row → RELATIONSHIP_ENDED", async () => {
+    const { trainer, relationshipId } = await reachActive("order-transition");
+    await endCoaching(trainer, relationshipId, "ec1b-order-transition-end");
+    const resolvedRow = {
+      ...openRows(relationshipId, "56565656").acknowledged,
+      status: "resolved" as const,
+      resolvedAt: earlierAck,
+      resolutionOutcome: "plan_adjusted" as const,
+    };
+    await db.insert(schema.exceptions).values(resolvedRow);
+    const before = await snapshot(relationshipId);
+
+    await expectEnded(
+      await post(`/exceptions/${resolvedRow.id}/acknowledge`, trainer, {}, "ec1b-order-ack"),
+    );
+    await expectEnded(
+      await post(
+        `/exceptions/${resolvedRow.id}/resolve`,
+        trainer,
+        { outcome: "plan_adjusted" },
+        "ec1b-order-resolve",
+      ),
+    );
+    expect(await snapshot(relationshipId)).toEqual(before);
+  });
+
+  it("checks ended before the linked-exception lookup on interventions", async () => {
+    const { trainer, relationshipId } = await reachActive("order-linked");
+    await endCoaching(trainer, relationshipId, "ec1b-order-linked-end");
+    const before = await snapshot(relationshipId);
+
+    await expectEnded(
+      await post(
+        `/exceptions/relationships/${relationshipId}/interventions`,
+        trainer,
+        // A linked exception that does not exist would otherwise be a 404.
+        { kind: "note", summary: "Linked note", exceptionId: "78787878-0001-4000-8000-000000000001" },
+        "ec1b-order-linked",
+      ),
+    );
+    expect(await snapshot(relationshipId)).toEqual(before);
+  });
+
+  it("replays a write made before the end with its original 200 and writes nothing (resolve, ack, interventions)", async () => {
+    const { trainer, relationshipId } = await reachActive("replay");
+    const rows = openRows(relationshipId, "9a9a9a9a");
+    await db.insert(schema.exceptions).values(Object.values(rows));
+    const writes = [
+      () =>
+        post(
+          `/exceptions/${rows.acknowledged.id}/resolve`,
+          trainer,
+          { outcome: "plan_adjusted", note: "Adjusted" },
+          "ec1b-replay-resolve",
+        ),
+      () => post(`/exceptions/${rows.active.id}/acknowledge`, trainer, {}, "ec1b-replay-ack"),
+      () =>
+        post(
+          `/exceptions/relationships/${relationshipId}/interventions`,
+          trainer,
+          { kind: "note", summary: "Free note" },
+          "ec1b-replay-int",
+        ),
+    ];
+    const originals: unknown[] = [];
+    for (const write of writes) {
+      const response = await write();
+      expect(response.status).toBe(200);
+      originals.push(await response.json());
+    }
+
+    await endCoaching(trainer, relationshipId, "ec1b-replay-end");
+    const before = await snapshot(relationshipId);
+    for (const [index, write] of writes.entries()) {
+      const replay = await write();
+      expect(replay.status, `write ${index}`).toBe(200);
+      expect(await replay.json(), `write ${index}`).toEqual(originals[index]);
+    }
+    expect(await snapshot(relationshipId)).toEqual(before);
   });
 
   it("allows every exception write on an active relationship and again after reactivation", async () => {
@@ -488,7 +592,7 @@ describe("EC1b ended relationships are read-only for exception writes", () => {
       const resolved = await post(
         `/exceptions/${rows.acknowledged.id}/resolve`,
         trainer,
-        { outcome: "other" },
+        { outcome: "plan_adjusted" },
         `${tag}-resolve`,
       );
       expect(resolved.status).toBe(200);
