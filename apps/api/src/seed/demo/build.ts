@@ -4,7 +4,7 @@ import { personaConfig } from "./generator/personas.js";
 
 /** Original 19 accounts + the 8 generated Rahul clients. */
 export const DEMO_ALL_ACCOUNTS = [...DEMO_ACCOUNTS, ...DEMO_EXTRA_ACCOUNTS];
-import { buildDemoHistorySql } from "./history.js";
+import { buildDemoHistorySql, legacyTimezoneFor } from "./history.js";
 import { demoUuid, sqlQuote } from "./ids.js";
 import type { DemoLibraryIndex } from "./personas.js";
 
@@ -157,6 +157,49 @@ function insertUser(input: {
   return lines.join("\n");
 }
 
+/** (table, user column, timestamp) facts that can come before a relationship starts. */
+const ACCOUNT_ANCHORS: Array<[table: string, userColumn: string, column: string]> = [
+  ["coaching_relationships", "trainer_user_id", "started_at"],
+  ["coaching_relationships", "trainer_user_id", "created_at"],
+  ["coaching_relationships", "trainee_user_id", "started_at"],
+  ["coaching_relationships", "trainee_user_id", "created_at"],
+  ["client_invitations", "trainer_user_id", "created_at"],
+  ["client_invitations", "accepted_user_id", "created_at"],
+  ["onboarding_form_responses", "trainee_user_id", "created_at"],
+  ["plan_templates", "trainer_user_id", "created_at"],
+  ["onboarding_form_templates", "trainer_user_id", "created_at"],
+  ["onboarding_form_versions", "trainer_user_id", "created_at"],
+  ["checkin_form_templates", "trainer_user_id", "created_at"],
+  ["checkin_form_versions", "trainer_user_id", "created_at"],
+  ["trainer_notes", "trainer_user_id", "created_at"],
+];
+
+/** Days an account existed before its first seeded fact (or now, with none). */
+export const ACCOUNT_LEAD_DAYS = 7;
+
+/**
+ * Accounts are inserted before history at now; once history exists, backdate
+ * each account (users, roles, profiles, identity created_at) to a week before
+ * its earliest relationship, invitation, intake or library row, so a client
+ * never joins after their coaching started (QS5). Deterministic: derived from
+ * the seeded rows. updated_at and password_updated_at stay at the reset time.
+ */
+function backdateAccountsSql(now: string): string {
+  const earliest = ACCOUNT_ANCHORS.map(
+    ([table, userColumn, column]) => `SELECT min(${column}) FROM ${table} WHERE ${userColumn} = users.id`,
+  );
+  const anchor = `min(${[...earliest.map((sql) => `coalesce((${sql}), ${sqlQuote(now)})`), sqlQuote(now)].join(", ")})`;
+  const since = (table: string) =>
+    `UPDATE ${table} SET created_at = (SELECT u.created_at FROM users u WHERE u.id = ${table}.user_id);`;
+  return [
+    `UPDATE users SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', ${anchor}, '-${ACCOUNT_LEAD_DAYS} days');`,
+    since("user_roles"),
+    since("trainer_profiles"),
+    since("trainee_profiles"),
+    since("user_identities"),
+  ].join("\n");
+}
+
 /**
  * Builds idempotent demo seed SQL (T24). Wipes app data, inserts accounts and history.
  */
@@ -181,8 +224,7 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
         : account.displayName ||
           titleCaseDemoName(account.email.split("@")[0]!.replace(/\./g, " "));
     const cfg = personaConfig(account.email);
-    const timezone =
-      cfg?.timezone ?? (account.email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata");
+    const timezone = cfg?.timezone ?? legacyTimezoneFor(account.email);
     const bio =
       account.role === "trainee" ? DEMO_TRAINEE_BIO[account.email] ??
           (cfg?.bio ? { ...cfg.bio, gender: cfg.sex } : undefined)
@@ -218,6 +260,8 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
       libraryIndex: input.libraryIndex,
     }),
   );
+
+  parts.push(backdateAccountsSql(now));
 
   for (const account of DEMO_ALL_ACCOUNTS) {
     parts.push(`-- ${account.email} (${account.state})`);

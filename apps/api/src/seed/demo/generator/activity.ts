@@ -450,7 +450,8 @@ export function simulateActivity(ctx: ActivityContext, opts: {
                     prescribed_load_label: target.loadLabel,
                     actual_reps: reps,
                     actual_load_label: kg == null ? target.loadLabel : kgLabel(kg),
-                    completed_at: atMost(iso(startedMs + (exIndex * 4 + setIndex + 1) * 3 * 60_000), ctx.now),
+                    // Inside the session: a set never finishes after the workout did (QS5).
+                    completed_at: iso(Math.min(startedMs + (exIndex * 4 + setIndex + 1) * 3 * 60_000, completedMs)),
                     created_at: iso(startedMs),
                     updated_at: completedAt,
                   });
