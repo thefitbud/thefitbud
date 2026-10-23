@@ -188,6 +188,22 @@ export function ExceptionDrawer({
     closingRef.current = false;
   }, [exceptionId, openSeq]);
 
+  // DR2 (DR1 QA F-C): Esc, then browser Back before the close commits. The
+  // history traversal brings this same item back, but the router's rendered
+  // location never changed (the close was still a pending transition), so no
+  // prop or location.key change reaches this instance. The popstate event is
+  // the only signal: if the URL it lands on shows this item, it is a fresh
+  // open. A traversal to a URL without this item leaves the flag set, so the
+  // drawer stays inert until it unmounts.
+  useEffect(() => {
+    function onPopState() {
+      const shown = new URLSearchParams(window.location.search).get("exception");
+      if (shown === exceptionId) closingRef.current = false;
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [exceptionId]);
+
   /** Leaving the drawer by any route: from now on no shortcut may act. */
   const markClosing = useCallback(() => {
     closingRef.current = true;
