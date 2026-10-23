@@ -655,6 +655,11 @@ function skippedMealSql(input: {
   ];
 }
 
+/** Timezone of a legacy demo account; buildAssignmentsAndLogs builds its windows in it. */
+function legacyTimezoneFor(email: string): string {
+  return email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
+}
+
 function buildPersonaOverlays(input: HistoryInput): string {
   const now = input.referenceInstant;
   const refDate = input.referenceDate;
@@ -864,9 +869,12 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
     // attention_hole leaves yesterday's workout unlogged (shouldLogWorkout).
     // Once its window closes, detection raises missed_workout on the first
-    // coach read; seed that row so the read creates nothing (QS4). Yesterday
-    // is always inside the 3-day lookback; on a rest day there is no hole.
-    const holeWorkout = slotsFor(email).workoutOn(addDaysFromLocalDate(refDate, -1));
+    // coach read; seed that row so the read creates nothing (QS4). The hole is
+    // refDate - 1, the same day shouldLogWorkout skips; its window is built in
+    // the client's own timezone, as buildAssignmentsAndLogs builds it. That day
+    // is inside detection's client-local 3-day lookback for any timezone. On a
+    // rest day there is no hole.
+    const holeWorkout = slotsFor(email, legacyTimezoneFor(email)).workoutOn(addDaysFromLocalDate(refDate, -1));
     if (holeWorkout && Date.parse(holeWorkout.endsAt) < Date.parse(now)) {
       const missed = missedWorkoutCandidate({
         assignmentId: holeWorkout.assignmentId,
@@ -1199,9 +1207,7 @@ export function buildDemoHistorySql(input: HistoryInput): string {
     });
     lines.push(plan.sql);
 
-    const timezone = account.email.startsWith("deepak.")
-      ? "Asia/Dubai"
-      : "Asia/Kolkata";
+    const timezone = legacyTimezoneFor(account.email);
     const activityUntilDate = endedAt
       ? activityUntilIso.slice(0, 10)
       : refDate;
