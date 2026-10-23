@@ -597,18 +597,20 @@ export function HomePage() {
     });
   }, [setParams]);
 
+  const homeTitleRef = useRef<HTMLHeadingElement>(null);
+
   const closeDrawerWithFocus = useCallback(() => {
     noteDrawerClosed();
     closeDrawer();
-    // Restored focus must not arm the a / n / o row shortcuts (HM4).
-    focusWithoutArming(rowElAt(focusIdx));
+    // Restored focus must not arm the a / n / o row shortcuts (HM4). With no
+    // rows left, focus goes to the page title, not <body> (HM5 QA F2).
+    focusWithoutArming(rowElAt(focusIdx) ?? homeTitleRef.current);
     // rowElAt reads the current visibleIds (visibleKey).
   }, [closeDrawer, focusIdx, visibleKey, focusWithoutArming, noteDrawerClosed]);
 
   // Ask drawer: remember whether the open ask was just answered so the close
   // handler can skip its (soon to be removed) row and pick a neighbour.
   const answeredAskIdRef = useRef<string | null>(null);
-  const homeTitleRef = useRef<HTMLHeadingElement>(null);
 
   const markAskChanged = useCallback(() => {
     answeredAskIdRef.current = drawerAskId;
@@ -760,7 +762,7 @@ export function HomePage() {
     } else if (key === "escape" && drawerExceptionId) {
       noteDrawerClosed();
       closeDrawer();
-      focusWithoutArming(rowElAt(focusIdx));
+      focusWithoutArming(rowElAt(focusIdx) ?? homeTitleRef.current);
     }
   }
 

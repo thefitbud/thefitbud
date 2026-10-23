@@ -620,4 +620,68 @@ describe("HomePage row selection follows the client (HM5)", () => {
     type("a");
     expectAcked(PRIYA_EXC);
   });
+
+  // HM5 QA F2 (fixed with DR1): drawer close with an empty list.
+  it("F2: closing the drawer after the list empties focuses the page title, not <body>", async () => {
+    api.getAttentionGroups.mockResolvedValue({ groups: [ROHAN()] });
+    await renderHome(`/?exception=${ROHAN_EXC}`);
+    await serverNow([]);
+    expect(screen.queryByRole("grid")).toBeNull();
+    await closeExceptionDrawer();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.tagName).toBe("H1");
+    advance(1000);
+    type("ano");
+    noActionTaken();
+  });
+
+  // HM5 QA F1: pin the four guards no test covered.
+  it("F1/Q1: a focusout from the focused row as it is removed keeps it for the hand-off", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    const priya = rowOf("Priya Nair");
+    // Chrome fires blur/focusout for a focused node that is being removed;
+    // by then the node is no longer connected and there is no relatedTarget.
+    Object.defineProperty(priya, "isConnected", { configurable: true, get: () => false });
+    fireEvent.focusOut(priya, { relatedTarget: null });
+    await serverNow([ROHAN(), FARHAN(), SANA()]);
+    expect(document.activeElement).toBe(rowOf("Sana Khan"));
+    expect(ringedNames()).toEqual(["Sana Khan"]);
+  });
+
+  it("F1/Q3: a keyboard-made click (detail 0) after a touch doesn't select or arm", async () => {
+    await renderHome("/");
+    const name = screen.getByText("Priya Nair");
+    // A touch that started a scroll, then a click the keyboard generated.
+    fireEvent.pointerDown(name, { pointerType: "touch", button: 0 });
+    fireEvent.click(name, { button: 0, detail: 0 });
+    expect(ringedNames()).toEqual(["Rohan Mehta"]);
+    type("a");
+    noActionTaken();
+  });
+
+  it("F1/Q4: a removed row doesn't steal focus from an outside button even if its focus record is stale", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    act(() => outside.focus());
+    // A focusin that wasn't followed by a real focus move (e.g. focus went
+    // to another frame): the grid still records Priya as focused.
+    fireEvent.focusIn(rowOf("Priya Nair"));
+    expect(document.activeElement).toBe(outside);
+    await serverNow([ROHAN(), FARHAN(), SANA()]);
+    expect(document.activeElement).toBe(outside);
+    expect(ringedNames()).toEqual(["Sana Khan"]);
+    outside.remove();
+  });
+
+  it("F1/Q6: a pen press selects the row and arms the shortcuts", async () => {
+    await renderHome("/");
+    fireEvent.pointerDown(screen.getByText("Priya Nair"), { pointerType: "pen", button: 0 });
+    act(() => rowOf("Priya Nair").focus());
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    type("a");
+    expectAcked(PRIYA_EXC);
+  });
 });
