@@ -42,6 +42,7 @@ import {
 } from "../db/schema";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { requireWritableRelationship } from "../lib/relationship-write-guard";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -298,6 +299,10 @@ exceptionRoutes.post(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
 
+    // Rule 5 (EC1): an ended relationship is read-only for the trainer.
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
+
     const result = await evaluateRelationshipExceptions(
       db,
       relationship.id,
@@ -368,7 +373,10 @@ exceptionRoutes.get(
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
 
-    await evaluateRelationshipExceptions(db, relationship.id, nowIso());
+    // Reads stay available for an ended relationship but never write (rule 5).
+    if (relationship.status !== "ended") {
+      await evaluateRelationshipExceptions(db, relationship.id, nowIso());
+    }
 
     const statusFilter = c.req.query("status");
     const rows = await db
@@ -507,6 +515,10 @@ exceptionRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
+
+    // Rule 5 (EC1): an ended relationship is read-only for the trainer.
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
 
     if (parsed.data.exceptionId) {
       const linked = await db
@@ -689,6 +701,10 @@ exceptionRoutes.post(
       return fail(c, 404, "EXCEPTION_NOT_FOUND", "Exception not found.");
     }
 
+    // Rule 5 (EC1): an ended relationship is read-only for the trainer.
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
+
     if (!canAcknowledgeException(row.status)) {
       return fail(
         c,
@@ -843,6 +859,10 @@ exceptionRoutes.post(
     if (!relationship || relationship.trainerUserId !== actor.userId) {
       return fail(c, 404, "EXCEPTION_NOT_FOUND", "Exception not found.");
     }
+
+    // Rule 5 (EC1): an ended relationship is read-only for the trainer.
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
 
     if (!canResolveException(row.status)) {
       return fail(
