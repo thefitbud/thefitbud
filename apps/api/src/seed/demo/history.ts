@@ -2,6 +2,7 @@ import {
   foodSnapshotFromLibrary,
   labelFor,
   materializePlanContent,
+  missedWorkoutCandidate,
 } from "@fitbud/core";
 import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
 import { DEMO_ACCOUNTS } from "./spec.js";
@@ -523,7 +524,7 @@ function shouldLogWorkout(
   if (state === "acknowledged") {
     return "completed";
   }
-  // Extra attention clients: miss only yesterday's workout (Attention severity).
+  // Extra attention clients: miss only yesterday's workout (seeded as a critical missed_workout once its window closes).
   if (state === "attention_hole") {
     const yesterday = addDaysFromLocalDate(refDate, -1);
     if (localDate === yesterday) return false;
@@ -581,6 +582,16 @@ function overlaySlotFinder(input: {
     }
     throw new Error(`Demo seed: no ${edge} ${what} slot for ${input.email}`);
   };
+  const workoutOn = (localDate: string): OverlaySlot | null => {
+    if (!workoutWeekdays.has(weekdayFromDate(localDate))) return null;
+    const startsAt = localDayStartIso(localDate, "07:00", input.timezone);
+    return {
+      localDate,
+      assignmentId: demoUuid("workout-assignment", input.email, localDate),
+      startsAt,
+      endsAt: new Date(Date.parse(startsAt) + 24 * 3_600_000).toISOString(),
+    };
+  };
   return {
     meal(mealId: string, edge: "opened" | "closed", skip = 0): OverlaySlot {
       const meal = input.content.mealPrescriptions.find((entry) => entry.id === mealId);
@@ -596,17 +607,10 @@ function overlaySlotFinder(input: {
       }, meal.name);
     },
     workout(edge: "opened" | "closed", skip = 0): OverlaySlot {
-      return pick(edge, skip, (localDate) => {
-        if (!workoutWeekdays.has(weekdayFromDate(localDate))) return null;
-        const startsAt = localDayStartIso(localDate, "07:00", input.timezone);
-        return {
-          localDate,
-          assignmentId: demoUuid("workout-assignment", input.email, localDate),
-          startsAt,
-          endsAt: new Date(Date.parse(startsAt) + 24 * 3_600_000).toISOString(),
-        };
-      }, "workout");
+      return pick(edge, skip, workoutOn, "workout");
     },
+    /** The legacy workout slot on `localDate`, or null on a rest day. */
+    workoutOn,
   };
 }
 
@@ -649,6 +653,11 @@ function skippedMealSql(input: {
     `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(input.slot.assignmentId)};`,
     `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", input.slot.assignmentId))}, ${sqlQuote(input.slot.assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("plan-version", input.relId, "v2"))}, ${sqlQuote(userId(input.email))}, 'skipped', 0, ${sqlQuote(input.loggedAt)}, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ${sqlQuote(input.loggedAt)}, ${sqlQuote(input.loggedAt)}, ${sqlQuote(input.loggedAt)});`,
   ];
+}
+
+/** Timezone of a legacy demo account; buildAssignmentsAndLogs builds its windows in it. */
+function legacyTimezoneFor(email: string): string {
+  return email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
 }
 
 function buildPersonaOverlays(input: HistoryInput): string {
@@ -858,6 +867,25 @@ function buildPersonaOverlays(input: HistoryInput): string {
       ...skippedMealSql({ slot: holeLunch, relId: holeRel, email, loggedAt: hoursAfter(holeLunch.startsAt, 1) }),
       `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `${key}-skipped-lunch`))}, ${sqlQuote(holeRel)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(holeLunch.assignmentId)}, 'Skipped lunch', ${sqlQuote(holeDetected)}, ${sqlQuote(holeDetected)}, ${sqlQuote(now)});`,
     );
+    // attention_hole leaves yesterday's workout unlogged (shouldLogWorkout).
+    // Once its window closes, detection raises missed_workout on the first
+    // coach read; seed that row so the read creates nothing (QS4). The hole is
+    // refDate - 1, the same day shouldLogWorkout skips; its window is built in
+    // the client's own timezone, as buildAssignmentsAndLogs builds it. That day
+    // is inside detection's client-local 3-day lookback for any timezone. On a
+    // rest day there is no hole.
+    const holeWorkout = slotsFor(email, legacyTimezoneFor(email)).workoutOn(addDaysFromLocalDate(refDate, -1));
+    if (holeWorkout && Date.parse(holeWorkout.endsAt) < Date.parse(now)) {
+      const missed = missedWorkoutCandidate({
+        assignmentId: holeWorkout.assignmentId,
+        localDate: holeWorkout.localDate,
+        windowEndsAt: holeWorkout.endsAt,
+      });
+      const missedDetected = stampBetween(hoursBefore(now, 8), holeWorkout.endsAt, now);
+      lines.push(
+        `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, details_json, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `${key}-missed-workout`))}, ${sqlQuote(holeRel)}, ${sqlQuote(missed.type)}, ${sqlQuote(missed.severity)}, 'active', 'demo-v1', ${sqlQuote(missed.sourceEntityType)}, ${sqlQuote(missed.sourceEntityId)}, ${sqlQuote(missed.summary)}, ${sqlQuote(JSON.stringify(missed.details))}, ${sqlQuote(missedDetected)}, ${sqlQuote(missedDetected)}, ${sqlQuote(now)});`,
+      );
+    }
   }
 
   const ishitaRel = relId("rahul.coach@demo.fitbud.test", "ishita.pushoff@demo.fitbud.test");
@@ -1179,9 +1207,7 @@ export function buildDemoHistorySql(input: HistoryInput): string {
     });
     lines.push(plan.sql);
 
-    const timezone = account.email.startsWith("deepak.")
-      ? "Asia/Dubai"
-      : "Asia/Kolkata";
+    const timezone = legacyTimezoneFor(account.email);
     const activityUntilDate = endedAt
       ? activityUntilIso.slice(0, 10)
       : refDate;
