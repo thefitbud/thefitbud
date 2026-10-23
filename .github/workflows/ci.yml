@@ -1,4 +1,5 @@
 # Minimal CI (task H3): lint, typecheck and unit/API tests on PRs to main and pushes to main.
+# Stacked PRs whose base branch isn't main are not checked; they get CI once retargeted to main.
 # No secrets, no deploys, no e2e (Playwright global-setup kills wrangler/workerd and needs port 8787).
 # The job id/name "ci" is stable so branch protection (H4) can require it.
 name: CI
@@ -14,7 +15,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded PR runs only; every push to main keeps its own run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci:
@@ -25,14 +27,16 @@ jobs:
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
+          # pnpm is cached explicitly below; setup-node's auto-cache is npm-only anyway.
+          package-manager-cache: false
 
       # Corepack activates the pnpm version pinned in package.json "packageManager"
       # (pnpm@9.15.4), so only official actions/* actions are used.
@@ -45,7 +49,7 @@ jobs:
         run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.PNPM_STORE_PATH }}
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
