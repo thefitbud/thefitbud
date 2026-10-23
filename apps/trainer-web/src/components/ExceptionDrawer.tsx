@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
@@ -129,10 +135,16 @@ export function dueLine(
 
 export function ExceptionDrawer({
   exceptionId,
+  openSeq,
   onClose,
   onChanged,
 }: {
   exceptionId: string;
+  /**
+   * Bumped by the parent on every open, including a quick reopen of the same
+   * item before the previous close has committed (DR1 QA F2).
+   */
+  openSeq?: number;
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -163,6 +175,29 @@ export function ExceptionDrawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const nudgeRef = useRef<() => void>(() => undefined);
+  // DR1: set synchronously the moment a close is requested. The parent's
+  // close is a router navigation (a React transition), so the drawer and its
+  // key listener can stay mounted for a frame or more under load; while this
+  // is set, the listener ignores every key.
+  const closingRef = useRef(false);
+
+  // A new item, or the same item opened again, in the same drawer instance
+  // is a fresh open. Layout effect: reset before any key can reach the
+  // listener for the newly committed open.
+  useLayoutEffect(() => {
+    closingRef.current = false;
+  }, [exceptionId, openSeq]);
+
+  /** Leaving the drawer by any route: from now on no shortcut may act. */
+  const markClosing = useCallback(() => {
+    closingRef.current = true;
+  }, []);
+
+  /** Every close path goes through here (Esc, X, backdrop, Close, Resolve). */
+  const requestClose = useCallback(() => {
+    markClosing();
+    onClose();
+  }, [markClosing, onClose]);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     // Quiet reload after an action keeps the drawer content on screen.
@@ -312,8 +347,9 @@ export function ExceptionDrawer({
         createIdempotencyKey(),
       );
       setNote("");
+      markClosing();
       onChanged?.();
-      onClose();
+      requestClose();
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Could not resolve.",
@@ -421,10 +457,12 @@ export function ExceptionDrawer({
 
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
+      // DR1: closing (or closed): no shortcut may act any more.
+      if (closingRef.current) return;
       if (ev.key === "Escape") {
         if (document.querySelector(".overflow-menu-list")) return;
         ev.preventDefault();
-        onClose();
+        requestClose();
         return;
       }
       const target = ev.target as HTMLElement | null;
@@ -455,7 +493,7 @@ export function ExceptionDrawer({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   const resolved = detail?.status === "resolved";
   const acknowledged = detail?.status === "acknowledged";
@@ -477,7 +515,7 @@ export function ExceptionDrawer({
   });
 
   return (
-    <div className="drawer-backdrop" role="presentation" onClick={onClose}>
+    <div className="drawer-backdrop" role="presentation" onClick={requestClose}>
       <div
         ref={panelRef}
         className="drawer-panel"
@@ -497,7 +535,7 @@ export function ExceptionDrawer({
             type="button"
             className="button-ghost"
             style={{ minHeight: 32, padding: "0 8px" }}
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
           >
             <X size={18} strokeWidth={1.75} />
@@ -508,7 +546,7 @@ export function ExceptionDrawer({
         {error && !detail ? (
           <div className="drawer-body">
             <p role="alert">{error}</p>
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" onClick={requestClose}>
               Close
             </Button>
           </div>
@@ -640,6 +678,8 @@ export function ExceptionDrawer({
                         id: "plan",
                         label: "Adjust plan",
                         onSelect: () => {
+                          // Leaving the page: treat as closing (DR1).
+                          markClosing();
                           window.location.assign(
                             `/clients/${detail.coachingRelationshipId}/plan`,
                           );
@@ -663,6 +703,7 @@ export function ExceptionDrawer({
                         id: "client",
                         label: "Open client",
                         onSelect: () => {
+                          markClosing();
                           window.location.assign(
                             `/clients/${detail.coachingRelationshipId}`,
                           );
@@ -680,6 +721,20 @@ export function ExceptionDrawer({
                   className="link"
                   to={`/clients/${detail.coachingRelationshipId}`}
                   style={{ fontSize: 13 }}
+                  onClick={(ev) => {
+                    // DR1 QA F1: a plain click navigates away in-app, so the
+                    // drawer is closing. Ctrl/Cmd/Shift/middle clicks open a
+                    // new tab or window and leave the drawer open here.
+                    if (
+                      ev.button === 0 &&
+                      !ev.metaKey &&
+                      !ev.ctrlKey &&
+                      !ev.shiftKey &&
+                      !ev.altKey
+                    ) {
+                      markClosing();
+                    }
+                  }}
                 >
                   Open client
                 </Link>
