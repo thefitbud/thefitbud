@@ -58,7 +58,7 @@ function tableColumns(
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 after 0029, 0031 after 0030, and 0032 after 0031", async () => {
+  it("places 0030 after 0029, then 0031, 0032, and 0033", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -68,18 +68,21 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 1]).toBe("0030_perf_indexes");
     expect(tags[previous + 2]).toBe("0031_library_schema");
     expect(tags[previous + 3]).toBe("0032_meal_compliance_local_date");
-    expect(tags.at(-1)).toBe("0032_meal_compliance_local_date");
+    expect(tags[previous + 4]).toBe("0033_remove_configured_status");
+    expect(tags.at(-1)).toBe("0033_remove_configured_status");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
     expect(journal[previous + 3]?.idx).toBe(32);
+    expect(journal[previous + 4]?.idx).toBe(33);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
     expect(files[previousFile + 1]).toBe("0030_perf_indexes.sql");
     expect(files[previousFile + 2]).toBe("0031_library_schema.sql");
     expect(files[previousFile + 3]).toBe("0032_meal_compliance_local_date.sql");
-    expect(files.at(-1)).toBe("0032_meal_compliance_local_date.sql");
+    expect(files[previousFile + 4]).toBe("0033_remove_configured_status.sql");
+    expect(files.at(-1)).toBe("0033_remove_configured_status.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -99,6 +102,19 @@ describe("migration chain and seeds", () => {
     expect(librarySchemaSql).toContain(
       "'katori','Katori','household',150000000,'FitBud decision: 1 katori = 150 g/ml'",
     );
+    const removeConfiguredSql = readFileSync(
+      join(drizzleDir, "0033_remove_configured_status.sql"),
+      "utf8",
+    );
+    expect(removeConfiguredSql).toContain(
+      "UPDATE `coaching_configurations`\nSET `status` = 'draft'\nWHERE `status` = 'configured';",
+    );
+    expect(removeConfiguredSql).toContain(
+      "DROP INDEX `coaching_configurations_one_open_uidx`;",
+    );
+    expect(removeConfiguredSql).toContain("WHERE `status` = 'draft';");
+    expect(removeConfiguredSql).not.toMatch(/CREATE TABLE/i);
+    expect(removeConfiguredSql).not.toMatch(/ALTER TABLE/i);
 
     const handle = await createMemoryDb();
     try {
@@ -237,10 +253,71 @@ describe("migration chain and seeds", () => {
           "SELECT id FROM library_sources WHERE id IN ('wger', 'wikimedia_commons', 'user_csv') ORDER BY id",
         )[0]?.values ?? [];
       expect(sources).toEqual([["user_csv"], ["wger"], ["wikimedia_commons"]]);
+      expect(tableColumns(handle.sqlite, "coaching_configurations")).toContain(
+        "configured_at",
+      );
+      const openIndex = String(
+        handle.sqlite.exec(
+          "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'coaching_configurations_one_open_uidx'",
+        )[0]?.values[0]?.[0] ?? "",
+      );
+      expect(openIndex.toLowerCase()).toContain("'draft'");
+      expect(openIndex.toLowerCase()).not.toContain("configured");
     } finally {
       handle.close();
     }
   }, 60_000);
+
+  it("rewrites configured coaching rows to draft and opens only drafts", async () => {
+    const handle = await createMemoryDb({
+      foreignKeys: false,
+      through: "0032_meal_compliance_local_date.sql",
+    });
+    try {
+      const insert = (
+        id: string,
+        relationshipId: string,
+        status: string,
+        configuredAt: string | null,
+      ) => {
+        handle.sqlite.run(
+          `INSERT INTO coaching_configurations (
+            id, coaching_relationship_id, status, version_number, record_version,
+            configured_at, created_at, updated_at
+          ) VALUES (?, ?, ?, 1, 0, ?, '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')`,
+          [id, relationshipId, status, configuredAt],
+        );
+      };
+      insert("cfg-active", "rel-active", "active", "2026-09-01T00:00:00.000Z");
+      insert("cfg-draft", "rel-draft", "draft", null);
+      insert("cfg-open", "rel-open", "configured", "2026-10-02T00:00:00.000Z");
+
+      handle.applyMigrationsFrom("0033_remove_configured_status.sql");
+
+      const rows =
+        handle.sqlite.exec(
+          "SELECT id, status, configured_at FROM coaching_configurations ORDER BY id",
+        )[0]?.values ?? [];
+      expect(rows).toEqual([
+        ["cfg-active", "active", "2026-09-01T00:00:00.000Z"],
+        ["cfg-draft", "draft", null],
+        ["cfg-open", "draft", "2026-10-02T00:00:00.000Z"],
+      ]);
+      expect(tableColumns(handle.sqlite, "coaching_configurations")).toContain(
+        "configured_at",
+      );
+      const openIndex = String(
+        handle.sqlite.exec(
+          "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'coaching_configurations_one_open_uidx'",
+        )[0]?.values[0]?.[0] ?? "",
+      );
+      expect(openIndex.toLowerCase()).toContain("'draft'");
+      expect(openIndex.toLowerCase()).not.toContain("configured");
+      expect(() => insert("cfg-open-2", "rel-open", "draft", null)).toThrow();
+    } finally {
+      handle.close();
+    }
+  });
 
   it("backfills meal_compliance.local_date from the assignment when 0032 applies", async () => {
     const handle = await createMemoryDb({
