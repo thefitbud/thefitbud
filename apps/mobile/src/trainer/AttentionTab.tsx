@@ -30,6 +30,7 @@ import { SwipeActionRow } from "../components/SwipeActionRow";
 import { Snackbar } from "../components/Snackbar";
 import { initialsFromName } from "../components/m2";
 import {
+  acknowledgeAttentionItem,
   acknowledgeAttentionItems,
   attentionIssueLine,
   attentionSectionModel,
@@ -45,8 +46,21 @@ import {
   type ClientAttentionCard,
   type ReviewedUndoItem,
 } from "./attentionCards";
+import { ReviewSheet } from "./ReviewSheet";
+import {
+  clampReviewSheetIndex,
+  reviewSheetIndexForItem,
+  reviewSheetItemsForRelationship,
+} from "./reviewSheetNav";
 import { localDateInTimezone } from "../lib/dates";
+import { openContextualWhatsApp } from "./whatsapp";
 import { readTrainerCache, writeTrainerCache } from "./cache";
+
+type ReviewSheetState = {
+  relationshipId: string;
+  traineeDisplayName: string;
+  clientWhatsappE164: string | null;
+};
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
 type Segment = "needs_you" | "asked" | "checkins";
@@ -121,6 +135,9 @@ export function AttentionTab({
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [undoTarget, setUndoTarget] = useState<ReviewedUndoItem[] | null>(null);
+  const [reviewSheet, setReviewSheet] = useState<ReviewSheetState | null>(null);
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [reviewActing, setReviewActing] = useState(false);
 
   const applySnapshot = useCallback((snapshot: Snapshot) => {
     setLists(listsFromSnapshot(snapshot));
@@ -196,6 +213,16 @@ export function AttentionTab({
     reviewedCount: reviewedCards.length,
   });
 
+  const reviewItems = useMemo(() => {
+    if (!reviewSheet) return [];
+    return reviewSheetItemsForRelationship(
+      lists.groups,
+      reviewSheet.relationshipId,
+    );
+  }, [lists.groups, reviewSheet]);
+
+  const safeReviewIndex = clampReviewSheetIndex(reviewIndex, reviewItems.length);
+
   async function acknowledgeCard(card: ClientAttentionCard) {
     if (offline) return;
     const targets = unreviewedItemsForRelationship(
@@ -259,6 +286,70 @@ export function AttentionTab({
           : "Couldn't load. Pull to try again.",
       );
     }
+  }
+
+  function openReviewSheet(card: ClientAttentionCard) {
+    const items = reviewSheetItemsForRelationship(
+      lists.groups,
+      card.relationshipId,
+    );
+    if (items.length === 0) {
+      onReviewException(card.primary.id);
+      return;
+    }
+    setReviewSheet({
+      relationshipId: card.relationshipId,
+      traineeDisplayName: card.traineeDisplayName,
+      clientWhatsappE164: card.clientWhatsappE164,
+    });
+    setReviewIndex(reviewSheetIndexForItem(items, card.primary.id));
+  }
+
+  async function markReviewedInSheet(exceptionId: string) {
+    if (!reviewSheet || offline) return;
+    const status = lists.groups
+      .flatMap((group) => group.items)
+      .find((item) => item.id === exceptionId)?.status;
+    if (status !== "detected" && status !== "active") return;
+    const prior = lists;
+    const next = partitionAttentionGroups(
+      acknowledgeAttentionItem(lists.groups, exceptionId),
+    );
+    setLists(next);
+    setReviewActing(true);
+    try {
+      await api.acknowledgeException(exceptionId, {}, createIdempotencyKey());
+      const items = reviewSheetItemsForRelationship(
+        next.groups,
+        reviewSheet.relationshipId,
+      );
+      if (items.length === 0) {
+        setReviewSheet(null);
+        return;
+      }
+      setReviewIndex((current) => clampReviewSheetIndex(current, items.length));
+    } catch (err) {
+      setLists(prior);
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Couldn't load. Pull to try again.",
+      );
+    } finally {
+      setReviewActing(false);
+    }
+  }
+
+  async function nudgeFromSheet() {
+    if (!reviewSheet || offline) return;
+    const first = formatPersonName(reviewSheet.traineeDisplayName).split(
+      " ",
+    )[0];
+    await openContextualWhatsApp({
+      phoneE164: reviewSheet.clientWhatsappE164,
+      draftText: `Hi ${first}, `,
+    });
+    setToast("Opened WhatsApp");
   }
 
   async function answerAsk(ask: CoachAsk) {
@@ -398,7 +489,7 @@ export function AttentionTab({
                     card={card}
                     row={row}
                     offline={offline}
-                    onPress={() => onReviewException(card.primary.id)}
+                    onPress={() => openReviewSheet(card)}
                   />
                 </SwipeActionRow>
               );
@@ -441,7 +532,7 @@ export function AttentionTab({
                     card={card}
                     row={row}
                     offline={offline}
-                    onPress={() => onReviewException(card.primary.id)}
+                    onPress={() => openReviewSheet(card)}
                   />
                 </View>
               );
@@ -487,6 +578,22 @@ export function AttentionTab({
           ))
         : null}
 
+      <ReviewSheet
+        visible={reviewSheet != null && reviewItems.length > 0}
+        traineeDisplayName={reviewSheet?.traineeDisplayName ?? ""}
+        items={reviewItems}
+        index={safeReviewIndex}
+        offline={offline}
+        acting={reviewActing}
+        onChangeIndex={setReviewIndex}
+        onDismiss={() => setReviewSheet(null)}
+        onMarkReviewed={(exceptionId) => {
+          void markReviewedInSheet(exceptionId);
+        }}
+        onNudge={() => {
+          void nudgeFromSheet();
+        }}
+      />
     </Screen>
   );
 }
