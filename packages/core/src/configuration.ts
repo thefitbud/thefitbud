@@ -74,23 +74,26 @@ export function canCreateConfigurationVersion(input: {
   return input.hasActive && !input.hasOpen;
 }
 
+/** Stored rows may still use the legacy configured value until Activate/Save changes. */
+type StoredCoachingConfigurationStatus = CoachingConfigurationStatus | "configured";
+
 /** Draft save is allowed before activation (draft or configured). */
 export function canSaveConfigurationDraft(
-  status: CoachingConfigurationStatus | null,
+  status: StoredCoachingConfigurationStatus | null,
 ): boolean {
   return status === null || status === "draft" || status === "configured";
 }
 
 /** Draft → Configured when expectations are present. */
 export function canMarkConfigurationConfigured(
-  status: CoachingConfigurationStatus,
+  status: StoredCoachingConfigurationStatus,
 ): boolean {
   return status === "draft";
 }
 
 /** Configured → Active. */
 export function canActivateConfiguration(
-  status: CoachingConfigurationStatus,
+  status: StoredCoachingConfigurationStatus,
 ): boolean {
   return status === "configured";
 }

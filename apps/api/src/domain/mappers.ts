@@ -269,7 +269,8 @@ export function mapCoachingConfiguration(input: {
   return {
     id: configuration.id,
     coachingRelationshipId: configuration.coachingRelationshipId,
-    status: configuration.status,
+    status:
+      configuration.status === "configured" ? "draft" : configuration.status,
     versionNumber: configuration.versionNumber,
     recordVersion: configuration.recordVersion,
     goalShort: configuration.goalShort,
@@ -294,7 +295,7 @@ export function mapCoachingConfiguration(input: {
       requireProgressPhotos: tracking.requireProgressPhotos,
       requireSessionRpe: tracking.requireSessionRpe,
     },
-    configuredAt: configuration.configuredAt,
+    configuredAt: null,
     activatedAt: configuration.activatedAt,
     createdAt: configuration.createdAt,
     updatedAt: configuration.updatedAt,

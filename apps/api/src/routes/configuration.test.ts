@@ -258,8 +258,8 @@ describe("coaching configuration", () => {
     const configured = (await configure.json()) as {
       data: { status: string; recordVersion: number; configuredAt: string | null };
     };
-    expect(configured.data.status).toBe("configured");
-    expect(configured.data.configuredAt).toBeTruthy();
+    expect(configured.data.status).toBe("draft");
+    expect(configured.data.configuredAt).toBeNull();
 
     const activate = await app.request(
       `/configurations/relationships/${relationshipId}/activate`,

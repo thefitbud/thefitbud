@@ -300,7 +300,6 @@ const LABELS = {
   },
   coaching_configuration_status: {
     draft: "Draft",
-    configured: "Configured",
     active: "Active",
     superseded: "Superseded",
   },
