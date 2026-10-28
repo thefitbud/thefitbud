@@ -226,12 +226,17 @@ export function AssignPlanModal({
     };
   }, [nutritionOnly, relationshipId, today, todayMealsEpoch]);
 
+  // Focus once, when the dialog opens. Re-running this when `onClose`
+  // changes pulls focus out of the field being edited.
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape" && !acting) onClose();
     }
     globalThis.addEventListener("keydown", onKey);
-    dialogRef.current?.focus();
     return () => globalThis.removeEventListener("keydown", onKey);
   }, [acting, onClose]);
 
