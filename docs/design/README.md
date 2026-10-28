@@ -11,11 +11,13 @@ Everything design lives here. **One file per screen state; if it is not in `mock
 Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Meals/Steps chips); Active workout (11, 11b) is **light**; Mark reviewed moves the client to a Reviewed section until every item is resolved; every coach gets a Sessions tab (calendar lives inside Sessions on web); client Check-ins tab with an Overdue filter is web/iPad only (trainer-mobile check-in history removed; trainer mobile = quick jobs).
 
 ## Layout
-- `mockups/png/` — 270 frames (42 v3 locked, 42 v3 drafts from the 22 Oct rounds, 186 original incl. 1 reference). iOS 393 × 852, Android 412 × 915 (v3 Android 393 × 852 @2x), web 1440 × 900, iPad 1024 × 768 / 768 × 1024.
-- `mockups/html/` — 114 HTML sources, named exactly like their PNG, plus shared `tokens.css`, `m2.css`, `l3.css`, `and6.css`, `fonts/`, `assets/`. Frames without HTML (most of 31–199 and the notification set) were rendered by a retired generator; the PNG is the source.
-- `mockups/compare/` — contact sheets of v3 screens; `P7`–`P11` are the 22 Oct round and `P12`–`P15` the 22 Oct round 2 (before vs after, old frames taken from git).
+- `mockups/png/` — 257 frames (40 v3 locked, 42 v3 drafts from the 22 Oct rounds, 175 original incl. 1 reference). iOS 393 × 852, Android 412 × 915 (v3 Android 393 × 852 @2x), web 1440 × 900, iPad 1024 × 768 / 768 × 1024.
+- `mockups/html/` — 112 HTML sources, named exactly like their PNG, plus shared `tokens.css`, `m2.css`, `l3.css`, `and6.css`, `fonts/`, `assets/`. Frames without HTML (most of 31–199 and the notification set) were rendered by a retired generator; the PNG is the source.
+- `mockups/compare/` — **removed 28 Oct 2026** (P1–P15 old-vs-new contact sheets deleted for Firoz’s lock review; single-source frames remain in `png/` / `html/`).
 - `mockups/tools/` — v3 generators (`p1…p15_*.py` on `fb.py`; client workspace frames on `cw.py`), `compare.py` (before/after grids), `render.mjs` (re-renders `*-v3*` only), `sheet.py` (contact sheets), `check.mjs` (banned strings). Run from `docs/design/mockups/`: `node tools/check.mjs`.
 - [DESIGN-NOTES.md](DESIGN-NOTES.md) (tokens, components, per-set notes), [DECISIONS-21OCT.md](DECISIONS-21OCT.md) (locked v3 decisions), `reviews/` (audit and review rationale: AUDIT-21OCT, review-pre-v3, sessions-offline, PHASE0-ACTIVE-WORKOUT-THEME).
+
+**Changelog (28 Oct 2026):** Retired D4 trainer-mobile Activity feed frames 62–72 and D5 package screens IP-15 / IP-15b; deleted `mockups/compare/` P1–P15 contact sheets. Kept `149-…-ref` and all other current frames.
 
 **ID note:** `200` is used twice: `200-trainer-web-plan-filtered-web` (original, Plan tab) and `200-trainer-web-calendar-v3-web` (v3, Sessions calendar). File names are unique; refer to frames by file name.
 
@@ -128,17 +130,6 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 59 | Role select | Default | iOS | [59-trainer-mobile-role-select-ios.png](mockups/png/59-trainer-mobile-role-select-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 60 | Unsupported role | Default | iOS | [60-trainer-mobile-unsupported-role-ios.png](mockups/png/60-trainer-mobile-unsupported-role-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 61 | Switch to coach view to open this? | Default | iOS | [61-trainer-mobile-switch-role-sheet-ios.png](mockups/png/61-trainer-mobile-switch-role-sheet-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 62 | Activity feed | Default | iOS | [62-trainer-mobile-activity-ios.png](mockups/png/62-trainer-mobile-activity-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 63 | Activity | group expanded, 3 new pill | iOS | [63-trainer-mobile-activity-grouped-ios.png](mockups/png/63-trainer-mobile-activity-grouped-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 64 | Meal detail sheet | planned vs actual | iOS | [64-trainer-mobile-activity-meal-sheet-ios.png](mockups/png/64-trainer-mobile-activity-meal-sheet-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 65 | Workout detail sheet | sets | iOS | [65-trainer-mobile-activity-workout-sheet-ios.png](mockups/png/65-trainer-mobile-activity-workout-sheet-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 66 | Client picker sheet | Default | iOS | [66-trainer-mobile-activity-client-picker-ios.png](mockups/png/66-trainer-mobile-activity-client-picker-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 67 | Row actions sheet | Default | iOS | [67-trainer-mobile-activity-row-actions-ios.png](mockups/png/67-trainer-mobile-activity-row-actions-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 68 | Filtered empty | Meals | iOS | [68-trainer-mobile-activity-filtered-empty-ios.png](mockups/png/68-trainer-mobile-activity-filtered-empty-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 69 | Offline | cached | iOS | [69-trainer-mobile-activity-offline-ios.png](mockups/png/69-trainer-mobile-activity-offline-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 70 | Error with Retry | Default | iOS | [70-trainer-mobile-activity-error-ios.png](mockups/png/70-trainer-mobile-activity-error-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 71 | Skeleton rows | Default | iOS | [71-trainer-mobile-activity-loading-ios.png](mockups/png/71-trainer-mobile-activity-loading-ios.png) | — | Approved · old tab bar: use v3 tabs |
-| 72 | Activity | Android | Android | [72-trainer-mobile-activity-android.png](mockups/png/72-trainer-mobile-activity-android.png) | — | Approved · old tab bar: use v3 tabs |
 | 73 | Clients | Ended filter | iOS | [73-trainer-mobile-clients-ended-ios.png](mockups/png/73-trainer-mobile-clients-ended-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 74 | Client status | ended summary + last week | iOS | [74-trainer-mobile-client-ended-ios.png](mockups/png/74-trainer-mobile-client-ended-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 75 | Check-in review | saved, read-only | iOS | [75-trainer-mobile-checkin-review-saved-ios.png](mockups/png/75-trainer-mobile-checkin-review-saved-ios.png) | — | Approved · old tab bar: use v3 tabs |
@@ -305,6 +296,4 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | IP-12 | Group logging | same exercise, present clients | iOS | [IP-12-trainer-mobile-group-log-v3-ios.png](mockups/png/IP-12-trainer-mobile-group-log-v3-ios.png) | [html](mockups/html/IP-12-trainer-mobile-group-log-v3-ios.html) | **Locked** (v3, 21 Oct) |
 | IP-13 | Single-client logging | during session | iOS | [IP-13-trainer-mobile-single-log-v3-ios.png](mockups/png/IP-13-trainer-mobile-single-log-v3-ios.png) | [html](mockups/html/IP-13-trainer-mobile-single-log-v3-ios.html) | **Locked** (v3, 21 Oct) |
 | IP-14 | After-session quick log | sheet | iOS | [IP-14-trainer-mobile-after-quick-log-v3-ios.png](mockups/png/IP-14-trainer-mobile-after-quick-log-v3-ios.png) | [html](mockups/html/IP-14-trainer-mobile-after-quick-log-v3-ios.html) | **Locked** (v3, 21 Oct) |
-| IP-15 | Package | plain fields | iOS | [IP-15-trainer-mobile-package-v3-ios.png](mockups/png/IP-15-trainer-mobile-package-v3-ios.png) | [html](mockups/html/IP-15-trainer-mobile-package-v3-ios.html) | **Locked** (v3, 21 Oct) |
-| IP-15b | Renew package | carry-over on | iOS | [IP-15b-trainer-mobile-renew-package-v3-ios.png](mockups/png/IP-15b-trainer-mobile-renew-package-v3-ios.png) | [html](mockups/html/IP-15b-trainer-mobile-renew-package-v3-ios.html) | **Locked** (v3, 21 Oct) |
 | IP-16 | Suggest a change (trainee) | coach-logged set | iOS | [IP-16-trainee-suggest-change-v3-ios.png](mockups/png/IP-16-trainee-suggest-change-v3-ios.png) | [html](mockups/html/IP-16-trainee-suggest-change-v3-ios.html) | **Locked** (v3, 21 Oct) |

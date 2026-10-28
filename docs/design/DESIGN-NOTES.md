@@ -1,6 +1,6 @@
 # FitBud high-fidelity mockups: design notes
 
-> **Single source of truth (22 Oct 2026).** All mockups now live in `docs/design/mockups/` (`png/`, `html/`, `compare/`, `tools/`), indexed in [README.md](README.md). Where this file and [DECISIONS-21OCT.md](DECISIONS-21OCT.md) disagree, DECISIONS-21OCT (the v3 screens, locked 21 Oct by Firoz) wins. Superseded by v3 and removed: the concentric-rings Today (04, 04b, 97, ring-card crop), Attention 05 / 42 and the old exception review 31 / 32 (now Needs you + review sheet), web Home 02 and the exception drawer 129 / 130 / 134 (now Home side panel), web client Check-ins 162 (now the v3 Check-ins tab), IP-01 / IP-02 / IP-05 / IP-09 (now Sessions tab, calendar 200, IP-05 v3, IP-09 v3), plus the older `mockups-v2` duplicate set and all overview sheets. The history sections below are kept for rationale; file paths in them (`src/`, `tools/build.mjs`, `overview-*.png`) refer to the retired pipeline.
+> **Single source of truth (22 Oct 2026).** All mockups now live in `docs/design/mockups/` (`png/`, `html/`, `tools/`), indexed in [README.md](README.md). Where this file and [DECISIONS-21OCT.md](DECISIONS-21OCT.md) disagree, DECISIONS-21OCT (the v3 screens, locked 21 Oct by Firoz) wins. Superseded by v3 and removed: the concentric-rings Today (04, 04b, 97, ring-card crop), Attention 05 / 42 and the old exception review 31 / 32 (now Needs you + review sheet), web Home 02 and the exception drawer 129 / 130 / 134 (now Home side panel), web client Check-ins 162 (now the v3 Check-ins tab), IP-01 / IP-02 / IP-05 / IP-09 (now Sessions tab, calendar 200, IP-05 v3, IP-09 v3), plus the older `mockups-v2` duplicate set and all overview sheets. **28 Oct 2026:** retired D4 trainer-mobile Activity feed frames 62–72 and D5 package screens IP-15 / IP-15b; deleted `mockups/compare/` (P1–P15 contact sheets). The history sections below are kept for rationale; file paths in them (`src/`, `tools/build.mjs`, `overview-*.png`) refer to the retired pipeline.
 
 These are the visual targets for every implementation batch. Sources: spec pack `docs/spec/` (00-foundations, 01-product-rules, 02-navigation, 09-demo-data, TW-01/03/04/09/09a, TM-01, TR-01/06, plus the BATCHES.md spec decisions) and the brand package (`packages/tokens`, `packages/brand`).
 
@@ -181,17 +181,7 @@ Built on the TM-01 Attention list and the 21 exception sheet. Every state keeps 
 | 59 | Role select | TM-08 §5 | 59-trainer-mobile-role-select-ios.png |
 | 60 | Unsupported role | TM-08 §6 | 60-trainer-mobile-unsupported-role-ios.png |
 | 61 | Switch to coach view to open this? | TM-08 §7 | 61-trainer-mobile-switch-role-sheet-ios.png |
-| 62 | Activity feed | TM-09 §5 | 62-trainer-mobile-activity-ios.png |
-| 63 | Activity · group expanded, 3 new pill | TM-09 §5 grouping | 63-trainer-mobile-activity-grouped-ios.png |
-| 64 | Meal detail sheet · planned vs actual | TM-09 row tap, TW-17 D28 | 64-trainer-mobile-activity-meal-sheet-ios.png |
-| 65 | Workout detail sheet · sets | TM-09 row tap | 65-trainer-mobile-activity-workout-sheet-ios.png |
-| 66 | Client picker sheet | TM-09 Client picker | 66-trainer-mobile-activity-client-picker-ios.png |
-| 67 | Row actions sheet | TM-09 row actions | 67-trainer-mobile-activity-row-actions-ios.png |
-| 68 | Filtered empty · Meals | TM-09 §6 | 68-trainer-mobile-activity-filtered-empty-ios.png |
-| 69 | Offline · cached | TM-09 §6 | 69-trainer-mobile-activity-offline-ios.png |
-| 70 | Error with Retry | TM-09 §6 | 70-trainer-mobile-activity-error-ios.png |
-| 71 | Skeleton rows | TM-09 §6 | 71-trainer-mobile-activity-loading-ios.png |
-| 72 | Activity · Android | TM-09, M3 | 72-trainer-mobile-activity-android.png |
+| 62–72 | ~~Trainer-mobile Activity feed (TM-09)~~ | — | **Retired / removed 28 Oct 2026** (D4 product decision; files deleted from `mockups/png/`) |
 | 73 | Clients · Ended filter | BATCHES dec. 12 | 73-trainer-mobile-clients-ended-ios.png |
 | 74 | Client status · ended summary + last week | MD1 dec. 5 | 74-trainer-mobile-client-ended-ios.png |
 | 75 | Check-in review · saved, read-only | MD1 dec. 3, TW-20 §6 | 75-trainer-mobile-checkin-review-saved-ios.png |
