@@ -53,7 +53,7 @@ Search result: the only existing list was the original 162-trainer-web-client-ch
 - Screens (web/iPad only): 162-…-v3-web, 162b empty, 162c ended, 192b-ipad.
 
 ## 22 Oct 2026 (LOCKED by Firoz)
-1. **Single mockups folder.** `docs/design/` is the only source of truth: one `mockups/` folder (png, html, compare, tools). Frames are replaced in place (same ID, superseded png/html deleted, no versioned folders). Reference-only frames keep a `-ref` suffix (149-ref: flag rules column, future scope).
+1. **Single mockups folder.** `docs/design/` is the only source of truth: one `mockups/` folder (png, html, tools; `compare/` removed 28 Oct 2026). Frames are replaced in place (same ID, superseded png/html deleted, no versioned folders). Reference-only frames keep a `-ref` suffix (149-ref: flag rules column, future scope).
 2. **Client settings is separate from Coaching setup.** Client settings (basic details, subscription & package, payment records, coaching relationship) opens from the client header **⋯ menu** on web and iPad (208, 208b, 209–212, IP-08). Coaching setup (goal, starting point, expectations, check-ins, reminders, coaching mode) lives in Plan › Coaching setup (148, 149, IP-07). No client settings on trainer mobile.
 3. **Consistent client tabs:** Overview · Plan · Activity · Progress · Check-ins · History everywhere (TW-09a). No Sessions, Packages or Configure tabs; everything else is in the ⋯ menu.
 4. **Check-in standard questions** (171, 171b, 14, 14c): Weight · Body measurements (one question, coach picks from waist, hip, chest, arm, thigh, neck, calf) · Progress photos (front, side, back) · ratings 1–5 for **Energy, Sleep quality, Stress and Hunger**. Hunger is a standard, charted question, not just a suggestion. Standard questions have fixed wording and are charted in Progress (160 set). Body fat is not offered.
@@ -62,7 +62,7 @@ Search result: the only existing list was the original 162-trainer-web-client-ch
 7. **Payments are a non-goal; records only.** FitBud never collects payments, sends invoices or reminds clients to pay. Client settings shows payment records for tracking only (209/209b, 211/211b, IP-08). The data model needs **amount, status (Paid / Unpaid), method and date** fields for payment records: backend change later.
 
 ## Compare sheets
-22 Oct rounds: P7–P11 (round 1) and P12–P15 (round 2), before vs after. Earlier: mockups/compare/ (final screens only; the 21 Oct "current vs v3" sheets were dropped 22 Oct and P2-mobile, P2-web, P3-sessions-mobile, P4-web, P6-web regenerated without the old frames): P1-today-ios-states, P1-today-android-states, P2-mobile-review-flow, (P2-web-home-panel removed 22 Oct, replaced by P8-home-side-panel-old-vs-new), P3-sessions-mobile, P4-calendar-web, P4-calendar-mobile, P5-sessions-online-only, P6-client-checkins-tab-web, P6-client-checkins-tab-ipad. (P1-sbs-today-current-vs-v3 and P3-ipad-group dropped: they compared against removed frames.)
+**Removed 28 Oct 2026** (entire `mockups/compare/` folder deleted for Firoz’s lock review). Historical note only: 22 Oct rounds had P7–P11 (round 1) and P12–P15 (round 2), before vs after; earlier sheets included P1-today-ios/android-states, P2-mobile-review-flow, P3-sessions-mobile, P4-calendar-web/mobile, P5-sessions-online-only, P6-client-checkins-tab-web/ipad, P8-home-side-panel-old-vs-new. Single-source frames remain in `mockups/png/` and `mockups/html/`.
 
 ## Screen index
 | PNG | HTML source |
@@ -106,8 +106,8 @@ Search result: the only existing list was the original 162-trainer-web-client-ch
 | mockups/png/IP-12-trainer-mobile-group-log-v3-ios.png | mockups/html/IP-12-trainer-mobile-group-log-v3-ios.html |
 | mockups/png/IP-13-trainer-mobile-single-log-v3-ios.png | mockups/html/IP-13-trainer-mobile-single-log-v3-ios.html |
 | mockups/png/IP-14-trainer-mobile-after-quick-log-v3-ios.png | mockups/html/IP-14-trainer-mobile-after-quick-log-v3-ios.html |
-| mockups/png/IP-15-trainer-mobile-package-v3-ios.png | mockups/html/IP-15-trainer-mobile-package-v3-ios.html |
-| mockups/png/IP-15b-trainer-mobile-renew-package-v3-ios.png | mockups/html/IP-15b-trainer-mobile-renew-package-v3-ios.html |
+| ~~mockups/png/IP-15-trainer-mobile-package-v3-ios.png~~ | **Retired / removed 28 Oct 2026** (D5) |
+| ~~mockups/png/IP-15b-trainer-mobile-renew-package-v3-ios.png~~ | **Retired / removed 28 Oct 2026** (D5) |
 | mockups/png/IP-16-trainee-suggest-change-v3-ios.png | mockups/html/IP-16-trainee-suggest-change-v3-ios.html |
 
 Banned-strings check: `cd mockups && node tools/check.mjs` (docs/spec/banned-strings.json over rendered text, device chrome excluded). 21 Oct: 42 files, 0 errors, 0 warnings. 22 Oct (all 75 html in mockups/html): 0 errors, 3 warnings (lock-screen clock on 27-android, 28, 30).
