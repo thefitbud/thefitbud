@@ -212,7 +212,6 @@ export function AttentionTab({
     );
     setLists(next);
     setUndoTarget(targets);
-    setReviewedOpen(true);
     setToast(
       markReviewedToastMessage(card.traineeDisplayName, next.needsYou.length),
     );
@@ -282,8 +281,6 @@ export function AttentionTab({
       );
     }
   }
-
-  const markReviewedToast = undoTarget != null && toast != null;
 
   const markReviewedToast = undoTarget != null && toast != null;
 
