@@ -9,7 +9,10 @@ import {
   formatLocalDate,
   labelFor,
 } from "@fitbud/core";
-import type { ExceptionDetail } from "@fitbud/contracts";
+import type {
+  ExceptionClosedReason,
+  ExceptionDetail,
+} from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
@@ -29,6 +32,24 @@ const OUTCOMES = [
 
 const VIEWER_TZ =
   Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+/**
+ * Timeline prefix for a closed exception. Trainer resolve keeps
+ * "Resolved by you"; system closes use closedReason from the DTO.
+ */
+export function resolvedCloseLabel(
+  closedReason: ExceptionClosedReason | null,
+): string {
+  switch (closedReason) {
+    case "coaching_ended":
+      return "Closed · coaching ended";
+    case "auto_resolve":
+      return "Cleared automatically";
+    case "trainer":
+    default:
+      return "Resolved by you";
+  }
+}
 
 function detailString(
   details: Record<string, unknown> | null | undefined,
@@ -556,7 +577,7 @@ export function ExceptionDrawer({
                 ) : null}
                 {detail.resolvedAt ? (
                   <li>
-                    Resolved by you ·{" "}
+                    {resolvedCloseLabel(detail.closedReason)} ·{" "}
                     {formatCivilDate(
                       formatLocalDate(
                         new Date(detail.resolvedAt),

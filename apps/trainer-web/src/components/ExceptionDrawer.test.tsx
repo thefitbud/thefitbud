@@ -28,7 +28,7 @@ vi.mock("../lib/stage1-api", () => ({
   stage1Api: { getResponsiveness: api.getResponsiveness },
 }));
 
-import { ExceptionDrawer } from "./ExceptionDrawer";
+import { ExceptionDrawer, resolvedCloseLabel } from "./ExceptionDrawer";
 
 // Acknowledged items show the outcome + note form straight away.
 const detail: ExceptionDetail = {
@@ -51,6 +51,20 @@ const detail: ExceptionDetail = {
   updatedAt: "2026-10-22T07:00:00.000Z",
   actions: [],
 };
+
+const RESOLVED_AT = "2026-10-22T08:00:00.000Z";
+
+function resolvedDetail(
+  closedReason: ExceptionDetail["closedReason"],
+): ExceptionDetail {
+  return {
+    ...detail,
+    status: "resolved",
+    resolvedAt: RESOLVED_AT,
+    closedReason,
+    updatedAt: RESOLVED_AT,
+  };
+}
 
 function inRouter(ui: ReactElement) {
   return <MemoryRouter>{ui}</MemoryRouter>;
@@ -121,5 +135,66 @@ describe("ExceptionDrawer focus (HM1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(latest).toHaveBeenCalledTimes(2);
     expect(first).not.toHaveBeenCalled();
+  });
+});
+
+describe("ExceptionDrawer closedReason label (RL1b)", () => {
+  beforeEach(() => {
+    api.getWorkoutAssignment.mockResolvedValue({
+      workoutDayName: "Upper body A",
+      windowEndsAt: "2026-10-22T12:00:00.000Z",
+      workoutDay: { exercises: [] },
+    });
+    api.getClientWorkspace.mockResolvedValue({
+      header: { traineeDisplayName: "Rohan Mehta", clientWhatsappE164: null },
+    });
+    api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("maps each closedReason to the trainer-facing prefix", () => {
+    expect(resolvedCloseLabel("trainer")).toBe("Resolved by you");
+    expect(resolvedCloseLabel(null)).toBe("Resolved by you");
+    expect(resolvedCloseLabel("coaching_ended")).toBe("Closed · coaching ended");
+    expect(resolvedCloseLabel("auto_resolve")).toBe("Cleared automatically");
+  });
+
+  it("shows Resolved by you for a trainer resolve", async () => {
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(
+      await screen.findByText(/Resolved by you ·/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Cleared automatically/)).toBeNull();
+    expect(screen.queryByText(/Closed · coaching ended/)).toBeNull();
+  });
+
+  it("shows Closed · coaching ended when coaching ended", async () => {
+    api.getException.mockResolvedValue(resolvedDetail("coaching_ended"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(
+      await screen.findByText(/Closed · coaching ended ·/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Resolved by you/)).toBeNull();
+    expect(screen.queryByText(/Cleared automatically/)).toBeNull();
+  });
+
+  it("shows Cleared automatically for an auto-resolve", async () => {
+    api.getException.mockResolvedValue(resolvedDetail("auto_resolve"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(
+      await screen.findByText(/Cleared automatically ·/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Resolved by you/)).toBeNull();
+    expect(screen.queryByText(/Closed · coaching ended/)).toBeNull();
   });
 });
