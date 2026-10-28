@@ -154,3 +154,74 @@ test.describe("TW-G iPad shell smoke", () => {
     await assertTapTargets(page.locator("body"), "Inbox");
   });
 });
+
+/**
+ * IP1a — reminders Close and ⋯ overflow rows, measured in CSS pixels.
+ * Fixture only: no API. Stylesheets load in the same order as main.tsx.
+ */
+test.describe("IP1a iPad hit targets", () => {
+  test("reminders Close is ≥44×44 and overflow items are ≥44px tall", async ({
+    page,
+  }) => {
+    const origin = process.env.TRAINER_WEB_URL ?? "http://127.0.0.1:5173";
+    await page.setContent(
+      `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <base href="${origin}/" />
+          <link rel="stylesheet" href="/src/styles.css" />
+          <link rel="stylesheet" href="/src/styles/shell.css" />
+          <link rel="stylesheet" href="/src/styles/home.css" />
+          <link rel="stylesheet" href="/src/styles/clients.css" />
+          <link rel="stylesheet" href="/src/styles/workspace.css" />
+          <link rel="stylesheet" href="/src/styles/templates.css" />
+          <link rel="stylesheet" href="/src/styles/tap-targets.css" />
+        </head>
+        <body>
+          <aside class="drawer-panel" data-testid="screen-TW-31">
+            <header class="drawer-head">
+              <h2>Reminders</h2>
+              <button type="button" class="icon-btn reminders-close" aria-label="Close">×</button>
+            </header>
+          </aside>
+          <div class="overflow-menu">
+            <ul class="overflow-menu-list" role="menu">
+              <li role="none">
+                <button type="button" role="menuitem" class="overflow-menu-item">Edit note</button>
+              </li>
+              <li role="none">
+                <button type="button" role="menuitem" class="overflow-menu-item overflow-menu-item-destructive">End coaching</button>
+              </li>
+            </ul>
+          </div>
+        </body>
+      </html>`,
+      { waitUntil: "load" },
+    );
+
+    const size = await page.locator(".reminders-close").evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return { w: rect.width, h: rect.height };
+    });
+    expect(
+      size.w + 0.5,
+      `reminders Close width ${size.w}`,
+    ).toBeGreaterThanOrEqual(44);
+    expect(
+      size.h + 0.5,
+      `reminders Close height ${size.h}`,
+    ).toBeGreaterThanOrEqual(44);
+
+    const items = page.locator(".overflow-menu-item");
+    expect(await items.count()).toBe(2);
+    const heights = await items.evaluateAll((nodes) =>
+      nodes.map((el) => el.getBoundingClientRect().height),
+    );
+    for (const height of heights) {
+      expect(height + 0.5, `overflow item height ${height}`).toBeGreaterThanOrEqual(
+        44,
+      );
+    }
+  });
+});
