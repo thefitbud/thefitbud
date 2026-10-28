@@ -160,4 +160,32 @@
     min-width: 44px !important;
     min-height: 44px !important;
   }
+
+  /* IP1b: Plan "Versions / Show" is a full-width button with padding: 0 (~24px). */
+  .plan-versions-toggle {
+    box-sizing: border-box !important;
+    align-items: center;
+    min-height: 44px !important;
+    padding-block: 0.625rem !important;
+  }
+
+  /* IP1b: each Progress measurement row's check-in link is an inline ~20px anchor. */
+  .progress-checkin-link {
+    box-sizing: border-box !important;
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    padding: 0.625rem 0.5rem !important;
+  }
+
+  /* IP1b: Settings > Profile "Forgot it?" is ~68x20. */
+  .profile-forgot-link {
+    box-sizing: border-box !important;
+    display: inline-flex;
+    align-items: center;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    padding: 0.625rem 0.35rem !important;
+  }
 }
