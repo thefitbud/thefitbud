@@ -58,7 +58,7 @@ function tableColumns(
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030_perf_indexes after 0029 and 0031_library_schema after 0030", async () => {
+  it("places 0030 after 0029, 0031 after 0030, and 0032 after 0031", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -67,16 +67,19 @@ describe("migration chain and seeds", () => {
     expect(previous).toBeGreaterThanOrEqual(0);
     expect(tags[previous + 1]).toBe("0030_perf_indexes");
     expect(tags[previous + 2]).toBe("0031_library_schema");
-    expect(tags.at(-1)).toBe("0031_library_schema");
+    expect(tags[previous + 3]).toBe("0032_meal_compliance_local_date");
+    expect(tags.at(-1)).toBe("0032_meal_compliance_local_date");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
+    expect(journal[previous + 3]?.idx).toBe(32);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
     expect(files[previousFile + 1]).toBe("0030_perf_indexes.sql");
     expect(files[previousFile + 2]).toBe("0031_library_schema.sql");
-    expect(files.at(-1)).toBe("0031_library_schema.sql");
+    expect(files[previousFile + 3]).toBe("0032_meal_compliance_local_date.sql");
+    expect(files.at(-1)).toBe("0032_meal_compliance_local_date.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -107,6 +110,10 @@ describe("migration chain and seeds", () => {
         "coaching_relationship_id",
         "logged_at",
       ]);
+      expect(tableColumns(handle.sqlite, "meal_compliance")).toContain("local_date");
+      expect(
+        indexColumns(handle.sqlite, "meal_compliance_relationship_local_date_idx"),
+      ).toEqual(["coaching_relationship_id", "local_date"]);
       expect(
         indexColumns(handle.sqlite, "workout_executions_relationship_completed_idx"),
       ).toEqual(["coaching_relationship_id", "completed_at"]);
@@ -234,6 +241,57 @@ describe("migration chain and seeds", () => {
       handle.close();
     }
   }, 60_000);
+
+  it("backfills meal_compliance.local_date from the assignment when 0032 applies", async () => {
+    const handle = await createMemoryDb({
+      foreignKeys: false,
+      through: "0031_library_schema.sql",
+    });
+    try {
+      expect(tableColumns(handle.sqlite, "meal_compliance")).not.toContain("local_date");
+      const insertAssignment = (id: string, localDate: string) => {
+        handle.sqlite.run(
+          `INSERT INTO meal_assignments (
+            id, coaching_relationship_id, plan_id, plan_version_id, meal_prescription_id,
+            meal_name, meal_prescription_json, local_date, window_starts_at, window_ends_at,
+            photo_required, schedule_status, created_at, updated_at
+          ) VALUES (?, 'rel', 'plan', 'version', ?, 'Lunch', '{}', ?, '2026-10-01T00:00:00.000Z', '2026-10-01T12:00:00.000Z', 0, 'scheduled', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')`,
+          [id, id, localDate],
+        );
+      };
+      const insertCompliance = (id: string, assignmentId: string) => {
+        handle.sqlite.run(
+          `INSERT INTO meal_compliance (
+            id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id,
+            outcome, record_version, logged_at, created_at, updated_at
+          ) VALUES (?, ?, 'rel', 'version', 'trainee', 'confirmed', 0, '2026-10-01T08:00:00.000Z', '2026-10-01T08:00:00.000Z', '2026-10-01T08:00:00.000Z')`,
+          [id, assignmentId],
+        );
+      };
+      insertAssignment("assignment-oct", "2026-10-20");
+      insertAssignment("assignment-sep", "2026-09-01");
+      insertCompliance("compliance-oct", "assignment-oct");
+      insertCompliance("compliance-sep", "assignment-sep");
+      insertCompliance("compliance-orphan", "missing-assignment");
+
+      handle.applyMigrationsFrom("0032_meal_compliance_local_date.sql");
+
+      const rows =
+        handle.sqlite.exec(
+          "SELECT id, local_date FROM meal_compliance ORDER BY id",
+        )[0]?.values ?? [];
+      expect(rows).toEqual([
+        ["compliance-oct", "2026-10-20"],
+        ["compliance-orphan", null],
+        ["compliance-sep", "2026-09-01"],
+      ]);
+      expect(
+        indexColumns(handle.sqlite, "meal_compliance_relationship_local_date_idx"),
+      ).toEqual(["coaching_relationship_id", "local_date"]);
+    } finally {
+      handle.close();
+    }
+  });
 
   it(
     "applies migrations, library seed, and demo seed with valid foreign keys",
