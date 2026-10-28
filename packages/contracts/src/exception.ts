@@ -41,6 +41,17 @@ export type ExceptionSourceEntityType = z.infer<
 export const exceptionActionKindSchema = z.enum(["acknowledge", "resolve"]);
 export type ExceptionActionKind = z.infer<typeof exceptionActionKindSchema>;
 
+/**
+ * Why a resolved exception left the open set.
+ * Matches close-path writes: coaching end, detect auto-resolve, trainer resolve.
+ */
+export const exceptionClosedReasonSchema = z.enum([
+  "coaching_ended",
+  "auto_resolve",
+  "trainer",
+]);
+export type ExceptionClosedReason = z.infer<typeof exceptionClosedReasonSchema>;
+
 export const interventionKindSchema = z.enum([
   "note",
   "acknowledge",
@@ -65,6 +76,7 @@ export const exceptionSchema = z.object({
   activatedAt: isoDateTimeSchema.nullable(),
   acknowledgedAt: isoDateTimeSchema.nullable(),
   resolvedAt: isoDateTimeSchema.nullable(),
+  closedReason: exceptionClosedReasonSchema.nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });

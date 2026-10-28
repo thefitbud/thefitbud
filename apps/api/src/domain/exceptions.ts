@@ -260,6 +260,7 @@ export async function evaluateRelationshipExceptions(
       .set({
         status: "resolved",
         resolvedAt: now,
+        closedReason: "auto_resolve",
         updatedAt: now,
       })
       .where(eq(exceptions.id, row.id));
@@ -267,6 +268,7 @@ export async function evaluateRelationshipExceptions(
       ...row,
       status: "resolved",
       resolvedAt: now,
+      closedReason: "auto_resolve",
       updatedAt: now,
     });
   }

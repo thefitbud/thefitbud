@@ -458,9 +458,10 @@ describe("intervention loop", () => {
     // Already acknowledged — resolve should succeed
     expect(resolveTooEarly.status).toBe(200);
     const resolveBody = (await resolveTooEarly.json()) as {
-      data: { status: string };
+      data: { status: string; closedReason: string | null };
     };
     expect(resolveBody.data.status).toBe("resolved");
+    expect(resolveBody.data.closedReason).toBe("trainer");
 
     const [resolvedRow] = await db
       .select()
@@ -469,6 +470,7 @@ describe("intervention loop", () => {
       .limit(1);
     expect(resolvedRow?.resolutionOutcome).toBe("plan_adjusted");
     expect(resolvedRow?.resolutionNote).toBe("Adjusted next week");
+    expect(resolvedRow?.closedReason).toBe("trainer");
 
     const interventionRows = await db
       .select()
@@ -970,6 +972,7 @@ describe("intervention loop", () => {
       .from(schema.exceptions)
       .where(eq(schema.exceptions.id, bySource.get(dinner!.id)!.id));
     expect(overdueRow[0]?.status).toBe("resolved");
+    expect(overdueRow[0]?.closedReason).toBe("auto_resolve");
     expect(
       clearedBody.data.exceptions.some(
         (item) =>
@@ -978,6 +981,17 @@ describe("intervention loop", () => {
           item.severity === "attention",
       ),
     ).toBe(true);
+    const resolvedHistory = await app.request(
+      `/exceptions/${bySource.get(dinner!.id)!.id}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(resolvedHistory.status).toBe(200);
+    const resolvedHistoryBody = (await resolvedHistory.json()) as {
+      data: { status: string; closedReason: string | null };
+    };
+    expect(resolvedHistoryBody.data.status).toBe("resolved");
+    expect(resolvedHistoryBody.data.closedReason).toBe("auto_resolve");
 
     const attention = await app.request(
       "/exceptions/attention",
@@ -1009,5 +1023,205 @@ describe("intervention loop", () => {
         (item) => item.id === bySource.get(dinner!.id)!.id && item.status === "resolved",
       ),
     ).toBe(true);
+  });
+
+  it("maps each close path to the matching closedReason", async () => {
+    const { trainerCookie, relationshipId, today } =
+      await reachActiveConfig("closed-reason");
+
+    const scheduled = await app.request(
+      `/checkins/relationships/${relationshipId}/schedule`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "sched-closed-reason",
+        },
+        body: JSON.stringify({ localDate: today }),
+      },
+      testEnv(),
+    );
+    expect(scheduled.status).toBe(200);
+    const scheduledBody = (await scheduled.json()) as {
+      data: { checkin: { id: string } };
+    };
+    const checkinId = scheduledBody.data.checkin.id;
+
+    await db
+      .update(schema.checkins)
+      .set({
+        windowStartsAt: "2020-01-01T00:00:00.000Z",
+        windowEndsAt: "2020-01-02T00:00:00.000Z",
+      })
+      .where(eq(schema.checkins.id, checkinId));
+
+    const evaluate = await app.request(
+      `/exceptions/relationships/${relationshipId}/evaluate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "eval-closed-reason",
+        },
+        body: "{}",
+      },
+      testEnv(),
+    );
+    expect(evaluate.status).toBe(200);
+    const evaluateBody = (await evaluate.json()) as {
+      data: { exceptions: Array<{ id: string; closedReason: string | null }> };
+    };
+    const openException = evaluateBody.data.exceptions[0];
+    expect(openException).toBeTruthy();
+    expect(openException!.closedReason).toBeNull();
+
+    // Seed a second active exception so coaching_ended and trainer paths can
+    // be checked independently of the check-in auto-resolve below.
+    const coachingEndedId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const trainerResolveId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const now = new Date().toISOString();
+    await db.insert(schema.exceptions).values([
+      {
+        id: coachingEndedId,
+        coachingRelationshipId: relationshipId,
+        type: "missed_workout",
+        severity: "attention",
+        status: "active",
+        ruleVersion: "mvp.v2",
+        sourceEntityType: "workout_assignment",
+        sourceEntityId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        summary: "Missed workout",
+        detailsJson: null,
+        detectedAt: now,
+        activatedAt: now,
+        acknowledgedAt: null,
+        resolvedAt: null,
+        resolutionOutcome: null,
+        resolutionNote: null,
+        closedReason: null,
+        sourceLoggedLateAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: trainerResolveId,
+        coachingRelationshipId: relationshipId,
+        type: "overdue_meal",
+        severity: "attention",
+        status: "acknowledged",
+        ruleVersion: "mvp.v2",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        summary: "Missed meal",
+        detailsJson: null,
+        detectedAt: now,
+        activatedAt: now,
+        acknowledgedAt: now,
+        resolvedAt: null,
+        resolutionOutcome: null,
+        resolutionNote: null,
+        closedReason: null,
+        sourceLoggedLateAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    // Clear the overdue condition so evaluate auto-resolves the open item.
+    await db
+      .update(schema.checkins)
+      .set({
+        recordStatus: "submitted",
+        submittedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(schema.checkins.id, checkinId));
+
+    const autoEval = await app.request(
+      `/exceptions/relationships/${relationshipId}/evaluate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "eval-auto-resolve-reason",
+        },
+        body: "{}",
+      },
+      testEnv(),
+    );
+    expect(autoEval.status).toBe(200);
+
+    const autoResolved = await app.request(
+      `/exceptions/${openException!.id}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(autoResolved.status).toBe(200);
+    const autoBody = (await autoResolved.json()) as {
+      data: { status: string; closedReason: string | null };
+    };
+    expect(autoBody.data.status).toBe("resolved");
+    expect(autoBody.data.closedReason).toBe("auto_resolve");
+
+    const trainerResolve = await app.request(
+      `/exceptions/${trainerResolveId}/resolve`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "resolve-closed-reason",
+        },
+        body: JSON.stringify({ outcome: "talked", note: null }),
+      },
+      testEnv(),
+    );
+    expect(trainerResolve.status).toBe(200);
+    const trainerBody = (await trainerResolve.json()) as {
+      data: { status: string; closedReason: string | null };
+    };
+    expect(trainerBody.data.status).toBe("resolved");
+    expect(trainerBody.data.closedReason).toBe("trainer");
+
+    const ended = await app.request(
+      `/relationships/${relationshipId}/end`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "end-closed-reason",
+        },
+        body: JSON.stringify({ reason: "done" }),
+      },
+      testEnv(),
+    );
+    expect(ended.status).toBe(200);
+
+    const coachingEnded = await app.request(
+      `/exceptions/${coachingEndedId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(coachingEnded.status).toBe(200);
+    const coachingBody = (await coachingEnded.json()) as {
+      data: { status: string; closedReason: string | null };
+    };
+    expect(coachingBody.data.status).toBe("resolved");
+    expect(coachingBody.data.closedReason).toBe("coaching_ended");
+
+    // Trainer-resolved row keeps its close reason after the end write.
+    const trainerAfterEnd = await app.request(
+      `/exceptions/${trainerResolveId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const trainerAfterBody = (await trainerAfterEnd.json()) as {
+      data: { closedReason: string | null };
+    };
+    expect(trainerAfterBody.data.closedReason).toBe("trainer");
   });
 });
