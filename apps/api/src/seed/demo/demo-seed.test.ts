@@ -16,6 +16,7 @@ import { DEMO_ACCOUNTS, DEMO_PASSWORD_PLAINTEXT } from "./spec.js";
 import { DEMO_EXTRA_ACCOUNTS } from "./spec-extra.js";
 import { WORKOUT_TEMPLATES } from "./generator/templates/workouts.js";
 import { DIET_TEMPLATES } from "./generator/templates/diets.js";
+import { assertNoForeignKeyViolations } from "../../test-support/foreign-key-check.js";
 import { createMemoryDb } from "../../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../../test-support/seeded-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
@@ -119,8 +120,7 @@ describe("demo seed", () => {
           libraryIndex,
         });
         handle.sqlite.exec(sql);
-        const fk = handle.sqlite.exec("PRAGMA foreign_key_check");
-        expect(fk[0]?.values ?? []).toEqual([]);
+        assertNoForeignKeyViolations(handle.sqlite);
         const users1 =
           handle.sqlite.exec("SELECT COUNT(*) FROM users")[0]?.values[0]?.[0];
         handle.sqlite.exec(sql);
