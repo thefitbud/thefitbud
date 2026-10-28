@@ -32,6 +32,7 @@ import { initialsFromName } from "../components/m2";
 import {
   acknowledgeAttentionItem,
   acknowledgeAttentionItems,
+  restoreAttentionItem,
   attentionIssueLine,
   attentionSectionModel,
   ATTENTION_SCREEN_TITLE,
@@ -49,6 +50,8 @@ import {
 import { ReviewSheet } from "./ReviewSheet";
 import {
   clampReviewSheetIndex,
+  nextReviewClient,
+  nextReviewClientName,
   reviewSheetIndexForItem,
   reviewSheetItemsForRelationship,
 } from "./reviewSheetNav";
@@ -138,6 +141,11 @@ export function AttentionTab({
   const [reviewSheet, setReviewSheet] = useState<ReviewSheetState | null>(null);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [reviewActing, setReviewActing] = useState(false);
+  const [reviewBrowsing, setReviewBrowsing] = useState(false);
+  const [justResolvedIds, setJustResolvedIds] = useState<string[]>([]);
+  const [reviewUndoStatus, setReviewUndoStatus] = useState<
+    Record<string, "detected" | "active">
+  >({});
 
   const applySnapshot = useCallback((snapshot: Snapshot) => {
     setLists(listsFromSnapshot(snapshot));
@@ -297,6 +305,9 @@ export function AttentionTab({
       onReviewException(card.primary.id);
       return;
     }
+    setReviewBrowsing(false);
+    setJustResolvedIds([]);
+    setReviewUndoStatus({});
     setReviewSheet({
       relationshipId: card.relationshipId,
       traineeDisplayName: card.traineeDisplayName,
@@ -312,10 +323,18 @@ export function AttentionTab({
       .find((item) => item.id === exceptionId)?.status;
     if (status !== "detected" && status !== "active") return;
     const prior = lists;
+    const priorUndo = reviewUndoStatus;
+    const priorJust = justResolvedIds;
+    const priorBrowsing = reviewBrowsing;
     const next = partitionAttentionGroups(
       acknowledgeAttentionItem(lists.groups, exceptionId),
     );
     setLists(next);
+    setReviewUndoStatus((current) => ({ ...current, [exceptionId]: status }));
+    setJustResolvedIds((current) =>
+      current.includes(exceptionId) ? current : [...current, exceptionId],
+    );
+    setReviewBrowsing(false);
     setReviewActing(true);
     try {
       await api.acknowledgeException(exceptionId, {}, createIdempotencyKey());
@@ -330,6 +349,9 @@ export function AttentionTab({
       setReviewIndex((current) => clampReviewSheetIndex(current, items.length));
     } catch (err) {
       setLists(prior);
+      setReviewUndoStatus(priorUndo);
+      setJustResolvedIds(priorJust);
+      setReviewBrowsing(priorBrowsing);
       setError(
         err instanceof ApiClientError
           ? err.message
@@ -338,6 +360,70 @@ export function AttentionTab({
     } finally {
       setReviewActing(false);
     }
+  }
+
+  async function undoReviewedInSheet(exceptionId: string) {
+    if (!reviewSheet || offline || reviewActing) return;
+    const known = reviewUndoStatus[exceptionId] ?? "active";
+    const prior = lists;
+    const priorJust = justResolvedIds;
+    const wasJust = priorJust.includes(exceptionId);
+    const next = partitionAttentionGroups(
+      restoreAttentionItem(lists.groups, exceptionId, known),
+    );
+    setLists(next);
+    setReviewBrowsing(true);
+    setJustResolvedIds((ids) => ids.filter((id) => id !== exceptionId));
+    setReviewActing(true);
+    try {
+      const restored = await api.undoExceptionAcknowledge(
+        exceptionId,
+        createIdempotencyKey(),
+      );
+      if (
+        (restored.status === "detected" || restored.status === "active") &&
+        restored.status !== known
+      ) {
+        setLists(
+          partitionAttentionGroups(
+            restoreAttentionItem(next.groups, exceptionId, restored.status),
+          ),
+        );
+      }
+    } catch (err) {
+      setLists(prior);
+      if (wasJust) {
+        setJustResolvedIds((ids) =>
+          ids.includes(exceptionId) ? ids : [...ids, exceptionId],
+        );
+      } else {
+        setJustResolvedIds(priorJust);
+      }
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Couldn't load. Pull to try again.",
+      );
+    } finally {
+      setReviewActing(false);
+    }
+  }
+
+  function leaveReviewSheet() {
+    setReviewSheet(null);
+    setReviewBrowsing(false);
+    setJustResolvedIds([]);
+    setReviewUndoStatus({});
+  }
+
+  function openNextClient() {
+    if (!reviewSheet) return;
+    const next = nextReviewClient(needsYouCards, reviewSheet.relationshipId);
+    if (!next) {
+      leaveReviewSheet();
+      return;
+    }
+    openReviewSheet(next);
   }
 
   async function nudgeFromSheet() {
@@ -586,11 +672,27 @@ export function AttentionTab({
         index={safeReviewIndex}
         offline={offline}
         acting={reviewActing}
+        browsingItem={reviewBrowsing}
+        justResolvedIds={justResolvedIds}
+        nextClientName={
+          reviewSheet
+            ? nextReviewClientName(needsYouCards, reviewSheet.relationshipId)
+            : null
+        }
         onChangeIndex={setReviewIndex}
-        onDismiss={() => setReviewSheet(null)}
+        onBrowseItem={(next) => {
+          setReviewBrowsing(true);
+          setReviewIndex(next);
+        }}
+        onShowSummary={() => setReviewBrowsing(false)}
+        onDismiss={leaveReviewSheet}
         onMarkReviewed={(exceptionId) => {
           void markReviewedInSheet(exceptionId);
         }}
+        onUndo={(exceptionId) => {
+          void undoReviewedInSheet(exceptionId);
+        }}
+        onNextClient={openNextClient}
         onNudge={() => {
           void nudgeFromSheet();
         }}
