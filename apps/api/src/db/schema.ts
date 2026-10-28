@@ -605,6 +605,10 @@ export const workoutExecutions = sqliteTable(
     index("workout_executions_relationship_idx").on(
       table.coachingRelationshipId,
     ),
+    index("workout_executions_relationship_completed_idx").on(
+      table.coachingRelationshipId,
+      table.completedAt,
+    ),
     index("workout_executions_trainee_idx").on(table.traineeUserId),
   ],
 );
@@ -760,6 +764,10 @@ export const mealCompliance = sqliteTable(
   (table) => [
     uniqueIndex("meal_compliance_assignment_uidx").on(table.assignmentId),
     index("meal_compliance_relationship_idx").on(table.coachingRelationshipId),
+    index("meal_compliance_relationship_logged_idx").on(
+      table.coachingRelationshipId,
+      table.loggedAt,
+    ),
     index("meal_compliance_trainee_idx").on(table.traineeUserId),
   ],
 );
@@ -851,6 +859,10 @@ export const checkins = sqliteTable(
     index("checkins_relationship_window_idx").on(
       table.coachingRelationshipId,
       table.windowEndsAt,
+    ),
+    index("checkins_relationship_submitted_idx").on(
+      table.coachingRelationshipId,
+      table.submittedAt,
     ),
     index("checkins_record_status_idx").on(table.recordStatus),
   ],
@@ -957,9 +969,10 @@ export const exceptions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    index("exceptions_relationship_status_idx").on(
+    index("exceptions_relationship_status_detected_idx").on(
       table.coachingRelationshipId,
       table.status,
+      table.detectedAt,
     ),
     index("exceptions_status_detected_idx").on(table.status, table.detectedAt),
     index("exceptions_source_idx").on(
@@ -1383,6 +1396,10 @@ export const notifications = sqliteTable(
   },
   (table) => [
     uniqueIndex("notifications_dedupe_key_uidx").on(table.dedupeKey),
+    index("notifications_relationship_created_idx").on(
+      table.coachingRelationshipId,
+      table.createdAt,
+    ),
     index("notifications_recipient_created_idx").on(
       table.recipientUserId,
       table.createdAt,
