@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   getWorkoutAssignment: vi.fn(),
   getClientWorkspace: vi.fn(),
   getResponsiveness: vi.fn(),
+  acknowledgeException: vi.fn(),
+  resolveException: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -22,13 +24,22 @@ vi.mock("../lib/api", () => ({
     getException: api.getException,
     getWorkoutAssignment: api.getWorkoutAssignment,
     getClientWorkspace: api.getClientWorkspace,
+    acknowledgeException: api.acknowledgeException,
+    resolveException: api.resolveException,
   },
 }));
 vi.mock("../lib/stage1-api", () => ({
   stage1Api: { getResponsiveness: api.getResponsiveness },
 }));
 
-import { ExceptionDrawer, resolvedCloseLabel } from "./ExceptionDrawer";
+import { formatCivilDate, formatLocalDate } from "@fitbud/core";
+import {
+  ExceptionDrawer,
+  formatTimelineDateTime,
+  resolvedCloseLabel,
+  trainerResolveBannerText,
+  trainerResolveTimelineText,
+} from "./ExceptionDrawer";
 
 // Acknowledged items show the outcome + note form straight away.
 const detail: ExceptionDetail = {
@@ -78,18 +89,22 @@ async function renderDrawer(onClose: () => void) {
   return { ...utils, note: note as HTMLTextAreaElement };
 }
 
+function mockSourceApis() {
+  api.getWorkoutAssignment.mockResolvedValue({
+    workoutDayName: "Upper body A",
+    windowEndsAt: "2026-10-22T12:00:00.000Z",
+    workoutDay: { exercises: [] },
+  });
+  api.getClientWorkspace.mockResolvedValue({
+    header: { traineeDisplayName: "Rohan Mehta", clientWhatsappE164: null },
+  });
+  api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+}
+
 describe("ExceptionDrawer focus (HM1)", () => {
   beforeEach(() => {
     api.getException.mockResolvedValue(detail);
-    api.getWorkoutAssignment.mockResolvedValue({
-      workoutDayName: "Upper body A",
-      windowEndsAt: "2026-10-22T12:00:00.000Z",
-      workoutDay: { exercises: [] },
-    });
-    api.getClientWorkspace.mockResolvedValue({
-      header: { traineeDisplayName: "Rohan Mehta", clientWhatsappE164: null },
-    });
-    api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+    mockSourceApis();
   });
   afterEach(() => {
     cleanup();
@@ -140,53 +155,140 @@ describe("ExceptionDrawer focus (HM1)", () => {
 
 describe("ExceptionDrawer closedReason label (RL1b)", () => {
   beforeEach(() => {
-    api.getWorkoutAssignment.mockResolvedValue({
-      workoutDayName: "Upper body A",
-      windowEndsAt: "2026-10-22T12:00:00.000Z",
-      workoutDay: { exercises: [] },
-    });
-    api.getClientWorkspace.mockResolvedValue({
-      header: { traineeDisplayName: "Rohan Mehta", clientWhatsappE164: null },
-    });
-    api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+    mockSourceApis();
   });
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("maps each closedReason to the trainer-facing prefix", () => {
     expect(resolvedCloseLabel("trainer")).toBe("Resolved by you");
     expect(resolvedCloseLabel(null)).toBe("Resolved by you");
-    expect(resolvedCloseLabel("coaching_ended")).toBe("Closed · coaching ended");
+    expect(resolvedCloseLabel("coaching_ended")).toBe(
+      "Closed when coaching ended",
+    );
     expect(resolvedCloseLabel("auto_resolve")).toBe("Cleared automatically");
   });
 
-  it("shows Resolved by you for a trainer resolve", async () => {
-    api.getException.mockResolvedValue(resolvedDetail("trainer"));
-    render(
-      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+  it("builds trainer banner/timeline structure like frames 02 / 132", () => {
+    expect(
+      trainerResolveBannerText({
+        resolvedAt: RESOLVED_AT,
+        outcomeLabel: "Talked to client",
+        justResolved: true,
+        timeZone: "UTC",
+      }),
+    ).toBe("Resolved by you · just now · Talked to client");
+    expect(
+      trainerResolveBannerText({
+        resolvedAt: RESOLVED_AT,
+        outcomeLabel: "Talked to client",
+        justResolved: false,
+        timeZone: "UTC",
+      }),
+    ).toBe(
+      `Resolved by you · ${formatCivilDate(formatLocalDate(new Date(RESOLVED_AT), "UTC"))} · Talked to client`,
     );
     expect(
-      await screen.findByText(/Resolved by you ·/),
-    ).toBeTruthy();
-    expect(screen.queryByText(/Cleared automatically/)).toBeNull();
-    expect(screen.queryByText(/Closed · coaching ended/)).toBeNull();
+      trainerResolveTimelineText({
+        resolvedAt: RESOLVED_AT,
+        outcomeLabel: "Talked to client",
+        timeZone: "UTC",
+      }),
+    ).toBe(
+      `Resolved by you · Talked to client · ${formatTimelineDateTime(RESOLVED_AT, "UTC")}`,
+    );
   });
 
-  it("shows Closed · coaching ended when coaching ended", async () => {
+  it("shows Closed when coaching ended on the timeline", async () => {
     api.getException.mockResolvedValue(resolvedDetail("coaching_ended"));
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
     expect(
-      await screen.findByText(/Closed · coaching ended ·/),
+      await screen.findByText(/Closed when coaching ended ·/),
     ).toBeTruthy();
     expect(screen.queryByText(/Resolved by you/)).toBeNull();
-    expect(screen.queryByText(/Cleared automatically/)).toBeNull();
+    expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
   });
 
-  it("shows Cleared automatically for an auto-resolve", async () => {
+  it("shows a read-only trainer resolve banner without Undo", async () => {
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    const banner = await screen.findByTestId("exception-resolve-banner");
+    expect(banner.textContent).toMatch(/Resolved by you ·/);
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    const timeline = screen.getByTestId("exception-resolve-timeline");
+    expect(timeline.textContent).toMatch(/Resolved by you ·/);
+    // Datetime includes a clock, not civil date alone.
+    expect(timeline.textContent).toMatch(/\d{1,2}:\d{2}\s?(am|pm)/i);
+  });
+
+  it("after Resolve shows just-now banner with outcome + Undo, then commits", async () => {
+    api.getException.mockResolvedValue(detail);
+    api.resolveException.mockResolvedValue(resolvedDetail("trainer"));
+    api.acknowledgeException.mockResolvedValue(detail);
+
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(await screen.findByRole("textbox")).toBeTruthy();
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+
+    const banner = screen.getByTestId("exception-resolve-banner");
+    expect(banner.textContent).toContain(
+      "Resolved by you · just now · Talked to client",
+    );
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+    const timeline = screen.getByTestId("exception-resolve-timeline");
+    expect(timeline.textContent).toContain("Talked to client");
+    expect(api.resolveException).not.toHaveBeenCalled();
+
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(api.resolveException).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.getByTestId("exception-resolve-banner").textContent).toMatch(
+      /Resolved by you ·/,
+    );
+  });
+
+  it("Undo cancels a pending Resolve before the POST", async () => {
+    api.getException.mockResolvedValue(detail);
+
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(await screen.findByRole("textbox")).toBeTruthy();
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    vi.useRealTimers();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(await screen.findByRole("textbox")).toBeTruthy();
+
+    expect(api.resolveException).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
+  });
+
+  it("keeps Cleared automatically as a minimal auto_resolve label", async () => {
     api.getException.mockResolvedValue(resolvedDetail("auto_resolve"));
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
@@ -194,7 +296,6 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     expect(
       await screen.findByText(/Cleared automatically ·/),
     ).toBeTruthy();
-    expect(screen.queryByText(/Resolved by you/)).toBeNull();
-    expect(screen.queryByText(/Closed · coaching ended/)).toBeNull();
+    expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
   });
 });
