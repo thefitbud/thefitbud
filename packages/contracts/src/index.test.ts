@@ -388,14 +388,11 @@ describe("contracts", () => {
     ).toMatchObject({ type: "overdue_checkin", status: "active", closedReason: null });
   });
 
-  it("accepts each exception closedReason close-path value", () => {
-    for (const closedReason of [
-      "coaching_ended",
-      "auto_resolve",
-      "trainer",
-    ] as const) {
+  it("accepts trainer and coaching_ended closedReason values only", () => {
+    for (const closedReason of ["coaching_ended", "trainer"] as const) {
       expect(exceptionClosedReasonSchema.parse(closedReason)).toBe(closedReason);
     }
+    expect(() => exceptionClosedReasonSchema.parse("auto_resolve")).toThrow();
     expect(() => exceptionClosedReasonSchema.parse("auto-resolve")).toThrow();
   });
 

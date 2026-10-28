@@ -133,7 +133,7 @@ function insertException(ctx: ActivityContext, rng: Rng, input: {
   candidate: ExceptionCandidate;
   detectedAt: string;
   open: boolean;
-  /** When the source was logged later (auto-resolve). */
+  /** When the source was logged later (Client logged later; not auto-resolved). */
   loggedLateAt?: string | null;
 }): void {
   const { rows } = ctx;

@@ -961,37 +961,49 @@ describe("intervention loop", () => {
         exceptions: Array<{ type: string; severity: string; sourceEntityId: string }>;
       };
     };
-    expect(clearedBody.data.resolved).toBeGreaterThanOrEqual(1);
+    expect(clearedBody.data.resolved).toBe(0);
     const dinnerAfter = await db
       .select()
       .from(schema.mealCompliance)
       .where(eq(schema.mealCompliance.assignmentId, dinner!.id));
     expect(dinnerAfter[0]?.outcome).toBe("confirmed");
+    const dinnerExceptionId = bySource.get(dinner!.id)!.id;
     const overdueRow = await db
       .select()
       .from(schema.exceptions)
-      .where(eq(schema.exceptions.id, bySource.get(dinner!.id)!.id));
-    expect(overdueRow[0]?.status).toBe("resolved");
-    expect(overdueRow[0]?.closedReason).toBe("auto_resolve");
+      .where(eq(schema.exceptions.id, dinnerExceptionId));
+    // Late log keeps the same open row and moves it to Client logged later.
+    expect(overdueRow[0]?.status).toBe("active");
+    expect(overdueRow[0]?.type).toBe("meal_logged_later");
+    expect(overdueRow[0]?.severity).toBe("attention");
+    expect(overdueRow[0]?.closedReason).toBeNull();
+    expect(overdueRow[0]?.sourceLoggedLateAt).toBeTruthy();
     expect(
       clearedBody.data.exceptions.some(
-        (item) =>
-          item.sourceEntityId === dinner!.id &&
-          item.type === "meal_logged_later" &&
-          item.severity === "attention",
+        (item) => item.sourceEntityId === dinner!.id,
       ),
-    ).toBe(true);
-    const resolvedHistory = await app.request(
-      `/exceptions/${bySource.get(dinner!.id)!.id}`,
+    ).toBe(false);
+
+    const lateDetail = await app.request(
+      `/exceptions/${dinnerExceptionId}`,
       { headers: { Cookie: trainerCookie } },
       testEnv(),
     );
-    expect(resolvedHistory.status).toBe(200);
-    const resolvedHistoryBody = (await resolvedHistory.json()) as {
-      data: { status: string; closedReason: string | null };
+    expect(lateDetail.status).toBe(200);
+    const lateDetailBody = (await lateDetail.json()) as {
+      data: {
+        status: string;
+        type: string;
+        severity: string;
+        closedReason: string | null;
+      };
     };
-    expect(resolvedHistoryBody.data.status).toBe("resolved");
-    expect(resolvedHistoryBody.data.closedReason).toBe("auto_resolve");
+    expect(lateDetailBody.data).toMatchObject({
+      status: "active",
+      type: "meal_logged_later",
+      severity: "attention",
+      closedReason: null,
+    });
 
     const attention = await app.request(
       "/exceptions/attention",
@@ -999,16 +1011,20 @@ describe("intervention loop", () => {
       testEnv(),
     );
     const attentionBody = (await attention.json()) as {
-      data: { items: Array<{ exception: { id: string; status: string } }> };
+      data: {
+        items: Array<{ exception: { id: string; status: string; type: string } }>;
+      };
     };
     expect(
       attentionBody.data.items.some((item) => item.exception.id === missed.id),
     ).toBe(true);
     expect(
       attentionBody.data.items.some(
-        (item) => item.exception.id === bySource.get(dinner!.id)!.id,
+        (item) =>
+          item.exception.id === dinnerExceptionId &&
+          item.exception.type === "meal_logged_later",
       ),
-    ).toBe(false);
+    ).toBe(true);
 
     const history = await app.request(
       `/exceptions/relationships/${relationshipId}?status=resolved`,
@@ -1019,66 +1035,14 @@ describe("intervention loop", () => {
       data: { items: Array<{ id: string; status: string }> };
     };
     expect(
-      historyBody.data.items.some(
-        (item) => item.id === bySource.get(dinner!.id)!.id && item.status === "resolved",
-      ),
-    ).toBe(true);
+      historyBody.data.items.some((item) => item.id === dinnerExceptionId),
+    ).toBe(false);
   });
 
-  it("maps each close path to the matching closedReason", async () => {
-    const { trainerCookie, relationshipId, today } =
+  it("maps trainer and coaching_ended close paths to closedReason", async () => {
+    const { trainerCookie, relationshipId } =
       await reachActiveConfig("closed-reason");
 
-    const scheduled = await app.request(
-      `/checkins/relationships/${relationshipId}/schedule`,
-      {
-        method: "POST",
-        headers: {
-          Cookie: trainerCookie,
-          "Content-Type": "application/json",
-          "Idempotency-Key": "sched-closed-reason",
-        },
-        body: JSON.stringify({ localDate: today }),
-      },
-      testEnv(),
-    );
-    expect(scheduled.status).toBe(200);
-    const scheduledBody = (await scheduled.json()) as {
-      data: { checkin: { id: string } };
-    };
-    const checkinId = scheduledBody.data.checkin.id;
-
-    await db
-      .update(schema.checkins)
-      .set({
-        windowStartsAt: "2020-01-01T00:00:00.000Z",
-        windowEndsAt: "2020-01-02T00:00:00.000Z",
-      })
-      .where(eq(schema.checkins.id, checkinId));
-
-    const evaluate = await app.request(
-      `/exceptions/relationships/${relationshipId}/evaluate`,
-      {
-        method: "POST",
-        headers: {
-          Cookie: trainerCookie,
-          "Content-Type": "application/json",
-          "Idempotency-Key": "eval-closed-reason",
-        },
-        body: "{}",
-      },
-      testEnv(),
-    );
-    expect(evaluate.status).toBe(200);
-    const evaluateBody = (await evaluate.json()) as {
-      data: { exceptions: Array<{ id: string; closedReason: string | null }> };
-    };
-    const openException = evaluateBody.data.exceptions[0];
-    expect(openException).toBeTruthy();
-    expect(openException!.closedReason).toBeNull();
-
-    // Seed a second active exception so coaching_ended and trainer paths can
-    // be checked independently of the check-in auto-resolve below.
     const coachingEndedId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const trainerResolveId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const now = new Date().toISOString();
@@ -1129,42 +1093,33 @@ describe("intervention loop", () => {
       },
     ]);
 
-    // Clear the overdue condition so evaluate auto-resolves the open item.
-    await db
-      .update(schema.checkins)
-      .set({
-        recordStatus: "submitted",
-        submittedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(schema.checkins.id, checkinId));
-
-    const autoEval = await app.request(
+    // Clearing the underlying condition must not system-resolve.
+    const noopEval = await app.request(
       `/exceptions/relationships/${relationshipId}/evaluate`,
       {
         method: "POST",
         headers: {
           Cookie: trainerCookie,
           "Content-Type": "application/json",
-          "Idempotency-Key": "eval-auto-resolve-reason",
+          "Idempotency-Key": "eval-no-auto-resolve",
         },
         body: "{}",
       },
       testEnv(),
     );
-    expect(autoEval.status).toBe(200);
-
-    const autoResolved = await app.request(
-      `/exceptions/${openException!.id}`,
+    expect(noopEval.status).toBe(200);
+    const noopBody = (await noopEval.json()) as { data: { resolved: number } };
+    expect(noopBody.data.resolved).toBe(0);
+    const stillOpen = await app.request(
+      `/exceptions/${coachingEndedId}`,
       { headers: { Cookie: trainerCookie } },
       testEnv(),
     );
-    expect(autoResolved.status).toBe(200);
-    const autoBody = (await autoResolved.json()) as {
+    const stillOpenBody = (await stillOpen.json()) as {
       data: { status: string; closedReason: string | null };
     };
-    expect(autoBody.data.status).toBe("resolved");
-    expect(autoBody.data.closedReason).toBe("auto_resolve");
+    expect(stillOpenBody.data.status).toBe("active");
+    expect(stillOpenBody.data.closedReason).toBeNull();
 
     const trainerResolve = await app.request(
       `/exceptions/${trainerResolveId}/resolve`,

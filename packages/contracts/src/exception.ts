@@ -43,11 +43,12 @@ export type ExceptionActionKind = z.infer<typeof exceptionActionKindSchema>;
 
 /**
  * Why a resolved exception left the open set.
- * Matches close-path writes: coaching end, detect auto-resolve, trainer resolve.
+ * Only coaching end (system) and trainer resolve write this. There is no
+ * auto_resolve: late logs stay open as logged-later for a trainer resolve
+ * (OQ-23 / Firoz product lock 28 Oct 2026).
  */
 export const exceptionClosedReasonSchema = z.enum([
   "coaching_ended",
-  "auto_resolve",
   "trainer",
 ]);
 export type ExceptionClosedReason = z.infer<typeof exceptionClosedReasonSchema>;
