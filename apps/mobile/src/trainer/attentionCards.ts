@@ -3,6 +3,7 @@ import {
   attentionReviewBucket,
   formatCivilDate,
   formatLocalDate,
+  formatPersonName,
   labelFor,
 } from "@fitbud/core";
 
@@ -222,16 +223,28 @@ export function partitionAttentionGroups(groups: AttentionGroup[]): AttentionLis
   return { groups: stamped, needsYou, reviewed };
 }
 
+export type ReviewedUndoItem = {
+  id: string;
+  status: "detected" | "active";
+};
+
 export function acknowledgeAttentionItem(
   groups: AttentionGroup[],
   exceptionId: string,
 ): AttentionGroup[] {
+  return acknowledgeAttentionItems(groups, [exceptionId]);
+}
+
+/** Mark every listed open item as acknowledged (client Mark reviewed). */
+export function acknowledgeAttentionItems(
+  groups: AttentionGroup[],
+  exceptionIds: ReadonlyArray<string>,
+): AttentionGroup[] {
+  const ids = new Set(exceptionIds);
   return groups.map((group) => ({
     ...group,
     items: group.items.map((item) =>
-      item.id === exceptionId
-        ? { ...item, status: "acknowledged" as const }
-        : item,
+      ids.has(item.id) ? { ...item, status: "acknowledged" as const } : item,
     ),
   }));
 }
@@ -241,12 +254,37 @@ export function restoreAttentionItem(
   exceptionId: string,
   status: "detected" | "active",
 ): AttentionGroup[] {
+  return restoreAttentionItems(groups, [{ id: exceptionId, status }]);
+}
+
+export function restoreAttentionItems(
+  groups: AttentionGroup[],
+  items: ReadonlyArray<ReviewedUndoItem>,
+): AttentionGroup[] {
+  const byId = new Map(items.map((item) => [item.id, item.status]));
   return groups.map((group) => ({
     ...group,
-    items: group.items.map((item) =>
-      item.id === exceptionId ? { ...item, status } : item,
-    ),
+    items: group.items.map((item) => {
+      const status = byId.get(item.id);
+      return status ? { ...item, status } : item;
+    }),
   }));
+}
+
+/** Detected/active items for one client — what swipe Mark reviewed clears. */
+export function unreviewedItemsForRelationship(
+  groups: AttentionGroup[],
+  relationshipId: string,
+): ReviewedUndoItem[] {
+  const group = groups.find((entry) => entry.relationshipId === relationshipId);
+  if (!group) return [];
+  const out: ReviewedUndoItem[] = [];
+  for (const item of group.items) {
+    if (item.status === "detected" || item.status === "active") {
+      out.push({ id: item.id, status: item.status });
+    }
+  }
+  return out;
 }
 
 export function attentionItemStatus(
@@ -258,6 +296,23 @@ export function attentionItemStatus(
     if (item && isExceptionStatus(item.status)) return item.status;
   }
   return null;
+}
+
+/** First name for the Mark reviewed toast ("Rohan moved to Reviewed…"). */
+export function clientFirstName(displayName: string): string {
+  const full = formatPersonName(displayName);
+  return full.split(" ")[0] || full;
+}
+
+/**
+ * Undo snackbar copy after swipe Mark reviewed.
+ * `{Name} moved to Reviewed · {N} still open` — Undo is a separate action.
+ */
+export function markReviewedToastMessage(
+  displayName: string,
+  stillOpenCount: number,
+): string {
+  return `${clientFirstName(displayName)} moved to Reviewed · ${stillOpenCount} still open`;
 }
 
 /** Locked frame 05. The tab bar and search/bell stay outside this screen. */
