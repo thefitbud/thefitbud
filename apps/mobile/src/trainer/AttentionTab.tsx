@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Ellipsis, CircleCheck } from "lucide-react-native";
+import { ChevronRight, Ellipsis, CircleCheck } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -30,9 +30,16 @@ import { SwipeActionRow } from "../components/SwipeActionRow";
 import { Snackbar } from "../components/Snackbar";
 import { initialsFromName } from "../components/m2";
 import {
+  acknowledgeAttentionItem,
   attentionIssueLine,
+  attentionItemStatus,
   buildClientAttentionCards,
   formatAttentionAge,
+  partialReviewLine,
+  partitionAttentionGroups,
+  restoreAttentionItem,
+  reviewedStillOpenSummary,
+  type AttentionLists,
   type ClientAttentionCard,
 } from "./attentionCards";
 import { localDateInTimezone } from "../lib/dates";
@@ -50,10 +57,25 @@ type Props = {
 
 type Snapshot = {
   groups: AttentionGroup[];
+  needsYou?: AttentionGroup[];
+  reviewed?: AttentionGroup[];
   asks: CoachAsk[];
   checkins: TrainerCheckinInboxItem[];
   savedAt: string;
 };
+
+const EMPTY_LISTS: AttentionLists = { groups: [], needsYou: [], reviewed: [] };
+
+function listsFromSnapshot(snapshot: Snapshot): AttentionLists {
+  if (snapshot.needsYou && snapshot.reviewed) {
+    return {
+      groups: snapshot.groups,
+      needsYou: snapshot.needsYou,
+      reviewed: snapshot.reviewed,
+    };
+  }
+  return partitionAttentionGroups(snapshot.groups);
+}
 
 const CACHE_KEY = "trainer:attention";
 
@@ -73,7 +95,7 @@ export function AttentionTab({
   const { api, relationships, refreshSession } = useAuth();
   const s1 = stage1Api(api);
   const [segment, setSegment] = useState<Segment>("needs_you");
-  const [groups, setGroups] = useState<AttentionGroup[]>([]);
+  const [lists, setLists] = useState<AttentionLists>(EMPTY_LISTS);
   const [asks, setAsks] = useState<CoachAsk[]>([]);
   const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,12 +103,15 @@ export function AttentionTab({
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [undoId, setUndoId] = useState<string | null>(null);
+  const [undoTarget, setUndoTarget] = useState<{
+    id: string;
+    status: "detected" | "active";
+  } | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [reviewedOpen, setReviewedOpen] = useState(false);
 
   const applySnapshot = useCallback((snapshot: Snapshot) => {
-    setGroups(snapshot.groups);
+    setLists(listsFromSnapshot(snapshot));
     setAsks(snapshot.asks);
     setCheckins(snapshot.checkins);
   }, []);
@@ -104,6 +129,8 @@ export function AttentionTab({
       );
       const snapshot: Snapshot = {
         groups: attentionGroups.groups,
+        needsYou: attentionGroups.needsYou,
+        reviewed: attentionGroups.reviewed,
         asks: coachAsks.items,
         checkins: nextCheckins,
         savedAt: new Date().toISOString(),
@@ -140,12 +167,13 @@ export function AttentionTab({
     },
   );
 
-  const cards = useMemo(
-    () =>
-      buildClientAttentionCards(groups).filter(
-        (card) => !hidden.has(card.relationshipId),
-      ),
-    [groups, hidden],
+  const needsYouCards = useMemo(
+    () => buildClientAttentionCards(lists.needsYou),
+    [lists.needsYou],
+  );
+  const reviewedCards = useMemo(
+    () => buildClientAttentionCards(lists.reviewed),
+    [lists.reviewed],
   );
 
   const offline = offlineAt != null;
@@ -153,18 +181,45 @@ export function AttentionTab({
   async function acknowledgeCard(card: ClientAttentionCard) {
     if (offline) return;
     const id = card.primary.id;
-    setHidden((current) => new Set(current).add(card.relationshipId));
-    setUndoId(id);
+    const previous = attentionItemStatus(lists.groups, id);
+    if (previous !== "detected" && previous !== "active") return;
+    const prior = lists;
+    setLists(
+      partitionAttentionGroups(acknowledgeAttentionItem(lists.groups, id)),
+    );
+    setUndoTarget({ id, status: previous });
     setToast("Marked reviewed");
     try {
       await api.acknowledgeException(id, {}, createIdempotencyKey());
     } catch (err) {
-      setHidden((current) => {
-        const next = new Set(current);
-        next.delete(card.relationshipId);
-        return next;
-      });
+      setLists(prior);
+      setUndoTarget(null);
       setToast(null);
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Couldn't load. Pull to try again.",
+      );
+    }
+  }
+
+  async function undoAcknowledge() {
+    if (!undoTarget || offline) return;
+    const prior = lists;
+    const target = undoTarget;
+    setLists(
+      partitionAttentionGroups(
+        restoreAttentionItem(lists.groups, target.id, target.status),
+      ),
+    );
+    setUndoTarget(null);
+    setToast(null);
+    try {
+      await api.undoExceptionAcknowledge(target.id, createIdempotencyKey());
+    } catch (err) {
+      setLists(prior);
+      setUndoTarget(target);
+      setToast("Marked reviewed");
       setError(
         err instanceof ApiClientError
           ? err.message
@@ -230,7 +285,7 @@ export function AttentionTab({
 
       <View style={styles.chips}>
         <FilterChip
-          label={`Needs you ${cards.length || groups.length}`}
+          label={`Needs you ${needsYouCards.length}`}
           selected={segment === "needs_you"}
           onPress={() => setSegment("needs_you")}
         />
@@ -246,7 +301,7 @@ export function AttentionTab({
         />
       </View>
 
-      {loading && groups.length === 0 ? (
+      {loading && lists.groups.length === 0 ? (
         <View>
           <SkeletonCard />
           <SkeletonCard />
@@ -254,99 +309,139 @@ export function AttentionTab({
         </View>
       ) : null}
 
-      {segment === "needs_you" && !loading && cards.length === 0 ? (
+      {segment === "needs_you" &&
+      !loading &&
+      needsYouCards.length === 0 &&
+      reviewedCards.length === 0 ? (
         <View style={styles.empty}>
           <CircleCheck color={colors.indigo} size={28} />
           <Text style={styles.emptyTitle}>All caught up.</Text>
         </View>
       ) : null}
 
-      {segment === "needs_you"
-        ? cards.map((card) => (
-            <SwipeActionRow
-              key={card.relationshipId}
-              onMarkReviewed={() => {
-                if (!offline) void acknowledgeCard(card);
-              }}
-              onNudge={() => {
-                if (!offline) void nudge(card);
-              }}
-            >
-              <View style={styles.card}>
-                <View style={styles.cardTop}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {initialsFromName(card.traineeDisplayName)}
-                    </Text>
-                  </View>
-                  <View style={styles.nameBlock}>
-                    <Text style={styles.name}>
-                      {formatPersonName(card.traineeDisplayName)}
-                    </Text>
-                    <Text style={styles.since}>
-                      {formatAttentionAge(card.primary.ageMinutes)}
-                    </Text>
-                  </View>
-                  <StatusChip kind="severity" value={card.primary.severity} />
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="More"
-                    style={styles.more}
-                    onPress={() =>
+      {segment === "needs_you" && needsYouCards.length > 0 ? (
+        <View accessibilityLabel="Needs you">
+          {reviewedCards.length > 0 ? (
+            <View style={styles.sectionLabelRow} accessibilityRole="header">
+              <Text style={styles.reviewedTitle}>Needs you</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{needsYouCards.length}</Text>
+              </View>
+            </View>
+          ) : null}
+          {needsYouCards.map((card) => {
+            const full = lists.groups.find(
+              (group) => group.relationshipId === card.relationshipId,
+            );
+            const projected = lists.needsYou.find(
+              (group) => group.relationshipId === card.relationshipId,
+            );
+            return (
+              <SwipeActionRow
+                key={card.relationshipId}
+                onMarkReviewed={() => {
+                  if (!offline) void acknowledgeCard(card);
+                }}
+                onNudge={() => {
+                  if (!offline) void nudge(card);
+                }}
+              >
+                <AttentionClientView
+                  card={card}
+                  issue={attentionIssueLine(projected?.items ?? [card.primary])}
+                  progress={partialReviewLine(full?.items ?? [])}
+                  actionLabel="Review"
+                  offline={offline}
+                  menuOpen={menuFor === card.relationshipId}
+                  showMarkReviewed
+                  onToggleMenu={() =>
+                    setMenuFor((current) =>
+                      current === card.relationshipId
+                        ? null
+                        : card.relationshipId,
+                    )
+                  }
+                  onAction={() => onReviewException(card.primary.id)}
+                  onMarkReviewed={() => {
+                    setMenuFor(null);
+                    void acknowledgeCard(card);
+                  }}
+                  onNudge={() => {
+                    setMenuFor(null);
+                    void nudge(card);
+                  }}
+                  onOpenClient={() => {
+                    setMenuFor(null);
+                    onOpenClients();
+                  }}
+                />
+              </SwipeActionRow>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {segment === "needs_you" && reviewedCards.length > 0 ? (
+        <View style={styles.reviewedSection}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: reviewedOpen }}
+            accessibilityLabel={`${labelFor("client_chip", "reviewed_still_open")}, ${reviewedStillOpenSummary(reviewedCards.length)}`}
+            onPress={() => setReviewedOpen((open) => !open)}
+            style={styles.reviewedHead}
+          >
+            <ChevronRight
+              color={colors.midGrey}
+              size={18}
+              style={reviewedOpen ? styles.chevronOpen : undefined}
+            />
+            <Text style={styles.reviewedTitle}>
+              {labelFor("client_chip", "reviewed_still_open")}
+            </Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{reviewedCards.length}</Text>
+            </View>
+            <Text style={styles.reviewedSummary}>
+              {reviewedStillOpenSummary(reviewedCards.length)}
+            </Text>
+          </Pressable>
+          {reviewedOpen
+            ? reviewedCards.map((card) => {
+                const projected = lists.reviewed.find(
+                  (group) => group.relationshipId === card.relationshipId,
+                );
+                return (
+                  <AttentionClientView
+                    key={card.relationshipId}
+                    card={card}
+                    issue={attentionIssueLine(projected?.items ?? [card.primary])}
+                    progress={null}
+                    actionLabel="Resolve"
+                    offline={offline}
+                    menuOpen={menuFor === card.relationshipId}
+                    showMarkReviewed={false}
+                    onToggleMenu={() =>
                       setMenuFor((current) =>
                         current === card.relationshipId
                           ? null
                           : card.relationshipId,
                       )
                     }
-                  >
-                    <Ellipsis color={colors.deepNavy} size={18} />
-                  </Pressable>
-                </View>
-                {menuFor === card.relationshipId ? (
-                  <View style={styles.menu}>
-                    <MenuItem
-                      label="Mark reviewed"
-                      onPress={() => {
-                        setMenuFor(null);
-                        void acknowledgeCard(card);
-                      }}
-                    />
-                    <MenuItem
-                      label="Nudge…"
-                      onPress={() => {
-                        setMenuFor(null);
-                        void nudge(card);
-                      }}
-                    />
-                    <MenuItem
-                      label="Open client"
-                      onPress={() => {
-                        setMenuFor(null);
-                        onOpenClients();
-                      }}
-                    />
-                  </View>
-                ) : null}
-                <Text style={styles.issue}>
-                  {attentionIssueLine(
-                    groups.find(
-                      (group) => group.relationshipId === card.relationshipId,
-                    )?.items ?? [card.primary],
-                  )}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={offline}
-                  onPress={() => onReviewException(card.primary.id)}
-                  style={[styles.review, offline ? styles.disabled : null]}
-                >
-                  <Text style={styles.reviewText}>Review</Text>
-                </Pressable>
-              </View>
-            </SwipeActionRow>
-          ))
-        : null}
+                    onAction={() => onReviewException(card.primary.id)}
+                    onNudge={() => {
+                      setMenuFor(null);
+                      void nudge(card);
+                    }}
+                    onOpenClient={() => {
+                      setMenuFor(null);
+                      onOpenClients();
+                    }}
+                  />
+                );
+              })
+            : null}
+        </View>
+      ) : null}
 
       {segment === "asked"
         ? asks.map((ask) => (
@@ -388,14 +483,11 @@ export function AttentionTab({
       {toast ? (
         <Snackbar
           message={toast}
-          actionLabel={undoId ? "Undo" : undefined}
+          actionLabel={undoTarget ? "Undo" : undefined}
           onAction={
-            undoId
+            undoTarget
               ? () => {
-                  setHidden(new Set());
-                  setUndoId(null);
-                  setToast(null);
-                  void load();
+                  void undoAcknowledge();
                 }
               : undefined
           }
@@ -403,6 +495,84 @@ export function AttentionTab({
         />
       ) : null}
     </Screen>
+  );
+}
+
+function AttentionClientView({
+  card,
+  issue,
+  progress,
+  actionLabel,
+  offline,
+  menuOpen,
+  showMarkReviewed,
+  onToggleMenu,
+  onAction,
+  onMarkReviewed,
+  onNudge,
+  onOpenClient,
+}: {
+  card: ClientAttentionCard;
+  issue: string;
+  progress: string | null;
+  actionLabel: string;
+  offline: boolean;
+  menuOpen: boolean;
+  showMarkReviewed: boolean;
+  onToggleMenu: () => void;
+  onAction: () => void;
+  onMarkReviewed?: () => void;
+  onNudge: () => void;
+  onOpenClient: () => void;
+}) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {initialsFromName(card.traineeDisplayName)}
+          </Text>
+        </View>
+        <View style={styles.nameBlock}>
+          <Text style={styles.name}>
+            {formatPersonName(card.traineeDisplayName)}
+          </Text>
+          <Text style={styles.since}>
+            {formatAttentionAge(card.primary.ageMinutes)}
+          </Text>
+        </View>
+        {showMarkReviewed ? (
+          <StatusChip kind="severity" value={card.primary.severity} />
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="More"
+          style={styles.more}
+          onPress={onToggleMenu}
+        >
+          <Ellipsis color={colors.deepNavy} size={18} />
+        </Pressable>
+      </View>
+      {menuOpen ? (
+        <View style={styles.menu}>
+          {showMarkReviewed && onMarkReviewed ? (
+            <MenuItem label="Mark reviewed" onPress={onMarkReviewed} />
+          ) : null}
+          <MenuItem label="Nudge…" onPress={onNudge} />
+          <MenuItem label="Open client" onPress={onOpenClient} />
+        </View>
+      ) : null}
+      <Text style={styles.issue}>{issue}</Text>
+      {progress ? <Text style={styles.progress}>{progress}</Text> : null}
+      <Pressable
+        accessibilityRole="button"
+        disabled={offline}
+        onPress={onAction}
+        style={[styles.review, offline ? styles.disabled : null]}
+      >
+        <Text style={styles.reviewText}>{actionLabel}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -518,6 +688,57 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     marginTop: 12,
+  },
+  progress: {
+    color: colors.midGrey,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  reviewedSection: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  sectionLabelRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+    minHeight: 32,
+  },
+  reviewedHead: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 48,
+    paddingVertical: 8,
+  },
+  chevronOpen: {
+    transform: [{ rotate: "90deg" }],
+  },
+  reviewedTitle: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 17,
+  },
+  countBadge: {
+    alignItems: "center",
+    backgroundColor: "#EDEAFF",
+    borderRadius: 999,
+    minWidth: 24,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  countText: {
+    color: colors.indigo,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 13,
+  },
+  reviewedSummary: {
+    color: colors.midGrey,
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   review: {
     alignItems: "center",
