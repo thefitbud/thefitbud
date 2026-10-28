@@ -2,17 +2,21 @@ import { describe, expect, it } from "vitest";
 import type { AttentionGroupsResponse } from "@fitbud/contracts";
 import {
   acknowledgeAttentionItem,
+  acknowledgeAttentionItems,
   attentionSectionModel,
   attentionSubtitle,
   ATTENTION_SCREEN_TITLE,
   buildClientAttentionCards,
   formatAttentionAge,
+  markReviewedToastMessage,
   needsYouRowModel,
   openItemsLabel,
   partitionAttentionGroups,
   restoreAttentionItem,
+  restoreAttentionItems,
   reviewedProgressFooter,
   reviewedRowModel,
+  unreviewedItemsForRelationship,
 } from "./attentionCards";
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
@@ -215,5 +219,79 @@ describe("Needs you and Reviewed", () => {
         open: 2,
       }),
     ).toBe("Reviewed Sat 17 Oct · 2 of 2 resolved");
+  });
+});
+
+describe("swipe Mark reviewed + Undo toast", () => {
+  const rohanId = "44444444-4444-4444-8444-444444444444";
+  const arjunId = "55555555-5555-4555-8555-555555555555";
+  const nehaId = "66666666-6666-4666-8666-666666666666";
+  const priyaId = "77777777-7777-4777-8777-777777777777";
+  const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const b = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const c = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  it("formats the toast with the client first name and Needs you count", () => {
+    expect(markReviewedToastMessage("Rohan Mehta", 3)).toBe(
+      "Rohan moved to Reviewed · 3 still open",
+    );
+    expect(markReviewedToastMessage("neha reddy", 1)).toBe(
+      "Neha moved to Reviewed · 1 still open",
+    );
+  });
+
+  it("swipe Mark reviewed acknowledges every open item and moves the client", () => {
+    const open = [
+      client(rohanId, "Rohan Mehta", [
+        item(a, "active", "critical"),
+        item(b, "detected"),
+        item(c, "active"),
+      ]),
+      client(arjunId, "Arjun Kapoor", [item("d1", "active", "critical")]),
+      client(nehaId, "Neha Reddy", [item("e1", "active"), item("e2", "active")]),
+      client(priyaId, "Priya Sharma", [item("f1", "detected")]),
+    ];
+    const before = partitionAttentionGroups(open);
+    expect(before.needsYou).toHaveLength(4);
+
+    const targets = unreviewedItemsForRelationship(before.groups, rohanId);
+    expect(targets.map((entry) => entry.id).sort()).toEqual([a, b, c].sort());
+
+    const after = partitionAttentionGroups(
+      acknowledgeAttentionItems(
+        before.groups,
+        targets.map((entry) => entry.id),
+      ),
+    );
+    expect(after.needsYou.map((group) => group.relationshipId)).toEqual([
+      arjunId,
+      nehaId,
+      priyaId,
+    ]);
+    expect(after.reviewed.map((group) => group.relationshipId)).toEqual([
+      rohanId,
+    ]);
+    expect(
+      after.reviewed[0]?.items.every((entry) => entry.status === "acknowledged"),
+    ).toBe(true);
+    expect(markReviewedToastMessage("Rohan Mehta", after.needsYou.length)).toBe(
+      "Rohan moved to Reviewed · 3 still open",
+    );
+
+    const undone = partitionAttentionGroups(
+      restoreAttentionItems(after.groups, targets),
+    );
+    expect(undone.needsYou.map((group) => group.relationshipId)).toContain(
+      rohanId,
+    );
+    expect(undone.reviewed.map((group) => group.relationshipId)).not.toContain(
+      rohanId,
+    );
+    expect(
+      undone.needsYou
+        .find((group) => group.relationshipId === rohanId)
+        ?.items.map((entry) => entry.id)
+        .sort(),
+    ).toEqual([a, b, c].sort());
   });
 });

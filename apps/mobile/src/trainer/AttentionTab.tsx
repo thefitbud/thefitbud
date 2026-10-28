@@ -26,18 +26,24 @@ import { Screen } from "../components/Screen";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { StatusChip } from "../components/StatusChip";
+import { SwipeActionRow } from "../components/SwipeActionRow";
 import { Snackbar } from "../components/Snackbar";
 import { initialsFromName } from "../components/m2";
 import {
+  acknowledgeAttentionItems,
   attentionIssueLine,
   attentionSectionModel,
   ATTENTION_SCREEN_TITLE,
   buildClientAttentionCards,
+  markReviewedToastMessage,
   needsYouRowModel,
   partitionAttentionGroups,
+  restoreAttentionItems,
   reviewedRowModel,
+  unreviewedItemsForRelationship,
   type AttentionLists,
   type ClientAttentionCard,
+  type ReviewedUndoItem,
 } from "./attentionCards";
 import { localDateInTimezone } from "../lib/dates";
 import { readTrainerCache, writeTrainerCache } from "./cache";
@@ -114,6 +120,7 @@ export function AttentionTab({
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [undoTarget, setUndoTarget] = useState<ReviewedUndoItem[] | null>(null);
 
   const applySnapshot = useCallback((snapshot: Snapshot) => {
     setLists(listsFromSnapshot(snapshot));
@@ -189,6 +196,71 @@ export function AttentionTab({
     reviewedCount: reviewedCards.length,
   });
 
+  async function acknowledgeCard(card: ClientAttentionCard) {
+    if (offline) return;
+    const targets = unreviewedItemsForRelationship(
+      lists.groups,
+      card.relationshipId,
+    );
+    if (targets.length === 0) return;
+    const prior = lists;
+    const next = partitionAttentionGroups(
+      acknowledgeAttentionItems(
+        lists.groups,
+        targets.map((item) => item.id),
+      ),
+    );
+    setLists(next);
+    setUndoTarget(targets);
+    setToast(
+      markReviewedToastMessage(card.traineeDisplayName, next.needsYou.length),
+    );
+    try {
+      for (const target of targets) {
+        await api.acknowledgeException(target.id, {}, createIdempotencyKey());
+      }
+    } catch (err) {
+      setLists(prior);
+      setUndoTarget(null);
+      setToast(null);
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Couldn't load. Pull to try again.",
+      );
+    }
+  }
+
+  async function undoAcknowledge() {
+    if (!undoTarget || offline) return;
+    const prior = lists;
+    const targets = undoTarget;
+    const next = partitionAttentionGroups(
+      restoreAttentionItems(lists.groups, targets),
+    );
+    setLists(next);
+    setUndoTarget(null);
+    setToast(null);
+    try {
+      for (const target of targets) {
+        await api.undoExceptionAcknowledge(target.id, createIdempotencyKey());
+      }
+    } catch (err) {
+      setLists(prior);
+      setUndoTarget(targets);
+      const name =
+        prior.groups.find((group) =>
+          group.items.some((item) => item.id === targets[0]?.id),
+        )?.traineeDisplayName ?? "Client";
+      setToast(markReviewedToastMessage(name, prior.needsYou.length));
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Couldn't load. Pull to try again.",
+      );
+    }
+  }
+
   async function answerAsk(ask: CoachAsk) {
     if (offline) return;
     try {
@@ -210,6 +282,8 @@ export function AttentionTab({
     }
   }
 
+  const markReviewedToast = undoTarget != null && toast != null;
+
   return (
     <Screen
       title={ATTENTION_SCREEN_TITLE}
@@ -221,6 +295,26 @@ export function AttentionTab({
         void refreshSession?.();
         void load().finally(() => setRefreshing(false));
       }}
+      footerVariant={toast ? "toast" : "bar"}
+      footer={
+        toast ? (
+          <Snackbar
+            message={toast}
+            leadingCheck={markReviewedToast}
+            actionLabel={undoTarget ? "Undo" : undefined}
+            onAction={
+              undoTarget
+                ? () => {
+                    void undoAcknowledge();
+                  }
+                : undefined
+            }
+            onDismiss={
+              markReviewedToast ? undefined : () => setToast(null)
+            }
+          />
+        ) : undefined
+      }
     >
       <Text style={styles.eyebrow}>{sections.subtitle}</Text>
       <Text style={styles.screenTitle} accessibilityRole="header">
@@ -293,7 +387,12 @@ export function AttentionTab({
                 issue: attentionIssueLine(items),
               });
               return (
-                <View key={card.relationshipId}>
+                <SwipeActionRow
+                  key={card.relationshipId}
+                  onMarkReviewed={() => {
+                    if (!offline) void acknowledgeCard(card);
+                  }}
+                >
                   {index > 0 ? <View style={styles.divider} /> : null}
                   <NeedsYouRow
                     card={card}
@@ -301,7 +400,7 @@ export function AttentionTab({
                     offline={offline}
                     onPress={() => onReviewException(card.primary.id)}
                   />
-                </View>
+                </SwipeActionRow>
               );
             })}
           </View>
@@ -388,9 +487,6 @@ export function AttentionTab({
           ))
         : null}
 
-      {toast ? (
-        <Snackbar message={toast} onDismiss={() => setToast(null)} />
-      ) : null}
     </Screen>
   );
 }
