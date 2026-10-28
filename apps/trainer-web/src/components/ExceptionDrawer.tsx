@@ -40,24 +40,19 @@ const VIEWER_TZ =
 
 /**
  * Close-path label for a resolved exception.
- * coaching_ended matches frame 41 ("Closed when coaching ended").
- * auto_resolve keeps a minimal string only — there is no locked mock for
- * that path; mock PASS for auto_resolve waits on a locked frame / Firoz
- * exception. Do not invent richer auto_resolve UI here.
+ * Locked frames only: trainer/null → "Resolved by you" (02/132);
+ * coaching_ended → "Closed when coaching ended" (41).
+ * Firoz product lock (28 Oct 2026): there is no auto_resolve UI. Legacy
+ * `auto_resolve` values fail closed to the trainer-readable path.
  */
 export function resolvedCloseLabel(
   closedReason: ExceptionClosedReason | null,
 ): string {
-  switch (closedReason) {
-    case "coaching_ended":
-      return "Closed when coaching ended";
-    case "auto_resolve":
-      // Minimal label only — no mock for auto_resolve (await locked frame).
-      return "Cleared automatically";
-    case "trainer":
-    default:
-      return "Resolved by you";
+  if (closedReason === "coaching_ended") {
+    return "Closed when coaching ended";
   }
+  // trainer | null | legacy auto_resolve → trainer path (no system-clear UI)
+  return "Resolved by you";
 }
 
 export function outcomeChipLabel(outcomeId: string | null | undefined): string | null {
@@ -120,7 +115,9 @@ export function trainerResolveTimelineText(opts: {
 function isTrainerClose(
   closedReason: ExceptionClosedReason | null,
 ): boolean {
-  return closedReason === "trainer" || closedReason === null;
+  // coaching_ended is the only non-trainer close with a locked frame.
+  // Legacy auto_resolve fails closed to the trainer path (no system-clear UI).
+  return closedReason !== "coaching_ended";
 }
 
 function detailString(
