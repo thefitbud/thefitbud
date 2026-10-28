@@ -319,6 +319,12 @@ export {
   sentenceCaseEnum,
   type LabelNamespace,
 } from "./labels.js";
+export {
+  clientDisplayLabel,
+  isTrainerClientNotificationType,
+  trainerNotificationCopy,
+  type TrainerClientNotificationType,
+} from "./notification-copy.js";
 export { routeForLinkKind, type LinkKind } from "./links.js";
 export { canLog, type LogDecision } from "./late-logging.js";
 export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";
