@@ -580,6 +580,7 @@ export function AttentionTab({
 
       <ReviewSheet
         visible={reviewSheet != null && reviewItems.length > 0}
+        relationshipId={reviewSheet?.relationshipId ?? null}
         traineeDisplayName={reviewSheet?.traineeDisplayName ?? ""}
         items={reviewItems}
         index={safeReviewIndex}

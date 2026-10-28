@@ -1,7 +1,13 @@
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
-import type { AttentionGroupsResponse } from "@fitbud/contracts";
-import { formatPersonName, labelFor } from "@fitbud/core";
+import type {
+  AttentionGroupsResponse,
+  ExceptionDetail,
+  MealAssignment,
+  WorkoutAssignment,
+} from "@fitbud/contracts";
+import { formatPersonName } from "@fitbud/core";
 import {
   colors,
   fontFamilyMedium,
@@ -10,26 +16,41 @@ import {
   semanticColors,
   spacing,
 } from "@fitbud/ui-mobile";
+import { useAuth } from "../auth/AuthProvider";
 import { BottomSheet } from "../components/BottomSheet";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusChip";
 import { Text } from "../components/Text";
 import { initialsFromName } from "../components/m2";
+import { plannedRowsFromAssignment } from "../lib/plannedMealItems";
 import { formatAttentionAge } from "./attentionCards";
+import {
+  buildReviewSheetCardModel,
+  coachingWeekNumber,
+  reviewSheetCardTitle,
+  reviewSheetClientSubtitle,
+  type ReviewSheetCardModel,
+} from "./reviewSheetContent";
 import {
   canGoNextReviewSheet,
   canGoPrevReviewSheet,
   reviewSheetDashStates,
   reviewSheetItemLabel,
-  reviewSheetOpenItemsLine,
   type ReviewSheetDashState,
 } from "./reviewSheetNav";
 
 type AttentionGroupItem =
   AttentionGroupsResponse["groups"][number]["items"][number];
 
+type ClientMeta = {
+  goalShort: string | null;
+  weekNumber: number | null;
+  timeZone: string | null;
+};
+
 type Props = {
   visible: boolean;
+  relationshipId: string | null;
   traineeDisplayName: string;
   items: ReadonlyArray<AttentionGroupItem>;
   index: number;
@@ -45,6 +66,7 @@ type Props = {
 
 export function ReviewSheet({
   visible,
+  relationshipId,
   traineeDisplayName,
   items,
   index,
@@ -56,6 +78,7 @@ export function ReviewSheet({
   onNudge,
   onResolve,
 }: Props) {
+  const { api } = useAuth();
   const total = items.length;
   const item = items[index] ?? null;
   const name = formatPersonName(traineeDisplayName);
@@ -67,6 +90,119 @@ export function ReviewSheet({
   const unreviewed =
     item?.status === "detected" || item?.status === "active";
 
+  const [clientMeta, setClientMeta] = useState<ClientMeta>({
+    goalShort: null,
+    weekNumber: null,
+    timeZone: null,
+  });
+  const [card, setCard] = useState<ReviewSheetCardModel | null>(null);
+  const [cardLoading, setCardLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !relationshipId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const workspace = await api.getClientWorkspace(relationshipId);
+        if (cancelled) return;
+        setClientMeta({
+          goalShort: workspace.header.goalShort ?? null,
+          weekNumber: coachingWeekNumber(workspace.header.startedAt),
+          timeZone: workspace.header.traineeTimezone ?? null,
+        });
+      } catch {
+        if (!cancelled) {
+          setClientMeta({ goalShort: null, weekNumber: null, timeZone: null });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api, relationshipId, visible]);
+
+  useEffect(() => {
+    if (!visible || !item) {
+      setCard(null);
+      return;
+    }
+    let cancelled = false;
+    setCardLoading(true);
+    void (async () => {
+      let detail: ExceptionDetail | null = null;
+      let workout: WorkoutAssignment | null = null;
+      let meal: MealAssignment | null = null;
+      try {
+        detail = await api.getException(item.id);
+      } catch {
+        detail = null;
+      }
+      if (detail?.sourceEntityType === "workout_assignment") {
+        try {
+          workout = await api.getWorkoutAssignment(detail.sourceEntityId);
+        } catch {
+          workout = null;
+        }
+      } else if (detail?.sourceEntityType === "meal_assignment") {
+        try {
+          meal = await api.getMealAssignment(detail.sourceEntityId);
+        } catch {
+          meal = null;
+        }
+      }
+      if (cancelled) return;
+      if (!detail) {
+        const localDate =
+          typeof item.details?.localDate === "string"
+            ? item.details.localDate
+            : null;
+        setCard({
+          title: reviewSheetCardTitle({
+            type: item.type,
+            localDate,
+            summary: item.summary,
+          }),
+          body: null,
+          planned: null,
+          logged: "Nothing logged",
+          reminder: null,
+          localDate,
+          severity: item.severity,
+          ageMinutes: item.ageMinutes,
+        });
+        setCardLoading(false);
+        return;
+      }
+      const mealKcalSum = meal
+        ? plannedRowsFromAssignment(meal).reduce(
+            (sum, row) => sum + (row.kcalPreview ?? 0),
+            0,
+          )
+        : 0;
+      const mealKcal = mealKcalSum > 0 ? mealKcalSum : null;
+      setCard(
+        buildReviewSheetCardModel({
+          detail,
+          ageMinutes: item.ageMinutes,
+          workout,
+          meal,
+          mealKcal,
+          timeZone: clientMeta.timeZone ?? undefined,
+        }),
+      );
+      setCardLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api, clientMeta.timeZone, item, relationshipId, visible]);
+
+  const subtitle = reviewSheetClientSubtitle({
+    goalShort: clientMeta.goalShort,
+    weekNumber: clientMeta.weekNumber,
+    openCount: total,
+  });
+
   return (
     <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
       <View style={styles.header}>
@@ -76,9 +212,7 @@ export function ReviewSheet({
           </View>
           <View style={styles.identityText}>
             <Text style={styles.name}>{name}</Text>
-            <Text style={styles.subtitle}>
-              {reviewSheetOpenItemsLine(total)}
-            </Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
         </View>
         <View style={styles.stepper} accessibilityLabel={`Item ${label}`}>
@@ -133,18 +267,24 @@ export function ReviewSheet({
         ))}
       </View>
 
-      {item ? (
+      {item && card ? (
         <View style={styles.card}>
           <View style={styles.cardMeta}>
-            <StatusChip kind="severity" value={item.severity} />
-            <Text style={styles.age}>{formatAttentionAge(item.ageMinutes)}</Text>
+            <StatusChip kind="severity" value={card.severity} />
+            <Text style={styles.age}>
+              {formatAttentionAge(card.ageMinutes)}
+            </Text>
           </View>
-          <Text style={styles.summary}>{item.summary}</Text>
-          <Text style={styles.detail}>
-            {labelFor("exception_status", item.status)} ·{" "}
-            {labelFor("exception_type", item.type)}
-          </Text>
+          <Text style={styles.summary}>{card.title}</Text>
+          {card.body ? <Text style={styles.body}>{card.body}</Text> : null}
+          <View style={styles.kv}>
+            <KvRow label="Planned" value={card.planned ?? "—"} />
+            <KvRow label="Logged" value={card.logged} />
+            <KvRow label="Reminder" value={card.reminder ?? "—"} />
+          </View>
         </View>
+      ) : item && cardLoading ? (
+        <Text style={styles.empty}>Loading item…</Text>
       ) : (
         <Text style={styles.empty}>No open items to review.</Text>
       )}
@@ -187,6 +327,15 @@ export function ReviewSheet({
         </Text>
       ) : null}
     </BottomSheet>
+  );
+}
+
+function KvRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.kvRow}>
+      <Text style={styles.kvLabel}>{label}</Text>
+      <Text style={styles.kvValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -306,10 +455,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
-  detail: {
-    color: colors.midGrey,
+  body: {
+    color: colors.darkGrey,
+    fontFamily: fontFamilyMedium,
     fontSize: 13,
     lineHeight: 18,
+  },
+  kv: {
+    marginTop: spacing.xs,
+    gap: 6,
+  },
+  kvRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  kvLabel: {
+    width: 96,
+    color: colors.midGrey,
+    fontSize: 13,
+  },
+  kvValue: {
+    flex: 1,
+    color: colors.nearBlack,
+    fontSize: 13,
   },
   empty: {
     color: colors.midGrey,

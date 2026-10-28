@@ -88,7 +88,7 @@ export function reviewSheetIndexForItem(
   return found >= 0 ? found : 0;
 }
 
-/** Subtitle under the client name: `{N} open items`. */
+/** Open-items fragment of the frame 31 subtitle. Prefer `reviewSheetClientSubtitle`. */
 export function reviewSheetOpenItemsLine(count: number): string {
   return count === 1 ? "1 open item" : `${count} open items`;
 }
