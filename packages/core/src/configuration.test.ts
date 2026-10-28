@@ -7,6 +7,7 @@ import {
   canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
   hasGoalShort,
+  missingConfigurationSections,
   resolveConfigurationDraftExpectations,
 } from "./configuration.js";
 
@@ -39,12 +40,13 @@ describe("coaching configuration transitions", () => {
     expect(canSaveConfigurationDraft("superseded")).toBe(false);
   });
 
-  it("gates configure and activate transitions", () => {
+  it("allows activate from draft (and legacy configured)", () => {
     expect(canMarkConfigurationConfigured("draft")).toBe(true);
-    expect(canMarkConfigurationConfigured("configured")).toBe(false);
+    expect(canMarkConfigurationConfigured("configured")).toBe(true);
+    expect(canActivateConfiguration("draft")).toBe(true);
     expect(canActivateConfiguration("configured")).toBe(true);
-    expect(canActivateConfiguration("draft")).toBe(false);
     expect(canActivateConfiguration("active")).toBe(false);
+    expect(canActivateConfiguration("superseded")).toBe(false);
   });
 
   it("fills a new draft from the trainer-web defaults", () => {
@@ -84,5 +86,31 @@ describe("coaching configuration transitions", () => {
     expect(hasGoalShort("Build strength")).toBe(true);
     expect(hasGoalShort("  ")).toBe(false);
     expect(hasGoalShort(null)).toBe(false);
+  });
+
+  it("lists missing activate sections", () => {
+    expect(
+      missingConfigurationSections({
+        goalShort: null,
+        workout: null,
+        nutrition: null,
+        checkin: null,
+        tracking: null,
+      }),
+    ).toEqual(["goal", "expectations", "checkins", "tracking"]);
+
+    expect(
+      missingConfigurationSections({
+        goalShort: "Build strength",
+        ...COACHING_CONFIGURATION_DEFAULTS,
+      }),
+    ).toEqual([]);
+
+    expect(
+      missingConfigurationSections({
+        goalShort: "  ",
+        ...COACHING_CONFIGURATION_DEFAULTS,
+      }),
+    ).toEqual(["goal"]);
   });
 });

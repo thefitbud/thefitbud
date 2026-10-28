@@ -790,6 +790,17 @@ export class FitBudApiClient {
     );
   }
 
+  async discardConfigurationDraft(
+    relationshipId: string,
+  ): Promise<CoachingConfiguration | null> {
+    return this.request(
+      "DELETE",
+      `/configurations/relationships/${relationshipId}/draft`,
+      coachingConfigurationSchema.nullable(),
+      { auth: true },
+    );
+  }
+
   async listPlans(
     relationshipId: string,
     query?: {

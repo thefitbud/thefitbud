@@ -62,6 +62,14 @@ const optionalTrimmedText = (max: number) =>
       return value.length === 0 ? null : value;
     });
 
+export const configurationSectionIdSchema = z.enum([
+  "goal",
+  "expectations",
+  "checkins",
+  "tracking",
+]);
+export type ConfigurationSectionId = z.infer<typeof configurationSectionIdSchema>;
+
 export const coachingConfigurationSchema = z.object({
   id: uuidSchema,
   coachingRelationshipId: uuidSchema,
@@ -76,6 +84,11 @@ export const coachingConfigurationSchema = z.object({
   nutrition: nutritionExpectationsSchema,
   checkin: checkinScheduleExpectationsSchema,
   tracking: trackingRequirementsSchema,
+  /**
+   * Sections still required before Activate. Empty when the draft is ready
+   * (or when the row is already active / superseded).
+   */
+  missingSections: z.array(configurationSectionIdSchema).default([]),
   /** @deprecated Unused. Responses return null. The column stays for existing rows. */
   configuredAt: isoDateTimeSchema.nullable(),
   activatedAt: isoDateTimeSchema.nullable(),

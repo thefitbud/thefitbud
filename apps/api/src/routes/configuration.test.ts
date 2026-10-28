@@ -190,7 +190,7 @@ describe("coaching configuration", () => {
     expect(response.status).toBe(401);
   });
 
-  it("walks Draft → Configured → Active and rejects edits after activate", async () => {
+  it("walks Draft → Active directly and rejects edits after activate", async () => {
     const { trainerCookie, traineeToken, relationshipId } =
       await reachCoachingReady("c1");
 
@@ -222,12 +222,14 @@ describe("coaching configuration", () => {
         recordVersion: number;
         versionNumber: number;
         workout: { sessionsPerWeek: number };
+        missingSections: string[];
       };
     };
     expect(draftParsed.data.status).toBe("draft");
     expect(draftParsed.data.recordVersion).toBe(1);
     expect(draftParsed.data.versionNumber).toBe(1);
     expect(draftParsed.data.workout.sessionsPerWeek).toBe(4);
+    expect(draftParsed.data.missingSections).toEqual([]);
 
     const traineeRead = await app.request(
       `/configurations/relationships/${relationshipId}`,
@@ -240,6 +242,10 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(traineeRead.status).toBe(200);
+    const traineeBody = (await traineeRead.json()) as {
+      data: { missingSections: string[] };
+    };
+    expect(traineeBody.data.missingSections).toEqual([]);
 
     const configure = await app.request(
       `/configurations/relationships/${relationshipId}/configure`,
@@ -259,6 +265,7 @@ describe("coaching configuration", () => {
       data: { status: string; recordVersion: number; configuredAt: string | null };
     };
     expect(configured.data.status).toBe("draft");
+    expect(configured.data.recordVersion).toBe(1);
     expect(configured.data.configuredAt).toBeNull();
 
     const activate = await app.request(
@@ -276,9 +283,10 @@ describe("coaching configuration", () => {
     );
     expect(activate.status).toBe(200);
     const activated = (await activate.json()) as {
-      data: { status: string; recordVersion: number };
+      data: { status: string; recordVersion: number; missingSections: string[] };
     };
     expect(activated.data.status).toBe("active");
+    expect(activated.data.missingSections).toEqual([]);
 
     const locked = await app.request(
       `/configurations/relationships/${relationshipId}/draft`,
@@ -301,7 +309,7 @@ describe("coaching configuration", () => {
     expect(lockedBody.error.code).toBe("CONFIGURATION_NOT_EDITABLE");
   });
 
-  it("rejects configure and activate until a short goal is saved", async () => {
+  it("returns missingSections on GET and rejects activate until a short goal is saved", async () => {
     const { trainerCookie, relationshipId } = await reachCoachingReady("goal");
     const saved = await app.request(
       `/configurations/relationships/${relationshipId}/draft`,
@@ -320,7 +328,22 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(saved.status).toBe(201);
-    const draft = (await saved.json()) as { data: { recordVersion: number } };
+    const draft = (await saved.json()) as {
+      data: { recordVersion: number; missingSections: string[] };
+    };
+    expect(draft.data.missingSections).toEqual(["goal"]);
+
+    const get = await app.request(
+      `/configurations/relationships/${relationshipId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(get.status).toBe(200);
+    const getBody = (await get.json()) as {
+      data: { missingSections: string[] };
+    };
+    expect(getBody.data.missingSections).toEqual(["goal"]);
+
     const configure = await app.request(
       `/configurations/relationships/${relationshipId}/configure`,
       {
@@ -334,9 +357,33 @@ describe("coaching configuration", () => {
       },
       testEnv(),
     );
-    expect(configure.status).toBe(422);
-    const configureBody = (await configure.json()) as { error: { code: string } };
-    expect(configureBody.error.code).toBe("CONFIGURATION_INCOMPLETE");
+    expect(configure.status).toBe(200);
+    const configureBody = (await configure.json()) as {
+      data: { status: string; recordVersion: number; missingSections: string[] };
+    };
+    expect(configureBody.data.status).toBe("draft");
+    expect(configureBody.data.recordVersion).toBe(draft.data.recordVersion);
+    expect(configureBody.data.missingSections).toEqual(["goal"]);
+
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-missing-goal",
+        },
+        body: JSON.stringify({ expectedVersion: draft.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(422);
+    const activateBody = (await activate.json()) as {
+      error: { code: string; details: { missingSections: string[] } };
+    };
+    expect(activateBody.error.code).toBe("CONFIGURATION_INCOMPLETE");
+    expect(activateBody.error.details.missingSections).toEqual(["goal"]);
   });
 
   it("isolates configuration across trainers", async () => {
@@ -636,5 +683,276 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(presets.status).toBe(404);
+  });
+
+  it("rolls back activate on version conflict and keeps the previous active row", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("conflict");
+    const draft = await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(draftBody),
+      },
+      testEnv(),
+    );
+    expect(draft.status).toBe(201);
+    const first = (await draft.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-conflict-v1",
+        },
+        body: JSON.stringify({ expectedVersion: first.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(200);
+    const active = (await activate.json()) as {
+      data: { id: string; recordVersion: number; status: string };
+    };
+    expect(active.data.status).toBe("active");
+
+    const opened = await app.request(
+      `/configurations/relationships/${relationshipId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "versions-conflict-1",
+        },
+        body: JSON.stringify({ expectedVersion: active.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(opened.status).toBe(201);
+    const next = (await opened.json()) as {
+      data: { id: string; recordVersion: number; versionNumber: number };
+    };
+    expect(next.data.versionNumber).toBe(2);
+
+    const stale = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-stale-version",
+        },
+        body: JSON.stringify({ expectedVersion: 0 }),
+      },
+      testEnv(),
+    );
+    expect(stale.status).toBe(409);
+    const staleBody = (await stale.json()) as { error: { code: string } };
+    expect(staleBody.error.code).toBe("CONFIGURATION_VERSION_CONFLICT");
+
+    const after = await app.request(
+      `/configurations/relationships/${relationshipId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const afterBody = (await after.json()) as {
+      data: { id: string; status: string; versionNumber: number };
+    };
+    expect(afterBody.data.status).toBe("draft");
+    expect(afterBody.data.id).toBe(next.data.id);
+    expect(afterBody.data.versionNumber).toBe(2);
+  });
+
+  it("discards an open vN+1 draft and returns the active configuration", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("discard");
+    await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(draftBody),
+      },
+      testEnv(),
+    );
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-for-discard",
+        },
+        body: JSON.stringify({ expectedVersion: 1 }),
+      },
+      testEnv(),
+    );
+    const active = (await activate.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const opened = await app.request(
+      `/configurations/relationships/${relationshipId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "versions-for-discard",
+        },
+        body: JSON.stringify({ expectedVersion: active.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(opened.status).toBe(201);
+    const draft = (await opened.json()) as { data: { id: string } };
+    expect(draft.data.id).not.toBe(active.data.id);
+
+    const discarded = await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "DELETE",
+        headers: { Cookie: trainerCookie },
+      },
+      testEnv(),
+    );
+    expect(discarded.status).toBe(200);
+    const discardedBody = (await discarded.json()) as {
+      data: { id: string; status: string; versionNumber: number };
+    };
+    expect(discardedBody.data.id).toBe(active.data.id);
+    expect(discardedBody.data.status).toBe("active");
+    expect(discardedBody.data.versionNumber).toBe(1);
+  });
+
+  it("materialises assignments immediately after activate when a plan is published", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("schedule");
+    await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(draftBody),
+      },
+      testEnv(),
+    );
+
+    const plan = await app.request(
+      `/plans/relationships/${relationshipId}`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "plan-before-activate",
+        },
+        body: JSON.stringify({
+          title: "Foundation",
+          content: {
+            workoutDays: [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                order: 1,
+                name: "Day A",
+                weekday: 1,
+                exercises: [],
+              },
+            ],
+            mealPrescriptions: [
+              {
+                id: "22222222-2222-4222-8222-222222222222",
+                order: 1,
+                name: "Breakfast",
+                mealType: "breakfast",
+                applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+                localTime: "08:00",
+                scheduleHint: "Morning",
+                instructions: null,
+                photoRequired: false,
+              },
+            ],
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(plan.status).toBe(201);
+    const planBody = (await plan.json()) as {
+      data: {
+        plan: { id: string };
+        version: { id: string; recordVersion: number };
+      };
+    };
+    const published = await app.request(
+      `/plans/${planBody.data.plan.id}/versions/${planBody.data.version.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pub-before-activate",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: planBody.data.version.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(200);
+
+    const before = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=2020-01-01&toDate=2099-01-01`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const beforeBody = (await before.json()) as { data: { items: unknown[] } };
+    expect(beforeBody.data.items).toHaveLength(0);
+
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-with-plan",
+        },
+        body: JSON.stringify({ expectedVersion: 1 }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(200);
+
+    const workouts = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=2020-01-01&toDate=2099-01-01`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(workouts.status).toBe(200);
+    const workoutBody = (await workouts.json()) as { data: { items: unknown[] } };
+    expect(workoutBody.data.items.length).toBeGreaterThan(0);
+
+    const meals = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=2020-01-01&toDate=2099-01-01`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(meals.status).toBe(200);
+    const mealBody = (await meals.json()) as { data: { items: unknown[] } };
+    expect(mealBody.data.items.length).toBeGreaterThan(0);
   });
 });

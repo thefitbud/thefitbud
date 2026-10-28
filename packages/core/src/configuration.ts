@@ -32,6 +32,15 @@ export const COACHING_CONFIGURATION_DEFAULTS: {
   },
 };
 
+/** Required Activate sections (D12 / D17). */
+export const CONFIGURATION_SECTION_IDS = [
+  "goal",
+  "expectations",
+  "checkins",
+  "tracking",
+] as const;
+export type ConfigurationSectionId = (typeof CONFIGURATION_SECTION_IDS)[number];
+
 export function resolveConfigurationDraftExpectations(input: {
   workout?: WorkoutExpectations;
   nutrition?: NutritionExpectations;
@@ -77,28 +86,108 @@ export function canCreateConfigurationVersion(input: {
 /** Stored rows may still use the legacy configured value until Activate/Save changes. */
 type StoredCoachingConfigurationStatus = CoachingConfigurationStatus | "configured";
 
-/** Draft save is allowed before activation (draft or configured). */
+/** Draft save is allowed before activation (draft or legacy configured). */
 export function canSaveConfigurationDraft(
   status: StoredCoachingConfigurationStatus | null,
 ): boolean {
   return status === null || status === "draft" || status === "configured";
 }
 
-/** Draft → Configured when expectations are present. */
+/**
+ * @deprecated Configure is a no-op. Kept for older clients that still call it.
+ */
 export function canMarkConfigurationConfigured(
   status: StoredCoachingConfigurationStatus,
 ): boolean {
-  return status === "draft";
+  return status === "draft" || status === "configured";
 }
 
-/** Configured → Active. */
+/** Draft (or legacy configured) → Active. */
 export function canActivateConfiguration(
   status: StoredCoachingConfigurationStatus,
 ): boolean {
-  return status === "configured";
+  return status === "draft" || status === "configured";
 }
 
-/** Whether a short goal is acceptable for configure/activate. */
+/** Whether a short goal is acceptable for activate. */
 export function hasGoalShort(goalShort: string | null | undefined): boolean {
   return typeof goalShort === "string" && goalShort.trim().length > 0;
+}
+
+function hasValidWorkout(workout: WorkoutExpectations | null | undefined): boolean {
+  return (
+    !!workout &&
+    Number.isInteger(workout.sessionsPerWeek) &&
+    workout.sessionsPerWeek >= 1 &&
+    workout.sessionsPerWeek <= 14 &&
+    Number.isInteger(workout.completionWindowHours) &&
+    workout.completionWindowHours >= 1 &&
+    workout.completionWindowHours <= 72
+  );
+}
+
+function hasValidNutrition(
+  nutrition: NutritionExpectations | null | undefined,
+): boolean {
+  return (
+    !!nutrition &&
+    Number.isInteger(nutrition.mealsPerDay) &&
+    nutrition.mealsPerDay >= 1 &&
+    nutrition.mealsPerDay <= 8 &&
+    Number.isInteger(nutrition.confirmationWindowHours) &&
+    nutrition.confirmationWindowHours >= 1 &&
+    nutrition.confirmationWindowHours <= 48 &&
+    (nutrition.photoRequirement === "none" ||
+      nutrition.photoRequirement === "selected_meals" ||
+      nutrition.photoRequirement === "all_meals")
+  );
+}
+
+function hasValidCheckin(
+  checkin: CheckinScheduleExpectations | null | undefined,
+): boolean {
+  return (
+    !!checkin &&
+    (checkin.cadence === "weekly" ||
+      checkin.cadence === "biweekly" ||
+      checkin.cadence === "monthly") &&
+    Number.isInteger(checkin.dueWindowHours) &&
+    checkin.dueWindowHours >= 1 &&
+    checkin.dueWindowHours <= 168
+  );
+}
+
+function hasValidTracking(
+  tracking: TrackingRequirements | null | undefined,
+): boolean {
+  return (
+    !!tracking &&
+    typeof tracking.requireBodyWeight === "boolean" &&
+    typeof tracking.requireProgressPhotos === "boolean" &&
+    typeof tracking.requireSessionRpe === "boolean"
+  );
+}
+
+/** Sections still required before Activate (matches GET missingSections). */
+export function missingConfigurationSections(input: {
+  goalShort: string | null | undefined;
+  workout: WorkoutExpectations | null | undefined;
+  nutrition: NutritionExpectations | null | undefined;
+  checkin: CheckinScheduleExpectations | null | undefined;
+  tracking: TrackingRequirements | null | undefined;
+}): ConfigurationSectionId[] {
+  const missing: ConfigurationSectionId[] = [];
+  if (!hasGoalShort(input.goalShort)) {
+    missing.push("goal");
+  }
+  if (!hasValidWorkout(input.workout) || !hasValidNutrition(input.nutrition)) {
+    missing.push("expectations");
+  }
+  if (!hasValidCheckin(input.checkin)) {
+    missing.push("checkins");
+  }
+  if (!hasValidTracking(input.tracking)) {
+    missing.push("tracking");
+  }
+  return missing;
 }

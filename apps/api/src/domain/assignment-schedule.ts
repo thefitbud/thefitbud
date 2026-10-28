@@ -675,7 +675,8 @@ async function loadEffectiveVersion(db: Db, relationshipId: string) {
   return rows[0] ?? null;
 }
 
-async function replenishRelationship(
+/** Fill the rolling assignment horizon for one relationship (used after Activate). */
+export async function replenishRelationship(
   db: Db,
   relationshipId: string,
   traineeUserId: string,
