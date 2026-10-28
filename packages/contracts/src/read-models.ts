@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { exceptionSeveritySchema, exceptionStatusSchema, exceptionTypeSchema } from "./exception.js";
-import { uuidSchema } from "./identity.js";
+import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { localDateSchema } from "./workout.js";
 
 export const weekDayStateSchema = z.enum([
@@ -92,6 +92,8 @@ export const attentionGroupItemSchema = z.object({
   summary: z.string(),
   /** Optional exception details (e.g. localDate) for weekday-aware reason lines. */
   details: z.record(z.string(), z.unknown()).nullable().optional(),
+  /** When Mark reviewed happened, for the Reviewed row footer. */
+  acknowledgedAt: isoDateTimeSchema.nullable().optional(),
 });
 export type AttentionGroupItem = z.infer<typeof attentionGroupItemSchema>;
 

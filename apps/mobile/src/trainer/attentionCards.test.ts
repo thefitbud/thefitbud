@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { AttentionGroupsResponse } from "@fitbud/contracts";
 import {
   acknowledgeAttentionItem,
+  attentionSectionModel,
+  attentionSubtitle,
+  ATTENTION_SCREEN_TITLE,
   buildClientAttentionCards,
-  partialReviewLine,
+  formatAttentionAge,
+  needsYouRowModel,
+  openItemsLabel,
   partitionAttentionGroups,
   restoreAttentionItem,
-  reviewedStillOpenSummary,
+  reviewedProgressFooter,
+  reviewedRowModel,
 } from "./attentionCards";
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
@@ -93,7 +99,14 @@ describe("Needs you and Reviewed", () => {
     ]);
     expect(before.reviewed).toHaveLength(0);
     expect(before.groups[0]?.bucket).toBe("needs_you");
-    expect(partialReviewLine(before.groups[0]!.items)).toBeNull();
+    expect(needsYouRowModel({
+      items: before.needsYou[0]!.items,
+      issue: "Missed 2 workouts",
+    })).toMatchObject({
+      severityLabel: "Critical",
+      openLabel: "2 open",
+      trailing: "chevron",
+    });
 
     const partial = partitionAttentionGroups(
       acknowledgeAttentionItem(before.groups, first),
@@ -103,9 +116,7 @@ describe("Needs you and Reviewed", () => {
     expect(partial.needsYou[0]?.items.map((entry) => entry.id)).toEqual([
       second,
     ]);
-    expect(partialReviewLine(partial.groups[0]!.items)).toBe(
-      "Reviewed, still open · 1 of 2 reviewed",
-    );
+    expect(openItemsLabel(partial.needsYou[0]!.items.length)).toBeNull();
 
     const reviewed = partitionAttentionGroups(
       acknowledgeAttentionItem(partial.groups, second),
@@ -118,10 +129,22 @@ describe("Needs you and Reviewed", () => {
         (entry) => entry.status === "acknowledged",
       ),
     ).toBe(true);
-    expect(partialReviewLine(reviewed.groups[0]!.items)).toBeNull();
-    expect(reviewedStillOpenSummary(reviewed.reviewed.length)).toBe(
-      "1 reviewed item still open",
-    );
+    expect(
+      reviewedRowModel({
+        items: [
+          { status: "acknowledged", acknowledgedAt: "2026-10-17T04:30:00.000Z" },
+          { status: "active" },
+        ],
+        issue: "Lunch not logged",
+        timeZone: "Asia/Kolkata",
+      }),
+    ).toEqual({
+      issue: "Lunch not logged",
+      chip: "Reviewed, still open",
+      footer: "Reviewed Sat 17 Oct · 1 of 2 resolved",
+      trailing: "chevron",
+      expanded: true,
+    });
 
     const undone = partitionAttentionGroups(
       restoreAttentionItem(reviewed.groups, second, "active"),
@@ -133,9 +156,6 @@ describe("Needs you and Reviewed", () => {
         (entry) => entry.id === second && entry.status === "active",
       ),
     ).toBe(true);
-    expect(partialReviewLine(undone.groups[0]!.items)).toBe(
-      "Reviewed, still open · 1 of 2 reviewed",
-    );
   });
 
   it("does not keep a resolved-only client in either section", () => {
@@ -146,7 +166,54 @@ describe("Needs you and Reviewed", () => {
     expect(lists.reviewed).toHaveLength(0);
   });
 
-  it("pluralises the reviewed section summary", () => {
-    expect(reviewedStillOpenSummary(4)).toBe("4 reviewed items still open");
+  it("matches frame 05 section copy and keeps Reviewed expanded", () => {
+    expect(ATTENTION_SCREEN_TITLE).toBe("Needs you");
+    expect(attentionSubtitle("Sun 18 Oct")).toBe(
+      "Sun 18 Oct · most urgent first",
+    );
+    expect(
+      attentionSectionModel({
+        dateLabel: "Sun 18 Oct",
+        needsYouCount: 4,
+        reviewedCount: 2,
+      }),
+    ).toEqual({
+      title: "Needs you",
+      subtitle: "Sun 18 Oct · most urgent first",
+      needsYou: {
+        title: "Needs you",
+        count: 4,
+        hint: "Swipe left to mark reviewed",
+        layout: "list-card",
+      },
+      reviewed: {
+        title: "Reviewed",
+        count: 2,
+        hint: "Stay here until every item is resolved",
+        expanded: true,
+        layout: "list-card",
+      },
+    });
+    expect(
+      attentionSectionModel({
+        dateLabel: "Sun 18 Oct",
+        needsYouCount: 0,
+        reviewedCount: 0,
+      }).needsYou,
+    ).toBeNull();
+  });
+
+  it("uses today for same-day age and hides a single open count", () => {
+    expect(formatAttentionAge(30)).toBe("today");
+    expect(formatAttentionAge(5 * 24 * 60)).toBe("since 5 d");
+    expect(openItemsLabel(1)).toBeNull();
+    expect(openItemsLabel(3)).toBe("3 open");
+    expect(
+      reviewedProgressFooter({
+        when: "Sat 17 Oct",
+        acknowledged: 2,
+        open: 2,
+      }),
+    ).toBe("Reviewed Sat 17 Oct · 2 of 2 resolved");
   });
 });

@@ -86,6 +86,7 @@ type AttentionGroupDraft = {
     ageMinutes: number;
     summary: string;
     details: Record<string, unknown> | null;
+    acknowledgedAt: string | null;
   }>;
   itemCount: number;
   mostSevere: string;
@@ -249,6 +250,7 @@ exceptionRoutes.get(
             ageMinutes: number;
             summary: string;
             details: Record<string, unknown> | null;
+            acknowledgedAt: string | null;
           }>;
         }
       >();
@@ -273,6 +275,7 @@ exceptionRoutes.get(
           ageMinutes,
           summary: ex.summary,
           details: ex.details ?? null,
+          acknowledgedAt: ex.acknowledgedAt,
         });
         grouped.set(item.coachingRelationshipId, bucket);
       }

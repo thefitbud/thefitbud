@@ -1,5 +1,10 @@
 import type { AttentionGroupsResponse, ExceptionStatus } from "@fitbud/contracts";
-import { attentionReviewBucket, labelFor } from "@fitbud/core";
+import {
+  attentionReviewBucket,
+  formatCivilDate,
+  formatLocalDate,
+  labelFor,
+} from "@fitbud/core";
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
 type AttentionGroupItem = AttentionGroup["items"][number];
@@ -59,16 +64,9 @@ export function buildClientAttentionCards(
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-/** "since 5 d" — age on the attention card. */
+/** "since 5 d", or "today" when the item is still on the same day. */
 export function formatAttentionAge(ageMinutes: number): string {
-  if (ageMinutes < 60) {
-    const mins = Math.max(1, ageMinutes);
-    return `since ${mins} min`;
-  }
-  if (ageMinutes < 24 * 60) {
-    const hours = Math.max(1, Math.round(ageMinutes / 60));
-    return `since ${hours} h`;
-  }
+  if (ageMinutes < 24 * 60) return "today";
   const days = Math.max(1, Math.round(ageMinutes / (24 * 60)));
   return `since ${days} d`;
 }
@@ -262,14 +260,30 @@ export function attentionItemStatus(
   return null;
 }
 
-/**
- * Partial Mark reviewed while the client is still in Needs you.
- * Product label is "Reviewed, still open" (client chip). The count is
- * acknowledged open items, which stay open — they are not Resolved.
- */
-export function partialReviewLine(
+/** Locked frame 05. The tab bar and search/bell stay outside this screen. */
+export const ATTENTION_SCREEN_TITLE = "Needs you";
+export const NEEDS_YOU_SECTION_TITLE = "Needs you";
+export const NEEDS_YOU_SECTION_HINT = "Swipe left to mark reviewed";
+export const REVIEWED_SECTION_TITLE = "Reviewed";
+export const REVIEWED_SECTION_HINT = "Stay here until every item is resolved";
+
+export function attentionSubtitle(dateLabel: string): string {
+  return `${dateLabel} · most urgent first`;
+}
+
+/** Lavender count chip. Hidden when the client has a single open item. */
+export function openItemsLabel(count: number): string | null {
+  if (count <= 1) return null;
+  return `${count} open`;
+}
+
+export function reviewedStillOpenChip(): string {
+  return labelFor("client_chip", "reviewed_still_open");
+}
+
+export function openReviewCounts(
   items: ReadonlyArray<{ status: string }>,
-): string | null {
+): { acknowledged: number; open: number } {
   let open = 0;
   let acknowledged = 0;
   for (const item of items) {
@@ -279,13 +293,143 @@ export function partialReviewLine(
     open += 1;
     if (item.status === "acknowledged") acknowledged += 1;
   }
-  if (acknowledged === 0 || acknowledged >= open) return null;
-  return `${labelFor("client_chip", "reviewed_still_open")} · ${acknowledged} of ${open} reviewed`;
+  return { acknowledged, open };
 }
 
-/** Collapsed Reviewed section line from TW-04 / the Home mockup. */
-export function reviewedStillOpenSummary(count: number): string {
-  return count === 1
-    ? "1 reviewed item still open"
-    : `${count} reviewed items still open`;
+export function latestAcknowledgedAt(
+  items: ReadonlyArray<{ acknowledgedAt?: string | null }>,
+): string | null {
+  let latest: string | null = null;
+  for (const item of items) {
+    if (!item.acknowledgedAt) continue;
+    if (latest == null || item.acknowledgedAt > latest) latest = item.acknowledgedAt;
+  }
+  return latest;
+}
+
+/** "Sat 17 Oct" in the trainer's zone. Null when Mark reviewed has no timestamp. */
+export function reviewedWhenLabel(
+  acknowledgedAt: string | null | undefined,
+  timeZone: string,
+): string | null {
+  if (!acknowledgedAt) return null;
+  const instant = new Date(acknowledgedAt);
+  if (Number.isNaN(instant.getTime())) return null;
+  return formatCivilDate(formatLocalDate(instant, timeZone));
+}
+
+/** Frame 05 footer: "Reviewed Sat 17 Oct · 1 of 2 resolved". */
+export function reviewedProgressFooter(input: {
+  when: string | null;
+  acknowledged: number;
+  open: number;
+}): string {
+  const progress = `${input.acknowledged} of ${input.open} resolved`;
+  return input.when ? `Reviewed ${input.when} · ${progress}` : `Reviewed · ${progress}`;
+}
+
+export type NeedsYouRowModel = {
+  issue: string;
+  severityLabel: string;
+  openLabel: string | null;
+  age: string;
+  trailing: "chevron";
+};
+
+export function needsYouRowModel(input: {
+  items: AttentionGroupItem[];
+  issue: string;
+}): NeedsYouRowModel {
+  const primary = [...input.items].sort((a, b) => {
+    const sev = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
+    if (sev !== 0) return sev;
+    return b.ageMinutes - a.ageMinutes;
+  })[0];
+  return {
+    issue: input.issue,
+    severityLabel: labelFor("exception_severity", primary?.severity ?? "attention"),
+    openLabel: openItemsLabel(input.items.length),
+    age: formatAttentionAge(primary?.ageMinutes ?? 0),
+    trailing: "chevron",
+  };
+}
+
+export type ReviewedRowModel = {
+  issue: string;
+  chip: string;
+  footer: string;
+  trailing: "chevron";
+  expanded: true;
+};
+
+export function reviewedRowModel(input: {
+  items: ReadonlyArray<{ status: string; acknowledgedAt?: string | null }>;
+  issue: string;
+  timeZone: string;
+}): ReviewedRowModel {
+  const counts = openReviewCounts(input.items);
+  const when = reviewedWhenLabel(
+    latestAcknowledgedAt(input.items),
+    input.timeZone,
+  );
+  return {
+    issue: input.issue,
+    chip: reviewedStillOpenChip(),
+    footer: reviewedProgressFooter({
+      when,
+      acknowledged: counts.acknowledged,
+      open: counts.open,
+    }),
+    trailing: "chevron",
+    expanded: true,
+  };
+}
+
+export type AttentionSectionModel = {
+  title: typeof ATTENTION_SCREEN_TITLE;
+  subtitle: string;
+  needsYou: {
+    title: typeof NEEDS_YOU_SECTION_TITLE;
+    count: number;
+    hint: typeof NEEDS_YOU_SECTION_HINT;
+    layout: "list-card";
+  } | null;
+  reviewed: {
+    title: typeof REVIEWED_SECTION_TITLE;
+    count: number;
+    hint: typeof REVIEWED_SECTION_HINT;
+    expanded: true;
+    layout: "list-card";
+  } | null;
+};
+
+/** Section chrome for frame 05. Empty lists stay hidden. Reviewed is expanded. */
+export function attentionSectionModel(input: {
+  dateLabel: string;
+  needsYouCount: number;
+  reviewedCount: number;
+}): AttentionSectionModel {
+  return {
+    title: ATTENTION_SCREEN_TITLE,
+    subtitle: attentionSubtitle(input.dateLabel),
+    needsYou:
+      input.needsYouCount > 0
+        ? {
+            title: NEEDS_YOU_SECTION_TITLE,
+            count: input.needsYouCount,
+            hint: NEEDS_YOU_SECTION_HINT,
+            layout: "list-card",
+          }
+        : null,
+    reviewed:
+      input.reviewedCount > 0
+        ? {
+            title: REVIEWED_SECTION_TITLE,
+            count: input.reviewedCount,
+            hint: REVIEWED_SECTION_HINT,
+            expanded: true,
+            layout: "list-card",
+          }
+        : null,
+  };
 }
