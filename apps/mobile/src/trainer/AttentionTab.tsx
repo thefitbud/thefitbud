@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { ChevronRight, Ellipsis, CircleCheck } from "lucide-react-native";
+import { Check, ChevronRight, CircleCheck } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -26,28 +26,26 @@ import { Screen } from "../components/Screen";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { StatusChip } from "../components/StatusChip";
-import { SwipeActionRow } from "../components/SwipeActionRow";
 import { Snackbar } from "../components/Snackbar";
 import { initialsFromName } from "../components/m2";
 import {
-  acknowledgeAttentionItem,
   attentionIssueLine,
-  attentionItemStatus,
+  attentionSectionModel,
+  ATTENTION_SCREEN_TITLE,
   buildClientAttentionCards,
-  formatAttentionAge,
-  partialReviewLine,
+  needsYouRowModel,
   partitionAttentionGroups,
-  restoreAttentionItem,
-  reviewedStillOpenSummary,
+  reviewedRowModel,
   type AttentionLists,
   type ClientAttentionCard,
 } from "./attentionCards";
 import { localDateInTimezone } from "../lib/dates";
-import { openContextualWhatsApp } from "./whatsapp";
 import { readTrainerCache, writeTrainerCache } from "./cache";
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
 type Segment = "needs_you" | "asked" | "checkins";
+
+const TRAINER_ZONE = "Asia/Kolkata";
 
 type Props = {
   onReviewException: (exceptionId: string) => void;
@@ -66,6 +64,15 @@ type Snapshot = {
 
 const EMPTY_LISTS: AttentionLists = { groups: [], needsYou: [], reviewed: [] };
 
+const AVATARS = [
+  { backgroundColor: "#FDECEF", color: "#A3243F" },
+  { backgroundColor: "#E3EEFD", color: "#1E4B9E" },
+  { backgroundColor: "#EAF5E4", color: "#2F6B1E" },
+  { backgroundColor: "#FFF1DB", color: "#8A4B06" },
+  { backgroundColor: "#E9E5FF", color: "#3B23A8" },
+  { backgroundColor: "#F1E8FA", color: "#6B2A93" },
+] as const;
+
 function listsFromSnapshot(snapshot: Snapshot): AttentionLists {
   if (snapshot.needsYou && snapshot.reviewed) {
     return {
@@ -75,6 +82,11 @@ function listsFromSnapshot(snapshot: Snapshot): AttentionLists {
     };
   }
   return partitionAttentionGroups(snapshot.groups);
+}
+
+function avatarTone(name: string): (typeof AVATARS)[number] {
+  const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return AVATARS[code % AVATARS.length] ?? AVATARS[0];
 }
 
 const CACHE_KEY = "trainer:attention";
@@ -90,7 +102,6 @@ function isOfflineError(err: unknown): boolean {
 export function AttentionTab({
   onReviewException,
   onReviewCheckin,
-  onOpenClients,
 }: Props) {
   const { api, relationships, refreshSession } = useAuth();
   const s1 = stage1Api(api);
@@ -103,12 +114,6 @@ export function AttentionTab({
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [undoTarget, setUndoTarget] = useState<{
-    id: string;
-    status: "detected" | "active";
-  } | null>(null);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [reviewedOpen, setReviewedOpen] = useState(false);
 
   const applySnapshot = useCallback((snapshot: Snapshot) => {
     setLists(listsFromSnapshot(snapshot));
@@ -177,66 +182,12 @@ export function AttentionTab({
   );
 
   const offline = offlineAt != null;
-
-  async function acknowledgeCard(card: ClientAttentionCard) {
-    if (offline) return;
-    const id = card.primary.id;
-    const previous = attentionItemStatus(lists.groups, id);
-    if (previous !== "detected" && previous !== "active") return;
-    const prior = lists;
-    setLists(
-      partitionAttentionGroups(acknowledgeAttentionItem(lists.groups, id)),
-    );
-    setUndoTarget({ id, status: previous });
-    setToast("Marked reviewed");
-    try {
-      await api.acknowledgeException(id, {}, createIdempotencyKey());
-    } catch (err) {
-      setLists(prior);
-      setUndoTarget(null);
-      setToast(null);
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load. Pull to try again.",
-      );
-    }
-  }
-
-  async function undoAcknowledge() {
-    if (!undoTarget || offline) return;
-    const prior = lists;
-    const target = undoTarget;
-    setLists(
-      partitionAttentionGroups(
-        restoreAttentionItem(lists.groups, target.id, target.status),
-      ),
-    );
-    setUndoTarget(null);
-    setToast(null);
-    try {
-      await api.undoExceptionAcknowledge(target.id, createIdempotencyKey());
-    } catch (err) {
-      setLists(prior);
-      setUndoTarget(target);
-      setToast("Marked reviewed");
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load. Pull to try again.",
-      );
-    }
-  }
-
-  async function nudge(card: ClientAttentionCard) {
-    if (offline) return;
-    const first = formatPersonName(card.traineeDisplayName).split(" ")[0];
-    await openContextualWhatsApp({
-      phoneE164: card.clientWhatsappE164,
-      draftText: `Hi ${first}, `,
-    });
-    setToast("Opened WhatsApp");
-  }
+  const todayLabel = formatCivilDate(localDateInTimezone(TRAINER_ZONE));
+  const sections = attentionSectionModel({
+    dateLabel: todayLabel,
+    needsYouCount: needsYouCards.length,
+    reviewedCount: reviewedCards.length,
+  });
 
   async function answerAsk(ask: CoachAsk) {
     if (offline) return;
@@ -259,12 +210,10 @@ export function AttentionTab({
     }
   }
 
-  const todayLabel = formatCivilDate(localDateInTimezone("Asia/Kolkata"));
-
   return (
     <Screen
-      title="Attention"
-      subtitle={`${todayLabel} · sorted by severity, then age`}
+      title={ATTENTION_SCREEN_TITLE}
+      showHeader={false}
       chrome="app"
       refreshing={refreshing}
       onRefresh={() => {
@@ -273,11 +222,16 @@ export function AttentionTab({
         void load().finally(() => setRefreshing(false));
       }}
     >
+      <Text style={styles.eyebrow}>{sections.subtitle}</Text>
+      <Text style={styles.screenTitle} accessibilityRole="header">
+        {sections.title}
+      </Text>
+
       {offline ? (
         <View style={styles.offline}>
           <Text style={styles.offlineText}>
             You're offline. Showing the last update from{" "}
-            {formatClockTime(offlineAt!, "Asia/Kolkata")}.
+            {formatClockTime(offlineAt!, TRAINER_ZONE)}.
           </Text>
         </View>
       ) : null}
@@ -311,141 +265,95 @@ export function AttentionTab({
 
       {segment === "needs_you" &&
       !loading &&
-      needsYouCards.length === 0 &&
-      reviewedCards.length === 0 ? (
+      !sections.needsYou &&
+      !sections.reviewed ? (
         <View style={styles.empty}>
           <CircleCheck color={colors.indigo} size={28} />
           <Text style={styles.emptyTitle}>All caught up.</Text>
         </View>
       ) : null}
 
-      {segment === "needs_you" && needsYouCards.length > 0 ? (
-        <View accessibilityLabel="Needs you">
-          {reviewedCards.length > 0 ? (
-            <View style={styles.sectionLabelRow} accessibilityRole="header">
-              <Text style={styles.reviewedTitle}>Needs you</Text>
-              <View style={styles.countBadge}>
-                <Text style={styles.countText}>{needsYouCards.length}</Text>
-              </View>
+      {segment === "needs_you" && sections.needsYou ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHead} accessibilityRole="header">
+            <Text style={styles.sectionTitle}>{sections.needsYou.title}</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{sections.needsYou.count}</Text>
             </View>
-          ) : null}
-          {needsYouCards.map((card) => {
-            const full = lists.groups.find(
-              (group) => group.relationshipId === card.relationshipId,
-            );
-            const projected = lists.needsYou.find(
-              (group) => group.relationshipId === card.relationshipId,
-            );
-            return (
-              <SwipeActionRow
-                key={card.relationshipId}
-                onMarkReviewed={() => {
-                  if (!offline) void acknowledgeCard(card);
-                }}
-                onNudge={() => {
-                  if (!offline) void nudge(card);
-                }}
-              >
-                <AttentionClientView
-                  card={card}
-                  issue={attentionIssueLine(projected?.items ?? [card.primary])}
-                  progress={partialReviewLine(full?.items ?? [])}
-                  actionLabel="Review"
-                  offline={offline}
-                  menuOpen={menuFor === card.relationshipId}
-                  showMarkReviewed
-                  onToggleMenu={() =>
-                    setMenuFor((current) =>
-                      current === card.relationshipId
-                        ? null
-                        : card.relationshipId,
-                    )
-                  }
-                  onAction={() => onReviewException(card.primary.id)}
-                  onMarkReviewed={() => {
-                    setMenuFor(null);
-                    void acknowledgeCard(card);
-                  }}
-                  onNudge={() => {
-                    setMenuFor(null);
-                    void nudge(card);
-                  }}
-                  onOpenClient={() => {
-                    setMenuFor(null);
-                    onOpenClients();
-                  }}
-                />
-              </SwipeActionRow>
-            );
-          })}
+            <Text style={styles.sectionHint}>{sections.needsYou.hint}</Text>
+          </View>
+          <View style={styles.listCard}>
+            {needsYouCards.map((card, index) => {
+              const projected = lists.needsYou.find(
+                (group) => group.relationshipId === card.relationshipId,
+              );
+              const items = projected?.items ?? [card.primary];
+              const row = needsYouRowModel({
+                items,
+                issue: attentionIssueLine(items),
+              });
+              return (
+                <View key={card.relationshipId}>
+                  {index > 0 ? <View style={styles.divider} /> : null}
+                  <NeedsYouRow
+                    card={card}
+                    row={row}
+                    offline={offline}
+                    onPress={() => onReviewException(card.primary.id)}
+                  />
+                </View>
+              );
+            })}
+          </View>
         </View>
       ) : null}
 
-      {segment === "needs_you" && reviewedCards.length > 0 ? (
-        <View style={styles.reviewedSection}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: reviewedOpen }}
-            accessibilityLabel={`${labelFor("client_chip", "reviewed_still_open")}, ${reviewedStillOpenSummary(reviewedCards.length)}`}
-            onPress={() => setReviewedOpen((open) => !open)}
-            style={styles.reviewedHead}
-          >
-            <ChevronRight
-              color={colors.midGrey}
-              size={18}
-              style={reviewedOpen ? styles.chevronOpen : undefined}
-            />
-            <Text style={styles.reviewedTitle}>
-              {labelFor("client_chip", "reviewed_still_open")}
-            </Text>
+      {segment === "needs_you" && sections.reviewed ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHead} accessibilityRole="header">
+            <Text style={styles.sectionTitle}>{sections.reviewed.title}</Text>
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{reviewedCards.length}</Text>
+              <Text style={styles.countText}>{sections.reviewed.count}</Text>
             </View>
-            <Text style={styles.reviewedSummary}>
-              {reviewedStillOpenSummary(reviewedCards.length)}
-            </Text>
-          </Pressable>
-          {reviewedOpen
-            ? reviewedCards.map((card) => {
-                const projected = lists.reviewed.find(
+            <Text style={styles.sectionHint}>{sections.reviewed.hint}</Text>
+          </View>
+          <View style={styles.listCard}>
+            {reviewedCards.map((card, index) => {
+              const full =
+                lists.groups.find(
+                  (group) => group.relationshipId === card.relationshipId,
+                ) ??
+                lists.reviewed.find(
                   (group) => group.relationshipId === card.relationshipId,
                 );
-                return (
-                  <AttentionClientView
-                    key={card.relationshipId}
+              const projected = lists.reviewed.find(
+                (group) => group.relationshipId === card.relationshipId,
+              );
+              const items = full?.items ?? [card.primary];
+              const row = reviewedRowModel({
+                items,
+                issue: attentionIssueLine(projected?.items ?? items),
+                timeZone: TRAINER_ZONE,
+              });
+              return (
+                <View key={card.relationshipId}>
+                  {index > 0 ? <View style={styles.divider} /> : null}
+                  <ReviewedRow
                     card={card}
-                    issue={attentionIssueLine(projected?.items ?? [card.primary])}
-                    progress={null}
-                    actionLabel="Resolve"
+                    row={row}
                     offline={offline}
-                    menuOpen={menuFor === card.relationshipId}
-                    showMarkReviewed={false}
-                    onToggleMenu={() =>
-                      setMenuFor((current) =>
-                        current === card.relationshipId
-                          ? null
-                          : card.relationshipId,
-                      )
-                    }
-                    onAction={() => onReviewException(card.primary.id)}
-                    onNudge={() => {
-                      setMenuFor(null);
-                      void nudge(card);
-                    }}
-                    onOpenClient={() => {
-                      setMenuFor(null);
-                      onOpenClients();
-                    }}
+                    onPress={() => onReviewException(card.primary.id)}
                   />
-                );
-              })
-            : null}
+                </View>
+              );
+            })}
+          </View>
         </View>
       ) : null}
 
       {segment === "asked"
         ? asks.map((ask) => (
-            <View key={ask.id} style={styles.card}>
+            <View key={ask.id} style={styles.askedCard}>
               <Text style={styles.name}>
                 {ask.itemLabel?.trim() || labelFor("coach_ask_topic", ask.topic)}
               </Text>
@@ -468,7 +376,7 @@ export function AttentionTab({
               key={item.checkin.id}
               accessibilityRole="button"
               onPress={() => onReviewCheckin(item)}
-              style={styles.card}
+              style={styles.askedCard}
             >
               <Text style={styles.name}>
                 {labelFor("checkin_status", item.checkin.status)}
@@ -481,98 +389,91 @@ export function AttentionTab({
         : null}
 
       {toast ? (
-        <Snackbar
-          message={toast}
-          actionLabel={undoTarget ? "Undo" : undefined}
-          onAction={
-            undoTarget
-              ? () => {
-                  void undoAcknowledge();
-                }
-              : undefined
-          }
-          onDismiss={() => setToast(null)}
-        />
+        <Snackbar message={toast} onDismiss={() => setToast(null)} />
       ) : null}
     </Screen>
   );
 }
 
-function AttentionClientView({
+function NeedsYouRow({
   card,
-  issue,
-  progress,
-  actionLabel,
+  row,
   offline,
-  menuOpen,
-  showMarkReviewed,
-  onToggleMenu,
-  onAction,
-  onMarkReviewed,
-  onNudge,
-  onOpenClient,
+  onPress,
 }: {
   card: ClientAttentionCard;
-  issue: string;
-  progress: string | null;
-  actionLabel: string;
+  row: ReturnType<typeof needsYouRowModel>;
   offline: boolean;
-  menuOpen: boolean;
-  showMarkReviewed: boolean;
-  onToggleMenu: () => void;
-  onAction: () => void;
-  onMarkReviewed?: () => void;
-  onNudge: () => void;
-  onOpenClient: () => void;
+  onPress: () => void;
 }) {
+  const tone = avatarTone(card.traineeDisplayName);
   return (
-    <View style={styles.card}>
-      <View style={styles.cardTop}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {initialsFromName(card.traineeDisplayName)}
-          </Text>
-        </View>
-        <View style={styles.nameBlock}>
-          <Text style={styles.name}>
-            {formatPersonName(card.traineeDisplayName)}
-          </Text>
-          <Text style={styles.since}>
-            {formatAttentionAge(card.primary.ageMinutes)}
-          </Text>
-        </View>
-        {showMarkReviewed ? (
-          <StatusChip kind="severity" value={card.primary.severity} />
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="More"
-          style={styles.more}
-          onPress={onToggleMenu}
-        >
-          <Ellipsis color={colors.deepNavy} size={18} />
-        </Pressable>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${formatPersonName(card.traineeDisplayName)}, ${row.issue}`}
+      disabled={offline}
+      onPress={onPress}
+      style={[styles.row, offline ? styles.disabled : null]}
+    >
+      <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
+        <Text style={[styles.avatarText, { color: tone.color }]}>
+          {initialsFromName(card.traineeDisplayName)}
+        </Text>
       </View>
-      {menuOpen ? (
-        <View style={styles.menu}>
-          {showMarkReviewed && onMarkReviewed ? (
-            <MenuItem label="Mark reviewed" onPress={onMarkReviewed} />
+      <View style={styles.rowBody}>
+        <Text style={styles.name}>{formatPersonName(card.traineeDisplayName)}</Text>
+        <Text style={styles.issue}>{row.issue}</Text>
+        <View style={styles.meta}>
+          <StatusChip kind="severity" value={card.primary.severity} />
+          {row.openLabel ? (
+            <View style={styles.openChip}>
+              <Text style={styles.openChipText}>{row.openLabel}</Text>
+            </View>
           ) : null}
-          <MenuItem label="Nudge…" onPress={onNudge} />
-          <MenuItem label="Open client" onPress={onOpenClient} />
+          <Text style={styles.age}>{row.age}</Text>
         </View>
-      ) : null}
-      <Text style={styles.issue}>{issue}</Text>
-      {progress ? <Text style={styles.progress}>{progress}</Text> : null}
-      <Pressable
-        accessibilityRole="button"
-        disabled={offline}
-        onPress={onAction}
-        style={[styles.review, offline ? styles.disabled : null]}
-      >
-        <Text style={styles.reviewText}>{actionLabel}</Text>
-      </Pressable>
-    </View>
+      </View>
+      <ChevronRight color={colors.midGrey} size={18} />
+    </Pressable>
+  );
+}
+
+function ReviewedRow({
+  card,
+  row,
+  offline,
+  onPress,
+}: {
+  card: ClientAttentionCard;
+  row: ReturnType<typeof reviewedRowModel>;
+  offline: boolean;
+  onPress: () => void;
+}) {
+  const tone = avatarTone(card.traineeDisplayName);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${formatPersonName(card.traineeDisplayName)}, ${row.chip}, ${row.footer}`}
+      disabled={offline}
+      onPress={onPress}
+      style={[styles.row, offline ? styles.disabled : null]}
+    >
+      <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
+        <Text style={[styles.avatarText, { color: tone.color }]}>
+          {initialsFromName(card.traineeDisplayName)}
+        </Text>
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={styles.name}>{formatPersonName(card.traineeDisplayName)}</Text>
+        <Text style={styles.issue}>{row.issue}</Text>
+        <View style={styles.reviewedChip}>
+          <Check color="#374151" size={14} strokeWidth={2.25} />
+          <Text style={styles.reviewedChipText}>{row.chip}</Text>
+        </View>
+        <Text style={styles.footer}>{row.footer}</Text>
+      </View>
+      <ChevronRight color={colors.midGrey} size={18} />
+    </Pressable>
   );
 }
 
@@ -599,32 +500,37 @@ function FilterChip({
   );
 }
 
-function MenuItem({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.menuItem}>
-      <Text style={styles.menuText}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function SkeletonCard() {
   return <View style={styles.skeleton} accessibilityLabel="Loading" />;
 }
 
 const styles = StyleSheet.create({
+  eyebrow: {
+    color: colors.midGrey,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  screenTitle: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 30,
+    letterSpacing: -0.4,
+    marginBottom: 12,
+    marginTop: 2,
+  },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   chip: {
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
     borderRadius: 999,
     borderWidth: 1,
-    minHeight: 36,
     justifyContent: "center",
+    minHeight: 36,
     paddingHorizontal: 14,
   },
   chipOn: {
@@ -640,83 +546,17 @@ const styles = StyleSheet.create({
     color: colors.indigo,
     fontFamily: fontFamilySemiBold,
   },
-  card: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 12,
-    padding: 14,
+  section: {
+    marginBottom: 18,
   },
-  cardTop: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-  },
-  avatar: {
-    alignItems: "center",
-    backgroundColor: "#F3E8E8",
-    borderRadius: 20,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  avatarText: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 13,
-  },
-  nameBlock: { flex: 1 },
-  name: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 17,
-  },
-  since: {
-    color: colors.midGrey,
-    fontSize: 13,
-    marginTop: 1,
-  },
-  more: {
-    alignItems: "center",
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  issue: {
-    color: colors.nearBlack,
-    fontSize: 16,
-    lineHeight: 22,
-    marginTop: 12,
-  },
-  progress: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 6,
-  },
-  reviewedSection: {
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  sectionLabelRow: {
+  sectionHead: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
     marginBottom: 8,
-    minHeight: 32,
+    minHeight: 28,
   },
-  reviewedHead: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 48,
-    paddingVertical: 8,
-  },
-  chevronOpen: {
-    transform: [{ rotate: "90deg" }],
-  },
-  reviewedTitle: {
+  sectionTitle: {
     color: colors.deepNavy,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
@@ -725,20 +565,118 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#EDEAFF",
     borderRadius: 999,
-    minWidth: 24,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    minWidth: 22,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
   },
   countText: {
     color: colors.indigo,
     fontFamily: fontFamilySemiBold,
     fontSize: 13,
   },
-  reviewedSummary: {
+  sectionHint: {
     color: colors.midGrey,
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
+    textAlign: "right",
+  },
+  listCard: {
+    backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  divider: {
+    backgroundColor: "#E7E9F2",
+    height: 1,
+    marginLeft: 66,
+  },
+  row: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  avatar: {
+    alignItems: "center",
+    borderRadius: 20,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  avatarText: {
+    fontFamily: fontFamilySemiBold,
+    fontSize: 13,
+  },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  name: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 17,
+  },
+  issue: {
+    color: colors.nearBlack,
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 2,
+  },
+  meta: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  openChip: {
+    backgroundColor: "#EDEAFF",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  openChipText: {
+    color: colors.indigo,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+  },
+  age: {
+    color: colors.midGrey,
+    fontSize: 13,
+  },
+  reviewedChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  reviewedChipText: {
+    color: "#374151",
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+  },
+  footer: {
+    color: colors.midGrey,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  askedCard: {
+    backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 14,
   },
   review: {
     alignItems: "center",
@@ -754,15 +692,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   disabled: { opacity: 0.45 },
-  menu: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 8,
-  },
-  menuItem: { minHeight: 44, justifyContent: "center", paddingHorizontal: 12 },
-  menuText: { color: colors.deepNavy, fontSize: 16 },
   empty: { alignItems: "center", gap: 8, paddingVertical: 48 },
   emptyTitle: {
     color: colors.deepNavy,
