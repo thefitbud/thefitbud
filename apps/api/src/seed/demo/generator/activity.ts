@@ -317,6 +317,7 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           outcome,
           record_version: 0,
           logged_at: loggedAt,
+          local_date: date,
           deviation_kind: deviationKind,
           notes,
           photo_required: 0,

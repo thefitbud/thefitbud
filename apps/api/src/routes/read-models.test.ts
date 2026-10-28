@@ -299,6 +299,7 @@ describe("read models", () => {
       outcome: "modified",
       recordVersion: 0,
       loggedAt: now,
+      localDate: today,
       deviationKind: "logged_foods",
       notes: null,
       photoRequired: false,
