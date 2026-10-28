@@ -1,4 +1,4 @@
-import type { MealAssignment, WorkoutAssignment } from "@fitbud/contracts";
+import type { MealAssignment } from "@fitbud/contracts";
 import type { WorkspaceActivityItem, WorkspaceActivityType } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
@@ -138,7 +138,6 @@ export function groupByDay(
 
 export function mealDayHeaderSummary(
   items: WorkspaceActivityItem[],
-  assignments: Map<string, MealAssignment>,
 ): string | null {
   const meals = items.filter((item) => item.type === "meal");
   if (meals.length === 0) return null;
