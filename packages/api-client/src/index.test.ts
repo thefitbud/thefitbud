@@ -99,7 +99,7 @@ describe("FitBudApiClient", () => {
           );
         }
         return new Response(
-          JSON.stringify({ data: { groups: [] } }),
+          JSON.stringify({ data: { groups: [], needsYou: [], reviewed: [] } }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       },
