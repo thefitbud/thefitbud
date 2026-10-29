@@ -167,9 +167,12 @@ export {
   ADHERENCE_EXCEPTION_SEVERITIES,
   ADHERENCE_OPEN_EXCEPTION_STATUSES,
   MVP_EXCEPTION_RULE_VERSION,
+  attentionReviewBucket,
   canAcknowledgeException,
   canActivateException,
   canResolveException,
+  canUndoAcknowledge,
+  restoredStatusAfterUndo,
   exceptionCountsTowardNeedsAttention,
   exceptionKey,
   filterNewExceptionCandidates,
@@ -186,6 +189,7 @@ export {
   workoutActivitySeverity,
   workoutAdherenceCandidate,
   type ActivitySeverity,
+  type AttentionReviewBucket,
   type ExceptionCandidate,
 } from "./exception.js";
 
