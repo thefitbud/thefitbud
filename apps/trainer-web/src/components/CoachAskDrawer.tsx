@@ -92,6 +92,9 @@ export function CoachAskDrawer({
 
   useEffect(() => {
     closeRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     function onKey(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
         if (document.querySelector(".overflow-menu-list")) return;
