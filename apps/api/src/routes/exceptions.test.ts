@@ -6,6 +6,7 @@ import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
+import { createId } from "../lib/crypto.js";
 import * as schema from "../db/schema.js";
 
 
@@ -1178,5 +1179,227 @@ describe("intervention loop", () => {
       data: { closedReason: string | null };
     };
     expect(trainerAfterBody.data.closedReason).toBe("trainer");
+  });
+
+  it("keeps a client in Needs you until every open item is reviewed, and undo restores on the server", async () => {
+    const { trainerCookie, traineeToken, relationshipId } =
+      await reachActiveConfig("review-undo");
+    const now = new Date().toISOString();
+    const older = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const criticalId = createId();
+    const attentionId = createId();
+
+    await db.insert(schema.exceptions).values([
+      {
+        id: criticalId,
+        coachingRelationshipId: relationshipId,
+        type: "missed_workout",
+        severity: "critical",
+        status: "active",
+        ruleVersion: "test",
+        sourceEntityType: "workout_assignment",
+        sourceEntityId: createId(),
+        summary: "Missed workout",
+        detectedAt: older,
+        activatedAt: older,
+        acknowledgedAt: null,
+        resolvedAt: null,
+        createdAt: older,
+        updatedAt: older,
+      },
+      {
+        id: attentionId,
+        coachingRelationshipId: relationshipId,
+        type: "skipped_meal",
+        severity: "attention",
+        status: "active",
+        ruleVersion: "test",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: createId(),
+        summary: "Skipped lunch",
+        detectedAt: now,
+        activatedAt: now,
+        acknowledgedAt: null,
+        resolvedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    type Group = {
+      relationshipId: string;
+      bucket?: string;
+      items: Array<{ id: string; status: string }>;
+    };
+    async function grouped() {
+      const response = await app.request(
+        "/exceptions/attention?groupBy=relationship&limit=20",
+        { headers: { Cookie: trainerCookie, "x-fitbud-role": "trainer" } },
+        testEnv(),
+      );
+      const text = await response.text();
+      expect(response.status, text).toBe(200);
+      return JSON.parse(text) as {
+        data: { groups: Group[]; needsYou: Group[]; reviewed: Group[] };
+      };
+    }
+
+    function clientGroups(list: Group[]) {
+      return list.filter((group) => group.relationshipId === relationshipId);
+    }
+
+    const before = await grouped();
+    expect(clientGroups(before.data.needsYou)).toHaveLength(1);
+    expect(clientGroups(before.data.reviewed)).toHaveLength(0);
+    expect(
+      clientGroups(before.data.groups)[0]?.bucket,
+    ).toBe("needs_you");
+    expect(
+      clientGroups(before.data.needsYou)[0]?.items.map((item) => item.id).sort(),
+    ).toEqual([attentionId, criticalId].sort());
+
+    const markReviewed = await app.request(
+      `/exceptions/${criticalId}/acknowledge`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mark-reviewed-critical",
+        },
+        body: JSON.stringify({ note: null }),
+      },
+      testEnv(),
+    );
+    const markReviewedText = await markReviewed.text();
+    expect(markReviewed.status, markReviewedText).toBe(200);
+    expect(
+      (JSON.parse(markReviewedText) as { data: { status: string } }).data.status,
+    ).toBe("acknowledged");
+
+    const partial = await grouped();
+    expect(clientGroups(partial.data.needsYou)).toHaveLength(1);
+    expect(clientGroups(partial.data.reviewed)).toHaveLength(0);
+    expect(
+      clientGroups(partial.data.needsYou)[0]?.items.map((item) => item.id),
+    ).toEqual([attentionId]);
+
+    const markSecond = await app.request(
+      `/exceptions/${attentionId}/acknowledge`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mark-reviewed-attention",
+        },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(markSecond.status, await markSecond.clone().text()).toBe(200);
+
+    const reviewed = await grouped();
+    expect(clientGroups(reviewed.data.needsYou)).toHaveLength(0);
+    expect(clientGroups(reviewed.data.reviewed)).toHaveLength(1);
+    expect(clientGroups(reviewed.data.reviewed)[0]?.bucket).toBe("reviewed");
+    expect(
+      clientGroups(reviewed.data.reviewed)[0]?.items.every(
+        (item) => item.status === "acknowledged",
+      ),
+    ).toBe(true);
+
+    const undo = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-attention",
+      },
+      body: "{}",
+    }, testEnv());
+    const undoText = await undo.text();
+    expect(undo.status, undoText).toBe(200);
+    const undoBody = JSON.parse(undoText) as {
+      data: { status: string; acknowledgedAt: string | null };
+    };
+    expect(undoBody.data.status).toBe("active");
+    expect(undoBody.data.acknowledgedAt).toBeNull();
+
+    const replay = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-attention",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(replay.status).toBe(200);
+    expect(
+      ((await replay.json()) as { data: { status: string } }).data.status,
+    ).toBe("active");
+
+    const [restoredRow] = await db
+      .select()
+      .from(schema.exceptions)
+      .where(eq(schema.exceptions.id, attentionId))
+      .limit(1);
+    expect(restoredRow?.status).toBe("active");
+    expect(restoredRow?.acknowledgedAt).toBeNull();
+
+    const afterUndo = await grouped();
+    expect(clientGroups(afterUndo.data.needsYou)).toHaveLength(1);
+    expect(clientGroups(afterUndo.data.reviewed)).toHaveLength(0);
+    expect(
+      clientGroups(afterUndo.data.needsYou)[0]?.items.some(
+        (item) => item.id === attentionId && item.status === "active",
+      ),
+    ).toBe(true);
+
+    const undoAgain = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-attention-again",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(undoAgain.status).toBe(409);
+
+    const resolve = await app.request(`/exceptions/${criticalId}/resolve`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "resolve-critical",
+      },
+      body: JSON.stringify({ outcome: "talked" }),
+    }, testEnv());
+    expect(resolve.status, await resolve.clone().text()).toBe(200);
+
+    const undoResolved = await app.request(`/exceptions/${criticalId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-resolved",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(undoResolved.status).toBe(409);
+
+    const traineeUndo = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${traineeToken}`,
+        "x-fitbud-role": "trainee",
+        "Content-Type": "application/json",
+        "Idempotency-Key": "trainee-undo",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(traineeUndo.status).toBe(403);
   });
 });

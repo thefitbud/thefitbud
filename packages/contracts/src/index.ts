@@ -483,6 +483,7 @@ export {
 
 export {
   acknowledgeExceptionRequestSchema,
+  undoExceptionAcknowledgeRequestSchema,
   activeExceptionSummarySchema,
   attentionFeedResponseSchema,
   attentionItemSchema,
@@ -503,6 +504,7 @@ export {
   interventionSchema,
   resolveExceptionRequestSchema,
   type AcknowledgeExceptionRequest,
+  type UndoExceptionAcknowledgeRequest,
   type ActiveExceptionSummary,
   type AttentionFeedResponse,
   type AttentionItem,
@@ -758,6 +760,7 @@ export {
   weekMealSlotStateSchema,
   attentionGroupsResponseSchema,
   attentionGroupSchema,
+  attentionReviewBucketSchema,
   clientFacetsSchema,
   responsivenessResponseSchema,
   responsivenessLabelSchema,
@@ -772,6 +775,7 @@ export {
   type WeekDay,
   type WeekMealSlotState,
   type AttentionGroupsResponse,
+  type AttentionReviewBucket,
   type ClientFacets,
   type ResponsivenessResponse,
   type ResponsivenessLabel,
