@@ -1,7 +1,21 @@
 /**
  * TW-C behavioural proofs for workspace header, overview, intake, configure, notes.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
+import { CLIENT_WORKSPACE_TABS } from "../src/components/workspace/workspaceTabs";
+
+async function expectClientWorkspaceTabStrip(tabs: Locator) {
+  const links = tabs.getByRole("link");
+  await expect(links).toHaveCount(CLIENT_WORKSPACE_TABS.length);
+  for (const [index, tab] of CLIENT_WORKSPACE_TABS.entries()) {
+    await expect(links.nth(index)).toContainText(tab.label);
+  }
+  for (const forbidden of ["Sessions", "Packages", "Configure"] as const) {
+    await expect(
+      tabs.getByRole("link", { name: forbidden, exact: true }),
+    ).toHaveCount(0);
+  }
+}
 
 const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
@@ -48,14 +62,28 @@ test.describe("TW-C workspace", () => {
     expect(href).toMatch(/^https:\/\/wa\.me\/919000000007/);
     await expect(page.getByRole("button", { name: /Review issue/i })).toBeVisible();
     const tabs = page.getByRole("navigation", { name: /Client sections/i });
-    await expect(tabs.getByRole("link", { name: /Overview/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Plan/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Activity/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Progress/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Check-ins/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /History/i })).toBeVisible();
+    await expectClientWorkspaceTabStrip(tabs);
     // Check-ins is the only tab that may carry a count badge.
     await expect(tabs.locator(".tab-badge")).toHaveCount(1);
+    for (const segment of [
+      "",
+      "overview",
+      "plan",
+      "activity",
+      "progress",
+      "check-ins",
+      "history",
+      "configure",
+      "onboarding",
+    ]) {
+      await page.goto(
+        segment ? `/clients/${ROHAN}/${segment}` : `/clients/${ROHAN}`,
+      );
+      await expectClientWorkspaceTabStrip(
+        page.getByRole("navigation", { name: /Client sections/i }),
+      );
+    }
+    await page.goto(`/clients/${ROHAN}/overview`);
     await page.getByRole("button", { name: /more actions/i }).click();
     await expect(
       page.getByRole("menuitem", { name: /Configure coaching/i }),
