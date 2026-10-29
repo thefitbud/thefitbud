@@ -876,6 +876,27 @@ describe("demo seed", () => {
       expect(chaatRows).toBeGreaterThan(50);
     });
 
+    it("never logs a compliance item at the 100-unit cap on a gram serving (QS1)", () => {
+      const capped: string[] = [];
+      let checked = 0;
+      for (const [id, json] of q("SELECT id, items_json FROM meal_compliance WHERE items_json IS NOT NULL")) {
+        const items = JSON.parse(String(json)) as Array<{
+          name?: string;
+          quantityScaled?: number;
+          serving?: { label?: string; unit?: string; conversionScaled?: number | null } | null;
+        }>;
+        for (const item of items) {
+          if (item.quantityScaled == null || !item.serving) continue;
+          checked += 1;
+          if (item.serving.unit === "g" && item.quantityScaled === NUTRIENT_SCALE * 100) {
+            capped.push(`meal_compliance ${String(id)}: ${item.name ?? "food"} × ${item.serving.label}`);
+          }
+        }
+      }
+      expect(checked).toBeGreaterThan(0);
+      expect(capped).toEqual([]);
+    });
+
     it("keeps the instruction text in step with the serving for the QS1 foods", () => {
       const touched = foodIdsOf(QS1_FOODS);
       let checked = 0;

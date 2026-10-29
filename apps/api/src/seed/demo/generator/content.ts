@@ -176,8 +176,8 @@ export function foodByGrams(
     }
   }
   // The plan contract (and the plan editor) allow at most 100 units of the chosen
-  // serving, so on a 1 g/unit serving the item tops out at 100 g. Cap it the way a
-  // coach would have to enter it, and report every cap so tests can pin the set.
+  // serving, so on a 1 g/unit serving the item tops out at 100 g. Callers that pass
+  // onClamp hear every cap: plan generation records it, and deviation logging throws.
   const wanted = Math.max(1, Math.round(bestQty * NUTRIENT_SCALE));
   const qtyScaled = Math.min(MAX_QUANTITY_SCALED, wanted);
   if (qtyScaled < wanted) {
