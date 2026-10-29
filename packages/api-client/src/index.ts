@@ -17,6 +17,7 @@ import {
   createOnboardingReviewRequestSchema,
   createOnboardingReviewResponseSchema,
   acknowledgeExceptionRequestSchema,
+  undoExceptionAcknowledgeRequestSchema,
   attentionFeedResponseSchema,
   createInterventionRequestSchema,
   createPlanDraftFromVersionRequestSchema,
@@ -1732,6 +1733,20 @@ export class FitBudApiClient {
     return this.request(
       "POST",
       `/exceptions/${exceptionId}/acknowledge`,
+      exceptionSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  }
+
+  /** Restores Mark reviewed (acknowledged) on the server. Resolve cannot be undone. */
+  async undoExceptionAcknowledge(
+    exceptionId: string,
+    idempotencyKey: string,
+  ): Promise<Exception> {
+    const parsed = undoExceptionAcknowledgeRequestSchema.parse({});
+    return this.request(
+      "POST",
+      `/exceptions/${exceptionId}/undo`,
       exceptionSchema,
       { auth: true, body: parsed, idempotencyKey },
     );

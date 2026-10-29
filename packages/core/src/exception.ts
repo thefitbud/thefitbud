@@ -78,6 +78,43 @@ export function canResolveException(status: ExceptionStatus): boolean {
   return status === "acknowledged";
 }
 
+/**
+ * Mark reviewed is the acknowledged status. Undo is allowed only from there;
+ * Resolve stays locked.
+ */
+export function canUndoAcknowledge(status: ExceptionStatus): boolean {
+  return status === "acknowledged";
+}
+
+/** Status restored when Mark reviewed is undone. Active once the item was activated. */
+export function restoredStatusAfterUndo(input: {
+  activatedAt: string | null;
+}): "detected" | "active" {
+  return input.activatedAt ? "active" : "detected";
+}
+
+/** Needs you vs Reviewed for one client's open exception statuses. */
+export type AttentionReviewBucket = "needs_you" | "reviewed";
+
+/**
+ * A client stays in Needs you while any open item is still detected or active.
+ * They move to Reviewed only when every remaining open item is acknowledged.
+ * Resolved items are history and do not keep the client in either list.
+ */
+export function attentionReviewBucket(
+  statuses: readonly ExceptionStatus[],
+): AttentionReviewBucket | null {
+  let sawOpen = false;
+  let sawUnreviewed = false;
+  for (const status of statuses) {
+    if (!isOpenExceptionStatus(status)) continue;
+    sawOpen = true;
+    if (status === "detected" || status === "active") sawUnreviewed = true;
+  }
+  if (!sawOpen) return null;
+  return sawUnreviewed ? "needs_you" : "reviewed";
+}
+
 export function canActivateException(status: ExceptionStatus): boolean {
   return status === "detected";
 }

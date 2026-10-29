@@ -116,6 +116,12 @@ export type AcknowledgeExceptionRequest = z.infer<
   typeof acknowledgeExceptionRequestSchema
 >;
 
+/** Compensating action for Mark reviewed. No body fields. */
+export const undoExceptionAcknowledgeRequestSchema = z.object({});
+export type UndoExceptionAcknowledgeRequest = z.infer<
+  typeof undoExceptionAcknowledgeRequestSchema
+>;
+
 export const resolveExceptionRequestSchema = z.object({
   note: z.string().trim().max(2000).nullable().optional(),
   outcome: z.enum(["talked", "plan_adjusted", "no_action", "other"]).optional(),

@@ -291,11 +291,9 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           deviationKind = weekdayOf(date) === 6 && mealRng.chance(0.5) ? "restaurant" : mealRng.pick(kinds);
           if (deviationKind === "restaurant" || deviationKind === "logged_foods") {
             const slug = mealRng.pick(deviationSlugs);
-            const grams = mealRng.int(15, 30) * 10;
-            // Same 100-unit cap as plan content: report (throw) so a future clamp is never silent.
-            const dish = foodByGrams(ctx.lib, slug, grams, (clamp) => {
+            const dish = foodByGrams(ctx.lib, slug, mealRng.int(15, 30) * 10, (clamp) => {
               throw new Error(
-                `Demo seed: deviation food ${clamp.slug} clamped ${clamp.requestedGrams}g → ${clamp.cappedUnits} units of "${clamp.servingLabel}"`,
+                `Demo seed: deviation ${clamp.slug} requested ${clamp.requestedGrams} g and would silently cap at ${clamp.cappedUnits} × "${clamp.servingLabel}"`,
               );
             });
             const items = [dish];
