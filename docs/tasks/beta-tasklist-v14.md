@@ -1,9 +1,9 @@
 # FitBud · beta task list (v14)
 
-Updated Sat 31 Oct 2026 (rev 2: Firoz's answers of 31 Oct; Live Activity in beta; no mid-task approvals; Firebase setup; production deploy). Written by Claude Code from task list v13, the code on `main` (50556c8), Cloudflare account state (checked 30 Oct), and Firoz's answers of 30 Oct.
+Updated Fri 30 Oct 2026 (rev 3: the full redesign and the seed work are scheduled as W5–W11, §9; no sign-off step on specs. Rev 2: Firoz's answers of 31 Oct; Live Activity in beta; no mid-task approvals; Firebase setup; production deploy). Written by Claude Code from task list v13, the code on `main` (50556c8), Cloudflare account state (checked 30 Oct), and Firoz's answers of 30 Oct.
 
 **What this file is.** This is the working list for the **closed beta only**: every task needed for beta, with enough detail for the bots to write self-contained specs. It replaces v13's Beta cut section and the beta tasks' details.
-**What it is not.** v13 stays the master list for everything post-beta: redesign phases, seed polish, gap buckets, Phase 10. Don't schedule those until the beta ships.
+**Redesign and seed (rev 3).** The full redesign (v13 Phases 1–4 and 6–9, the Phase 12 gap buckets) and the seed work are **scheduled**, not parked: batches W5–W11 in §9, which start once the beta-critical work (W1–W4) is done. Their task details stay in v13, now in the repo at [`fitbud-tasklist-v13.md`](fitbud-tasklist-v13.md) (Appendix A). Still not scheduled: Phase 10 (sessions and in-person, on hold by Firoz), BP1/BP2 (before public release), and the v13 items marked On hold.
 
 **Beta target:** Sun 15 Nov 2026 (worst case Mon 30 Nov). Closed: TestFlight (internal + external testers) and a Google Play **closed** testing track only.
 
@@ -27,6 +27,7 @@ Updated Sat 31 Oct 2026 (rev 2: Firoz's answers of 31 Oct; Live Activity in beta
 | C12 | **Each beta task has a batch, lane, model and file area.** | Bots can then write specs and batch files directly from this list. |
 | C13 | **Live Activity is in the beta** (Firoz, 31 Oct) as lane LA1–LA3: local updates only, with a cut-line. | Much is already written: the iOS widget UI (`apps/mobile/targets/FitBudLiveActivity/FitBudLiveActivity.swift`, 253 lines), the Android notification (`targets/android/WorkoutSetNotification.kt`), the JS state model (`src/notifications/liveActivity.ts`) and the config plugin (`plugins/withLiveActivity.js`). Missing: the build target (`@bacons/apple-targets` isn't installed), a native bridge to start/update/end the activity from the app, and draining the buttons' App Group outbox into the sync outbox. |
 | C14 | **New I6b: production deploy** (owner F), after the staging rehearsal. | Beta trainers use real data, so the beta runs on **production**, not staging. v13 had only the staging deploy. |
+| C16 | **The full redesign and the seed work are scheduled** (Firoz, 30 Oct) as W5–W11 (§9), after W1–W4. | Trainers judge FitBud on trainer web, and most of its screens don't match the locked frames yet. Running the redesign after the APIs and the beta-critical work means the UI is built once, on top of the final API and seed. |
 | C15 | **Firebase setup, app variants and domains specified** (§6). | No Firebase projects exist yet (Firoz, 31 Oct). The domain is `thefitbud.com`, and its mail is on Zoho Mail, which affects SPF. |
 
 ## 2. What "false dependency" means (C1)
@@ -55,8 +56,11 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 | D-B11 | Domain **thefitbud.com**. Mail is on **Zoho Mail** (`tech@thefitbud.com`). | Firoz, 31 Oct |
 | D-B12 | **Two Firebase projects** (staging, prod) and **two app variants**: production `com.thefitbud.mobile` for the beta, staging `com.thefitbud.mobile.staging` for internal testing, so both can be installed side by side (§6 step 2). | Claude's recommendation, 31 Oct |
 | D-B13 | Privacy Policy and Terms are written by **counsel**. Agents build the pages and links only. | Firoz, 31 Oct |
+| D-B15 | **The full redesign and the seed work are in the plan** (C16): v13 Phases 1–4, 6–9 and the Phase 12 gap buckets, plus the seed fixes, as W5–W11 after W1–W4. Phase 10 stays on hold. | Firoz, 30 Oct |
+| D-B16 | **#50 AC1a and #57 AC1b come back in scope** in W5, because B1a (migration 0034) and AC2 depend on them. They are rebased onto current `main` by merging `main` in, their migration renumbered if needed, then reviewed like any other PR. | Claude, 30 Oct (follows from D-B15) |
 
 **Open items**
+- **D-B14 When do beta invites go out?** (a) **Recommended:** 15 Nov after W4, on today's UI; redesigned screens then reach testers as weekly TestFlight/Play updates. Testers start using the real flows two to four weeks sooner, and nothing in W5–W11 needs to wait for them. (b) After W8, once trainer web is redesigned; invites slip by roughly three to four weeks. (c) After W11, once everything is redesigned; invites slip by roughly five to seven weeks. Until Firoz picks, the plan assumes (a).
 - Firebase project IDs and Web API keys go into W1.md D-W1-3 once Firoz creates the projects (in progress, 31 Oct).
 - **Schedule risk:** the counsel's text is needed by **Mon 9 Nov**. BT3 must be live before BT1, because both stores require a privacy-policy URL for testing tracks. If the text is late, publish a short interim policy that counsel signs off, and replace it later.
 
@@ -105,7 +109,8 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 | I6b | Production deploy + production library seed (owner F, new) | W4 | human | BT5 passed, CF2 prod secrets | S | F |
 
 Post-beta, before public release: **BP1** in-app account deletion, **BP2** automated D1 backups (v13 details unchanged).
-Post-beta: everything else in v13, including I2e (C1), WhatsApp OTP (C4), the open draft PRs #50 AC1a and #57 AC1b, and OB3/OB4. Live Activity is in the beta (C13, LA1–LA3); only APNs push-to-start and push updates are post-beta.
+Redesign and seed work: scheduled in §9 (W5–W11), including I2e and the open draft PRs #50 AC1a and #57 AC1b.
+Post-beta: WhatsApp OTP (C4), OB3/OB4, Phase 10, and the v13 items marked On hold (AL1, EC1g, F5). Live Activity is in the beta (C13, LA1–LA3); only APNs push-to-start and push updates are post-beta.
 
 ## 5. Task details (for spec writers)
 
@@ -352,6 +357,8 @@ These tasks need a **dev build on a real device**. Agents can't compile Swift or
 | **W3** | push-api: X4a → X4c · push-mobile: X4b → X4d · web: BT3 · ops-docs: BT4 · mobile-native: LA2 → LA3 (LA cut-line Thu 12 Nov) | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
 | **W4** | mobile/api: BT2 · release: BT1 (agents prepare, Firoz submits) · QA: BT5 checklist | BT5 rehearsal on staging (Thu 12 Nov) → **I6b production deploy** → TestFlight external review (~1–2 days) + Play closed track | invites out Sun 15 Nov |
 
+W5–W11 (redesign and seed) follow in §9.
+
 `docs/specs/batches/W1.md` is the draft for W1. The bots update it from this section, then draft W2–W4. Specs for a batch are written once the previous batch's decisions are made.
 
 ## 8. Rules (updated)
@@ -360,3 +367,26 @@ These tasks need a **dev build on a real device**. Agents can't compile Swift or
 - **Working rule 3 (fixed, C10):** every brief names its frames from `docs/design/mockups/png/` by file name.
 - **QA reports** live in `docs/qa/`. Any `/workspace/qa/...` path in v13 means `docs/qa/...` once W0b lands.
 - All other v13 working rules (1, 4–9) and product rules are unchanged. They are also in `CLAUDE.md`.
+
+## 9. Redesign and seed: W5–W11 (rev 3)
+
+These batches start once W1–W4 are done (C16, D-B15). Task details are in [`fitbud-tasklist-v13.md`](fitbud-tasklist-v13.md), Appendix A, by task ID; the frames are in v13's Appendix C (screen coverage matrix). Every v13 `/workspace/qa/...` path means `docs/qa/...`. Same rules as W1–W4: at most 3 implementer sessions at once, one task per PR, specs written once the batch before has landed.
+
+| Batch | Lanes (in order) | Firoz in parallel | Rough size |
+|---|---|---|---|
+| **W5 · Redesign prep and seed** | qa: **P1** gap audit (screenshot every built screen against its frames; turns G1–G11 into S tasks with IDs) → P3 → MBR → MCD · repo: **E2E1** (repair the e2e suite) → VT1 → DEP1 · activate: AC1a (#50) → AC1b (#57) (D-B16) · seed: I2e → QS7 → A2 → C3 → C6 → E2 → R1 → X5 → X7 → F4a → EC1e · library: DK1 · mobile: B0L | Design frames DS1, DS2, DS3, DS6, DS7; DS4 row spec; the D-new design questions (v13 Appendix B). Planner bots: P4 (MD2 spec rewrite), P5 (design index + briefs); P6 (gap-list QA gate) becomes a step at the start of every W7–W11 batch | ~25 tasks |
+| **W6 · Backend for the redesign** | migrations (one at a time, in this order): B1a → B2a → B3a → B4a → EC1f · api: B1b, B2b → B2c, B3b, B4b, SPB · api-rules: EC1c → EC1d | Answer D-new questions that block W7–W8 | ~13 tasks |
+| **W7 · Trainer web: Home and ended clients** | home (all touch `HomePage.tsx`, strictly serial): HM2 → HM3 → SP1 → SP1b → SP2 → SP2b → SP3 → SP4 → HV1 → HV2 → HV3 → HV4 → N1a · ended: DF1 → CE4 → CE5 → CE6 → CE7 → W8 · fixes: W1e → HB1 → LB1 | Review against frames 02, 131–135, 191, 193, 199, DS1/DS2 | ~22 tasks |
+| **W8 · Trainer web: client workspace** | settings: W1b → W1c → W1d → W2a → W2b → W2c · setup: W3a → AC2 → W3b → W3c · check-ins: W4a → W4b → W5a → W5b · progress: W6a → W6b → W6c → W6d → W6e → W7a → W7b → W7c | Review against frames 148–150, 160–162, 171, 181, 208–212, IP-07, IP-08 | ~22 tasks |
+| **W9 · Trainee mobile** | today: F4d → T1a → T1b → T1c → T1d → T2a → T2b · workout: F4b → T3a → T3b · check-in: F4c → T4 · steps: T5a → T5b → T5c | Steps on real phones (HealthKit / Health Connect need a dev build) | ~16 tasks |
+| **W10 · Trainer mobile** | review sheet: F1f1 → F1f2 → F1f3 → F1f4 → F1f5 · needs-you: F1g → F1h → F1j → F1k · clients: F3a → F3b → F3c → F3d → F3e · more: M1a → M1b → M1c → M2a → M2b → M2c → M2d · check-ins: M3a → M3b → M3c | Review on iOS and Android phones | ~24 tasks |
+| **W11 · Gap buckets** | The S tasks P1 produced for G1–G8 (trainer web, iPad) and G9–G11 (trainee mobile), grouped into lanes by screen file | Final visual pass | depends on P1; expect 30–60 tasks |
+
+**Ordering rules**
+- **W5 before everything else.** P1 is the gate for all UI work (v13 rule): it records what each built screen is missing, so W7–W11 specs can list real gaps. E2E1 makes the e2e suite trustworthy before ~100 UI PRs land on it. AC1a/AC1b unblock B1a and AC2.
+- **W6 before W7–W10.** Those screens read the new APIs (strength, check-in v2 metrics, payments tracking, steps, bulk review).
+- **W7–W10 can overlap.** They touch different apps (trainer web vs trainee mobile vs trainer mobile), so the orchestrator may run lanes from two of them at once, still at most 3 implementers. W9 and W10 both edit `apps/mobile`: the batch files must split `files_owned` by screen folder, and shared files (tab bar, navigation, `AuthProvider.tsx`) go to one lane only.
+- **Firoz's design frames gate their tasks.** DS1 gates HV1–HV3; DS2 gates SP1–SP4 and SPB; DS3 gates AC2; DS7 gates DF1 and CE6; DS4 gates HM3. If a frame isn't in `docs/design/mockups/png/` when the batch runs, those tasks stop and report; the rest run.
+- **Seed lane is serial.** QS7 through X7 all edit the demo-seed history modules; F4a and EC1e follow them.
+
+**Effort, honestly.** W5–W11 is roughly 150–180 tasks, about four times W1–W4. At 3 implementers on one Max seat, the binding limit is the weekly usage cap, not wall-clock time. Measure `/usage` across W1 and W2, then size the W5+ timeline from that. As a rough guide, expect W5–W11 to take five to seven weeks.
