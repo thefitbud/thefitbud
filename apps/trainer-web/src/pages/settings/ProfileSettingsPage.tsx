@@ -171,7 +171,10 @@ export function ProfileSettingsPage() {
           />
         </label>
         <p className="muted">
-          <Link to="/forgot-password">Forgot it?</Link> Use the email code flow
+          <Link className="profile-forgot-link" to="/forgot-password">
+            Forgot it?
+          </Link>{" "}
+          Use the email code flow
           to set a new password.
         </p>
         <button
