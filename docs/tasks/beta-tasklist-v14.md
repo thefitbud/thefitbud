@@ -21,7 +21,7 @@ Updated Sat 31 Oct 2026 (rev 2: Firoz's answers of 31 Oct; Live Activity in beta
 | C6 | **New task WD1: trainer-web hosting + custom domains.** | v13 deploys only the API (I6). The trainers' main tool (trainer web), the legal pages (BT3) and every link in emails (`APP_HOST`) need a hosted web app on the real domain. |
 | C7 | **New task BT5: beta dress rehearsal** on staging with real phones. | Nothing in v13 checks the whole path end to end: sign up → invite → install from TestFlight/Play → accept → log → reminder push → email OTP. |
 | C8 | **New Firoz-only setup task CF2** (Cloudflare, DNS, Firebase, Expo, Apple and Google console steps), replacing the scattered CF1 notes. | The Cloudflare state is now known (see §6). The remaining manual steps need one checklist. |
-| C9 | **No mid-task human approval** (Firoz, 31 Oct). Agents.md's "Human approval required" section is replaced by "Decisions and stop rules". | Firoz reviews the finished batch only. Decisions are written into specs and batch files before launch. Agents still stop when a spec leaves a decision open, or when work would need remote access or production data, which agents never have. |
+| C9 | **No mid-task human approval** (Firoz, 31 Oct). Agents.md's "Human approval required" section is replaced by "Decisions and stop rules". | Firoz reviews the finished batch only. Decisions are written into specs and batch files before launch. There is no sign-off step on specs or batch files either (Firoz, 30 Oct): Firoz reads them and launching the batch is the go. Agents still stop when a spec leaves a decision open, or when work would need remote access or production data, which agents never have. |
 | C10 | **Stale references fixed.** | Working rule 3 now points to `docs/design/mockups/png/` (the design branch is deleted). `/workspace/qa/...` paths become `docs/qa/...`. The "ZeptoMail email provider" heading is fixed. |
 | C11 | **Working rule 2 clarified:** several states of the **same screen and file** may be one task (one commit per frame). Different screens stay separate tasks. | Otherwise bots split one file into many tiny tasks that all collide. |
 | C12 | **Each beta task has a batch, lane, model and file area.** | Bots can then write specs and batch files directly from this list. |
@@ -62,7 +62,7 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 
 ## 4. Beta task list
 
-Status is Ready unless noted. **Model:** opus = Opus; plan = opusplan (Opus plans, Sonnet edits); son = Sonnet. **Owner F** = Firoz (manual, not an agent).
+**Model:** opus = Opus; plan = opusplan (Opus plans, Sonnet edits); son = Sonnet. **Owner F** = Firoz (manual, not an agent).
 
 | ID | Task | Batch | Lane | Depends on (real only) | Size | Model |
 |---|---|---|---|---|---|---|

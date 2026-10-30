@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { signIn } from "./support/session";
 
 const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
 const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 
 function unwrap<T>(json: { data?: T } & T): T {
   return (json.data ?? json) as T;
@@ -16,14 +16,6 @@ async function fetchDevMailCode(to: string): Promise<string> {
   const match = /(\d{6})/.exec(body.items?.[0]?.subject ?? "");
   if (!match) throw new Error("no OTP in dev mail subject");
   return match[1];
-}
-
-async function signInWithPassword(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 30_000 });
 }
 
 async function apiToken(page: Page): Promise<string> {
@@ -67,7 +59,7 @@ test("email OTP sign-in via dev mail sink", async ({ page }) => {
 });
 
 test("home acknowledge then resolve", async ({ page }) => {
-  await signInWithPassword(page);
+  await signIn(page);
   const token = await apiToken(page);
   const attention = unwrap<{ groups: Array<{ items: Array<{ id: string; status: string }> }> }>(
     await fetch(`${API}/exceptions/attention?groupBy=relationship`, {
@@ -88,7 +80,7 @@ test("home acknowledge then resolve", async ({ page }) => {
 });
 
 test("apply a workout template from the library", async ({ page }) => {
-  await signInWithPassword(page);
+  await signIn(page);
   const aarav = await findClient(page, "aarav");
   const token = await apiToken(page);
   const templates = unwrap<{ items: Array<{ id: string; title: string }> }>(
@@ -125,7 +117,7 @@ test("apply a workout template from the library", async ({ page }) => {
 });
 
 test("share a client-visible note", async ({ page }) => {
-  await signInWithPassword(page);
+  await signIn(page);
   const rohan = await findClient(page, "rohan");
   await page.goto(`/clients/${rohan.relationshipId}/overview`);
   await page.getByTestId("screen-TW-09").waitFor();
@@ -146,7 +138,7 @@ test("share a client-visible note", async ({ page }) => {
 });
 
 test("end coaching then reactivate", async ({ page }) => {
-  await signInWithPassword(page);
+  await signIn(page);
   const farhan = await findClient(page, "farhan");
   const token = await apiToken(page);
   const endRes = await fetch(`${API}/relationships/${farhan.relationshipId}/end`, {
