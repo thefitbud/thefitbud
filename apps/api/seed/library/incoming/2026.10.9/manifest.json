@@ -1,0 +1,62 @@
+{
+ "seed_version": "2026.10.9",
+ "generated_at": "2026-10-12T00:00:00.000Z",
+ "content_sha256": "e9782a0bae8f7293ca5f9a539ef9f55c77116333a017a9d6020190862c69caf3",
+ "counts": {
+  "foods": 1243,
+  "foods_by_source": {
+   "indb": 110,
+   "usda_fdc": 1125,
+   "web_average": 8
+  },
+  "foods_by_cuisine": {
+   "indian": 136,
+   "indian_pantry": 252,
+   "global": 855
+  },
+  "exercises": 353,
+  "exercises_by_setting": {
+   "gym": 188,
+   "both": 45,
+   "home": 75,
+   "cardio": 16,
+   "mobility": 29
+  },
+  "templates": 10,
+  "redirects": 1,
+  "food_servings": 3979,
+  "food_aliases": 3574,
+  "exercise_media": 242,
+  "exercise_relations": 947
+ },
+ "files": {
+  "library-2026.10.9.json": {
+   "sha256": "0e08bddefbcf1991ecec255904162ade9bae3474825605482b365a33f8f0e40e",
+   "bytes": 9716400
+  },
+  "01_lookups.sql": {
+   "sha256": "7dc105198f99ea9cbdba47746bc29925c0da49bd9a8db51522454ebae6f2b48f",
+   "bytes": 40690
+  },
+  "02_foods.sql": {
+   "sha256": "43fd5245aa88cfc148f0a9fb69a92d1ff6ecd936190c20446e8797de019b001f",
+   "bytes": 22968287
+  },
+  "03_exercises.sql": {
+   "sha256": "477ae0c6370a502784c0c385988ce288b9290b24d716036ad3782bdd6e4589d5",
+   "bytes": 4126045
+  },
+  "04_templates.sql": {
+   "sha256": "4890370964a18ed763b7856f180f1f3b7c059e3a688c6bc5f318aa2b0b50e1dd",
+   "bytes": 82515
+  },
+  "05_search.sql": {
+   "sha256": "13e6459d60b8ff81f06bdea00eb2a49e199b1b5c1696dbee509602318dc60f54",
+   "bytes": 1423
+  },
+  "06_seed_version.sql": {
+   "sha256": "e6f2934076e30302485cf0d9221bacfc15adbe87e809cebec43633380473bb12",
+   "bytes": 776
+  }
+ }
+}
