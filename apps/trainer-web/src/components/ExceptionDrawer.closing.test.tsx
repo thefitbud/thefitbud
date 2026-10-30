@@ -115,14 +115,8 @@ const CLOSE_PATHS: ClosePath[] = [
       fireEvent.click(container.querySelector(".drawer-backdrop")!);
     },
   },
-  {
-    name: "Resolve",
-    close: async () => {
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
-      });
-    },
-  },
+  // Resolve is not a close path since frame 02 (resolved banner + Undo +
+  // Next item stays in the drawer; see ExceptionDrawer.test.tsx).
 ];
 
 const NAV_PATHS: ClosePath[] = [

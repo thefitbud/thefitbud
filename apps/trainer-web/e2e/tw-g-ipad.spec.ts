@@ -166,3 +166,174 @@ test.describe("TW-G iPad shell smoke", () => {
     await assertTapTargets(page.locator("body"), "Inbox");
   });
 });
+
+/**
+ * IP1a — reminders Close and ⋯ overflow rows, measured in CSS pixels.
+ * Fixture only: no API. Stylesheets load in the same order as main.tsx.
+ */
+test.describe("IP1a iPad hit targets", () => {
+  test("reminders Close is ≥44×44 and overflow items are ≥44px tall", async ({
+    page,
+  }) => {
+    const origin = process.env.TRAINER_WEB_URL ?? "http://127.0.0.1:5173";
+    await page.setContent(
+      `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <base href="${origin}/" />
+          <link rel="stylesheet" href="/src/styles.css" />
+          <link rel="stylesheet" href="/src/styles/shell.css" />
+          <link rel="stylesheet" href="/src/styles/home.css" />
+          <link rel="stylesheet" href="/src/styles/clients.css" />
+          <link rel="stylesheet" href="/src/styles/workspace.css" />
+          <link rel="stylesheet" href="/src/styles/templates.css" />
+          <link rel="stylesheet" href="/src/styles/tap-targets.css" />
+        </head>
+        <body>
+          <aside class="drawer-panel" data-testid="screen-TW-31">
+            <header class="drawer-head">
+              <h2>Reminders</h2>
+              <button type="button" class="icon-btn reminders-close" aria-label="Close">×</button>
+            </header>
+          </aside>
+          <div class="overflow-menu">
+            <ul class="overflow-menu-list" role="menu">
+              <li role="none">
+                <button type="button" role="menuitem" class="overflow-menu-item">Edit note</button>
+              </li>
+              <li role="none">
+                <button type="button" role="menuitem" class="overflow-menu-item overflow-menu-item-destructive">End coaching</button>
+              </li>
+            </ul>
+          </div>
+        </body>
+      </html>`,
+      { waitUntil: "load" },
+    );
+
+    const size = await page.locator(".reminders-close").evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return { w: rect.width, h: rect.height };
+    });
+    expect(
+      size.w + 0.5,
+      `reminders Close width ${size.w}`,
+    ).toBeGreaterThanOrEqual(44);
+    expect(
+      size.h + 0.5,
+      `reminders Close height ${size.h}`,
+    ).toBeGreaterThanOrEqual(44);
+
+    const items = page.locator(".overflow-menu-item");
+    expect(await items.count()).toBe(2);
+    const heights = await items.evaluateAll((nodes) =>
+      nodes.map((el) => el.getBoundingClientRect().height),
+    );
+    for (const height of heights) {
+      expect(height + 0.5, `overflow item height ${height}`).toBeGreaterThanOrEqual(
+        44,
+      );
+    }
+  });
+});
+
+/**
+ * IP1b — Plan Versions/Show, Progress check-in links, Settings "Forgot it?".
+ * Fixture only: no API. Stylesheets load in the same order as the app
+ * (page CSS, then tap-targets.css). Landscape project viewport is 1024×768.
+ */
+test.describe("IP1b iPad hit targets", () => {
+  test("versions toggle, check-in links, and Forgot it? are at least 44px", async ({
+    page,
+  }) => {
+    const origin = process.env.TRAINER_WEB_URL ?? "http://127.0.0.1:5173";
+    await page.setContent(
+      `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <base href="${origin}/" />
+          <link rel="stylesheet" href="/src/styles.css" />
+          <link rel="stylesheet" href="/src/styles/workspace.css" />
+          <link rel="stylesheet" href="/src/styles/plan.css" />
+          <link rel="stylesheet" href="/src/styles/tap-targets.css" />
+        </head>
+        <body>
+          <button type="button" class="plan-versions-toggle" aria-expanded="false">
+            <h2 id="plan-versions-heading">Versions</h2>
+            <span>Show</span>
+          </button>
+          <table class="progress-data-table">
+            <tbody>
+              <tr><td><a class="progress-checkin-link" href="/clients/1/check-ins/a">From check-in · 12 Oct</a></td></tr>
+              <tr><td><a class="progress-checkin-link" href="/clients/1/check-ins/b">From check-in · 5 Oct</a></td></tr>
+              <tr><td><a class="progress-checkin-link" href="/clients/1/check-ins/c">From check-in · 28 Sep</a></td></tr>
+              <tr><td><a class="progress-checkin-link" href="/clients/1/check-ins/d">From check-in · 21 Sep</a></td></tr>
+            </tbody>
+          </table>
+          <p class="muted">
+            <a class="profile-forgot-link" href="/forgot-password">Forgot it?</a>
+            Use the email code flow to set a new password.
+          </p>
+        </body>
+      </html>`,
+      { waitUntil: "load" },
+    );
+
+    const viewport = page.viewportSize();
+    expect(viewport?.width, "tablet query is max-width 1024px").toBeLessThanOrEqual(
+      1024,
+    );
+
+    const toggle = await page.locator(".plan-versions-toggle").evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const heading = el.querySelector("h2");
+      const show = el.querySelector("span");
+      return {
+        w: rect.width,
+        h: rect.height,
+        headingFont: heading ? getComputedStyle(heading).fontSize : "",
+        showFont: show ? getComputedStyle(show).fontSize : "",
+      };
+    });
+    expect(toggle.w + 0.5, `versions toggle width ${toggle.w}`).toBeGreaterThanOrEqual(
+      44,
+    );
+    expect(toggle.h + 0.5, `versions toggle height ${toggle.h}`).toBeGreaterThanOrEqual(
+      44,
+    );
+    expect(toggle.headingFont, "Versions heading type stays 1rem").toBe("16px");
+    expect(toggle.showFont, "Show label type stays 1rem").toBe("16px");
+
+    const links = page.locator(".progress-checkin-link");
+    expect(await links.count()).toBe(4);
+    const linkBoxes = await links.evaluateAll((nodes) =>
+      nodes.map((el) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          w: rect.width,
+          h: rect.height,
+          font: getComputedStyle(el).fontSize,
+        };
+      }),
+    );
+    for (const box of linkBoxes) {
+      expect(box.w + 0.5, `check-in link width ${box.w}`).toBeGreaterThanOrEqual(44);
+      expect(box.h + 0.5, `check-in link height ${box.h}`).toBeGreaterThanOrEqual(44);
+      expect(box.font, "check-in link type stays 1rem").toBe("16px");
+    }
+
+    const forgot = await page.locator(".profile-forgot-link").evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        w: rect.width,
+        h: rect.height,
+        font: getComputedStyle(el).fontSize,
+      };
+    });
+    expect(forgot.w + 0.5, `Forgot it? width ${forgot.w}`).toBeGreaterThanOrEqual(44);
+    expect(forgot.h + 0.5, `Forgot it? height ${forgot.h}`).toBeGreaterThanOrEqual(44);
+    expect(forgot.font, "Forgot it? type stays 1rem").toBe("16px");
+  });
+});

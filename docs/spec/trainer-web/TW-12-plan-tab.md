@@ -118,3 +118,8 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **1440×900** (desktop, Chromium). Save it as `docs/spec/evidence/TW-12.png`. Save extra states as `docs/spec/evidence/TW-12--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+Plan tab structure (mockups 150, 200, 151): sub-tabs **Plans** | **Coaching setup** (TW-11). Plans shows one *current plan card per type* (Workout, Nutrition) with the Mon–Sun strip, header actions *Replace from template* and **Adjust plan**, and the **Versions** table with filters **Type** (All · Workout · Nutrition) and **Status** (All · Active · Scheduled · Draft · Superseded) and a "N of M" count. Columns: Plan, Type, Version, Status, Effective, Published, View.
