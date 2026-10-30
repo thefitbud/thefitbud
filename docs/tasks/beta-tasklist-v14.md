@@ -105,7 +105,7 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 | I6b | Production deploy + production library seed (owner F, new) | W4 | human | BT5 passed, CF2 prod secrets | S | F |
 
 Post-beta, before public release: **BP1** in-app account deletion, **BP2** automated D1 backups (v13 details unchanged).
-Post-beta: everything else in v13, including I2e (C1), Live Activity (C3), WhatsApp OTP (C4), the open draft PRs #50 AC1a and #57 AC1b, and OB3/OB4.
+Post-beta: everything else in v13, including I2e (C1), WhatsApp OTP (C4), the open draft PRs #50 AC1a and #57 AC1b, and OB3/OB4. Live Activity is in the beta (C13, LA1–LA3); only APNs push-to-start and push updates are post-beta.
 
 ## 5. Task details (for spec writers)
 
