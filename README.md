@@ -174,6 +174,16 @@ pnpm api
 - OpenAPI UI: `http://127.0.0.1:8787/docs`
 - Dev email sink (OTP codes): `GET http://127.0.0.1:8787/dev/mail`
 
+In an interactive terminal, `pnpm api` prints the size of local request traces at `apps/api/.wrangler/state/v3/observability` and asks what to do before Wrangler starts:
+
+| Answer | Effect |
+| --- | --- |
+| **Enter** / `keep` | Leave the folder and keep recording traces (default). |
+| `fresh` | Delete only that observability folder, then start. |
+| `off` | Start this run with local tracing off. |
+
+`pnpm dev`, CI, and tests are non-interactive and do not ask. They read `FITBUD_LOCAL_TRACES=keep|fresh|off` (default `keep`). Setting that variable also skips the question in an interactive terminal. A traces folder over 500 MB prints a warning that suggests `fresh`. `fresh` does not delete D1, R2, or anything else under `.wrangler/state`.
+
 ### Trainer web (port 5173)
 
 In a second terminal:
