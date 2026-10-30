@@ -215,5 +215,12 @@
     "when": 1729958400000,
     "tag": "0030_perf_indexes",
     "breakpoints": true
+  },
+  {
+    "idx": 31,
+    "version": "7",
+    "when": 1730044800000,
+    "tag": "0031_library_schema",
+    "breakpoints": true
   }
 ]

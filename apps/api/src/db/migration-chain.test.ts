@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,10 @@ CREATE INDEX IF NOT EXISTS \`checkins_relationship_submitted_idx\` ON \`checkins
 CREATE INDEX IF NOT EXISTS \`exceptions_relationship_status_detected_idx\` ON \`exceptions\` (\`coaching_relationship_id\`, \`status\`, \`detected_at\`);
 DROP INDEX IF EXISTS \`exceptions_relationship_status_idx\`;
 `;
+
+/** sha256 of the hand-written 0031 file. Locks the migration byte-for-byte. */
+const LIBRARY_SCHEMA_SQL_SHA256 =
+  "e40e54da306a1a6efc2a0a49edf7f664deb5c3e9f3ea0ebb5828d60e343b065a";
 
 type JournalEntry = {
   idx: number;
@@ -44,8 +49,17 @@ function indexColumns(
   return rows.map((row) => String(row[0]));
 }
 
+function tableColumns(
+  sqlite: { exec: (sql: string) => Array<{ values: unknown[][] }> },
+  table: string,
+): string[] {
+  const rows =
+    sqlite.exec(`SELECT name FROM pragma_table_info('${table}')`)[0]?.values ?? [];
+  return rows.map((row) => String(row[0]));
+}
+
 describe("migration chain and seeds", () => {
-  it("places 0030_perf_indexes immediately after 0029 and creates the trace indexes", async () => {
+  it("places 0030_perf_indexes after 0029 and 0031_library_schema after 0030", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -53,16 +67,35 @@ describe("migration chain and seeds", () => {
     const previous = tags.indexOf("0029_checkin_form_global_fields");
     expect(previous).toBeGreaterThanOrEqual(0);
     expect(tags[previous + 1]).toBe("0030_perf_indexes");
-    expect(tags.at(-1)).toBe("0030_perf_indexes");
+    expect(tags[previous + 2]).toBe("0031_library_schema");
+    expect(tags.at(-1)).toBe("0031_library_schema");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
+    expect(journal[previous + 2]?.idx).toBe(31);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
     expect(files[previousFile + 1]).toBe("0030_perf_indexes.sql");
-    expect(files.at(-1)).toBe("0030_perf_indexes.sql");
+    expect(files[previousFile + 2]).toBe("0031_library_schema.sql");
+    expect(files.at(-1)).toBe("0031_library_schema.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
+    );
+    const librarySchemaSql = readFileSync(
+      join(drizzleDir, "0031_library_schema.sql"),
+      "utf8",
+    );
+    expect(createHash("sha256").update(librarySchemaSql).digest("hex")).toBe(
+      LIBRARY_SCHEMA_SQL_SHA256,
+    );
+    expect(librarySchemaSql).toContain(
+      "'cup','Cup','household',150000000,'FitBud decision: 1 cup = 150 ml'",
+    );
+    expect(librarySchemaSql).toContain(
+      "'glass','Glass','household',250000000,'FitBud decision: 1 glass = 250 ml'",
+    );
+    expect(librarySchemaSql).toContain(
+      "'katori','Katori','household',150000000,'FitBud decision: 1 katori = 150 g/ml'",
     );
 
     const handle = await createMemoryDb();
@@ -90,6 +123,114 @@ describe("migration chain and seeds", () => {
           "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'exceptions_relationship_status_idx'",
         )[0]?.values ?? [];
       expect(dropped).toEqual([]);
+
+      const foodColumns = tableColumns(handle.sqlite, "food_library_items");
+      expect(foodColumns).toEqual(
+        expect.arrayContaining([
+          "name_norm",
+          "main_ingredients_json",
+          "description_provenance_json",
+          "instructions",
+          "density_g_per_ml_scaled",
+          "density_source",
+          "density_assumed",
+          "source_reason",
+          "source_refs_json",
+          "review_confidence_scaled",
+          "low_confidence",
+          "review_flags_json",
+          "legacy_id",
+        ]),
+      );
+      const servingColumns = tableColumns(handle.sqlite, "food_library_servings");
+      expect(servingColumns).toEqual(
+        expect.arrayContaining([
+          "amount_scaled",
+          "amount_unit",
+          "grams_scaled",
+          "descriptor",
+        ]),
+      );
+      const exerciseColumns = tableColumns(handle.sqlite, "exercise_library_items");
+      expect(exerciseColumns).toEqual(
+        expect.arrayContaining([
+          "name_norm",
+          "name_source",
+          "description",
+          "description_provenance",
+          "youtube_search_url",
+          "steps_source",
+          "steps_licence_json",
+          "steps_review_required",
+          "coaching_provenance",
+          "needs_human_review",
+          "review_flags_json",
+          "origin",
+        ]),
+      );
+      const mediaColumns = tableColumns(handle.sqlite, "exercise_library_media");
+      expect(mediaColumns).toEqual(
+        expect.arrayContaining([
+          "source_title",
+          "source_url",
+          "author",
+          "licence_url",
+          "match_confidence",
+          "modified",
+        ]),
+      );
+      expect(tableColumns(handle.sqlite, "exercise_library_links")).toEqual([
+        "id",
+        "exercise_library_item_id",
+        "kind",
+        "url",
+        "label",
+        "seed_version",
+      ]);
+      expect(indexColumns(handle.sqlite, "food_library_name_norm_idx")).toEqual([
+        "name_norm",
+      ]);
+      expect(indexColumns(handle.sqlite, "food_library_type_state_idx")).toEqual([
+        "food_type",
+        "cooking_state",
+      ]);
+      expect(indexColumns(handle.sqlite, "food_library_low_conf_idx")).toEqual([
+        "low_confidence",
+      ]);
+      expect(
+        indexColumns(handle.sqlite, "food_library_servings_one_default_uidx"),
+      ).toEqual(["food_library_item_id"]);
+      expect(indexColumns(handle.sqlite, "exercise_library_name_norm_idx")).toEqual([
+        "name_norm",
+      ]);
+      expect(indexColumns(handle.sqlite, "exercise_library_aliases_norm_idx")).toEqual([
+        "alias_norm",
+      ]);
+      expect(indexColumns(handle.sqlite, "exercise_library_equipment_code_idx")).toEqual(
+        ["equipment_code"],
+      );
+      expect(
+        indexColumns(handle.sqlite, "exercise_library_instructions_ex_idx"),
+      ).toEqual(["exercise_library_item_id", "kind", "position"]);
+      expect(indexColumns(handle.sqlite, "exercise_library_links_uidx")).toEqual([
+        "exercise_library_item_id",
+        "kind",
+        "url",
+      ]);
+
+      const units = handle.sqlite.exec(
+        "SELECT code, typical_grams_scaled FROM serving_units WHERE code IN ('cup', 'glass', 'katori') ORDER BY code",
+      )[0]?.values ?? [];
+      expect(units).toEqual([
+        ["cup", 150_000_000],
+        ["glass", 250_000_000],
+        ["katori", 150_000_000],
+      ]);
+      const sources =
+        handle.sqlite.exec(
+          "SELECT id FROM library_sources WHERE id IN ('wger', 'wikimedia_commons', 'user_csv') ORDER BY id",
+        )[0]?.values ?? [];
+      expect(sources).toEqual([["user_csv"], ["wger"], ["wikimedia_commons"]]);
     } finally {
       handle.close();
     }
