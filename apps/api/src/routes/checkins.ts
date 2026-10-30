@@ -1633,7 +1633,10 @@ checkinRoutes.get(
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
 
-    await detectExceptionsForRelationship(db, relationship.id, now);
+    // Rule 5 (EC1b): reading an ended client's check-in must not detect.
+    if (relationship.status !== "ended") {
+      await detectExceptionsForRelationship(db, relationship.id, now);
+    }
     const activeExceptionRows = await listActiveExceptionsForRelationship(
       db,
       relationship.id,
