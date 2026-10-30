@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte } from "drizzle-orm";
 import type { AdherenceState, OnboardingStatus } from "@fitbud/contracts";
 import {
   ADHERENCE_EXCEPTION_SEVERITIES,
@@ -11,7 +11,6 @@ import type { Db } from "../db/client";
 import {
   checkins,
   exceptions,
-  mealAssignments,
   mealCompliance,
   workoutAssignments,
   workoutExecutions,
@@ -77,21 +76,17 @@ export async function deriveAdherenceForRelationships(
       db
         .select({
           relationshipId: mealCompliance.coachingRelationshipId,
-          outcome: mealCompliance.outcome,
-          localDate: mealAssignments.localDate,
+          logged: count(),
         })
         .from(mealCompliance)
-        .innerJoin(
-          mealAssignments,
-          eq(mealCompliance.assignmentId, mealAssignments.id),
-        )
         .where(
           and(
             inArray(mealCompliance.coachingRelationshipId, activeIds),
-            gte(mealAssignments.localDate, start),
-            lte(mealAssignments.localDate, input.today),
+            gte(mealCompliance.localDate, start),
+            lte(mealCompliance.localDate, input.today),
           ),
-        ),
+        )
+        .groupBy(mealCompliance.coachingRelationshipId),
       db
         .select({
           relationshipId: checkins.coachingRelationshipId,
@@ -122,16 +117,7 @@ export async function deriveAdherenceForRelationships(
       }
     }
     for (const row of mealRows) {
-      if (
-        isQualifyingAdherenceObservation({
-          kind: "meal_compliance",
-          status: row.outcome,
-          localDate: row.localDate,
-          today: input.today,
-        })
-      ) {
-        qualifyingIds.add(row.relationshipId);
-      }
+      if (row.logged > 0) qualifyingIds.add(row.relationshipId);
     }
     for (const row of checkinRows) {
       if (

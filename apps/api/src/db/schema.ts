@@ -731,6 +731,8 @@ export const mealCompliance = sqliteTable(
     }).notNull(),
     recordVersion: integer("record_version").notNull().default(0),
     loggedAt: text("logged_at").notNull(),
+    /** Assignment civil date. Nullable only for rows written before 0032; inserts set it. */
+    localDate: text("local_date"),
     deviationKind: text("deviation_kind", {
       enum: [
         "portion_adjustment",
@@ -767,6 +769,10 @@ export const mealCompliance = sqliteTable(
     index("meal_compliance_relationship_logged_idx").on(
       table.coachingRelationshipId,
       table.loggedAt,
+    ),
+    index("meal_compliance_relationship_local_date_idx").on(
+      table.coachingRelationshipId,
+      table.localDate,
     ),
     index("meal_compliance_trainee_idx").on(table.traineeUserId),
   ],
