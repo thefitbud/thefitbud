@@ -416,13 +416,15 @@ describe("EC1b ended relationships are read-only for exception writes", () => {
       "ec1b-readeval-sched",
     );
     expect(scheduled.status).toBe(200);
-    // Move it to yesterday and make it overdue, so ending (which only stops
+    // Move it two days back and make it overdue, so ending (which only stops
     // today and later) keeps it and detection would pick it up if the read
-    // path evaluated the ended relationship.
+    // path evaluated the ended relationship. Two days, not one: ending takes
+    // "today" from the UTC date, which between 00:00 and 05:30 IST is still
+    // IST yesterday.
     await db
       .update(schema.checkins)
       .set({
-        localDate: addDaysToLocalDate(today, -1),
+        localDate: addDaysToLocalDate(today, -2),
         windowStartsAt: "2020-01-01T00:00:00.000Z",
         windowEndsAt: "2020-01-02T00:00:00.000Z",
       })
