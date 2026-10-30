@@ -17,7 +17,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 626–708. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-01 -->
 ### TW-01 · Sign in
@@ -27,8 +27,6 @@
 1. **Purpose and user.** The trainer gets into their workspace. Most trainers sign in on a laptop, and some on a tablet.
 2. **Entry points.** A direct URL, a redirect when the user has no session, sign-out, and session expiry (401).
 3. **Legacy (do not keep).** `shots/d1440_01_signin.png`. An email field turns into a test identity. There's no password and no Firebase.
-
-   ![Implemented sign-in (1440)](../img/impl_d1440_01_signin.jpg){.shot}
 
 4. **Gaps to close.**
    - Production sign-in isn't wired.
@@ -107,13 +105,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY: shows old UI, do not copy** (embedded in the guide section): `impl_d1440_01_signin.jpg`
-
-  ![impl_d1440_01_signin.jpg](../img/impl_d1440_01_signin.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 

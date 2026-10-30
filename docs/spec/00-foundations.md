@@ -438,4 +438,4 @@ FitBud has two **server-side** flags: KV or D1 config, read at send time and exp
 
 **Tests and capture**
 - Web E2E: `apps/trainer-web/e2e/trainer-flows.spec.ts` (Playwright, `pnpm --filter trainer-web test:e2e`). RCA.md says these drive flows through API `fetch`, which is a presence check only. Don't count them as UI evidence.
-- Web captures: `apps/trainer-web/scripts/capture-tw-screens.mjs` (render/uniqueness checks only). Mobile captures: Expo web plus `apps/mobile/src/dev/captureBridge.ts` (see `/workspace/fitbud-mobile-shots/capture.mjs`).
+- Web captures: `apps/trainer-web/scripts/capture-tw-screens.mjs` (render/uniqueness checks only; writes to `.captures/trainer-web` or `$CAPTURE_OUT`). Mobile captures: Expo web plus `apps/mobile/src/dev/captureBridge.ts` (see `/workspace/fitbud-mobile-shots/capture.mjs`).

@@ -22,7 +22,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1814–1895. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-23 -->
 ### TW-23 · Templates hub (type tabs)
@@ -32,8 +32,6 @@
 1. **Purpose.** Manage reusable starting points: use the global bases as they are, fork them, or create your own. Maintain the exercise and food libraries.
 2. **Entry.** Navigation, and the builder's *Duplicate as template*.
 3. **Legacy (do not keep).** `shots/d1440_06_templates*.png`. Family tabs with counts (Onboarding · Workout · Nutrition · Combined · Libraries), Global (read-only) and Trainer badges, Fork and New version. Cards are tiny on a large canvas. Open and Read versions expand inline. Libraries is about 6,200 px tall.
-
-   ![Figma vs implemented templates](../img/sbs_templates.jpg){.shot}
 
 4. **Gaps to close.**
    - There's no Check-in forms family in the UI (the route exists in the API).
@@ -111,29 +109,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY + REFERENCE (side by side): left = Figma/Stitch reference for density and hierarchy only (its banned elements, per 00-foundations.md §1.5, must not be built); right = old implemented UI, LEGACY: do not copy** (embedded in the guide section): `sbs_templates.jpg`
-
-  ![sbs_templates.jpg](../img/sbs_templates.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_d1440_06_templates.jpg`
-
-  ![impl_d1440_06_templates.jpg](../img/impl_d1440_06_templates.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_d1440_06_templates_3_New_trainer_template.jpg`
-
-  ![impl_d1440_06_templates_3_New_trainer_template.jpg](../img/impl_d1440_06_templates_3_New_trainer_template.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_d1440_06_templates_4_Open.jpg`
-
-  ![impl_d1440_06_templates_4_Open.jpg](../img/impl_d1440_06_templates_4_Open.jpg)
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (cited by the section or by guide Appendix D): `figma_trainer_03_templates.jpg`
-
-  ![figma_trainer_03_templates.jpg](../img/figma_trainer_03_templates.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
