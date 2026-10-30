@@ -30,7 +30,7 @@ export type Env = {
   PUSH_PROVIDER_MODE?: "test" | "fcm";
   /** HMAC secret for time-limited media upload/download URLs. */
   MEDIA_SIGNING_SECRET: string;
-  ENVIRONMENT?: "local" | "production" | "preview";
+  ENVIRONMENT?: "local" | "staging" | "production" | "preview";
   EMAIL_PROVIDER?: "dev_sink" | "disabled" | "resend" | "ses";
   SYSTEM_EMAIL_FROM?: string;
   SYSTEM_EMAIL_REPLY_TO?: string;
