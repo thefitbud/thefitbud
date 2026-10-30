@@ -626,6 +626,39 @@ h1.home-title:focus-visible {
   color: var(--ink-700, #25262b);
 }
 
+/* Trainer resolve confirmation (frames 02 / 132). */
+.drawer-resolve-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--semantic-positive-fill, #ecfdf5);
+  color: var(--semantic-positive-text, #047857);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.drawer-resolve-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-resolve-undo {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--semantic-positive-text, #047857);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 2px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .drawer-outcomes {
   display: flex;
   flex-wrap: wrap;

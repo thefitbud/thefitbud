@@ -72,6 +72,16 @@ function weightedPick(rng: Rng, entries: Array<[string, number]>): string {
   return entries[0]![0];
 }
 
+/**
+ * A coach ask sits at least an hour into its item's window and before it
+ * closes (QS6): `preferredMs`, clamped to [opens + 1 h, closes - 30 min].
+ */
+export function askInsideWindowMs(item: { windowStartsAt: string; windowEndsAt: string }, preferredMs: number): number {
+  const earliest = Date.parse(item.windowStartsAt) + HOUR;
+  const latest = Math.max(earliest, Date.parse(item.windowEndsAt) - HOUR / 2);
+  return Math.min(latest, Math.max(earliest, preferredMs));
+}
+
 /** Notes, asks and plan notifications derived from what was generated. */
 function addCoachingTouches(input: WorldInput, ctx: ActivityContext, items: GeneratedItem[], opts: {
   fromDate: string;
@@ -87,7 +97,13 @@ function addCoachingTouches(input: WorldInput, ctx: ActivityContext, items: Gene
   for (let i = 0; i < askCount && candidates.length > 0; i += 1) {
     const item = candidates[rng.int(0, candidates.length - 1)]!;
     const topic = weightedPick(rng, ASK_TOPICS);
-    const askedMs = Date.parse(localDayStartIso(item.localDate, "12:00", ctx.cfg.timezone)) + rng.int(0, 9) * HOUR;
+    // Never ask about an item before its window opened (QS5): a dinner or late
+    // workout opens after the 12:00–21:00 ask slot, so roll those to an hour in.
+    // An early meal closes before 21:00, so cap the ask inside its window (QS6).
+    const askedMs = askInsideWindowMs(
+      item,
+      Date.parse(localDayStartIso(item.localDate, "12:00", ctx.cfg.timezone)) + rng.int(0, 9) * HOUR,
+    );
     if (askedMs > nowMs) continue;
     const askId = demoUuid("coach_ask", ctx.relId, String(i));
     const expired = rng.chance(0.2);
@@ -130,19 +146,24 @@ function addCoachingTouches(input: WorldInput, ctx: ActivityContext, items: Gene
   }
   if (opts.openAsk) {
     const day = addDaysFromLocalDate(input.refDate, -opts.openAsk.daysAgo);
-    // Only ask about an item whose window has opened (an hour before now, so
-    // the ask can sit at least an hour back); otherwise roll back to the
-    // latest such item of the same kind.
+    // Only ask about an item whose window opened at least an hour ago, so the
+    // ask can sit an hour into the window and still be in the past; otherwise
+    // roll back to the latest such item of the same kind.
     const askable = items.filter(
-      (entry) => entry.kind === opts.openAsk!.kind && Date.parse(entry.windowStartsAt) <= nowMs - HOUR,
+      (entry) => entry.kind === opts.openAsk!.kind && Date.parse(entry.windowStartsAt) + HOUR <= nowMs,
     );
     const item = askable.find((entry) => entry.localDate === day) ??
       askable.filter((entry) => entry.localDate <= input.refDate).at(-1);
     if (item) {
+      // 19:30 local, or an hour back when that is still ahead; never in the
+      // first hour of the window, after it closed, or after now (QS6).
       const askedAt = iso(
-        Math.max(
-          Date.parse(item.windowStartsAt),
-          Math.min(Date.parse(localDayStartIso(item.localDate, "19:30", ctx.cfg.timezone)), nowMs - HOUR),
+        Math.min(
+          askInsideWindowMs(
+            item,
+            Math.min(Date.parse(localDayStartIso(item.localDate, "19:30", ctx.cfg.timezone)), nowMs - HOUR),
+          ),
+          nowMs,
         ),
       );
       rows.add("coach_asks", {
@@ -413,12 +434,15 @@ function addCurrentCheckins(input: WorldInput, ctx: ActivityContext, last: { id:
         });
         if (due >= clientLookbackFrom(input.now, cfg.timezone)) {
           const cleared = CLEARED_LOOKBACK.has(cfg.email);
+          // Detected 5 min after the window closed, but never after now: in the
+          // first 5 min past the close it is stamped now (QS5, QA-PR30 F3).
+          const detectedAt = iso(Math.max(Date.parse(end), Math.min(Date.parse(end) + 5 * 60_000, nowMs)));
           rows.add("exceptions", {
             id: demoUuid("exception", ctx.relId, `checkin-${id}`), coaching_relationship_id: ctx.relId, type: "overdue_checkin", status: cleared ? "resolved" : "active",
             rule_version: "mvp.v2", source_entity_type: "checkin", source_entity_id: id, summary: "Overdue check-in",
             details_json: JSON.stringify(overdueCheckinCandidate({ checkinId: id, localDate: due, windowEndsAt: end }).details),
-            detected_at: iso(Date.parse(end) + 5 * 60_000), activated_at: iso(Date.parse(end) + 5 * 60_000), acknowledged_at: null, resolved_at: cleared ? input.now : null,
-            created_at: iso(Date.parse(end) + 5 * 60_000), updated_at: cleared ? input.now : iso(Date.parse(end) + 5 * 60_000), severity: "attention",
+            detected_at: detectedAt, activated_at: detectedAt, acknowledged_at: null, resolved_at: cleared ? input.now : null,
+            created_at: detectedAt, updated_at: cleared ? input.now : detectedAt, severity: "attention",
             resolution_outcome: null, resolution_note: null, closed_reason: null, source_logged_late_at: null,
           });
         }
