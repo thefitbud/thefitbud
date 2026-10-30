@@ -70,6 +70,30 @@
     padding: 0;
   }
 
+  /* IP1a: reminders drawer Close is an unstyled .icon-btn (~27×30). */
+  .reminders-close {
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 44px;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    line-height: 1;
+  }
+
+  /* IP1a: ⋯ menu rows are ~42px from 0.55rem block padding. */
+  .overflow-menu-item {
+    box-sizing: border-box !important;
+    display: flex;
+    align-items: center;
+    min-height: 44px !important;
+    padding-block: 0.625rem;
+  }
+
   .button-sm {
     padding: 0 0.9rem;
     height: auto !important;
