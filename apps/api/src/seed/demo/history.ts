@@ -806,6 +806,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `DELETE FROM checkins WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND local_date >= ${sqlQuote(adherenceStart)};`,
   );
   // Pre-seed Farhan exceptions with realistic ages (not detected_at=now).
+  // Hard-cap at 10 open: evaluate no longer system-clears dense overdue stacks
+  // (OQ-23 / no auto_resolve), and A4 asserts ≤10 per client after attention.
   const farhanMealSlots = [
     MEAL_PRESCRIPTION_IDS.breakfast,
     MEAL_PRESCRIPTION_IDS.lunch,
@@ -816,13 +818,14 @@ function buildPersonaOverlays(input: HistoryInput): string {
   // whose later slots may still be open). Ten is the open-set cap that
   // attention evaluate keeps per client, so the first coach read neither
   // resolves nor tops up this stack.
+  const FARHAN_OPEN_EXCEPTION_CAP = 10;
   const farhanSlots = slotsFor("farhan.paused@demo.fitbud.test");
   const farhanOverdue = farhanMealSlots
     .flatMap((mealId) =>
       [0, 1, 2].map((dayOffset) => ({ mealId, dayOffset, slot: farhanSlots.meal(mealId, "closed", dayOffset) })),
     )
     .sort((a, b) => Date.parse(b.slot.endsAt) - Date.parse(a.slot.endsAt))
-    .slice(0, 10);
+    .slice(0, FARHAN_OPEN_EXCEPTION_CAP);
   for (const { mealId, dayOffset, slot } of farhanOverdue) {
     const aged = hoursBefore(now, 18 + dayOffset * 24);
     const detected = stampBetween(aged, slot.endsAt, now);
