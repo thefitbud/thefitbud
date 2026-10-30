@@ -121,3 +121,12 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **1440×900** (desktop, Chromium). Save it as `docs/spec/evidence/TW-11.png`. Save extra states as `docs/spec/evidence/TW-11--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+Location and sections (mockups 148, 149):
+- Configure lives in the client **Plan tab** as the sub-tab **Coaching setup** (next to *Plans*); route `/clients/:rid/plan?view=setup`. Entry: Plan tab; onboarding page › *Mark ready & configure*; header ⋯ › *Coaching setup*; Home Renewals CTA → Subscription section.
+- Accordion order: **Goal** (goalShort shown to the client, 120 chars; **detailed goal**, private, 500) · **Basics** (age, sex, height, start weight from intake, diet preference, timezone) · **Expectations** · Workouts · Nutrition · Check-ins · Reminders · Subscription. Tracking switches move into Expectations.
+- **Expectations** table: Expectation · Target · "Raises a flag when". Rows: Workouts per week + log window; Meals logged per week ("at least 22 of 28"); Check-in cadence + window; Weight trend range per week + weigh-in day; Steps (optional, only when the client connects a health app). Each row states which Attention/Critical rule it feeds. Counts only, no %. Changes apply from tomorrow and never re-flag past days. Saving on an active setup creates a new version (sticky footer: status pill + Save as vN).
+- **Open question (behaviour):** today's exception thresholds are global (00-foundations "does not reopen accepted behaviour"). Making them per-client from Expectations needs product sign-off and an API change.
