@@ -1083,6 +1083,7 @@ exceptionRoutes.post(
         resolvedAt: now,
         resolutionOutcome: outcome,
         resolutionNote: noteText,
+        closedReason: "trainer",
         updatedAt: now,
       })
       .where(eq(exceptions.id, row.id));
@@ -1131,6 +1132,7 @@ exceptionRoutes.post(
       resolvedAt: now,
       resolutionOutcome: outcome,
       resolutionNote: noteText,
+      closedReason: "trainer" as const,
       updatedAt: now,
     };
     const responseBody = {

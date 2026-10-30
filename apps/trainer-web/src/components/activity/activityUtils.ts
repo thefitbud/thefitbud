@@ -1,7 +1,13 @@
-import type { MealAssignment } from "@fitbud/contracts";
-import type { WorkspaceActivityItem, WorkspaceActivityType } from "@fitbud/contracts";
+import {
+  NUTRIENT_SCALE,
+  type MealAssignment,
+  type MealFoodItem,
+  type WorkspaceActivityItem,
+  type WorkspaceActivityType,
+} from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
+  dayMacrosFromScaledItems,
   formatCivilDate,
   formatClockTime,
   formatLocalDate,
@@ -154,6 +160,22 @@ export function mealDayHeaderSummary(
   return `${logged} of ${total} meals logged`;
 }
 
+/** Planned meal energy in kcal. Sum scaled nutrients, then unscale once. */
+export function planEnergyKcal(
+  items: readonly MealFoodItem[] | undefined,
+): number {
+  const totals = dayMacrosFromScaledItems(
+    (items ?? []).map((row) => {
+      if ("calculated" in row && row.calculated) return row.calculated;
+      if ("calories" in row && typeof row.calories === "number") {
+        return { energyKcalScaled: row.calories * NUTRIENT_SCALE };
+      }
+      return null;
+    }),
+  );
+  return totals.kcal;
+}
+
 export function mealDetailLine(
   assignment: MealAssignment | undefined,
 ): string {
@@ -175,16 +197,9 @@ export function mealDetailLine(
       .map((row) => row.name)
       .join(", ");
     const loggedKcal = compliance.loggedTotals?.energyKcal;
-    const planKcal = assignment.prescription.items?.reduce((sum, row) => {
-      if ("calculated" in row && row.calculated?.energyKcalScaled != null) {
-        return sum + row.calculated.energyKcalScaled;
-      }
-      return sum;
-    }, 0);
+    const planKcal = planEnergyKcal(assignment.prescription.items);
     const kcalPart =
-      loggedKcal != null
-        ? ` · ${loggedKcal} kcal${planKcal != null ? ` (plan ${planKcal})` : ""}`
-        : "";
+      loggedKcal != null ? ` · ${loggedKcal} kcal (plan ${planKcal})` : "";
     return `Ate: ${names}${kcalPart}`;
   }
   if (compliance.notes?.trim()) {
