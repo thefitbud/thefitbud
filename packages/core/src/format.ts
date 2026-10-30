@@ -172,7 +172,7 @@ export function formatRelative(
   const then = Date.parse(iso);
   const nowMs = typeof now === "string" ? Date.parse(now) : now.getTime();
   if (Number.isNaN(then) || Number.isNaN(nowMs)) return "";
-  let deltaSec = Math.round((nowMs - then) / 1000);
+  const deltaSec = Math.round((nowMs - then) / 1000);
   if (deltaSec < 0) {
     // Future
     const ahead = -deltaSec;

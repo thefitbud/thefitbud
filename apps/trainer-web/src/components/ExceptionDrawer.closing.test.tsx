@@ -57,6 +57,7 @@ const detail: ExceptionDetail = {
   activatedAt: "2026-10-22T06:00:00.000Z",
   acknowledgedAt: "2026-10-22T07:00:00.000Z",
   resolvedAt: null,
+  closedReason: null,
   createdAt: "2026-10-22T06:00:00.000Z",
   updatedAt: "2026-10-22T07:00:00.000Z",
   actions: [],
