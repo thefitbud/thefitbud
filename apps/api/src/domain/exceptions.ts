@@ -200,16 +200,31 @@ export async function evaluateRelationshipExceptions(
   exceptions: ReturnType<typeof mapException>[];
   resolvedExceptions: ReturnType<typeof mapException>[];
 }> {
+  const relationship = await db
+    .select({
+      traineeUserId: coachingRelationships.traineeUserId,
+      status: coachingRelationships.status,
+    })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, relationshipId))
+    .limit(1);
+  // Rule 5 (EC1b): an ended relationship is read-only. Detection must never
+  // create, activate or auto-resolve its exceptions, whoever the caller is.
+  if (relationship[0]?.status === "ended") {
+    return {
+      created: 0,
+      activated: 0,
+      resolved: 0,
+      exceptions: [],
+      resolvedExceptions: [],
+    };
+  }
+
   const existingRows = await db
     .select()
     .from(exceptions)
     .where(eq(exceptions.coachingRelationshipId, relationshipId));
 
-  const relationship = await db
-    .select({ traineeUserId: coachingRelationships.traineeUserId })
-    .from(coachingRelationships)
-    .where(eq(coachingRelationships.id, relationshipId))
-    .limit(1);
   const timeZone = relationship[0]
     ? await loadTraineeTimezone(db, relationship[0].traineeUserId)
     : "Asia/Kolkata";
