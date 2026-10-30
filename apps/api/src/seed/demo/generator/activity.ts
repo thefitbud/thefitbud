@@ -2,7 +2,7 @@
  * Day-by-day simulation of assignments, logs, executions, check-ins, weights and
  * historical exceptions for one persona over a date range (SEED_DESIGN.md §6.3–6.4).
  */
-import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
+import type { PlanContent } from "@fitbud/contracts";
 import {
   mealAdherenceCandidate,
   missedWorkoutCandidate,
@@ -133,7 +133,7 @@ function insertException(ctx: ActivityContext, rng: Rng, input: {
   candidate: ExceptionCandidate;
   detectedAt: string;
   open: boolean;
-  /** When the source was logged later (auto-resolve). */
+  /** When the source was logged later (Client logged later; not auto-resolved). */
   loggedLateAt?: string | null;
 }): void {
   const { rows } = ctx;
@@ -291,7 +291,11 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           deviationKind = weekdayOf(date) === 6 && mealRng.chance(0.5) ? "restaurant" : mealRng.pick(kinds);
           if (deviationKind === "restaurant" || deviationKind === "logged_foods") {
             const slug = mealRng.pick(deviationSlugs);
-            const dish = foodByGrams(ctx.lib, slug, mealRng.int(15, 30) * 10);
+            const dish = foodByGrams(ctx.lib, slug, mealRng.int(15, 30) * 10, (clamp) => {
+              throw new Error(
+                `Demo seed: deviation ${clamp.slug} requested ${clamp.requestedGrams} g and would silently cap at ${clamp.cappedUnits} × "${clamp.servingLabel}"`,
+              );
+            });
             const items = [dish];
             itemsJson = JSON.stringify(items);
             macros = mealMacros(items);

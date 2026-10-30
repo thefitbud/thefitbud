@@ -39,6 +39,7 @@ import {
   mapNotificationPreferences,
   mapReminderRule,
 } from "../domain/mappers";
+import { presentNotifications } from "../domain/notification-client-names.js";
 import {
   parseTrainerCategoriesJson,
   serializeTrainerCategories,
@@ -603,7 +604,7 @@ notificationRoutes.get(
     return ok(
       c,
       notificationListResponseSchema.parse({
-        items: rows.map(mapNotification),
+        items: await presentNotifications(db, rows),
         nextCursor: null,
       }),
     );
@@ -683,7 +684,11 @@ notificationRoutes.post(
     if (!updated) {
       return fail(c, 404, "NOTIFICATION_NOT_FOUND", "Notification not found.");
     }
-    return ok(c, notificationSchema.parse(mapNotification(updated)));
+    const [presented] = await presentNotifications(db, [updated]);
+    if (!presented) {
+      return fail(c, 404, "NOTIFICATION_NOT_FOUND", "Notification not found.");
+    }
+    return ok(c, notificationSchema.parse(presented));
   },
 );
 
