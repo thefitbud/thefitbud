@@ -4,7 +4,7 @@ import {
   mealComplianceSummaryResponseSchema,
   meDayResponseSchema,
 } from "@fitbud/contracts";
-import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
+import { NUTRIENT_SCALE, planContentSchema, type PlanContent } from "@fitbud/contracts";
 import { demoUuid } from "./ids.js";
 import { hashPassword } from "../../auth/password.js";
 import { app } from "../../index.js";
@@ -20,6 +20,10 @@ import { assertNoForeignKeyViolations } from "../../test-support/foreign-key-che
 import { createMemoryDb } from "../../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../../test-support/seeded-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
+import { replenishRollingHorizons } from "../../domain/assignment-schedule.js";
+import { mealPrescriptionsFor } from "./generator/content.js";
+import { buildPlanChain } from "./generator/plans.js";
+import { PERSONA_CONFIGS } from "./generator/personas.js";
 
 function testEnv(): Env {
   return {
@@ -749,6 +753,201 @@ describe("demo seed", () => {
       expect(one("SELECT COUNT(*) FROM measurements WHERE type = 'body_weight_kg' AND (value < 40 OR value > 140)")).toBe(0);
       expect(one(`SELECT COUNT(*) FROM meal_compliance WHERE logged_at > '${FROZEN_REFERENCE_INSTANT}'`)).toBe(0);
       expect(one(`SELECT COUNT(*) FROM workout_executions WHERE created_at > '${FROZEN_REFERENCE_INSTANT}'`)).toBe(0);
+    });
+
+    it("keeps every seeded meal quantity inside the plan contract (QS1)", () => {
+      // planContentSchema caps a calculated item's quantityScaled at 100 units; one item over it
+      // made replenishRollingHorizons throw a ZodError on every cron for that client.
+      const max = NUTRIENT_SCALE * 100;
+      const sources: Array<[string, string]> = [
+        ["plan_versions", "SELECT id, content_json FROM plan_versions"],
+        ["plan_templates", "SELECT id, content_json FROM plan_templates"],
+        ["meal_assignments", "SELECT id, meal_prescription_json FROM meal_assignments"],
+      ];
+      const outOfRange: string[] = [];
+      let checked = 0;
+      for (const [table, sql] of sources) {
+        for (const [id, json] of q(sql)) {
+          for (const match of String(json).matchAll(/"quantityScaled":(-?[\d.e+]+)/g)) {
+            checked += 1;
+            const value = Number(match[1]);
+            if (!Number.isInteger(value) || value <= 0 || value > max) outOfRange.push(`${table} ${String(id)}: ${match[1]}`);
+          }
+        }
+      }
+      expect(checked).toBeGreaterThan(1000);
+      expect(outOfRange).toEqual([]);
+      for (const [id, json] of q("SELECT id, content_json FROM plan_versions")) {
+        const parsed = planContentSchema.safeParse(JSON.parse(String(json)));
+        expect(parsed.success, `plan_versions ${String(id)}: ${parsed.success ? "" : parsed.error.message}`).toBe(true);
+      }
+    });
+
+    it("lets the cron replenish every seeded client without a schema error (QS1)", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const watched = ["imran.nightshift@demo.fitbud.test", "rajesh.senior@demo.fitbud.test"].map(relOf);
+        const horizon = (rel: string) =>
+          String(q(`SELECT MAX(local_date) FROM meal_assignments WHERE coaching_relationship_id = '${rel}'`)[0]?.[0] ?? "");
+        const before = watched.map(horizon);
+        const later = new Date(Date.parse(FROZEN_REFERENCE_INSTANT) + 3 * 86_400_000).toISOString();
+        const result = await replenishRollingHorizons(db, later);
+        const failures = errors.mock.calls.map((c) => String(c[0])).filter((line) => line.includes("replenishment failed"));
+        expect(failures).toEqual([]);
+        expect(result.mealsCreated).toBeGreaterThan(0);
+        watched.forEach((rel, i) => expect(horizon(rel) > (before[i] ?? ""), rel).toBe(true));
+      } finally {
+        errors.mockRestore();
+      }
+    });
+
+    // Prescribed meal items as the generator wrote them: plan versions, templates and assignment snapshots.
+    type SeededMeal = {
+      instructions?: string | null;
+      items?: Array<{
+        serving?: { label: string; unit: string; conversionScaled?: number | null } | null;
+        quantityScaled?: number;
+        sourceFoodLibraryItemId?: string | null;
+        sourceServingId?: string | null;
+      }>;
+    };
+    const seededMeals = (): Array<{ where: string; meal: SeededMeal }> => {
+      const out: Array<{ where: string; meal: SeededMeal }> = [];
+      for (const table of ["plan_versions", "plan_templates"]) {
+        for (const [id, json] of q(`SELECT id, content_json FROM ${table}`)) {
+          const content = JSON.parse(String(json)) as { mealPrescriptions?: SeededMeal[] };
+          for (const meal of content.mealPrescriptions ?? []) out.push({ where: `${table} ${String(id)}`, meal });
+        }
+      }
+      for (const [id, json] of q("SELECT id, meal_prescription_json FROM meal_assignments")) {
+        out.push({ where: `meal_assignments ${String(id)}`, meal: JSON.parse(String(json)) as SeededMeal });
+      }
+      return out;
+    };
+    const QS1_FOODS = ["sprouted-moong-chaat", "tea-black-brewed"];
+    const foodIdsOf = (slugs: string[]) =>
+      new Map(q(`SELECT id, slug FROM food_library_items WHERE ownership = 'global' AND slug IN (${slugs.map((s) => `'${s}'`).join(",")})`).map(([id, slug]) => [String(id), String(slug)]));
+
+    it("never uses a plausible = 0 serving for a generated meal or logged food (QS1)", () => {
+      const implausible = new Map(
+        q(`SELECT s.id, f.slug || ' / ' || s.label FROM food_library_servings s JOIN food_library_items f ON f.id = s.food_library_item_id WHERE s.plausible = 0`).map(([id, name]) => [String(id), String(name)]),
+      );
+      expect(implausible.size).toBeGreaterThan(0);
+      const used: string[] = [];
+      let checked = 0;
+      const note = (where: string, servingId: string | null | undefined) => {
+        if (!servingId) return;
+        checked += 1;
+        const name = implausible.get(servingId);
+        if (name) used.push(`${where}: ${name}`);
+      };
+      for (const { where, meal } of seededMeals()) for (const item of meal.items ?? []) note(where, item.sourceServingId);
+      for (const [id, json] of q("SELECT id, items_json FROM meal_compliance WHERE items_json IS NOT NULL")) {
+        for (const item of JSON.parse(String(json)) as Array<{ sourceServingId?: string | null }>) {
+          note(`meal_compliance ${String(id)}`, item.sourceServingId);
+        }
+      }
+      expect(checked).toBeGreaterThan(1000);
+      expect(used.slice(0, 8)).toEqual([]);
+
+      // Arjun's 130 g chaat used to land on 0.5 × the implausible INDB plate.
+      const arjun = relOf("arjun.attention@demo.fitbud.test");
+      const chaatId = String(q("SELECT id FROM food_library_items WHERE ownership = 'global' AND slug = 'sprouted-moong-chaat'")[0]?.[0]);
+      const plateId = String(
+        q(`SELECT s.id FROM food_library_servings s JOIN food_library_items f ON f.id = s.food_library_item_id WHERE f.slug = 'sprouted-moong-chaat' AND s.label = '1 plate (INDB recipe portion)'`)[0]?.[0],
+      );
+      expect(implausible.has(plateId)).toBe(true);
+      let chaatRows = 0;
+      for (const [json] of q(`SELECT meal_prescription_json FROM meal_assignments WHERE coaching_relationship_id = '${arjun}'`)) {
+        const meal = JSON.parse(String(json)) as SeededMeal;
+        for (const item of meal.items ?? []) {
+          if (String(item.sourceFoodLibraryItemId) !== chaatId) continue;
+          chaatRows += 1;
+          expect(item.sourceServingId).not.toBe(plateId);
+          expect(item.serving?.label).not.toBe("1 plate (INDB recipe portion)");
+          expect(item.serving?.unit).toBe("g");
+          const units = (item.quantityScaled ?? 0) / NUTRIENT_SCALE;
+          const gramsPerUnit = (item.serving?.conversionScaled ?? 0) / NUTRIENT_SCALE;
+          const grams = units * gramsPerUnit;
+          expect(grams).toBeGreaterThanOrEqual(90);
+          expect(grams).toBeLessThanOrEqual(140);
+        }
+      }
+      expect(chaatRows).toBeGreaterThan(50);
+    });
+
+    it("never logs a compliance item at the 100-unit cap on a gram serving (QS1)", () => {
+      const capped: string[] = [];
+      let checked = 0;
+      for (const [id, json] of q("SELECT id, items_json FROM meal_compliance WHERE items_json IS NOT NULL")) {
+        const items = JSON.parse(String(json)) as Array<{
+          name?: string;
+          quantityScaled?: number;
+          serving?: { label?: string; unit?: string; conversionScaled?: number | null } | null;
+        }>;
+        for (const item of items) {
+          if (item.quantityScaled == null || !item.serving) continue;
+          checked += 1;
+          if (item.serving.unit === "g" && item.quantityScaled === NUTRIENT_SCALE * 100) {
+            capped.push(`meal_compliance ${String(id)}: ${item.name ?? "food"} × ${item.serving.label}`);
+          }
+        }
+      }
+      expect(checked).toBeGreaterThan(0);
+      expect(capped).toEqual([]);
+    });
+
+    it("keeps the instruction text in step with the serving for the QS1 foods", () => {
+      const touched = foodIdsOf(QS1_FOODS);
+      let checked = 0;
+      const mismatched: string[] = [];
+      for (const { where, meal } of seededMeals()) {
+        // Only meals where the generator wrote instructions (library-seed templates carry none).
+        if (!meal.instructions) continue;
+        const items = meal.items ?? [];
+        const parts = String(meal.instructions ?? "").split(" · ");
+        items.forEach((item, index) => {
+          if (!touched.has(String(item.sourceFoodLibraryItemId)) || !item.serving) return;
+          checked += 1;
+          // The generator writes one instruction part per item, in order.
+          const part = items.length === parts.length ? (parts[index] ?? "") : "";
+          const ok = item.serving.unit === "g" ? part === item.serving.label : part.includes(item.serving.unit);
+          if (!ok) mismatched.push(`${where}: "${part}" vs ${item.serving.label}`);
+        });
+      }
+      expect(checked).toBeGreaterThan(500);
+      expect(mismatched.slice(0, 5)).toEqual([]);
+    });
+
+    it("caps meal amounts at the contract limit only for the known persona scales (QS1)", () => {
+      const lib = loadDemoLibraryIndex({ exec: sqliteExec });
+      // Catalogue templates at scale 1 must already fit; a 150 g gram-only item would fail here.
+      for (const template of DIET_TEMPLATES) {
+        const clamps: string[] = [];
+        mealPrescriptionsFor(lib, template, { workout: null, diet: template.code, idKey: `qs1-${template.code}`, onClamp: (c) => clamps.push(c.slug) });
+        expect(clamps, template.code).toEqual([]);
+      }
+      const clamped = new Map<string, number[]>();
+      for (const cfg of PERSONA_CONFIGS) {
+        const chain = buildPlanChain({ lib, cfg, relId: `qs1-${cfg.email}`, refDate, legacyWindow: false, windowStart: refDate });
+        for (const version of chain) {
+          for (const clamp of version.quantityClamps) {
+            expect(clamp.cappedUnits).toBe(100);
+            expect(clamp.servingLabel).toBe("100 g");
+            const key = `${cfg.email.split("@")[0]} ${clamp.slug}`;
+            clamped.set(key, [...new Set([...(clamped.get(key) ?? []), clamp.requestedGrams])].sort((a, b) => a - b));
+          }
+        }
+      }
+      // Each is a 100 g template item × dietScale > 1; a new entry here means a template or scale grew past the cap.
+      expect(Object.fromEntries([...clamped].sort())).toEqual({
+        "arjun.attention sprouted-moong-chaat": [130],
+        "imran.nightshift sprouted-moong-chaat": [105],
+        "karan.dual tea-black-brewed": [110, 115],
+        "kavya.ended tea-black-brewed": [110],
+        "nikhil.reactivate sprouted-moong-chaat": [110],
+        "rohan.slipping sprouted-moong-chaat": [110],
+      });
     });
 
     it("builds months of history for the generated clients", () => {
