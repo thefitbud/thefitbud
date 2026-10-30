@@ -28,7 +28,7 @@ size: S
 - Per-env `[vars]` still to add (v14 I4a; Decision D-B10, Firoz 31 Oct 2026; D-W1-3):
   - staging: `AUTH_MODE = "firebase"`, `PUSH_PROVIDER_MODE = "expo"`, `EMAIL_PROVIDER = "zeptomail"`, `APP_HOST = "app-staging.thefitbud.com"`, `SESSION_COOKIE_NAME = "fitbud_session"`, `SUPPORT_EMAIL = "tech@thefitbud.com"`, `ADMIN_ALERT_EMAILS = "tech@thefitbud.com"`.
   - production: same, with `APP_HOST = "app.thefitbud.com"`.
-  - `SYSTEM_EMAIL_FROM` / `SYSTEM_EMAIL_REPLY_TO` per env: **D-W1-9 (Open)**. Recommended `FitBud <no-reply@thefitbud.com>` with reply-to `tech@thefitbud.com`. Stop if still Open.
+  - D-W1-9 (Firoz, 31 Oct 2026), both envs: `SYSTEM_EMAIL_FROM = "FitBud <no-reply@thefitbud.com>"`, `SYSTEM_EMAIL_REPLY_TO = "tech@thefitbud.com"`. The top-level local `SYSTEM_EMAIL_FROM` stays unchanged.
   - `MEDIA_PREFIX` is added by I4b, not here.
 - `PUSH_PROVIDER_MODE = "expo"` and `EMAIL_PROVIDER = "zeptomail"` are values the code accepts only after X4a (W3) and I5 (W2). Until then a staging deploy would be refused by AU2's guard; that is intended: no staging deploy happens before I6 (W2→W3).
 - **No secrets in toml:** `MEDIA_SIGNING_SECRET`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `ZEPTOMAIL_TOKEN`, `EXPO_ACCESS_TOKEN`, `SENTRY_DSN` are set by Firoz as Worker secrets. Do not copy the local `MEDIA_SIGNING_SECRET` value into an env block.
@@ -39,6 +39,7 @@ size: S
 - `apps/api/wrangler.toml:74-82`: env blocks hold only `[env.*.vars]` with 3 vars each (PR #76). No D1, R2, queue, DO or cron bindings for either env, and no `AUTH_MODE`, `PUSH_PROVIDER_MODE`, `EMAIL_PROVIDER`, `APP_HOST`, `SESSION_COOKIE_NAME`, `SUPPORT_EMAIL`, `ADMIN_ALERT_EMAILS` or `SYSTEM_EMAIL_*`.
 
 ## Acceptance criteria
+- [ ] Both `[env.staging.vars]` and `[env.production.vars]` contain exactly `SYSTEM_EMAIL_FROM = "FitBud <no-reply@thefitbud.com>"` and `SYSTEM_EMAIL_REPLY_TO = "tech@thefitbud.com"`.
 - [ ] `[env.staging]` and `[env.production]` each define D1, R2, queue producer, queue consumer with `dead_letter_queue`, DO binding, `triggers.crons` and `vars`, with the exact names and ids in Context.
 - [ ] No env block contains `MEDIA_SIGNING_SECRET` or any other secret value; `git grep -n "SECRET\|TOKEN\|PRIVATE" apps/api/wrangler.toml` shows only comments and the unchanged local `MEDIA_SIGNING_SECRET` line. The two `FIREBASE_WEB_API_KEY` lines are public and expected.
 - [ ] The top-level config and the 3 vars per env from PR #76 are unchanged (diff shows only added lines).
@@ -51,7 +52,7 @@ size: S
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 
 ## Tests to add
-- None new; paste both dry-run outputs (trimmed of account ids) into the PR.
+- None new; check the D-W1-9 values with `grep -n SYSTEM_EMAIL apps/api/wrangler.toml` (4 env lines plus the unchanged local line) and paste both dry-run outputs (trimmed of account ids) into the PR.
 - Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 
 ## Visual check

@@ -24,7 +24,7 @@ A staging or production Worker that is accidentally configured with a test auth,
 - Decision D-B9 (Firoz, 31 Oct 2026): this spec decides the auth change; no mid-task approval.
 - `"staging"` is already in `ENVIRONMENT` (`apps/api/src/types.ts:33`, PR #76); this task does not edit `types.ts`.
 - Rule (v14 AU2): when `ENVIRONMENT` is `staging` or `production` and any of `AUTH_MODE=test`, `PUSH_PROVIDER_MODE=test`, `EMAIL_PROVIDER=dev_sink` is set, every request returns an error with code `RUNTIME_MISCONFIGURED`, and the reason is logged once per isolate.
-- **D-W1-10 (Open in W1.md):** the HTTP status for `RUNTIME_MISCONFIGURED`. v14 says 500; today's partial checks return 503 (`auth-login.ts:143` `AUTH_NOT_CONFIGURED`, `middleware/auth.ts:48-53` `AUTH_MODE_TEST_DISABLED`). Recommended: 500 as v14 says. If it is still Open at launch, stop.
+- **D-W1-10 (Firoz, 31 Oct 2026): `RUNTIME_MISCONFIGURED` returns HTTP 500.** Today's partial checks return 503 (`auth-login.ts:143` `AUTH_NOT_CONFIGURED`, `middleware/auth.ts:48-53` `AUTH_MODE_TEST_DISABLED`). The guard runs first, so in staging/production with a test mode both now answer 500 `RUNTIME_MISCONFIGURED`. Update `apps/api/src/routes/auth-login.test.ts:297-313` (it expects 503 `AUTH_NOT_CONFIGURED` with `ENVIRONMENT: "production"`) to expect 500 `RUNTIME_MISCONFIGURED`. `AUTH_NOT_CONFIGURED` remains only for firebase mode without `FIREBASE_SERVICE_ACCOUNT_JSON` (`auth-login.ts:101-103`), still 503.
 - Wrangler does not inherit top-level `[vars]` into `[env.*]`. Until I4a lands, the staging and production envs on `main` set only `ENVIRONMENT`, `FIREBASE_PROJECT_ID` and `FIREBASE_WEB_API_KEY` (`wrangler.toml:74-82`), so `AUTH_MODE` is unset there. Treat an unset `AUTH_MODE` in staging or production as misconfigured too.
 - **gitleaks note:** gitleaks flags the two Firebase web API keys in `apps/api/wrangler.toml` (`[env.staging.vars]` and `[env.production.vars]`, added in PR #76) as `gcp-api-key`. They are public Firebase Web identifiers that ship to browsers (D-W1-8, Firoz, 31 Oct 2026). This finding is expected: do not remove or move the keys, and do not treat it as a stop condition.
 - `preview` keeps today's behaviour (it is neither staging nor production).
@@ -40,12 +40,13 @@ A staging or production Worker that is accidentally configured with a test auth,
 - `apps/api/src/routes/auth-login.ts:272-275`: WhatsApp channel added whenever `flags.wa_otp` is on, in any environment.
 
 ## Acceptance criteria
-- [ ] With `ENVIRONMENT=staging` or `production` and `AUTH_MODE=test`, `GET /health` and any other route return the D-W1-10 status with `error.code = "RUNTIME_MISCONFIGURED"` and a `requestId`.
+- [ ] With `ENVIRONMENT=staging` or `production` and `AUTH_MODE=test`, `GET /health` and any other route return HTTP **500** with `error.code = "RUNTIME_MISCONFIGURED"` and a `requestId`.
 - [ ] Same for `AUTH_MODE` unset, for `PUSH_PROVIDER_MODE=test` (or unset) and for `EMAIL_PROVIDER=dev_sink` (or unset).
 - [ ] With `ENVIRONMENT=staging`, `AUTH_MODE=firebase`, `PUSH_PROVIDER_MODE` not `test`, `EMAIL_PROVIDER` not `dev_sink`, requests are served normally.
 - [ ] `ENVIRONMENT=local` and `preview` are unaffected by the guard.
 - [ ] The misconfiguration is logged once per isolate, naming the offending vars; no secret values are logged.
 - [ ] With `ENVIRONMENT` other than `local`, `/auth/otp/start` for a mobile identifier with `wa_otp` on returns `channels: ["email"]` and sends no WhatsApp message; in `local` behaviour is unchanged.
+- [ ] No route returns 503 `AUTH_NOT_CONFIGURED` or `AUTH_MODE_TEST_DISABLED` for a test mode outside local; `auth-login.test.ts` "returns AUTH_NOT_CONFIGURED when test auth runs outside local" is updated to expect 500 `RUNTIME_MISCONFIGURED`.
 - [ ] Existing auth tests pass; the VITEST bypass in `middleware/auth.ts` is removed or no longer needed because tests set `ENVIRONMENT=local`.
 
 ## Out of scope
@@ -55,7 +56,8 @@ A staging or production Worker that is accidentally configured with a test auth,
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 
 ## Tests to add
-- `apps/api/src/middleware/runtime-guard.test.ts`: matrix of ENVIRONMENT (local, preview, staging, production) × each test mode → served or `RUNTIME_MISCONFIGURED`; log emitted once.
+- `apps/api/src/middleware/runtime-guard.test.ts`: matrix of ENVIRONMENT (local, preview, staging, production) × each test mode → served, or status 500 with `RUNTIME_MISCONFIGURED`; log emitted once.
+- `apps/api/src/routes/auth-login.test.ts:297-313`: change the expectation from 503 `AUTH_NOT_CONFIGURED` to 500 `RUNTIME_MISCONFIGURED`.
 - `apps/api/src/routes/auth-login.test.ts`: OTP start returns email only outside local even with `wa_otp` on; local still offers WhatsApp for a mobile identifier.
 - Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 

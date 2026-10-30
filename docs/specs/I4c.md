@@ -2,10 +2,10 @@
 id: I4c
 title: Deploy, migrate and library-seed scripts per env (plus predev filter fix)
 batch: W1
-depends_on: [I4b]
+depends_on: [I4b, AU1]
 lane: infra
 files_owned:
-  - apps/api/package.json  # scripts block
+  - apps/api/package.json  # scripts block only, D-W1-6 decided
   - apps/api/scripts/deploy-env.ts
   - apps/api/scripts/deploy-env.test.ts
 frames: []
@@ -23,6 +23,8 @@ Firoz has one documented command per env to deploy the API, apply D1 migrations 
 - The library entry calls `tsx scripts/library-seed.ts --env <env> --remote --yes`; the remote logic itself is I2d (library lane). If I2d has not merged, `library-seed.ts` refuses `--remote` today (`library-seed.ts:51-55`), which is the safe behaviour.
 - **X2 fix moved here (W1.md ownership fix, 31 Oct 2026):** `apps/api/package.json` `predev`, `predb:reset` and `presetup:local` use `pnpm --filter thefitbud build:packages`, which CI reports as "No projects matched the filters". Change each to `pnpm -w run build:packages` (root `package.json:9` defines `build:packages`).
 
+- D-W1-6 (Firoz, 31 Oct 2026): I4c owns only the `scripts` block of `apps/api/package.json`; AU1 adds `jose` to `dependencies`. Start after AU1 is merged (or merge `main` in first); do not edit `dependencies` or `devDependencies`.
+
 ## Gap list
 - `apps/api/package.json:7-9`: `pnpm --filter thefitbud build:packages` in three pre-scripts.
 - `apps/api/package.json:16-17`: only `db:migrate:local` and an env-less `db:migrate`; no deploy or per-env scripts.
@@ -33,6 +35,7 @@ Firoz has one documented command per env to deploy the API, apply D1 migrations 
 - [ ] Running any of them without `--yes` prints the command and exits non-zero without calling Wrangler.
 - [ ] `pnpm --filter @fitbud/api deploy:staging -- --dry-run` completes a Wrangler dry run locally.
 - [ ] `predev`, `predb:reset`, `presetup:local` use `pnpm -w run build:packages`; `pnpm db:reset` works from a clean checkout.
+- [ ] `git diff main -- apps/api/package.json` touches only the `scripts` block.
 - [ ] The agent ran no remote command (state it in the PR).
 
 ## Out of scope
