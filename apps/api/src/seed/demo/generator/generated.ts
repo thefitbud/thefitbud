@@ -2,7 +2,7 @@
  * Per-persona world building: deep pre-window history for the original
  * accounts and the full lifecycle for the 8 generated Rahul clients.
  */
-import { overdueCheckinCandidate } from "@fitbud/core";
+import { formatLocalDate, overdueCheckinCandidate } from "@fitbud/core";
 import { addDaysFromLocalDate, demoUuid, localDayStartIso } from "../ids.js";
 import type { DemoLibraryIndex } from "../personas.js";
 import { DEMO_CHECKIN_FORM_VERSION_ID } from "../personas.js";
@@ -37,6 +37,18 @@ export type WorldInput = {
 
 export function startedAtFor(cfg: PersonaConfig, refDate: string): string {
   return new Date(Date.parse(`${refDate}T06:00:00.000Z`) - cfg.tenureDays * 86_400_000).toISOString();
+}
+
+/**
+ * First local date inside detection's 3-day lookback for this client. Detection
+ * counts from the client's own local today (domain/exceptions.ts
+ * detectionWindowStartLocalDate), not the IST refDate: west of IST the client
+ * can still be a civil day behind, so an IST-based start would leave that day
+ * uncovered and the first coach read would create rows (QS4). Meal, workout
+ * and check-in coverage all use this.
+ */
+export function clientLookbackFrom(now: string, timezone: string): string {
+  return addDaysFromLocalDate(formatLocalDate(new Date(now), timezone), -2);
 }
 
 export function checkinFormFor(cfg: PersonaConfig): string {
@@ -361,7 +373,7 @@ export function addGeneratedPersona(input: WorldInput, cfg: PersonaConfig): void
     rows, lib: input.lib, cfg, relId, planId, chain, traineeId, trainerId, refDate, now, startDate,
     checkinScheduleId: scheduleId, checkinFormVersionId: checkinFormFor(cfg),
   };
-  const lookbackFrom = addDaysFromLocalDate(refDate, -2);
+  const lookbackFrom = clientLookbackFrom(now, cfg.timezone);
   const result = simulateActivity(ctx, { fromDate: startDate, toDate: refDate, assignUntil: addDaysFromLocalDate(refDate, 6), lookbackFrom, checkins: true });
   // SEED_DESIGN §4 distribution: these read on_track / no_recent_data, so the
   // coach has already cleared every lookback item; the rest keep ≤4 open.
@@ -399,7 +411,7 @@ function addCurrentCheckins(input: WorldInput, ctx: ActivityContext, last: { id:
           window_starts_at: start, window_ends_at: end, record_status: "draft", record_version: 0, definition_version: 1,
           checkin_form_version_id: ctx.checkinFormVersionId, answers_json: null, submitted_at: null, created_at: start, updated_at: start,
         });
-        if (due >= addDaysFromLocalDate(input.refDate, -2)) {
+        if (due >= clientLookbackFrom(input.now, cfg.timezone)) {
           const cleared = CLEARED_LOOKBACK.has(cfg.email);
           rows.add("exceptions", {
             id: demoUuid("exception", ctx.relId, `checkin-${id}`), coaching_relationship_id: ctx.relId, type: "overdue_checkin", status: cleared ? "resolved" : "active",

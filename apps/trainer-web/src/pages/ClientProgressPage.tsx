@@ -221,6 +221,7 @@ export function ClientProgressPage() {
                     <td>
                       {row.source === "checkin" && row.checkinId ? (
                         <Link
+                          className="progress-checkin-link"
                           to={`/clients/${relationshipId}/check-ins/${row.checkinId}`}
                         >
                           From check-in ·{" "}
