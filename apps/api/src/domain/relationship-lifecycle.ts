@@ -1,5 +1,10 @@
 import { and, eq, exists, gte, inArray, ne, sql } from "drizzle-orm";
-import { isOpenExceptionStatus } from "@fitbud/core";
+import {
+  addDaysToLocalDate,
+  formatLocalDate,
+  isOpenExceptionStatus,
+  localDateTimeToUtcIso,
+} from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
   checkins,
@@ -13,6 +18,7 @@ import {
   workoutAssignments,
 } from "../db/schema.js";
 import { createId, nowIso } from "../lib/crypto.js";
+import { loadTraineeTimezone } from "./assignment-schedule.js";
 
 /** Every non-terminal exception status (detected, active, acknowledged). */
 export const OPEN_EXCEPTION_STATUSES = exceptions.status.enumValues.filter(
@@ -41,12 +47,25 @@ export async function assertRelationshipWritable(
   return relationship;
 }
 
-/** Civil date one day before `iso` (UTC calendar), used to close plan horizons. */
-function previousCivilDate(iso: string): string {
-  const day = iso.slice(0, 10);
-  const prior = new Date(`${day}T12:00:00.000Z`);
-  prior.setUTCDate(prior.getUTCDate() - 1);
-  return prior.toISOString().slice(0, 10);
+/**
+ * The trainee's civil "today" at `timestamp`, in the same timezone used to
+ * generate assignment and check-in local dates. Never the UTC date: between
+ * 00:00 and 05:30 IST that is still yesterday, and yesterday is history.
+ */
+async function relationshipLocalToday(
+  db: Db,
+  relationshipId: string,
+  timestamp: string,
+): Promise<{ today: string; timeZone: string }> {
+  const [relationship] = await db
+    .select({ traineeUserId: coachingRelationships.traineeUserId })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, relationshipId))
+    .limit(1);
+  const timeZone = relationship
+    ? await loadTraineeTimezone(db, relationship.traineeUserId)
+    : "UTC";
+  return { today: formatLocalDate(new Date(timestamp), timeZone), timeZone };
 }
 
 /**
@@ -65,9 +84,13 @@ export async function endCoachingRelationship(
   },
 ): Promise<void> {
   const timestamp = nowIso();
-  const fromDate = timestamp.slice(0, 10);
+  const { today: fromDate, timeZone } = await relationshipLocalToday(
+    db,
+    input.relationshipId,
+    timestamp,
+  );
 
-  // Read-only lookup first so every write below can go into one batch.
+  // Read-only lookups first so every write below can go into one batch.
   const relationshipPlans = await db
     .select({ id: plans.id })
     .from(plans)
@@ -182,15 +205,18 @@ export async function endCoachingRelationship(
 
   // Close the effective plan horizon so replenishRollingHorizons creates nothing
   // after reactivation until the trainer assigns a plan with a new start date.
-  // Midnight UTC on the prior civil day stays on/before that day in all
-  // common trainer timezones (avoids T23:59Z rolling into "today" in IST).
+  // Local midnight starting the trainee's prior civil day, so the horizon ends
+  // on yesterday in their timezone (never today, never the day before).
   const closePlanHorizon =
     planIds.length > 0
       ? [
           db
             .update(planVersions)
             .set({
-              effectiveTo: `${previousCivilDate(timestamp)}T00:00:00.000Z`,
+              effectiveTo: localDateTimeToUtcIso(
+                addDaysToLocalDate(fromDate, -1),
+                timeZone,
+              ),
               updatedAt: timestamp,
             })
             .where(
@@ -282,7 +308,11 @@ export async function confirmRelationshipReactivation(
     .where(eq(reactivationRequests.id, input.requestId));
 
   // Belt-and-suspenders: nothing scheduled from today until assign.
-  const fromDate = timestamp.slice(0, 10);
+  const { today: fromDate } = await relationshipLocalToday(
+    db,
+    input.relationshipId,
+    timestamp,
+  );
   await db
     .update(workoutAssignments)
     .set({
