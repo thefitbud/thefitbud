@@ -47,7 +47,7 @@ Architectural rules
 - Treat D1 and the API as authoritative. SQLite, notifications, and realtime events are projections or delivery mechanisms.
 - Use REST and sync for normal state. Use Durable Objects and WebSockets only for selected change notifications.
 - Do not add in-app chat, payment processing or collection, in-app video or voice calling, organization roles, or trainer-team permissions to the MVP.
-- Payment tracking is allowed (30 Oct 2026): per client, the trainer records amount, subscription type, coaching mode, start and due dates, paid/unpaid status and method (cash/UPI/bank/other). Session counting is out of scope. Calendar entries may carry an external meeting link. Steps (HealthKit / Health Connect, trainer-visible) and push notifications are MVP.
+- Payment tracking is allowed (30 Oct 2026): per client, the trainer records amount, subscription type, coaching mode, start and due dates, paid/unpaid status and method (cash/UPI/bank). Session counting is out of scope. Calendar entries may carry an external meeting link. Steps (HealthKit / Health Connect, trainer-visible) and push notifications are MVP.
 Provider portability rule
 - Cloudflare is an infrastructure choice, not a domain-model choice.
 - Product behavior, domain rules, shared contracts, and client behavior must remain provider-neutral.
@@ -218,7 +218,7 @@ Testing and data realism rules
 - A test helper may create fixture data, but it must create the same persisted entities and valid relationships that the production workflow expects.
 - Do not weaken production validation or introduce test-only behavior into domain logic merely to simplify tests.
 - When a product decision changes the data model or workflow, update the affected fixtures and integration tests so they continue to represent the real product flow.
-- Subscription tests must use a persisted relationship-owned subscription version and exercise plan name, payment frequency, civil start and renewal dates, derived renewal state in the trainer timezone, the trainer attention list, and the `subscription_renewal_reminder` path. Do not invent amounts, invoices, or payment collection.
+- Subscription tests must use a persisted relationship-owned subscription version and exercise plan name, payment frequency, civil start and renewal dates, derived renewal state in the trainer timezone, the trainer attention list, and the `subscription_renewal_reminder` path. Amount, subscription type, coaching mode, paid/unpaid status and payment method are tracking-only fields (30 Oct 2026); tests may exercise them once they exist. Do not add invoices, payment collection, a payment gateway, or session counting.
 Definition of done
 A task is complete only when:
 - The requested user outcome works.
