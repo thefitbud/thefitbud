@@ -280,6 +280,31 @@ describe("me meal times", () => {
     );
     expect(mealTimeAlerts).toHaveLength(1);
 
+    const [rel] = await db
+      .select({ traineeUserId: schema.coachingRelationships.traineeUserId })
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+    await db
+      .update(schema.traineeProfiles)
+      .set({ displayName: "Priya Shah" })
+      .where(eq(schema.traineeProfiles.userId, rel!.traineeUserId));
+
+    const listed = await app.request(
+      "/notifications",
+      { headers: { Cookie: ctx.trainerCookie } },
+      testEnv(),
+    );
+    expect(listed.status).toBe(200);
+    const listedBody = (await listed.json()) as {
+      data: {
+        items: Array<{ type: string; clientDisplayName?: string }>;
+      };
+    };
+    const listedAlert = listedBody.data.items.find(
+      (item) => item.type === "trainer_meal_times_changed",
+    );
+    expect(listedAlert?.clientDisplayName).toBe("Priya Shah");
+
     const [assignment] = await db
       .select()
       .from(schema.mealAssignments)

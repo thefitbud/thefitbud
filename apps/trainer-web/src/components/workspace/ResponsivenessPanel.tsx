@@ -31,10 +31,7 @@ function labelTitle(
   }
 }
 
-function summaryCounts(
-  data: ResponsivenessResponse,
-  pronoun: string,
-): string {
+function summaryCounts(data: ResponsivenessResponse): string {
   const { sent, opened, loggedAfter, loggedBefore } = data.counts;
   switch (data.label) {
     case "logs_on_own":
@@ -65,9 +62,11 @@ export function quietHoursText(
 
 export function compactHeadline(
   data: ResponsivenessResponse,
+  // Kept so callers (ExceptionDrawer, out of scope for H2) still compile; drop it with that file.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   pronoun: string,
 ): string {
-  return `${labelTitle(data.label)} · ${summaryCounts(data, pronoun)}`;
+  return `${labelTitle(data.label)} · ${summaryCounts(data)}`;
 }
 
 function formatOpened(value: number | null | undefined): string {
@@ -189,7 +188,7 @@ export function ResponsivenessPanel({
     <div className="responsiveness-panel">
       <p className="responsiveness-summary">
         <strong>{labelTitle(data.label)}</strong>
-        <span className="muted"> · {summaryCounts(data, pronoun)}</span>
+        <span className="muted"> · {summaryCounts(data)}</span>
       </p>
       {data.label === "notifications_off" ? (
         <p className="muted">

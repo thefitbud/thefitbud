@@ -861,7 +861,7 @@ export function ConfigureCoachingPage() {
         </p>
       ) : null}
 
-      {status === "active" ? (
+      {status === "active" && !relationshipEnded ? (
         <p className="banner-info" role="status">
           This version is active. Create a new version to change it.
         </p>
@@ -949,6 +949,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Sessions per week</span>
               <input
+                disabled={fieldsDisabled}
                 type="number"
                 min={1}
                 max={7}
@@ -964,6 +965,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Completion window (hours)</span>
               <input
+                disabled={fieldsDisabled}
                 type="number"
                 min={1}
                 max={72}
@@ -988,6 +990,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Meals per day</span>
               <input
+                disabled={fieldsDisabled}
                 type="number"
                 min={1}
                 max={8}
@@ -1003,6 +1006,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Confirmation window (hours)</span>
               <input
+                disabled={fieldsDisabled}
                 type="number"
                 min={1}
                 max={48}
@@ -1018,6 +1022,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Meal photo requirement</span>
               <select
+                disabled={fieldsDisabled}
                 value={form.photoRequirement}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -1046,6 +1051,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Cadence</span>
               <select
+                disabled={fieldsDisabled}
                 value={form.cadence}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -1064,6 +1070,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Due window (hours)</span>
               <input
+                disabled={fieldsDisabled}
                 type="number"
                 min={1}
                 max={168}
@@ -1079,6 +1086,7 @@ export function ConfigureCoachingPage() {
             <label className="field">
               <span>Check-in form</span>
               <select
+                disabled={fieldsDisabled}
                 value={form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID}
                 onChange={(event) => {
                   const next = event.target.value || null;
@@ -1143,6 +1151,7 @@ export function ConfigureCoachingPage() {
             <label className="configure-switch">
               <span>Body weight</span>
               <input
+                disabled={fieldsDisabled}
                 type="checkbox"
                 role="switch"
                 className="configure-switch-input"
@@ -1159,6 +1168,7 @@ export function ConfigureCoachingPage() {
             <label className="configure-switch">
               <span>Progress photos</span>
               <input
+                disabled={fieldsDisabled}
                 type="checkbox"
                 role="switch"
                 className="configure-switch-input"
@@ -1175,6 +1185,7 @@ export function ConfigureCoachingPage() {
             <label className="configure-switch">
               <span>Session RPE</span>
               <input
+                disabled={fieldsDisabled}
                 type="checkbox"
                 role="switch"
                 className="configure-switch-input"
@@ -1209,7 +1220,9 @@ export function ConfigureCoachingPage() {
                   className="configure-switch-input"
                   aria-checked={Boolean(reminders[category.type])}
                   checked={Boolean(reminders[category.type])}
-                  disabled={reminderSaving === category.type}
+                  disabled={
+                    mutationsBlocked || reminderSaving === category.type
+                  }
                   onChange={(event) => {
                     void toggleReminder(category.type, event.target.checked);
                   }}
