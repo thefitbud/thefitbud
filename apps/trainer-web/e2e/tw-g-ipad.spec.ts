@@ -2,6 +2,7 @@
  * TW-G tablet smoke — WebKit iPad viewports (shell nav, clients, overflow, tap targets).
  */
 import { test, expect, type Page, type Locator } from "@playwright/test";
+import { CLIENT_WORKSPACE_TABS } from "../src/components/workspace/workspaceTabs";
 
 const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";
@@ -145,6 +146,17 @@ test.describe("TW-G iPad shell smoke", () => {
     await expect(page.getByRole("heading", { name: /Aarav/i })).toBeVisible({
       timeout: 25_000,
     });
+    const tabs = page.getByRole("navigation", { name: /Client sections/i });
+    const tabLinks = tabs.getByRole("link");
+    await expect(tabLinks).toHaveCount(CLIENT_WORKSPACE_TABS.length);
+    for (const [index, tab] of CLIENT_WORKSPACE_TABS.entries()) {
+      await expect(tabLinks.nth(index)).toContainText(tab.label);
+    }
+    for (const forbidden of ["Sessions", "Packages", "Configure"] as const) {
+      await expect(
+        tabs.getByRole("link", { name: forbidden, exact: true }),
+      ).toHaveCount(0);
+    }
     await assertTapTargets(page.locator("body"), "Workspace overview");
 
     await page.goto("/checkins");

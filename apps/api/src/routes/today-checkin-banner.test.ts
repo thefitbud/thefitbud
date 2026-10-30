@@ -1,13 +1,10 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { hashPassword } from "../auth/password.js";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
-import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
-import { createMemoryDb } from "../test-support/memory-db.js";
-import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
+import { createDemoSeededDb, prepareDemoSeededDb } from "../test-support/seeded-db.js";
 
 /** Mirrors apps/mobile pickTodayCheckin (live Today path after ensure-due + list). */
 function pickTodayCheckin(
@@ -58,21 +55,17 @@ describe("Today check-in banner live path", () => {
   let db: Db;
   let close: () => void = () => {};
 
+  beforeAll(async () => {
+    await prepareDemoSeededDb(FROZEN);
+  });
+
   beforeEach(async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(FROZEN));
-    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    const handle = await createDemoSeededDb(FROZEN);
     close = handle.close;
     db = handle.db;
     setTestDbOverride(db);
-    const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
-    const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-    const sql = buildDemoSeedSql({
-      referenceInstant: FROZEN,
-      passwordHash,
-      libraryIndex,
-    });
-    handle.sqlite.exec(sql);
   });
 
   afterEach(() => {

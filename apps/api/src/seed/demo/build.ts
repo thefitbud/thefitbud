@@ -17,7 +17,7 @@ export type DemoSeedInput = {
   libraryIndex: DemoLibraryIndex;
 };
 
-function kolkataLocalDate(instant: string): string {
+export function kolkataLocalDate(instant: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
     year: "numeric",

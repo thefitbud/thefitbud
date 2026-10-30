@@ -1,13 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
 import { setTestDbOverride } from "../db/client.js";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
-import { createMemoryDb } from "../test-support/memory-db.js";
-import { buildDemoSeedSql } from "../seed/demo/build.js";
-import { hashPassword } from "../auth/password.js";
+import { createDemoSeededDb, prepareDemoSeededDb } from "../test-support/seeded-db.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
-import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 
 function testEnv(): Env {
   return {
@@ -48,18 +45,15 @@ async function trainerHeaders(email: string) {
 
 describe("library search API (T08)", () => {
   let close: () => void = () => {};
+  // Seeded once per file "as of now"; each test still gets its own copy.
+  const referenceInstant = new Date().toISOString();
+
+  beforeAll(async () => {
+    await prepareDemoSeededDb(referenceInstant);
+  }, 120_000);
 
   beforeEach(async () => {
-    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
-    const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
-    const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-    handle.sqlite.exec(
-      buildDemoSeedSql({
-        referenceInstant: new Date().toISOString(),
-        passwordHash,
-        libraryIndex,
-      }),
-    );
+    const handle = await createDemoSeededDb(referenceInstant);
     setTestDbOverride(handle.db);
     close = handle.close;
   }, 120_000);
