@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src",
     "test:e2e": "playwright test",
+    "test:e2e:banned": "playwright test -c playwright.banned.config.ts",
     "capture:screens": "node scripts/capture-tw-screens.mjs",
     "preview": "vite preview"
   },

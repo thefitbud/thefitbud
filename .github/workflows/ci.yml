@@ -1,7 +1,10 @@
-# Minimal CI (task H3): lint, typecheck and unit/API tests on PRs to main and pushes to main.
+# CI on PRs to main and pushes to main.
+# - ci (task H3): lint, typecheck and unit/API tests. Required by the "main" ruleset (H4);
+#   the job id/name "ci" is stable.
+# - e2e and banned-strings (W0): trainer-web Playwright against a locally seeded API
+#   (db:reset + wrangler dev --local on the runner). Advisory until added to the ruleset.
 # Stacked PRs whose base branch isn't main are not checked; they get CI once retargeted to main.
-# No secrets, no deploys, no e2e (Playwright global-setup kills wrangler/workerd and needs port 8787).
-# The job id/name "ci" is stable so branch protection (H4) can require it.
+# No secrets, no deploys, no remote commands.
 name: CI
 
 on:
@@ -76,3 +79,122 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      FITBUD_API_PORT: "8787"
+      FITBUD_WEB_PORT: "5173"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @fitbud/trainer-web exec playwright install --with-deps chromium webkit
+
+      # global-setup.ts runs db:reset, starts wrangler dev on FITBUD_API_PORT and waits for
+      # the demo login; Playwright's webServer starts trainer-web on FITBUD_WEB_PORT.
+      - name: Trainer-web e2e
+        run: pnpm --filter @fitbud/trainer-web test:e2e
+
+      - name: Upload report and API log
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: e2e-report
+          path: |
+            apps/trainer-web/playwright-report
+            apps/trainer-web/test-results
+            /tmp/fitbud-api-e2e.log
+          retention-days: 7
+
+  banned-strings:
+    name: banned-strings
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      FITBUD_API_PORT: "8787"
+      FITBUD_WEB_PORT: "5173"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Install Playwright browser
+        run: pnpm --filter @fitbud/trainer-web exec playwright install --with-deps chromium
+
+      # Scans rendered UI text against docs/spec/banned-strings.json. Error-severity hits
+      # on cleaned screens fail; the rest are reported only (see banned-strings.spec.ts).
+      - name: Banned strings
+        run: pnpm --filter @fitbud/trainer-web test:e2e:banned
+
+      - name: Upload API log
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: banned-strings-api-log
+          path: /tmp/fitbud-api-e2e.log
+          retention-days: 7
