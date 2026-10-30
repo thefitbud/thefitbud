@@ -605,6 +605,10 @@ export const workoutExecutions = sqliteTable(
     index("workout_executions_relationship_idx").on(
       table.coachingRelationshipId,
     ),
+    index("workout_executions_relationship_completed_idx").on(
+      table.coachingRelationshipId,
+      table.completedAt,
+    ),
     index("workout_executions_trainee_idx").on(table.traineeUserId),
   ],
 );
@@ -760,6 +764,10 @@ export const mealCompliance = sqliteTable(
   (table) => [
     uniqueIndex("meal_compliance_assignment_uidx").on(table.assignmentId),
     index("meal_compliance_relationship_idx").on(table.coachingRelationshipId),
+    index("meal_compliance_relationship_logged_idx").on(
+      table.coachingRelationshipId,
+      table.loggedAt,
+    ),
     index("meal_compliance_trainee_idx").on(table.traineeUserId),
   ],
 );
@@ -851,6 +859,10 @@ export const checkins = sqliteTable(
     index("checkins_relationship_window_idx").on(
       table.coachingRelationshipId,
       table.windowEndsAt,
+    ),
+    index("checkins_relationship_submitted_idx").on(
+      table.coachingRelationshipId,
+      table.submittedAt,
     ),
     index("checkins_record_status_idx").on(table.recordStatus),
   ],
@@ -957,9 +969,10 @@ export const exceptions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    index("exceptions_relationship_status_idx").on(
+    index("exceptions_relationship_status_detected_idx").on(
       table.coachingRelationshipId,
       table.status,
+      table.detectedAt,
     ),
     index("exceptions_status_detected_idx").on(table.status, table.detectedAt),
     index("exceptions_source_idx").on(
@@ -1383,6 +1396,10 @@ export const notifications = sqliteTable(
   },
   (table) => [
     uniqueIndex("notifications_dedupe_key_uidx").on(table.dedupeKey),
+    index("notifications_relationship_created_idx").on(
+      table.coachingRelationshipId,
+      table.createdAt,
+    ),
     index("notifications_recipient_created_idx").on(
       table.recipientUserId,
       table.createdAt,
@@ -1591,6 +1608,11 @@ export const exerciseLibraryItems = sqliteTable(
     }).notNull(),
     trainerUserId: text("trainer_user_id").references(() => users.id),
     name: text("name").notNull(),
+    nameNorm: text("name_norm"),
+    nameSource: text("name_source"),
+    description: text("description"),
+    descriptionProvenance: text("description_provenance"),
+    youtubeSearchUrl: text("youtube_search_url"),
     instructions: text("instructions"),
     primaryMusclesJson: text("primary_muscles_json").notNull().default("[]"),
     secondaryMusclesJson: text("secondary_muscles_json")
@@ -1622,6 +1644,17 @@ export const exerciseLibraryItems = sqliteTable(
     sourceRef: text("source_ref"),
     sourceName: text("source_name"),
     reviewStatus: text("review_status"),
+    stepsSource: text("steps_source"),
+    stepsLicenceJson: text("steps_licence_json"),
+    stepsReviewRequired: integer("steps_review_required", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    coachingProvenance: text("coaching_provenance"),
+    needsHumanReview: integer("needs_human_review", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    reviewFlagsJson: text("review_flags_json").notNull().default("[]"),
+    origin: text("origin"),
     seedVersion: text("seed_version"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -1637,6 +1670,7 @@ export const exerciseLibraryItems = sqliteTable(
       table.movementPatternCode,
       table.setting,
     ),
+    index("exercise_library_name_norm_idx").on(table.nameNorm),
   ],
 );
 
@@ -1653,6 +1687,7 @@ export const foodLibraryItems = sqliteTable(
     }).notNull(),
     trainerUserId: text("trainer_user_id").references(() => users.id),
     name: text("name").notNull(),
+    nameNorm: text("name_norm"),
     cuisineRegion: text("cuisine_region", {
       enum: ["indian", "indian_pantry", "global"],
     }).notNull(),
@@ -1673,20 +1708,27 @@ export const foodLibraryItems = sqliteTable(
     fatScaled: integer("fat_grams_scaled"),
     notes: text("notes"),
     description: text("description"),
+    mainIngredientsJson: text("main_ingredients_json").notNull().default("[]"),
+    descriptionProvenanceJson: text("description_provenance_json"),
+    instructions: text("instructions"),
     status: text("status", {
       enum: ["active", "archived"],
     })
       .notNull()
       .default("active"),
     slug: text("slug"),
-    foodType: text("food_type"),
+    foodType: text("food_type", {
+      enum: ["ingredient", "dish", "beverage", "packaged_or_prepared"],
+    }),
     foodGroup: text("food_group"),
     dishCategory: text("dish_category"),
     cuisine: text("cuisine", {
       enum: ["indian", "indian_pantry", "global"],
     }),
     region: text("region"),
-    cookingState: text("cooking_state"),
+    cookingState: text("cooking_state", {
+      enum: ["raw", "cooked", "ready_to_eat", "as_purchased"],
+    }),
     cookingMethod: text("cooking_method"),
     dietTagsJson: text("diet_tags_json").notNull().default("[]"),
     mealTypesJson: text("meal_types_json").notNull().default("[]"),
@@ -1695,11 +1737,24 @@ export const foodLibraryItems = sqliteTable(
     sugarsScaled: integer("sugars_grams_scaled"),
     satFatScaled: integer("sat_fat_grams_scaled"),
     sodiumMgScaled: integer("sodium_mg_scaled"),
+    densityGPerMlScaled: integer("density_g_per_ml_scaled"),
+    densitySource: text("density_source"),
+    densityAssumed: integer("density_assumed", { mode: "boolean" })
+      .notNull()
+      .default(false),
     sourceId: text("source_id").references(() => librarySources.id),
     sourceRef: text("source_ref"),
     sourceName: text("source_name"),
+    sourceReason: text("source_reason"),
+    sourceRefsJson: text("source_refs_json").notNull().default("[]"),
     defaultServingId: text("default_serving_id"),
     reviewStatus: text("review_status"),
+    reviewConfidenceScaled: integer("review_confidence_scaled"),
+    lowConfidence: integer("low_confidence", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    reviewFlagsJson: text("review_flags_json").notNull().default("[]"),
+    legacyId: text("legacy_id"),
     seedVersion: text("seed_version"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -1714,6 +1769,11 @@ export const foodLibraryItems = sqliteTable(
       .where(sql`${table.ownership} = 'global'`),
     index("food_library_group_idx").on(table.foodGroup, table.dishCategory),
     index("food_library_source_idx").on(table.sourceId, table.sourceRef),
+    index("food_library_name_norm_idx").on(table.nameNorm),
+    index("food_library_type_state_idx").on(table.foodType, table.cookingState),
+    index("food_library_low_conf_idx")
+      .on(table.lowConfidence)
+      .where(sql`low_confidence = 1`),
   ],
 );
 
@@ -1729,6 +1789,10 @@ export const foodLibraryServings = sqliteTable(
     unit: text("unit").notNull(),
     conversionScaled: integer("conversion_scaled"),
     quantityScaled: integer("quantity_scaled").notNull().default(1_000_000),
+    amountScaled: integer("amount_scaled"),
+    amountUnit: text("amount_unit", { enum: ["g", "ml"] }),
+    gramsScaled: integer("grams_scaled"),
+    descriptor: text("descriptor"),
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
     provenance: text("provenance"),
     plausible: integer("plausible", { mode: "boolean" }).notNull().default(true),
@@ -1739,6 +1803,9 @@ export const foodLibraryServings = sqliteTable(
   },
   (table) => [
     index("food_library_servings_food_idx").on(table.foodLibraryItemId),
+    uniqueIndex("food_library_servings_one_default_uidx")
+      .on(table.foodLibraryItemId)
+      .where(sql`is_default = 1`),
   ],
 );
 
@@ -1842,6 +1909,7 @@ export const exerciseLibraryEquipment = sqliteTable(
     primaryKey({
       columns: [table.exerciseLibraryItemId, table.equipmentCode],
     }),
+    index("exercise_library_equipment_code_idx").on(table.equipmentCode),
   ],
 );
 
@@ -1865,6 +1933,7 @@ export const exerciseLibraryAliases = sqliteTable(
       table.lang,
       table.aliasNorm,
     ),
+    index("exercise_library_aliases_norm_idx").on(table.aliasNorm),
   ],
 );
 
@@ -1884,6 +1953,11 @@ export const exerciseLibraryInstructions = sqliteTable(
       table.exerciseLibraryItemId,
       table.kind,
       table.lang,
+      table.position,
+    ),
+    index("exercise_library_instructions_ex_idx").on(
+      table.exerciseLibraryItemId,
+      table.kind,
       table.position,
     ),
   ],
@@ -1929,12 +2003,40 @@ export const exerciseLibraryMedia = sqliteTable(
     sourceRef: text("source_ref"),
     licence: text("licence").notNull(),
     attribution: text("attribution").notNull(),
+    sourceTitle: text("source_title"),
+    sourceUrl: text("source_url"),
+    author: text("author"),
+    licenceUrl: text("licence_url"),
+    matchConfidence: text("match_confidence"),
+    modified: integer("modified", { mode: "boolean" }).notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (table) => [
     index("exercise_library_media_ex_idx").on(
       table.exerciseLibraryItemId,
       table.sortOrder,
+    ),
+  ],
+);
+
+/** External links for an exercise (YouTube search, etc.). */
+export const exerciseLibraryLinks = sqliteTable(
+  "exercise_library_links",
+  {
+    id: text("id").primaryKey(),
+    exerciseLibraryItemId: text("exercise_library_item_id")
+      .notNull()
+      .references(() => exerciseLibraryItems.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    url: text("url").notNull(),
+    label: text("label"),
+    seedVersion: text("seed_version"),
+  },
+  (table) => [
+    uniqueIndex("exercise_library_links_uidx").on(
+      table.exerciseLibraryItemId,
+      table.kind,
+      table.url,
     ),
   ],
 );

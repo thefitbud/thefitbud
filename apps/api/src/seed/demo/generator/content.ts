@@ -128,15 +128,6 @@ export function workoutDaysFor(
 /** Contract max for a calculated item's quantityScaled: 100 units of the chosen serving. */
 export const MAX_QUANTITY_SCALED = NUTRIENT_SCALE * 100;
 
-/**
- * plausible = 0 servings the seed already used before QS1. They stay selectable so
- * existing rows don't change; replacing them is a separate follow-up.
- */
-export const LEGACY_IMPLAUSIBLE_SERVINGS: Readonly<Record<string, string>> = {
-  "vegetable-poha": "1 bowl (INDB recipe portion)",
-  "pav-bhaji": "1 serving (INDB)",
-};
-
 /** An amount the generator had to shrink to fit the 100-unit contract limit. */
 export type QuantityClamp = {
   slug: string;
@@ -146,7 +137,13 @@ export type QuantityClamp = {
   cappedUnits: number;
 };
 
-/** Grams → library snapshot, preferring a plausible household serving that divides evenly. */
+/**
+ * Grams → library snapshot.
+ * Household choice never uses a serving the library marks plausible = 0.
+ * The first plausible household serving that divides evenly (within 6%) wins;
+ * otherwise the plausible default stays, so the gram amount is unchanged.
+ * An implausible default falls back to the gram serving, or the next plausible serving.
+ */
 export function foodByGrams(
   lib: DemoLibraryIndex,
   slug: string,
@@ -156,18 +153,20 @@ export function foodByGrams(
   const entry = lib.foods[slug];
   if (!entry) throw new Error(`Demo seed: food ${slug} not loaded`);
   const implausible = new Set(entry.implausibleServingIds);
-  const servings = entry.item.servings.filter(
-    (s) =>
-      s.conversionScaled != null &&
-      (!implausible.has(s.id) || LEGACY_IMPLAUSIBLE_SERVINGS[slug] === s.label),
-  );
-  if (servings.length === 0) throw new Error(`Demo seed: food ${slug} has no plausible serving`);
+  const servings = entry.item.servings.filter((s) => s.conversionScaled != null);
+  if (servings.length === 0) throw new Error(`Demo seed: food ${slug} has no servings`);
   // conversionScaled is grams per serving × NUTRIENT_SCALE (1 egg = 70_000_000).
   const gramsOf = (conversionScaled: number) => conversionScaled / NUTRIENT_SCALE;
-  let best = servings.find((s) => s.id === entry.defaultServingId) ?? servings[0]!;
+  const plausible = servings.filter((s) => !implausible.has(s.id));
+  if (plausible.length === 0) throw new Error(`Demo seed: food ${slug} has no plausible serving`);
+  let best = plausible.find((s) => s.id === entry.defaultServingId);
+  if (!best) {
+    // The library default is plausible = 0. Use the gram serving, else the next plausible one.
+    best = plausible.find((s) => s.unit === "g") ?? plausible[0]!;
+  }
   let bestQty = grams / gramsOf(best.conversionScaled!);
   for (const serving of servings) {
-    if (serving.unit === "g") continue;
+    if (serving.unit === "g" || implausible.has(serving.id)) continue;
     const qty = grams / gramsOf(serving.conversionScaled!);
     const rounded = Math.round(qty * 2) / 2;
     if (rounded >= 0.5 && rounded <= 6 && Math.abs(qty - rounded) / qty < 0.06) {
@@ -177,8 +176,8 @@ export function foodByGrams(
     }
   }
   // The plan contract (and the plan editor) allow at most 100 units of the chosen
-  // serving, so on a 1 g/unit serving the item tops out at 100 g. Cap it the way a
-  // coach would have to enter it, and report every cap so tests can pin the set.
+  // serving, so on a 1 g/unit serving the item tops out at 100 g. Callers that pass
+  // onClamp hear every cap: plan generation records it, and deviation logging throws.
   const wanted = Math.max(1, Math.round(bestQty * NUTRIENT_SCALE));
   const qtyScaled = Math.min(MAX_QUANTITY_SCALED, wanted);
   if (qtyScaled < wanted) {
