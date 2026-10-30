@@ -7,7 +7,7 @@
     "predev": "pnpm --filter thefitbud build:packages",
     "predb:reset": "pnpm --filter thefitbud build:packages",
     "presetup:local": "pnpm --filter thefitbud build:packages",
-    "dev": "wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 0.0.0.0",
+    "dev": "tsx scripts/local-traces.ts -- wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 0.0.0.0",
     "build": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src scripts --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",

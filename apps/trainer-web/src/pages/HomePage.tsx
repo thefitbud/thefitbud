@@ -24,7 +24,6 @@ import {
   labelFor,
 } from "@fitbud/core";
 import type {
-  AttentionGroupsResponse,
   CoachAsk,
   ReengagementCandidatesResponse,
   SubscriptionAttentionItem,
@@ -43,6 +42,11 @@ import {
   type ErrorKind,
 } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
+import {
+  issueLine,
+  type AttentionGroup,
+  type AttentionItem,
+} from "../lib/attentionIssueLine";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
 import {
@@ -51,8 +55,6 @@ import {
 } from "../hooks/useRowShortcutGuard";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 
-type AttentionGroup = AttentionGroupsResponse["groups"][number];
-type AttentionItem = AttentionGroup["items"][number];
 type ReengagementCandidate = ReengagementCandidatesResponse["items"][number];
 type ActivityEvent = {
   id: string;
@@ -105,28 +107,6 @@ function formatAttentionAge(ageMinutes: number): string {
   return days === 1 ? "since 1 d" : `since ${days} d`;
 }
 
-function weekdayShortFromCivil(localDate: string): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return null;
-  const y = Number(match[1]);
-  const m = Number(match[2]);
-  const d = Number(match[3]);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-GB", {
-    weekday: "short",
-    timeZone: "UTC",
-  });
-}
-
-function localDateFromDetails(
-  details: Record<string, unknown> | null | undefined,
-): string | null {
-  if (!details) return null;
-  const value = details.localDate;
-  return typeof value === "string" ? value : null;
-}
-
 function initials(name: string): string {
   return name
     .split(" ")
@@ -139,72 +119,6 @@ function initials(name: string): string {
 function avatarClass(name: string): string {
   const n = name.charCodeAt(0) + (name.charCodeAt(1) || 0);
   return `home-av c${(n % 8) + 1}`;
-}
-
-function issueLine(group: AttentionGroup, primary: AttentionItem): {
-  text: string;
-  more: number;
-  title: string;
-} {
-  const open = group.items.filter(
-    (i) => i.status === "detected" || i.status === "active",
-  );
-  const items = open.length > 0 ? open : group.items;
-  const workouts = items.filter(
-    (i) => i.type === "missed_workout" || i.type === "skipped_workout",
-  );
-  const meals = items.filter(
-    (i) =>
-      i.type === "overdue_meal" ||
-      i.type === "skipped_meal" ||
-      i.type === "meal_logged_later",
-  );
-  const sameType = items.filter((i) => i.type === primary.type);
-  const related =
-    primary.type === "missed_workout" || primary.type === "skipped_workout"
-      ? workouts
-      : primary.type === "overdue_meal" ||
-          primary.type === "skipped_meal" ||
-          primary.type === "meal_logged_later"
-        ? meals
-        : sameType;
-  const weekdays = related
-    .map((i) => localDateFromDetails(i.details))
-    .filter((d): d is string => Boolean(d))
-    .map((d) => weekdayShortFromCivil(d))
-    .filter((d): d is string => Boolean(d));
-  const uniqueWeekdays = [...new Set(weekdays)];
-
-  let text =
-    primary.summary?.trim() || labelFor("exception_type", primary.type);
-
-  const dayList =
-    uniqueWeekdays.length > 0 ? uniqueWeekdays.join(", ") : null;
-  if (
-    related.length >= 2 &&
-    (primary.type === "missed_workout" || primary.type === "skipped_workout")
-  ) {
-    text = dayList
-      ? `Missed ${related.length} workouts (${dayList})`
-      : `Missed ${related.length} workouts`;
-  } else if (
-    related.length >= 2 &&
-    (primary.type === "overdue_meal" ||
-      primary.type === "skipped_meal" ||
-      primary.type === "meal_logged_later")
-  ) {
-    text = dayList
-      ? `Missed ${related.length} meals (${dayList})`
-      : `Missed ${related.length} meals`;
-  } else if (dayList && !/\([A-Z][a-z]{2}/.test(text)) {
-    text = `${text} (${dayList})`;
-  }
-
-  const more = Math.max(0, items.length - 1);
-  const title = items
-    .map((i) => i.summary || labelFor("exception_type", i.type))
-    .join("; ");
-  return { text, more, title };
 }
 
 function askItemLabel(ask: CoachAsk): string {
