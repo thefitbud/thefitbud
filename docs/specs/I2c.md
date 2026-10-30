@@ -15,14 +15,14 @@ size: M
 ---
 
 ## Outcome
-A script turns the locked exercise base (release 2026.10.20-v2) into `03b_exercise_base.sql`, giving 1,362 exercises with media storage keys that the library loads locally.
+A script turns the locked exercise base (release 2026.10.21-v3) into `03b_exercise_base.sql`, giving 1,362 exercises with media storage keys that the library loads locally.
 
 ## Context
 - Facts (v14 I2c): `apps/api/scripts/emit-exercise-base.ts` emits `apps/api/seed/library/sql/03b_exercise_base.sql`; media keys are `exercises/<slug>/<n>.<ext>`; 1,362 exercises; `PRAGMA foreign_key_check` is empty after load.
 - Decision D-B5 / D-W1-1 (Firoz, 30 Oct 2026): I2c does **not** depend on I2e (demo-seed food remap, post-beta). **Its tests must pass on the current demo seed without I2e.**
 - Media keys are stored env-agnostic (I4b applies any `MEDIA_PREFIX` at R2 call time).
 - Wiring 03b into `library-seed.ts` is I2d (same lane, next). This task's tests load 03b directly into a test D1.
-- **Source artifacts: D-W1-7 (Open in W1.md).** The locked release files (foods 2026.10.9 and the 2026.10.20-v2 exercise base) are produced by a pipeline outside this repo and are **not on `main`** (checked 31 Oct 2026: `apps/api/seed/library/` holds release 2026.10.2 only). Until Firoz commits them to the path named in D-W1-7, stop.
+- **Source artifacts: D-W1-7 (Open in W1.md).** The locked release files (foods 2026.10.9 and the 2026.10.21-v3 exercise base) are produced by a pipeline outside this repo and are **not on `main`** (checked 31 Oct 2026: `apps/api/seed/library/` holds release 2026.10.2 only). Until Firoz commits them to the path named in D-W1-7, stop.
 
 ## Gap list
 - No `emit-exercise-base.ts` and no `03b_exercise_base.sql` on `main`.

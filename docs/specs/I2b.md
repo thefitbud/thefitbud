@@ -34,7 +34,7 @@ size: M
   - Replace files 01–06 and `manifest.json`; every file's sha256 must match the manifest.
   - Add `08_post_seed.sql` (post-seed corrections; I2f adds to it) and `02b_food_extras.sql` (extras that load after 02).
 - Load order after this task (local): `00_wipe_legacy_dev.sql`, `01`, `02`, `02b`, `03`, `04`, `05`, `06`, `07_post_wipe_dev.sql`, `08_post_seed.sql`, `05_search.sql` again (FTS rebuild). I2d later adds `03b` and the remote mode.
-- **Source artifacts: D-W1-7 (Open in W1.md).** The locked release files (foods 2026.10.9 and the 2026.10.20-v2 exercise base) are produced by a pipeline outside this repo and are **not on `main`** (checked 31 Oct 2026: `apps/api/seed/library/` holds release 2026.10.2 only). Until Firoz commits them to the path named in D-W1-7, stop.
+- **Source artifacts: D-W1-7 (Open in W1.md).** The locked release files (foods 2026.10.9 and the 2026.10.21-v3 exercise base) are produced by a pipeline outside this repo and are **not on `main`** (checked 31 Oct 2026: `apps/api/seed/library/` holds release 2026.10.2 only). Until Firoz commits them to the path named in D-W1-7, stop.
 - The current demo seed (`apps/api/scripts/seed-demo.ts`) must still load on top; Agents.md requires realistic persisted data in tests.
 
 ## Gap list
