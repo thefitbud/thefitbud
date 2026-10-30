@@ -15,11 +15,13 @@ const files = [
   "00_wipe_legacy_dev.sql",
   "sql/01_lookups.sql",
   "sql/02_foods.sql",
+  "sql/02b_food_extras.sql",
   "sql/03_exercises.sql",
   "sql/04_templates.sql",
   "sql/05_search.sql",
   "sql/06_seed_version.sql",
   "07_post_wipe_dev.sql",
+  "sql/08_post_seed.sql",
   "sql/05_search.sql",
 ];
 
