@@ -7,6 +7,7 @@ This folder is where planning (Firoz and the Grok/Cursor bots) hands work to the
 
 ## Flow
 
+0. **Input:** [docs/tasks/beta-tasklist-v14.md](../tasks/beta-tasklist-v14.md) for the beta. Task list v13 stays the master list for post-beta work.
 1. **Bots write specs.** They commit the specs and the batch file. Bots never trigger Claude: no `@claude` comments, no API calls on the subscription.
 2. **Firoz approves the batch.** He ticks "Decisions needed" and sets Status to Approved.
 3. **Firoz launches one orchestrator cloud session** with something like "Run batch W1 per docs/specs/batches/W1.md". The orchestrator:
