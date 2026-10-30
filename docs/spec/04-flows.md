@@ -129,7 +129,7 @@ stateDiagram-v2
 
 **Rules:**
 - Acknowledge and Resolve never change the source workout, meal or check-in.
-- A late log by the trainee does **not** auto-resolve the exception unless the rule says so. This is OQ-23. The current behaviour is to keep the exception visible, marked "Client logged later", so the trainer resolves it in one tap.
+- A late log by the trainee **never** auto-resolves the exception (OQ-23, locked 28 Oct 2026: there is no auto_resolve; every resolve is made by the trainer). The system keeps the exception visible, marked "Client logged later", so the trainer resolves it in one tap.
 - Nudges are tracked separately and never change adherence.
 - **Resolving locks late logging** for the source item (D23, §3.7). The resolve drawer says so. Mark reviewed (acknowledge) does **not** lock it.
 

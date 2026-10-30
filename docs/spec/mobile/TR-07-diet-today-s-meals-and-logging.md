@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 2905–2974. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TR-07 -->
 ### TR-07 · Diet: today's meals and logging
@@ -28,7 +28,7 @@
    - Code: a list with three equal buttons per meal, a "Photo required" note and the subtitle "confirm what you ate, then move on."
    - Figma `trainee_05_today_diet.png` and `trainee_06_yesterday_diet.png`: rich meal cards, but with % on-plan, a streak, "Photo Proof" and "Set Reminder".
 
-   ![Figma Today's diet (reference)](../img/figma_trainee_05_today_diet.jpg){.phone} ![Figma Yesterday's diet (reference)](../img/figma_trainee_06_yesterday_diet.jpg){.phone}
+
 
 4. **Gaps to close.**
    - The three equal buttons make no action primary.
@@ -92,25 +92,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (embedded in the guide section): `figma_trainee_05_today_diet.jpg`
-
-  ![figma_trainee_05_today_diet.jpg](../img/figma_trainee_05_today_diet.jpg)
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (embedded in the guide section): `figma_trainee_06_yesterday_diet.jpg`
-
-  ![figma_trainee_06_yesterday_diet.jpg](../img/figma_trainee_06_yesterday_diet.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Diet logging, rohan.slipping@demo.fitbud.test): `mobile-qa/TR-07-diet-logging--rohan-slipping.jpg`
-
-  ![mobile-qa/TR-07-diet-logging--rohan-slipping.jpg](../img/mobile-qa/TR-07-diet-logging--rohan-slipping.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Diet logging, lakshmi.foods@demo.fitbud.test): `mobile-qa/TR-07-diet-logging.jpg`
-
-  ![mobile-qa/TR-07-diet-logging.jpg](../img/mobile-qa/TR-07-diet-logging.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
