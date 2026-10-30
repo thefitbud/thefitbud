@@ -1,20 +1,10 @@
 /**
  * TW-G tablet smoke — WebKit iPad viewports (shell nav, clients, overflow, tap targets).
  */
-import { test, expect, type Page, type Locator } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
+import { signIn } from "./support/session";
 import { CLIENT_WORKSPACE_TABS } from "../src/components/workspace/workspaceTabs";
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
-}
 
 async function assertTapTargets(root: Locator, label: string) {
   const undersized = await root.evaluate((node) => {

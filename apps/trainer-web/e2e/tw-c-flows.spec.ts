@@ -1,7 +1,8 @@
 /**
  * TW-C behavioural proofs for workspace header, overview, intake, configure, notes.
  */
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
+import { signIn } from "./support/session";
 import { CLIENT_WORKSPACE_TABS } from "../src/components/workspace/workspaceTabs";
 
 async function expectClientWorkspaceTabStrip(tabs: Locator) {
@@ -17,23 +18,12 @@ async function expectClientWorkspaceTabStrip(tabs: Locator) {
   }
 }
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 const SNEHA = "6a68b615-c47c-4bfc-a7f8-550becf7878a";
 const VIKRAM = "2fe7a6d8-4c61-443d-9614-18b4210186ee";
 const DEEPAK = "f2a64fdb-96ad-46f3-a95e-99151b4a25f1";
 const KAVYA = "b9f01670-8acc-45f6-adab-d7728bca88a6";
 const UNKNOWN = "00000000-0000-4000-8000-000000000000";
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
-}
 
 test.describe("TW-C workspace", () => {
   test.describe.configure({ mode: "serial" });
