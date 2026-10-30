@@ -27,7 +27,8 @@ In firebase mode, every sign-in route returns a Firebase **ID token** plus a ref
 - Route response in firebase mode: `{ token: idToken, tokenKind: "firebase_id_token", refreshToken, expiresIn: <number of seconds>, userId }`.
 - Refresh: new `POST /auth/refresh` with body `{ refreshToken }` calls `POST https://securetoken.googleapis.com/v1/token?key=<FIREBASE_WEB_API_KEY>` with form body `grant_type=refresh_token&refresh_token=<token>`. Google returns `id_token`, `refresh_token`, `expires_in`. The route returns `{ token, tokenKind: "firebase_id_token", refreshToken, expiresIn }`.
 - Rate-limit `/auth/refresh` like login: the existing `bumpRateLimit(db, "auth:ip:<ipHash>", 15, 30)` pattern in `auth-login.ts:153` (use a separate bucket key prefix `auth:refresh:ip:`).
-- `FIREBASE_WEB_API_KEY` is a public identifier (v14). Add it to the `Env` type as optional `string`. **Do not** add it to `wrangler.toml` (owned by the infra lane); how its per-env value is supplied is D-W1-8 (Open), which does not block this task.
+- `FIREBASE_WEB_API_KEY` is a public identifier (v14). Add it to the `Env` type as optional `string`. **Do not** edit `wrangler.toml`: D-W1-8 (Firoz, 31 Oct 2026, option a) is done, and `apps/api/wrangler.toml:74-82` (PR #76) already sets it per env. Locally it is unset; tests inject a fake value.
+- **gitleaks note:** gitleaks flags the two Firebase web API keys in `apps/api/wrangler.toml` (`[env.staging.vars]` and `[env.production.vars]`, added in PR #76) as `gcp-api-key`. They are public Firebase Web identifiers that ship to browsers (D-W1-8, Firoz, 31 Oct 2026). This finding is expected: do not remove or move the keys, and do not treat it as a stop condition.
 - In test mode nothing changes: `tokenKind: "test_id_token"`, no `refreshToken`, no `expiresIn`; `/auth/refresh` returns 400 `REFRESH_NOT_SUPPORTED` in test mode.
 - Error mapping: any non-2xx or malformed Google response → 401 with stable code `AUTH_EXCHANGE_FAILED` (login routes) or `AUTH_REFRESH_FAILED` (refresh). Missing `FIREBASE_WEB_API_KEY` in firebase mode → 503 `AUTH_PROVIDER_NOT_CONFIGURED` (existing code). Never log tokens, keys or Google response bodies.
 
@@ -37,7 +38,7 @@ In firebase mode, every sign-in route returns a Firebase **ID token** plus a ref
 - `apps/api/src/routes/auth-login.ts:196`, `:355`, `:467`, `:564`: `/login`, `/otp/verify`, reset-password and set-password return `mintAuthToken` output unchanged.
 - `apps/api/src/routes/auth-login.ts`: no `/auth/refresh` route.
 - `packages/contracts/src/auth.ts:10`, `:35` (and the other token responses in that file): `tokenKind` enum lacks `firebase_id_token`; no `refreshToken` / `expiresIn`; no refresh request/response schemas.
-- `apps/api/src/types.ts:22-53`: no `FIREBASE_WEB_API_KEY`.
+- `apps/api/src/types.ts:15-53` (`Env`): no `FIREBASE_WEB_API_KEY` field (PR #76 added the vars to `wrangler.toml` but not the type).
 
 ## Acceptance criteria
 - [ ] In firebase mode, `/auth/login`, `/auth/otp/verify` (login purpose), the reset-password and set-password routes return `tokenKind: "firebase_id_token"`, `refreshToken` and numeric `expiresIn`.

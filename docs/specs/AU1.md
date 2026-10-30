@@ -7,7 +7,7 @@ lane: auth
 files_owned:
   - apps/api/src/auth/firebase.ts
   - apps/api/src/auth/firebase.test.ts
-  - apps/api/package.json  # dependencies block only, to add jose; see D-W1-6
+  - apps/api/package.json  # dependencies block only (jose), D-W1-6 decided
   - pnpm-lock.yaml  # shared with X2 under the W1.md lockfile rule
 frames: []
 model: opus
@@ -19,7 +19,8 @@ With `AUTH_MODE=firebase`, the API accepts a genuine Firebase ID token for the c
 
 ## Context
 - Decision D-B9 (Firoz, 31 Oct 2026): no mid-task human approval; this spec decides the auth change.
-- Decision D-W1-3 (Firoz, 30 Oct 2026): two Firebase projects. Staging project ID `thefitbud-staging`; production project ID `thefitbud-prod`. No dev project: local runs use `AUTH_MODE=test`. The project ID reaches the Worker as the existing var `FIREBASE_PROJECT_ID` (local value `fitbud-local`, `apps/api/wrangler.toml`).
+- Decision D-W1-3 (Firoz, 30 Oct 2026): two Firebase projects. Staging project ID `thefitbud-staging`; production project ID `thefitbud-prod`. No dev project: local runs use `AUTH_MODE=test`. The project ID reaches the Worker as the existing var `FIREBASE_PROJECT_ID` (local value `fitbud-local`, `apps/api/wrangler.toml` `[vars]`; staging and production values are on `main` in `apps/api/wrangler.toml:74-82`, PR #76).
+- **gitleaks note:** gitleaks flags the two Firebase web API keys in `apps/api/wrangler.toml` (`[env.staging.vars]` and `[env.production.vars]`, added in PR #76) as `gcp-api-key`. They are public Firebase Web identifiers that ship to browsers (D-W1-8, Firoz, 31 Oct 2026). This finding is expected: do not remove or move the keys, and do not treat it as a stop condition.
 - Verification rules (beta task list v14, AU1):
   - Algorithm RS256 only; verify with `jose` `createRemoteJWKSet` against `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`.
   - `iss` must equal `https://securetoken.google.com/<FIREBASE_PROJECT_ID>`.
@@ -27,7 +28,7 @@ With `AUTH_MODE=firebase`, the API accepts a genuine Firebase ID token for the c
   - `exp` in the future and `iat` in the past (allow at most 60 s clock skew); `sub` a non-empty string; `auth_time` ≤ now.
   - The verified identity is `{ uid: sub, email: payload.email if a string }`.
 - Callers (no signature change needed): `apps/api/src/middleware/auth.ts:56`, `apps/api/src/routes/auth.ts:74`, `apps/api/src/routes/realtime.ts:79`. They pass `{ projectId, authMode }`.
-- Dependency: adding `jose` touches `apps/api/package.json` and `pnpm-lock.yaml`. Ownership of `apps/api/package.json` is **D-W1-6 (Open)** in W1.md. Lockfile rule (W1.md): whichever of AU1 / X2 merges second merges `main` in and re-runs `pnpm install`.
+- Dependency: adding `jose` touches `apps/api/package.json` and `pnpm-lock.yaml`. D-W1-6 (Firoz, 31 Oct 2026): AU1 adds `"jose"` to the `dependencies` block of `apps/api/package.json` (`:23-32`) and edits nothing else in that file; I4c owns `scripts` and runs after AU1 in sequence. Lockfile rule (W1.md): whichever of AU1 / X2 merges second merges `main` in and re-runs `pnpm install`.
 - Tests must not reach the network: build a local RSA key pair and a local JWKS in the test and inject it (e.g. an optional `jwks` parameter or a module-level setter used only by tests; it must not be selectable from env).
 - AU1b (token exchange) and AU2 (refuse test modes outside local) follow in this lane. Until AU1b merges, firebase-mode login still returns custom tokens; that is expected.
 
@@ -43,6 +44,7 @@ With `AUTH_MODE=firebase`, the API accepts a genuine Firebase ID token for the c
 - [ ] A protected route called with a rejected token returns 401 `UNAUTHENTICATED` (via the existing `requireAuthMiddleware`).
 - [ ] `AUTH_MODE=test` tokens (`test.<base64url>`) still verify exactly as before; existing `apps/api/src/auth/auth.test.ts` passes unchanged.
 - [ ] No token, header or payload value is logged.
+- [ ] `git diff main -- apps/api/package.json` shows only one added `"jose"` line inside `dependencies`; `scripts` is untouched.
 - [ ] The JWKS URL is a constant in `firebase.ts`; it is not read from env.
 
 ## Out of scope

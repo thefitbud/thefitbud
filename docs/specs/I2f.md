@@ -22,7 +22,7 @@ The food `dal-lentil-curry-generic` no longer carries the Jain tag, so Jain clie
 - If the tag is stored in a JSON column or a join table, read the 2026.10.9 seed to find which, and remove only the Jain entry.
 
 ## Gap list
-- On `main`, `dal-lentil-curry-generic` is not in the 2026.10.2 seed; it arrives with I2b. After I2b, its Jain tag is present (v14 I2f).
+- On `main`, `dal-lentil-curry-generic` is not in the loaded 2026.10.2 seed; it is in `apps/api/seed/library/incoming/2026.10.9/` (PR #74) and loads once I2b copies that release in. After I2b, its Jain tag is present (v14 I2f).
 
 ## Acceptance criteria
 - [ ] After `pnpm db:reset`, `dal-lentil-curry-generic` has no Jain tag and keeps all its other tags.
