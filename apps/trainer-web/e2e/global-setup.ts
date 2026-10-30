@@ -13,6 +13,9 @@ import {
 const API_PORT = process.env.FITBUD_API_PORT ?? "8787";
 const API = process.env.FITBUD_API_URL ?? `http://127.0.0.1:${API_PORT}`;
 process.env.FITBUD_API_URL = API;
+// A second wrangler also needs its own inspector port (default 9229 is taken by a dev API).
+const inspectorArgs =
+  API_PORT === "8787" ? [] : ["--inspector-port", String(Number(API_PORT) + 1000)];
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -135,6 +138,7 @@ function startApiDevServer() {
     "127.0.0.1",
     "--port",
     API_PORT,
+    ...inspectorArgs,
   ];
   const logFd = openSync(e2eLog, "a");
   const child = spawn("pnpm", wranglerArgs, {
@@ -169,7 +173,7 @@ export default async function globalSetup() {
       /* ignore */
     }
     execCommandSync(
-      `nohup pnpm exec wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 127.0.0.1 --port ${API_PORT} > ${e2eLog} 2>&1 &`,
+      `nohup pnpm exec wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 127.0.0.1 --port ${API_PORT} ${inspectorArgs.join(" ")} > ${e2eLog} 2>&1 &`,
       { cwd: API_ROOT },
     );
   }
