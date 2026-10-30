@@ -57,6 +57,7 @@ const detail: ExceptionDetail = {
   activatedAt: "2026-10-22T06:00:00.000Z",
   acknowledgedAt: "2026-10-22T07:00:00.000Z",
   resolvedAt: null,
+  closedReason: null,
   createdAt: "2026-10-22T06:00:00.000Z",
   updatedAt: "2026-10-22T07:00:00.000Z",
   actions: [],
@@ -114,14 +115,8 @@ const CLOSE_PATHS: ClosePath[] = [
       fireEvent.click(container.querySelector(".drawer-backdrop")!);
     },
   },
-  {
-    name: "Resolve",
-    close: async () => {
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
-      });
-    },
-  },
+  // Resolve is not a close path since frame 02 (resolved banner + Undo +
+  // Next item stays in the drawer; see ExceptionDrawer.test.tsx).
 ];
 
 const NAV_PATHS: ClosePath[] = [

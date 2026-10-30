@@ -2,7 +2,7 @@
  * Day-by-day simulation of assignments, logs, executions, check-ins, weights and
  * historical exceptions for one persona over a date range (SEED_DESIGN.md §6.3–6.4).
  */
-import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
+import type { PlanContent } from "@fitbud/contracts";
 import {
   mealAdherenceCandidate,
   missedWorkoutCandidate,
@@ -33,6 +33,8 @@ import type { SeedRows } from "./sql.js";
 
 const HOUR = 3_600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
+/** Facts that already happened are never stamped after the seed's "now". */
+const atMost = (at: string, now: string) => (Date.parse(at) > Date.parse(now) ? now : at);
 const WEEKDAY_MULT = [0.8, 1.0, 1.0, 0.98, 0.93, 0.85, 0.75];
 
 export function weekdayOf(localDate: string): number {
@@ -59,8 +61,8 @@ export type ActivityContext = {
 };
 
 export type GeneratedItem =
-  | { kind: "meal"; assignmentId: string; localDate: string; mealName: string; windowEndsAt: string; outcome: string | null; loggedAt: string | null; deviationKind: string | null }
-  | { kind: "workout"; assignmentId: string; localDate: string; windowEndsAt: string; status: string | null };
+  | { kind: "meal"; assignmentId: string; localDate: string; mealName: string; windowStartsAt: string; windowEndsAt: string; outcome: string | null; loggedAt: string | null; deviationKind: string | null }
+  | { kind: "workout"; assignmentId: string; localDate: string; windowStartsAt: string; windowEndsAt: string; status: string | null };
 
 /** Logging probability for a day (0..1). */
 function logProbability(cfg: PersonaConfig, ctx: ActivityContext, localDate: string, kind: "meal" | "workout", rng: Rng): number {
@@ -133,7 +135,7 @@ function insertException(ctx: ActivityContext, rng: Rng, input: {
   candidate: ExceptionCandidate;
   detectedAt: string;
   open: boolean;
-  /** When the source was logged later (auto-resolve). */
+  /** When the source was logged later (Client logged later; not auto-resolved). */
   loggedLateAt?: string | null;
 }): void {
   const { rows } = ctx;
@@ -154,12 +156,15 @@ function insertException(ctx: ActivityContext, rng: Rng, input: {
     } else {
       outcome = rng.pick(["talked", "talked", "no_action", "plan_adjusted"] as const);
       note = rng.pick(RESOLUTION_NOTES);
-      acknowledgedAt = iso(ms + rng.int(1, 10) * HOUR);
+      acknowledgedAt = atMost(iso(ms + rng.int(1, 10) * HOUR), ctx.now);
       resolvedAt = iso(Date.parse(acknowledgedAt) + rng.int(1, 40) * HOUR);
+    }
+    resolvedAt = atMost(resolvedAt, ctx.now);
+    // The trainer's actions are stamped with the (capped) times they happened.
+    if (acknowledgedAt) {
       actions.push({ action: "acknowledge", at: acknowledgedAt, note: null });
       actions.push({ action: "resolve", at: resolvedAt, note });
     }
-    if (Date.parse(resolvedAt) > Date.parse(ctx.now)) resolvedAt = ctx.now;
   }
   rows.add("exceptions", {
     id,
@@ -259,8 +264,8 @@ export function simulateActivity(ctx: ActivityContext, opts: {
         schedule_status: "scheduled",
         superseded_at: null,
         superseded_by_plan_version_id: null,
-        created_at: `${version.fromDate}T00:00:00.000Z` < windowStart ? `${version.fromDate}T00:00:00.000Z` : windowStart,
-        updated_at: windowStart,
+        created_at: atMost(`${version.fromDate}T00:00:00.000Z` < windowStart ? `${version.fromDate}T00:00:00.000Z` : windowStart, ctx.now),
+        updated_at: atMost(windowStart, ctx.now),
       });
       if (!past || Date.parse(windowStart) > nowMs) continue;
       weekStats.mealsPlanned += 1;
@@ -291,7 +296,11 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           deviationKind = weekdayOf(date) === 6 && mealRng.chance(0.5) ? "restaurant" : mealRng.pick(kinds);
           if (deviationKind === "restaurant" || deviationKind === "logged_foods") {
             const slug = mealRng.pick(deviationSlugs);
-            const dish = foodByGrams(ctx.lib, slug, mealRng.int(15, 30) * 10);
+            const dish = foodByGrams(ctx.lib, slug, mealRng.int(15, 30) * 10, (clamp) => {
+              throw new Error(
+                `Demo seed: deviation ${clamp.slug} requested ${clamp.requestedGrams} g and would silently cap at ${clamp.cappedUnits} × "${clamp.servingLabel}"`,
+              );
+            });
             const items = [dish];
             itemsJson = JSON.stringify(items);
             macros = mealMacros(items);
@@ -354,7 +363,7 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           open: false,
         });
       }
-      items.push({ kind: "meal", assignmentId, localDate: date, mealName: meal.name, windowEndsAt: windowEnd, outcome, loggedAt, deviationKind });
+      items.push({ kind: "meal", assignmentId, localDate: date, mealName: meal.name, windowStartsAt: windowStart, windowEndsAt: windowEnd, outcome, loggedAt, deviationKind });
     }
 
     const workoutDay = version.content.workoutDays.find((day) => day.weekday === weekdayOf(date));
@@ -376,8 +385,8 @@ export function simulateActivity(ctx: ActivityContext, opts: {
         schedule_status: "scheduled",
         superseded_at: null,
         superseded_by_plan_version_id: null,
-        created_at: wStart,
-        updated_at: wStart,
+        created_at: atMost(wStart, ctx.now),
+        updated_at: atMost(wStart, ctx.now),
       });
       let status: string | null = null;
       if (past && Date.parse(wStart) <= nowMs) {
@@ -445,7 +454,8 @@ export function simulateActivity(ctx: ActivityContext, opts: {
                     prescribed_load_label: target.loadLabel,
                     actual_reps: reps,
                     actual_load_label: kg == null ? target.loadLabel : kgLabel(kg),
-                    completed_at: iso(startedMs + (exIndex * 4 + setIndex + 1) * 3 * 60_000),
+                    // Inside the session: a set never finishes after the workout did (QS5).
+                    completed_at: iso(Math.min(startedMs + (exIndex * 4 + setIndex + 1) * 3 * 60_000, completedMs)),
                     created_at: iso(startedMs),
                     updated_at: completedAt,
                   });
@@ -465,7 +475,7 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           });
         }
       }
-      items.push({ kind: "workout", assignmentId, localDate: date, windowEndsAt: wEnd, status });
+      items.push({ kind: "workout", assignmentId, localDate: date, windowStartsAt: wStart, windowEndsAt: wEnd, status });
     }
 
     // Weigh-ins (trainee entries), only up to the persona's cut-off.

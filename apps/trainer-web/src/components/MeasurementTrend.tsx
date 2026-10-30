@@ -202,7 +202,6 @@ function daysBetween(left: string, right: string): number {
 export function MeasurementTrend({
   label,
   points,
-  compact = false,
 }: {
   label: string;
   points: TrendPoint[];

@@ -69,6 +69,12 @@ Product invariants
 - Exceptions retain their source signal and do not replace it.
 - FitBud presents context to trainers; it does not make automatic coaching decisions.
 - The normal trainee path should require minimal input. Ask for detail only when the workflow requires it.
+Design source of truth (locked 28 Oct 2026)
+- The locked UI design lives in `docs/design/` on main. The frames are in `docs/design/mockups/png/`, with HTML sources in `docs/design/mockups/html/`. Start from `docs/design/README.md` for the screen index, precedence, and lock status, and read `DESIGN-NOTES.md` and `DECISIONS-21OCT.md` there too.
+- Every UI task names its frame IDs. Build to those frames: match layout, copy, and every state. Do not invent screens, states, or copy. If a frame is missing, stop and report instead of guessing.
+- `docs/spec/mockups/` and `docs/spec/mockups-v2/` were retired and removed. Do not use older frames from git history.
+- UI QA compares the built screen side by side with the named frames. Tests and CI alone do not pass a UI task.
+
 Design rules
 - Design screens from domain state and transitions, not from a feature inventory.
 - Every visible dynamic value must have a defined backend source.

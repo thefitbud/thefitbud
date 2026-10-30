@@ -1,17 +1,14 @@
 /**
  * Batch 0 API/seed acceptance tests (03-api-changes A1–A14).
  */
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
-import { hashPassword } from "../auth/password.js";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
-import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
-import { createMemoryDb } from "../test-support/memory-db.js";
-import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
+import { createDemoSeededDb, prepareDemoSeededDb } from "../test-support/seeded-db.js";
 import { demoUuid } from "../seed/demo/ids.js";
 import { coerceIsoInstant } from "../domain/mappers.js";
 
@@ -61,18 +58,14 @@ describe("Batch 0 API fixes", () => {
   let close: () => void = () => {};
   let trainerToken = "";
 
+  beforeAll(async () => {
+    await prepareDemoSeededDb(FROZEN_REFERENCE_INSTANT);
+  });
+
   beforeEach(async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date(FROZEN_REFERENCE_INSTANT));
-    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
-    const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
-    const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-    const sql = buildDemoSeedSql({
-      referenceInstant: FROZEN_REFERENCE_INSTANT,
-      passwordHash,
-      libraryIndex,
-    });
-    handle.sqlite.exec(sql);
+    const handle = await createDemoSeededDb(FROZEN_REFERENCE_INSTANT);
     db = handle.db;
     close = handle.close;
     setTestDbOverride(db);
