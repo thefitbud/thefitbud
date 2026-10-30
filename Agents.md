@@ -46,7 +46,8 @@ Architectural rules
 - Support trainer and trainee modes in the Expo mobile application.
 - Treat D1 and the API as authoritative. SQLite, notifications, and realtime events are projections or delivery mechanisms.
 - Use REST and sync for normal state. Use Durable Objects and WebSockets only for selected change notifications.
-- Do not add in-app chat, payment tracking, organization roles, or trainer-team permissions to the MVP.
+- Do not add in-app chat, payment processing or collection, in-app video or voice calling, organization roles, or trainer-team permissions to the MVP.
+- Payment tracking is allowed (30 Oct 2026): per client, the trainer records amount, subscription type, coaching mode, start and due dates, paid/unpaid status and method (cash/UPI/bank/other). Session counting is out of scope. Calendar entries may carry an external meeting link. Steps (HealthKit / Health Connect, trainer-visible) and push notifications are MVP.
 Provider portability rule
 - Cloudflare is an infrastructure choice, not a domain-model choice.
 - Product behavior, domain rules, shared contracts, and client behavior must remain provider-neutral.

@@ -1,5 +1,7 @@
 # TR-06 · Today
 
+> **Updated 30 Oct 2026:** steps appear as a Steps **chip** on Today (not a ring or a goal-free card), against a target (default 8,000, coach-editable). Steps are MVP.
+
 **ID:** TR-06 · **Name:** Today · **Priority:** P0 (date navigator, workout card, rings, next meal), P1 (coach notes), P2 (steps) · **Route/screen:** `Today` · **Batch:** M-2 (see `../BATCHES.md`)
 
 **Files to touch:**
