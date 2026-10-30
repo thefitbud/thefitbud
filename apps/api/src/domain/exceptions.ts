@@ -43,6 +43,13 @@ function detectionWindowStartLocalDate(
   return addDaysToLocalDate(today, -(DETECTION_LOOKBACK_DAYS - 1));
 }
 
+function sourceKey(input: {
+  sourceEntityType: string;
+  sourceEntityId: string;
+}): string {
+  return `${input.sourceEntityType}:${input.sourceEntityId}`;
+}
+
 /** One open item per type + civil day + slot. Duplicate plan versions share a day. */
 function dedupeSameDaySlot<T extends ExceptionCandidate>(candidates: T[]): T[] {
   const seen = new Set<string>();
@@ -174,46 +181,13 @@ async function collectCandidatesForRelationship(
   return candidates;
 }
 
-/** True when the exception source still sits inside the detection lookback. */
-async function isSourceInDetectionWindow(
-  db: Db,
-  row: ExceptionRow,
-  windowStart: string,
-): Promise<boolean> {
-  if (row.sourceEntityType === "meal_assignment") {
-    const [assignment] = await db
-      .select({ localDate: mealAssignments.localDate })
-      .from(mealAssignments)
-      .where(eq(mealAssignments.id, row.sourceEntityId))
-      .limit(1);
-    return Boolean(assignment && assignment.localDate >= windowStart);
-  }
-  if (row.sourceEntityType === "workout_assignment") {
-    const [assignment] = await db
-      .select({ localDate: workoutAssignments.localDate })
-      .from(workoutAssignments)
-      .where(eq(workoutAssignments.id, row.sourceEntityId))
-      .limit(1);
-    return Boolean(assignment && assignment.localDate >= windowStart);
-  }
-  if (row.sourceEntityType === "checkin") {
-    const [checkin] = await db
-      .select({ localDate: checkins.localDate })
-      .from(checkins)
-      .where(eq(checkins.id, row.sourceEntityId))
-      .limit(1);
-    return Boolean(checkin && checkin.localDate >= windowStart);
-  }
-  // Unknown source types: only resolve when positively re-checked via candidates.
-  return false;
-}
-
 /**
  * Deterministic exception detection for one coaching relationship.
- * Creates Detected exceptions, promotes them to Active, and resolves an open
- * exception only when its condition is gone. Acknowledged exceptions that are
- * still true stay acknowledged. Does not rewrite workout, meal, or check-in
- * source records.
+ * Creates Detected exceptions and promotes them to Active. Does not
+ * system-resolve open items when a source condition clears — late logs stay
+ * visible as logged-later / attention for a trainer resolve (OQ-23).
+ * Acknowledged exceptions that are still true stay acknowledged. Does not
+ * rewrite workout, meal, or check-in source records.
  */
 export async function evaluateRelationshipExceptions(
   db: Db,
@@ -254,7 +228,6 @@ export async function evaluateRelationshipExceptions(
   const timeZone = relationship[0]
     ? await loadTraineeTimezone(db, relationship[0].traineeUserId)
     : "Asia/Kolkata";
-  const windowStart = detectionWindowStartLocalDate(now, timeZone);
   const candidates = await collectCandidatesForRelationship(
     db,
     relationshipId,
@@ -262,28 +235,53 @@ export async function evaluateRelationshipExceptions(
     timeZone,
   );
   const candidateKeys = new Set(candidates.map((candidate) => exceptionKey(candidate)));
+  const candidatesBySource = new Map<string, ExceptionCandidate[]>();
+  for (const candidate of candidates) {
+    const key = sourceKey(candidate);
+    const list = candidatesBySource.get(key);
+    if (list) list.push(candidate);
+    else candidatesBySource.set(key, [candidate]);
+  }
 
-  const resolvedRows: ExceptionRow[] = [];
-  for (const row of existingRows) {
-    if (!isOpenExceptionStatus(row.status)) continue;
-    if (candidateKeys.has(exceptionKey(row))) continue;
-    // Lookback only limits new detection. Older open items stay open unless we
-    // positively re-check their source inside the window and the condition cleared.
-    if (!(await isSourceInDetectionWindow(db, row, windowStart))) continue;
+  // Late log (or equivalent meal_logged_later signal): move the existing open
+  // item to Client logged later. Never clear it as resolved.
+  const openRows: ExceptionRow[] = existingRows.filter((row) =>
+    isOpenExceptionStatus(row.status),
+  );
+  for (const row of openRows) {
+    if (row.type === "meal_logged_later") continue;
+    const lateCandidate = (candidatesBySource.get(sourceKey(row)) ?? []).find(
+      (candidate) => candidate.type === "meal_logged_later",
+    );
+    if (!lateCandidate) continue;
     await db
       .update(exceptions)
       .set({
-        status: "resolved",
-        resolvedAt: now,
+        type: lateCandidate.type,
+        severity: lateCandidate.severity,
+        summary: lateCandidate.summary,
+        detailsJson: lateCandidate.details
+          ? JSON.stringify(lateCandidate.details)
+          : null,
+        sourceLoggedLateAt: now,
         updatedAt: now,
       })
       .where(eq(exceptions.id, row.id));
-    resolvedRows.push({
+    const morphed: ExceptionRow = {
       ...row,
-      status: "resolved",
-      resolvedAt: now,
+      type: lateCandidate.type,
+      severity: lateCandidate.severity,
+      summary: lateCandidate.summary,
+      detailsJson: lateCandidate.details
+        ? JSON.stringify(lateCandidate.details)
+        : null,
+      sourceLoggedLateAt: now,
       updatedAt: now,
-    });
+    };
+    const idx = existingRows.findIndex((item) => item.id === row.id);
+    if (idx >= 0) existingRows[idx] = morphed;
+    const openIdx = openRows.findIndex((item) => item.id === row.id);
+    if (openIdx >= 0) openRows[openIdx] = morphed;
   }
 
   // Skip sources that already have an open, acknowledged, or resolved item so
@@ -296,18 +294,17 @@ export async function evaluateRelationshipExceptions(
       )
       .map((row) => exceptionKey(row)),
   );
+  // One open item per source entity: keep the morphed/original row instead of
+  // inserting a second meal_logged_later (or other) for the same assignment.
+  const openSourceKeys = new Set(openRows.map((row) => sourceKey(row)));
 
   const freshCandidates = dedupeSameDaySlot(
-    filterNewExceptionCandidates(candidates, blockedKeys),
+    filterNewExceptionCandidates(candidates, blockedKeys).filter(
+      (candidate) => !openSourceKeys.has(sourceKey(candidate)),
+    ),
   );
 
-  const openAfterResolve = existingRows.filter(
-    (row) =>
-      isOpenExceptionStatus(row.status) &&
-      !resolvedRows.some((resolved) => resolved.id === row.id),
-  ).length;
-  // A paused client can already hold a full meal stack. Keep the open set ≤10.
-  let room = Math.max(0, 10 - openAfterResolve);
+  let room = Math.max(0, 10 - openRows.length);
 
   const createdRows: ExceptionRow[] = [];
   for (const candidate of freshCandidates) {
@@ -333,7 +330,8 @@ export async function evaluateRelationshipExceptions(
       resolutionOutcome: null,
       resolutionNote: null,
       closedReason: null,
-      sourceLoggedLateAt: null,
+      sourceLoggedLateAt:
+        candidate.type === "meal_logged_later" ? now : null,
       createdAt: now,
       updatedAt: now,
     };
@@ -374,7 +372,8 @@ export async function evaluateRelationshipExceptions(
   return {
     created: createdRows.length,
     activated,
-    resolved: resolvedRows.length,
+    // Evaluate never system-resolves. Coaching end / trainer resolve are separate.
+    resolved: 0,
     exceptions: [
       ...createdRows.map((row) =>
         mapException({
@@ -388,7 +387,7 @@ export async function evaluateRelationshipExceptions(
         .filter((row) => !createdRows.some((created) => created.id === row.id))
         .map(mapException),
     ],
-    resolvedExceptions: resolvedRows.map(mapException),
+    resolvedExceptions: [],
   };
 }
 

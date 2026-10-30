@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { X } from "lucide-react";
+import { CheckCircle2, X } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import {
   formatCivilDate,
@@ -9,7 +9,10 @@ import {
   formatLocalDate,
   labelFor,
 } from "@fitbud/core";
-import type { ExceptionDetail } from "@fitbud/contracts";
+import type {
+  ExceptionClosedReason,
+  ExceptionDetail,
+} from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
@@ -27,8 +30,93 @@ const OUTCOMES = [
   { id: "no_action", label: "No action needed" },
 ] as const;
 
+type OutcomeId = (typeof OUTCOMES)[number]["id"];
+
+/** Undo window after Resolve before the POST commits (frame 02). */
+const RESOLVE_UNDO_MS = 5000;
+
 const VIEWER_TZ =
   Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+/**
+ * Close-path label for a resolved exception.
+ * Locked frames only: trainer/null → "Resolved by you" (02/132);
+ * coaching_ended → "Closed when coaching ended" (41).
+ * Firoz product lock (28 Oct 2026): trainers resolve every exception.
+ */
+export function resolvedCloseLabel(
+  closedReason: ExceptionClosedReason | null,
+): string {
+  if (closedReason === "coaching_ended") {
+    return "Closed when coaching ended";
+  }
+  // trainer | null → trainer path
+  return "Resolved by you";
+}
+
+export function outcomeChipLabel(outcomeId: string | null | undefined): string | null {
+  if (!outcomeId) return null;
+  const chip = OUTCOMES.find((o) => o.id === outcomeId);
+  if (chip) return chip.label;
+  const fromCore = labelFor("resolve_outcome", outcomeId);
+  return fromCore && fromCore !== outcomeId ? fromCore : null;
+}
+
+/** Weekday + civil day + clock, e.g. "Sat 17 Oct, 10:05 am" (frames 02 / 132). */
+export function formatTimelineDateTime(
+  iso: string,
+  timeZone: string = VIEWER_TZ,
+): string {
+  const civil = formatCivilDate(formatLocalDate(new Date(iso), timeZone));
+  const clock = formatClockTime(iso, timeZone);
+  return clock ? `${civil}, ${clock}` : civil;
+}
+
+/**
+ * Trainer resolve banner copy (frames 02 / 132).
+ * just-resolved → "Resolved by you · just now · {outcome}"
+ * read-only → "Resolved by you · {civil date}[ · {outcome}]"
+ */
+export function trainerResolveBannerText(opts: {
+  resolvedAt: string;
+  outcomeLabel: string | null;
+  justResolved: boolean;
+  timeZone?: string;
+}): string {
+  const tz = opts.timeZone ?? VIEWER_TZ;
+  const when = opts.justResolved
+    ? "just now"
+    : formatCivilDate(formatLocalDate(new Date(opts.resolvedAt), tz));
+  const parts = ["Resolved by you", when];
+  if (opts.outcomeLabel) parts.push(opts.outcomeLabel);
+  return parts.join(" · ");
+}
+
+/**
+ * Trainer resolve timeline line (frames 02 / 132):
+ * "Resolved by you · {outcome} · {weekday date, time}" when outcome is known.
+ */
+export function trainerResolveTimelineText(opts: {
+  resolvedAt: string;
+  outcomeLabel: string | null;
+  timeZone?: string;
+}): string {
+  const when = formatTimelineDateTime(
+    opts.resolvedAt,
+    opts.timeZone ?? VIEWER_TZ,
+  );
+  const parts = ["Resolved by you"];
+  if (opts.outcomeLabel) parts.push(opts.outcomeLabel);
+  parts.push(when);
+  return parts.join(" · ");
+}
+
+function isTrainerClose(
+  closedReason: ExceptionClosedReason | null,
+): boolean {
+  // coaching_ended is the only non-trainer close with a locked frame.
+  return closedReason !== "coaching_ended";
+}
 
 function detailString(
   details: Record<string, unknown> | null | undefined,
@@ -146,9 +234,14 @@ export function ExceptionDrawer({
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [outcome, setOutcome] =
-    useState<(typeof OUTCOMES)[number]["id"]>("talked");
+  const [outcome, setOutcome] = useState<OutcomeId>("talked");
   const [showResolveForm, setShowResolveForm] = useState(false);
+  /** Outcome chosen in this drawer session (DTO does not yet return it). */
+  const [sessionOutcomeId, setSessionOutcomeId] = useState<OutcomeId | null>(
+    null,
+  );
+  /** True while Resolve is optimistic and Undo can cancel before POST. */
+  const [resolveUndoPending, setResolveUndoPending] = useState(false);
   const [reminderLine, setReminderLine] = useState<string | null>(null);
   const [nudgeHint, setNudgeHint] = useState<string | null>(null);
   const [nudgeBlockedUntil, setNudgeBlockedUntil] = useState<number | null>(
@@ -163,6 +256,10 @@ export function ExceptionDrawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const nudgeRef = useRef<() => void>(() => undefined);
+  const resolveTimerRef = useRef<number | null>(null);
+  const resolveGenRef = useRef(0);
+  /** After Mark reviewed unmounts, restore focus inside the open drawer. */
+  const restoreFocusAfterReviewRef = useRef(false);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     // Quiet reload after an action keeps the drawer content on screen.
@@ -253,6 +350,15 @@ export function ExceptionDrawer({
   }, [load]);
 
   useEffect(() => {
+    return () => {
+      if (resolveTimerRef.current != null) {
+        window.clearTimeout(resolveTimerRef.current);
+        resolveTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (nudgeBlockedUntil == null) return;
     const id = window.setInterval(() => {
       const now = Date.now();
@@ -274,9 +380,11 @@ export function ExceptionDrawer({
         createIdempotencyKey(),
       );
       setNote("");
+      restoreFocusAfterReviewRef.current = true;
       await load({ quiet: true });
       onChanged?.();
     } catch (err) {
+      restoreFocusAfterReviewRef.current = false;
       setError(
         err instanceof ApiClientError ? err.message : "Could not mark reviewed.",
       );
@@ -285,42 +393,85 @@ export function ExceptionDrawer({
     }
   }
 
-  async function resolve() {
-    setActing(true);
-    setError(null);
-    try {
-      if (detail && (detail.status === "detected" || detail.status === "active")) {
-        // The API resolves only reviewed items; Resolve on an open item marks
-        // it reviewed first so the trainer never needs two clicks.
-        await apiClient.acknowledgeException(
-          exceptionId,
-          { note: null },
-          createIdempotencyKey(),
-        );
-      }
-      await apiClient.resolveException(
-        exceptionId,
-        {
-          note: note.trim() || null,
-          outcome:
-            outcome === "talked"
-              ? "talked"
-              : outcome === "plan_adjusted"
-                ? "plan_adjusted"
-                : "no_action",
-        },
-        createIdempotencyKey(),
-      );
-      setNote("");
-      onChanged?.();
-      onClose();
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not resolve.",
-      );
-    } finally {
-      setActing(false);
+  function undoPendingResolve() {
+    if (resolveTimerRef.current != null) {
+      window.clearTimeout(resolveTimerRef.current);
+      resolveTimerRef.current = null;
     }
+    resolveGenRef.current += 1;
+    setResolveUndoPending(false);
+    setSessionOutcomeId(null);
+    setError(null);
+    void load({ quiet: true });
+  }
+
+  function resolve() {
+    if (!detail || resolveUndoPending) return;
+    setError(null);
+    const chosenOutcome = outcome;
+    const noteText = note.trim() || null;
+    const needsAck =
+      detail.status === "detected" || detail.status === "active";
+    const optimisticAt = new Date().toISOString();
+
+    // Frame 02: optimistic resolved banner + Undo before the POST commits.
+    setSessionOutcomeId(chosenOutcome);
+    setResolveUndoPending(true);
+    setShowResolveForm(false);
+    setNote("");
+    setDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: "resolved",
+            resolvedAt: optimisticAt,
+            closedReason: "trainer",
+            updatedAt: optimisticAt,
+          }
+        : prev,
+    );
+
+    const gen = ++resolveGenRef.current;
+    resolveTimerRef.current = window.setTimeout(() => {
+      void (async () => {
+        if (gen !== resolveGenRef.current) return;
+        setActing(true);
+        try {
+          if (needsAck) {
+            // API resolves only reviewed items; Resolve on an open item marks
+            // it reviewed first so the trainer never needs two clicks.
+            await apiClient.acknowledgeException(
+              exceptionId,
+              { note: null },
+              createIdempotencyKey(),
+            );
+          }
+          await apiClient.resolveException(
+            exceptionId,
+            {
+              note: noteText,
+              outcome: chosenOutcome,
+            },
+            createIdempotencyKey(),
+          );
+          if (gen !== resolveGenRef.current) return;
+          setResolveUndoPending(false);
+          await load({ quiet: true });
+          onChanged?.();
+        } catch (err) {
+          if (gen !== resolveGenRef.current) return;
+          setResolveUndoPending(false);
+          setSessionOutcomeId(null);
+          setError(
+            err instanceof ApiClientError ? err.message : "Could not resolve.",
+          );
+          await load({ quiet: true });
+        } finally {
+          if (gen === resolveGenRef.current) setActing(false);
+          resolveTimerRef.current = null;
+        }
+      })();
+    }, RESOLVE_UNDO_MS);
   }
 
   async function nudge() {
@@ -417,6 +568,33 @@ export function ExceptionDrawer({
 
   useEffect(() => {
     closeRef.current?.focus();
+  }, []);
+
+  const resolved = detail?.status === "resolved";
+  const acknowledged = detail?.status === "acknowledged";
+  const active =
+    detail &&
+    (detail.status === "detected" || detail.status === "active");
+
+  // Mark reviewed removes its own button; move focus to Resolve (now primary)
+  // or Close so document.body never holds focus while aria-modal is open.
+  // Wait until acting clears — Resolve is disabled while the request runs, and
+  // disabled controls cannot take focus (happy-dom and browsers).
+  useLayoutEffect(() => {
+    if (!restoreFocusAfterReviewRef.current) return;
+    if (active || acting) return;
+    restoreFocusAfterReviewRef.current = false;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const activeEl = document.activeElement;
+    if (activeEl instanceof Node && panel.contains(activeEl)) return;
+    const next =
+      panel.querySelector<HTMLElement>(".drawer-foot .button-primary") ??
+      closeRef.current;
+    next?.focus();
+  }, [active, acting, acknowledged, detail]);
+
+  useEffect(() => {
     function onKey(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
         if (document.querySelector(".overflow-menu-list")) return;
@@ -454,12 +632,6 @@ export function ExceptionDrawer({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const resolved = detail?.status === "resolved";
-  const acknowledged = detail?.status === "acknowledged";
-  const active =
-    detail &&
-    (detail.status === "detected" || detail.status === "active");
-
   const dueIso =
     dueByIso ?? (detail ? windowEndIso(detail.details) : null);
   const nudgeBlocked =
@@ -472,6 +644,19 @@ export function ExceptionDrawer({
     phoneE164: clientWhatsappE164,
     name: clientName,
   });
+  const sessionOutcomeLabel = outcomeChipLabel(sessionOutcomeId);
+  const trainerClose = Boolean(
+    detail?.resolvedAt && isTrainerClose(detail.closedReason),
+  );
+  const showTrainerResolveBanner = trainerClose;
+  const resolvedTimelineText = detail?.resolvedAt
+    ? trainerClose
+      ? trainerResolveTimelineText({
+          resolvedAt: detail.resolvedAt,
+          outcomeLabel: sessionOutcomeLabel,
+        })
+      : `${resolvedCloseLabel(detail.closedReason)} · ${formatTimelineDateTime(detail.resolvedAt)}`
+    : null;
 
   return (
     <div className="drawer-backdrop" role="presentation" onClick={onClose}>
@@ -540,6 +725,32 @@ export function ExceptionDrawer({
               {reminderLine ? <p className="muted">{reminderLine}</p> : null}
               {nudgeHint ? <p className="muted">{nudgeHint}</p> : null}
 
+              {showTrainerResolveBanner && detail.resolvedAt ? (
+                <div
+                  className="drawer-resolve-banner"
+                  role="status"
+                  data-testid="exception-resolve-banner"
+                >
+                  <CheckCircle2 size={16} strokeWidth={2.25} aria-hidden />
+                  <span>
+                    {trainerResolveBannerText({
+                      resolvedAt: detail.resolvedAt,
+                      outcomeLabel: sessionOutcomeLabel,
+                      justResolved: resolveUndoPending,
+                    })}
+                  </span>
+                  {resolveUndoPending ? (
+                    <button
+                      type="button"
+                      className="drawer-resolve-undo"
+                      onClick={undoPendingResolve}
+                    >
+                      Undo
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
               <ul className="drawer-timeline">
                 <li>
                   Detected{" "}
@@ -551,15 +762,9 @@ export function ExceptionDrawer({
                     {formatInstant(detail.acknowledgedAt, VIEWER_TZ)}
                   </li>
                 ) : null}
-                {detail.resolvedAt ? (
-                  <li>
-                    Resolved by you ·{" "}
-                    {formatCivilDate(
-                      formatLocalDate(
-                        new Date(detail.resolvedAt),
-                        VIEWER_TZ,
-                      ),
-                    )}
+                {resolvedTimelineText ? (
+                  <li data-testid="exception-resolve-timeline">
+                    {resolvedTimelineText}
                   </li>
                 ) : null}
               </ul>
@@ -611,7 +816,7 @@ export function ExceptionDrawer({
                           setShowResolveForm(true);
                           return;
                         }
-                        void resolve();
+                        resolve();
                       }}
                     >
                       {!acknowledged && !showResolveForm ? "Resolve…" : "Resolve"}

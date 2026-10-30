@@ -9,6 +9,8 @@ import {
   acknowledgeExceptionRequestSchema,
   attentionFeedResponseSchema,
   attentionGroupsResponseSchema,
+  undoExceptionAcknowledgeRequestSchema,
+  type ExceptionStatus,
   createInterventionRequestSchema,
   evaluateExceptionsResponseSchema,
   exceptionDetailSchema,
@@ -19,8 +21,12 @@ import {
   resolveExceptionRequestSchema,
 } from "@fitbud/contracts";
 import {
+  attentionReviewBucket,
   canAcknowledgeException,
   canResolveException,
+  canUndoAcknowledge,
+  restoredStatusAfterUndo,
+  type AttentionReviewBucket,
 } from "@fitbud/core";
 import {
   evaluateRelationshipExceptions,
@@ -57,6 +63,7 @@ import type { ActorContext, Env, Variables } from "../types";
 import { canAccessRelationship } from "./relationships";
 
 const ACK_OPERATION = "exception.acknowledge";
+const UNDO_ACK_OPERATION = "exception.undo_acknowledge";
 const RESOLVE_OPERATION = "exception.resolve";
 const INTERVENTION_OPERATION = "intervention.create";
 const EVALUATE_OPERATION = "exception.evaluate";
@@ -67,6 +74,92 @@ export const exceptionRoutes = new Hono<{
 }>();
 
 type Db = ReturnType<typeof createDb>;
+
+type AttentionGroupDraft = {
+  relationshipId: string;
+  traineeDisplayName: string;
+  clientWhatsappE164: string | null;
+  items: Array<{
+    id: string;
+    type: string;
+    severity: string;
+    status: string;
+    ageMinutes: number;
+    summary: string;
+    details: Record<string, unknown> | null;
+    acknowledgedAt: string | null;
+  }>;
+  itemCount: number;
+  mostSevere: string;
+  oldestAgeMinutes: number;
+  bucket?: AttentionReviewBucket;
+};
+
+function projectAttentionBucket<T extends AttentionGroupDraft>(
+  group: T,
+  bucket: AttentionReviewBucket,
+): T {
+  const items = group.items.filter((item) =>
+    bucket === "needs_you"
+      ? item.status === "detected" || item.status === "active"
+      : item.status === "acknowledged",
+  );
+  const mostSevere: "critical" | "attention" = items.some(
+    (item) => item.severity === "critical",
+  )
+    ? "critical"
+    : "attention";
+  const oldestAgeMinutes = items.reduce(
+    (max, item) => Math.max(max, item.ageMinutes),
+    0,
+  );
+  return {
+    ...group,
+    items,
+    itemCount: items.length,
+    mostSevere,
+    oldestAgeMinutes,
+    bucket,
+  };
+}
+
+function compareAttentionGroups(a: AttentionGroupDraft, b: AttentionGroupDraft) {
+  const aCrit = a.mostSevere === "critical" ? 1 : 0;
+  const bCrit = b.mostSevere === "critical" ? 1 : 0;
+  if (aCrit !== bCrit) return bCrit - aCrit;
+  if (a.oldestAgeMinutes !== b.oldestAgeMinutes) {
+    return b.oldestAgeMinutes - a.oldestAgeMinutes;
+  }
+  return a.traineeDisplayName.localeCompare(b.traineeDisplayName);
+}
+
+/**
+ * Split grouped attention into Needs you and Reviewed.
+ * A client leaves Needs you only when every remaining open item is acknowledged.
+ */
+function partitionAttentionGroups(groups: AttentionGroupDraft[]) {
+  const stamped = groups.map((group) => ({
+    ...group,
+    bucket:
+      attentionReviewBucket(
+        group.items.map((item) => item.status as ExceptionStatus),
+      ) ?? "needs_you",
+  }));
+  const needsYou: AttentionGroupDraft[] = [];
+  const reviewed: AttentionGroupDraft[] = [];
+  for (const group of stamped) {
+    if (group.bucket === "reviewed") {
+      const projected = projectAttentionBucket(group, "reviewed");
+      if (projected.items.length > 0) reviewed.push(projected);
+      continue;
+    }
+    const projected = projectAttentionBucket(group, "needs_you");
+    if (projected.items.length > 0) needsYou.push(projected);
+  }
+  needsYou.sort(compareAttentionGroups);
+  reviewed.sort(compareAttentionGroups);
+  return { groups: stamped, needsYou, reviewed };
+}
 
 async function loadAccessibleRelationship(
   db: Db,
@@ -95,8 +188,9 @@ exceptionRoutes.get(
   "/attention",
   operation({
     tag: "Exceptions",
-    summary: "Exceptions operation for GET /exceptions/attention.",
-    description: "Exceptions operation for GET /exceptions/attention.",
+    summary: "Trainer attention feed.",
+    description:
+      "Lists open exceptions for the trainer. groupBy=relationship returns one group per client, split into Needs you and Reviewed. A client stays in Needs you until every open item is acknowledged or resolved. limit counts groups.",
     roles: ["trainer"],
     parameters: [
       limitParameter({ defaultValue: 20, maximum: 1 }),
@@ -157,6 +251,7 @@ exceptionRoutes.get(
             ageMinutes: number;
             summary: string;
             details: Record<string, unknown> | null;
+            acknowledgedAt: string | null;
           }>;
         }
       >();
@@ -181,6 +276,7 @@ exceptionRoutes.get(
           ageMinutes,
           summary: ex.summary,
           details: ex.details ?? null,
+          acknowledgedAt: ex.acknowledgedAt,
         });
         grouped.set(item.coachingRelationshipId, bucket);
       }
@@ -206,20 +302,10 @@ exceptionRoutes.get(
           oldestAgeMinutes: oldestDetectedAge,
         };
       });
-      groups.sort((a, b) => {
-        const aCrit = a.mostSevere === "critical" ? 1 : 0;
-        const bCrit = b.mostSevere === "critical" ? 1 : 0;
-        if (aCrit !== bCrit) return bCrit - aCrit;
-        if (a.oldestAgeMinutes !== b.oldestAgeMinutes) {
-          return b.oldestAgeMinutes - a.oldestAgeMinutes;
-        }
-        return a.traineeDisplayName.localeCompare(b.traineeDisplayName);
-      });
+      groups.sort(compareAttentionGroups);
       // `limit` counts groups (clients), not raw items.
-      return ok(
-        c,
-        attentionGroupsResponseSchema.parse({ groups: groups.slice(0, limit) }),
-      );
+      const partitioned = partitionAttentionGroups(groups.slice(0, limit));
+      return ok(c, attentionGroupsResponseSchema.parse(partitioned));
     }
 
     return ok(
@@ -776,6 +862,140 @@ exceptionRoutes.post(
 );
 
 exceptionRoutes.post(
+  "/:exceptionId/undo",
+  operation({
+    tag: "Exceptions",
+    summary: "Undoes Mark reviewed for an acknowledged exception.",
+    description:
+      "Restores an acknowledged exception to active (or detected, if it was never activated) and clears acknowledgedAt. Resolve cannot be undone. The stored status stays acknowledged until this compensating action runs.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: undoExceptionAcknowledgeRequestSchema,
+    response: exceptionSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const parsed = undoExceptionAcknowledgeRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid undo request.", {
+        issues: parsed.error.issues,
+      });
+    }
+
+    const idempotencyKey = requireIdempotencyKey(c);
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
+
+    const db = createDb(c.env.DB);
+    const fingerprint = await sha256Hex(
+      JSON.stringify({ exceptionId: c.req.param("exceptionId") }),
+    );
+    const existing = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: UNDO_ACK_OPERATION,
+      idempotencyKey,
+    });
+    if (existing) {
+      if (existing.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request.",
+        );
+      }
+      return c.json(
+        JSON.parse(existing.responseBody),
+        existing.responseStatus as 200,
+      );
+    }
+
+    const rows = await db
+      .select()
+      .from(exceptions)
+      .where(eq(exceptions.id, c.req.param("exceptionId")))
+      .limit(1);
+    const row = rows[0];
+    if (!row) {
+      return fail(c, 404, "EXCEPTION_NOT_FOUND", "Exception not found.");
+    }
+
+    const relationship = await loadAccessibleRelationship(
+      db,
+      row.coachingRelationshipId,
+      actor,
+    );
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 404, "EXCEPTION_NOT_FOUND", "Exception not found.");
+    }
+
+    if (!canUndoAcknowledge(row.status)) {
+      return fail(
+        c,
+        409,
+        "INVALID_TRANSITION",
+        "Exception can only be restored while it is acknowledged.",
+      );
+    }
+
+    const now = nowIso();
+    const restoredStatus = restoredStatusAfterUndo({
+      activatedAt: row.activatedAt,
+    });
+    await db
+      .update(exceptions)
+      .set({
+        status: restoredStatus,
+        acknowledgedAt: null,
+        updatedAt: now,
+      })
+      .where(eq(exceptions.id, row.id));
+
+    const updated = {
+      ...row,
+      status: restoredStatus,
+      acknowledgedAt: null,
+      updatedAt: now,
+    };
+    const responseBody = {
+      data: exceptionSchema.parse(mapException(updated)),
+    };
+    await saveIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: UNDO_ACK_OPERATION,
+      idempotencyKey,
+      requestFingerprint: fingerprint,
+      responseStatus: 200,
+      responseBody,
+      expiresAt: addDaysIso(7),
+    });
+    queueRealtimeHint(c.env, {
+      eventType: "exception_changed",
+      entityType: "exception",
+      entityId: updated.id,
+      coachingRelationshipId: relationship.id,
+      serverVersion: 0,
+    });
+    return c.json(responseBody, 200);
+  },
+);
+
+exceptionRoutes.post(
   "/:exceptionId/resolve",
   operation({
     tag: "Exceptions",
@@ -883,6 +1103,7 @@ exceptionRoutes.post(
         resolvedAt: now,
         resolutionOutcome: outcome,
         resolutionNote: noteText,
+        closedReason: "trainer",
         updatedAt: now,
       })
       .where(eq(exceptions.id, row.id));
@@ -931,6 +1152,7 @@ exceptionRoutes.post(
       resolvedAt: now,
       resolutionOutcome: outcome,
       resolutionNote: noteText,
+      closedReason: "trainer" as const,
       updatedAt: now,
     };
     const responseBody = {

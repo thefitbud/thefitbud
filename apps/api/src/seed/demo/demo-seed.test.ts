@@ -16,13 +16,20 @@ import { DEMO_ACCOUNTS, DEMO_PASSWORD_PLAINTEXT } from "./spec.js";
 import { DEMO_EXTRA_ACCOUNTS } from "./spec-extra.js";
 import { WORKOUT_TEMPLATES } from "./generator/templates/workouts.js";
 import { DIET_TEMPLATES } from "./generator/templates/diets.js";
+import { assertNoForeignKeyViolations } from "../../test-support/foreign-key-check.js";
 import { createMemoryDb } from "../../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../../test-support/seeded-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
 import { replenishRollingHorizons } from "../../domain/assignment-schedule.js";
-import { LEGACY_IMPLAUSIBLE_SERVINGS, mealPrescriptionsFor } from "./generator/content.js";
+import {
+  MAX_QUANTITY_SCALED,
+  foodByGrams,
+  mealPrescriptionsFor,
+} from "./generator/content.js";
 import { buildPlanChain } from "./generator/plans.js";
 import { PERSONA_CONFIGS } from "./generator/personas.js";
+import { dietTemplate } from "./generator/templates/diets.js";
+import { DEMO_DEVIATION_FOOD_SLUGS } from "./personas.js";
 
 function testEnv(): Env {
   return {
@@ -123,8 +130,7 @@ describe("demo seed", () => {
           libraryIndex,
         });
         handle.sqlite.exec(sql);
-        const fk = handle.sqlite.exec("PRAGMA foreign_key_check");
-        expect(fk[0]?.values ?? []).toEqual([]);
+        assertNoForeignKeyViolations(handle.sqlite);
         const users1 =
           handle.sqlite.exec("SELECT COUNT(*) FROM users")[0]?.values[0]?.[0];
         handle.sqlite.exec(sql);
@@ -802,7 +808,15 @@ describe("demo seed", () => {
     });
 
     // Prescribed meal items as the generator wrote them: plan versions, templates and assignment snapshots.
-    type SeededMeal = { instructions?: string | null; items?: Array<{ serving?: { label: string; unit: string } | null; sourceFoodLibraryItemId?: string | null; sourceServingId?: string | null }> };
+    type SeededMeal = {
+      instructions?: string | null;
+      items?: Array<{
+        serving?: { label: string; unit: string; conversionScaled?: number | null } | null;
+        quantityScaled?: number;
+        sourceFoodLibraryItemId?: string | null;
+        sourceServingId?: string | null;
+      }>;
+    };
     const seededMeals = (): Array<{ where: string; meal: SeededMeal }> => {
       const out: Array<{ where: string; meal: SeededMeal }> = [];
       for (const table of ["plan_versions", "plan_templates"]) {
@@ -820,33 +834,73 @@ describe("demo seed", () => {
     const foodIdsOf = (slugs: string[]) =>
       new Map(q(`SELECT id, slug FROM food_library_items WHERE ownership = 'global' AND slug IN (${slugs.map((s) => `'${s}'`).join(",")})`).map(([id, slug]) => [String(id), String(slug)]));
 
-    it("never prescribes a plausible = 0 serving beyond the two legacy ones (QS1)", () => {
+    it("never uses a plausible = 0 serving for a generated meal or logged food (QS1)", () => {
       const implausible = new Map(
         q(`SELECT s.id, f.slug || ' / ' || s.label FROM food_library_servings s JOIN food_library_items f ON f.id = s.food_library_item_id WHERE s.plausible = 0`).map(([id, name]) => [String(id), String(name)]),
       );
-      const used = new Map<string, number>();
+      expect(implausible.size).toBeGreaterThan(0);
+      const used: string[] = [];
       let checked = 0;
-      const note = (servingId: string | null | undefined) => {
+      const note = (where: string, servingId: string | null | undefined) => {
         if (!servingId) return;
         checked += 1;
         const name = implausible.get(servingId);
-        if (name) used.set(name, (used.get(name) ?? 0) + 1);
+        if (name) used.push(`${where}: ${name}`);
       };
-      for (const { meal } of seededMeals()) for (const item of meal.items ?? []) note(item.sourceServingId);
-      for (const [json] of q("SELECT items_json FROM meal_compliance WHERE items_json IS NOT NULL")) {
-        for (const item of JSON.parse(String(json)) as Array<{ sourceServingId?: string | null }>) note(item.sourceServingId);
-      }
-      expect(checked).toBeGreaterThan(1000);
-      // Only the servings main already used (follow-up to replace them); none on the QS1 foods.
-      expect([...used.keys()].sort()).toEqual(
-        Object.entries(LEGACY_IMPLAUSIBLE_SERVINGS).map(([slug, label]) => `${slug} / ${label}`).sort(),
-      );
-      const touched = foodIdsOf(QS1_FOODS);
-      for (const { where, meal } of seededMeals()) {
-        for (const item of meal.items ?? []) {
-          if (touched.has(String(item.sourceFoodLibraryItemId))) expect(implausible.has(String(item.sourceServingId)), where).toBe(false);
+      for (const { where, meal } of seededMeals()) for (const item of meal.items ?? []) note(where, item.sourceServingId);
+      for (const [id, json] of q("SELECT id, items_json FROM meal_compliance WHERE items_json IS NOT NULL")) {
+        for (const item of JSON.parse(String(json)) as Array<{ sourceServingId?: string | null }>) {
+          note(`meal_compliance ${String(id)}`, item.sourceServingId);
         }
       }
+      expect(checked).toBeGreaterThan(1000);
+      expect(used.slice(0, 8)).toEqual([]);
+
+      // Arjun's 130 g chaat used to land on 0.5 × the implausible INDB plate.
+      const arjun = relOf("arjun.attention@demo.fitbud.test");
+      const chaatId = String(q("SELECT id FROM food_library_items WHERE ownership = 'global' AND slug = 'sprouted-moong-chaat'")[0]?.[0]);
+      const plateId = String(
+        q(`SELECT s.id FROM food_library_servings s JOIN food_library_items f ON f.id = s.food_library_item_id WHERE f.slug = 'sprouted-moong-chaat' AND s.label = '1 plate (INDB recipe portion)'`)[0]?.[0],
+      );
+      expect(implausible.has(plateId)).toBe(true);
+      let chaatRows = 0;
+      for (const [json] of q(`SELECT meal_prescription_json FROM meal_assignments WHERE coaching_relationship_id = '${arjun}'`)) {
+        const meal = JSON.parse(String(json)) as SeededMeal;
+        for (const item of meal.items ?? []) {
+          if (String(item.sourceFoodLibraryItemId) !== chaatId) continue;
+          chaatRows += 1;
+          expect(item.sourceServingId).not.toBe(plateId);
+          expect(item.serving?.label).not.toBe("1 plate (INDB recipe portion)");
+          expect(item.serving?.unit).toBe("g");
+          const units = (item.quantityScaled ?? 0) / NUTRIENT_SCALE;
+          const gramsPerUnit = (item.serving?.conversionScaled ?? 0) / NUTRIENT_SCALE;
+          const grams = units * gramsPerUnit;
+          expect(grams).toBeGreaterThanOrEqual(90);
+          expect(grams).toBeLessThanOrEqual(140);
+        }
+      }
+      expect(chaatRows).toBeGreaterThan(50);
+    });
+
+    it("never logs a compliance item at the 100-unit cap on a gram serving (QS1)", () => {
+      const capped: string[] = [];
+      let checked = 0;
+      for (const [id, json] of q("SELECT id, items_json FROM meal_compliance WHERE items_json IS NOT NULL")) {
+        const items = JSON.parse(String(json)) as Array<{
+          name?: string;
+          quantityScaled?: number;
+          serving?: { label?: string; unit?: string; conversionScaled?: number | null } | null;
+        }>;
+        for (const item of items) {
+          if (item.quantityScaled == null || !item.serving) continue;
+          checked += 1;
+          if (item.serving.unit === "g" && item.quantityScaled === NUTRIENT_SCALE * 100) {
+            capped.push(`meal_compliance ${String(id)}: ${item.name ?? "food"} × ${item.serving.label}`);
+          }
+        }
+      }
+      expect(checked).toBeGreaterThan(0);
+      expect(capped).toEqual([]);
     });
 
     it("keeps the instruction text in step with the serving for the QS1 foods", () => {
@@ -900,6 +954,49 @@ describe("demo seed", () => {
         "nikhil.reactivate sprouted-moong-chaat": [110],
         "rohan.slipping sprouted-moong-chaat": [110],
       });
+    });
+
+    it("keeps template grams × dietScale within the quantity cap and never silently clamps deviations (DV1)", () => {
+      const lib = loadDemoLibraryIndex({ exec: sqliteExec });
+      // activity.ts restaurant/logged_foods path: 150–300 g. None may clamp (generator throws if they do).
+      for (const slug of DEMO_DEVIATION_FOOD_SLUGS) {
+        expect(lib.foods[slug], slug).toBeTruthy();
+        for (let grams = 150; grams <= 300; grams += 10) {
+          const clamps: string[] = [];
+          const dish = foodByGrams(lib, slug, grams, (c) => clamps.push(c.slug));
+          expect(clamps, `${slug} @ ${grams}g`).toEqual([]);
+          expect(dish.quantityScaled, `${slug} @ ${grams}g`).toBeLessThanOrEqual(MAX_QUANTITY_SCALED);
+        }
+      }
+      // Persona diet steps: rounded template grams × dietScale must land ≤ the contract max.
+      // The only allowed clamps are the QS1 100 g × dietScale > 1 cases already pinned above.
+      const allowedClamps = new Set([
+        "arjun.attention sprouted-moong-chaat",
+        "imran.nightshift sprouted-moong-chaat",
+        "karan.dual tea-black-brewed",
+        "kavya.ended tea-black-brewed",
+        "nikhil.reactivate sprouted-moong-chaat",
+        "rohan.slipping sprouted-moong-chaat",
+      ]);
+      for (const cfg of PERSONA_CONFIGS) {
+        for (const step of cfg.plan) {
+          if (!step.diet) continue;
+          const scale = step.dietScale ?? 1;
+          const template = dietTemplate(step.diet);
+          for (const meal of template.meals) {
+            for (const item of meal.items) {
+              const grams = Math.max(5, Math.round((item.grams * scale) / 5) * 5);
+              const where = `${cfg.email} ${step.diet}×${scale} ${item.slug} ${grams}g`;
+              const dish = foodByGrams(lib, item.slug, grams, (clamp) => {
+                const key = `${cfg.email.split("@")[0]} ${clamp.slug}`;
+                expect(allowedClamps.has(key), `unexpected clamp ${where}`).toBe(true);
+                expect(clamp.cappedUnits).toBe(100);
+              });
+              expect(dish.quantityScaled, where).toBeLessThanOrEqual(MAX_QUANTITY_SCALED);
+            }
+          }
+        }
+      }
     });
 
     it("builds months of history for the generated clients", () => {

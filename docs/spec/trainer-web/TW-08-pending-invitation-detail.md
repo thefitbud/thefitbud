@@ -88,3 +88,11 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **1440×900** (desktop, Chromium). Save it as `docs/spec/evidence/TW-08.png`. Save extra states as `docs/spec/evidence/TW-08--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+TW-08 and TW-10 are **one onboarding page** at `/clients/:rid` with a stepper Invited → Joined → Intake → Ready to coach (mockups 144 → 147 → 146; 145 = revoke confirm).
+- **Entry:** Clients roster row with status *Invited* or *Onboarding* (row CTA *Resend invite* / *Review intake* opens the same page), or Home › Getting started row.
+- Invited (144): header with name + *Invited* chip and a single *Invite* tab; details, **Remind on WhatsApp**, *Copy new link*, ⋯ *Revoke invite*; side cards "What happens next" and Timeline.
+- Joined (147): workspace tabs appear; intake progress, Remind on WhatsApp. Intake submitted (146): answers with flags, **Mark ready & configure** → Plan › Coaching setup.

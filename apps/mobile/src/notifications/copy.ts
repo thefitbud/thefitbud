@@ -1,13 +1,26 @@
 import type { Notification, NotificationType } from "@fitbud/contracts";
+import { labelFor, trainerNotificationCopy } from "@fitbud/core";
 
 /** Lock-screen body when "Hide details on lock screen" is on. */
 export const HIDDEN_LOCK_BODY = "You have something to log in FitBud.";
 
 export type NotificationCopyContext = {
   coachName?: string | null;
+  /** Trainee this trainer notification is about. Overrides clientDisplayName. */
+  clientName?: string | null;
   /** Lock screen only. The inbox keeps the full sentence. */
   hideLockDetails?: boolean;
 };
+
+function trainerClientName(
+  notification: Notification,
+  context: NotificationCopyContext,
+): string | null {
+  const fromContext = context.clientName?.trim();
+  if (fromContext) return fromContext;
+  const onRow = notification.clientDisplayName?.trim();
+  return onRow || null;
+}
 
 const LOCK_DETAIL_TYPES = new Set<NotificationType>([
   "meal_reminder",
@@ -111,22 +124,21 @@ export function notificationRowTitle(
     case "reactivation_requested":
       return "Your coach wants to restart coaching";
     case "trainer_ask_coach":
-      return "Client asked on WhatsApp";
     case "trainer_checkin_submitted":
-      return "Check-in submitted";
     case "trainer_intake_submitted":
-      return "Intake submitted";
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+      return trainerNotificationCopy(
+        type,
+        trainerClientName(notification, context),
+      ).title;
     case "trainer_critical_digest":
       return "Clients need attention";
-    case "trainer_renewal":
-      return "Client renewal due";
-    case "trainer_meal_times_changed":
-      return "Client changed meal times";
     case "admin_whatsapp_budget":
       return "WhatsApp budget alert";
     default: {
       const _exhaustive: never = type;
-      return _exhaustive;
+      return labelFor("notification_type", _exhaustive);
     }
   }
 }
@@ -170,17 +182,16 @@ export function notificationRowBody(
     case "reactivation_requested":
       return "Tap to review the request.";
     case "trainer_ask_coach":
-      return "Open the item they asked about.";
     case "trainer_checkin_submitted":
-      return "Review when you're ready.";
     case "trainer_intake_submitted":
-      return "Review their intake answers.";
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+      return trainerNotificationCopy(
+        notification.type,
+        trainerClientName(notification, context),
+      ).body;
     case "trainer_critical_digest":
       return "Open Attention to see who needs you.";
-    case "trainer_renewal":
-      return "Follow up before the window closes.";
-    case "trainer_meal_times_changed":
-      return "Reminders will follow their new times.";
     case "admin_whatsapp_budget":
       return "Admin-only budget notice.";
     default:

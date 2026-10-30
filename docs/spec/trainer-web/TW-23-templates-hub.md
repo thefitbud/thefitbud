@@ -175,3 +175,8 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **1440×900** (desktop, Chromium). Save it as `docs/spec/evidence/TW-23.png`. This screen has mobile-web rules, so also save **390×844** as `docs/spec/evidence/TW-23-390.png`. Save extra states as `docs/spec/evidence/TW-23--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+Filters (mockups 168, 169): search · **Type** segmented (All · Workout · Nutrition · Intake form · Check-in form) · **Owner** (All · Mine · FitBud base) · **Status** (Published · Draft · Archived) · *Clear filters*. Columns: Template, Owner, Status, Used by, Use. Same chip-dropdown pattern as Clients (TW-06) and Plan versions (TW-12). Use (174) and Make my copy (175) open as modals over this list.

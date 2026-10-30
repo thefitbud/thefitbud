@@ -59,7 +59,7 @@ export const DEMO_DEVIATION_FOOD_SLUGS = [
   "butter-chicken",
   "naan",
   "vegetable-biryani",
-  "pav-bhaji",
+  "egg-fried-rice-indo-chinese",
   "plain-dosa",
   "vegetable-samosa",
   "mutton-biryani",
