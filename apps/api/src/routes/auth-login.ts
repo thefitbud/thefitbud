@@ -8,9 +8,17 @@ import {
   authOtpVerifyResponseSchema,
   authPasswordResetRequestSchema,
   authPasswordSetRequestSchema,
+  authRefreshRequestSchema,
+  authRefreshResponseSchema,
   authTokenResponseSchema,
 } from "@fitbud/contracts";
-import { mintAuthToken } from "../auth/custom-token.js";
+import {
+  authTokenErrorStatus,
+  mintAuthToken,
+  sessionTokenFields,
+  type AuthTokenError,
+} from "../auth/custom-token.js";
+import { refreshIdToken } from "../auth/token-exchange.js";
 import {
   findIdentityByIdentifierHash,
   identifierHash,
@@ -34,7 +42,7 @@ import {
 import { otpEmailBody, otpEmailSubject } from "../emails/otp.js";
 import { passwordChangedEmailBody, passwordChangedEmailSubject } from "../emails/password-changed.js";
 import { createId, nowIso, sha256Hex } from "../lib/crypto.js";
-import { fail, ok } from "../lib/envelope.js";
+import { fail, ok, type AppContext } from "../lib/envelope.js";
 import { sendSystemEmail } from "../lib/email.js";
 import { operation } from "../openapi/document.js";
 import {
@@ -102,6 +110,17 @@ function assertAuthRuntimeReady(env: import("../types.js").Env): string | null {
     return "AUTH_MODE=firebase requires FIREBASE_SERVICE_ACCOUNT_JSON in .dev.vars.";
   }
   return null;
+}
+
+function tokenFailure(c: AppContext, error: AuthTokenError) {
+  return fail(
+    c,
+    authTokenErrorStatus(error),
+    error,
+    error === "AUTH_EXCHANGE_FAILED"
+      ? "Sign-in could not be completed. Try again."
+      : "Authentication provider is not configured.",
+  );
 }
 
 async function findIdentityByIdentifier(
@@ -198,13 +217,12 @@ authLoginRoutes.post(
       email: identity.email ?? undefined,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return tokenFailure(c, token.error);
     }
     return ok(
       c,
       authTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId: user.id,
       }),
     );
@@ -357,14 +375,13 @@ authLoginRoutes.post(
         email: identifier.value,
       });
       if ("error" in token) {
-        return fail(c, 503, token.error, "Authentication provider is not configured.");
+        return tokenFailure(c, token.error);
       }
       return ok(
         c,
         authOtpVerifyResponseSchema.parse({
           purpose: "login",
-          token: token.token,
-          tokenKind: token.tokenKind,
+          ...sessionTokenFields(token),
           userId: user.id,
         }),
       );
@@ -469,13 +486,12 @@ authLoginRoutes.post(
       email: identity.email ?? undefined,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return tokenFailure(c, token.error);
     }
     return ok(
       c,
       authTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId: user.id,
       }),
     );
@@ -566,14 +582,69 @@ authLoginRoutes.post(
       email: identity?.email ?? undefined,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return tokenFailure(c, token.error);
     }
     return ok(
       c,
       authTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId: actor.userId,
+      }),
+    );
+  },
+);
+
+authLoginRoutes.post(
+  "/refresh",
+  operation({
+    tag: "Auth",
+    summary: "Refresh session token",
+    description:
+      "Exchanges a Firebase refresh token for a new ID token. The response carries the rotated refresh token. Firebase mode only.",
+    security: "public",
+    body: authRefreshRequestSchema,
+    response: authRefreshResponseSchema,
+  }),
+  async (c) => {
+    if (c.env.AUTH_MODE !== "firebase") {
+      return fail(
+        c,
+        400,
+        "REFRESH_NOT_SUPPORTED",
+        "Token refresh is only available with Firebase sign-in.",
+      );
+    }
+    const apiKey = c.env.FIREBASE_WEB_API_KEY;
+    if (!apiKey) {
+      return fail(
+        c,
+        503,
+        "AUTH_PROVIDER_NOT_CONFIGURED",
+        "Authentication provider is not configured.",
+      );
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = authRefreshRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid refresh request.");
+    }
+    const db = createDb(c.env.DB);
+    const ip = c.req.header("CF-Connecting-IP") ?? "0.0.0.0";
+    const ipHash = await sha256Hex(ip);
+    if (await bumpRateLimit(db, `auth:refresh:ip:${ipHash}`, 15, 15)) {
+      return fail(c, 429, "RATE_LIMITED", "Too many attempts.");
+    }
+    const refreshed = await refreshIdToken(apiKey, parsed.data.refreshToken);
+    if (!refreshed.ok) {
+      return fail(c, 401, "AUTH_REFRESH_FAILED", "Session expired. Sign in again.");
+    }
+    return ok(
+      c,
+      authRefreshResponseSchema.parse({
+        token: refreshed.idToken,
+        tokenKind: "firebase_id_token",
+        refreshToken: refreshed.refreshToken,
+        expiresIn: refreshed.expiresIn,
       }),
     );
   },

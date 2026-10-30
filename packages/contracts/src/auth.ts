@@ -5,10 +5,30 @@ export const authLoginRequestSchema = z.object({
   password: z.string().min(8).max(64),
 });
 
-export const authTokenResponseSchema = z.object({
+/** `firebase_id_token` responses also carry `refreshToken` and `expiresIn` (seconds). */
+export const authTokenKindSchema = z.enum(["test_id_token", "firebase_id_token"]);
+
+const sessionTokenFields = {
   token: z.string(),
-  tokenKind: z.enum(["test_id_token", "firebase_custom_token"]),
+  tokenKind: authTokenKindSchema,
+  refreshToken: z.string().optional(),
+  expiresIn: z.number().int().positive().optional(),
+};
+
+export const authTokenResponseSchema = z.object({
+  ...sessionTokenFields,
   userId: z.string().uuid(),
+});
+
+export const authRefreshRequestSchema = z.object({
+  refreshToken: z.string().min(1).max(4096),
+});
+
+export const authRefreshResponseSchema = z.object({
+  token: z.string(),
+  tokenKind: z.literal("firebase_id_token"),
+  refreshToken: z.string(),
+  expiresIn: z.number().int().positive(),
 });
 
 export const authOtpStartRequestSchema = z.object({
@@ -31,8 +51,7 @@ export const authOtpVerifyRequestSchema = z.object({
 export const authOtpVerifyResponseSchema = z.discriminatedUnion("purpose", [
   z.object({
     purpose: z.literal("login"),
-    token: z.string(),
-    tokenKind: z.enum(["test_id_token", "firebase_custom_token"]),
+    ...sessionTokenFields,
     userId: z.string().uuid(),
   }),
   z.object({
@@ -56,7 +75,10 @@ export const authPasswordSetRequestSchema = z.object({
 });
 
 export type AuthLoginRequest = z.infer<typeof authLoginRequestSchema>;
+export type AuthTokenKind = z.infer<typeof authTokenKindSchema>;
 export type AuthTokenResponse = z.infer<typeof authTokenResponseSchema>;
+export type AuthRefreshRequest = z.infer<typeof authRefreshRequestSchema>;
+export type AuthRefreshResponse = z.infer<typeof authRefreshResponseSchema>;
 export type AuthOtpStartRequest = z.infer<typeof authOtpStartRequestSchema>;
 export type AuthOtpStartResponse = z.infer<typeof authOtpStartResponseSchema>;
 export type AuthOtpVerifyRequest = z.infer<typeof authOtpVerifyRequestSchema>;
