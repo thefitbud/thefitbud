@@ -929,6 +929,7 @@ async function recordCompliance(
     outcome: input.outcome,
     recordVersion: 0,
     loggedAt: now,
+    localDate: loaded.assignment.localDate,
     deviationKind: input.deviationKind ?? null,
     notes: input.notes ?? null,
     photoRequired: loaded.assignment.photoRequired,

@@ -222,5 +222,12 @@
     "when": 1730044800000,
     "tag": "0031_library_schema",
     "breakpoints": true
+  },
+  {
+    "idx": 32,
+    "version": "7",
+    "when": 1730131200000,
+    "tag": "0032_meal_compliance_local_date",
+    "breakpoints": true
   }
 ]

@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1080–1137. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-07 -->
 ### TW-07 · Add client (invite)
@@ -25,8 +25,6 @@
 1. **Purpose.** Invite a client with the right onboarding form.
 2. **Entry.** The Clients header, Home "Getting started", the first-run wizard, and the empty roster.
 3. **Legacy (do not keep).** `shots/d1440_04_clients_add.png`. A four-step stepper (Invite · Trainee accepts · Onboarding form · Review and configure). Template pinning and a preview of the latest version are present.
-
-   ![Implemented Add Client](../img/impl_d1440_04_clients_add.jpg){.shot}
 
 4. **Gaps to close.**
    - After creation there's no share step. The raw token is returned **once** and must be delivered.
@@ -80,13 +78,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY: shows old UI, do not copy** (embedded in the guide section): `impl_d1440_04_clients_add.jpg`
-
-  ![impl_d1440_04_clients_add.jpg](../img/impl_d1440_04_clients_add.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 

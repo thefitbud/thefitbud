@@ -422,6 +422,11 @@ describe("meal assignment and compliance", () => {
       data: { outcome: string };
     };
     expect(confirmedBody.data.outcome).toBe("confirmed");
+    const storedCompliance = await db
+      .select({ localDate: schema.mealCompliance.localDate })
+      .from(schema.mealCompliance)
+      .where(eq(schema.mealCompliance.assignmentId, breakfast.id));
+    expect(storedCompliance).toEqual([{ localDate: today }]);
 
     const duplicate = await app.request(
       `/meals/assignments/${breakfast.id}/confirm`,
