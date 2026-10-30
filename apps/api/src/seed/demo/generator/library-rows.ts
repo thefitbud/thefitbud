@@ -30,6 +30,11 @@ function at(refDate: string, daysAgo: number, time = "10:30"): string {
   return `${addDaysFromLocalDate(refDate, -daysAgo)}T${time === "10:30" ? "05:00" : time}:00.000Z`;
 }
 
+/** Last edit `updatedDaysAgo`, but never before the template was created (QS5). */
+function editedAt(refDate: string, createdDaysAgo: number, updatedDaysAgo: number): string {
+  return at(refDate, Math.min(createdDaysAgo, updatedDaysAgo));
+}
+
 export function addTrainerLibrary(rows: SeedRows, lib: DemoLibraryIndex, refDate: string, now: string, userId: (email: string) => string): void {
   for (const trainer of TEMPLATE_TRAINERS) {
     const isCopy = trainer.startsWith("priya.");
@@ -37,7 +42,7 @@ export function addTrainerLibrary(rows: SeedRows, lib: DemoLibraryIndex, refDate
     const trainerId = userId(trainer);
     const idKey = trainer.split("@")[0]!;
     WORKOUT_TEMPLATES.forEach((template, index) => {
-      const created = at(refDate, (isCopy ? 40 : 200) - index * 3 - offset);
+      const createdDaysAgo = (isCopy ? 40 : 200) - index * 3 - offset;
       rows.add("plan_templates", {
         id: planTemplateId(trainer, template.code),
         ownership: "trainer",
@@ -46,8 +51,8 @@ export function addTrainerLibrary(rows: SeedRows, lib: DemoLibraryIndex, refDate
         template_type: "workout",
         content_json: JSON.stringify(materializePlanContent(buildTemplateContent(lib, { workout: template.code, diet: null, idKey: `${idKey}-tpl-${template.code}` }))),
         record_version: (index % 4) + 1,
-        created_at: created,
-        updated_at: at(refDate, (isCopy ? 20 : 60) - index),
+        created_at: at(refDate, createdDaysAgo),
+        updated_at: editedAt(refDate, createdDaysAgo, (isCopy ? 20 : 60) - index),
       });
     });
     DIET_TEMPLATES.forEach((template, index) => {
@@ -60,7 +65,7 @@ export function addTrainerLibrary(rows: SeedRows, lib: DemoLibraryIndex, refDate
         content_json: JSON.stringify(materializePlanContent(buildTemplateContent(lib, { workout: null, diet: template.code, idKey: `${idKey}-tpl-${template.code}` }))),
         record_version: (index % 3) + 1,
         created_at: at(refDate, (isCopy ? 39 : 190) - index * 3),
-        updated_at: at(refDate, (isCopy ? 19 : 50) - index),
+        updated_at: editedAt(refDate, (isCopy ? 39 : 190) - index * 3, (isCopy ? 19 : 50) - index),
       });
     });
     COMBINED.forEach((template, index) => {
@@ -73,7 +78,7 @@ export function addTrainerLibrary(rows: SeedRows, lib: DemoLibraryIndex, refDate
         content_json: JSON.stringify(materializePlanContent(buildTemplateContent(lib, { workout: template.workout, diet: template.diet, idKey: `${idKey}-tpl-${template.code}` }))),
         record_version: 1,
         created_at: at(refDate, (isCopy ? 30 : 100) - index * 5),
-        updated_at: at(refDate, (isCopy ? 15 : 35) - index),
+        updated_at: editedAt(refDate, (isCopy ? 30 : 100) - index * 5, (isCopy ? 15 : 35) - index),
       });
     });
     for (const form of ONBOARDING_FORMS) {
