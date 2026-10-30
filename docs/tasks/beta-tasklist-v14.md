@@ -1,6 +1,6 @@
 # FitBud · beta task list (v14)
 
-Updated Fri 30 Oct 2026, late evening IST. Written by Claude Code from task list v13, the code on `main` (50556c8), Cloudflare account state (checked 30 Oct), and Firoz's answers of 30 Oct.
+Updated Sat 31 Oct 2026 (rev 2: Firoz's answers of 31 Oct; Live Activity in beta; no mid-task approvals; Firebase setup; production deploy). Written by Claude Code from task list v13, the code on `main` (50556c8), Cloudflare account state (checked 30 Oct), and Firoz's answers of 30 Oct.
 
 **What this file is.** This is the working list for the **closed beta only**: every task needed for beta, with enough detail for the bots to write self-contained specs. It replaces v13's Beta cut section and the beta tasks' details.
 **What it is not.** v13 stays the master list for everything post-beta: redesign phases, seed polish, gap buckets, Phase 10. Don't schedule those until the beta ships.
@@ -15,16 +15,19 @@ Updated Fri 30 Oct 2026, late evening IST. Written by Claude Code from task list
 |---|---|---|
 | C1 | **Three dependencies removed:** I4a no longer waits for I2d, X2 no longer waits for F4d, I2c no longer waits for I2e. I2e moves to post-beta. | These were ordering habits, not real code dependencies (see §2). Keeping them pushes the beta past 15 Nov. |
 | C2 | **New tasks AU1b and AU1c** (Firebase token exchange and client refresh). | On `main`, login returns a Firebase *custom* token when `AUTH_MODE=firebase` (`apps/api/src/auth/custom-token.ts`), and both clients send it back as the bearer token (`apps/trainer-web/src/auth/*`, `apps/mobile/src/auth/AuthProvider.tsx`). AU1 verifies *ID* tokens, so after AU1 alone every request would get 401 and nobody could sign in. |
-| C3 | **X4 split into X4a–X4d; provider is Expo Push Service; Live Activity moves to post-beta.** | The `fcm` sender is a stub returning `fcm_not_configured` (`apps/api/src/lib/push-provider.ts`). Mobile registers a synthetic token (`apps/mobile/src/notifications/register.ts`), and trainees never register a device (`AuthProvider.tsx` skips them because the route returned 403). `expo-notifications` is already installed, and Expo's service delivers to both APNs and FCM with credentials kept in EAS, so the Worker needs no Google service-account signing for push. One M task was really four. |
+| C3 | **X4 split into X4a–X4d; provider is Expo Push Service.** | The `fcm` sender is a stub returning `fcm_not_configured` (`apps/api/src/lib/push-provider.ts`). Mobile registers a synthetic token (`apps/mobile/src/notifications/register.ts`), and trainees never register a device (`AuthProvider.tsx` skips them because the route returned 403). `expo-notifications` is already installed, and Expo's service delivers to both APNs and FCM with credentials kept in EAS, so the Worker needs no Google service-account signing for push. One M task was really four. |
 | C4 | **Email OTP only for beta** (Firoz, 30 Oct). The WhatsApp OTP channel is off outside local until post-beta. | WhatsApp OTP needs the Cloud API, an approved template and the `WA_*` secrets, none of which is beta-critical. |
 | C5 | **Email provider: ZeptoMail** (Firoz, 30 Oct). I5 is rewritten for it. | On `main`, `EMAIL_PROVIDER` allows only `dev_sink | disabled | resend | ses` (`apps/api/src/types.ts`), and `lib/email.ts` throws for anything but `dev_sink`/`disabled`. No ZeptoMail code exists on `main`. |
 | C6 | **New task WD1: trainer-web hosting + custom domains.** | v13 deploys only the API (I6). The trainers' main tool (trainer web), the legal pages (BT3) and every link in emails (`APP_HOST`) need a hosted web app on the real domain. |
 | C7 | **New task BT5: beta dress rehearsal** on staging with real phones. | Nothing in v13 checks the whole path end to end: sign up → invite → install from TestFlight/Play → accept → log → reminder push → email OTP. |
 | C8 | **New Firoz-only setup task CF2** (Cloudflare, DNS, Firebase, Expo, Apple and Google console steps), replacing the scattered CF1 notes. | The Cloudflare state is now known (see §6). The remaining manual steps need one checklist. |
-| C9 | **Approvals recorded up front** (§3). | Agents.md makes agents stop for auth changes and new providers. Recording Firoz's approvals here lets specs carry them in `approvals`, so agents don't stop mid-task. |
+| C9 | **No mid-task human approval** (Firoz, 31 Oct). Agents.md's "Human approval required" section is replaced by "Decisions and stop rules". | Firoz reviews the finished batch only. Decisions are written into specs and batch files before launch. Agents still stop when a spec leaves a decision open, or when work would need remote access or production data, which agents never have. |
 | C10 | **Stale references fixed.** | Working rule 3 now points to `docs/design/mockups/png/` (the design branch is deleted). `/workspace/qa/...` paths become `docs/qa/...`. The "ZeptoMail email provider" heading is fixed. |
 | C11 | **Working rule 2 clarified:** several states of the **same screen and file** may be one task (one commit per frame). Different screens stay separate tasks. | Otherwise bots split one file into many tiny tasks that all collide. |
 | C12 | **Each beta task has a batch, lane, model and file area.** | Bots can then write specs and batch files directly from this list. |
+| C13 | **Live Activity is in the beta** (Firoz, 31 Oct) as lane LA1–LA3: local updates only, with a cut-line. | Much is already written: the iOS widget UI (`apps/mobile/targets/FitBudLiveActivity/FitBudLiveActivity.swift`, 253 lines), the Android notification (`targets/android/WorkoutSetNotification.kt`), the JS state model (`src/notifications/liveActivity.ts`) and the config plugin (`plugins/withLiveActivity.js`). Missing: the build target (`@bacons/apple-targets` isn't installed), a native bridge to start/update/end the activity from the app, and draining the buttons' App Group outbox into the sync outbox. |
+| C14 | **New I6b: production deploy** (owner F), after the staging rehearsal. | Beta trainers use real data, so the beta runs on **production**, not staging. v13 had only the staging deploy. |
+| C15 | **Firebase setup, app variants and domains specified** (§6). | No Firebase projects exist yet (Firoz, 31 Oct). The domain is `thefitbud.com`, and its mail is on Zoho Mail, which affects SPF. |
 
 ## 2. What "false dependency" means (C1)
 
@@ -36,29 +39,26 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 
 ## 3. Decisions
 
-**Locked (30 Oct, Firoz)**
-| ID | Decision |
-|---|---|
-| D-B1 | Beta is closed: TestFlight + Play closed testing only. Must-haves: push + reminders, transactional email, store builds, staging deploy, real sign-in, basic crash reporting, privacy + terms (account deletion by email request for beta), D1 Time Travel + a documented restore. Post-beta: in-app account deletion (BP1), automated backups (BP2). |
-| D-B2 | OTP channel for beta: **email only**. |
-| D-B3 | Email provider: **ZeptoMail** (India region API `api.zeptomail.in`). |
-| D-B4 | I9 dropped (fixed 18 Oct, b5e4278). Payments are tracking only (post-beta tasks; Agents.md updated by #69). |
-
-**Recommended. Firoz to confirm** (the specs list each as `PENDING` in `approvals` until confirmed)
-| ID | Decision | Recommendation |
+**Locked.** Each decision says who made it. Under C9, Firoz may still override any of them when he reviews a batch.
+| ID | Decision | Source |
 |---|---|---|
-| D-B5 | Remove the false dependencies (§2) | Yes |
-| D-B6 | Token exchange design (AU1b) | **Server-side.** The API calls Identity Toolkit `accounts:signInWithCustomToken` and returns `idToken`, `refreshToken` and `expiresIn`; a new `POST /auth/refresh` calls the Secure Token API. Clients get no Firebase SDK. |
-| D-B7 | Push provider | **Expo Push Service** (C3). Live Activity is post-beta. |
-| D-B8 | Crash reporting | **Sentry** (`@sentry/react-native` with the Expo plugin; `@sentry/cloudflare` for the Worker), with PII scrubbing. |
-| D-B9 | Pre-approval of the Agents.md "Human approval required" items | Approve: the auth-boundary changes in AU1, AU1b, AU1c, AU2; allowing trainees to register devices in X4b (an authorization change); the new providers ZeptoMail, Expo Push, Sentry. Anything else still stops the agent. |
-| D-B10 | Web hosting (WD1) | A web Worker with static assets at `app.<domain>` that forwards `/api/*` to the API Worker (same origin, like the local Vite proxy, so no CORS and first-party cookies). Mobile calls `api.<domain>` directly. Staging uses `app-staging.<domain>` and `api-staging.<domain>`. |
-| D-B11 | Domain name | Confirm the domain. Config suggests `thefitbud.com` (`SUPPORT_EMAIL`). |
+| D-B1 | Beta is closed: TestFlight + Play closed testing only. Must-haves: push + reminders, transactional email, store builds, staging deploy, real sign-in, basic crash reporting, privacy + terms (account deletion by email request for beta), D1 Time Travel + a documented restore. Post-beta: in-app account deletion (BP1), automated backups (BP2). | Firoz, 30 Oct |
+| D-B2 | OTP channel for beta: **email only**. | Firoz, 30 Oct |
+| D-B3 | Email provider: **ZeptoMail** (India region API `api.zeptomail.in`). | Firoz, 30 Oct |
+| D-B4 | I9 dropped (fixed 18 Oct, b5e4278). Payments are tracking only (post-beta tasks; Agents.md updated by #69). | Firoz, 30 Oct |
+| D-B5 | Remove the false dependencies (§2). | Firoz, 30 Oct |
+| D-B6 | **Server-side token exchange** (AU1b). The API calls Identity Toolkit `accounts:signInWithCustomToken` and returns `idToken`, `refreshToken` and `expiresIn`; a new `POST /auth/refresh` calls the Secure Token API. Clients get no Firebase SDK. | Claude's recommendation, adopted 31 Oct |
+| D-B7 | Push via **Expo Push Service**. **Live Activity in the beta**: local updates only, no push-driven updates (LA1–LA3). **Cut-line:** if LA1 doesn't work on Firoz's iPhone by Thu 12 Nov, the beta ships without Live Activity and it arrives in a later TestFlight/Play update. LA never blocks BT1. | Firoz, 31 Oct (Live Activity); Claude (provider) |
+| D-B8 | Crash reporting: **Sentry** (`@sentry/react-native` with the Expo plugin; `@sentry/cloudflare` for the Worker), with PII scrubbing. | Claude's recommendation, adopted 31 Oct |
+| D-B9 | **No mid-task human approval** (C9). Specs decide auth changes (AU1, AU1b, AU1c, AU2), letting trainees register devices (X4b), and the providers (ZeptoMail, Expo Push, Sentry). | Firoz, 31 Oct |
+| D-B10 | Web hosting: a web Worker with static assets at `app.thefitbud.com` that forwards `/api/*` to the API Worker (same origin, like the local Vite proxy, so no CORS and first-party cookies). Mobile calls `api.thefitbud.com` directly. Staging uses `app-staging.thefitbud.com` and `api-staging.thefitbud.com`. | Firoz, 31 Oct |
+| D-B11 | Domain **thefitbud.com**. Mail is on **Zoho Mail** (`tech@thefitbud.com`). | Firoz, 31 Oct |
+| D-B12 | **Two Firebase projects** (staging, prod) and **two app variants**: production `com.thefitbud.mobile` for the beta, staging `com.thefitbud.mobile.staging` for internal testing, so both can be installed side by side (§6 step 2). | Claude's recommendation, 31 Oct |
+| D-B13 | Privacy Policy and Terms are written by **counsel**. Agents build the pages and links only. | Firoz, 31 Oct |
 
-**Open questions for Firoz** (needed before W2 specs)
-- Q1. Do Firebase projects exist for staging and prod? If not, create them (CF2). They provide the auth token issuer and the FCM credentials Expo needs for Android push.
-- Q2. Is the custom-domain mailbox on Zoho Mail or another host? It decides how the SPF record is merged with ZeptoMail's (CF2 step 6).
-- Q3. Legal text for BT3: who drafts the Privacy Policy and Terms (Firoz or counsel), and by when? Agents never write legal copy.
+**Open items**
+- Firebase project IDs and Web API keys go into W1.md D-W1-3 once Firoz creates the projects (in progress, 31 Oct).
+- **Schedule risk:** the counsel's text is needed by **Mon 9 Nov**. BT3 must be live before BT1, because both stores require a privacy-policy URL for testing tracks. If the text is late, publish a short interim policy that counsel signs off, and replace it later.
 
 ## 4. Beta task list
 
@@ -97,8 +97,12 @@ Status is Ready unless noted. **Model:** opus = Opus; plan = opusplan (Opus plan
 | DS5 | Legal page frame (Privacy, Terms, Credits and licences) (design, human) | W2 | human | — | S | F |
 | BT3 | Privacy + Terms pages, in-app links, store URLs | W3 | web | DS5, WD1, legal text (Q3) | S | son |
 | BT2 | Basic crash reporting (Sentry, Expo + Worker) | W4 | mobile + api-ops | X3, I4a | S | son |
+| LA1 | iOS Live Activity: build target + native bridge (start/update/end, local only) | W2→W3 | mobile-native | X6 | M | opus |
+| LA2 | Live Activity buttons → App Group outbox → sync outbox | W3 | mobile-native | LA1 | S | opus |
+| LA3 | Android ongoing workout notification (frame 27 Android) via the same outbox path | W3 | mobile-native | LA2 | S | opus |
 | BT1 | TestFlight + Play closed-track builds (EAS build + submit) | W4 | mobile + F | X3, X6, BT3 | M | son + F |
-| BT5 | Beta dress rehearsal on staging with real phones (new) | W4 | human + QA agent | I6, X4c, BT1 | S | F |
+| BT5 | Beta dress rehearsal on staging with real phones (new) | W4 | human + QA agent | I6, X4c, X4d | S | F |
+| I6b | Production deploy + production library seed (owner F, new) | W4 | human | BT5 passed, CF2 prod secrets | S | F |
 
 Post-beta, before public release: **BP1** in-app account deletion, **BP2** automated D1 backups (v13 details unchanged).
 Post-beta: everything else in v13, including I2e (C1), Live Activity (C3), WhatsApp OTP (C4), the open draft PRs #50 AC1a and #57 AC1b, and OB3/OB4.
@@ -114,7 +118,6 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - Verify RS256 with `jose` `createRemoteJWKSet` against `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`.
 - Check: `iss` = `https://securetoken.google.com/<FIREBASE_PROJECT_ID>`; `aud` = project id; `exp`/`iat` valid; `sub` non-empty; `auth_time` ≤ now.
 - Used by `routes/auth.ts` and `routes/realtime.ts`. Tests use a local JWKS (no network). `AUTH_MODE=test` is unchanged.
-- Approvals: D-B9 (auth boundary).
 
 **AU1b · Server-side token exchange + refresh (new)**
 - Today `mintAuthToken` (`apps/api/src/auth/custom-token.ts`) returns `{ token, tokenKind: "firebase_custom_token" }` from `/auth/login`, the OTP verify, reset-password and set-password routes (`routes/auth-login.ts`). Clients use it directly as the bearer token.
@@ -123,21 +126,19 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - `FIREBASE_WEB_API_KEY` is a var, not a secret (it is a public identifier). Add it to `wrangler.toml` `[vars]` per env in I4a, or here if I4a has merged.
 - Contracts: update `packages/contracts/src/auth.ts` (new `tokenKind`, optional `refreshToken` and `expiresIn`). Test mode is unchanged.
 - Tests: mocked `fetch` for both Google endpoints, covering success, Google error → 401 with a stable error code, and refresh rotation. Never log tokens.
-- Approvals: D-B6, D-B9.
 
 **AU2 · Refuse test modes outside local; email-only OTP**
 - Add `"staging"` to `ENVIRONMENT` in `apps/api/src/types.ts` (today `"local" | "production" | "preview"`).
 - When `ENVIRONMENT` is staging or production and any of `AUTH_MODE=test`, `PUSH_PROVIDER_MODE=test` or `EMAIL_PROVIDER=dev_sink` is set, every request returns 500 with error code `RUNTIME_MISCONFIGURED`, and the reason is logged once.
 - Part of this already exists: `assertAuthRuntimeReady` in `routes/auth-login.ts` and `DEV_SINK_REFUSED` in `lib/email.ts`. Centralise the check in middleware.
 - OTP (D-B2): outside local, `/auth/otp/start` offers only the `email` channel; WhatsApp stays available in local.
-- Approvals: D-B9.
 
 **AU1c · Clients store and refresh the token (new, W2)**
 - Trainer web (`apps/trainer-web/src/auth/*`, `lib/api.ts`) and mobile (`apps/mobile/src/auth/AuthProvider.tsx`, `lib/api.ts`):
   - store `refreshToken` the same way each app stores its token today (read the code; don't invent new storage);
   - refresh before `expiresIn` runs out, and once on a 401, then retry the request once;
   - on refresh failure, sign out cleanly.
-- UI-free except the existing sign-out path. Approvals: D-B9.
+- UI-free except the existing sign-out path.
 
 ### Infra and platform
 
@@ -153,7 +154,7 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - Per-env vars:
   - `ENVIRONMENT=staging|production`, `AUTH_MODE=firebase`, `PUSH_PROVIDER_MODE=expo`, `EMAIL_PROVIDER=zeptomail`;
   - `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` (from Firoz, CF2);
-  - `APP_HOST` (`app-staging.<domain>` / `app.<domain>`);
+  - `APP_HOST` (`app-staging.thefitbud.com` / `app.thefitbud.com`);
   - `SYSTEM_EMAIL_FROM`, `SUPPORT_EMAIL`.
 - No secrets in toml. The local/default env stays exactly as it is today.
 
@@ -170,8 +171,8 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
   - It forwards `/api/*` to the API Worker through a **service binding**, stripping `/api` exactly like the Vite proxy.
   - Result: no CORS, and the cookies stay first-party.
 - Domains:
-  - web on `app-staging.<domain>` and `app.<domain>`;
-  - API also on `api-staging.<domain>` and `api.<domain>`, for the mobile app, which is native and doesn't need CORS.
+  - web on `app-staging.thefitbud.com` and `app.thefitbud.com`;
+  - API also on `api-staging.thefitbud.com` and `api.thefitbud.com`, for the mobile app, which is native and doesn't need CORS.
 - Set `APP_HOST` per env (links in emails). Add the deploy script for web; Firoz runs it, agents never deploy.
 - If the spec writer finds a reason this can't work, stop and add a decision. Don't add CORS on a whim.
 
@@ -203,7 +204,6 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - The token is the secret `ZEPTOMAIL_TOKEN`, set by Firoz (CF2), and is never logged.
 - Map provider errors to a stable error; keep the dev sink for local. Tests use a mocked `fetch`.
 - Covers every template `lib/email.ts` sends today (OTP codes, invites, password reset, system alerts). List them in the spec from the code.
-- Approvals: D-B3, D-B9.
 
 ### Mobile and push
 
@@ -214,7 +214,12 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 
 **X6 · Device guide + EAS profiles**
 - Create `apps/mobile/eas.json` (none exists) with `development` (dev client), `preview` (staging API) and `production` profiles, each with its own `EXPO_PUBLIC_API_BASE_URL`.
-- Make `app.json` bundle ids and plugins ready for the store records.
+- Two app variants (D-B12), via `app.config.js` reading the EAS profile:
+  - production `com.thefitbud.mobile`, display name "FitBud", API `https://api.thefitbud.com`;
+  - staging `com.thefitbud.mobile.staging`, display name "FitBud Staging", API `https://api-staging.thefitbud.com`;
+  - development: dev client, local or staging API.
+- Keep the Live Activity App Group per variant (`group.com.thefitbud.mobile[.staging]`).
+- `google-services.json` per variant comes from Firebase (§6 step 2). Load it through an EAS file env var, not a committed file.
 - Write `docs/runbooks/physical-device.md`. Expo Go can't run this app (SDK 52 with native targets); use a dev build.
 
 **X3 · Dev build on phones (Firoz)**: follow the X6 guide; never paste credentials in chat.
@@ -224,11 +229,11 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - Send with `POST https://exp.host/--/api/v2/push/send` in batches ≤ 100, optional `EXPO_ACCESS_TOKEN` secret.
 - Record provider acceptance (ticket ids) separately from delivery. A later job fetches receipts (`/--/api/v2/push/getReceipts`) and marks `DeviceNotRegistered` tokens inactive.
 - Payloads carry routing only (`buildSafePushPayload`): no coaching details.
-- Keep the test double for local. Approvals: D-B7, D-B9.
+- Keep the test double for local.
 
 **X4b · Real device registration, trainees included**
 - Mobile: request permission, get `Notifications.getExpoPushTokenAsync({ projectId })`, and register for **both** roles.
-- Today trainees are skipped (`AuthProvider.tsx` ~L148) because `/notifications/device-tokens` returns 403 for them. Allow trainees to register their own device, an authorization change approved in D-B9.
+- Today trainees are skipped (`AuthProvider.tsx` ~L148) because `/notifications/device-tokens` returns 403 for them. Allow trainees to register their own device, an authorization change decided in D-B9.
 - Re-register on token change; unregister on sign-out.
 - Backend and mobile parts may be two PRs (backend first).
 
@@ -238,6 +243,26 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - Tests for one reminder of each type, from schedule to provider call (mocked).
 
 **X4d · Tap → deep link**: use `deepLinkFromNotificationPayload` (`apps/mobile/src/notifications/routing.ts`). Opening a notification navigates to the right screen, then refetches state.
+
+### Live Activity (C13, D-B7)
+
+These tasks need a **dev build on a real device**. Agents can't compile Swift or run iOS in the cloud (Linux), so each spec includes a device test checklist that Firoz runs on his EAS dev build (X3) and reports back. Frames: `27-*`, `27b-*`, `27c-*` (iOS), `27-*android*` in `docs/design/mockups/png/`. Use exact file names. There is no rest timer (per the existing code and plugin comments).
+
+**LA1 · iOS Live Activity: target + bridge**
+- Add `@bacons/apple-targets`, at a version compatible with Expo SDK 52, to the plugins. The `targets/FitBudLiveActivity` widget (deployment target 17.0, App Group) must build in EAS.
+- Add a small native module (Expo Modules API, Swift) exposing `start(state)`, `update(state)` and `end()` for `FitBudWorkoutAttributes`, with a JS wrapper next to `src/notifications/liveActivity.ts`.
+- When the trainee starts a workout, the app starts the activity. Each set logged in the app updates it; finishing or skipping ends it.
+- **Local updates only.** No APNs push-to-start or push updates; that is post-beta.
+- No-op on Android, web and older iOS. JS tests cover the wrapper calls.
+
+**LA2 · Buttons → sync outbox**
+- The widget's `LiveActivityIntent` buttons already append `workout.log_set` rows to the App Group (`LiveActivityOutbox` in the Swift file).
+- When the app becomes active, drain those rows into the SQLite sync outbox, each with one stable mutation UUID and idempotency key (Agents.md offline rules). Clear only what was drained, and skip duplicates.
+- Tests: drain logic, idempotency, and a duplicate tap that doesn't double-log.
+
+**LA3 · Android ongoing notification**
+- Wire `targets/android/WorkoutSetNotification.kt` through a config plugin/module: an ongoing notification with −/+ weight, −/+ reps and Log set actions, matching frame 27 Android, through the same outbox path as LA2.
+- Notification channel; it respects notifications-off.
 
 ### Ops, legal and release
 
@@ -258,7 +283,7 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - Mobile: `@sentry/react-native` with the Expo config plugin. Worker: `@sentry/cloudflare`.
 - Release and environment tags; staging and prod only.
 - `beforeSend` scrubs names, emails, notes and health data.
-- The DSN goes in config; `SENTRY_AUTH_TOKEN` (source maps) is an EAS/CI secret set by Firoz. Approvals: D-B8, D-B9.
+- The DSN goes in config; `SENTRY_AUTH_TOKEN` (source maps) is an EAS/CI secret set by Firoz.
 
 **BT1 · Store builds**
 - EAS production builds; `eas submit` to TestFlight (internal + external groups) and a Play closed track.
@@ -266,7 +291,7 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 - Agents prepare config and a checklist. Firoz runs submit and the consoles.
 
 **BT5 · Dress rehearsal (new)**
-- On staging, with 2 phones (1 iOS via TestFlight, 1 Android via the Play closed track) and trainer web:
+- On **staging**, with the **staging app variant** on 2 phones (1 iOS, 1 Android; EAS internal distribution) and `app-staging.thefitbud.com`:
   1. A trainer signs up with email OTP (ZeptoMail arrives).
   2. The trainer invites a trainee; the trainee installs, accepts and completes intake.
   3. The trainer reviews and publishes a plan.
@@ -274,8 +299,9 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
   5. A reminder push arrives and opens the right screen.
   6. The trainer sees the exception on Home.
   7. A crash test event shows up in Sentry.
+  8. If LA1–LA3 made the cut-line: starting a workout shows the Live Activity / ongoing notification, and Log set from it syncs.
 - A QA agent writes the checklist and report (`docs/qa/QA-BT5.md`). Firoz runs it.
-- Any failure becomes a beta-blocker task.
+- Any failure becomes a beta-blocker task. Once BT5 passes, Firoz runs **I6b** (production deploy + production library seed + production secrets). The beta builds (BT1) use the production variant.
 
 ## 6. Firoz-only setup (CF2)
 
@@ -288,18 +314,31 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 
 **To do**, in this order (each step says which task needs it):
 1. **Queues** `fitbud-jobs-staging`, `fitbud-jobs-prod` plus DLQs `fitbud-jobs-staging-dlq`, `fitbud-jobs-prod-dlq` (dashboard → Queues). Needed by I4a and I6.
-2. **Firebase** projects `fitbud-staging` and `fitbud-prod` (Q1).
-   - From each: project id and Web API key (I4a vars), and a service-account JSON (secret `FIREBASE_SERVICE_ACCOUNT_JSON`).
-   - Add Android apps to get the FCM V1 credentials Expo needs (X4).
+2. **Firebase: two projects** (D-B12). Local dev needs none (`AUTH_MODE=test`).
+
+   | Display name | Project ID (request) | Used by |
+   |---|---|---|
+   | FitBud Staging | `thefitbud-staging` | API staging, app variant `com.thefitbud.mobile.staging` |
+   | FitBud | `thefitbud-prod` | API production, app variant `com.thefitbud.mobile` (beta) |
+
+   - If an ID is taken, Firebase suggests a suffix. **Use whatever it gives and paste the real IDs into W1.md D-W1-3.**
+   - Turn **off** Google Analytics. The free Spark plan is enough.
+   - **Authentication → Get started** in each project. No sign-in providers need enabling: the API checks passwords and email OTP itself and only uses custom tokens.
+   - **Web API key:** Project settings → General. If none shows, add a Web app (no hosting). It goes into I4a as `FIREBASE_WEB_API_KEY`; it is a public identifier.
+   - **Service-account key:** Project settings → Service accounts → Generate new private key. This becomes the Worker secret `FIREBASE_SERVICE_ACCOUNT_JSON` for that env. Keep it in your vault; never in chat or the repo.
+   - **Android app** in each project with the variant's package name; download `google-services.json` (used by X6 through an EAS file env var).
+   - Upload an **FCM V1 service-account key** for each project to EAS (step 3), so Expo can deliver Android push.
+   - No iOS app is needed in Firebase: Expo sends iOS push through APNs.
 3. **Expo/EAS:** create the project, link the bundle ids, upload the APNs key (EAS can create it with the Apple account) and the FCM V1 service-account key. Optional: an access token for push (`EXPO_ACCESS_TOKEN`). Needed by X3, X4, BT1.
 4. **App Store Connect:** app record, bundle id, TestFlight internal and external groups. **Play Console:** app record, closed testing track, testers list. Needed by BT1.
 5. **ZeptoMail:** add the sending domain and a mail agent, and get the send token (`ZEPTOMAIL_TOKEN`). Needed by I5.
 6. **DNS** (Cloudflare):
    - ZeptoMail's DKIM TXT and bounce CNAME.
-   - **Merge** ZeptoMail into the existing SPF TXT. A domain must have only one SPF record, and the mailbox host already has one (Q2).
-   - Custom domains for `api[-staging]` and `app[-staging]`, attached in I6/WD1 deploys.
+   - **Merge** ZeptoMail into the existing Zoho SPF TXT record. A domain may have only one SPF record. Keep Zoho's `include:` (e.g. `zoho.in` or `zoho.com`, whichever is there now) and add the include value ZeptoMail shows on its domain page, giving `v=spf1 include:<zoho> include:<zeptomail> ~all`. Don't create a second `v=spf1` record. Zoho's and ZeptoMail's DKIM records use different selectors, so they coexist.
+   - Send system mail from an address like `no-reply@thefitbud.com`, with replies going to `tech@thefitbud.com`. Set it in `SYSTEM_EMAIL_FROM` (I4a).
+   - Custom domains `api.thefitbud.com`, `api-staging.thefitbud.com`, `app.thefitbud.com`, `app-staging.thefitbud.com`, attached during the I6/I6b deploys (WD1).
 7. **Sentry:** an org and two projects (mobile, api); DSNs and an auth token. Needed by BT2.
-8. **Worker secrets per env**, at the first staging deploy (I6): `FIREBASE_SERVICE_ACCOUNT_JSON`, `MEDIA_SIGNING_SECRET`, `ZEPTOMAIL_TOKEN`, `EXPO_ACCESS_TOKEN` (optional), `SENTRY_DSN`. `WA_*` aren't needed for beta (C4).
+8. **Worker secrets per env**, at the staging deploy (I6) and again for production (I6b): `FIREBASE_SERVICE_ACCOUNT_JSON`, `MEDIA_SIGNING_SECRET`, `ZEPTOMAIL_TOKEN`, `EXPO_ACCESS_TOKEN` (optional), `SENTRY_DSN`. `WA_*` aren't needed for beta (C4).
 9. **Rotate the Confluence credentials** (open item from CF1).
 
 ## 7. Batches
@@ -309,9 +348,9 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 | Batch | Lanes (in order) | Firoz in parallel | Target |
 |---|---|---|---|
 | **W1** | auth: AU1 → AU1b → AU2 · infra: I7 → I4a → I4b → I4c · mobile: X2 → X6 · library: I2b → I2f (→ I2c) · api-perf: I1b if a slot is free | CF2 steps 1–5; DS5; legal text (Q3) | merged by Wed 4 Nov |
-| **W2** | web+mobile auth: AU1c · email: I5 · infra: WD1 → OB1 · api-ops: OB2 · library: I2c → I2d · api-perf: I8 | X3 dev build; CF2 steps 6–8; **I6 first staging deploy** | staging up by Sat 7 Nov |
-| **W3** | push-api: X4a → X4c · push-mobile: X4b → X4d · web: BT3 · ops-docs: BT4 | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
-| **W4** | mobile/api: BT2 · release: BT1 (agents prepare, Firoz submits) · QA: BT5 checklist | TestFlight external review (~1–2 days); Play closed track; BT5 rehearsal | invites out Sun 15 Nov |
+| **W2** | web+mobile auth: AU1c · email: I5 · infra: WD1 → OB1 · api-ops: OB2 · library: I2c → I2d · api-perf: I8 · mobile-native: LA1 (starts once X6 is merged) | X3 dev build; CF2 steps 6–8; **I6 first staging deploy** | staging up by Sat 7 Nov |
+| **W3** | push-api: X4a → X4c · push-mobile: X4b → X4d · web: BT3 · ops-docs: BT4 · mobile-native: LA2 → LA3 (LA cut-line Thu 12 Nov) | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
+| **W4** | mobile/api: BT2 · release: BT1 (agents prepare, Firoz submits) · QA: BT5 checklist | BT5 rehearsal on staging (Thu 12 Nov) → **I6b production deploy** → TestFlight external review (~1–2 days) + Play closed track | invites out Sun 15 Nov |
 
 `docs/specs/batches/W1.md` is the draft for W1. The bots update it from this section, then draft W2–W4. Specs for a batch are written once the previous batch's decisions are made.
 

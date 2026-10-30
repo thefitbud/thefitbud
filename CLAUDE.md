@@ -17,7 +17,7 @@ The full engineering rules are in Agents.md, imported here. Everything below add
 **Stop and ask** (comment on the PR or end the session with a question) when any of these is true. Never guess.
 - The spec has no task file, or a frame or decision it needs is missing.
 - A file outside the spec's `files_owned` must change.
-- The task hits an Agents.md "Human approval required" item. This includes a new provider (email, push, crash reporting) and any auth change, unless the spec records Firoz's approval.
+- Any other stop rule in Agents.md "Decisions and stop rules" applies. There is **no mid-task human approval**: if the spec decides it (a new provider, an auth change), build it.
 
 ## Commands (repo root; Node 22.23+, pnpm 9.15.4)
 

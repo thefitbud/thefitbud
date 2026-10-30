@@ -1,8 +1,8 @@
 # Wn · <name>
 
-**Status:** Draft | Approved by Firoz (<date>) | In progress | Done
+**Status:** Draft | Ready | In progress | Done
 **Goal:** what this batch unlocks, in one line.
-**Launch rule:** start agents only after Status is "Approved" and every box under "Decisions needed" is ticked.
+**Launch rule:** the orchestrator starts only when Status is Ready and every box under "Decisions needed" is answered ("decided by <who>, <date>"). It refuses to launch with an open box.
 
 ## Decisions needed before launch
 - [ ] Decision, the options, and the recommended option.

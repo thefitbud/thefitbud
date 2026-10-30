@@ -26,7 +26,7 @@
 ## Scope
 - [ ] Only files in the spec's `files_owned` changed (or explained below)
 - [ ] No migration mixed with UI changes
-- [ ] No secrets, no remote/deploy commands, no new provider without a recorded approval
+- [ ] No secrets, no remote/deploy commands, no decision made that the spec left open
 
 ## Follow-ups / open questions
 <!-- New issues found, with suggested task IDs. -->
