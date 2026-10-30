@@ -17,7 +17,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1371–1419. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-12 -->
 ### TW-12 · Plan tab (versions, current plan, consistency)
@@ -27,8 +27,6 @@
 1. **Purpose.** See the current program, start an adjustment, replace it from a template, and browse versions.
 2. **Entry.** Header plan link, Overview plan card, TW-05 *Adjust plan*.
 3. **Legacy (do not keep).** `shots/d1440_10_client1_plan.png`. Version list with filters, immutable-version messaging, an "Adjust plan" action, and the plan-configuration consistency notice (a strong feature). The composition editor is inline and very long (about 7,100 px). There's no weekday mapping and no assignment-window step.
-
-   ![Implemented plan tab](../img/impl_d1440_10_client1_plan.jpg){.shot}
 
 4. **Gaps to close.**
    - Editing happens inline in one long column.
@@ -73,13 +71,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY: shows old UI, do not copy** (embedded in the guide section): `impl_d1440_10_client1_plan.jpg`
-
-  ![impl_d1440_10_client1_plan.jpg](../img/impl_d1440_10_client1_plan.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 

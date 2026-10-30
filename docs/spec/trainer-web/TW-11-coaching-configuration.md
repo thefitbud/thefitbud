@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1312–1367. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-11 -->
 ### TW-11 · Coaching configuration ("Configure")
@@ -25,8 +25,6 @@
 1. **Purpose.** Set the coaching baseline: goal, workout and nutrition expectations, check-in cadence, tracking requirements, subscription dates, and (new here) **automatic reminders on or off per category**.
 2. **Entry.** After TW-10, the header overflow, and the Home Renewals CTA.
 3. **Legacy (do not keep).** `shots/d1440_10_client1_configure.png`. A long page (about 2,000 px) with every section expanded. It fires 404s for clients with no subscription or configuration. It doesn't load reminder rules.
-
-   ![Implemented configure (top of page)](../img/impl_d1440_10_client1_configure.jpg){.shot}
 
 4. **Gaps to close.**
    - No progressive disclosure.
@@ -78,13 +76,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY: shows old UI, do not copy** (embedded in the guide section): `impl_d1440_10_client1_configure.jpg`
-
-  ![impl_d1440_10_client1_configure.jpg](../img/impl_d1440_10_client1_configure.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
