@@ -51,7 +51,7 @@ class_name = "RelationshipRealtimeRoom"
 
 [[migrations]]
 tag = "v1-realtime"
-new_classes = ["RelationshipRealtimeRoom"]
+new_sqlite_classes = ["RelationshipRealtimeRoom"]
 
 [vars]
 FIREBASE_PROJECT_ID = "fitbud-local"
