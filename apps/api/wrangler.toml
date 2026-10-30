@@ -65,3 +65,18 @@ SUPPORT_EMAIL = "tech@thefitbud.com"
 APP_HOST = "localhost:5173"
 SYSTEM_EMAIL_FROM = "FitBud <tech@thefitbud.com>"
 ADMIN_ALERT_EMAILS = "tech@thefitbud.com"
+
+# Per-environment vars (decision D-W1-8, option a).
+# FIREBASE_WEB_API_KEY values are public Firebase Web identifiers shipped to
+# browsers — not secrets. The rest of each env's vars and bindings are added
+# by task I4a. Secrets are set with `wrangler secret put <NAME> --env <env>`,
+# never committed here.
+[env.staging.vars]
+ENVIRONMENT = "staging"
+FIREBASE_PROJECT_ID = "thefitbud-staging"
+FIREBASE_WEB_API_KEY = "AIzaSyBJgtoIJSNrqB0klTt1-rjiSI6F_HqxQqQ"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+FIREBASE_PROJECT_ID = "thefitbud-prod"
+FIREBASE_WEB_API_KEY = "AIzaSyCTZXLWvlDjEDTQtyd_bmLV_ALf7ceQqYE"
