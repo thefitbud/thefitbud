@@ -28,6 +28,7 @@ function detail(
     activatedAt: null,
     acknowledgedAt: null,
     resolvedAt: null,
+    closedReason: null,
     createdAt: "2026-10-13T18:00:00.000Z",
     updatedAt: "2026-10-13T18:00:00.000Z",
     actions: [],
