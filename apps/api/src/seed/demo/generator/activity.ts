@@ -291,7 +291,11 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           deviationKind = weekdayOf(date) === 6 && mealRng.chance(0.5) ? "restaurant" : mealRng.pick(kinds);
           if (deviationKind === "restaurant" || deviationKind === "logged_foods") {
             const slug = mealRng.pick(deviationSlugs);
-            const dish = foodByGrams(ctx.lib, slug, mealRng.int(15, 30) * 10);
+            const dish = foodByGrams(ctx.lib, slug, mealRng.int(15, 30) * 10, (clamp) => {
+              throw new Error(
+                `Demo seed: deviation ${clamp.slug} requested ${clamp.requestedGrams} g and would silently cap at ${clamp.cappedUnits} × "${clamp.servingLabel}"`,
+              );
+            });
             const items = [dish];
             itemsJson = JSON.stringify(items);
             macros = mealMacros(items);
