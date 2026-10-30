@@ -287,6 +287,31 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
     expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
   });
 
+  // DR2 (DR1 QA F-B): each modifier / button guard on its own. Shift opens a
+  // new window, Alt is a download/no-op, a non-left button never navigates
+  // in-app; none of them may leave the drawer marked as closing.
+  for (const [name, init] of [
+    ["Shift", { button: 0, shiftKey: true }],
+    ["Alt", { button: 0, altKey: true }],
+    ["middle-button (button 1)", { button: 1 }],
+  ] as const) {
+    it(`footer Open client link: ${name}-click keeps the shortcuts working`, async () => {
+      const { onClose } = await renderStuck();
+      const footer = screen
+        .getAllByRole("link", { name: "Open client" })
+        .find((a) => a.getAttribute("href") === `/clients/${REL_ID}`)!;
+      expect(footer).toBeTruthy();
+      footer.addEventListener("click", (e) => e.preventDefault());
+      fireEvent.click(footer, init);
+      await act(async () => {
+        fireEvent.keyDown(document.activeElement ?? document.body, { key: "n" });
+      });
+      expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  }
+
   // DR1 QA F2: Esc, then the same item reopened before the close commits.
   // The drawer instance (and its exceptionId) never changes, so only the
   // parent's open token can tell it that this is a fresh open.
