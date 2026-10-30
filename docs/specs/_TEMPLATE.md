@@ -1,0 +1,47 @@
+---
+# Copy to docs/specs/<ID>.md. Every field is required. Use [] for "none".
+id: XX1
+title: One-line task title
+batch: W1
+depends_on: []            # task IDs that must be merged to main first
+lane: api                 # api | api-perf | infra | seed | web | mobile | ops
+files_owned:              # globs this task may change. Two tasks in one batch never share a path.
+  - apps/api/src/example/**
+frames:                   # [] for non-UI tasks. Use file names from docs/design/mockups/png/.
+  - { frame: "01-trainer-web-signin.png", viewport: "1440x900" }
+model: sonnet             # sonnet | opus | opusplan (opus plans, sonnet edits)
+size: S                   # S | M (never L; split instead)
+approvals: []             # Agents.md "Human approval required" items Firoz has approved, with date
+                          # e.g. ["auth boundary change (AU1), Firoz 31 Oct"]
+---
+
+## Outcome
+One or two sentences: what a trainer or trainee can do once this is merged.
+
+## Context
+Everything the agent needs that is not in the code or frames: decisions with their IDs and dates, rules, background.
+Paste it in. Don't link to Confluence or /workspace paths.
+
+## Gap list
+- What `main` does today vs the frame or decision. Give `file:line` where useful.
+
+## Acceptance criteria
+- [ ] Observable, testable statement.
+- [ ] Another one.
+
+## Out of scope
+- Explicit exclusions, e.g. no payment collection, no session counting, no other screens.
+
+## Tests to add
+- `path/to/file.test.ts`: what it asserts.
+- Checks to run: `pnpm lint`, `pnpm typecheck`, `pnpm test` (plus e2e or banned-strings for UI).
+
+## Visual check
+- UI tasks: the frames and viewports above. Capture to `docs/qa/<ID>/` and attach to the PR.
+- Non-UI tasks: "n/a".
+
+## Stop conditions
+- A frame or decision is missing or ambiguous.
+- A file outside `files_owned` must change.
+- The task needs an approval not listed in `approvals`.
+- The task would need a remote command, a secret or a deploy.
