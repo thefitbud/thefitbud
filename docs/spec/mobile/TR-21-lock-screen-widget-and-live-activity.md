@@ -88,3 +88,13 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **393×852** (iPhone 15 profile, Expo web or a device). Save it as `docs/spec/evidence/TR-21.png`. Save extra states as `docs/spec/evidence/TR-21--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+One workout Live Activity with two states (mockups 27, 27b, 27c; Android equivalent 27-android):
+
+- **Collapsed** (lock screen default): app · session · elapsed, exercise, "Set 2 of 3 · Last: 20 kg × 10", prefilled "22.5 kg × 10" and a round ✓ that logs the set as shown. Hint: "Touch and hold to change kg or reps".
+- **Expanded** (touch and hold the collapsed activity, or the Dynamic Island): the same activity grows to kg and reps steppers (− / +), *Open* and **Log set 2**. Logging returns to collapsed.
+- **Resting** is the collapsed state after a log: "Rest · 0:58", progress bar, next set, *Skip*.
+- Android: the ongoing notification's expanded view is the expanded state; collapsed shows exercise, set and ✓.
