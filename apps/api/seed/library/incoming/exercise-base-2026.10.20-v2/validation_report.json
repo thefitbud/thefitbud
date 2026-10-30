@@ -1,0 +1,14 @@
+{
+ "exercises": 1371,
+ "media_files": 929,
+ "errors": {},
+ "warnings": {
+  "steps:fewer_than_3(warn)": 2
+ },
+ "details": {
+  "steps:fewer_than_3(warn)": [
+   "side-neck-stretch",
+   "triceps-stretch"
+  ]
+ }
+}
