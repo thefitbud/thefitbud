@@ -118,10 +118,21 @@ function addCoachingTouches(input: WorldInput, ctx: ActivityContext, items: Gene
   }
   if (opts.openAsk) {
     const day = addDaysFromLocalDate(input.refDate, -opts.openAsk.daysAgo);
-    const item = items.find((entry) => entry.localDate === day && entry.kind === opts.openAsk!.kind) ??
-      items.filter((entry) => entry.kind === opts.openAsk!.kind && entry.localDate <= input.refDate).at(-1);
+    // Only ask about an item whose window has opened (an hour before now, so
+    // the ask can sit at least an hour back); otherwise roll back to the
+    // latest such item of the same kind.
+    const askable = items.filter(
+      (entry) => entry.kind === opts.openAsk!.kind && Date.parse(entry.windowStartsAt) <= nowMs - HOUR,
+    );
+    const item = askable.find((entry) => entry.localDate === day) ??
+      askable.filter((entry) => entry.localDate <= input.refDate).at(-1);
     if (item) {
-      const askedAt = iso(Math.min(Date.parse(localDayStartIso(item.localDate, "19:30", ctx.cfg.timezone)), nowMs - HOUR));
+      const askedAt = iso(
+        Math.max(
+          Date.parse(item.windowStartsAt),
+          Math.min(Date.parse(localDayStartIso(item.localDate, "19:30", ctx.cfg.timezone)), nowMs - HOUR),
+        ),
+      );
       rows.add("coach_asks", {
         id: demoUuid("coach_ask", ctx.relId, "open"),
         relationship_id: ctx.relId,

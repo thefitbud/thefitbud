@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildDemoSeedSql } from "./build.js";
+import { buildDemoSeedSql, kolkataLocalDate } from "./build.js";
+import { previousWeekdayBefore } from "./history.js";
 import { loadDemoLibraryIndex } from "./personas.js";
 import { demoUuid } from "./ids.js";
 import { createMemoryDb, type MemoryDbHandle } from "../../test-support/memory-db.js";
@@ -37,12 +38,12 @@ const REFERENCE_INSTANTS = [
  *    whose updated_at offset is older than its created_at offset.
  *  - checkin_reviews: history.ts's Rohan overlay copies the Friday reply onto his
  *    latest Sunday review with updated_at = the Friday submission, before that review.
+ *    Exactly that one review (by its check-in), not every review with the same notes:
+ *    the Friday review itself carries those notes and must still be ordered.
  */
 const KNOWN_PLAN_TEMPLATE_FOLLOW_UPS = ["e9efffa5-29ac-4846-b1b9-870af8242cb4"];
-const ROHAN_SUNDAY_REVIEW_SQL = `select cr.id from checkin_reviews cr
-  join coaching_relationships r on r.id = cr.coaching_relationship_id
-  where r.trainee_user_id = '${demoUuid("user", "rohan.slipping@demo.fitbud.test")}'
-    and cr.notes = 'Solid effort this week — lock in sleep and we will rebuild training next.'`;
+const rohanSundayReviewSql = (now: string) => `select cr.id from checkin_reviews cr
+  where cr.checkin_id = '${demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(kolkataLocalDate(now), 0))}'`;
 
 /** Seeded tables that hold user- or trainer-level rows, not relationship activity. */
 const USER_LEVEL_TABLES = new Set([
@@ -149,9 +150,11 @@ describe.each(REFERENCE_INSTANTS)("demo seed timestamps at %s", (now) => {
   it("never stamps created_at after updated_at", () => {
     const { violations, checkedTables } = auditTimestampOrder(handle.sqlite, { baseRowKeys });
     expect(checkedTables).toEqual(expect.arrayContaining(["exceptions", "meal_assignments", "workout_executions", "plans"]));
+    const rohanSundayReview = q(rohanSundayReviewSql(now)).map((r) => String(r[0]));
+    expect(rohanSundayReview).toHaveLength(1);
     const known: Record<string, string[]> = {
       plan_templates: KNOWN_PLAN_TEMPLATE_FOLLOW_UPS,
-      checkin_reviews: q(ROHAN_SUNDAY_REVIEW_SQL).map((r) => String(r[0])),
+      checkin_reviews: rohanSundayReview,
     };
     const unexpected = violations.filter((v) => !known[v.table]?.includes(v.rowKey));
     expect(unexpected.map((v) => `${v.table} ${v.rowKey}: ${v.earlierValue} > ${v.laterValue}`)).toEqual([]);
