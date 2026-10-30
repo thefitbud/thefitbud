@@ -2,6 +2,7 @@ import {
   foodSnapshotFromLibrary,
   labelFor,
   materializePlanContent,
+  missedWorkoutCandidate,
 } from "@fitbud/core";
 import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
 import { DEMO_ACCOUNTS } from "./spec.js";
@@ -18,6 +19,7 @@ import {
   addGeneratedPersona,
   addLegacyDeepHistory,
   addTrainerLibrary,
+  askInsideWindowMs,
   buildPlanChain,
   personaConfig,
   rowsToSql,
@@ -100,7 +102,7 @@ function demoStartedAt(
 }
 
 /** Most recent civil date strictly before refDate on `weekday`. */
-function previousWeekdayBefore(refDate: string, weekday: number): string {
+export function previousWeekdayBefore(refDate: string, weekday: number): string {
   let cursor = addDaysFromLocalDate(refDate, -1);
   for (let i = 0; i < 7; i += 1) {
     if (weekdayFromDate(cursor) === weekday) return cursor;
@@ -392,7 +394,11 @@ function buildAssignmentsAndLogs(input: {
       const checkinId = demoUuid("checkin", input.traineeEmail, localDate);
       const cStart = localDayStartIso(localDate, "09:00", input.timezone);
       const cEnd = new Date(Date.parse(cStart) + 48 * 3_600_000).toISOString();
-      const submittedAt = clampIsoToNow(cEnd, logCap);
+      // Submitted at the window end; a window still open at the cap was
+      // submitted that Sunday evening, not at the instant of reading (QS5).
+      const submittedAt = Date.parse(cEnd) > Date.parse(logCap)
+        ? stampBetween(hoursAfter(cStart, 11), cStart, logCap)
+        : cEnd;
       const submitted =
         input.state !== "food_deviations" ||
         localDate < input.activityUntilDate;
@@ -523,7 +529,7 @@ function shouldLogWorkout(
   if (state === "acknowledged") {
     return "completed";
   }
-  // Extra attention clients: miss only yesterday's workout (Attention severity).
+  // Extra attention clients: miss only yesterday's workout (seeded as a critical missed_workout once its window closes).
   if (state === "attention_hole") {
     const yesterday = addDaysFromLocalDate(refDate, -1);
     if (localDate === yesterday) return false;
@@ -538,51 +544,216 @@ function shouldLogWorkout(
   return false;
 }
 
+type OverlaySlot = {
+  localDate: string;
+  assignmentId: string;
+  startsAt: string;
+  endsAt: string;
+};
+
+/**
+ * "opened": the window has started; "askable": it started at least an hour ago,
+ * so a coach ask can sit an hour into it (QS6); "closed": it has ended.
+ */
+type SlotEdge = "opened" | "askable" | "closed";
+
+/**
+ * Overlay anchors (QS3). A seeded log or ask needs its slot's window to have
+ * opened by `now`; an overdue / skipped / missed exception needs it to have
+ * closed. Walk back from refDate to the latest legacy slot that fits instead
+ * of pinning overlays to fixed days (which may not have opened, or may have no
+ * workout at all). `skip` takes the next-older fitting slot.
+ */
+function overlaySlotFinder(input: {
+  email: string;
+  refDate: string;
+  now: string;
+  content: PlanContent;
+}) {
+  const nowMs = Date.parse(input.now);
+  // Same zone buildAssignmentsAndLogs builds the client's windows in (QS6): an
+  // overlay must never compute its slot in a zone of its own.
+  const timezone = legacyTimezoneFor(input.email);
+  const workoutWeekdays = new Set(input.content.workoutDays.map((day) => day.weekday));
+  const pick = (
+    edge: SlotEdge,
+    skip: number,
+    windowFor: (localDate: string) => OverlaySlot | null,
+    what: string,
+  ): OverlaySlot => {
+    let found = 0;
+    for (let back = 0; back < 27; back += 1) {
+      const slot = windowFor(addDaysFromLocalDate(input.refDate, -back));
+      if (!slot) continue;
+      const fits =
+        edge === "opened"
+          ? Date.parse(slot.startsAt) <= nowMs
+          : edge === "askable"
+            ? Date.parse(slot.startsAt) + 3_600_000 <= nowMs
+            : Date.parse(slot.endsAt) < nowMs;
+      if (!fits) continue;
+      if (found === skip) return slot;
+      found += 1;
+    }
+    throw new Error(`Demo seed: no ${edge} ${what} slot for ${input.email}`);
+  };
+  const workoutOn = (localDate: string): OverlaySlot | null => {
+    if (!workoutWeekdays.has(weekdayFromDate(localDate))) return null;
+    const startsAt = localDayStartIso(localDate, "07:00", timezone);
+    return {
+      localDate,
+      assignmentId: demoUuid("workout-assignment", input.email, localDate),
+      startsAt,
+      endsAt: new Date(Date.parse(startsAt) + 24 * 3_600_000).toISOString(),
+    };
+  };
+  return {
+    meal(mealId: string, edge: SlotEdge, skip = 0): OverlaySlot {
+      const meal = input.content.mealPrescriptions.find((entry) => entry.id === mealId);
+      if (!meal) throw new Error(`Demo seed: no meal ${mealId} in standard plan`);
+      return pick(edge, skip, (localDate) => {
+        const startsAt = localDayStartIso(localDate, meal.localTime ?? "08:00", timezone);
+        return {
+          localDate,
+          assignmentId: demoUuid("meal-assignment", input.email, localDate, mealId),
+          startsAt,
+          endsAt: new Date(Date.parse(startsAt) + 12 * 3_600_000).toISOString(),
+        };
+      }, meal.name);
+    },
+    workout(edge: SlotEdge, skip = 0): OverlaySlot {
+      return pick(edge, skip, workoutOn, "workout");
+    },
+    /** The legacy workout slot on `localDate`, or null on a rest day. */
+    workoutOn,
+  };
+}
+
+/** `preferred`, but never before `floor` (e.g. window end) and never after now. */
+function stampBetween(preferred: string, floor: string, now: string): string {
+  const ms = Math.min(Date.parse(now), Math.max(Date.parse(preferred), Date.parse(floor)));
+  return new Date(ms).toISOString();
+}
+
+function hoursBefore(now: string, hours: number): string {
+  return new Date(Date.parse(now) - hours * 3_600_000).toISOString();
+}
+
+function hoursAfter(iso: string, hours: number): string {
+  return new Date(Date.parse(iso) + hours * 3_600_000).toISOString();
+}
+
+/** Replace any legacy execution on the slot with an explicit client skip. */
+function skippedWorkoutSql(input: {
+  slot: OverlaySlot;
+  relId: string;
+  email: string;
+  skippedAt: string;
+}): string[] {
+  const execId = demoUuid("workout-execution", input.slot.assignmentId);
+  return [
+    `DELETE FROM workout_executions WHERE assignment_id = ${sqlQuote(input.slot.assignmentId)};`,
+    `INSERT INTO workout_executions (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, status, record_version, started_at, paused_at, completed_at, session_rpe, require_session_rpe, logged_late, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(execId)}, ${sqlQuote(input.slot.assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("plan-version", input.relId, "v2"))}, ${sqlQuote(userId(input.email))}, 'skipped', 0, ${sqlQuote(input.skippedAt)}, NULL, ${sqlQuote(input.skippedAt)}, NULL, 0, 0, ${sqlQuote(input.skippedAt)}, ${sqlQuote(input.skippedAt)}, ${sqlQuote(input.skippedAt)});`,
+  ];
+}
+
+/** Replace any legacy compliance on the slot with an explicit client skip. */
+function skippedMealSql(input: {
+  slot: OverlaySlot;
+  relId: string;
+  email: string;
+  loggedAt: string;
+}): string[] {
+  return [
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(input.slot.assignmentId)};`,
+    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", input.slot.assignmentId))}, ${sqlQuote(input.slot.assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("plan-version", input.relId, "v2"))}, ${sqlQuote(userId(input.email))}, 'skipped', 0, ${sqlQuote(input.loggedAt)}, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ${sqlQuote(input.loggedAt)}, ${sqlQuote(input.loggedAt)}, ${sqlQuote(input.loggedAt)});`,
+  ];
+}
+
+/**
+ * Timezone of a legacy demo account; buildAssignmentsAndLogs builds its windows
+ * in it, and build.ts writes it to users.timezone. A persona config's zone wins
+ * (QS6), so the config is the client's real timezone everywhere.
+ */
+export function legacyTimezoneFor(email: string): string {
+  return personaConfig(email)?.timezone ?? (email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata");
+}
+
 function buildPersonaOverlays(input: HistoryInput): string {
   const now = input.referenceInstant;
   const refDate = input.referenceDate;
   const lines: string[] = [];
 
-  const rohanRel = relId("rahul.coach@demo.fitbud.test", "rohan.slipping@demo.fitbud.test");
-  const missedWorkoutId = demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -2));
-  const skippedWorkoutId = demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", refDate);
-  const overdueMealId = demoUuid("meal-assignment", "rohan.slipping@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.dinner);
-  const skippedMealId = demoUuid("meal-assignment", "rohan.slipping@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.breakfast);
-  const deviationMealId = demoUuid("meal-assignment", "rohan.slipping@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
-  const overdueCheckinId = demoUuid("checkin", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -7));
+  const standardContent = materializePlanContent(buildStandardPlanContent(input.libraryIndex, "v2"));
+  // Slots are always in the client's own timezone (legacyTimezoneFor), never a literal (QS6).
+  const slotsFor = (email: string) => overlaySlotFinder({ email, refDate, now, content: standardContent });
+
+  const rohanEmail = "rohan.slipping@demo.fitbud.test";
+  const rohanRel = relId("rahul.coach@demo.fitbud.test", rohanEmail);
+  const rohanSlots = slotsFor(rohanEmail);
+  // Story: Rohan skipped one session, then missed the next; a dinner went
+  // unlogged, a breakfast was skipped and a lunch was logged differently.
+  const missedWorkout = rohanSlots.workout("closed", 0);
+  const skippedWorkout = rohanSlots.workout("closed", 1);
+  const overdueMeal = rohanSlots.meal(MEAL_PRESCRIPTION_IDS.dinner, "closed");
+  const skippedMeal = rohanSlots.meal(MEAL_PRESCRIPTION_IDS.breakfast, "closed");
+  const deviationMeal = rohanSlots.meal(MEAL_PRESCRIPTION_IDS.lunch, "opened");
+  const overdueCheckinId = demoUuid("checkin", rohanEmail, addDaysFromLocalDate(refDate, -7));
+  const overdueCheckinDate = addDaysFromLocalDate(refDate, -7);
+  // Same window as every Rohan check-in (09:00 IST + 48 h), so the exception is
+  // detected only after it closed (QS5, QA-PR28 F3).
+  const overdueCheckinStart = localDayStartIso(overdueCheckinDate, "09:00", legacyTimezoneFor(rohanEmail));
+  const overdueCheckinSlot: OverlaySlot = {
+    localDate: overdueCheckinDate,
+    assignmentId: overdueCheckinId,
+    startsAt: overdueCheckinStart,
+    endsAt: hoursAfter(overdueCheckinStart, 48),
+  };
 
   // Stable IDs from docs/spec/09-demo-data.md (agents verify these URLs).
   const ROHAN_ACTIVE_EXCEPTION_ID = "95af751f-156c-44ac-a945-ec30870134ae";
   const ROHAN_RESOLVED_EXCEPTION_ID = "fa80cb4f-f852-403e-9c91-318a9944f238";
   const MEERA_ACK_EXCEPTION_ID = "f588b76a-62a3-42bb-bf85-0570ea52c9eb";
 
-  // Spread ages so attention cards aren't all "just now". Cap seeded rows so
-  // detection for today's unlogged holes stays ≤10 open total per client.
+  const rohanSkippedWorkoutAt = hoursAfter(skippedWorkout.startsAt, 10);
+  const rohanSkippedMealAt = hoursAfter(skippedMeal.startsAt, 0.75);
+  const rohanLunchMacros = mealMacros(
+    standardContent.mealPrescriptions.find((meal) => meal.id === MEAL_PRESCRIPTION_IDS.lunch)!,
+  );
+  const rohanDeviationAt = stampBetween(hoursAfter(deviationMeal.startsAt, 0.5), deviationMeal.startsAt, now);
+  lines.push(
+    // Missed means no execution at all; skipped needs the client's skip row.
+    `DELETE FROM workout_executions WHERE assignment_id = ${sqlQuote(missedWorkout.assignmentId)};`,
+    ...skippedWorkoutSql({ slot: skippedWorkout, relId: rohanRel, email: rohanEmail, skippedAt: rohanSkippedWorkoutAt }),
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(overdueMeal.assignmentId)};`,
+    ...skippedMealSql({ slot: skippedMeal, relId: rohanRel, email: rohanEmail, loggedAt: rohanSkippedMealAt }),
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(deviationMeal.assignmentId)};`,
+    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", deviationMeal.assignmentId))}, ${sqlQuote(deviationMeal.assignmentId)}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("plan-version", rohanRel, "v2"))}, ${sqlQuote(userId(rohanEmail))}, 'modified', 0, ${sqlQuote(rohanDeviationAt)}, 'restaurant', 'Ate out with the office team', 0, NULL, NULL, NULL, ${rohanLunchMacros.kcal}, ${rohanLunchMacros.protein}, ${rohanLunchMacros.carbs}, ${rohanLunchMacros.fat}, 0, 0, ${sqlQuote(rohanDeviationAt)}, ${sqlQuote(rohanDeviationAt)}, ${sqlQuote(rohanDeviationAt)});`,
+  );
+
+  // Spread ages so attention cards aren't all "just now", but never detect an
+  // overdue / skipped / missed item before its window closed (or a deviation
+  // before it was logged). Cap seeded rows so detection for today's unlogged
+  // holes stays ≤10 open total per client.
   const exceptionRows = [
-    ["rohan-missed-workout", ROHAN_ACTIVE_EXCEPTION_ID, rohanRel, "missed_workout", "critical", missedWorkoutId, "workout_assignment", 2, 6],
-    ["rohan-skipped-workout", demoUuid("exception", "rohan-skipped-workout"), rohanRel, "skipped_workout", "attention", skippedWorkoutId, "workout_assignment", 0, 18],
-    ["rohan-overdue-meal", demoUuid("exception", "rohan-overdue-meal"), rohanRel, "overdue_meal", "critical", overdueMealId, "meal_assignment", 1, 4],
-    ["rohan-skipped-meal", demoUuid("exception", "rohan-skipped-meal"), rohanRel, "skipped_meal", "attention", skippedMealId, "meal_assignment", 0, 9],
-    ["rohan-meal-deviation", demoUuid("exception", "rohan-meal-deviation"), rohanRel, "meal_deviation", "attention", deviationMealId, "meal_assignment", 0, 3],
-    ["rohan-overdue-checkin", demoUuid("exception", "rohan-overdue-checkin-active"), rohanRel, "overdue_checkin", "attention", overdueCheckinId, "checkin", 7, 2],
+    [ROHAN_ACTIVE_EXCEPTION_ID, "missed_workout", "critical", missedWorkout, "workout_assignment", 2, 6, missedWorkout.endsAt],
+    [demoUuid("exception", "rohan-skipped-workout"), "skipped_workout", "attention", skippedWorkout, "workout_assignment", 0, 18, skippedWorkout.endsAt],
+    [demoUuid("exception", "rohan-overdue-meal"), "overdue_meal", "critical", overdueMeal, "meal_assignment", 1, 4, overdueMeal.endsAt],
+    [demoUuid("exception", "rohan-skipped-meal"), "skipped_meal", "attention", skippedMeal, "meal_assignment", 0, 9, skippedMeal.endsAt],
+    [demoUuid("exception", "rohan-meal-deviation"), "meal_deviation", "attention", deviationMeal, "meal_assignment", 0, 3, rohanDeviationAt],
+    [demoUuid("exception", "rohan-overdue-checkin-active"), "overdue_checkin", "attention", overdueCheckinSlot, "checkin", 7, 2, overdueCheckinSlot.endsAt],
   ] as const;
-  for (const [, id, rel, type, severity, sourceId, sourceType, daysAgo, hoursAgo] of exceptionRows) {
-    const detected = new Date(
-      Date.parse(now) - daysAgo * 86_400_000 - hoursAgo * 3_600_000,
-    ).toISOString();
+  for (const [id, type, severity, slot, sourceType, daysAgo, hoursAgo, floor] of exceptionRows) {
+    const aged = hoursBefore(now, daysAgo * 24 + hoursAgo);
+    const detected = floor ? stampBetween(aged, floor, now) : aged;
     const summary = labelFor("exception_type", type);
-    const localDate =
-      type === "missed_workout"
-        ? addDaysFromLocalDate(refDate, -2)
-        : type === "overdue_checkin"
-          ? addDaysFromLocalDate(refDate, -7)
-          : refDate;
     const detailsJson = JSON.stringify({
-      localDate,
-      windowEndsAt: `${localDate}T18:30:00.000Z`,
+      localDate: slot.localDate,
+      windowEndsAt: slot.endsAt,
     });
+    const createdAt = floor ? detected : now;
     lines.push(
-      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, details_json, detected_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(rel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(sourceId)}, ${sqlQuote(summary)}, ${sqlQuote(detailsJson)}, ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, details_json, detected_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(rohanRel)}, ${sqlQuote(type)}, ${sqlQuote(severity)}, 'active', 'demo-v1', ${sqlQuote(sourceType)}, ${sqlQuote(slot.assignmentId)}, ${sqlQuote(summary)}, ${sqlQuote(detailsJson)}, ${sqlQuote(detected)}, ${sqlQuote(createdAt)}, ${sqlQuote(now)});`,
     );
   }
 
@@ -621,9 +792,11 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const meeraRel = relId("rahul.coach@demo.fitbud.test", "meera.ack@demo.fitbud.test");
   const ackMealId = demoUuid("meal-assignment", "meera.ack@demo.fitbud.test", addDaysFromLocalDate(refDate, -2), MEAL_PRESCRIPTION_IDS.lunch);
   const ackExceptionId = MEERA_ACK_EXCEPTION_ID;
-  const meeraDetected = new Date(
-    Date.parse(`${addDaysFromLocalDate(refDate, -2)}T09:00:00.000Z`),
-  ).toISOString();
+  // Overdue only exists once the lunch window has closed (13:00 IST + 12h).
+  const meeraDetected = hoursAfter(
+    localDayStartIso(addDaysFromLocalDate(refDate, -2), "13:00", "Asia/Kolkata"),
+    12.5,
+  );
   const meeraAcked = new Date(
     Date.parse(`${addDaysFromLocalDate(refDate, -1)}T10:00:00.000Z`),
   ).toISOString();
@@ -663,26 +836,24 @@ function buildPersonaOverlays(input: HistoryInput): string {
     MEAL_PRESCRIPTION_IDS.dinner,
     MEAL_PRESCRIPTION_IDS.snack,
   ] as const;
+  // The ten latest closed meal windows (not refDate..refDate-2 x every slot,
+  // whose later slots may still be open). Ten is the open-set cap that
+  // attention evaluate keeps per client, so the first coach read neither
+  // resolves nor tops up this stack.
   const FARHAN_OPEN_EXCEPTION_CAP = 10;
-  let farhanOpenSeeded = 0;
-  for (let dayOffset = 0; dayOffset <= 2; dayOffset += 1) {
-    if (farhanOpenSeeded >= FARHAN_OPEN_EXCEPTION_CAP) break;
-    const day = addDaysFromLocalDate(refDate, -dayOffset);
-    const ageHours = 18 + dayOffset * 24;
-    const detected = new Date(Date.parse(now) - ageHours * 3_600_000).toISOString();
-    for (const slot of farhanMealSlots) {
-      if (farhanOpenSeeded >= FARHAN_OPEN_EXCEPTION_CAP) break;
-      const mealId = demoUuid(
-        "meal-assignment",
-        "farhan.paused@demo.fitbud.test",
-        day,
-        slot,
-      );
-      lines.push(
-        `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `farhan-${day}-${slot}`))}, ${sqlQuote(farhanRel)}, 'overdue_meal', 'critical', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(mealId)}, 'Required meal still unlogged', ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-      );
-      farhanOpenSeeded += 1;
-    }
+  const farhanSlots = slotsFor("farhan.paused@demo.fitbud.test");
+  const farhanOverdue = farhanMealSlots
+    .flatMap((mealId) =>
+      [0, 1, 2].map((dayOffset) => ({ mealId, dayOffset, slot: farhanSlots.meal(mealId, "closed", dayOffset) })),
+    )
+    .sort((a, b) => Date.parse(b.slot.endsAt) - Date.parse(a.slot.endsAt))
+    .slice(0, FARHAN_OPEN_EXCEPTION_CAP);
+  for (const { mealId, dayOffset, slot } of farhanOverdue) {
+    const aged = hoursBefore(now, 18 + dayOffset * 24);
+    const detected = stampBetween(aged, slot.endsAt, now);
+    lines.push(
+      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `farhan-${slot.localDate}-${mealId}`))}, ${sqlQuote(farhanRel)}, 'overdue_meal', 'critical', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(slot.assignmentId)}, 'Required meal still unlogged', ${sqlQuote(detected)}, ${sqlQuote(detected)}, ${sqlQuote(now)});`,
+    );
   }
   // Re-engage eligibility: no logs in 48h (above) + ≥3 reminders in 48h.
   const reengageAt = new Date(Date.parse(now) - 6 * 3_600_000).toISOString();
@@ -695,14 +866,17 @@ function buildPersonaOverlays(input: HistoryInput): string {
   // Deepak + attention_hole clients: Attention-severity open items so Home
   // shows Critical/Attention across 8 clients; Aarav stays On track.
   const deepakRel = relId("rahul.coach@demo.fitbud.test", "deepak.dubai@demo.fitbud.test");
-  const deepakWorkoutId = demoUuid(
-    "workout-assignment",
-    "deepak.dubai@demo.fitbud.test",
-    addDaysFromLocalDate(refDate, -1),
-  );
-  const deepakDetected = new Date(Date.parse(now) - 30 * 3_600_000).toISOString();
+  // Latest closed Dubai workout, with the client's skip behind the exception.
+  const deepakWorkout = slotsFor("deepak.dubai@demo.fitbud.test").workout("closed");
+  const deepakDetected = stampBetween(hoursBefore(now, 30), deepakWorkout.endsAt, now);
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "deepak-skipped-workout"))}, ${sqlQuote(deepakRel)}, 'skipped_workout', 'attention', 'active', 'demo-v1', 'workout_assignment', ${sqlQuote(deepakWorkoutId)}, 'Skipped workout', ${sqlQuote(deepakDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    ...skippedWorkoutSql({
+      slot: deepakWorkout,
+      relId: deepakRel,
+      email: "deepak.dubai@demo.fitbud.test",
+      skippedAt: hoursAfter(deepakWorkout.startsAt, 10),
+    }),
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "deepak-skipped-workout"))}, ${sqlQuote(deepakRel)}, 'skipped_workout', 'attention', 'active', 'demo-v1', 'workout_assignment', ${sqlQuote(deepakWorkout.assignmentId)}, 'Skipped workout', ${sqlQuote(deepakDetected)}, ${sqlQuote(deepakDetected)}, ${sqlQuote(now)});`,
   );
 
   for (const [email, key] of [
@@ -711,34 +885,55 @@ function buildPersonaOverlays(input: HistoryInput): string {
     ["tanvi.attention@demo.fitbud.test", "tanvi"],
   ] as const) {
     const holeRel = relId("rahul.coach@demo.fitbud.test", email);
-    const holeMealId = demoUuid(
-      "meal-assignment",
-      email,
-      addDaysFromLocalDate(refDate, -1),
-      MEAL_PRESCRIPTION_IDS.lunch,
-    );
-    const holeDetected = new Date(Date.parse(now) - 20 * 3_600_000).toISOString();
+    // Latest closed lunch; the skip is logged inside its window.
+    const holeLunch = slotsFor(email).meal(MEAL_PRESCRIPTION_IDS.lunch, "closed");
+    const holeDetected = stampBetween(hoursBefore(now, 20), holeLunch.endsAt, now);
     lines.push(
-      `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(holeMealId)};`,
-      `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", holeMealId))}, ${sqlQuote(holeMealId)}, ${sqlQuote(holeRel)}, ${sqlQuote(demoUuid("plan-version", holeRel, "v2"))}, ${sqlQuote(userId(email))}, 'skipped', 0, ${sqlQuote(now)}, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `${key}-skipped-lunch`))}, ${sqlQuote(holeRel)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(holeMealId)}, 'Skipped lunch', ${sqlQuote(holeDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      ...skippedMealSql({ slot: holeLunch, relId: holeRel, email, loggedAt: hoursAfter(holeLunch.startsAt, 1) }),
+      `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `${key}-skipped-lunch`))}, ${sqlQuote(holeRel)}, 'skipped_meal', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(holeLunch.assignmentId)}, 'Skipped lunch', ${sqlQuote(holeDetected)}, ${sqlQuote(holeDetected)}, ${sqlQuote(now)});`,
     );
+    // attention_hole leaves yesterday's workout unlogged (shouldLogWorkout).
+    // Once its window closes, detection raises missed_workout on the first
+    // coach read; seed that row so the read creates nothing (QS4). The hole is
+    // refDate - 1, the same day shouldLogWorkout skips; its window is built in
+    // the client's own timezone, as buildAssignmentsAndLogs builds it. That day
+    // is inside detection's client-local 3-day lookback for any timezone. On a
+    // rest day there is no hole.
+    const holeWorkout = slotsFor(email).workoutOn(addDaysFromLocalDate(refDate, -1));
+    if (holeWorkout && Date.parse(holeWorkout.endsAt) < Date.parse(now)) {
+      const missed = missedWorkoutCandidate({
+        assignmentId: holeWorkout.assignmentId,
+        localDate: holeWorkout.localDate,
+        windowEndsAt: holeWorkout.endsAt,
+      });
+      const missedDetected = stampBetween(hoursBefore(now, 8), holeWorkout.endsAt, now);
+      lines.push(
+        `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, details_json, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `${key}-missed-workout`))}, ${sqlQuote(holeRel)}, ${sqlQuote(missed.type)}, ${sqlQuote(missed.severity)}, 'active', 'demo-v1', ${sqlQuote(missed.sourceEntityType)}, ${sqlQuote(missed.sourceEntityId)}, ${sqlQuote(missed.summary)}, ${sqlQuote(JSON.stringify(missed.details))}, ${sqlQuote(missedDetected)}, ${sqlQuote(missedDetected)}, ${sqlQuote(now)});`,
+      );
+    }
   }
 
   const ishitaRel = relId("rahul.coach@demo.fitbud.test", "ishita.pushoff@demo.fitbud.test");
-  const ishitaMealId = demoUuid("meal-assignment", "ishita.pushoff@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
-  const ishitaDinnerId = demoUuid(
-    "meal-assignment",
-    "ishita.pushoff@demo.fitbud.test",
-    addDaysFromLocalDate(refDate, -1),
-    MEAL_PRESCRIPTION_IDS.dinner,
-  );
-  const ishitaDetected = new Date(Date.parse(now) - 16 * 3_600_000).toISOString();
+  // Ask on the latest lunch that opened at least an hour ago; overdue on the latest closed dinner.
+  const ishitaSlots = slotsFor("ishita.pushoff@demo.fitbud.test");
+  const ishitaLunch = ishitaSlots.meal(MEAL_PRESCRIPTION_IDS.lunch, "askable");
+  const ishitaDinner = ishitaSlots.meal(MEAL_PRESCRIPTION_IDS.dinner, "closed");
+  const ishitaMealId = ishitaLunch.assignmentId;
+  const ishitaDinnerId = ishitaDinner.assignmentId;
+  // An hour back, but at least an hour into the lunch window and before it closed (QS6).
+  const ishitaAskedAt = new Date(
+    Math.min(
+      Date.parse(now),
+      askInsideWindowMs({ windowStartsAt: ishitaLunch.startsAt, windowEndsAt: ishitaLunch.endsAt }, Date.parse(hoursBefore(now, 1))),
+    ),
+  ).toISOString();
+  const ishitaDetected = stampBetween(hoursBefore(now, 16), ishitaDinner.endsAt, now);
   lines.push(
     `INSERT INTO device_tokens (id, user_id, platform, provider, token, installation_id, status, last_seen_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("device-token", "ishita"))}, ${sqlQuote(userId("ishita.pushoff@demo.fitbud.test"))}, 'android', 'fcm', 'demo-ishita-revoked', 'demo-ishita-install', 'revoked', ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     `INSERT INTO reminder_rules (id, coaching_relationship_id, reminder_type, enabled, created_at, updated_at) VALUES (${sqlQuote(demoUuid("reminder-rule", "ishita-workout"))}, ${sqlQuote(ishitaRel)}, 'workout_reminder', 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO coach_asks (id, relationship_id, trainee_user_id, item_type, item_id, topic, asked_at, last_asked_at, ask_count, status) VALUES (${sqlQuote(demoUuid("coach_ask", "ishita"))}, ${sqlQuote(ishitaRel)}, ${sqlQuote(userId("ishita.pushoff@demo.fitbud.test"))}, 'meal_assignment', ${sqlQuote(ishitaMealId)}, 'portion_size', ${sqlQuote(now)}, ${sqlQuote(now)}, 2, 'open');`,
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "ishita-dinner"))}, ${sqlQuote(ishitaRel)}, 'overdue_meal', 'critical', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(ishitaDinnerId)}, 'Missed dinner', ${sqlQuote(ishitaDetected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO coach_asks (id, relationship_id, trainee_user_id, item_type, item_id, topic, asked_at, last_asked_at, ask_count, status) VALUES (${sqlQuote(demoUuid("coach_ask", "ishita"))}, ${sqlQuote(ishitaRel)}, ${sqlQuote(userId("ishita.pushoff@demo.fitbud.test"))}, 'meal_assignment', ${sqlQuote(ishitaMealId)}, 'portion_size', ${sqlQuote(ishitaAskedAt)}, ${sqlQuote(ishitaAskedAt)}, 2, 'open');`,
+    `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(ishitaDinnerId)};`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "ishita-dinner"))}, ${sqlQuote(ishitaRel)}, 'overdue_meal', 'critical', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(ishitaDinnerId)}, 'Missed dinner', ${sqlQuote(ishitaDetected)}, ${sqlQuote(ishitaDetected)}, ${sqlQuote(now)});`,
   );
 
   const nikhilRel = relId("rahul.coach@demo.fitbud.test", "nikhil.reactivate@demo.fitbud.test");
@@ -755,12 +950,15 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const lib = input.libraryIndex;
   const idliItem = foodSnapshotJson(lib, "idli");
   const sambarItem = foodSnapshotJson(lib, "sambar");
-  const lakshmiLunchId = demoUuid("meal-assignment", "lakshmi.foods@demo.fitbud.test", refDate, MEAL_PRESCRIPTION_IDS.lunch);
+  // Deviation on the latest lunch that has opened, logged inside its window.
+  const lakshmiLunch = slotsFor("lakshmi.foods@demo.fitbud.test").meal(MEAL_PRESCRIPTION_IDS.lunch, "opened");
+  const lakshmiLunchId = lakshmiLunch.assignmentId;
+  const lakshmiLoggedAt = stampBetween(hoursAfter(lakshmiLunch.startsAt, 0.5), lakshmiLunch.startsAt, now);
   lines.push(
     `INSERT INTO trainee_custom_foods (id, trainee_user_id, relationship_id, name, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, serving_label, created_at) VALUES (${sqlQuote(demoUuid("custom-food", "lakshmi-thali"))}, ${sqlQuote(userId("lakshmi.foods@demo.fitbud.test"))}, ${sqlQuote(lakshmiRel)}, 'Office canteen thali', 650000000, 25000000, 90000000, 20000000, '1 plate', ${sqlQuote(now)});`,
     `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(lakshmiLunchId)};`,
-    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", lakshmiLunchId))}, ${sqlQuote(lakshmiLunchId)}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("plan-version", lakshmiRel, "v2"))}, ${sqlQuote(userId("lakshmi.foods@demo.fitbud.test"))}, 'modified', 0, ${sqlQuote(now)}, 'logged_foods', 'Idli + sambar instead of poha', 0, NULL, NULL, ${jsonQuote([idliItem, sambarItem])}, 500000000, 20000000, 80000000, 10000000, 0, 0, ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "lakshmi-deviation"))}, ${sqlQuote(lakshmiRel)}, 'meal_deviation', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(lakshmiLunchId)}, 'Logged different foods', ${sqlQuote(now)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", lakshmiLunchId))}, ${sqlQuote(lakshmiLunchId)}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("plan-version", lakshmiRel, "v2"))}, ${sqlQuote(userId("lakshmi.foods@demo.fitbud.test"))}, 'modified', 0, ${sqlQuote(lakshmiLoggedAt)}, 'logged_foods', 'Idli + sambar instead of poha', 0, NULL, NULL, ${jsonQuote([idliItem, sambarItem])}, 500000000, 20000000, 80000000, 10000000, 0, 0, ${sqlQuote(lakshmiLoggedAt)}, ${sqlQuote(lakshmiLoggedAt)}, ${sqlQuote(lakshmiLoggedAt)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "lakshmi-deviation"))}, ${sqlQuote(lakshmiRel)}, 'meal_deviation', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(lakshmiLunchId)}, 'Logged different foods', ${sqlQuote(lakshmiLoggedAt)}, ${sqlQuote(lakshmiLoggedAt)}, ${sqlQuote(now)});`,
   );
   lines.push(
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "lakshmi-today"))}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("checkin-schedule", lakshmiRel))}, ${sqlQuote(refDate)}, ${sqlQuote(localDayStartIso(refDate, "09:00", "Asia/Kolkata"))}, ${sqlQuote(new Date(Date.parse(now) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
@@ -789,7 +987,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
         ? "priya.coach@demo.fitbud.test"
         : "rahul.coach@demo.fitbud.test";
     const relationship = relId(trainer, email);
-    const timezone = email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
+    const timezone = legacyTimezoneFor(email);
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", `${email}-next`))}, ${sqlQuote(relationship)}, ${sqlQuote(demoUuid("checkin-schedule", relationship))}, ${sqlQuote(nextCheckinDate)}, ${sqlQuote(localDayStartIso(nextCheckinDate, "09:00", timezone))}, ${sqlQuote(new Date(Date.parse(localDayStartIso(nextCheckinDate, "09:00", timezone)) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
@@ -831,7 +1029,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Hit my protein most days. Walked after dinner four times.", notes: "Office travel Tue to Thu. Missed two sessions and ate out twice.", went_well: "Hit my protein most days. Walked after dinner four times.", was_hard: "Office travel Tue to Thu. Missed two sessions and ate out twice.", for_coach: "Can we move leg day to the weekend?", energy: 3, hunger: 4, stress: 4 })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
     `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledged', 'Solid effort this week — lock in sleep and we will rebuild training next.', ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanSubmittedAt)});`,
     // Latest Sunday is also reviewed for slipping; give it the reply so Today prefers it.
-    `UPDATE checkin_reviews SET notes = 'Solid effort this week — lock in sleep and we will rebuild training next.', updated_at = ${sqlQuote(rohanSubmittedAt)} WHERE checkin_id = ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(refDate, 0)))};`,
+    // Edited when the Friday reply went out, never before the review existed (QS5).
+    `UPDATE checkin_reviews SET notes = 'Solid effort this week — lock in sleep and we will rebuild training next.', updated_at = max(created_at, ${sqlQuote(rohanSubmittedAt)}) WHERE checkin_id = ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(refDate, 0)))};`,
   );
 
   // Rohan waist for Progress measurements row (TR-13).
@@ -1040,9 +1239,7 @@ export function buildDemoHistorySql(input: HistoryInput): string {
     });
     lines.push(plan.sql);
 
-    const timezone = account.email.startsWith("deepak.")
-      ? "Asia/Dubai"
-      : "Asia/Kolkata";
+    const timezone = legacyTimezoneFor(account.email);
     const activityUntilDate = endedAt
       ? activityUntilIso.slice(0, 10)
       : refDate;

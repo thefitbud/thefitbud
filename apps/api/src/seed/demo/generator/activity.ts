@@ -61,8 +61,8 @@ export type ActivityContext = {
 };
 
 export type GeneratedItem =
-  | { kind: "meal"; assignmentId: string; localDate: string; mealName: string; windowEndsAt: string; outcome: string | null; loggedAt: string | null; deviationKind: string | null }
-  | { kind: "workout"; assignmentId: string; localDate: string; windowEndsAt: string; status: string | null };
+  | { kind: "meal"; assignmentId: string; localDate: string; mealName: string; windowStartsAt: string; windowEndsAt: string; outcome: string | null; loggedAt: string | null; deviationKind: string | null }
+  | { kind: "workout"; assignmentId: string; localDate: string; windowStartsAt: string; windowEndsAt: string; status: string | null };
 
 /** Logging probability for a day (0..1). */
 function logProbability(cfg: PersonaConfig, ctx: ActivityContext, localDate: string, kind: "meal" | "workout", rng: Rng): number {
@@ -363,7 +363,7 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           open: false,
         });
       }
-      items.push({ kind: "meal", assignmentId, localDate: date, mealName: meal.name, windowEndsAt: windowEnd, outcome, loggedAt, deviationKind });
+      items.push({ kind: "meal", assignmentId, localDate: date, mealName: meal.name, windowStartsAt: windowStart, windowEndsAt: windowEnd, outcome, loggedAt, deviationKind });
     }
 
     const workoutDay = version.content.workoutDays.find((day) => day.weekday === weekdayOf(date));
@@ -454,7 +454,8 @@ export function simulateActivity(ctx: ActivityContext, opts: {
                     prescribed_load_label: target.loadLabel,
                     actual_reps: reps,
                     actual_load_label: kg == null ? target.loadLabel : kgLabel(kg),
-                    completed_at: atMost(iso(startedMs + (exIndex * 4 + setIndex + 1) * 3 * 60_000), ctx.now),
+                    // Inside the session: a set never finishes after the workout did (QS5).
+                    completed_at: iso(Math.min(startedMs + (exIndex * 4 + setIndex + 1) * 3 * 60_000, completedMs)),
                     created_at: iso(startedMs),
                     updated_at: completedAt,
                   });
@@ -474,7 +475,7 @@ export function simulateActivity(ctx: ActivityContext, opts: {
           });
         }
       }
-      items.push({ kind: "workout", assignmentId, localDate: date, windowEndsAt: wEnd, status });
+      items.push({ kind: "workout", assignmentId, localDate: date, windowStartsAt: wStart, windowEndsAt: wEnd, status });
     }
 
     // Weigh-ins (trainee entries), only up to the persona's cut-off.
