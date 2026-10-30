@@ -1,11 +1,12 @@
 # Wn · <name>
 
-**Status:** Draft | Ready | In progress | Done
+**Status:** Draft | In progress | Done (information only; it does not gate the launch)
 **Goal:** what this batch unlocks, in one line.
-**Launch rule:** the orchestrator starts only when Status is Ready and every box under "Decisions needed" is answered ("decided by <who>, <date>"). It refuses to launch with an open box.
+**Launch rule:** Firoz's launch message is the go. The orchestrator does not wait for a status or a sign-off. If a decision below is still marked **Open**, the tasks that need it stop and report; the rest run.
 
-## Decisions needed before launch
-- [ ] Decision, the options, and the recommended option.
+## Decisions
+- **D-Wn-1 <topic>.** The decision, and the options it was chosen over. Decided by <who>, <date>.
+- **D-Wn-2 <topic>. Open.** Only if it truly can't be decided yet: the options, the recommended one, and which tasks wait on it.
 
 ## Lanes
 
