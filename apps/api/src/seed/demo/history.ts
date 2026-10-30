@@ -393,7 +393,11 @@ function buildAssignmentsAndLogs(input: {
       const checkinId = demoUuid("checkin", input.traineeEmail, localDate);
       const cStart = localDayStartIso(localDate, "09:00", input.timezone);
       const cEnd = new Date(Date.parse(cStart) + 48 * 3_600_000).toISOString();
-      const submittedAt = clampIsoToNow(cEnd, logCap);
+      // Submitted at the window end; a window still open at the cap was
+      // submitted that Sunday evening, not at the instant of reading (QS5).
+      const submittedAt = Date.parse(cEnd) > Date.parse(logCap)
+        ? stampBetween(hoursAfter(cStart, 11), cStart, logCap)
+        : cEnd;
       const submitted =
         input.state !== "food_deviations" ||
         localDate < input.activityUntilDate;
@@ -656,7 +660,7 @@ function skippedMealSql(input: {
 }
 
 /** Timezone of a legacy demo account; buildAssignmentsAndLogs builds its windows in it. */
-function legacyTimezoneFor(email: string): string {
+export function legacyTimezoneFor(email: string): string {
   return email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
 }
 
@@ -681,11 +685,14 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const deviationMeal = rohanSlots.meal(MEAL_PRESCRIPTION_IDS.lunch, "opened");
   const overdueCheckinId = demoUuid("checkin", rohanEmail, addDaysFromLocalDate(refDate, -7));
   const overdueCheckinDate = addDaysFromLocalDate(refDate, -7);
+  // Same window as every Rohan check-in (09:00 IST + 48 h), so the exception is
+  // detected only after it closed (QS5, QA-PR28 F3).
+  const overdueCheckinStart = localDayStartIso(overdueCheckinDate, "09:00", legacyTimezoneFor(rohanEmail));
   const overdueCheckinSlot: OverlaySlot = {
     localDate: overdueCheckinDate,
     assignmentId: overdueCheckinId,
-    startsAt: `${overdueCheckinDate}T18:30:00.000Z`,
-    endsAt: `${overdueCheckinDate}T18:30:00.000Z`,
+    startsAt: overdueCheckinStart,
+    endsAt: hoursAfter(overdueCheckinStart, 48),
   };
 
   // Stable IDs from docs/spec/09-demo-data.md (agents verify these URLs).
@@ -719,7 +726,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     [demoUuid("exception", "rohan-overdue-meal"), "overdue_meal", "critical", overdueMeal, "meal_assignment", 1, 4, overdueMeal.endsAt],
     [demoUuid("exception", "rohan-skipped-meal"), "skipped_meal", "attention", skippedMeal, "meal_assignment", 0, 9, skippedMeal.endsAt],
     [demoUuid("exception", "rohan-meal-deviation"), "meal_deviation", "attention", deviationMeal, "meal_assignment", 0, 3, rohanDeviationAt],
-    [demoUuid("exception", "rohan-overdue-checkin-active"), "overdue_checkin", "attention", overdueCheckinSlot, "checkin", 7, 2, null],
+    [demoUuid("exception", "rohan-overdue-checkin-active"), "overdue_checkin", "attention", overdueCheckinSlot, "checkin", 7, 2, overdueCheckinSlot.endsAt],
   ] as const;
   for (const [id, type, severity, slot, sourceType, daysAgo, hoursAgo, floor] of exceptionRows) {
     const aged = hoursBefore(now, daysAgo * 24 + hoursAgo);
@@ -959,7 +966,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
         ? "priya.coach@demo.fitbud.test"
         : "rahul.coach@demo.fitbud.test";
     const relationship = relId(trainer, email);
-    const timezone = email.startsWith("deepak.") ? "Asia/Dubai" : "Asia/Kolkata";
+    const timezone = legacyTimezoneFor(email);
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", `${email}-next`))}, ${sqlQuote(relationship)}, ${sqlQuote(demoUuid("checkin-schedule", relationship))}, ${sqlQuote(nextCheckinDate)}, ${sqlQuote(localDayStartIso(nextCheckinDate, "09:00", timezone))}, ${sqlQuote(new Date(Date.parse(localDayStartIso(nextCheckinDate, "09:00", timezone)) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
@@ -1001,7 +1008,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(demoUuid("checkin-schedule", rohanRel))}, ${sqlQuote(rohanCheckinDate)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(new Date(Date.parse(rohanCheckinStart) + 48 * 3_600_000).toISOString())}, 'submitted', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${jsonQuote({ wellbeing: "Hit my protein most days. Walked after dinner four times.", notes: "Office travel Tue to Thu. Missed two sessions and ate out twice.", went_well: "Hit my protein most days. Walked after dinner four times.", was_hard: "Office travel Tue to Thu. Missed two sessions and ate out twice.", for_coach: "Can we move leg day to the weekend?", energy: 3, hunger: 4, stress: 4 })}, ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanCheckinStart)}, ${sqlQuote(rohanSubmittedAt)});`,
     `INSERT INTO checkin_reviews (id, checkin_id, coaching_relationship_id, trainer_user_id, outcome, notes, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin-review", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", rohanCheckinDate))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledged', 'Solid effort this week — lock in sleep and we will rebuild training next.', ${sqlQuote(rohanSubmittedAt)}, ${sqlQuote(rohanSubmittedAt)});`,
     // Latest Sunday is also reviewed for slipping; give it the reply so Today prefers it.
-    `UPDATE checkin_reviews SET notes = 'Solid effort this week — lock in sleep and we will rebuild training next.', updated_at = ${sqlQuote(rohanSubmittedAt)} WHERE checkin_id = ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(refDate, 0)))};`,
+    // Edited when the Friday reply went out, never before the review existed (QS5).
+    `UPDATE checkin_reviews SET notes = 'Solid effort this week — lock in sleep and we will rebuild training next.', updated_at = max(created_at, ${sqlQuote(rohanSubmittedAt)}) WHERE checkin_id = ${sqlQuote(demoUuid("checkin", "rohan.slipping@demo.fitbud.test", previousWeekdayBefore(refDate, 0)))};`,
   );
 
   // Rohan waist for Progress measurements row (TR-13).

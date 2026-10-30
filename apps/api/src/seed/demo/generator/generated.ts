@@ -87,7 +87,12 @@ function addCoachingTouches(input: WorldInput, ctx: ActivityContext, items: Gene
   for (let i = 0; i < askCount && candidates.length > 0; i += 1) {
     const item = candidates[rng.int(0, candidates.length - 1)]!;
     const topic = weightedPick(rng, ASK_TOPICS);
-    const askedMs = Date.parse(localDayStartIso(item.localDate, "12:00", ctx.cfg.timezone)) + rng.int(0, 9) * HOUR;
+    // Never ask about an item before its window opened (QS5): a dinner or late
+    // workout opens after the 12:00–21:00 ask slot, so roll those to an hour in.
+    const askedMs = Math.max(
+      Date.parse(localDayStartIso(item.localDate, "12:00", ctx.cfg.timezone)) + rng.int(0, 9) * HOUR,
+      Date.parse(item.windowStartsAt) + HOUR,
+    );
     if (askedMs > nowMs) continue;
     const askId = demoUuid("coach_ask", ctx.relId, String(i));
     const expired = rng.chance(0.2);
@@ -413,12 +418,15 @@ function addCurrentCheckins(input: WorldInput, ctx: ActivityContext, last: { id:
         });
         if (due >= clientLookbackFrom(input.now, cfg.timezone)) {
           const cleared = CLEARED_LOOKBACK.has(cfg.email);
+          // Detected 5 min after the window closed, but never after now: in the
+          // first 5 min past the close it is stamped now (QS5, QA-PR30 F3).
+          const detectedAt = iso(Math.max(Date.parse(end), Math.min(Date.parse(end) + 5 * 60_000, nowMs)));
           rows.add("exceptions", {
             id: demoUuid("exception", ctx.relId, `checkin-${id}`), coaching_relationship_id: ctx.relId, type: "overdue_checkin", status: cleared ? "resolved" : "active",
             rule_version: "mvp.v2", source_entity_type: "checkin", source_entity_id: id, summary: "Overdue check-in",
             details_json: JSON.stringify(overdueCheckinCandidate({ checkinId: id, localDate: due, windowEndsAt: end }).details),
-            detected_at: iso(Date.parse(end) + 5 * 60_000), activated_at: iso(Date.parse(end) + 5 * 60_000), acknowledged_at: null, resolved_at: cleared ? input.now : null,
-            created_at: iso(Date.parse(end) + 5 * 60_000), updated_at: cleared ? input.now : iso(Date.parse(end) + 5 * 60_000), severity: "attention",
+            detected_at: detectedAt, activated_at: detectedAt, acknowledged_at: null, resolved_at: cleared ? input.now : null,
+            created_at: detectedAt, updated_at: cleared ? input.now : detectedAt, severity: "attention",
             resolution_outcome: null, resolution_note: null, closed_reason: null, source_logged_late_at: null,
           });
         }
