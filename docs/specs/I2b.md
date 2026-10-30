@@ -34,11 +34,15 @@ size: M
   - Replace files 01–06 and `manifest.json`; every file's sha256 must match the manifest.
   - Add `08_post_seed.sql` (post-seed corrections; I2f adds to it) and `02b_food_extras.sql` (extras that load after 02).
 - Load order after this task (local): `00_wipe_legacy_dev.sql`, `01`, `02`, `02b`, `03`, `04`, `05`, `06`, `07_post_wipe_dev.sql`, `08_post_seed.sql`, `05_search.sql` again (FTS rebuild). I2d later adds `03b` and the remote mode.
-- **Source artifacts: D-W1-7 (Open in W1.md).** The locked release files (foods 2026.10.9 and the 2026.10.21-v3 exercise base) are produced by a pipeline outside this repo and are **not on `main`** (checked 31 Oct 2026: `apps/api/seed/library/` holds release 2026.10.2 only). Until Firoz commits them to the path named in D-W1-7, stop.
+- **Source artifacts: D-W1-7 (decided by Firoz, 31 Oct 2026; on `main` via PR #74).** Copy, byte for byte, from `apps/api/seed/library/incoming/2026.10.9/`: `manifest.json`, `library-2026.10.9.json`, `ATTRIBUTION.md` and `sql/01_lookups.sql` to `sql/06_seed_version.sql` (6 files) into `apps/api/seed/library/` and `apps/api/seed/library/sql/`, then remove `apps/api/seed/library/library-2026.10.2.json`. Do not edit anything under `incoming/` (read-only input, not owned).
+- The release has **no** `02b_food_extras.sql` or `08_post_seed.sql`. I2b creates both with a header comment and no statements (they are not in the manifest, so the sha256 check does not cover them). I2f adds the first correction to `08`.
+- The source manifest also lists 353 exercises (the old base inside `03_exercises.sql`). The 1,362-exercise base is I2c's `03b`, not this task.
 - The current demo seed (`apps/api/scripts/seed-demo.ts`) must still load on top; Agents.md requires realistic persisted data in tests.
 
 ## Gap list
-- `apps/api/seed/library/manifest.json:2-6`: release `2026.10.2`, 693 foods, 353 exercises.
+- `apps/api/seed/library/manifest.json:2-6`: release `2026.10.2`, 693 foods, 353 exercises. Target: identical to `apps/api/seed/library/incoming/2026.10.9/manifest.json` (`seed_version` 2026.10.9, `counts.foods` 1243).
+- `apps/api/seed/library/library-2026.10.2.json`: old export. Target: `library-2026.10.9.json` copied from `incoming/`.
+- `apps/api/seed/library/sql/`: no `02b_food_extras.sql`, no `08_post_seed.sql`.
 - `apps/api/scripts/library-seed.ts:14-24`: file list has no `02b` or `08`.
 - No test asserts the food count, default-serving rule, value sets or sha256.
 

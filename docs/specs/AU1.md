@@ -19,7 +19,8 @@ With `AUTH_MODE=firebase`, the API accepts a genuine Firebase ID token for the c
 
 ## Context
 - Decision D-B9 (Firoz, 31 Oct 2026): no mid-task human approval; this spec decides the auth change.
-- Decision D-W1-3 (Firoz, 30 Oct 2026): two Firebase projects. Staging project ID `thefitbud-staging`; production project ID `thefitbud-prod`. No dev project: local runs use `AUTH_MODE=test`. The project ID reaches the Worker as the existing var `FIREBASE_PROJECT_ID` (local value `fitbud-local`, `apps/api/wrangler.toml`).
+- Decision D-W1-3 (Firoz, 30 Oct 2026): two Firebase projects. Staging project ID `thefitbud-staging`; production project ID `thefitbud-prod`. No dev project: local runs use `AUTH_MODE=test`. The project ID reaches the Worker as the existing var `FIREBASE_PROJECT_ID` (local value `fitbud-local`, `apps/api/wrangler.toml` `[vars]`; staging and production values are on `main` in `apps/api/wrangler.toml:74-82`, PR #76).
+- **gitleaks note:** gitleaks flags the two Firebase web API keys in `apps/api/wrangler.toml` (`[env.staging.vars]` and `[env.production.vars]`, added in PR #76) as `gcp-api-key`. They are public Firebase Web identifiers that ship to browsers (D-W1-8, Firoz, 31 Oct 2026). This finding is expected: do not remove or move the keys, and do not treat it as a stop condition.
 - Verification rules (beta task list v14, AU1):
   - Algorithm RS256 only; verify with `jose` `createRemoteJWKSet` against `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`.
   - `iss` must equal `https://securetoken.google.com/<FIREBASE_PROJECT_ID>`.

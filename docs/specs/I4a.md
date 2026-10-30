@@ -23,23 +23,25 @@ size: S
   - DO binding `RELATIONSHIP_REALTIME` → class `RelationshipRealtimeRoom` in each env.
   - Crons `["*/5 * * * *"]` in each env.
 - Worker names: `fitbud-api-staging` and `fitbud-api-production` (Wrangler's default `<name>-<env>`).
-- Per-env `[vars]` (v14 I4a; Decision D-B10, Firoz 31 Oct 2026; D-W1-3):
-  - staging: `ENVIRONMENT = "staging"`, `AUTH_MODE = "firebase"`, `PUSH_PROVIDER_MODE = "expo"`, `EMAIL_PROVIDER = "zeptomail"`, `FIREBASE_PROJECT_ID = "thefitbud-staging"`, `APP_HOST = "app-staging.thefitbud.com"`, `SESSION_COOKIE_NAME = "fitbud_session"`, `SUPPORT_EMAIL = "tech@thefitbud.com"`, `ADMIN_ALERT_EMAILS = "tech@thefitbud.com"`.
-  - production: same, with `ENVIRONMENT = "production"`, `FIREBASE_PROJECT_ID = "thefitbud-prod"`, `APP_HOST = "app.thefitbud.com"`.
+- Already on `main` (PR #76, D-W1-8 decided by Firoz 31 Oct 2026, option a): `apps/api/wrangler.toml:74-77` `[env.staging.vars]` and `:79-82` `[env.production.vars]` with `ENVIRONMENT`, `FIREBASE_PROJECT_ID` and `FIREBASE_WEB_API_KEY`. Keep those three lines in each block unchanged and add the rest below them.
+- **gitleaks note:** gitleaks flags the two Firebase web API keys in `apps/api/wrangler.toml` (`[env.staging.vars]` and `[env.production.vars]`, added in PR #76) as `gcp-api-key`. They are public Firebase Web identifiers that ship to browsers (D-W1-8, Firoz, 31 Oct 2026). This finding is expected: do not remove or move the keys, and do not treat it as a stop condition.
+- Per-env `[vars]` still to add (v14 I4a; Decision D-B10, Firoz 31 Oct 2026; D-W1-3):
+  - staging: `AUTH_MODE = "firebase"`, `PUSH_PROVIDER_MODE = "expo"`, `EMAIL_PROVIDER = "zeptomail"`, `APP_HOST = "app-staging.thefitbud.com"`, `SESSION_COOKIE_NAME = "fitbud_session"`, `SUPPORT_EMAIL = "tech@thefitbud.com"`, `ADMIN_ALERT_EMAILS = "tech@thefitbud.com"`.
+  - production: same, with `APP_HOST = "app.thefitbud.com"`.
   - `SYSTEM_EMAIL_FROM` / `SYSTEM_EMAIL_REPLY_TO` per env: **D-W1-9 (Open)**. Recommended `FitBud <no-reply@thefitbud.com>` with reply-to `tech@thefitbud.com`. Stop if still Open.
-  - `FIREBASE_WEB_API_KEY`: **not in toml**; D-W1-8 (Open) decides how Firoz supplies it. Leave a comment naming the var and saying Firoz sets it.
   - `MEDIA_PREFIX` is added by I4b, not here.
 - `PUSH_PROVIDER_MODE = "expo"` and `EMAIL_PROVIDER = "zeptomail"` are values the code accepts only after X4a (W3) and I5 (W2). Until then a staging deploy would be refused by AU2's guard; that is intended: no staging deploy happens before I6 (W2→W3).
 - **No secrets in toml:** `MEDIA_SIGNING_SECRET`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `ZEPTOMAIL_TOKEN`, `EXPO_ACCESS_TOKEN`, `SENTRY_DSN` are set by Firoz as Worker secrets. Do not copy the local `MEDIA_SIGNING_SECRET` value into an env block.
 - The top-level (local/default) config stays byte-for-byte as it is after I7.
 
 ## Gap list
-- `apps/api/wrangler.toml:1-67`: only a top-level local config (D1 `fitbud` with a placeholder id, R2 `fitbud-media`, queue `fitbud-jobs-dev`, `[vars]` for local). No `[env.staging]` or `[env.production]`.
+- `apps/api/wrangler.toml:1-67`: top-level local config (D1 `fitbud` with a placeholder id, R2 `fitbud-media`, queue `fitbud-jobs-dev`, `[vars]` for local).
+- `apps/api/wrangler.toml:74-82`: env blocks hold only `[env.*.vars]` with 3 vars each (PR #76). No D1, R2, queue, DO or cron bindings for either env, and no `AUTH_MODE`, `PUSH_PROVIDER_MODE`, `EMAIL_PROVIDER`, `APP_HOST`, `SESSION_COOKIE_NAME`, `SUPPORT_EMAIL`, `ADMIN_ALERT_EMAILS` or `SYSTEM_EMAIL_*`.
 
 ## Acceptance criteria
 - [ ] `[env.staging]` and `[env.production]` each define D1, R2, queue producer, queue consumer with `dead_letter_queue`, DO binding, `triggers.crons` and `vars`, with the exact names and ids in Context.
-- [ ] No env block contains `MEDIA_SIGNING_SECRET` or any other secret value; `git grep -n "SECRET\|TOKEN\|PRIVATE" apps/api/wrangler.toml` shows only comments and the unchanged local `MEDIA_SIGNING_SECRET` line.
-- [ ] The top-level config is unchanged (diff shows only added lines below it).
+- [ ] No env block contains `MEDIA_SIGNING_SECRET` or any other secret value; `git grep -n "SECRET\|TOKEN\|PRIVATE" apps/api/wrangler.toml` shows only comments and the unchanged local `MEDIA_SIGNING_SECRET` line. The two `FIREBASE_WEB_API_KEY` lines are public and expected.
+- [ ] The top-level config and the 3 vars per env from PR #76 are unchanged (diff shows only added lines).
 - [ ] `wrangler deploy --dry-run --env staging --outdir <tmp>` and `--env production` both succeed locally (no upload).
 - [ ] `pnpm --filter @fitbud/api dev` still runs the local env.
 
