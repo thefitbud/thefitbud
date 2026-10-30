@@ -243,8 +243,6 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     expect(resolvedCloseLabel("coaching_ended")).toBe(
       "Closed when coaching ended",
     );
-    // Firoz lock: no auto_resolve UI — legacy values fail closed to trainer path
-    expect(resolvedCloseLabel("auto_resolve")).toBe("Resolved by you");
   });
 
   it("builds trainer banner/timeline structure like frames 02 / 132", () => {
@@ -361,20 +359,5 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
 
     expect(api.resolveException).not.toHaveBeenCalled();
     expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
-  });
-
-  it("treats legacy auto_resolve as the trainer-readable path", async () => {
-    api.getException.mockResolvedValue(resolvedDetail("auto_resolve"));
-    render(
-      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
-    );
-    expect(
-      await screen.findByTestId("exception-resolve-banner"),
-    ).toBeTruthy();
-    expect(
-      screen.getByTestId("exception-resolve-timeline").textContent,
-    ).toMatch(/Resolved by you ·/);
-    expect(screen.queryByText(/Cleared automatically/)).toBeNull();
-    expect(screen.queryByText(/Closed when coaching ended/)).toBeNull();
   });
 });

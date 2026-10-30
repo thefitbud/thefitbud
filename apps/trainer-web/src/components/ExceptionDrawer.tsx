@@ -42,8 +42,7 @@ const VIEWER_TZ =
  * Close-path label for a resolved exception.
  * Locked frames only: trainer/null → "Resolved by you" (02/132);
  * coaching_ended → "Closed when coaching ended" (41).
- * Firoz product lock (28 Oct 2026): there is no auto_resolve UI. Legacy
- * `auto_resolve` values fail closed to the trainer-readable path.
+ * Firoz product lock (28 Oct 2026): trainers resolve every exception.
  */
 export function resolvedCloseLabel(
   closedReason: ExceptionClosedReason | null,
@@ -51,7 +50,7 @@ export function resolvedCloseLabel(
   if (closedReason === "coaching_ended") {
     return "Closed when coaching ended";
   }
-  // trainer | null | legacy auto_resolve → trainer path (no system-clear UI)
+  // trainer | null → trainer path
   return "Resolved by you";
 }
 
@@ -116,7 +115,6 @@ function isTrainerClose(
   closedReason: ExceptionClosedReason | null,
 ): boolean {
   // coaching_ended is the only non-trainer close with a locked frame.
-  // Legacy auto_resolve fails closed to the trainer path (no system-clear UI).
   return closedReason !== "coaching_ended";
 }
 
