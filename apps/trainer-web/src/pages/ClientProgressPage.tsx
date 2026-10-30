@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Measurement, MeasurementType, ProgressEntry } from "@fitbud/contracts";
-import { formatCivilDate, formatInstant, labelFor } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { LinkedMedia } from "../components/LinkedMedia";
 import {
   MEASUREMENT_SERIES,
@@ -16,6 +16,7 @@ import {
   ErrorState,
   LoadingBlock,
 } from "../components/StatePanels";
+import { isWorkspaceReadOnly } from "../hooks/useWorkspaceReadOnly";
 import { apiClient } from "../lib/api";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
 import { todayInTimezone } from "../components/activity/activityUtils";
@@ -33,6 +34,7 @@ export function ClientProgressPage() {
   const { relationshipId = "" } = useParams();
   const { workspace, refreshEpoch = 0, online = true } =
     useOutletContext<WorkspaceOutletContext>();
+  const ended = isWorkspaceReadOnly(workspace);
   const clientTz = resolveTraineeTimezone(
     workspace?.header ?? {
       relationshipId,
@@ -140,8 +142,9 @@ export function ClientProgressPage() {
 
       {!loading && weightEmpty ? (
         <EmptyState title="No weigh-ins yet. Weight is collected in check-ins.">
+          {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
           <Link to={`/clients/${relationshipId}/configure`}>
-            Open check-in settings
+            {ended ? "View coaching setup" : "Open check-in settings"}
           </Link>
         </EmptyState>
       ) : null}
@@ -221,6 +224,7 @@ export function ClientProgressPage() {
                     <td>
                       {row.source === "checkin" && row.checkinId ? (
                         <Link
+                          className="progress-checkin-link"
                           to={`/clients/${relationshipId}/check-ins/${row.checkinId}`}
                         >
                           From check-in ·{" "}

@@ -92,11 +92,30 @@ export function CoachAskDrawer({
 
   useEffect(() => {
     closeRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     function onKey(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
         if (document.querySelector(".overflow-menu-list")) return;
         ev.preventDefault();
         onClose();
+        return;
+      }
+      // Same trap as ExceptionDrawer: Tab stays inside the open dialog.
+      if (ev.key !== "Tab" || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (ev.shiftKey && document.activeElement === first) {
+        ev.preventDefault();
+        last.focus();
+      } else if (!ev.shiftKey && document.activeElement === last) {
+        ev.preventDefault();
+        first.focus();
       }
     }
     document.addEventListener("keydown", onKey);

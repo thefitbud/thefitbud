@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { drizzle } from "drizzle-orm/d1";
-import { readdirSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as schema from "../db/schema.js";
@@ -183,6 +184,73 @@ export async function createMemoryDb(options?: {
   if (options?.librarySeed) {
     runLibrarySeed(sqlite);
   }
+
+  return buildHandle(sqlite, files, applied);
+}
+
+/**
+ * Opens a private, writable copy of a database file written by `VACUUM INTO`
+ * (see seeded-db.ts). Every migration is already applied in the copy. The copy is
+ * deleted on close, so tests never share rows with each other or with the template.
+ */
+export function openMemoryDbCopy(
+  templatePath: string,
+  options?: { foreignKeys?: boolean },
+): MemoryDbHandle {
+  assertFts5Available();
+  // The pid in the name lets the startup sweep (tmp-sweep.ts) tell live dirs from leftovers.
+  const dir = mkdtempSync(join(tmpdir(), `fitbud-test-db-${process.pid}-`));
+  const copyPath = join(dir, "db.sqlite");
+  copyFileSync(templatePath, copyPath);
+  const sqlite = new DatabaseSync(copyPath);
+  // Throwaway test copy: skip fsync/on-disk journal so it behaves like :memory: for speed.
+  sqlite.exec("PRAGMA journal_mode = MEMORY");
+  sqlite.exec("PRAGMA synchronous = OFF");
+  sqlite.exec(`PRAGMA foreign_keys = ${options?.foreignKeys === false ? "OFF" : "ON"}`);
+  const files = migrationFiles();
+  const handle = buildHandle(sqlite, files, new Set(files));
+  const closeDb = handle.close;
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    openCopies.delete(close);
+    try {
+      closeDb();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  openCopies.add(close);
+  return { ...handle, close, sqlite: { ...handle.sqlite, close } };
+}
+
+/** Close functions of copies from `openMemoryDbCopy` that a test has not closed yet. */
+const openCopies = new Set<() => void>();
+
+/** Closes and deletes every copy still open in this test file (safety net for tests that forget). */
+export function closeOpenMemoryDbCopies(): void {
+  for (const close of [...openCopies]) {
+    try {
+      close();
+    } catch {
+      // Already closed by the test through another path; the dir is removed either way.
+    }
+  }
+}
+
+function buildHandle(
+  sqlite: DatabaseSync,
+  files: string[],
+  applied: Set<string>,
+): MemoryDbHandle {
+  const applyFile = (fileName: string) => {
+    if (applied.has(fileName)) {
+      return;
+    }
+    applyMigrationFile(sqlite, fileName);
+    applied.add(fileName);
+  };
 
   const queryCounter: D1QueryCounter = {
     count: 0,

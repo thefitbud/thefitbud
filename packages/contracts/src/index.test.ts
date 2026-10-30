@@ -14,6 +14,7 @@ import {
   mealAssignmentSchema,
   workoutAssignmentSchema,
   checkinSchema,
+  exceptionClosedReasonSchema,
   exceptionSchema,
   historyItemSchema,
   measurementSchema,
@@ -380,10 +381,19 @@ describe("contracts", () => {
         activatedAt: "2026-09-27T00:00:00.000Z",
         acknowledgedAt: null,
         resolvedAt: null,
+        closedReason: null,
         createdAt: "2026-09-27T00:00:00.000Z",
         updatedAt: "2026-09-27T00:00:00.000Z",
       }),
-    ).toMatchObject({ type: "overdue_checkin", status: "active" });
+    ).toMatchObject({ type: "overdue_checkin", status: "active", closedReason: null });
+  });
+
+  it("accepts trainer and coaching_ended closedReason values only", () => {
+    for (const closedReason of ["coaching_ended", "trainer"] as const) {
+      expect(exceptionClosedReasonSchema.parse(closedReason)).toBe(closedReason);
+    }
+    expect(() => exceptionClosedReasonSchema.parse("auto_resolve")).toThrow();
+    expect(() => exceptionClosedReasonSchema.parse("auto-resolve")).toThrow();
   });
 
   it("validates readable history item projection", () => {
