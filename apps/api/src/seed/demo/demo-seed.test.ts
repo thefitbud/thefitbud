@@ -21,9 +21,15 @@ import { createMemoryDb } from "../../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../../test-support/seeded-db.js";
 import { loadDemoLibraryIndex, personaByEmail } from "./personas.js";
 import { replenishRollingHorizons } from "../../domain/assignment-schedule.js";
-import { mealPrescriptionsFor } from "./generator/content.js";
+import {
+  MAX_QUANTITY_SCALED,
+  foodByGrams,
+  mealPrescriptionsFor,
+} from "./generator/content.js";
 import { buildPlanChain } from "./generator/plans.js";
 import { PERSONA_CONFIGS } from "./generator/personas.js";
+import { dietTemplate } from "./generator/templates/diets.js";
+import { DEMO_DEVIATION_FOOD_SLUGS } from "./personas.js";
 
 function testEnv(): Env {
   return {
@@ -948,6 +954,49 @@ describe("demo seed", () => {
         "nikhil.reactivate sprouted-moong-chaat": [110],
         "rohan.slipping sprouted-moong-chaat": [110],
       });
+    });
+
+    it("keeps template grams × dietScale within the quantity cap and never silently clamps deviations (DV1)", () => {
+      const lib = loadDemoLibraryIndex({ exec: sqliteExec });
+      // activity.ts restaurant/logged_foods path: 150–300 g. None may clamp (generator throws if they do).
+      for (const slug of DEMO_DEVIATION_FOOD_SLUGS) {
+        expect(lib.foods[slug], slug).toBeTruthy();
+        for (let grams = 150; grams <= 300; grams += 10) {
+          const clamps: string[] = [];
+          const dish = foodByGrams(lib, slug, grams, (c) => clamps.push(c.slug));
+          expect(clamps, `${slug} @ ${grams}g`).toEqual([]);
+          expect(dish.quantityScaled, `${slug} @ ${grams}g`).toBeLessThanOrEqual(MAX_QUANTITY_SCALED);
+        }
+      }
+      // Persona diet steps: rounded template grams × dietScale must land ≤ the contract max.
+      // The only allowed clamps are the QS1 100 g × dietScale > 1 cases already pinned above.
+      const allowedClamps = new Set([
+        "arjun.attention sprouted-moong-chaat",
+        "imran.nightshift sprouted-moong-chaat",
+        "karan.dual tea-black-brewed",
+        "kavya.ended tea-black-brewed",
+        "nikhil.reactivate sprouted-moong-chaat",
+        "rohan.slipping sprouted-moong-chaat",
+      ]);
+      for (const cfg of PERSONA_CONFIGS) {
+        for (const step of cfg.plan) {
+          if (!step.diet) continue;
+          const scale = step.dietScale ?? 1;
+          const template = dietTemplate(step.diet);
+          for (const meal of template.meals) {
+            for (const item of meal.items) {
+              const grams = Math.max(5, Math.round((item.grams * scale) / 5) * 5);
+              const where = `${cfg.email} ${step.diet}×${scale} ${item.slug} ${grams}g`;
+              const dish = foodByGrams(lib, item.slug, grams, (clamp) => {
+                const key = `${cfg.email.split("@")[0]} ${clamp.slug}`;
+                expect(allowedClamps.has(key), `unexpected clamp ${where}`).toBe(true);
+                expect(clamp.cappedUnits).toBe(100);
+              });
+              expect(dish.quantityScaled, where).toBeLessThanOrEqual(MAX_QUANTITY_SCALED);
+            }
+          }
+        }
+      }
     });
 
     it("builds months of history for the generated clients", () => {
