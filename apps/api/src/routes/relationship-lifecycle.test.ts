@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
 import { app } from "../index.js";
 import {
@@ -474,6 +474,109 @@ describe("TW-30 end and reactivate scheduling", () => {
     expect(((await nudge.json()) as { error: { code: string } }).error.code).toBe(
       "RELATIONSHIP_ENDED",
     );
+  });
+
+  it("ending coaching between 00:00 and 05:30 IST leaves yesterday's IST record alone", async () => {
+    // Mon 2 Nov 2026, 11:30 IST: schedule from Monday (Day A is a Monday workout).
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date("2026-11-02T06:00:00.000Z"));
+      const { trainerCookie, relationshipId, planId, today: yesterday } =
+        await reachActiveWithSchedule("end-early-ist");
+      expect(yesterday).toBe("2026-11-02");
+      const db = getTestDbOverride()!;
+
+      // Tue 3 Nov 2026, 01:15 IST, while the UTC date is still 2 Nov.
+      vi.setSystemTime(new Date("2026-11-02T19:45:00.000Z"));
+      const today = formatLocalDate(new Date(), "Asia/Kolkata");
+      expect(today).toBe("2026-11-03");
+      const todayCheckin = await app.request(
+        `/checkins/relationships/${relationshipId}/schedule`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: trainerCookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": "chk-end-early-ist-today",
+          },
+          body: JSON.stringify({ localDate: today }),
+        },
+        testEnv(),
+      );
+      expect(todayCheckin.status).toBe(200);
+
+      const ended = await app.request(
+        `/relationships/${relationshipId}/end`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: trainerCookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": "end-early-ist",
+          },
+          body: JSON.stringify({ reason: "paused" }),
+        },
+        testEnv(),
+      );
+      expect(ended.status).toBe(200);
+
+      const workouts = await db
+        .select()
+        .from(schema.workoutAssignments)
+        .where(
+          eq(schema.workoutAssignments.coachingRelationshipId, relationshipId),
+        );
+      const yesterdayWorkouts = workouts.filter(
+        (row) => row.localDate === yesterday,
+      );
+      expect(yesterdayWorkouts.length).toBeGreaterThan(0);
+      for (const row of yesterdayWorkouts) {
+        expect(row.scheduleStatus).toBe("scheduled");
+      }
+      const laterWorkouts = workouts.filter((row) => row.localDate >= today);
+      expect(laterWorkouts.length).toBeGreaterThan(0);
+      for (const row of laterWorkouts) {
+        expect(row.scheduleStatus).toBe("superseded");
+      }
+
+      const meals = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.coachingRelationshipId, relationshipId));
+      const yesterdayMeals = meals.filter((row) => row.localDate === yesterday);
+      expect(yesterdayMeals.length).toBeGreaterThan(0);
+      for (const row of yesterdayMeals) {
+        expect(row.scheduleStatus).toBe("scheduled");
+      }
+      const todayMeals = meals.filter((row) => row.localDate === today);
+      expect(todayMeals.length).toBeGreaterThan(0);
+      for (const row of todayMeals) {
+        expect(row.scheduleStatus).toBe("superseded");
+      }
+
+      const drafts = await db
+        .select()
+        .from(schema.checkins)
+        .where(
+          and(
+            eq(schema.checkins.coachingRelationshipId, relationshipId),
+            eq(schema.checkins.recordStatus, "draft"),
+          ),
+        );
+      expect(drafts.map((row) => row.localDate)).toEqual([yesterday]);
+
+      // The plan horizon closes on yesterday in IST, not the day before.
+      const [version] = await db
+        .select()
+        .from(schema.planVersions)
+        .where(eq(schema.planVersions.planId, planId));
+      expect(version?.effectiveTo).toBeTruthy();
+      expect(
+        formatLocalDate(new Date(version!.effectiveTo!), "Asia/Kolkata"),
+      ).toBe(yesterday);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("after reactivate confirm keeps nothing scheduled until a plan is assigned", async () => {
