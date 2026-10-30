@@ -2,22 +2,12 @@
  * TW-D behavioural proofs: plan tab, builders, publish modal.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { signIn } from "./support/session";
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 const DEEPAK = "f2a64fdb-96ad-46f3-a95e-99151b4a25f1";
 
 const BANNED = [/Library snapshot [0-9a-f]{8}-/i, /\[object Object\]/, /\bundefined\b/, /\bNaN\b/];
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
-}
 
 async function expectNoBannedStrings(page: Page) {
   const text = await page.locator("body").innerText();

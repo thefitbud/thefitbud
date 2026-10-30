@@ -1,25 +1,15 @@
 /**
  * TW-G behavioural proofs: history, settings, notifications, ended/reactivate, responsiveness.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { signIn } from "./support/session";
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 const KAVYA = "b9f01670-8acc-45f6-adab-d7728bca88a6";
 const NIKHIL = "8919b5c0-73fa-495a-958e-e9333a41f4e7";
 const FARHAN = "778a793a-d04e-44bc-b7aa-187f70573275";
 const ISHITA = "0a72ab36-f042-46dc-bceb-67725d78b46a";
 const AARAV = "30e514e1-e3f4-4dac-ae4b-5f45e72c3df6";
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
-}
 
 test.describe("TW-G history, settings, ended, reminders", () => {
   test.beforeEach(async ({ page }) => {

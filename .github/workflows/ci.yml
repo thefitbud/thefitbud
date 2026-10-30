@@ -25,8 +25,50 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides which jobs a PR needs. Pushes to main always run everything.
+  # code: anything outside docs/** and *.md. web: code that the trainer-web
+  # e2e and banned-strings jobs exercise (not mobile-only or incoming seed data).
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Classify changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$BASE...$HEAD")
+          echo "$files"
+          code=$(echo "$files" | grep -Ev '^docs/|\.md$' | grep -c . || true)
+          web=$( { echo "$files" | grep -Ev '^docs/|\.md$|^apps/mobile/|^packages/ui-mobile/|^apps/api/seed/library/incoming/'; \
+                   echo "$files" | grep -E '^docs/spec/banned-strings\.json$'; } | grep -c . || true)
+          echo "code=$([ "$code" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "web=$([ "$web" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   ci:
     name: ci
+    needs: changes
+    # Required by the ruleset: a skipped job counts as passed, so docs-only PRs
+    # merge without the 3-4 minute run. If classification fails, run anyway.
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -68,6 +110,16 @@ jobs:
       # setup:local (.dev.vars from .dev.vars.example) is not needed: the API tests
       # build their own in-memory D1 and never read .dev.vars.
 
+      # Turbo's local cache: packages whose inputs did not change replay their
+      # build/lint/typecheck/test results instead of re-running.
+      - name: Cache turbo
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-ci-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-ci-${{ runner.os }}-
+
       - name: Build packages
         run: pnpm build:packages
 
@@ -82,6 +134,8 @@ jobs:
 
   e2e:
     name: e2e
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.web == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -143,6 +197,8 @@ jobs:
 
   banned-strings:
     name: banned-strings
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.web == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
