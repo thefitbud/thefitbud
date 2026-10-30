@@ -32,6 +32,10 @@ const REFERENCE_INSTANTS = [
   "2026-10-22T00:30:00.000Z",
   "2026-10-26T00:30:00.000Z",
   "2026-10-20T03:31:00.000Z",
+  // QS6 (QA-PR33 F1): Sunday 20:00 IST, and half an hour after today's 13:00 IST
+  // lunch opened (Ishita's overlay ask used to sit at the window open).
+  "2026-10-25T14:30:00.000Z",
+  "2026-10-26T08:00:00.001Z",
 ];
 
 const ROHAN = "rohan.slipping@demo.fitbud.test";
@@ -187,13 +191,30 @@ describe.each(REFERENCE_INSTANTS)("demo seed timestamps at %s", (now) => {
     expect(Number(q("select count(*) from set_executions where completed_at is not null")[0]?.[0])).toBeGreaterThan(0);
   });
 
-  it("asks about a meal or workout only after its window opened (QS5)", () => {
-    const rows = q(`select a.id, a.asked_at, coalesce(m.window_starts_at, w.window_starts_at) as opens from coach_asks a
+  it("asks about a meal or workout at least an hour into its window, before it closed and never after now (QS5, QS6)", () => {
+    // Every ask, open (current) or answered / expired, generated or overlay.
+    const rows = q(`select a.id, a.status, a.asked_at, a.last_asked_at,
+        coalesce(m.window_starts_at, w.window_starts_at) as opens, coalesce(m.window_ends_at, w.window_ends_at) as closes
+      from coach_asks a
       left join meal_assignments m on a.item_type = 'meal_assignment' and m.id = a.item_id
-      left join workout_assignments w on a.item_type = 'workout_assignment' and w.id = a.item_id
-      where opens is null or julianday(a.asked_at) < julianday(opens) or julianday(a.last_asked_at) < julianday(opens)`);
-    expect(rows).toEqual([]);
-    expect(Number(q("select count(*) from coach_asks where status in ('answered', 'expired')")[0]?.[0])).toBeGreaterThan(0);
+      left join workout_assignments w on a.item_type = 'workout_assignment' and w.id = a.item_id`) as Array<Array<string | null>>;
+    const bad: string[] = [];
+    for (const [id, status, askedAt, lastAskedAt, opens, closes] of rows) {
+      if (opens == null || closes == null) {
+        bad.push(`${id} (${status}): no item`);
+        continue;
+      }
+      for (const stamp of [askedAt!, lastAskedAt!]) {
+        if (Date.parse(stamp) < Date.parse(opens) + 3_600_000) bad.push(`${id} (${status}): ${stamp} < opens ${opens} + 1h`);
+        if (Date.parse(stamp) >= Date.parse(closes)) bad.push(`${id} (${status}): ${stamp} >= closes ${closes}`);
+        if (Date.parse(stamp) > Date.parse(now)) bad.push(`${id} (${status}): ${stamp} > now`);
+      }
+    }
+    expect(bad).toEqual([]);
+    // Not vacuous: current open asks (generator OPEN_ASKS and Ishita's overlay) and past ones are checked.
+    expect(rows.filter((r) => r[1] === "open").map((r) => r[0])).toEqual(expect.arrayContaining([demoUuid("coach_ask", "ishita")]));
+    expect(rows.filter((r) => r[1] === "open").length).toBeGreaterThanOrEqual(4);
+    expect(rows.filter((r) => r[1] === "answered" || r[1] === "expired").length).toBeGreaterThan(0);
   });
 
   it("creates every account before its own first seeded fact, in the past (QS5)", () => {
