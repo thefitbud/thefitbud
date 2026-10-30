@@ -101,13 +101,26 @@ async function bumpRateLimit(
   return false;
 }
 
-function assertAuthRuntimeReady(env: import("../types.js").Env): string | null {
-  const authMode = env.AUTH_MODE === "firebase" ? "firebase" : "test";
-  if (authMode === "test" && env.ENVIRONMENT !== "local") {
-    return "Test auth (AUTH_MODE=test) requires ENVIRONMENT=local. Set both in wrangler.toml [vars] or apps/api/.dev.vars.";
+/** Staging/production with test auth is refused earlier by the runtime guard. */
+function authRuntimeError(
+  c: AppContext,
+): Response | null {
+  const authMode = c.env.AUTH_MODE === "firebase" ? "firebase" : "test";
+  if (authMode === "test" && c.env.ENVIRONMENT !== "local") {
+    return fail(
+      c,
+      500,
+      "RUNTIME_MISCONFIGURED",
+      "Test auth (AUTH_MODE=test) requires ENVIRONMENT=local. Set both in wrangler.toml [vars] or apps/api/.dev.vars.",
+    );
   }
-  if (authMode === "firebase" && !env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    return "AUTH_MODE=firebase requires FIREBASE_SERVICE_ACCOUNT_JSON in .dev.vars.";
+  if (authMode === "firebase" && !c.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return fail(
+      c,
+      503,
+      "AUTH_NOT_CONFIGURED",
+      "AUTH_MODE=firebase requires FIREBASE_SERVICE_ACCOUNT_JSON in .dev.vars.",
+    );
   }
   return null;
 }
@@ -157,9 +170,9 @@ authLoginRoutes.post(
     response: authTokenResponseSchema,
   }),
   async (c) => {
-    const configError = assertAuthRuntimeReady(c.env);
+    const configError = authRuntimeError(c);
     if (configError) {
-      return fail(c, 503, "AUTH_NOT_CONFIGURED", configError);
+      return configError;
     }
     const body = await c.req.json().catch(() => null);
     const parsed = authLoginRequestSchema.safeParse(body);
@@ -288,7 +301,8 @@ authLoginRoutes.post(
       }
     }
     const flags = await getFlags(c.env, db);
-    if (flags.wa_otp && identifier?.kind === "mobile") {
+    // D-W1-4: outside local, OTP is email-only even when wa_otp is on.
+    if (c.env.ENVIRONMENT === "local" && flags.wa_otp && identifier?.kind === "mobile") {
       channels.push("whatsapp");
     }
     return ok(

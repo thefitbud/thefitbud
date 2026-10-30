@@ -304,7 +304,7 @@ describe("auth login routes", () => {
     expect(rows[0]?.passwordHash).toBeTruthy();
   });
 
-  it("returns AUTH_NOT_CONFIGURED when test auth runs outside local", async () => {
+  it("returns 500 RUNTIME_MISCONFIGURED when test auth runs outside local", async () => {
     const response = await app.request(
       "/auth/login",
       {
@@ -317,9 +317,54 @@ describe("auth login routes", () => {
       },
       testEnv({ ENVIRONMENT: "production" }),
     );
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(500);
     const body = (await response.json()) as { error: { code: string } };
-    expect(body.error.code).toBe("AUTH_NOT_CONFIGURED");
+    expect(body.error.code).toBe("RUNTIME_MISCONFIGURED");
+  });
+
+  it("refuses test bearer tokens outside local with RUNTIME_MISCONFIGURED", async () => {
+    const response = await app.request(
+      "/me",
+      { headers: { Authorization: "Bearer test.eyJ1aWQiOiJ4In0" } },
+      testEnv({ ENVIRONMENT: "preview" }),
+    );
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("RUNTIME_MISCONFIGURED");
+  });
+
+  it("offers WhatsApp OTP for a mobile identifier in local when wa_otp is on", async () => {
+    const response = await app.request(
+      "/auth/otp/start",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "+919876543210", purpose: "login" }),
+      },
+      testEnv({ FLAG_WA_OTP: "true" }),
+    );
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ data: { sent: true, channels: ["whatsapp"] } });
+  });
+
+  it("is email-only outside local even when wa_otp is on", async () => {
+    const response = await app.request(
+      "/auth/otp/start",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "+919876543210", purpose: "login" }),
+      },
+      testEnv({
+        ENVIRONMENT: "staging",
+        AUTH_MODE: "firebase",
+        PUSH_PROVIDER_MODE: "fcm",
+        EMAIL_PROVIDER: "disabled",
+        FLAG_WA_OTP: "true",
+      }),
+    );
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ data: { sent: true, channels: ["email"] } });
   });
 
   it("uses email-only channels for mobile OTP when wa_otp is off", async () => {
