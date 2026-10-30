@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { exceptionSeveritySchema, exceptionStatusSchema, exceptionTypeSchema } from "./exception.js";
-import { uuidSchema } from "./identity.js";
+import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { localDateSchema } from "./workout.js";
 
 export const weekDayStateSchema = z.enum([
@@ -92,8 +92,14 @@ export const attentionGroupItemSchema = z.object({
   summary: z.string(),
   /** Optional exception details (e.g. localDate) for weekday-aware reason lines. */
   details: z.record(z.string(), z.unknown()).nullable().optional(),
+  /** When Mark reviewed happened, for the Reviewed row footer. */
+  acknowledgedAt: isoDateTimeSchema.nullable().optional(),
 });
 export type AttentionGroupItem = z.infer<typeof attentionGroupItemSchema>;
+
+/** Needs you while any open item is unreviewed; Reviewed when all open items are acknowledged. */
+export const attentionReviewBucketSchema = z.enum(["needs_you", "reviewed"]);
+export type AttentionReviewBucket = z.infer<typeof attentionReviewBucketSchema>;
 
 export const attentionGroupSchema = z.object({
   relationshipId: uuidSchema,
@@ -104,11 +110,18 @@ export const attentionGroupSchema = z.object({
   itemCount: z.number().int().nonnegative().optional(),
   mostSevere: exceptionSeveritySchema.optional(),
   oldestAgeMinutes: z.number().int().nonnegative().optional(),
+  /** Set on grouped attention. A client is needs_you until every open item is acknowledged. */
+  bucket: attentionReviewBucketSchema.optional(),
 });
 export type AttentionGroup = z.infer<typeof attentionGroupSchema>;
 
 export const attentionGroupsResponseSchema = z.object({
+  /** Open clients, including acknowledged items, for existing callers. */
   groups: z.array(attentionGroupSchema),
+  /** Clients with at least one detected or active item. Items are the unreviewed ones. */
+  needsYou: z.array(attentionGroupSchema),
+  /** Clients whose remaining open items are all acknowledged. */
+  reviewed: z.array(attentionGroupSchema),
 });
 export type AttentionGroupsResponse = z.infer<typeof attentionGroupsResponseSchema>;
 
