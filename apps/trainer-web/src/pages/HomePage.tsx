@@ -4,7 +4,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -47,6 +49,10 @@ import {
 } from "../lib/attentionIssueLine";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
+import {
+  isEditableTarget,
+  useRowShortcutGuard,
+} from "../hooks/useRowShortcutGuard";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 
 type ReengagementCandidate = ReengagementCandidatesResponse["items"][number];
@@ -185,6 +191,18 @@ export function HomePage() {
     undo?: () => void;
   } | null>(null);
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  // HM4 F1: mirror of focusIdx, and a flag that tells the focusIdx effect not
+  // to move focus when the selection followed focus the trainer already moved.
+  const focusIdxRef = useRef(0);
+  const skipRowFocusRef = useRef(false);
+  const {
+    onGridFocus,
+    onGridPointerDown,
+    armFromKeyboard,
+    noteDrawerClosed,
+    focusWithoutArming,
+    allowRowShortcut,
+  } = useRowShortcutGuard();
   const undoTimer = useRef<number | null>(null);
 
   // One fetch at a time. A quiet refresh requested while another load is in
@@ -472,9 +490,11 @@ export function HomePage() {
   }, [setParams]);
 
   const closeDrawerWithFocus = useCallback(() => {
+    noteDrawerClosed();
     closeDrawer();
-    rowRefs.current[focusIdx]?.focus();
-  }, [closeDrawer, focusIdx]);
+    // Restored focus must not arm the a / n / o row shortcuts (HM4).
+    focusWithoutArming(rowRefs.current[focusIdx]);
+  }, [closeDrawer, focusIdx, focusWithoutArming, noteDrawerClosed]);
 
   // Ask drawer: remember whether the open ask was just answered so the close
   // handler can skip its (soon to be removed) row and pick a neighbour.
@@ -490,6 +510,7 @@ export function HomePage() {
     const askId = drawerAskId;
     const answered = askId != null && answeredAskIdRef.current === askId;
     answeredAskIdRef.current = null;
+    noteDrawerClosed();
     closeDrawer();
     const visibleIds = coachAsks.slice(0, SECTION_CAP).map((a) => a.id);
     const idx = askId ? visibleIds.indexOf(askId) : -1;
@@ -513,7 +534,7 @@ export function HomePage() {
     // Fallback: the page title (not a row, so stray typing cannot hit the
     // Home grid shortcuts).
     homeTitleRef.current?.focus();
-  }, [closeDrawer, coachAsks, drawerAskId]);
+  }, [closeDrawer, coachAsks, drawerAskId, noteDrawerClosed]);
 
   function showToast(message: string, undo?: () => void) {
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
@@ -580,7 +601,16 @@ export function HomePage() {
   function onGridKey(ev: ReactKeyboardEvent<HTMLDivElement>) {
     const max = visibleOpen.length - 1;
     if (max < 0) return;
+    if (isEditableTarget(ev.target)) return;
     const key = ev.key.toLowerCase();
+    // Arrow / Home / End are deliberate navigation and arm the row shortcuts;
+    // j / k move too but don't arm them (they could be stray typing).
+    if (ev.key.startsWith("Arrow") || key === "home" || key === "end") {
+      armFromKeyboard();
+    }
+    if ((key === "a" || key === "n" || key === "o") && !allowRowShortcut(ev)) {
+      return;
+    }
     if (key === "arrowdown" || key === "j") {
       ev.preventDefault();
       setFocusIdx((i) => Math.min(max, i + 1));
@@ -618,12 +648,43 @@ export function HomePage() {
         void nudgeClient(row.group.relationshipId, row.primary.id);
       }
     } else if (key === "escape" && drawerExceptionId) {
+      noteDrawerClosed();
       closeDrawer();
-      rowRefs.current[focusIdx]?.focus();
+      focusWithoutArming(rowRefs.current[focusIdx]);
     }
   }
 
+  // HM4 F1: when focus (click, Tab, Shift+Tab) lands inside a row, that row
+  // becomes the selected one, so a / n / o act on the row that has focus.
+  function selectRowFromTarget(target: EventTarget | null) {
+    if (!target || typeof (target as Element).closest !== "function") return;
+    const rowEl = (target as Element).closest('[role="row"]');
+    if (!rowEl) return;
+    const idx = rowRefs.current.indexOf(rowEl as HTMLDivElement);
+    if (idx < 0 || idx >= visibleOpen.length) return;
+    if (idx === focusIdxRef.current) return;
+    focusIdxRef.current = idx;
+    skipRowFocusRef.current = true;
+    setFocusIdx(idx);
+  }
+
+  function onGridFocusIn(ev: ReactFocusEvent<HTMLDivElement>) {
+    selectRowFromTarget(ev.target);
+    onGridFocus();
+  }
+
+  function onGridPointerDownIn(ev: ReactPointerEvent<HTMLDivElement>) {
+    selectRowFromTarget(ev.target);
+    onGridPointerDown();
+  }
+
   useEffect(() => {
+    focusIdxRef.current = focusIdx;
+    if (skipRowFocusRef.current) {
+      // Focus is already inside this row (maybe on its button); keep it there.
+      skipRowFocusRef.current = false;
+      return;
+    }
     rowRefs.current[focusIdx]?.focus();
   }, [focusIdx]);
 
@@ -829,6 +890,8 @@ export function HomePage() {
                 aria-label="Needs attention"
                 tabIndex={0}
                 onKeyDown={onGridKey}
+                onFocus={onGridFocusIn}
+                onPointerDown={onGridPointerDownIn}
               >
                 {visibleOpen.map((row, idx) => {
                   const { group, primary } = row;
