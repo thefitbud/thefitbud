@@ -6,6 +6,7 @@ import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
+import { createId } from "../lib/crypto.js";
 import * as schema from "../db/schema.js";
 
 
@@ -458,9 +459,10 @@ describe("intervention loop", () => {
     // Already acknowledged — resolve should succeed
     expect(resolveTooEarly.status).toBe(200);
     const resolveBody = (await resolveTooEarly.json()) as {
-      data: { status: string };
+      data: { status: string; closedReason: string | null };
     };
     expect(resolveBody.data.status).toBe("resolved");
+    expect(resolveBody.data.closedReason).toBe("trainer");
 
     const [resolvedRow] = await db
       .select()
@@ -469,6 +471,7 @@ describe("intervention loop", () => {
       .limit(1);
     expect(resolvedRow?.resolutionOutcome).toBe("plan_adjusted");
     expect(resolvedRow?.resolutionNote).toBe("Adjusted next week");
+    expect(resolvedRow?.closedReason).toBe("trainer");
 
     const interventionRows = await db
       .select()
@@ -959,25 +962,49 @@ describe("intervention loop", () => {
         exceptions: Array<{ type: string; severity: string; sourceEntityId: string }>;
       };
     };
-    expect(clearedBody.data.resolved).toBeGreaterThanOrEqual(1);
+    expect(clearedBody.data.resolved).toBe(0);
     const dinnerAfter = await db
       .select()
       .from(schema.mealCompliance)
       .where(eq(schema.mealCompliance.assignmentId, dinner!.id));
     expect(dinnerAfter[0]?.outcome).toBe("confirmed");
+    const dinnerExceptionId = bySource.get(dinner!.id)!.id;
     const overdueRow = await db
       .select()
       .from(schema.exceptions)
-      .where(eq(schema.exceptions.id, bySource.get(dinner!.id)!.id));
-    expect(overdueRow[0]?.status).toBe("resolved");
+      .where(eq(schema.exceptions.id, dinnerExceptionId));
+    // Late log keeps the same open row and moves it to Client logged later.
+    expect(overdueRow[0]?.status).toBe("active");
+    expect(overdueRow[0]?.type).toBe("meal_logged_later");
+    expect(overdueRow[0]?.severity).toBe("attention");
+    expect(overdueRow[0]?.closedReason).toBeNull();
+    expect(overdueRow[0]?.sourceLoggedLateAt).toBeTruthy();
     expect(
       clearedBody.data.exceptions.some(
-        (item) =>
-          item.sourceEntityId === dinner!.id &&
-          item.type === "meal_logged_later" &&
-          item.severity === "attention",
+        (item) => item.sourceEntityId === dinner!.id,
       ),
-    ).toBe(true);
+    ).toBe(false);
+
+    const lateDetail = await app.request(
+      `/exceptions/${dinnerExceptionId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(lateDetail.status).toBe(200);
+    const lateDetailBody = (await lateDetail.json()) as {
+      data: {
+        status: string;
+        type: string;
+        severity: string;
+        closedReason: string | null;
+      };
+    };
+    expect(lateDetailBody.data).toMatchObject({
+      status: "active",
+      type: "meal_logged_later",
+      severity: "attention",
+      closedReason: null,
+    });
 
     const attention = await app.request(
       "/exceptions/attention",
@@ -985,16 +1012,20 @@ describe("intervention loop", () => {
       testEnv(),
     );
     const attentionBody = (await attention.json()) as {
-      data: { items: Array<{ exception: { id: string; status: string } }> };
+      data: {
+        items: Array<{ exception: { id: string; status: string; type: string } }>;
+      };
     };
     expect(
       attentionBody.data.items.some((item) => item.exception.id === missed.id),
     ).toBe(true);
     expect(
       attentionBody.data.items.some(
-        (item) => item.exception.id === bySource.get(dinner!.id)!.id,
+        (item) =>
+          item.exception.id === dinnerExceptionId &&
+          item.exception.type === "meal_logged_later",
       ),
-    ).toBe(false);
+    ).toBe(true);
 
     const history = await app.request(
       `/exceptions/relationships/${relationshipId}?status=resolved`,
@@ -1005,9 +1036,370 @@ describe("intervention loop", () => {
       data: { items: Array<{ id: string; status: string }> };
     };
     expect(
-      historyBody.data.items.some(
-        (item) => item.id === bySource.get(dinner!.id)!.id && item.status === "resolved",
+      historyBody.data.items.some((item) => item.id === dinnerExceptionId),
+    ).toBe(false);
+  });
+
+  it("maps trainer and coaching_ended close paths to closedReason", async () => {
+    const { trainerCookie, relationshipId } =
+      await reachActiveConfig("closed-reason");
+
+    const coachingEndedId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const trainerResolveId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const now = new Date().toISOString();
+    await db.insert(schema.exceptions).values([
+      {
+        id: coachingEndedId,
+        coachingRelationshipId: relationshipId,
+        type: "missed_workout",
+        severity: "attention",
+        status: "active",
+        ruleVersion: "mvp.v2",
+        sourceEntityType: "workout_assignment",
+        sourceEntityId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        summary: "Missed workout",
+        detailsJson: null,
+        detectedAt: now,
+        activatedAt: now,
+        acknowledgedAt: null,
+        resolvedAt: null,
+        resolutionOutcome: null,
+        resolutionNote: null,
+        closedReason: null,
+        sourceLoggedLateAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: trainerResolveId,
+        coachingRelationshipId: relationshipId,
+        type: "overdue_meal",
+        severity: "attention",
+        status: "acknowledged",
+        ruleVersion: "mvp.v2",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        summary: "Missed meal",
+        detailsJson: null,
+        detectedAt: now,
+        activatedAt: now,
+        acknowledgedAt: now,
+        resolvedAt: null,
+        resolutionOutcome: null,
+        resolutionNote: null,
+        closedReason: null,
+        sourceLoggedLateAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    // Clearing the underlying condition must not system-resolve.
+    const noopEval = await app.request(
+      `/exceptions/relationships/${relationshipId}/evaluate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "eval-no-auto-resolve",
+        },
+        body: "{}",
+      },
+      testEnv(),
+    );
+    expect(noopEval.status).toBe(200);
+    const noopBody = (await noopEval.json()) as { data: { resolved: number } };
+    expect(noopBody.data.resolved).toBe(0);
+    const stillOpen = await app.request(
+      `/exceptions/${coachingEndedId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const stillOpenBody = (await stillOpen.json()) as {
+      data: { status: string; closedReason: string | null };
+    };
+    expect(stillOpenBody.data.status).toBe("active");
+    expect(stillOpenBody.data.closedReason).toBeNull();
+
+    const trainerResolve = await app.request(
+      `/exceptions/${trainerResolveId}/resolve`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "resolve-closed-reason",
+        },
+        body: JSON.stringify({ outcome: "talked", note: null }),
+      },
+      testEnv(),
+    );
+    expect(trainerResolve.status).toBe(200);
+    const trainerBody = (await trainerResolve.json()) as {
+      data: { status: string; closedReason: string | null };
+    };
+    expect(trainerBody.data.status).toBe("resolved");
+    expect(trainerBody.data.closedReason).toBe("trainer");
+
+    const ended = await app.request(
+      `/relationships/${relationshipId}/end`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "end-closed-reason",
+        },
+        body: JSON.stringify({ reason: "done" }),
+      },
+      testEnv(),
+    );
+    expect(ended.status).toBe(200);
+
+    const coachingEnded = await app.request(
+      `/exceptions/${coachingEndedId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(coachingEnded.status).toBe(200);
+    const coachingBody = (await coachingEnded.json()) as {
+      data: { status: string; closedReason: string | null };
+    };
+    expect(coachingBody.data.status).toBe("resolved");
+    expect(coachingBody.data.closedReason).toBe("coaching_ended");
+
+    // Trainer-resolved row keeps its close reason after the end write.
+    const trainerAfterEnd = await app.request(
+      `/exceptions/${trainerResolveId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const trainerAfterBody = (await trainerAfterEnd.json()) as {
+      data: { closedReason: string | null };
+    };
+    expect(trainerAfterBody.data.closedReason).toBe("trainer");
+  });
+
+  it("keeps a client in Needs you until every open item is reviewed, and undo restores on the server", async () => {
+    const { trainerCookie, traineeToken, relationshipId } =
+      await reachActiveConfig("review-undo");
+    const now = new Date().toISOString();
+    const older = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const criticalId = createId();
+    const attentionId = createId();
+
+    await db.insert(schema.exceptions).values([
+      {
+        id: criticalId,
+        coachingRelationshipId: relationshipId,
+        type: "missed_workout",
+        severity: "critical",
+        status: "active",
+        ruleVersion: "test",
+        sourceEntityType: "workout_assignment",
+        sourceEntityId: createId(),
+        summary: "Missed workout",
+        detectedAt: older,
+        activatedAt: older,
+        acknowledgedAt: null,
+        resolvedAt: null,
+        createdAt: older,
+        updatedAt: older,
+      },
+      {
+        id: attentionId,
+        coachingRelationshipId: relationshipId,
+        type: "skipped_meal",
+        severity: "attention",
+        status: "active",
+        ruleVersion: "test",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: createId(),
+        summary: "Skipped lunch",
+        detectedAt: now,
+        activatedAt: now,
+        acknowledgedAt: null,
+        resolvedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    type Group = {
+      relationshipId: string;
+      bucket?: string;
+      items: Array<{ id: string; status: string }>;
+    };
+    async function grouped() {
+      const response = await app.request(
+        "/exceptions/attention?groupBy=relationship&limit=20",
+        { headers: { Cookie: trainerCookie, "x-fitbud-role": "trainer" } },
+        testEnv(),
+      );
+      const text = await response.text();
+      expect(response.status, text).toBe(200);
+      return JSON.parse(text) as {
+        data: { groups: Group[]; needsYou: Group[]; reviewed: Group[] };
+      };
+    }
+
+    function clientGroups(list: Group[]) {
+      return list.filter((group) => group.relationshipId === relationshipId);
+    }
+
+    const before = await grouped();
+    expect(clientGroups(before.data.needsYou)).toHaveLength(1);
+    expect(clientGroups(before.data.reviewed)).toHaveLength(0);
+    expect(
+      clientGroups(before.data.groups)[0]?.bucket,
+    ).toBe("needs_you");
+    expect(
+      clientGroups(before.data.needsYou)[0]?.items.map((item) => item.id).sort(),
+    ).toEqual([attentionId, criticalId].sort());
+
+    const markReviewed = await app.request(
+      `/exceptions/${criticalId}/acknowledge`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mark-reviewed-critical",
+        },
+        body: JSON.stringify({ note: null }),
+      },
+      testEnv(),
+    );
+    const markReviewedText = await markReviewed.text();
+    expect(markReviewed.status, markReviewedText).toBe(200);
+    expect(
+      (JSON.parse(markReviewedText) as { data: { status: string } }).data.status,
+    ).toBe("acknowledged");
+
+    const partial = await grouped();
+    expect(clientGroups(partial.data.needsYou)).toHaveLength(1);
+    expect(clientGroups(partial.data.reviewed)).toHaveLength(0);
+    expect(
+      clientGroups(partial.data.needsYou)[0]?.items.map((item) => item.id),
+    ).toEqual([attentionId]);
+
+    const markSecond = await app.request(
+      `/exceptions/${attentionId}/acknowledge`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mark-reviewed-attention",
+        },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(markSecond.status, await markSecond.clone().text()).toBe(200);
+
+    const reviewed = await grouped();
+    expect(clientGroups(reviewed.data.needsYou)).toHaveLength(0);
+    expect(clientGroups(reviewed.data.reviewed)).toHaveLength(1);
+    expect(clientGroups(reviewed.data.reviewed)[0]?.bucket).toBe("reviewed");
+    expect(
+      clientGroups(reviewed.data.reviewed)[0]?.items.every(
+        (item) => item.status === "acknowledged",
       ),
     ).toBe(true);
+
+    const undo = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-attention",
+      },
+      body: "{}",
+    }, testEnv());
+    const undoText = await undo.text();
+    expect(undo.status, undoText).toBe(200);
+    const undoBody = JSON.parse(undoText) as {
+      data: { status: string; acknowledgedAt: string | null };
+    };
+    expect(undoBody.data.status).toBe("active");
+    expect(undoBody.data.acknowledgedAt).toBeNull();
+
+    const replay = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-attention",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(replay.status).toBe(200);
+    expect(
+      ((await replay.json()) as { data: { status: string } }).data.status,
+    ).toBe("active");
+
+    const [restoredRow] = await db
+      .select()
+      .from(schema.exceptions)
+      .where(eq(schema.exceptions.id, attentionId))
+      .limit(1);
+    expect(restoredRow?.status).toBe("active");
+    expect(restoredRow?.acknowledgedAt).toBeNull();
+
+    const afterUndo = await grouped();
+    expect(clientGroups(afterUndo.data.needsYou)).toHaveLength(1);
+    expect(clientGroups(afterUndo.data.reviewed)).toHaveLength(0);
+    expect(
+      clientGroups(afterUndo.data.needsYou)[0]?.items.some(
+        (item) => item.id === attentionId && item.status === "active",
+      ),
+    ).toBe(true);
+
+    const undoAgain = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-attention-again",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(undoAgain.status).toBe(409);
+
+    const resolve = await app.request(`/exceptions/${criticalId}/resolve`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "resolve-critical",
+      },
+      body: JSON.stringify({ outcome: "talked" }),
+    }, testEnv());
+    expect(resolve.status, await resolve.clone().text()).toBe(200);
+
+    const undoResolved = await app.request(`/exceptions/${criticalId}/undo`, {
+      method: "POST",
+      headers: {
+        Cookie: trainerCookie,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "undo-resolved",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(undoResolved.status).toBe(409);
+
+    const traineeUndo = await app.request(`/exceptions/${attentionId}/undo`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${traineeToken}`,
+        "x-fitbud-role": "trainee",
+        "Content-Type": "application/json",
+        "Idempotency-Key": "trainee-undo",
+      },
+      body: "{}",
+    }, testEnv());
+    expect(traineeUndo.status).toBe(403);
   });
 });
