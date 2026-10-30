@@ -582,8 +582,8 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "items": [
           {
             "slug": "sprouted-moong-chaat",
-            "grams": 150,
-            "label": "1 bowl"
+            "grams": 100,
+            "label": "100 g"
           },
           {
             "slug": "chai-with-milk-and-sugar",
@@ -645,8 +645,8 @@ export const DIET_TEMPLATES: DietTemplate[] = [
           },
           {
             "slug": "tea-black-brewed",
-            "grams": 150,
-            "label": "black tea"
+            "grams": 100,
+            "label": "100 g"
           }
         ]
       },

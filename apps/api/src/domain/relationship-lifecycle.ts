@@ -74,6 +74,8 @@ export async function endCoachingRelationship(
     .set({
       status: "resolved",
       closedReason: "coaching_ended",
+      // Same instant as endedAt, like the other system close (auto-resolve).
+      resolvedAt: timestamp,
       updatedAt: timestamp,
     })
     .where(
