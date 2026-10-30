@@ -33,6 +33,17 @@ export type MemoryDbHandle = {
   queryCounter: D1QueryCounter;
 };
 
+/**
+ * Lets the event loop run (task CI1). Migrations, the library seed and the ~37 MB
+ * demo seed run synchronously through node:sqlite. A file that chains several of
+ * them without a macrotask turn starves vitest's worker RPC ("Timeout calling
+ * onTaskUpdate" after 60 s) even though every test passes. Await this between
+ * heavy synchronous steps.
+ */
+export function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function assertFts5Available(): void {
   const probe = new DatabaseSync(":memory:");
   try {
@@ -181,8 +192,10 @@ export async function createMemoryDb(options?: {
     applyFile(file);
   }
 
+  await yieldToEventLoop();
   if (options?.librarySeed) {
     runLibrarySeed(sqlite);
+    await yieldToEventLoop();
   }
 
   return buildHandle(sqlite, files, applied);

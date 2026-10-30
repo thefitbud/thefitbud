@@ -183,18 +183,14 @@ Risks or questions
 
 Done when
 - Observable acceptance criteria
-Human approval required
-Stop before implementing when a task would:
-- Change MVP scope or a documented non-goal.
-- Introduce a new role, application, provider, or infrastructure service.
-- Change authentication or authorization boundaries.
-- Change ownership semantics.
-- Make a destructive or irreversible migration.
-- Remove or rewrite historical coaching records.
-- Change published-plan immutability or version-effective behavior.
-- Choose unspecified conflict resolution that could discard user data.
-- Put sensitive information in notifications, logs, or analytics.
-- Require production credentials or direct production-data access.
+Decisions and stop rules (30 Oct 2026: no mid-task human approval)
+Agents do not wait for human approval during a task. Product, architecture, provider, auth and migration decisions are made before a batch starts and are written into the task spec (`docs/specs/<ID>.md`) and its batch file. Firoz reviews the finished batch, not individual steps.
+Stop and report, instead of guessing, only when:
+- The spec does not answer a question whose answer changes product behavior, scope, architecture, auth, ownership, or data.
+- The work would make a destructive or irreversible migration, rewrite historical coaching records, change published-plan immutability, or discard user data, and the spec does not say so explicitly.
+- A file outside the spec's `files_owned` must change.
+- The work would need a remote or deploy command, a production credential, or production data. Agents never have these.
+Never put sensitive information in notifications, logs, or analytics.
 Required verification
 Run the checks relevant to the changed scope using root workspace scripts:
 - Formatting and linting.

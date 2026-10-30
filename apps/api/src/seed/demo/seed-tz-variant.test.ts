@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildDemoSeedSql } from "./build.js";
 import { PERSONA_CONFIGS } from "./generator/personas.js";
 import { loadDemoLibraryIndex } from "./personas.js";
-import { createMemoryDb, type MemoryDbHandle } from "../../test-support/memory-db.js";
+import { createMemoryDb, type MemoryDbHandle, yieldToEventLoop } from "../../test-support/memory-db.js";
 import { evaluateRelationshipExceptions } from "../../domain/exceptions.js";
 
 /**
@@ -54,7 +54,10 @@ describe.each(LAG_INSTANTS)(`demo seed with Pooja in ${VARIANT_TIMEZONE} at %s`,
   beforeAll(async () => {
     handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
     const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-    handle.sqlite.exec(buildDemoSeedSql({ referenceInstant: now, passwordHash: "qs4-tz-test-hash", libraryIndex }));
+    const sql = buildDemoSeedSql({ referenceInstant: now, passwordHash: "qs4-tz-test-hash", libraryIndex });
+    await yieldToEventLoop();
+    handle.sqlite.exec(sql);
+    await yieldToEventLoop();
   }, 60_000);
 
   afterAll(() => handle?.close());

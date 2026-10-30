@@ -11,8 +11,6 @@ frames:                   # [] for non-UI tasks. Use file names from docs/design
   - { frame: "01-trainer-web-signin.png", viewport: "1440x900" }
 model: sonnet             # sonnet | opus | opusplan (opus plans, sonnet edits)
 size: S                   # S | M (never L; split instead)
-approvals: []             # Agents.md "Human approval required" items Firoz has approved, with date
-                          # e.g. ["auth boundary change (AU1), Firoz 31 Oct"]
 ---
 
 ## Outcome
@@ -43,5 +41,5 @@ Paste it in. Don't link to Confluence or /workspace paths.
 ## Stop conditions
 - A frame or decision is missing or ambiguous.
 - A file outside `files_owned` must change.
-- The task needs an approval not listed in `approvals`.
+- The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.
 - The task would need a remote command, a secret or a deploy.

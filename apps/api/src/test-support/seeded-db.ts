@@ -21,6 +21,7 @@ import {
   createMemoryDb,
   type MemoryDbHandle,
   openMemoryDbCopy,
+  yieldToEventLoop,
 } from "./memory-db.js";
 
 const templates = new Map<string, Promise<string>>();
@@ -61,7 +62,10 @@ async function buildTemplate(referenceInstant: string): Promise<string> {
   try {
     const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
     const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-    handle.sqlite.exec(buildDemoSeedSql({ referenceInstant, passwordHash, libraryIndex }));
+    const sql = buildDemoSeedSql({ referenceInstant, passwordHash, libraryIndex });
+    await yieldToEventLoop();
+    handle.sqlite.exec(sql);
+    await yieldToEventLoop();
     const path = join(ensureTemplateDir(), `seed-${templates.size}.sqlite`);
     handle.sqlite.run("VACUUM INTO ?", [path]);
     return path;
