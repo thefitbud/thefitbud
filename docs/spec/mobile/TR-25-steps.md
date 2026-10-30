@@ -1,5 +1,7 @@
 # TR-25 · Steps (optional, Health Connect / HealthKit)
 
+> **Updated 30 Oct 2026:** steps are MVP (no longer behind the go/no-go). Daily totals are synced to FitBud and the trainer can see them. Today shows a Steps **chip** against a target that defaults to 8,000 and that the coach can change per client in Coaching setup. Text below that says steps stay on the phone or are never shared is superseded.
+
 **ID:** TR-25 · **Name:** Steps (optional, Health Connect / HealthKit) · **Priority:** P1 if the spike is Go; otherwise P2, after MVP · **Route/screen:** `StepsSettings` + the TR-06 steps card · **Batch:** M-6 (see `../BATCHES.md`)
 
 **Files to touch:**

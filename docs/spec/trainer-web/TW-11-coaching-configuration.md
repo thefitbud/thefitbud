@@ -41,7 +41,7 @@
    | Check-ins | cadence (weekly, biweekly, monthly), due window hours, form (select from check-in templates, TW-25) | "Weekly · 48 h window · Standard check-in" |
    | Tracking | body weight, progress photos, session RPE (switches) | "Weight weekly · photos · RPE" |
    | **Automatic reminders** | Workout, Meal, Check-in switches (the `reminder_rules` booleans) plus a read-only note | "On for workouts and meals · off for check-ins" |
-   | Subscription | plan name, payment frequency, start date, renewal date (no amounts) | "Monthly · renews 1 Nov" |
+   | Subscription | plan name, payment frequency, start date, renewal date (30 Oct 2026: subscription settings also track amount, type, coaching mode, paid/unpaid and method; no payment collection) | "Monthly · renews 1 Nov" |
 
    - The **Automatic reminders** note reads: "FitBud times reminders around Priya's meal times and workout time, only when something isn't logged, and never in her quiet hours (10 pm–7 am). Priya controls her own notification settings and can adjust her meal times." When she has changed any times, the note adds "Priya's meal times: Lunch 2:30 pm (plan 1:30 pm)" (D24).
    - **WhatsApp reminders** status line (read-only). While `wa_automation` is off, which is today's state: "WhatsApp reminders · **Coming soon**. FitBud reminds Priya in the app for now." When it's on: "WhatsApp reminders: opted in · used when app notifications don't reach Priya" or "Not opted in". The trainer can't opt a client in (D17).
