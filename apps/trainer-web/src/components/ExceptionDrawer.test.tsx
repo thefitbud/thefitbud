@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactElement } from "react";
 import type { ExceptionDetail } from "@fitbud/contracts";
@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   getWorkoutAssignment: vi.fn(),
   getClientWorkspace: vi.fn(),
   getResponsiveness: vi.fn(),
+  acknowledgeException: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -22,6 +23,7 @@ vi.mock("../lib/api", () => ({
     getException: api.getException,
     getWorkoutAssignment: api.getWorkoutAssignment,
     getClientWorkspace: api.getClientWorkspace,
+    acknowledgeException: api.acknowledgeException,
   },
 }));
 vi.mock("../lib/stage1-api", () => ({
@@ -30,8 +32,7 @@ vi.mock("../lib/stage1-api", () => ({
 
 import { ExceptionDrawer } from "./ExceptionDrawer";
 
-// Acknowledged items show the outcome + note form straight away.
-const detail: ExceptionDetail = {
+const baseDetail: ExceptionDetail = {
   id: EXC_ID,
   coachingRelationshipId: REL_ID,
   type: "missed_workout",
@@ -46,13 +47,36 @@ const detail: ExceptionDetail = {
   activatedAt: "2026-10-22T06:00:00.000Z",
   acknowledgedAt: "2026-10-22T07:00:00.000Z",
   resolvedAt: null,
+  closedReason: null,
   createdAt: "2026-10-22T06:00:00.000Z",
   updatedAt: "2026-10-22T07:00:00.000Z",
   actions: [],
 };
 
+// Acknowledged items show the outcome + note form straight away.
+const detail: ExceptionDetail = { ...baseDetail };
+
+const activeDetail: ExceptionDetail = {
+  ...baseDetail,
+  status: "active",
+  acknowledgedAt: null,
+  updatedAt: "2026-10-22T06:00:00.000Z",
+};
+
 function inRouter(ui: ReactElement) {
   return <MemoryRouter>{ui}</MemoryRouter>;
+}
+
+function stubWorkspaceApis() {
+  api.getWorkoutAssignment.mockResolvedValue({
+    workoutDayName: "Upper body A",
+    windowEndsAt: "2026-10-22T12:00:00.000Z",
+    workoutDay: { exercises: [] },
+  });
+  api.getClientWorkspace.mockResolvedValue({
+    header: { traineeDisplayName: "Rohan Mehta", clientWhatsappE164: null },
+  });
+  api.getResponsiveness.mockRejectedValue(new Error("not needed"));
 }
 
 async function renderDrawer(onClose: () => void) {
@@ -66,15 +90,7 @@ async function renderDrawer(onClose: () => void) {
 describe("ExceptionDrawer focus (HM1)", () => {
   beforeEach(() => {
     api.getException.mockResolvedValue(detail);
-    api.getWorkoutAssignment.mockResolvedValue({
-      workoutDayName: "Upper body A",
-      windowEndsAt: "2026-10-22T12:00:00.000Z",
-      workoutDay: { exercises: [] },
-    });
-    api.getClientWorkspace.mockResolvedValue({
-      header: { traineeDisplayName: "Rohan Mehta", clientWhatsappE164: null },
-    });
-    api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+    stubWorkspaceApis();
   });
   afterEach(() => {
     cleanup();
@@ -120,5 +136,58 @@ describe("ExceptionDrawer focus (HM1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(latest).toHaveBeenCalledTimes(2);
     expect(first).not.toHaveBeenCalled();
+  });
+});
+
+describe("ExceptionDrawer Mark reviewed focus (ED1)", () => {
+  beforeEach(() => {
+    stubWorkspaceApis();
+    api.getException.mockResolvedValue(activeDetail);
+    api.acknowledgeException.mockResolvedValue({
+      ...activeDetail,
+      status: "acknowledged",
+      acknowledgedAt: "2026-10-22T07:00:00.000Z",
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("keeps activeElement inside the drawer after Mark reviewed", async () => {
+    render(
+      inRouter(
+        <ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />,
+      ),
+    );
+    const markReviewed = await screen.findByRole("button", {
+      name: "Mark reviewed",
+    });
+
+    api.getException.mockResolvedValue({
+      ...activeDetail,
+      status: "acknowledged",
+      acknowledgedAt: "2026-10-22T07:00:00.000Z",
+      updatedAt: "2026-10-22T07:00:00.000Z",
+    });
+
+    await act(async () => {
+      markReviewed.focus();
+      fireEvent.click(markReviewed);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Mark reviewed" }),
+      ).toBeNull();
+    });
+    await waitFor(() => {
+      const drawer = screen.getByRole("dialog", {
+        name: "Needs attention detail",
+      });
+      expect(document.activeElement).not.toBe(document.body);
+      expect(drawer.contains(document.activeElement)).toBe(true);
+    });
+    expect(api.acknowledgeException).toHaveBeenCalled();
   });
 });

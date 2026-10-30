@@ -38,6 +38,8 @@ export type ContentOptions = {
   diet: string | null;
   /** Multiplies every food gram amount (rounded to 5 g). */
   dietScale?: number;
+  /** Called for every food amount capped at the 100-unit contract limit. */
+  onClamp?: (clamp: QuantityClamp) => void;
   /** Multiplies every planned load (strength block 2 heavier, deload lighter). */
   loadScale?: number;
   /** Force these weekdays (existing personas: Mon/Tue/Thu/Sat). */
@@ -123,17 +125,48 @@ export function workoutDaysFor(
   });
 }
 
-/** Grams → library snapshot, preferring a household serving that divides evenly. */
-export function foodByGrams(lib: DemoLibraryIndex, slug: string, grams: number) {
+/** Contract max for a calculated item's quantityScaled: 100 units of the chosen serving. */
+export const MAX_QUANTITY_SCALED = NUTRIENT_SCALE * 100;
+
+/** An amount the generator had to shrink to fit the 100-unit contract limit. */
+export type QuantityClamp = {
+  slug: string;
+  requestedGrams: number;
+  servingLabel: string;
+  requestedUnits: number;
+  cappedUnits: number;
+};
+
+/**
+ * Grams → library snapshot.
+ * Household choice never uses a serving the library marks plausible = 0.
+ * The first plausible household serving that divides evenly (within 6%) wins;
+ * otherwise the plausible default stays, so the gram amount is unchanged.
+ * An implausible default falls back to the gram serving, or the next plausible serving.
+ */
+export function foodByGrams(
+  lib: DemoLibraryIndex,
+  slug: string,
+  grams: number,
+  onClamp?: (clamp: QuantityClamp) => void,
+) {
   const entry = lib.foods[slug];
   if (!entry) throw new Error(`Demo seed: food ${slug} not loaded`);
+  const implausible = new Set(entry.implausibleServingIds);
   const servings = entry.item.servings.filter((s) => s.conversionScaled != null);
+  if (servings.length === 0) throw new Error(`Demo seed: food ${slug} has no servings`);
   // conversionScaled is grams per serving × NUTRIENT_SCALE (1 egg = 70_000_000).
   const gramsOf = (conversionScaled: number) => conversionScaled / NUTRIENT_SCALE;
-  let best = servings.find((s) => s.id === entry.defaultServingId) ?? servings[0]!;
+  const plausible = servings.filter((s) => !implausible.has(s.id));
+  if (plausible.length === 0) throw new Error(`Demo seed: food ${slug} has no plausible serving`);
+  let best = plausible.find((s) => s.id === entry.defaultServingId);
+  if (!best) {
+    // The library default is plausible = 0. Use the gram serving, else the next plausible one.
+    best = plausible.find((s) => s.unit === "g") ?? plausible[0]!;
+  }
   let bestQty = grams / gramsOf(best.conversionScaled!);
   for (const serving of servings) {
-    if (serving.unit === "g") continue;
+    if (serving.unit === "g" || implausible.has(serving.id)) continue;
     const qty = grams / gramsOf(serving.conversionScaled!);
     const rounded = Math.round(qty * 2) / 2;
     if (rounded >= 0.5 && rounded <= 6 && Math.abs(qty - rounded) / qty < 0.06) {
@@ -142,7 +175,20 @@ export function foodByGrams(lib: DemoLibraryIndex, slug: string, grams: number) 
       break;
     }
   }
-  const qtyScaled = Math.max(1, Math.round(bestQty * NUTRIENT_SCALE));
+  // The plan contract (and the plan editor) allow at most 100 units of the chosen
+  // serving, so on a 1 g/unit serving the item tops out at 100 g. Callers that pass
+  // onClamp hear every cap: plan generation records it, and deviation logging throws.
+  const wanted = Math.max(1, Math.round(bestQty * NUTRIENT_SCALE));
+  const qtyScaled = Math.min(MAX_QUANTITY_SCALED, wanted);
+  if (qtyScaled < wanted) {
+    onClamp?.({
+      slug,
+      requestedGrams: grams,
+      servingLabel: best.label,
+      requestedUnits: wanted / NUTRIENT_SCALE,
+      cappedUnits: qtyScaled / NUTRIENT_SCALE,
+    });
+  }
   return foodSnapshotFromLibrary(entry.item, best.id, qtyScaled);
 }
 
@@ -176,7 +222,7 @@ export function mealPrescriptionsFor(
       photoRequired: false,
       required: meal.mealType !== "snack",
       items: meal.items.map((item) =>
-        foodByGrams(lib, item.slug, Math.max(5, Math.round((item.grams * scale) / 5) * 5)),
+        foodByGrams(lib, item.slug, Math.max(5, Math.round((item.grams * scale) / 5) * 5), opts.onClamp),
       ),
     };
   });
