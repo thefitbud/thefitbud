@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1699–1750. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-20 -->
 ### TW-20 · Check-in review
@@ -25,8 +25,6 @@
 1. **Purpose.** Review a submitted check-in, record an outcome, and close the loop with the client.
 2. **Entry.** Check-ins inbox, Home, header CTA, and trainer push "Priya submitted her check-in".
 3. **Legacy (do not keep).** `shots/d1440_11_client1_checkin_review.png`. Submission, measurements, an adherence count grid (10 equal tiles, mostly 0), active exceptions with raw ISO "Detected …Z", plan and notes. The actions (Record Outcome, Schedule Next, Record Note) are at the bottom, below the fold.
-
-   ![Figma vs implemented check-in review](../img/sbs_checkin_review.jpg){.shot}
 
 4. **Gaps to close.** The primary actions are below the fold. Zero tiles add noise. Raw timestamps. The trainee never sees that the trainer reviewed anything.
 5. **Target design.** Two columns at ≥1280.
@@ -74,17 +72,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY + REFERENCE (side by side): left = Figma/Stitch reference for density and hierarchy only (its banned elements, per 00-foundations.md §1.5, must not be built); right = old implemented UI, LEGACY: do not copy** (embedded in the guide section): `sbs_checkin_review.jpg`
-
-  ![sbs_checkin_review.jpg](../img/sbs_checkin_review.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_d1440_11_client1_checkin_review.jpg`
-
-  ![impl_d1440_11_client1_checkin_review.jpg](../img/impl_d1440_11_client1_checkin_review.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
