@@ -1,11 +1,13 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -51,6 +53,7 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
 import {
   isEditableTarget,
+  isDeliberatePointerDown,
   useRowShortcutGuard,
 } from "../hooks/useRowShortcutGuard";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
@@ -185,16 +188,26 @@ export function HomePage() {
   );
   const [showAllAttention, setShowAllAttention] = useState(showAllParam);
   const [reviewedOpen, setReviewedOpen] = useState(false);
-  const [focusIdx, setFocusIdx] = useState(0);
+  // HM5: the selected "Needs attention" row is held by relationshipId (the
+  // row key), not by index, so a poll or a re-sort keeps the same client
+  // selected. null = nothing picked yet; the first row is selected implicitly.
+  const [selectedRid, setSelectedRid] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     message: string;
     undo?: () => void;
   } | null>(null);
-  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
-  // HM4 F1: mirror of focusIdx, and a flag that tells the focusIdx effect not
-  // to move focus when the selection followed focus the trainer already moved.
-  const focusIdxRef = useRef(0);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  // HM4 F1 / HM5: mirror of selectedRid, and a flag that tells the selection
+  // effect not to move focus when the selection followed focus the trainer
+  // already moved (or that the removal hand-off placed itself).
+  const selectedRidRef = useRef<string | null>(null);
   const skipRowFocusRef = useRef(false);
+  // HM5 R2-2: the row that holds DOM focus, and the row order last rendered,
+  // so a removed focused row can hand focus to its neighbour.
+  const focusedRidRef = useRef<string | null>(null);
+  const prevVisibleIdsRef = useRef<string[]>([]);
+  // HM5 R2-3: pointer type of the last pointerdown in the grid.
+  const lastPointerTypeRef = useRef("");
   const {
     onGridFocus,
     onGridPointerDown,
@@ -461,6 +474,15 @@ export function HomePage() {
   const visibleOpen = showAllAttention
     ? openGroups
     : openGroups.slice(0, ATTENTION_CAP);
+  const visibleIds = visibleOpen.map((row) => row.group.relationshipId);
+  const visibleKey = visibleIds.join("|");
+  // Index of the selected client in the current order (-1: none on screen).
+  const focusIdx =
+    selectedRid == null ? 0 : visibleIds.indexOf(selectedRid);
+  const rowElAt = (idx: number) => {
+    const rid = visibleIds[idx];
+    return rid ? rowRefs.current.get(rid) : undefined;
+  };
 
   function openException(id: string) {
     setParams((prev) => {
@@ -493,8 +515,9 @@ export function HomePage() {
     noteDrawerClosed();
     closeDrawer();
     // Restored focus must not arm the a / n / o row shortcuts (HM4).
-    focusWithoutArming(rowRefs.current[focusIdx]);
-  }, [closeDrawer, focusIdx, focusWithoutArming, noteDrawerClosed]);
+    focusWithoutArming(rowElAt(focusIdx));
+    // rowElAt reads the current visibleIds (visibleKey).
+  }, [closeDrawer, focusIdx, visibleKey, focusWithoutArming, noteDrawerClosed]);
 
   // Ask drawer: remember whether the open ask was just answered so the close
   // handler can skip its (soon to be removed) row and pick a neighbour.
@@ -611,18 +634,19 @@ export function HomePage() {
     if ((key === "a" || key === "n" || key === "o") && !allowRowShortcut(ev)) {
       return;
     }
+    const cur = Math.max(0, focusIdx);
     if (key === "arrowdown" || key === "j") {
       ev.preventDefault();
-      setFocusIdx((i) => Math.min(max, i + 1));
+      selectIdx(Math.min(max, cur + 1));
     } else if (key === "arrowup" || key === "k") {
       ev.preventDefault();
-      setFocusIdx((i) => Math.max(0, i - 1));
+      selectIdx(Math.max(0, cur - 1));
     } else if (key === "home") {
       ev.preventDefault();
-      setFocusIdx(0);
+      selectIdx(0);
     } else if (key === "end") {
       ev.preventDefault();
-      setFocusIdx(max);
+      selectIdx(max);
     } else if (key === "enter") {
       ev.preventDefault();
       const row = visibleOpen[focusIdx];
@@ -650,43 +674,119 @@ export function HomePage() {
     } else if (key === "escape" && drawerExceptionId) {
       noteDrawerClosed();
       closeDrawer();
-      focusWithoutArming(rowRefs.current[focusIdx]);
+      focusWithoutArming(rowElAt(focusIdx));
     }
+  }
+
+  /** Keyboard navigation: select the row at idx; the effect focuses it. */
+  function selectIdx(idx: number) {
+    const rid = visibleIds[idx];
+    if (!rid) return;
+    selectedRidRef.current = rid;
+    setSelectedRid(rid);
+  }
+
+  function ridFromTarget(target: EventTarget | null): string | null {
+    if (!target || typeof (target as Element).closest !== "function") {
+      return null;
+    }
+    const rowEl = (target as Element).closest('[role="row"]');
+    if (!rowEl) return null;
+    for (const [rid, el] of rowRefs.current) {
+      if (el === rowEl) return visibleIds.includes(rid) ? rid : null;
+    }
+    return null;
   }
 
   // HM4 F1: when focus (click, Tab, Shift+Tab) lands inside a row, that row
   // becomes the selected one, so a / n / o act on the row that has focus.
   function selectRowFromTarget(target: EventTarget | null) {
-    if (!target || typeof (target as Element).closest !== "function") return;
-    const rowEl = (target as Element).closest('[role="row"]');
-    if (!rowEl) return;
-    const idx = rowRefs.current.indexOf(rowEl as HTMLDivElement);
-    if (idx < 0 || idx >= visibleOpen.length) return;
-    if (idx === focusIdxRef.current) return;
-    focusIdxRef.current = idx;
+    const rid = ridFromTarget(target);
+    if (!rid) return;
+    if (rid === selectedRidRef.current) return;
+    selectedRidRef.current = rid;
     skipRowFocusRef.current = true;
-    setFocusIdx(idx);
+    setSelectedRid(rid);
   }
 
   function onGridFocusIn(ev: ReactFocusEvent<HTMLDivElement>) {
+    focusedRidRef.current = ridFromTarget(ev.target);
     selectRowFromTarget(ev.target);
     onGridFocus();
   }
 
+  function onGridFocusOut(ev: ReactFocusEvent<HTMLDivElement>) {
+    const next = ev.relatedTarget as Node | null;
+    if (next ? !ev.currentTarget.contains(next) : ev.target.isConnected) {
+      // Focus left the grid (a removed row keeps its id for the hand-off).
+      focusedRidRef.current = null;
+    }
+  }
+
+  // HM5 R2-3: only a primary-button mouse / pen press selects and arms on
+  // pointerdown. Right / middle clicks and touches (which may start a scroll)
+  // don't; a touch tap selects and arms when it ends as a click.
   function onGridPointerDownIn(ev: ReactPointerEvent<HTMLDivElement>) {
+    lastPointerTypeRef.current = ev.pointerType;
+    if (!isDeliberatePointerDown(ev)) return;
+    selectRowFromTarget(ev.target);
+    onGridPointerDown();
+  }
+
+  function onGridClickIn(ev: ReactMouseEvent<HTMLDivElement>) {
+    if (ev.button !== 0 || ev.detail === 0) return; // keyboard-made clicks
+    const native = ev.nativeEvent as MouseEvent & { pointerType?: string };
+    const pointerType = native.pointerType || lastPointerTypeRef.current;
+    if (pointerType !== "touch") return;
     selectRowFromTarget(ev.target);
     onGridPointerDown();
   }
 
   useEffect(() => {
-    focusIdxRef.current = focusIdx;
+    selectedRidRef.current = selectedRid;
     if (skipRowFocusRef.current) {
       // Focus is already inside this row (maybe on its button); keep it there.
       skipRowFocusRef.current = false;
       return;
     }
-    rowRefs.current[focusIdx]?.focus();
-  }, [focusIdx]);
+    if (selectedRid) rowRefs.current.get(selectedRid)?.focus();
+  }, [selectedRid]);
+
+  // HM5 R2-2: when the selected client leaves the list (acknowledged, resolved
+  // or pushed past the cap), select the next row, or the previous one if it
+  // was last. If it held focus, focus follows (unarmed); with no rows left,
+  // focus goes to the page title. Reorders and insertions change nothing here.
+  useLayoutEffect(() => {
+    const prev = prevVisibleIdsRef.current;
+    prevVisibleIdsRef.current = visibleIds;
+    const rid = selectedRidRef.current;
+    if (rid == null || visibleIds.includes(rid)) return;
+    const at = prev.indexOf(rid);
+    let next: string | null = null;
+    if (at >= 0) {
+      next =
+        prev.slice(at + 1).find((id) => visibleIds.includes(id)) ??
+        [...prev.slice(0, at)].reverse().find((id) => visibleIds.includes(id)) ??
+        null;
+    }
+    if (next == null && visibleIds.length > 0) {
+      next = visibleIds[Math.min(Math.max(at, 0), visibleIds.length - 1)]!;
+    }
+    const active = document.activeElement;
+    const hadFocus =
+      focusedRidRef.current === rid &&
+      (active == null || active === document.body);
+    selectedRidRef.current = next;
+    if (next != null) skipRowFocusRef.current = true;
+    setSelectedRid(next);
+    if (hadFocus) {
+      focusedRidRef.current = next;
+      focusWithoutArming(
+        next != null ? rowRefs.current.get(next) : homeTitleRef.current,
+      );
+    }
+    // Runs when the rendered row order changes; visibleKey encodes visibleIds.
+  }, [visibleKey]);
 
   const attentionCount = openGroups.length;
   const checkinCount = checkins.length;
@@ -891,7 +991,9 @@ export function HomePage() {
                 tabIndex={0}
                 onKeyDown={onGridKey}
                 onFocus={onGridFocusIn}
+                onBlur={onGridFocusOut}
                 onPointerDown={onGridPointerDownIn}
+                onClick={onGridClickIn}
               >
                 {visibleOpen.map((row, idx) => {
                   const { group, primary } = row;
@@ -910,7 +1012,8 @@ export function HomePage() {
                       role="row"
                       tabIndex={-1}
                       ref={(el) => {
-                        rowRefs.current[idx] = el;
+                        if (el) rowRefs.current.set(group.relationshipId, el);
+                        else rowRefs.current.delete(group.relationshipId);
                       }}
                       aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}. Review button.`}
                     >

@@ -17,6 +17,12 @@ const PRIYA_EXC = "33333333-3333-4333-8333-333333333333";
 const SANA_REL = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const SANA_EXC = "44444444-4444-4444-8444-444444444444";
 
+const AARAV_REL = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const AARAV_EXC = "55555555-5555-4555-8555-555555555555";
+
+// HM5: the realtime hint callback triggers the same quiet refetch as the poll.
+const hints = vi.hoisted(() => ({ refresh: null as null | (() => void) }));
+
 const api = vi.hoisted(() => ({
   getAttentionGroups: vi.fn(),
   listCoachAsks: vi.fn(),
@@ -57,7 +63,9 @@ vi.mock("../components/OfflineBanner", () => ({
   useOnlineStatus: () => true,
 }));
 vi.mock("../realtime/useRealtimeHints", () => ({
-  useRealtimeHints: () => undefined,
+  useRealtimeHints: (_client: unknown, _ids: unknown, onHint: () => void) => {
+    hints.refresh = onHint;
+  },
 }));
 // Stub drawers: only the close path matters here.
 vi.mock("../components/ExceptionDrawer", () => ({
@@ -364,5 +372,252 @@ describe("HomePage row shortcuts guard (HM4)", () => {
     type("A", { shiftKey: true });
     type("a", { isComposing: true });
     noActionTaken();
+  });
+});
+
+// HM5: selection follows the client (relationshipId), not the row index.
+describe("HomePage row selection follows the client (HM5)", () => {
+  const ROHAN = () => group(ROHAN_REL, "Rohan Mehta", ROHAN_EXC, "critical");
+  const FARHAN = () => group(FARHAN_REL, "Farhan Ali", FARHAN_EXC, "attention");
+  const PRIYA = () => group(PRIYA_REL, "Priya Nair", PRIYA_EXC, "attention");
+  const SANA = () => group(SANA_REL, "Sana Khan", SANA_EXC, "attention");
+
+  beforeEach(() => {
+    api.getAttentionGroups.mockResolvedValue({
+      groups: [ROHAN(), FARHAN(), PRIYA(), SANA()],
+    });
+    api.listCoachAsks.mockResolvedValue({ items: [] });
+    api.getReengagementCandidates.mockResolvedValue({ items: [] });
+    api.getActivityFeed.mockResolvedValue({ events: [] });
+    api.listSubscriptionAttention.mockResolvedValue({ items: [] });
+    api.listTrainerCheckinInbox.mockResolvedValue({ items: [] });
+    api.listClients.mockResolvedValue({ items: [] });
+    api.listInvitations.mockResolvedValue({ items: [] });
+    api.acknowledgeException.mockResolvedValue({});
+    api.getException.mockResolvedValue({
+      sourceEntityType: "workout_assignment",
+      sourceEntityId: "x",
+    });
+    api.nudgeActivity.mockResolvedValue({});
+    realLocation = window.location;
+    assignSpy = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...realLocation, assign: assignSpy },
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: realLocation,
+    });
+  });
+
+  function rowOf(name: string) {
+    const row = rows().find((r) => r.textContent?.includes(name));
+    if (!row) throw new Error(`no row for ${name}`);
+    return row;
+  }
+
+  function ringedNames() {
+    return rows()
+      .filter((r) => r.className.includes("is-focused"))
+      .map((r) => r.querySelector("b")?.textContent);
+  }
+
+  /** Mouse click on a row's name cell: pointerdown, then focus lands on the row. */
+  function clickRow(name: string) {
+    fireEvent.pointerDown(screen.getByText(name), { pointerType: "mouse", button: 0 });
+    act(() => rowOf(name).focus());
+  }
+
+  /** A quiet refetch (same path as the 4 s poll) returning these groups. */
+  async function serverNow(groups: ReturnType<typeof group>[]) {
+    api.getAttentionGroups.mockResolvedValue({ groups });
+    await act(async () => {
+      hints.refresh?.();
+    });
+    await act(async () => {});
+  }
+
+  function expectAcked(exc: string) {
+    advance(5000);
+    expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
+    expect(api.acknowledgeException.mock.calls[0]?.[0]).toBe(exc);
+  }
+
+  it("R2-1: a refetch that reorders rows keeps the focused client selected", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    expect(rows().indexOf(rowOf("Priya Nair"))).toBe(2);
+    // Priya becomes critical and sorts first; Rohan moves to row 2.
+    await serverNow([
+      ROHAN(),
+      FARHAN(),
+      group(PRIYA_REL, "Priya Nair", PRIYA_EXC, "critical"),
+      SANA(),
+    ]);
+    expect(rows().indexOf(rowOf("Priya Nair"))).toBe(0);
+    expect(document.activeElement).toBe(rowOf("Priya Nair"));
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    type("a");
+    expectAcked(PRIYA_EXC);
+  });
+
+  it("R2-1: a refetch that inserts a row above keeps the focused client selected", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    await serverNow([
+      group(AARAV_REL, "Aarav Shah", AARAV_EXC, "critical"),
+      ROHAN(),
+      FARHAN(),
+      PRIYA(),
+      SANA(),
+    ]);
+    expect(rows().indexOf(rowOf("Priya Nair"))).toBe(3);
+    expect(document.activeElement).toBe(rowOf("Priya Nair"));
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    type("n");
+    await act(async () => {});
+    expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
+    expect(api.nudgeActivity.mock.calls[0]?.[0]).toBe(PRIYA_REL);
+  });
+
+  it("R2-1: another client acked elsewhere (row removed above) keeps the focused client", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    // QA repro: Rohan acked from another session; the poll drops his row.
+    await serverNow([FARHAN(), PRIYA(), SANA()]);
+    expect(rows().indexOf(rowOf("Priya Nair"))).toBe(1);
+    expect(document.activeElement).toBe(rowOf("Priya Nair"));
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    type("a");
+    expectAcked(PRIYA_EXC);
+  });
+
+  it("R2-1: arrows move from the focused client's new position", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    await serverNow([FARHAN(), PRIYA(), SANA()]);
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(rowOf("Sana Khan"));
+    type("o");
+    expect(assignSpy).toHaveBeenCalledWith(`/clients/${SANA_REL}`);
+  });
+
+  it("R2-2: acking the focused middle row hands focus to the next row", async () => {
+    await renderHome("/");
+    clickRow("Farhan Ali");
+    type("a");
+    expect(screen.queryByText("Farhan Ali")).toBeNull();
+    expect(document.activeElement).toBe(rowOf("Priya Nair"));
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(rowOf("Rohan Mehta"));
+  });
+
+  it("R2-2: acking the focused last row hands focus to the previous row; arrows still work", async () => {
+    await renderHome("/");
+    clickRow("Sana Khan");
+    type("a");
+    expect(screen.queryByText("Sana Khan")).toBeNull();
+    expect(document.activeElement).toBe(rowOf("Priya Nair"));
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(rowOf("Farhan Ali"));
+    type("j");
+    expect(document.activeElement).toBe(rowOf("Priya Nair"));
+  });
+
+  it("R2-2: acking the only row moves focus to the page title, not <body>", async () => {
+    api.getAttentionGroups.mockResolvedValue({ groups: [ROHAN()] });
+    await renderHome("/");
+    clickRow("Rohan Mehta");
+    type("a");
+    expect(screen.queryByRole("grid")).toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.tagName).toBe("H1");
+  });
+
+  it("R2-2: a removed selected row doesn't steal focus from outside the grid", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    const outside = document.createElement("input");
+    document.body.appendChild(outside);
+    act(() => outside.focus());
+    await serverNow([ROHAN(), FARHAN(), SANA()]);
+    expect(document.activeElement).toBe(outside);
+    expect(ringedNames()).toEqual(["Sana Khan"]);
+    outside.remove();
+  });
+
+  it("R2-2: a removed selected row doesn't pull focus back after the trainer left the grid", async () => {
+    await renderHome("/");
+    clickRow("Priya Nair");
+    // Click on blank page: focus goes to <body>. Focusing a row now would
+    // scroll the page to it.
+    act(() => (document.activeElement as HTMLElement).blur());
+    expect(document.activeElement).toBe(document.body);
+    await serverNow([ROHAN(), FARHAN(), SANA()]);
+    expect(document.activeElement).toBe(document.body);
+    expect(ringedNames()).toEqual(["Sana Khan"]);
+  });
+
+  it("R2-3: right-click, middle-click and macOS Ctrl+click don't select or arm", async () => {
+    await renderHome("/");
+    fireEvent.pointerDown(screen.getByText("Priya Nair"), { pointerType: "mouse", button: 2 });
+    fireEvent.pointerDown(screen.getByText("Sana Khan"), { pointerType: "mouse", button: 1 });
+    fireEvent.pointerDown(screen.getByText("Farhan Ali"), {
+      pointerType: "mouse",
+      button: 0,
+      ctrlKey: true,
+    });
+    expect(ringedNames()).toEqual(["Rohan Mehta"]);
+    type("a");
+    noActionTaken();
+  });
+
+  it("R2-3: right-click doesn't move the selection of an armed grid", async () => {
+    const grid = await renderHome("/");
+    tabInto(grid);
+    fireEvent.pointerDown(screen.getByText("Priya Nair"), { pointerType: "mouse", button: 2 });
+    expect(ringedNames()).toEqual(["Rohan Mehta"]);
+    type("a");
+    expectAcked(ROHAN_EXC);
+  });
+
+  it("R2-3: a touch that may start a scroll doesn't select or arm", async () => {
+    await renderHome("/");
+    fireEvent.pointerDown(screen.getByText("Priya Nair"), { pointerType: "touch", button: 0 });
+    expect(ringedNames()).toEqual(["Rohan Mehta"]);
+    type("a");
+    noActionTaken();
+  });
+
+  it("R2-3: a touch tap that ends as a click selects and arms", async () => {
+    await renderHome("/");
+    const name = screen.getByText("Priya Nair");
+    // Real tap order: pointerdown (touch), focus on the row, then click.
+    fireEvent.pointerDown(name, { pointerType: "touch", button: 0 });
+    act(() => rowOf("Priya Nair").focus());
+    fireEvent.click(name, { button: 0, detail: 1 });
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    type("a");
+    expectAcked(PRIYA_EXC);
+  });
+
+  it("R2-4: pointerdown alone (no focus event, as in Safari) selects the pressed row", async () => {
+    const grid = await renderHome("/");
+    tabInto(grid);
+    expect(document.activeElement).toBe(grid);
+    fireEvent.pointerDown(screen.getByText("Priya Nair"), { pointerType: "mouse", button: 0 });
+    // No focus moved: the grid itself still has focus.
+    expect(document.activeElement).toBe(grid);
+    expect(ringedNames()).toEqual(["Priya Nair"]);
+    type("a");
+    expectAcked(PRIYA_EXC);
   });
 });

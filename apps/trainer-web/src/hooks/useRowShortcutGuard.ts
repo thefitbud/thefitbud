@@ -25,6 +25,26 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
+ * HM5 R2-3: whether a pointerdown is a deliberate primary press that may
+ * select a row and arm the shortcuts on its own. Only the primary button of a
+ * mouse or pen counts (an empty pointerType is treated as a mouse). Right and
+ * middle clicks, macOS Ctrl+click (context menu) and touch, which may be the
+ * start of a scroll, don't; a touch tap is handled when it ends as a click.
+ */
+export function isDeliberatePointerDown(ev: {
+  button: number;
+  ctrlKey: boolean;
+  pointerType: string;
+}): boolean {
+  if (ev.button !== 0 || ev.ctrlKey) return false;
+  return (
+    ev.pointerType === "mouse" ||
+    ev.pointerType === "pen" ||
+    ev.pointerType === ""
+  );
+}
+
+/**
  * HM4: guard for the Home "Needs attention" single-key shortcuts (a / n / o).
  *
  * The shortcuts are only honoured once the trainer has deliberately reached
@@ -56,7 +76,10 @@ export function useRowShortcutGuard() {
     }
   }, []);
 
-  /** Grid onPointerDown: a click or tap on a row is deliberate. */
+  /**
+   * A deliberate primary click (see isDeliberatePointerDown) or a touch tap
+   * that ended as a click.
+   */
   const onGridPointerDown = useCallback(() => {
     armedRef.current = true;
   }, []);
