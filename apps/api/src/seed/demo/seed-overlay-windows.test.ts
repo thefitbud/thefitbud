@@ -11,6 +11,13 @@ import { evaluateRelationshipExceptions } from "../../domain/exceptions.js";
  * once it has closed. Otherwise the first coach read auto-resolves seeded attention
  * items (evaluateRelationshipExceptions finds no matching candidate). Same instants
  * as seed-timestamps.test.ts (several local times of day plus a Monday).
+ *
+ * Task QS4: the seed must also already hold every exception that detection would
+ * raise, so the first coach read creates nothing either. The extra instants are
+ * where it used to: Sunday evening IST (attention_hole clients' Saturday workout
+ * has closed unlogged), Monday evening IST, and 18:30Z / 19:00Z, when London
+ * (Fatima Khan) is still a civil day behind IST and detection's 3-day lookback
+ * starts a day earlier for her (before and after the 25 Oct BST -> GMT change).
  */
 const REFERENCE_INSTANTS = [
   "2026-10-17T14:30:00.000Z",
@@ -19,6 +26,10 @@ const REFERENCE_INSTANTS = [
   "2026-10-22T12:37:00.000Z",
   "2026-10-22T00:30:00.000Z",
   "2026-10-26T00:30:00.000Z",
+  "2026-10-25T14:30:00.000Z",
+  "2026-10-26T14:30:00.000Z",
+  "2026-10-21T18:30:00.000Z",
+  "2026-10-25T19:00:00.000Z",
 ];
 
 const CLOSED_WINDOW_TYPES = "('overdue_meal', 'skipped_meal', 'missed_workout', 'skipped_workout')";
@@ -83,17 +94,34 @@ describe.each(REFERENCE_INSTANTS)("demo seed overlay windows at %s", (now) => {
     expect(Number(q(`select count(*) from (${EXCEPTION_ITEMS}) where status <> 'resolved' and type in ${CLOSED_WINDOW_TYPES}`)[0]?.[0])).toBeGreaterThan(0);
   });
 
-  it("auto-resolves nothing on the first coach read after reset", async () => {
+  it("first coach read after reset creates, resolves and changes nothing", async () => {
     const before = Number(q("select count(*) from exceptions where status <> 'resolved'")[0]?.[0]);
     expect(before).toBeGreaterThan(0);
+    const snapshot = () => rows("select * from exceptions order by id");
+    const tableBefore = snapshot();
+    const created: string[] = [];
     const resolved: string[] = [];
-    for (const [relId] of q("select id from coaching_relationships where status = 'active' order by id")) {
+    let activated = 0;
+    for (const [relId, name] of q(`select r.id, u.display_name from coaching_relationships r
+        left join trainee_profiles u on u.user_id = r.trainee_user_id where r.status = 'active' order by r.id`)) {
+      const known = new Set(q(`select id from exceptions where coaching_relationship_id = '${String(relId)}'`).map((r) => String(r[0])));
       const result = await evaluateRelationshipExceptions(handle.db, String(relId), now);
       for (const exception of result.resolvedExceptions) {
-        resolved.push(`${exception.id} ${exception.type} ${exception.sourceEntityType}`);
+        resolved.push(`${String(name)}: ${exception.type} ${exception.sourceEntityType} ${exception.sourceEntityId}`);
       }
+      for (const exception of result.exceptions) {
+        if (!known.has(exception.id)) {
+          created.push(`${String(name)}: ${exception.type} ${exception.sourceEntityType} ${exception.sourceEntityId}`);
+        }
+      }
+      expect(result.created).toBe(result.exceptions.filter((e) => !known.has(e.id)).length);
+      activated += result.activated;
     }
+    expect(created).toEqual([]);
     expect(resolved).toEqual([]);
+    expect(activated).toBe(0);
+    // Nothing else moved either: the exceptions table is row-for-row unchanged.
+    expect(snapshot()).toEqual(tableBefore);
     // Evaluate keeps at most ten open per client; the seed must not start above it.
     expect(
       rows(`select coaching_relationship_id, count(*) from exceptions
