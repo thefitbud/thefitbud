@@ -39,6 +39,11 @@ function relId(trainerEmail: string, traineeEmail: string): string {
   );
 }
 
+/** Kavya and Nikhil's coaching ended 10 days before the reference instant. */
+function demoEndedAt(now: string): string {
+  return new Date(Date.parse(now) - 10 * 86_400_000).toISOString();
+}
+
 /** Never seed activity timestamps after "now". */
 function clampIsoToNow(iso: string, nowIso: string): string {
   return Date.parse(iso) > Date.parse(nowIso) ? nowIso : iso;
@@ -119,7 +124,7 @@ function insertRelationship(input: {
   endedAt?: string | null;
 }): string {
   const id = relId(input.trainerEmail, input.traineeEmail);
-  return `INSERT INTO coaching_relationships (id, trainer_user_id, trainee_user_id, status, invitation_id, started_at, ended_at, ended_by_user_id, end_reason, reactivated_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(userId(input.trainerEmail))}, ${sqlQuote(userId(input.traineeEmail))}, ${sqlQuote(input.status)}, NULL, ${sqlQuote(input.startedAt)}, ${input.endedAt ? sqlQuote(input.endedAt) : "NULL"}, NULL, NULL, NULL, ${sqlQuote(input.now)}, ${sqlQuote(input.now)});`;
+  return `INSERT INTO coaching_relationships (id, trainer_user_id, trainee_user_id, status, invitation_id, started_at, ended_at, ended_by_user_id, end_reason, reactivated_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(userId(input.trainerEmail))}, ${sqlQuote(userId(input.traineeEmail))}, ${sqlQuote(input.status)}, NULL, ${sqlQuote(input.startedAt)}, ${input.endedAt ? sqlQuote(input.endedAt) : "NULL"}, NULL, NULL, NULL, ${sqlQuote(input.endedAt ? input.startedAt : input.now)}, ${sqlQuote(input.endedAt ?? input.now)});`;
 }
 
 function buildTrainerTemplates(now: string, lib: DemoLibraryIndex): string {
@@ -321,7 +326,7 @@ function buildAssignmentsAndLogs(input: {
         Date.parse(windowStart) + 12 * 3_600_000,
       ).toISOString();
       lines.push(
-        `INSERT INTO meal_assignments (id, coaching_relationship_id, plan_id, plan_version_id, meal_prescription_id, meal_name, meal_prescription_json, local_date, window_starts_at, window_ends_at, photo_required, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(meal.id)}, ${sqlQuote(meal.name)}, ${jsonQuote(meal)}, ${sqlQuote(localDate)}, ${sqlQuote(windowStart)}, ${sqlQuote(windowEnd)}, 0, 'scheduled', NULL, NULL, ${sqlQuote(windowStart)}, ${sqlQuote(windowStart)});`,
+        `INSERT INTO meal_assignments (id, coaching_relationship_id, plan_id, plan_version_id, meal_prescription_id, meal_name, meal_prescription_json, local_date, window_starts_at, window_ends_at, photo_required, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(assignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(meal.id)}, ${sqlQuote(meal.name)}, ${jsonQuote(meal)}, ${sqlQuote(localDate)}, ${sqlQuote(windowStart)}, ${sqlQuote(windowEnd)}, 0, 'scheduled', NULL, NULL, ${sqlQuote(clampIsoToNow(windowStart, logCap))}, ${sqlQuote(clampIsoToNow(windowStart, logCap))});`,
       );
 
       // Never log a meal whose slot time hasn't started yet, and never after end.
@@ -358,7 +363,7 @@ function buildAssignmentsAndLogs(input: {
       const wStart = localDayStartIso(localDate, "07:00", input.timezone);
       const wEnd = new Date(Date.parse(wStart) + 24 * 3_600_000).toISOString();
       lines.push(
-        `INSERT INTO workout_assignments (id, coaching_relationship_id, plan_id, plan_version_id, workout_day_id, workout_day_name, workout_day_json, local_date, window_starts_at, window_ends_at, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(workoutDay.id)}, ${sqlQuote(workoutDay.name)}, ${jsonQuote(workoutDay)}, ${sqlQuote(localDate)}, ${sqlQuote(wStart)}, ${sqlQuote(wEnd)}, 'scheduled', NULL, NULL, ${sqlQuote(wStart)}, ${sqlQuote(wStart)});`,
+        `INSERT INTO workout_assignments (id, coaching_relationship_id, plan_id, plan_version_id, workout_day_id, workout_day_name, workout_day_json, local_date, window_starts_at, window_ends_at, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(workoutDay.id)}, ${sqlQuote(workoutDay.name)}, ${jsonQuote(workoutDay)}, ${sqlQuote(localDate)}, ${sqlQuote(wStart)}, ${sqlQuote(wEnd)}, 'scheduled', NULL, NULL, ${sqlQuote(clampIsoToNow(wStart, logCap))}, ${sqlQuote(clampIsoToNow(wStart, logCap))});`,
       );
       const workoutLog = shouldLogWorkout(
         input.state,
@@ -366,7 +371,8 @@ function buildAssignmentsAndLogs(input: {
         input.activityUntilDate,
         adherenceStart,
       );
-      if (workoutLog) {
+      // Like meals: never start a workout before its slot opens, or after the end.
+      if (workoutLog && Date.parse(wStart) <= Date.parse(logCap)) {
         const execId = demoUuid("workout-execution", workoutAssignmentId);
         const completedAt = clampIsoToNow(
           new Date(Date.parse(wStart) + 60 * 60_000).toISOString(),
@@ -587,7 +593,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     Date.parse(now) - 9 * 86_400_000,
   ).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(ROHAN_RESOLVED_EXCEPTION_ID)}, ${sqlQuote(rohanRel)}, 'missed_workout', 'attention', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -10)))}, 'Missed workout', ${sqlQuote(rohanResolvedDetected)}, ${sqlQuote(rohanResolvedAt)}, 'talked', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(ROHAN_RESOLVED_EXCEPTION_ID)}, ${sqlQuote(rohanRel)}, 'missed_workout', 'attention', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "rohan.slipping@demo.fitbud.test", addDaysFromLocalDate(refDate, -10)))}, 'Missed workout', ${sqlQuote(rohanResolvedDetected)}, ${sqlQuote(rohanResolvedAt)}, 'talked', ${sqlQuote(rohanResolvedDetected)}, ${sqlQuote(now)});`,
   );
 
   // Unlogged past meal with resolved exception → Diet shows "Closed by …".
@@ -609,7 +615,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   ).toISOString();
   lines.push(
     `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(rohanLockedMealId)};`,
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(rohanLockedMealExceptionId)}, ${sqlQuote(rohanRel)}, 'overdue_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(rohanLockedMealId)}, 'Missed lunch', ${sqlQuote(rohanLockedDetected)}, ${sqlQuote(rohanLockedResolved)}, 'talked', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(rohanLockedMealExceptionId)}, ${sqlQuote(rohanRel)}, 'overdue_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(rohanLockedMealId)}, 'Missed lunch', ${sqlQuote(rohanLockedDetected)}, ${sqlQuote(rohanLockedResolved)}, 'talked', ${sqlQuote(rohanLockedDetected)}, ${sqlQuote(now)});`,
   );
 
   const meeraRel = relId("rahul.coach@demo.fitbud.test", "meera.ack@demo.fitbud.test");
@@ -622,7 +628,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     Date.parse(`${addDaysFromLocalDate(refDate, -1)}T10:00:00.000Z`),
   ).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, acknowledged_at, created_at, updated_at) VALUES (${sqlQuote(ackExceptionId)}, ${sqlQuote(meeraRel)}, 'overdue_meal', 'critical', 'acknowledged', 'demo-v1', 'meal_assignment', ${sqlQuote(ackMealId)}, 'Missed lunch', ${sqlQuote(meeraDetected)}, ${sqlQuote(meeraAcked)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, acknowledged_at, created_at, updated_at) VALUES (${sqlQuote(ackExceptionId)}, ${sqlQuote(meeraRel)}, 'overdue_meal', 'critical', 'acknowledged', 'demo-v1', 'meal_assignment', ${sqlQuote(ackMealId)}, 'Missed lunch', ${sqlQuote(meeraDetected)}, ${sqlQuote(meeraAcked)}, ${sqlQuote(meeraDetected)}, ${sqlQuote(now)});`,
     `INSERT INTO exception_actions (id, exception_id, trainer_user_id, action, note, created_at) VALUES (${sqlQuote(demoUuid("exception-action", "meera-ack"))}, ${sqlQuote(ackExceptionId)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, 'acknowledge', 'Watching', ${sqlQuote(meeraAcked)});`,
   );
   const resolvedMealId = demoUuid("meal-assignment", "meera.ack@demo.fitbud.test", addDaysFromLocalDate(refDate, -5), MEAL_PRESCRIPTION_IDS.breakfast);
@@ -634,7 +640,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     Date.parse(`${addDaysFromLocalDate(refDate, -4)}T11:00:00.000Z`),
   ).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(resolvedExceptionId)}, ${sqlQuote(meeraRel)}, 'skipped_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(resolvedMealId)}, 'Skipped breakfast', ${sqlQuote(resolvedDetected)}, ${sqlQuote(resolvedAt)}, 'client_logged_later', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, resolved_at, resolution_outcome, created_at, updated_at) VALUES (${sqlQuote(resolvedExceptionId)}, ${sqlQuote(meeraRel)}, 'skipped_meal', 'attention', 'resolved', 'demo-v1', 'meal_assignment', ${sqlQuote(resolvedMealId)}, 'Skipped breakfast', ${sqlQuote(resolvedDetected)}, ${sqlQuote(resolvedAt)}, 'client_logged_later', ${sqlQuote(resolvedDetected)}, ${sqlQuote(now)});`,
     // Overlay replaces any auto-seeded compliance so late-log flags stay accurate.
     `DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(resolvedMealId)};`,
     `INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, record_version, logged_at, deviation_kind, notes, photo_required, photo_intent_json, media_asset_id, items_json, kcal_scaled, protein_scaled, carbs_scaled, fat_scaled, logged_late, logged_after_resolve, client_logged_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("meal-compliance", resolvedMealId))}, ${sqlQuote(resolvedMealId)}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("plan-version", meeraRel, "v2"))}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'confirmed', 0, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, NULL, 'Client logged later', 0, NULL, NULL, NULL, 300000000, 15000000, 40000000, 8000000, 1, 1, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, ${sqlQuote(`${addDaysFromLocalDate(refDate, -3)}T12:00:00.000Z`)}, ${sqlQuote(now)});`,
@@ -938,7 +944,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     Date.parse(`${addDaysFromLocalDate(refDate, -11)}T08:00:00.000Z`),
   ).toISOString();
   lines.push(
-    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, closed_reason, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "kavya-ended"))}, ${sqlQuote(kavyaRel)}, 'missed_workout', 'critical', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "kavya.ended@demo.fitbud.test", addDaysFromLocalDate(refDate, -12)))}, 'Missed workout', ${sqlQuote(kavyaDetected)}, 'coaching_ended', ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, closed_reason, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "kavya-ended"))}, ${sqlQuote(kavyaRel)}, 'missed_workout', 'critical', 'resolved', 'demo-v1', 'workout_assignment', ${sqlQuote(demoUuid("workout-assignment", "kavya.ended@demo.fitbud.test", addDaysFromLocalDate(refDate, -12)))}, 'Missed workout', ${sqlQuote(kavyaDetected)}, 'coaching_ended', ${sqlQuote(kavyaDetected)}, ${sqlQuote(demoEndedAt(now))});`,
   );
 
   const pendingHash = sha256HexSync(DEMO_ANITA_PENDING_INVITE_TOKEN);
@@ -980,9 +986,7 @@ export function buildDemoHistorySql(input: HistoryInput): string {
     const startedAt = demoStartedAt(account.email, refDate, defaultStartedAt);
     const ended =
       account.state === "ended" || account.state === "reactivation_pending";
-    const endedAt = ended
-      ? new Date(Date.parse(now) - 10 * 86_400_000).toISOString()
-      : null;
+    const endedAt = ended ? demoEndedAt(now) : null;
     lines.push(
       insertRelationship({
         trainerEmail: account.trainerEmail,
@@ -1012,13 +1016,15 @@ export function buildDemoHistorySql(input: HistoryInput): string {
       continue;
     }
 
+    // Ended clients: nothing is touched after ended_at (config, plan, logs).
+    const activityUntilIso = endedAt ?? now;
     lines.push(
       buildOnboardingStack({
         relId: rid,
         traineeEmail: account.email,
         trainerEmail: account.trainerEmail,
         state: account.state,
-        now,
+        now: activityUntilIso,
         startedAt,
       }),
     );
@@ -1028,7 +1034,7 @@ export function buildDemoHistorySql(input: HistoryInput): string {
       traineeEmail: account.email,
       state: account.state,
       refDate,
-      now,
+      now: activityUntilIso,
       startedAt,
       lib: input.libraryIndex,
     });
@@ -1037,7 +1043,6 @@ export function buildDemoHistorySql(input: HistoryInput): string {
     const timezone = account.email.startsWith("deepak.")
       ? "Asia/Dubai"
       : "Asia/Kolkata";
-    const activityUntilIso = endedAt ?? now;
     const activityUntilDate = endedAt
       ? activityUntilIso.slice(0, 10)
       : refDate;

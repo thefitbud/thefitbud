@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, X } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
@@ -260,6 +260,8 @@ export function ExceptionDrawer({
   const nudgeRef = useRef<() => void>(() => undefined);
   const resolveTimerRef = useRef<number | null>(null);
   const resolveGenRef = useRef(0);
+  /** After Mark reviewed unmounts, restore focus inside the open drawer. */
+  const restoreFocusAfterReviewRef = useRef(false);
 
   const load = useCallback(async (opts?: { quiet?: boolean }) => {
     // Quiet reload after an action keeps the drawer content on screen.
@@ -380,9 +382,11 @@ export function ExceptionDrawer({
         createIdempotencyKey(),
       );
       setNote("");
+      restoreFocusAfterReviewRef.current = true;
       await load({ quiet: true });
       onChanged?.();
     } catch (err) {
+      restoreFocusAfterReviewRef.current = false;
       setError(
         err instanceof ApiClientError ? err.message : "Could not mark reviewed.",
       );
@@ -568,6 +572,30 @@ export function ExceptionDrawer({
     closeRef.current?.focus();
   }, []);
 
+  const resolved = detail?.status === "resolved";
+  const acknowledged = detail?.status === "acknowledged";
+  const active =
+    detail &&
+    (detail.status === "detected" || detail.status === "active");
+
+  // Mark reviewed removes its own button; move focus to Resolve (now primary)
+  // or Close so document.body never holds focus while aria-modal is open.
+  // Wait until acting clears — Resolve is disabled while the request runs, and
+  // disabled controls cannot take focus (happy-dom and browsers).
+  useLayoutEffect(() => {
+    if (!restoreFocusAfterReviewRef.current) return;
+    if (active || acting) return;
+    restoreFocusAfterReviewRef.current = false;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const activeEl = document.activeElement;
+    if (activeEl instanceof Node && panel.contains(activeEl)) return;
+    const next =
+      panel.querySelector<HTMLElement>(".drawer-foot .button-primary") ??
+      closeRef.current;
+    next?.focus();
+  }, [active, acting, acknowledged, detail]);
+
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
@@ -605,12 +633,6 @@ export function ExceptionDrawer({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  const resolved = detail?.status === "resolved";
-  const acknowledged = detail?.status === "acknowledged";
-  const active =
-    detail &&
-    (detail.status === "detected" || detail.status === "active");
 
   const dueIso =
     dueByIso ?? (detail ? windowEndIso(detail.details) : null);

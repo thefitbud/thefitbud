@@ -607,4 +607,140 @@ describe("TW-30 end and reactivate scheduling", () => {
       );
     expect(afterWorkouts.length + afterMeals.length).toBeGreaterThan(0);
   });
+
+  it("API1: ending coaching stamps resolved_at on every exception it closes and leaves already-resolved ones alone", async () => {
+    const { trainerCookie, relationshipId } =
+      await reachActiveWithSchedule("end-resolves");
+    const db = getTestDbOverride();
+    expect(db).toBeTruthy();
+
+    const [workout] = await db!
+      .select()
+      .from(schema.workoutAssignments)
+      .where(eq(schema.workoutAssignments.coachingRelationshipId, relationshipId))
+      .limit(1);
+    const [meal] = await db!
+      .select()
+      .from(schema.mealAssignments)
+      .where(eq(schema.mealAssignments.coachingRelationshipId, relationshipId))
+      .limit(1);
+    expect(workout).toBeTruthy();
+    expect(meal).toBeTruthy();
+
+    const earlier = "2026-01-05T08:00:00.000Z";
+    const earlierResolved = "2026-01-06T09:30:00.000Z";
+    const base = {
+      coachingRelationshipId: relationshipId,
+      ruleVersion: "test-v1",
+      detailsJson: null,
+      detectedAt: earlier,
+      activatedAt: earlier,
+      acknowledgedAt: null,
+      resolvedAt: null,
+      resolutionOutcome: null,
+      resolutionNote: null,
+      closedReason: null,
+      sourceLoggedLateAt: null,
+      createdAt: earlier,
+      updatedAt: earlier,
+    } as const;
+    const openIds = [
+      "aaaaaaaa-0001-4000-8000-000000000001",
+      "aaaaaaaa-0001-4000-8000-000000000002",
+    ];
+    const resolvedId = "aaaaaaaa-0001-4000-8000-000000000003";
+    await db!.insert(schema.exceptions).values([
+      {
+        ...base,
+        id: openIds[0]!,
+        type: "missed_workout",
+        severity: "critical",
+        status: "active",
+        sourceEntityType: "workout_assignment",
+        sourceEntityId: workout!.id,
+        summary: "Missed workout",
+      },
+      {
+        ...base,
+        id: openIds[1]!,
+        type: "overdue_meal",
+        severity: "attention",
+        status: "active",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: meal!.id,
+        summary: "Overdue meal",
+      },
+      {
+        ...base,
+        id: resolvedId,
+        type: "skipped_meal",
+        severity: "attention",
+        status: "resolved",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: meal!.id,
+        summary: "Skipped meal",
+        acknowledgedAt: earlier,
+        resolvedAt: earlierResolved,
+        resolutionOutcome: "other",
+        updatedAt: earlierResolved,
+      },
+    ]);
+    const actionsBefore = await db!.select().from(schema.exceptionActions);
+
+    const requestStart = new Date().toISOString();
+    const ended = await app.request(
+      `/relationships/${relationshipId}/end`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "end-resolves",
+        },
+        body: JSON.stringify({ reason: "paused" }),
+      },
+      testEnv(),
+    );
+    const requestEnd = new Date().toISOString();
+    expect(ended.status).toBe(200);
+
+    const [relationship] = await db!
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    const endedAt = relationship!.endedAt;
+    expect(relationship!.status).toBe("ended");
+    expect(endedAt).toBeTruthy();
+    expect(endedAt! >= requestStart && endedAt! <= requestEnd).toBe(true);
+
+    const rows = await db!
+      .select()
+      .from(schema.exceptions)
+      .where(eq(schema.exceptions.coachingRelationshipId, relationshipId));
+    const byId = new Map(rows.map((row) => [row.id, row]));
+
+    for (const id of openIds) {
+      const row = byId.get(id)!;
+      expect(row.status).toBe("resolved");
+      expect(row.closedReason).toBe("coaching_ended");
+      expect(row.resolvedAt).toBe(endedAt);
+      expect(row.updatedAt).toBe(endedAt);
+      // A system close, not a trainer resolve: no outcome or note is invented.
+      expect(row.resolutionOutcome).toBeNull();
+      expect(row.resolutionNote).toBeNull();
+    }
+
+    const untouched = byId.get(resolvedId)!;
+    expect(untouched.status).toBe("resolved");
+    expect(untouched.resolvedAt).toBe(earlierResolved);
+    expect(untouched.updatedAt).toBe(earlierResolved);
+    expect(untouched.closedReason).toBeNull();
+    expect(untouched.resolutionOutcome).toBe("other");
+
+    // Matches the other system close path (auto-resolve in detectExceptions):
+    // exception_actions only records trainer acknowledge/resolve, so ending
+    // coaching writes no action rows.
+    const actionsAfter = await db!.select().from(schema.exceptionActions);
+    expect(actionsAfter).toHaveLength(actionsBefore.length);
+  });
 });
