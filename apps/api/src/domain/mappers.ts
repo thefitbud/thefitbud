@@ -36,8 +36,10 @@ import {
   type WorkoutExecutionSummary,
   type Exception,
   type ExceptionAction,
+  type ExceptionClosedReason,
   type Intervention,
   type ActiveExceptionSummary,
+  exceptionClosedReasonSchema,
   type Measurement,
   type MediaAsset,
   type ProgressEntry,
@@ -925,6 +927,14 @@ function requireIsoInstant(value: string): string {
   return coerceIsoInstant(value) ?? value;
 }
 
+function mapClosedReason(
+  value: string | null | undefined,
+): ExceptionClosedReason | null {
+  if (value == null || value === "") return null;
+  const parsed = exceptionClosedReasonSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export function mapException(row: ExceptionRow): Exception {
   const typeLabel = labelFor("exception_type", row.type);
   const summary =
@@ -944,6 +954,7 @@ export function mapException(row: ExceptionRow): Exception {
     activatedAt: coerceIsoInstant(row.activatedAt),
     acknowledgedAt: coerceIsoInstant(row.acknowledgedAt),
     resolvedAt: coerceIsoInstant(row.resolvedAt),
+    closedReason: mapClosedReason(row.closedReason),
     createdAt: requireIsoInstant(row.createdAt),
     updatedAt: requireIsoInstant(row.updatedAt),
   };
