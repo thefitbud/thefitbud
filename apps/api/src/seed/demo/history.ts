@@ -655,17 +655,23 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `DELETE FROM checkins WHERE coaching_relationship_id = ${sqlQuote(farhanRel)} AND local_date >= ${sqlQuote(adherenceStart)};`,
   );
   // Pre-seed Farhan exceptions with realistic ages (not detected_at=now).
+  // Hard-cap at 10 open: evaluate no longer system-clears dense overdue stacks
+  // (OQ-23 / no auto_resolve), and A4 asserts ≤10 per client after attention.
   const farhanMealSlots = [
     MEAL_PRESCRIPTION_IDS.breakfast,
     MEAL_PRESCRIPTION_IDS.lunch,
     MEAL_PRESCRIPTION_IDS.dinner,
     MEAL_PRESCRIPTION_IDS.snack,
   ] as const;
+  const FARHAN_OPEN_EXCEPTION_CAP = 10;
+  let farhanOpenSeeded = 0;
   for (let dayOffset = 0; dayOffset <= 2; dayOffset += 1) {
+    if (farhanOpenSeeded >= FARHAN_OPEN_EXCEPTION_CAP) break;
     const day = addDaysFromLocalDate(refDate, -dayOffset);
     const ageHours = 18 + dayOffset * 24;
     const detected = new Date(Date.parse(now) - ageHours * 3_600_000).toISOString();
     for (const slot of farhanMealSlots) {
+      if (farhanOpenSeeded >= FARHAN_OPEN_EXCEPTION_CAP) break;
       const mealId = demoUuid(
         "meal-assignment",
         "farhan.paused@demo.fitbud.test",
@@ -675,6 +681,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
       lines.push(
         `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", `farhan-${day}-${slot}`))}, ${sqlQuote(farhanRel)}, 'overdue_meal', 'critical', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(mealId)}, 'Required meal still unlogged', ${sqlQuote(detected)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
       );
+      farhanOpenSeeded += 1;
     }
   }
   // Re-engage eligibility: no logs in 48h (above) + ≥3 reminders in 48h.
