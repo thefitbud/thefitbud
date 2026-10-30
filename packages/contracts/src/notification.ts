@@ -294,6 +294,11 @@ export const notificationSchema = z.object({
   routing: pushPayloadSchema,
   /** In-app navigation path; clients refetch state after opening. */
   route: z.string().min(1).max(256),
+  /**
+   * Trainee display name for a trainer notification about one client.
+   * Omitted for trainee reminders and multi-client digests.
+   */
+  clientDisplayName: z.string().min(1).max(320).optional(),
 });
 export type Notification = z.infer<typeof notificationSchema>;
 export type NotificationRecord = Notification;
