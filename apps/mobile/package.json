@@ -9,12 +9,13 @@
     "ios": "expo run:ios",
     "android": "expo run:android",
     "build": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint App.tsx index.js src --max-warnings=0",
+    "lint": "eslint App.tsx index.js src modules --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",
+    "@bacons/apple-targets": "0.2.1",
     "@expo-google-fonts/noto-sans-devanagari": "^0.4.1",
     "@expo/metro-runtime": "~4.0.1",
     "@fitbud/api-client": "workspace:*",
