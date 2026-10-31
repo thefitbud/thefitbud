@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { useAuth } from "../auth/AuthProvider";
+import { pickSessionRefresh } from "../lib/api";
 import { stage1Api } from "../lib/stage1Api";
 import { AcceptInviteScreen } from "./AcceptInviteScreen";
 import { CodeSignInScreen } from "./auth/CodeSignInScreen";
@@ -37,10 +38,10 @@ export function AuthScreen() {
   const displayError = localError ?? errorMessage;
 
   const finishAuth = useCallback(
-    async (token: string) => {
+    async (result: { token: string }) => {
       clearError();
       setLocalError(null);
-      await signInWithToken(token);
+      await signInWithToken(result.token, pickSessionRefresh(result));
     },
     [clearError, signInWithToken],
   );
@@ -54,7 +55,7 @@ export function AuthScreen() {
     setLocalError(null);
     try {
       const result = await s1.login({ identifier: id, password });
-      await finishAuth(result.token);
+      await finishAuth(result);
     } catch {
       setLocalError("That mobile number or email and password don't match.");
     } finally {
@@ -97,7 +98,7 @@ export function AuthScreen() {
         setLocalError("That code didn't work. Check the latest message or tap Resend.");
         return;
       }
-      await finishAuth(result.token);
+      await finishAuth(result);
     } catch {
       setLocalError("That code didn't work. Check the latest message or tap Resend.");
     } finally {
@@ -152,7 +153,7 @@ export function AuthScreen() {
           resetProof: otpProof,
           newPassword: password,
         });
-        await finishAuth(login.token);
+        await finishAuth(login);
       }
     } catch {
       setLocalError("Could not update password. Try again.");

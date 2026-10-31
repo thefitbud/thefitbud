@@ -17,11 +17,20 @@ import type {
   MeResponse,
   Role,
 } from "@fitbud/contracts";
-import { createMobileApiClient, resolveApiBaseUrl } from "../lib/api";
+import { AppState } from "react-native";
+import {
+  createMobileApiClient,
+  createTokenSession,
+  isForegroundAppState,
+  resolveApiBaseUrl,
+  type SessionRefresh,
+  type TokenSession,
+} from "../lib/api";
 import {
   clearPersistedSession,
   loadPersistedSession,
   persistSession,
+  persistTokenState,
 } from "../lib/sessionStorage";
 import {
   resolveAppRoute,
@@ -44,7 +53,7 @@ type AuthContextValue = {
   api: FitBudApiClient;
   pendingNotificationLink: NotificationDeepLink | null;
   pendingDeepLink: ParsedDeepLink | null;
-  signInWithToken: (token: string) => Promise<void>;
+  signInWithToken: (token: string, refresh?: SessionRefresh) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
   refreshSession: () => Promise<void>;
@@ -71,7 +80,8 @@ function messageFromError(error: unknown): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const persisted = loadPersistedSession();
+  // Read once: later renders must not re-read storage.
+  const [persisted] = useState(() => loadPersistedSession());
   const [accessToken, setAccessToken] = useState<string | null>(
     persisted.accessToken,
   );
@@ -96,19 +106,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     !persisted.accessToken,
   );
 
-  const accessTokenRef = useRef<string | null>(persisted.accessToken);
   const selectedRoleRef = useRef<Role | null>(persisted.selectedRole);
-  accessTokenRef.current = accessToken;
   selectedRoleRef.current = selectedRole;
+  // Set once signOut exists; the token session calls it when refresh is refused.
+  const onExpiredRef = useRef<() => void>(() => undefined);
 
-  const api = useMemo(
-    () =>
-      createMobileApiClient({
-        getAccessToken: () => accessTokenRef.current,
-        getSelectedRole: () => selectedRoleRef.current,
-      }),
-    [],
-  );
+  // The token session owns the access token, refresh token and expiry
+  // (D-W2-3). Web persists them in localStorage; native keeps them in memory
+  // only (D-W2-13).
+  const { api, tokens } = useMemo(() => {
+    let client: FitBudApiClient | null = null;
+    const session: TokenSession = createTokenSession({
+      initial: {
+        accessToken: persisted.accessToken,
+        refreshToken: persisted.refreshToken,
+        expiresAt: persisted.expiresAt,
+      },
+      refreshAuth: (refreshToken) => client!.refreshAuth(refreshToken),
+      persist: (state) => {
+        setAccessToken(state.accessToken);
+        persistTokenState(state, selectedRoleRef.current);
+      },
+      onExpired: () => onExpiredRef.current(),
+    });
+    client = createMobileApiClient({
+      getAccessToken: () => session.getAccessToken(),
+      getSelectedRole: () => selectedRoleRef.current,
+      refreshAccessToken: () => session.refresh(),
+    });
+    return { api: client, tokens: session };
+  }, []);
+
+  // Timer runs in the foreground only; on return to the foreground it
+  // refreshes straight away if the expiry has passed.
+  useEffect(() => {
+    // The provider mounts while the app is on screen; currentState can still
+    // read "unknown" this early on some platforms.
+    tokens.setForeground(AppState.currentState !== "background");
+    const subscription = AppState.addEventListener("change", (next) => {
+      tokens.setForeground(isForegroundAppState(next));
+    });
+    return () => {
+      subscription.remove();
+      tokens.setForeground(false);
+    };
+  }, [tokens]);
 
   const loadRelationships = useCallback(
     async (client: FitBudApiClient) => {
@@ -161,7 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshSession = useCallback(async () => {
-    if (!accessTokenRef.current) {
+    if (!tokens.getAccessToken()) {
       return;
     }
     setBootstrapping(true);
@@ -170,16 +212,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const meResponse = await api.me();
       await applyMe(meResponse, selectedRoleRef.current, api);
       persistSession({
-        accessToken: accessTokenRef.current,
+        accessToken: tokens.getAccessToken(),
         selectedRole: selectedRoleRef.current,
       });
     } catch (error) {
+      // The client already tried one refresh before this 401 reached us.
       if (error instanceof ApiClientError && error.status === 401) {
         setMe(null);
         setSelectedRole(null);
         selectedRoleRef.current = null;
-        setAccessToken(null);
-        accessTokenRef.current = null;
+        tokens.clear();
         clearPersistedSession();
         setRelationships([]);
         setRelationshipsLoaded(true);
@@ -191,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBootstrapping(false);
       setSessionHydrated(true);
     }
-  }, [api, applyMe]);
+  }, [api, applyMe, tokens]);
 
   useEffect(() => {
     if (!persisted.accessToken) return;
@@ -222,14 +264,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signInWithToken = useCallback(
-    async (token: string) => {
+    async (token: string, refresh?: SessionRefresh) => {
       const trimmed = token.trim();
       if (!trimmed) {
         setErrorMessage("Enter a test identity token or Firebase UID.");
         return;
       }
-      accessTokenRef.current = trimmed;
-      setAccessToken(trimmed);
+      selectedRoleRef.current = null;
+      tokens.signIn(trimmed, refresh);
       persistSession({ accessToken: trimmed, selectedRole: null });
       setBootstrapping(true);
       setErrorMessage(null);
@@ -246,7 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const meResponse = await api.me();
         await applyMe(meResponse, null, api);
         persistSession({
-          accessToken: trimmed,
+          accessToken: tokens.getAccessToken(),
           selectedRole: selectedRoleRef.current,
         });
       } catch (error) {
@@ -255,8 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setNeedsAccountLink(true);
           setRelationshipsLoaded(true);
         } else {
-          setAccessToken(null);
-          accessTokenRef.current = null;
+          tokens.clear();
           clearPersistedSession();
           setErrorMessage(messageFromError(error));
         }
@@ -265,11 +306,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionHydrated(true);
       }
     },
-    [api, applyMe],
+    [api, applyMe, tokens],
   );
 
   const signOut = useCallback(() => {
-    accessTokenRef.current = null;
+    tokens.clear();
     selectedRoleRef.current = null;
     setAccessToken(null);
     setSelectedRole(null);
@@ -282,7 +323,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingNotificationLink(null);
     setPendingDeepLink(null);
     clearPersistedSession();
-  }, []);
+  }, [tokens]);
+  onExpiredRef.current = signOut;
 
   const setActiveRelationship = useCallback(
     (relationship: CoachingRelationship) => {
