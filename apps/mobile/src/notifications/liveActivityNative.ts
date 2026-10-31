@@ -147,7 +147,9 @@ export const liveActivityNative: LiveActivityNative = createLiveActivityNative({
 });
 
 /**
- * Debug-only device check for LA1 (dev builds only, never in release). In
+ * Debug-only device check for LA1 (dev builds only, never in release). It is
+ * registered when this file is first imported, which happens once LA1b's
+ * workout-screen wiring (liveActivitySession.ts) is in the build. Then, in
  * React Native DevTools' console on the dev build:
  *   __fitbudLiveActivityDemo.start()   // shows the activity on the lock screen
  *   __fitbudLiveActivityDemo.update()  // logs a set: kg/reps and the logged line change
