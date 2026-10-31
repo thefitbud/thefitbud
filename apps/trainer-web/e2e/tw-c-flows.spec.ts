@@ -230,8 +230,8 @@ test.describe("TW-C workspace", () => {
     const noteBody = `Private note from TW-C e2e ${Date.now()}`;
     await area.fill(noteBody);
     await page.getByRole("button", { name: /^Save note$/i }).click();
-    // The toast lives in the workspace layout, so the reload that follows the
-    // save (which swaps in the loading state) can't take it down.
+    // Locked TW-34 confirmation (31 Oct): the drawer closes and the toast lives
+    // in the workspace layout, so the reload that follows the save can't take it down.
     await expect(
       page.getByRole("status").filter({ hasText: /^Saved privately$/ }),
     ).toBeVisible({ timeout: 15_000 });
