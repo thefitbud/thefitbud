@@ -2,6 +2,9 @@ import { createId, nowIso } from "./crypto";
 import type { Db } from "../db/client";
 import { devMailOutbox } from "../db/schema";
 import type { Env } from "../types";
+import { sendZeptoMail } from "./zeptomail";
+
+export { EmailSendError } from "./zeptomail";
 
 export type EmailTemplate =
   | "otp"
@@ -41,5 +44,17 @@ export async function sendSystemEmail(
     console.log(`[DEV MAIL] to=${input.to} subject=${input.subject}`);
     return;
   }
+  if (provider === "zeptomail") {
+    const token = env.ZEPTOMAIL_TOKEN?.trim();
+    if (!token) {
+      throw new Error("EMAIL_PROVIDER_NOT_CONFIGURED");
+    }
+    await sendZeptoMail(
+      { token, from: env.SYSTEM_EMAIL_FROM, replyTo: env.SYSTEM_EMAIL_REPLY_TO },
+      { to: input.to, subject: input.subject, text: input.text, html: input.html },
+    );
+    return;
+  }
+  // resend / ses are named in the type but not implemented.
   throw new Error("EMAIL_PROVIDER_NOT_CONFIGURED");
 }
