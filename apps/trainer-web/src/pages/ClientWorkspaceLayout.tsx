@@ -19,6 +19,8 @@ import { setShellClientTitle } from "../lib/shell-title";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 
+const TOAST_MS = 4000;
+
 export function ClientWorkspaceLayout() {
   const { relationshipId = "" } = useParams();
   const [refreshEpoch, setRefreshEpoch] = useState(0);
@@ -36,12 +38,36 @@ export function ClientWorkspaceLayout() {
   const [submittedCheckins, setSubmittedCheckins] = useState(0);
   const [modal, setModal] = useState<WorkspaceModal>(null);
   const loadedRelationshipId = useRef<string | null>(null);
+  // TW-34 save confirmation (locked: deep-navy bottom pill, 4 s). It lives in
+  // the layout, outside the drawer and the loading/loaded branches, so the
+  // reload that follows a save cannot unmount it. An object, so two saves with
+  // the same copy each restart the timer.
+  const [toast, setToast] = useState<{ message: string } | null>(null);
 
   const reloadWorkspace = useCallback(() => {
     setRefreshEpoch((value) => value + 1);
   }, []);
 
   useRealtimeHints(apiClient, relationshipId || null, reloadWorkspace);
+
+  const onNoteSaved = useCallback(
+    (message: string) => {
+      setModal(null);
+      setToast({ message });
+      reloadWorkspace();
+    },
+    [reloadWorkspace],
+  );
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    setToast(null);
+  }, [relationshipId]);
 
   useEffect(() => {
     const name = workspace?.header.traineeDisplayName ?? null;
@@ -53,8 +79,8 @@ export function ClientWorkspaceLayout() {
     if (!relationshipId) return;
     let cancelled = false;
     // A refresh (refreshEpoch) keeps the current workspace on screen so open
-    // drawers, such as the note composer and its "Saved privately" toast,
-    // are not unmounted by the loading state. Only a different client clears it.
+    // drawers are not unmounted by the loading state. Only a different client
+    // clears it.
     if (loadedRelationshipId.current !== relationshipId) {
       setWorkspace(null);
       loadedRelationshipId.current = relationshipId;
@@ -112,88 +138,102 @@ export function ClientWorkspaceLayout() {
     };
   }, [relationshipId, refreshEpoch]);
 
-  if (forbidden) {
-    return (
-      <section className="page centered-status" data-testid="screen-TW-33">
-        <ForbiddenState />
-      </section>
-    );
-  }
+  function renderContent() {
+    if (forbidden) {
+      return (
+        <section className="page centered-status" data-testid="screen-TW-33">
+          <ForbiddenState />
+        </section>
+      );
+    }
 
-  if (notFound) {
-    return (
-      <section className="page centered-status" data-testid="screen-TW-33">
-        <h1>Client not found</h1>
-        <p className="lede">
-          This coaching relationship doesn&apos;t exist or you don&apos;t have
-          access.
-        </p>
-        <Link className="button-primary" to="/clients">
-          Back to clients
-        </Link>
-      </section>
-    );
-  }
+    if (notFound) {
+      return (
+        <section className="page centered-status" data-testid="screen-TW-33">
+          <h1>Client not found</h1>
+          <p className="lede">
+            This coaching relationship doesn&apos;t exist or you don&apos;t have
+            access.
+          </p>
+          <Link className="button-primary" to="/clients">
+            Back to clients
+          </Link>
+        </section>
+      );
+    }
 
-  if (workspaceLoading && !workspace) {
-    return (
-      <section className="page workspace-shell" aria-busy="true">
-        <p className="muted">Loading client workspace…</p>
-      </section>
-    );
-  }
+    if (workspaceLoading && !workspace) {
+      return (
+        <section className="page workspace-shell" aria-busy="true">
+          <p className="muted">Loading client workspace…</p>
+        </section>
+      );
+    }
 
-  if (!workspace) {
+    if (!workspace) {
+      return (
+        <section className="page workspace-shell" data-testid="screen-TW-33">
+          <ErrorState
+            kind={workspaceErrorKind}
+            title="We couldn't load this client"
+            message={workspaceError ?? undefined}
+            requestId={workspaceErrorRequestId}
+            onRetry={reloadWorkspace}
+            screenId="TW-09"
+          />
+        </section>
+      );
+    }
+
+    const ended = workspace.header.onboardingStatus === "ended";
+    const outletContext: WorkspaceOutletContext = {
+      workspace,
+      workspaceLoading,
+      workspaceError,
+      notFound,
+      refreshEpoch,
+      reloadWorkspace,
+      openWorkspaceModal: setModal,
+      relationshipId,
+      online,
+      ended,
+    };
+
     return (
-      <section className="page workspace-shell" data-testid="screen-TW-33">
-        <ErrorState
-          kind={workspaceErrorKind}
-          title="We couldn't load this client"
-          message={workspaceError ?? undefined}
-          requestId={workspaceErrorRequestId}
-          onRetry={reloadWorkspace}
-          screenId="TW-09"
+      <section className="page workspace-shell">
+        <WorkspaceHeader
+          workspace={workspace}
+          relationshipId={relationshipId}
+          submittedCheckinCount={submittedCheckins}
+          onOpenModal={setModal}
+          onWorkspaceChanged={reloadWorkspace}
+          online={online}
+        />
+        <Outlet context={outletContext} />
+        <WorkspaceModals
+          relationshipId={relationshipId}
+          traineeName={workspace.header.traineeDisplayName}
+          traineeGender={workspace.header.traineeProfile.gender}
+          lastPlanTitle={workspace.header.effectivePlan?.title ?? null}
+          clientWhatsappE164={workspace.header.clientWhatsappE164}
+          ended={ended}
+          modal={modal}
+          onClose={() => setModal(null)}
+          onChanged={reloadWorkspace}
+          onNoteSaved={onNoteSaved}
         />
       </section>
     );
   }
 
-  const ended = workspace.header.onboardingStatus === "ended";
-  const outletContext: WorkspaceOutletContext = {
-    workspace,
-    workspaceLoading,
-    workspaceError,
-    notFound,
-    refreshEpoch,
-    reloadWorkspace,
-    openWorkspaceModal: setModal,
-    relationshipId,
-    online,
-    ended,
-  };
-
   return (
-    <section className="page workspace-shell">
-      <WorkspaceHeader
-        workspace={workspace}
-        relationshipId={relationshipId}
-        submittedCheckinCount={submittedCheckins}
-        onOpenModal={setModal}
-        onWorkspaceChanged={reloadWorkspace}
-        online={online}
-      />
-      <Outlet context={outletContext} />
-      <WorkspaceModals
-        relationshipId={relationshipId}
-        traineeName={workspace.header.traineeDisplayName}
-        traineeGender={workspace.header.traineeProfile.gender}
-        lastPlanTitle={workspace.header.effectivePlan?.title ?? null}
-        clientWhatsappE164={workspace.header.clientWhatsappE164}
-        ended={ended}
-        modal={modal}
-        onClose={() => setModal(null)}
-        onChanged={reloadWorkspace}
-      />
-    </section>
+    <>
+      {renderContent()}
+      {toast ? (
+        <div className="home-toast" role="status">
+          {toast.message}
+        </div>
+      ) : null}
+    </>
   );
 }

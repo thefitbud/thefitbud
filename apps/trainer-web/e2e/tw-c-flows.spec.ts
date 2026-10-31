@@ -226,11 +226,17 @@ test.describe("TW-C workspace", () => {
     ).toBeVisible();
     await expect(page.getByText(/From rahul · just now/i)).toBeVisible();
     await visibility.uncheck();
-    await area.fill("Private note from TW-C e2e");
+    // Unique per run so --repeat-each against one seeded DB stays unambiguous.
+    const noteBody = `Private note from TW-C e2e ${Date.now()}`;
+    await area.fill(noteBody);
     await page.getByRole("button", { name: /^Save note$/i }).click();
-    await expect(page.getByText(/Saved privately/i)).toBeVisible({
-      timeout: 15_000,
-    });
+    // Locked TW-34 confirmation (31 Oct): the drawer closes and the toast lives
+    // in the workspace layout, so the reload that follows the save can't take it down.
+    await expect(
+      page.getByRole("status").filter({ hasText: /^Saved privately$/ }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("screen-TW-34")).toHaveCount(0);
+    await expect(page.getByText(noteBody)).toBeVisible();
 
     await page.goto(`/clients/${KAVYA}/overview`);
     await expect(page.getByText(/Coaching ended/i)).toBeVisible();

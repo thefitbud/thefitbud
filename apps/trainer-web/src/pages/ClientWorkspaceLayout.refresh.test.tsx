@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -24,12 +24,22 @@ vi.mock("../components/workspace/WorkspaceHeader", () => ({
   ),
 }));
 vi.mock("../components/workspace/WorkspaceModals", () => ({
-  WorkspaceModals: ({ modal, onChanged }: { modal: unknown; onChanged: () => void }) =>
+  WorkspaceModals: ({
+    modal,
+    onChanged,
+    onNoteSaved,
+  }: {
+    modal: unknown;
+    onChanged: () => void;
+    onNoteSaved: (message: string) => void;
+  }) =>
     modal ? (
       <div data-testid="screen-TW-34">
-        <p role="status">Saved privately</p>
         <button type="button" onClick={onChanged}>
-          Saved
+          Other change
+        </button>
+        <button type="button" onClick={() => onNoteSaved("Saved privately")}>
+          Save note
         </button>
       </div>
     ) : null,
@@ -54,39 +64,90 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function renderLayout() {
+  return render(
+    <MemoryRouter initialEntries={[`/clients/${REL_ID}/overview`]}>
+      <Routes>
+        <Route path="/clients/:relationshipId/*" element={<ClientWorkspaceLayout />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+/** The next workspace reload stays pending until the returned resolver runs. */
+function holdNextReload(): () => Promise<void> {
+  let resolveReload: (value: unknown) => void = () => undefined;
+  api.getClientWorkspace.mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveReload = resolve;
+    }),
+  );
+  return async () => {
+    await act(async () => {
+      resolveReload(workspaceFixture());
+    });
+  };
+}
+
 describe("ClientWorkspaceLayout refresh", () => {
-  it("keeps the workspace and an open drawer on screen while a save reloads it", async () => {
+  beforeEach(() => {
     api.getClientWorkspace.mockResolvedValue(workspaceFixture());
     api.listTrainerCheckinInbox.mockResolvedValue({ items: [] });
+  });
 
-    render(
-      <MemoryRouter initialEntries={[`/clients/${REL_ID}/overview`]}>
-        <Routes>
-          <Route path="/clients/:relationshipId/*" element={<ClientWorkspaceLayout />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
+  it("keeps the workspace and an open drawer on screen while a change reloads it (#88)", async () => {
+    renderLayout();
     fireEvent.click(await screen.findByRole("button", { name: "Add note" }));
-    expect(screen.getByTestId("screen-TW-34")).toBeTruthy();
 
-    // The reload after a save stays pending: the drawer and its toast must survive it.
-    let resolveReload: (value: unknown) => void = () => undefined;
-    api.getClientWorkspace.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveReload = resolve;
-      }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Saved" }));
+    const finishReload = holdNextReload();
+    fireEvent.click(screen.getByRole("button", { name: "Other change" }));
 
     expect(api.getClientWorkspace).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/Loading client workspace/i)).toBeNull();
     expect(screen.getByTestId("screen-TW-34")).toBeTruthy();
+    await finishReload();
+    expect(screen.getByTestId("screen-TW-34")).toBeTruthy();
+  });
+
+  it("closes the drawer on a note save and shows the toast through the reload (TW-34)", async () => {
+    renderLayout();
+    fireEvent.click(await screen.findByRole("button", { name: "Add note" }));
+
+    const finishReload = holdNextReload();
+    fireEvent.click(screen.getByRole("button", { name: "Save note" }));
+
+    expect(api.getClientWorkspace).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId("screen-TW-34")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Saved privately");
+    await finishReload();
+    expect(screen.getByRole("status").textContent).toBe("Saved privately");
+  });
+
+  it("hides the toast after 4 s, and a repeated save restarts the 4 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderLayout();
+    fireEvent.click(await screen.findByRole("button", { name: "Add note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save note" }));
     expect(screen.getByRole("status").textContent).toBe("Saved privately");
 
     await act(async () => {
-      resolveReload(workspaceFixture());
+      vi.advanceTimersByTime(3_000);
     });
-    expect(screen.getByTestId("screen-TW-34")).toBeTruthy();
+    // Same copy again: the timer restarts instead of expiring 1 s later.
+    fireEvent.click(await screen.findByRole("button", { name: "Add note" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save note" }));
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
+    });
+    expect(screen.getByRole("status").textContent).toBe("Saved privately");
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_100);
+    });
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
