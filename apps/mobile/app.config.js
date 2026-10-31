@@ -53,6 +53,9 @@ module.exports = ({ config }) => {
         package: variant.bundleIdentifier,
         ...(googleServicesFile ? { googleServicesFile } : {}),
       },
+      // After ./plugins/withLiveActivity (applied around this config):
+      // @bacons/apple-targets adds targets/FitBudLiveActivity to the iOS build (LA1).
+      plugins: [...(config.plugins ?? []), "@bacons/apple-targets"],
     },
     { appGroup: variant.appGroup },
   );
