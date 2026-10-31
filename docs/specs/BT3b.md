@@ -27,7 +27,7 @@ The mobile sign-in screen and both More screens open the web Privacy, Terms and 
 
 ## Gap list
 - `apps/mobile/src/screens/AuthScreen.tsx`: no legal links.
-- `apps/mobile/src/trainer/MoreScreen.tsx:53-70`: Notifications, Profile, web, Help; no legal rows.
+- `apps/mobile/src/trainer/MoreScreen.tsx:61-78`: Notifications, Profile, web, Help; no legal rows.
 - `apps/mobile/src/trainee/MoreScreen.tsx:440-448`: no Terms or Credits rows.
 
 ## Acceptance criteria

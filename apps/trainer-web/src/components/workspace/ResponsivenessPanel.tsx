@@ -116,12 +116,15 @@ export function ResponsivenessPanel({
   gender,
   traineeFirstName = "Client",
   clientWhatsappE164,
+  refreshEpoch = 0,
 }: {
   relationshipId: string;
   compact?: boolean;
   gender?: string | null;
   traineeFirstName?: string;
   clientWhatsappE164?: string | null;
+  /** Workspace refresh counter: the panel refetches on a refresh, keeping its data on screen. */
+  refreshEpoch?: number;
 }) {
   const pronoun = possessivePronoun(gender);
   const [data, setData] = useState<ResponsivenessResponse | null>(null);
@@ -132,7 +135,9 @@ export function ResponsivenessPanel({
     void stage1Api
       .getResponsiveness(relationshipId, 14)
       .then((value) => {
-        if (!cancelled) setData(value);
+        if (cancelled) return;
+        setData(value);
+        setError(null);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -142,9 +147,10 @@ export function ResponsivenessPanel({
     return () => {
       cancelled = true;
     };
-  }, [relationshipId]);
+  }, [relationshipId, refreshEpoch]);
 
-  if (error) {
+  // A failed background refresh keeps the data already on screen.
+  if (error && !data) {
     return (
       <p className="form-error" role="alert">
         {error}

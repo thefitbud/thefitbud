@@ -22,13 +22,13 @@ On staging and production, unhandled errors in the API Worker's fetch, scheduled
 
 ## Context
 - v14 BT2 (Worker half; the mobile half is BT2b because backend and UI never share a spec). D-W4-1: Sentry, staging and production only.
-- `@sentry/cloudflare` with `withSentry` around the exported handler (`apps/api/src/index.ts:201-216`); `nodejs_compat` is already on (`apps/api/wrangler.toml:15`).
+- `@sentry/cloudflare` with `withSentry` around the exported handler (`apps/api/src/index.ts:278-322`); `nodejs_compat` is already on (`apps/api/wrangler.toml:15`).
 - DSN storage: D-W4-5 (decided by Firoz, 1 Nov 2026): Worker secret `SENTRY_DSN` per env (as in v14 CF2 step 8), not a toml var. With no DSN set (local, tests) Sentry is off.
 - Tracing: D-W4-6 (decided by Firoz, 1 Nov 2026): errors only (`tracesSampleRate: 0`).
 - After OB2 (W2), which owns logging in `index.ts`.
 
 ## Gap list
-- No Sentry package or init in `apps/api` (`apps/api/package.json`, `apps/api/src/index.ts:201-216`).
+- No Sentry package or init in `apps/api` (`apps/api/package.json`, `apps/api/src/index.ts:278-322`).
 - `apps/api/src/types.ts`: no `SENTRY_DSN` / `SENTRY_ENVIRONMENT` in `Env`.
 
 ## Acceptance criteria

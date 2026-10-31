@@ -23,8 +23,8 @@ After sign-in as trainer or trainee on a dev build, the app asks for notificatio
 
 ## Gap list
 - `apps/mobile/src/notifications/register.ts:13-15`: always `provider: "fcm"`, token `local-test-fcm-…`.
-- `apps/mobile/src/auth/AuthProvider.tsx:149-153`: trainees are skipped; only trainers register.
-- `apps/mobile/src/auth/AuthProvider.tsx:271-285`: `signOut` doesn't unregister the device token.
+- `apps/mobile/src/auth/AuthProvider.tsx:191-195`: trainees are skipped; only trainers register.
+- `apps/mobile/src/auth/AuthProvider.tsx:312-326`: `signOut` doesn't unregister the device token.
 - No `addPushTokenListener` for token changes.
 
 ## Acceptance criteria

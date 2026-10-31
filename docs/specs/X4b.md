@@ -3,7 +3,7 @@ id: X4b
 title: Device-token API accepts Expo tokens and re-registers per installation
 batch: W3
 depends_on: [X4a]
-lane: push-api
+lane: reminders
 files_owned:
   - packages/contracts/src/notification.ts
   - apps/api/src/db/schema.ts  # device_tokens provider enum only
@@ -19,14 +19,14 @@ size: S
 
 ## Context
 - v14 X4b (backend half; the mobile half is X4e, because backend and UI never share a spec). D-B9: letting trainees register their own device is decided.
-- Conflict listed in W3.md: v14 C3 says the route returns 403 for trainees, but the route already allows both roles (`apps/api/src/routes/notifications.ts:134`, `:141`); the 403 is `FORBIDDEN_ROLE` when no role is selected (`apps/api/src/middleware/auth.ts:94`). This spec keeps the role rule and adds a test proving a trainee with a selected role gets 200.
+- Conflict listed in W3.md: v14 C3 says the route returns 403 for trainees, but the route already allows both roles (`apps/api/src/routes/notifications.ts:135`, `:141`); the 403 is `FORBIDDEN_ROLE` when no role is selected (`apps/api/src/middleware/auth.ts:96`). This spec keeps the role rule and adds a test proving a trainee with a selected role gets 200.
 - Provider value: D-W3-2 (decided by Firoz, 1 Nov 2026): add `"expo"`, no migration: `device_tokens.provider` is plain `text` with no CHECK (`apps/api/drizzle/0010_notifications.sql:6`).
 - X4a (W2) sends with Expo; X4a owns the sender, this spec owns the routes.
 
 ## Gap list
 - `packages/contracts/src/notification.ts:9`: `deviceTokenProviderSchema = z.enum(["fcm"])`; `:32` defaults to `fcm`.
 - `apps/api/src/db/schema.ts:1245`: `provider` enum `["fcm"]` (TypeScript only).
-- `apps/api/src/routes/notifications.ts:157`: looks up by token only; `:199` inserts a new row. A new token for the same `(user_id, installation_id)` hits the unique index `device_tokens_user_installation_uidx` (`apps/api/drizzle/0010_notifications.sql:16`) and fails.
+- `apps/api/src/routes/notifications.ts:158`: looks up by token only; `:199` inserts a new row. A new token for the same `(user_id, installation_id)` hits the unique index `device_tokens_user_installation_uidx` (`apps/api/drizzle/0010_notifications.sql:16`) and fails.
 
 ## Acceptance criteria
 - [ ] Provider enum is `["fcm", "expo"]` in the contract and the Drizzle schema; default stays `fcm` for old clients.

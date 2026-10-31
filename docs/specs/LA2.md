@@ -20,11 +20,12 @@ Sets logged from the lock-screen Live Activity are saved: when the app becomes a
 
 ## Context
 - v14 LA2. The widget intent appends rows to the App Group (`apps/mobile/targets/FitBudLiveActivity/FitBudLiveActivity.swift:8-24`) with `exerciseName`, `setIndex`, `kilograms`, `reps` only.
-- Conflict listed in W3.md: the row says `workout.log_set` (`FitBudLiveActivity.swift:16`, `apps/mobile/src/notifications/liveActivity.ts:116`) but the sync contract has `workout.complete_set` (`packages/contracts/src/sync.ts:41`). Mapping: D-W3-5 (decided by Firoz, 1 Nov 2026): map to `workout.complete_set` using the assignment and exercise ids of the running session kept by LA1b.
+- Conflict listed in W3.md: the row says `workout.log_set` (`FitBudLiveActivity.swift:16`, `apps/mobile/src/notifications/liveActivity.ts:169`) but the sync contract has `workout.complete_set` (`packages/contracts/src/sync.ts:41`). Mapping: D-W3-5 (decided by Firoz, 1 Nov 2026): map to `workout.complete_set` using the assignment and exercise ids of the running session kept by LA1b.
 - Offline rules: one stable mutation UUID and idempotency key per row (`enqueueAndPush`, `apps/mobile/src/sync/actions.ts:14`).
 
 ## Gap list
 - Nothing reads `liveActivityOutbox` from the App Group; the native module (LA1) has no read/clear.
+- W2 report follow-up: `@bacons/apple-targets` 0.2.1 ignores `infoPlist`, so the widget never gets its `FitBudAppGroup` key (`FitBudLiveActivity.swift:10` reads it) and its outbox writes land where the app can't read them. LA2's device check fails until the widget gets the App Group; if that needs a change outside `files_owned` (for example the target config or `plugins/withLiveActivity.js`, owned by LA3), stop and report.
 - No app-active hook in `apps/mobile/src/trainee/TraineeShell.tsx`.
 
 ## Acceptance criteria
