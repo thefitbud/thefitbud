@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import type {
   EvaluateRemindersResponse,
   NotificationDomainEntityType,
@@ -65,6 +65,7 @@ import {
   workoutExecutions,
 } from "../db/schema";
 import { createId, nowIso } from "../lib/crypto";
+import { selectInChunks } from "../lib/in-array-chunks";
 import {
   routingPayloadForNotification,
   sendPushToDevice,
@@ -136,13 +137,9 @@ export type ActivityNudgeResult =
       retryAfter?: number;
     };
 
-async function loadOrDefaultPreferences(db: Db, userId: string) {
-  const rows = await db
-    .select()
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.userId, userId))
-    .limit(1);
-  const row = rows[0];
+type NotificationPreferenceRow = typeof notificationPreferences.$inferSelect;
+
+function preferencesFromRow(row: NotificationPreferenceRow | undefined) {
   if (row) {
     return {
       pushEnabled: row.pushEnabled,
@@ -169,6 +166,15 @@ async function loadOrDefaultPreferences(db: Db, userId: string) {
     quietHoursStart: null as string | null,
     quietHoursEnd: null as string | null,
   };
+}
+
+async function loadOrDefaultPreferences(db: Db, userId: string) {
+  const rows = await db
+    .select()
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, userId))
+    .limit(1);
+  return preferencesFromRow(rows[0]);
 }
 
 export async function ensureDefaultReminderRules(
@@ -283,32 +289,6 @@ const PUSH_REMINDER_TYPES = new Set<NotificationType>([
   "activity_nudge",
 ]);
 
-async function countTraineePushRemindersToday(
-  db: Db,
-  traineeUserId: string,
-  dayStartIso: string,
-): Promise<number> {
-  const rows = await db
-    .select({
-      notificationType: notifications.notificationType,
-      state: notifications.state,
-    })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.recipientUserId, traineeUserId),
-        gte(notifications.createdAt, dayStartIso),
-      ),
-    )
-    .limit(200);
-  return rows.filter(
-    (row) =>
-      PUSH_REMINDER_TYPES.has(row.notificationType as NotificationType) &&
-      row.state !== "suppressed" &&
-      row.state !== "deferred",
-  ).length;
-}
-
 function summaryCategoryAllowed(
   prefs: Awaited<ReturnType<typeof loadOrDefaultPreferences>>,
   remaining: RemainingLogs,
@@ -401,40 +381,290 @@ async function countRemainingLogs(
   return remaining;
 }
 
+/** countRemainingLogs for the relationship's own "today", read from the run context. */
+function remainingLogsFromContext(
+  context: ReminderRunContext,
+  relationshipId: string,
+  today: string,
+  enabled: Set<ReminderType>,
+  now: string,
+): RemainingLogs {
+  const remaining: RemainingLogs = { workouts: 0, meals: 0, checkins: 0 };
+  if (enabled.has("workout_reminder")) {
+    const assignments = (context.workoutsByRelationship.get(relationshipId) ?? [])
+      .filter((assignment) => assignment.localDate === today)
+      .slice(0, 50);
+    for (const assignment of assignments) {
+      const execution = context.executionByAssignmentId.get(assignment.id);
+      if (!isWorkoutResolved(execution?.status ?? null)) remaining.workouts += 1;
+    }
+  }
+  if (enabled.has("meal_reminder")) {
+    const assignments = (context.mealsByRelationship.get(relationshipId) ?? [])
+      .filter((assignment) => assignment.localDate === today)
+      .slice(0, 50);
+    for (const assignment of assignments) {
+      if (!context.loggedMealAssignmentIds.has(assignment.id)) remaining.meals += 1;
+    }
+  }
+  if (enabled.has("checkin_reminder")) {
+    const rows = (context.todaysDraftCheckinsByRelationship.get(relationshipId) ?? [])
+      .filter((checkin) => checkin.localDate === today)
+      .slice(0, 5);
+    for (const checkin of rows) {
+      if (
+        isCheckinReminderEligible({
+          nowIso: now,
+          windowStartsAt: checkin.windowStartsAt,
+          windowEndsAt: checkin.windowEndsAt,
+          recordStatus: checkin.recordStatus,
+          hasReview: false,
+        })
+      ) {
+        remaining.checkins += 1;
+      }
+    }
+  }
+  return remaining;
+}
+
+/**
+ * Everything one cron run reads per relationship, loaded in bulk (I8, D-W1-11):
+ * a constant number of chunked queries instead of ~20 per active relationship.
+ */
+type ReminderRunContext = {
+  traineeUserIds: Set<string>;
+  enabledByRelationship: Map<string, Set<ReminderType>>;
+  timezoneByUserId: Map<string, string>;
+  preferencesByUserId: Map<string, NotificationPreferenceRow>;
+  reminderStateByUserId: Map<string, typeof reminderStates.$inferSelect>;
+  overridesByRelationship: Map<string, Array<typeof mealTimeOverrides.$inferSelect>>;
+  workoutsByRelationship: Map<string, Array<typeof workoutAssignments.$inferSelect>>;
+  executionByAssignmentId: Map<string, typeof workoutExecutions.$inferSelect>;
+  mealsByRelationship: Map<string, Array<typeof mealAssignments.$inferSelect>>;
+  loggedMealAssignmentIds: Set<string>;
+  draftCheckinsByRelationship: Map<string, Array<typeof checkins.$inferSelect>>;
+  /** Draft check-ins dated on each relationship's "today" (daily summary). */
+  todaysDraftCheckinsByRelationship: Map<string, Array<typeof checkins.$inferSelect>>;
+  currentSubscriptionByRelationship: Map<string, typeof subscriptionVersions.$inferSelect>;
+};
+
+/** Leaves room for the other bound parameters of a filter (D1 allows 100). */
+const RUN_CONTEXT_CHUNK = 80;
+/** reminder_rules has 6 columns: 15 rows stay under D1's 100 bound parameters. */
+const REMINDER_RULE_INSERT_ROWS = 15;
+
+function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const k = key(row);
+    const list = grouped.get(k);
+    if (list) list.push(row);
+    else grouped.set(k, [row]);
+  }
+  return grouped;
+}
+
+/** First row per key, like the per-key `.limit(1)` reads it replaces. */
+function firstBy<T>(rows: T[], key: (row: T) => string): Map<string, T> {
+  const first = new Map<string, T>();
+  for (const row of rows) {
+    const k = key(row);
+    if (!first.has(k)) first.set(k, row);
+  }
+  return first;
+}
+
+/** Bulk form of ensureDefaultReminderRules + the enabled-rules read, for many relationships. */
+async function enabledReminderTypesByRelationship(
+  db: Db,
+  relationshipIds: string[],
+  now: string,
+): Promise<Map<string, Set<ReminderType>>> {
+  const existing = await selectInChunks(relationshipIds, (ids) =>
+    db.select().from(reminderRules).where(inArray(reminderRules.coachingRelationshipId, ids)),
+  );
+  const byRelationship = groupBy(existing, (row) => row.coachingRelationshipId);
+  const missing: Array<typeof reminderRules.$inferInsert> = [];
+  for (const relationshipId of relationshipIds) {
+    const present = new Set((byRelationship.get(relationshipId) ?? []).map((row) => row.reminderType));
+    for (const type of DEFAULT_REMINDER_TYPES) {
+      if (present.has(type)) continue;
+      missing.push({
+        id: createId(),
+        coachingRelationshipId: relationshipId,
+        reminderType: type,
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+  for (let i = 0; i < missing.length; i += REMINDER_RULE_INSERT_ROWS) {
+    await db.insert(reminderRules).values(missing.slice(i, i + REMINDER_RULE_INSERT_ROWS));
+  }
+  const enabled = new Map<string, Set<ReminderType>>();
+  for (const relationshipId of relationshipIds) enabled.set(relationshipId, new Set());
+  for (const rule of existing) {
+    if (rule.enabled) enabled.get(rule.coachingRelationshipId)?.add(rule.reminderType);
+  }
+  for (const rule of missing) enabled.get(rule.coachingRelationshipId)?.add(rule.reminderType);
+  return enabled;
+}
+
+async function loadReminderRunContext(
+  db: Db,
+  relationships: RelationshipRow[],
+  now: string,
+): Promise<ReminderRunContext> {
+  const relationshipIds = relationships.map((r) => r.id);
+  const traineeIds = relationships.map((r) => r.traineeUserId);
+  const userIds = [...traineeIds, ...relationships.map((r) => r.trainerUserId)];
+
+  const enabledByRelationship = await enabledReminderTypesByRelationship(db, relationshipIds, now);
+  const userRows = await selectInChunks(userIds, (ids) =>
+    db.select({ id: users.id, timezone: users.timezone }).from(users).where(inArray(users.id, ids)),
+  );
+  const timezoneByUserId = new Map(userRows.map((row) => [row.id, row.timezone]));
+  const preferenceRows = await selectInChunks(traineeIds, (ids) =>
+    db.select().from(notificationPreferences).where(inArray(notificationPreferences.userId, ids)),
+  );
+  const stateRows = await selectInChunks(traineeIds, (ids) =>
+    db.select().from(reminderStates).where(inArray(reminderStates.traineeUserId, ids)),
+  );
+  const overrideRows = await selectInChunks(relationshipIds, (ids) =>
+    db.select().from(mealTimeOverrides).where(inArray(mealTimeOverrides.relationshipId, ids)),
+  );
+
+  // Each relationship has its own "today" (trainee timezone); read every day any of them needs.
+  const todayByRelationship = new Map(
+    relationships.map((r) => [
+      r.id,
+      formatLocalDate(new Date(now), timezoneByUserId.get(r.traineeUserId) ?? "UTC"),
+    ]),
+  );
+  const todays = [...new Set(todayByRelationship.values())];
+  const mealDays = [...new Set(todays.flatMap((day) => [day, addDaysToLocalDate(day, 1)]))];
+
+  const workoutRows = await selectInChunks(
+    relationshipIds,
+    (ids) =>
+      db
+        .select()
+        .from(workoutAssignments)
+        .where(
+          and(
+            inArray(workoutAssignments.coachingRelationshipId, ids),
+            eq(workoutAssignments.scheduleStatus, "scheduled"),
+            inArray(workoutAssignments.localDate, todays),
+          ),
+        ),
+    RUN_CONTEXT_CHUNK,
+  );
+  const executionRows = await selectInChunks(
+    workoutRows.map((row) => row.id),
+    (ids) => db.select().from(workoutExecutions).where(inArray(workoutExecutions.assignmentId, ids)),
+  );
+  const mealRows = await selectInChunks(
+    relationshipIds,
+    (ids) =>
+      db
+        .select()
+        .from(mealAssignments)
+        .where(
+          and(
+            inArray(mealAssignments.coachingRelationshipId, ids),
+            eq(mealAssignments.scheduleStatus, "scheduled"),
+            inArray(mealAssignments.localDate, mealDays),
+          ),
+        ),
+    RUN_CONTEXT_CHUNK,
+  );
+  const complianceRows = await selectInChunks(
+    mealRows.map((row) => row.id),
+    (ids) =>
+      db
+        .select({ assignmentId: mealCompliance.assignmentId })
+        .from(mealCompliance)
+        .where(inArray(mealCompliance.assignmentId, ids)),
+  );
+  const checkinRows = await selectInChunks(
+    relationshipIds,
+    (ids) =>
+      db
+        .select()
+        .from(checkins)
+        .where(
+          and(
+            inArray(checkins.coachingRelationshipId, ids),
+            eq(checkins.recordStatus, "draft"),
+            lte(checkins.windowStartsAt, now),
+          ),
+        ),
+    RUN_CONTEXT_CHUNK,
+  );
+  const todaysDraftCheckinRows = await selectInChunks(
+    relationshipIds,
+    (ids) =>
+      db
+        .select()
+        .from(checkins)
+        .where(
+          and(
+            inArray(checkins.coachingRelationshipId, ids),
+            eq(checkins.recordStatus, "draft"),
+            inArray(checkins.localDate, todays),
+          ),
+        ),
+    RUN_CONTEXT_CHUNK,
+  );
+  const subscriptionRows = await selectInChunks(relationshipIds, (ids) =>
+    db
+      .select()
+      .from(subscriptionVersions)
+      .where(inArray(subscriptionVersions.coachingRelationshipId, ids))
+      .orderBy(desc(subscriptionVersions.versionNumber)),
+  );
+
+  return {
+    traineeUserIds: new Set(traineeIds),
+    enabledByRelationship,
+    timezoneByUserId,
+    preferencesByUserId: firstBy(preferenceRows, (row) => row.userId),
+    reminderStateByUserId: firstBy(stateRows, (row) => row.traineeUserId),
+    overridesByRelationship: groupBy(overrideRows, (row) => row.relationshipId),
+    workoutsByRelationship: groupBy(workoutRows, (row) => row.coachingRelationshipId),
+    executionByAssignmentId: firstBy(executionRows, (row) => row.assignmentId),
+    mealsByRelationship: groupBy(mealRows, (row) => row.coachingRelationshipId),
+    loggedMealAssignmentIds: new Set(complianceRows.map((row) => row.assignmentId)),
+    draftCheckinsByRelationship: groupBy(checkinRows, (row) => row.coachingRelationshipId),
+    todaysDraftCheckinsByRelationship: groupBy(
+      todaysDraftCheckinRows,
+      (row) => row.coachingRelationshipId,
+    ),
+    currentSubscriptionByRelationship: firstBy(subscriptionRows, (row) => row.coachingRelationshipId),
+  };
+}
+
 async function collectCandidates(
   db: Db,
   now: string,
-): Promise<ReminderCandidate[]> {
+): Promise<{ candidates: ReminderCandidate[]; context: ReminderRunContext }> {
   const relationships = await db
     .select()
     .from(coachingRelationships)
     .where(eq(coachingRelationships.status, "active"));
 
+  const context = await loadReminderRunContext(db, relationships, now);
   const candidates: ReminderCandidate[] = [];
 
   for (const relationship of relationships) {
-    const enabled = await enabledReminderTypes(db, relationship.id, now);
-    const trainee = await db
-      .select({ timezone: users.timezone })
-      .from(users)
-      .where(eq(users.id, relationship.traineeUserId))
-      .limit(1);
-    const timeZone = trainee[0]?.timezone ?? "UTC";
+    const enabled = context.enabledByRelationship.get(relationship.id) ?? new Set();
+    const timeZone = context.timezoneByUserId.get(relationship.traineeUserId) ?? "UTC";
     const today = formatLocalDate(new Date(now), timeZone);
     const tomorrow = addDaysToLocalDate(today, 1);
-    const [prefRow] = await db
-      .select({
-        preferredWorkoutTime: notificationPreferences.preferredWorkoutTime,
-        quietHoursStart: notificationPreferences.quietHoursStart,
-      })
-      .from(notificationPreferences)
-      .where(eq(notificationPreferences.userId, relationship.traineeUserId))
-      .limit(1);
-    const [reminderState] = await db
-      .select()
-      .from(reminderStates)
-      .where(eq(reminderStates.traineeUserId, relationship.traineeUserId))
-      .limit(1);
+    const prefRow = context.preferencesByUserId.get(relationship.traineeUserId);
+    const reminderState = context.reminderStateByUserId.get(relationship.traineeUserId);
     const backoffMode = reminderState?.mode ?? "normal";
     const softIgnorerSkipTick =
       backoffMode === "soft_ignorer" &&
@@ -447,38 +677,23 @@ async function collectCandidates(
         nowIso: now,
         softIgnorerSkipTick,
       });
-    const overrideRows = await db
-      .select()
-      .from(mealTimeOverrides)
-      .where(eq(mealTimeOverrides.relationshipId, relationship.id));
+    const overrideRows = context.overridesByRelationship.get(relationship.id) ?? [];
     const overrideBySlot = new Map(
       overrideRows.map((row) => [row.slotKey, row.time]),
     );
     const hardStop = isAtOrAfterHardStopLocal(now, timeZone);
 
     if (enabled.has("workout_reminder") && !hardStop && !skipBackoff("workout_reminder")) {
-      const assignments = await db
-        .select()
-        .from(workoutAssignments)
-        .where(
-          and(
-            eq(workoutAssignments.coachingRelationshipId, relationship.id),
-            eq(workoutAssignments.scheduleStatus, "scheduled"),
-            eq(workoutAssignments.localDate, today),
-          ),
-        )
-        .limit(50);
+      const assignments = (context.workoutsByRelationship.get(relationship.id) ?? [])
+        .filter((assignment) => assignment.localDate === today)
+        .slice(0, 50);
       for (const assignment of assignments) {
-        const executions = await db
-          .select()
-          .from(workoutExecutions)
-          .where(eq(workoutExecutions.assignmentId, assignment.id))
-          .limit(1);
+        const execution = context.executionByAssignmentId.get(assignment.id);
         const slots = dueWorkoutReminderTimes({
           nowIso: now,
           assignmentLocalDate: assignment.localDate,
           timeZone,
-          resolved: isWorkoutResolved(executions[0]?.status ?? null),
+          resolved: isWorkoutResolved(execution?.status ?? null),
           workoutStartLocalTime: prefRow?.preferredWorkoutTime ?? null,
           quietHoursStart: prefRow?.quietHoursStart ?? null,
         });
@@ -498,26 +713,10 @@ async function collectCandidates(
     }
 
     if (enabled.has("meal_reminder") && !hardStop && !skipBackoff("meal_reminder")) {
-      const assignments = await db
-        .select()
-        .from(mealAssignments)
-        .where(
-          and(
-            eq(mealAssignments.coachingRelationshipId, relationship.id),
-            eq(mealAssignments.scheduleStatus, "scheduled"),
-            or(
-              eq(mealAssignments.localDate, today),
-              eq(mealAssignments.localDate, tomorrow),
-            ),
-          ),
-        )
-        .limit(50);
+      const assignments = (context.mealsByRelationship.get(relationship.id) ?? [])
+        .filter((assignment) => assignment.localDate === today || assignment.localDate === tomorrow)
+        .slice(0, 50);
       for (const assignment of assignments) {
-        const complianceRows = await db
-          .select()
-          .from(mealCompliance)
-          .where(eq(mealCompliance.assignmentId, assignment.id))
-          .limit(1);
         const phases = dueMealReminderPhases({
           nowIso: now,
           localDate: assignment.localDate,
@@ -526,7 +725,7 @@ async function collectCandidates(
             assignment.mealPrescriptionJson,
             overrideBySlot,
           ),
-          logged: Boolean(complianceRows[0]),
+          logged: context.loggedMealAssignmentIds.has(assignment.id),
           windowEndsAt: assignment.windowEndsAt,
         });
         for (const phase of phases) {
@@ -545,17 +744,7 @@ async function collectCandidates(
     }
 
     if (enabled.has("checkin_reminder") && !skipBackoff("checkin_reminder")) {
-      const rows = await db
-        .select()
-        .from(checkins)
-        .where(
-          and(
-            eq(checkins.coachingRelationshipId, relationship.id),
-            eq(checkins.recordStatus, "draft"),
-            lte(checkins.windowStartsAt, now),
-          ),
-        )
-        .limit(50);
+      const rows = (context.draftCheckinsByRelationship.get(relationship.id) ?? []).slice(0, 50);
       for (const checkin of rows) {
         if (
           !isCheckinReminderEligible({
@@ -585,22 +774,11 @@ async function collectCandidates(
     }
 
     if (enabled.has("subscription_renewal_reminder")) {
-      const versions = await db
-        .select()
-        .from(subscriptionVersions)
-        .where(eq(subscriptionVersions.coachingRelationshipId, relationship.id))
-        .orderBy(desc(subscriptionVersions.versionNumber))
-        .limit(1);
-      const current = versions[0];
+      const current = context.currentSubscriptionByRelationship.get(relationship.id);
       if (current) {
-        const trainer = await db
-          .select({ timezone: users.timezone })
-          .from(users)
-          .where(eq(users.id, relationship.trainerUserId))
-          .limit(1);
         const trainerToday = formatLocalDate(
           new Date(now),
-          trainer[0]?.timezone ?? "UTC",
+          context.timezoneByUserId.get(relationship.trainerUserId) ?? "UTC",
         );
         const renewalState = deriveRenewalState({
           today: trainerToday,
@@ -625,17 +803,9 @@ async function collectCandidates(
       }
     }
 
-    const todaysMealAssignments = await db
-      .select({ mealPrescriptionJson: mealAssignments.mealPrescriptionJson })
-      .from(mealAssignments)
-      .where(
-        and(
-          eq(mealAssignments.coachingRelationshipId, relationship.id),
-          eq(mealAssignments.localDate, today),
-          eq(mealAssignments.scheduleStatus, "scheduled"),
-        ),
-      )
-      .limit(20);
+    const todaysMealAssignments = (context.mealsByRelationship.get(relationship.id) ?? [])
+      .filter((assignment) => assignment.localDate === today)
+      .slice(0, 20);
     const lastMealLocalTime = latestMealLocalTime(
       todaysMealAssignments,
       overrideBySlot,
@@ -647,8 +817,8 @@ async function collectCandidates(
         lastMealLocalTime,
       })
     ) {
-      const remaining = await countRemainingLogs(
-        db,
+      const remaining = remainingLogsFromContext(
+        context,
         relationship.id,
         today,
         enabled,
@@ -656,9 +826,8 @@ async function collectCandidates(
       );
       const total = remaining.workouts + remaining.meals + remaining.checkins;
       if (total > 0) {
-        const prefs = await loadOrDefaultPreferences(
-          db,
-          relationship.traineeUserId,
+        const prefs = preferencesFromRow(
+          context.preferencesByUserId.get(relationship.traineeUserId),
         );
         candidates.push({
           type: "daily_summary",
@@ -674,7 +843,113 @@ async function collectCandidates(
     }
   }
 
-  return candidates;
+  return { candidates, context };
+}
+
+/**
+ * Lookups one cron run would otherwise repeat per candidate (I8), prefetched in
+ * bulk. A key or user missing from a map falls back to the original query, so a
+ * caller without a cache (activity nudges) behaves exactly as before.
+ */
+type PersistCache = {
+  notificationByKey: Map<string, Pick<NotificationRow, "id" | "state"> | null>;
+  existingJobKeys: Map<string, boolean>;
+  context: ReminderRunContext;
+};
+
+async function findByDedupeKeyCached(
+  db: Db,
+  dedupeKey: string,
+  cache?: PersistCache,
+): Promise<Pick<NotificationRow, "id" | "state"> | null> {
+  if (cache?.notificationByKey.has(dedupeKey)) {
+    return cache.notificationByKey.get(dedupeKey) ?? null;
+  }
+  const row = await findByDedupeKey(db, dedupeKey);
+  cache?.notificationByKey.set(dedupeKey, row);
+  return row;
+}
+
+async function recipientTimezone(db: Db, userId: string, cache?: PersistCache): Promise<string> {
+  const known = cache?.context.timezoneByUserId.get(userId);
+  if (known) return known;
+  const userRows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return userRows[0]?.timezone ?? "UTC";
+}
+
+async function recipientPreferences(db: Db, userId: string, cache?: PersistCache) {
+  if (cache?.context.traineeUserIds.has(userId)) {
+    return preferencesFromRow(cache.context.preferencesByUserId.get(userId));
+  }
+  return loadOrDefaultPreferences(db, userId);
+}
+
+async function createPersistCache(
+  db: Db,
+  candidates: ReminderCandidate[],
+  context: ReminderRunContext,
+): Promise<PersistCache> {
+  const keys = candidates.flatMap((candidate) => [
+    candidate.dedupeKey,
+    deferredReminderDedupeKey(candidate.dedupeKey),
+  ]);
+  const rows = await selectInChunks(keys, (chunk) =>
+    db
+      .select({ id: notifications.id, state: notifications.state, dedupeKey: notifications.dedupeKey })
+      .from(notifications)
+      .where(inArray(notifications.dedupeKey, chunk)),
+  );
+  const notificationByKey = new Map<string, Pick<NotificationRow, "id" | "state"> | null>(
+    keys.map((key) => [key, null]),
+  );
+  for (const row of rows) notificationByKey.set(row.dedupeKey, { id: row.id, state: row.state });
+
+  const jobKeys = candidates.map((candidate) => `deliver:${candidate.dedupeKey}`);
+  const jobRows = await selectInChunks(jobKeys, (chunk) =>
+    db
+      .select({ dedupeKey: scheduledJobs.dedupeKey })
+      .from(scheduledJobs)
+      .where(inArray(scheduledJobs.dedupeKey, chunk)),
+  );
+  const existingJobKeys = new Map(jobKeys.map((key) => [key, false]));
+  for (const row of jobRows) existingJobKeys.set(row.dedupeKey, true);
+
+  return { notificationByKey, existingJobKeys, context };
+}
+
+/** Push reminders already sent today per recipient, in one read (was one per recipient). */
+async function pushRemindersSentToday(
+  db: Db,
+  recipientUserIds: string[],
+  now: string,
+  cache: PersistCache,
+): Promise<Map<string, number>> {
+  const dayStartByUser = new Map<string, string>();
+  for (const userId of new Set(recipientUserIds)) {
+    const tz = await recipientTimezone(db, userId, cache);
+    dayStartByUser.set(userId, localDateTimeToUtcIso(formatLocalDate(new Date(now), tz), tz, 0, 0, 0));
+  }
+  const counts = new Map([...dayStartByUser.keys()].map((userId) => [userId, 0]));
+  if (dayStartByUser.size === 0) return counts;
+  const earliest = [...dayStartByUser.values()].sort()[0]!;
+  const rows = await selectInChunks(dayStartByUser.keys(), (ids) =>
+    db
+      .select({
+        recipientUserId: notifications.recipientUserId,
+        notificationType: notifications.notificationType,
+        state: notifications.state,
+        createdAt: notifications.createdAt,
+      })
+      .from(notifications)
+      .where(and(inArray(notifications.recipientUserId, ids), gte(notifications.createdAt, earliest))),
+  );
+  for (const row of rows) {
+    if (row.createdAt < dayStartByUser.get(row.recipientUserId)!) continue;
+    if (!PUSH_REMINDER_TYPES.has(row.notificationType as NotificationType)) continue;
+    if (row.state === "suppressed" || row.state === "deferred") continue;
+    counts.set(row.recipientUserId, (counts.get(row.recipientUserId) ?? 0) + 1);
+  }
+  return counts;
 }
 
 async function enqueueReminderDelivery(
@@ -684,6 +959,7 @@ async function enqueueReminderDelivery(
     candidate: ReminderCandidate;
     now: string;
     options: DeliveryOptions;
+    cache?: PersistCache;
   },
 ): Promise<void> {
   const deliveryId = createId();
@@ -702,12 +978,20 @@ async function enqueueReminderDelivery(
   });
 
   const jobDedupe = `deliver:${input.candidate.dedupeKey}`;
-  const priorJob = await db
-    .select()
-    .from(scheduledJobs)
-    .where(eq(scheduledJobs.dedupeKey, jobDedupe))
-    .limit(1);
-  if (!priorJob[0]) {
+  const priorJobKnown = input.cache?.existingJobKeys.get(jobDedupe);
+  const priorJob =
+    priorJobKnown === undefined
+      ? Boolean(
+          (
+            await db
+              .select()
+              .from(scheduledJobs)
+              .where(eq(scheduledJobs.dedupeKey, jobDedupe))
+              .limit(1)
+          )[0],
+        )
+      : priorJobKnown;
+  if (!priorJob) {
     await db.insert(scheduledJobs).values({
       id: createId(),
       jobType: "notification.deliver",
@@ -721,12 +1005,8 @@ async function enqueueReminderDelivery(
       createdAt: input.now,
       updatedAt: input.now,
     });
+    input.cache?.existingJobKeys.set(jobDedupe, true);
   }
-
-  await db
-    .update(notifications)
-    .set({ state: "queued" })
-    .where(eq(notifications.id, input.notificationId));
 
   const message: ReminderQueueMessage = {
     notificationId: input.notificationId,
@@ -749,20 +1029,16 @@ async function persistReminder(
   now: string,
   options: DeliveryOptions,
   counters: ReminderCounters,
+  cache?: PersistCache,
 ): Promise<PersistResult> {
-  const existingDelivery = await findByDedupeKey(db, candidate.dedupeKey);
+  const existingDelivery = await findByDedupeKeyCached(db, candidate.dedupeKey, cache);
   if (existingDelivery) {
     counters.notificationsDeduped += 1;
     return { outcome: "deduped" };
   }
 
-  const prefs = await loadOrDefaultPreferences(db, candidate.recipientUserId);
-  const userRows = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, candidate.recipientUserId))
-    .limit(1);
-  const timezone = userRows[0]?.timezone ?? "UTC";
+  const prefs = await recipientPreferences(db, candidate.recipientUserId, cache);
+  const timezone = await recipientTimezone(db, candidate.recipientUserId, cache);
   const localTime = localTimeHhMm(now, timezone) ?? "12:00";
   const categoryOk =
     candidate.categoryAllowed !== null
@@ -783,7 +1059,7 @@ async function persistReminder(
     }),
   });
   const deferredKey = deferredReminderDedupeKey(candidate.dedupeKey);
-  const deferredRow = await findByDedupeKey(db, deferredKey);
+  const deferredRow = await findByDedupeKeyCached(db, deferredKey, cache);
 
   if (decision === "suppress") {
     if (deferredRow) {
@@ -796,6 +1072,8 @@ async function persistReminder(
         counters.notificationsDeduped += 1;
         return { outcome: "deduped" };
       }
+      cache?.notificationByKey.set(deferredKey, null);
+      cache?.notificationByKey.set(candidate.dedupeKey, { id: deferredRow.id, state: "suppressed" });
       counters.suppressed += 1;
       return { outcome: "stored", notificationId: deferredRow.id };
     }
@@ -817,6 +1095,7 @@ async function persistReminder(
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
+    cache?.notificationByKey.set(candidate.dedupeKey, { id: notificationId, state: "suppressed" });
     counters.notificationsCreated += 1;
     counters.suppressed += 1;
     return { outcome: "stored", notificationId };
@@ -845,6 +1124,7 @@ async function persistReminder(
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
+    cache?.notificationByKey.set(deferredKey, { id: notificationId, state: "deferred" });
     counters.notificationsCreated += 1;
     counters.deferred += 1;
     return { outcome: "stored", notificationId };
@@ -855,13 +1135,14 @@ async function persistReminder(
     try {
       await db
         .update(notifications)
-        .set({ dedupeKey: candidate.dedupeKey, state: "pending" })
+        .set({ dedupeKey: candidate.dedupeKey, state: "queued" })
         .where(eq(notifications.id, deferredRow.id));
     } catch {
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
     notificationId = deferredRow.id;
+    cache?.notificationByKey.set(deferredKey, null);
   } else {
     notificationId = createId();
     try {
@@ -872,7 +1153,9 @@ async function persistReminder(
         notificationType: candidate.type,
         domainEntityType: candidate.domainEntityType,
         domainEntityId: candidate.domainEntityId,
-        state: "pending",
+        // Final state straight away: the delivery below is always enqueued
+        // (one write instead of insert "pending" then update "queued", I8).
+        state: "queued",
         dedupeKey: candidate.dedupeKey,
         createdAt: now,
         readAt: null,
@@ -883,12 +1166,14 @@ async function persistReminder(
     }
     counters.notificationsCreated += 1;
   }
+  cache?.notificationByKey.set(candidate.dedupeKey, { id: notificationId, state: "queued" });
 
   await enqueueReminderDelivery(db, {
     notificationId,
     candidate,
     now,
     options,
+    cache,
   });
   counters.deliveriesEnqueued += 1;
   return { outcome: "stored", notificationId };
@@ -1264,37 +1549,29 @@ export async function evaluateAndEnqueueReminders(
     suppressed: 0,
     deferred: 0,
   };
-  const candidates = await collectCandidates(db, now);
+  const { candidates, context } = await collectCandidates(db, now);
   const candidateKeys = new Set(candidates.map((candidate) => candidate.dedupeKey));
   const sorted = [...candidates].sort(
     (a, b) => reminderDeliveryPriority(a.type) - reminderDeliveryPriority(b.type),
   );
-  const pushCountCache = new Map<string, number>();
+  const cache = await createPersistCache(db, candidates, context);
+  const pushCountCache = await pushRemindersSentToday(
+    db,
+    candidates
+      .filter((candidate) => PUSH_REMINDER_TYPES.has(candidate.type))
+      .map((candidate) => candidate.recipientUserId),
+    now,
+    cache,
+  );
   for (const candidate of sorted) {
     if (PUSH_REMINDER_TYPES.has(candidate.type)) {
-      let used = pushCountCache.get(candidate.recipientUserId);
-      if (used === undefined) {
-        const [userRow] = await db
-          .select({ timezone: users.timezone })
-          .from(users)
-          .where(eq(users.id, candidate.recipientUserId))
-          .limit(1);
-        const tz = userRow?.timezone ?? "UTC";
-        const localToday = formatLocalDate(new Date(now), tz);
-        const dayStart = localDateTimeToUtcIso(localToday, tz, 0, 0, 0);
-        used = await countTraineePushRemindersToday(
-          db,
-          candidate.recipientUserId,
-          dayStart,
-        );
-        pushCountCache.set(candidate.recipientUserId, used);
-      }
+      const used = pushCountCache.get(candidate.recipientUserId) ?? 0;
       if (used >= DAILY_PUSH_CAP) {
         continue;
       }
     }
     const beforeDeliveries = counters.deliveriesEnqueued;
-    await persistReminder(db, candidate, now, delivery, counters);
+    await persistReminder(db, candidate, now, delivery, counters, cache);
     if (
       PUSH_REMINDER_TYPES.has(candidate.type) &&
       counters.deliveriesEnqueued > beforeDeliveries

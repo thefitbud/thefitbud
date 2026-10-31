@@ -184,7 +184,7 @@ Risks or questions
 Done when
 - Observable acceptance criteria
 Decisions and stop rules (30 Oct 2026: no mid-task human approval)
-Agents do not wait for human approval during a task. Product, architecture, provider, auth and migration decisions are made before a batch starts and are written into the task spec (`docs/specs/<ID>.md`) and its batch file. Firoz reviews the finished batch, not individual steps.
+Agents do not wait for human approval during a task. Product, architecture, provider, auth and migration decisions are made before a batch starts and are written into the task spec (`docs/specs/<ID>.md`) and its batch file. No person reviews code: agents write, review and merge it at every level, including auth (CLAUDE.md, "No human code review", 31 Oct 2026). Firoz reads the batch report and does the manual steps only he can do.
 Stop and report, instead of guessing, only when:
 - The spec does not answer a question whose answer changes product behavior, scope, architecture, auth, ownership, or data.
 - The work would make a destructive or irreversible migration, rewrite historical coaching records, change published-plan immutability, or discard user data, and the spec does not say so explicitly.

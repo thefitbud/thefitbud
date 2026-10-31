@@ -16,12 +16,12 @@ This folder is where planning (Firoz and the Grok/Cursor bots) hands work to the
    - sends back at most one fix round, then re-scopes smaller;
    - merges under the working rules in CLAUDE.md;
    - fills in the batch report.
-4. **Firoz reviews the batch report** and the screenshots in `docs/qa/`, and does the manual steps listed there.
+4. **Firoz reads the batch report** and the screenshots in `docs/qa/`, and does the manual steps listed there. Nobody reviews code by hand (CLAUDE.md, "No human code review").
 
 ## Rules
 
 - Two tasks in the same batch never own the same file.
 - If a frame or decision is missing, the agent stops and asks. It never guesses.
 - Confluence is reference only. Paste what matters into the spec's Context section.
-- There is no human approval step, before or during a batch (Agents.md, 30 Oct). Decisions go into the spec before launch; Firoz reading the docs and launching the batch is the only go; he reviews the finished batch.
+- There is no human approval step, before or during a batch (Agents.md, 30 Oct). Decisions go into the spec before launch; Firoz reading the docs and launching the batch is the only go. Code is written, reviewed and merged by agents at every level, auth included (CLAUDE.md, 31 Oct).
 - If a decision is still written as **Open** when the batch runs, only the tasks that need it stop and report. The rest of the batch runs.

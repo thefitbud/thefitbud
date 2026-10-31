@@ -22,6 +22,7 @@ import {
   users,
 } from "../db/schema";
 import {
+  createIdentityRequestCache,
   ensureRoleAndProfile,
   findOrCreateUserFromFirebase,
   loadActorByUserId,
@@ -49,7 +50,11 @@ import {
   validatePasswordPlaintext,
 } from "../auth/password.js";
 import { identifierHash } from "../auth/identifiers.js";
-import { mintAuthToken } from "../auth/custom-token.js";
+import {
+  authTokenErrorStatus,
+  mintAuthToken,
+  sessionTokenFields,
+} from "../auth/custom-token.js";
 import { acceptInvitationWithTokenResponseSchema } from "@fitbud/contracts";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import {
@@ -723,13 +728,19 @@ invitationRoutes.post("/accept",
       email: invitation.recipientEmail,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return fail(
+        c,
+        authTokenErrorStatus(token.error),
+        token.error,
+        token.error === "AUTH_EXCHANGE_FAILED"
+          ? "Sign-in could not be completed. Try again."
+          : "Authentication provider is not configured.",
+      );
     }
     return ok(
       c,
       acceptInvitationWithTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId,
         relationshipId,
       }),
@@ -824,11 +835,16 @@ invitationRoutes.post("/accept",
     identity.email?.split("@")[0] ??
     "Trainee";
 
-  await ensureRoleAndProfile(db, {
-    userId,
-    role: "trainee",
-    displayName,
-  });
+  const identityCache = createIdentityRequestCache();
+  await ensureRoleAndProfile(
+    db,
+    {
+      userId,
+      role: "trainee",
+      displayName,
+    },
+    identityCache,
+  );
 
   if (parsed.data.timezone) {
     await db
@@ -888,12 +904,16 @@ invitationRoutes.post("/accept",
   )[0]!;
 
   // Load actor so subsequent bearer calls succeed for this Firebase UID.
-  await loadActorByUserId(db, {
-    userId,
-    surface: "mobile",
-    authMethod: "bearer",
-    requestedRole: "trainee",
-  });
+  await loadActorByUserId(
+    db,
+    {
+      userId,
+      surface: "mobile",
+      authMethod: "bearer",
+      requestedRole: "trainee",
+    },
+    identityCache,
+  );
 
   const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
   return ok(

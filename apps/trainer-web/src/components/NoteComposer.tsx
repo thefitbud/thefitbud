@@ -34,7 +34,13 @@ export function NoteComposer({
   checkinId?: string;
   note?: TrainerNote;
   readOnly?: boolean;
-  onSaved?: () => void;
+  /**
+   * Called with the confirmation copy ("Saved privately" / "Shared with Rohan")
+   * once the note is saved. The parent shows it and closes the composer: the
+   * composer itself may unmount when the workspace reloads, so it can't own
+   * the confirmation.
+   */
+  onSaved?: (message: string) => void;
   onClose?: () => void;
 }) {
   const { me } = useAuth();
@@ -45,7 +51,6 @@ export function NoteComposer({
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
   const firstName = useMemo(() => {
     const raw = (traineeName ?? "Client").trim().split(/\s+/)[0];
@@ -100,16 +105,11 @@ export function NoteComposer({
         visibility === "client"
           ? `Shared with ${firstName}`
           : "Saved privately";
-      setToast(message);
       if (!isEdit) {
         setBody("");
         setVisibility("private");
       }
-      onSaved?.();
-      window.setTimeout(() => {
-        setToast(null);
-        onClose?.();
-      }, 1200);
+      onSaved?.(message);
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Could not save note.",
@@ -172,11 +172,6 @@ export function NoteComposer({
       {error ? (
         <p className="form-error" role="alert">
           {error}
-        </p>
-      ) : null}
-      {toast ? (
-        <p className="banner-info" role="status">
-          {toast}
         </p>
       ) : null}
 

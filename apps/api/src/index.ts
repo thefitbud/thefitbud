@@ -47,6 +47,7 @@ import { activityFeedRoutes } from "./routes/activity-feed";
 import { linkRoutes } from "./routes/links";
 import { whatsappWebhookRoutes } from "./routes/webhooks-whatsapp";
 import { openApiRouteOptions, operation } from "./openapi/document";
+import { runtimeGuardMiddleware } from "./middleware/runtime-guard";
 import type { Env, Variables } from "./types";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -60,6 +61,8 @@ app.use("*", async (c, next) => {
 });
 app.use("*", requestIdMiddleware);
 app.use("*", requestLogMiddleware);
+// Before any route: a staging/production Worker running a local test double refuses to serve.
+app.use("*", runtimeGuardMiddleware);
 
 app.get(
   "/health",

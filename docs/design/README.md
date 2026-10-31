@@ -10,6 +10,12 @@ Everything design lives here. **One file per screen state; if it is not in `mock
 2. **Original frames** (approved 18–21 Oct): [DESIGN-NOTES.md](DESIGN-NOTES.md). Where an original frame shows something a v3 decision changed (old Today ring card, old trainer tab bar "Attention · Clients · Check-ins · More", the exception drawer), follow the v3 decision; the Status column flags these.
 3. Content rules always apply: [../spec/01-product-rules.md](../spec/01-product-rules.md), [../spec/banned-strings.json](../spec/banned-strings.json).
 
+**Locked without a frame (31 Oct 2026, owner):** the trainer-web note-saved confirmation (TW-34; the old web toast frame 134 was removed on 22 Oct).
+- Saving a note closes the drawer and shows "Saved privately" or "Shared with <first name>" in the deep-navy bottom pill (`.home-toast`, the same pattern as the Home toast and mobile frame 05) for 4 s.
+- The confirmation lives in the client workspace, not in the drawer, so the workspace refresh after a save cannot remove it.
+- Reference screenshots: `docs/qa/TW-34/` (1440 × 900).
+- Build to this; do not stop for a missing frame.
+
 Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Meals/Steps chips); Active workout (11, 11b) is **light**; Mark reviewed moves the client to a Reviewed section until every item is resolved; every coach gets a Sessions tab (calendar lives inside Sessions on web); client Check-ins tab with an Overdue filter is web/iPad only (trainer-mobile check-in history removed; trainer mobile = quick jobs).
 
 ## Layout

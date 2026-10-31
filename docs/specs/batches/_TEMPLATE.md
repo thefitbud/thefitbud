@@ -23,8 +23,8 @@ Two lanes never own the same file. Run at most **3 implementer sessions at once*
 - [ ] Every PR merged with `ci` green and review PASS.
 - [ ] Batch-level checks (e.g. a staging-like sign-in works end to end).
 
-## What Firoz reviews
-- PRs, with the QA reports and screenshots in `docs/qa/`.
+## What Firoz does
+- Reads the batch report and the QA screenshots in `docs/qa/`. Code is reviewed by agents, not by hand (CLAUDE.md, "No human code review").
 - Manual steps only he can do: secrets, store consoles, remote commands.
 
 ## Report (filled in by the orchestrator at the end)

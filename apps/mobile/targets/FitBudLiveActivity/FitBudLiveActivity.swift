@@ -6,7 +6,8 @@ import WidgetKit
 /// Shared with the Expo app through the App Group. A dev build drains this
 /// into the sync outbox. Expo web cannot read it.
 enum LiveActivityOutbox {
-  static let suite = "group.com.thefitbud.mobile"
+  /// Per-variant App Group, written to Info.plist by plugins/withLiveActivity.js.
+  static let suite = Bundle.main.object(forInfoDictionaryKey: "FitBudAppGroup") as? String
   static let key = "liveActivityOutbox"
 
   static func append(exerciseName: String, setIndex: Int, kilograms: Double, reps: Int) {

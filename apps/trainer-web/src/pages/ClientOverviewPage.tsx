@@ -698,6 +698,7 @@ export function ClientOverviewPage() {
           </div>
           <ResponsivenessPanel
             relationshipId={relationshipId}
+            refreshEpoch={refreshEpoch}
             compact
             gender={header.traineeProfile.gender}
             traineeFirstName={firstName}
