@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Outlet, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ClientWorkspace } from "@fitbud/contracts";
@@ -35,6 +35,7 @@ export function ClientWorkspaceLayout() {
   const [forbidden, setForbidden] = useState(false);
   const [submittedCheckins, setSubmittedCheckins] = useState(0);
   const [modal, setModal] = useState<WorkspaceModal>(null);
+  const loadedRelationshipId = useRef<string | null>(null);
 
   const reloadWorkspace = useCallback(() => {
     setRefreshEpoch((value) => value + 1);
@@ -51,7 +52,13 @@ export function ClientWorkspaceLayout() {
   useEffect(() => {
     if (!relationshipId) return;
     let cancelled = false;
-    setWorkspace(null);
+    // A refresh (refreshEpoch) keeps the current workspace on screen so open
+    // drawers, such as the note composer and its "Saved privately" toast,
+    // are not unmounted by the loading state. Only a different client clears it.
+    if (loadedRelationshipId.current !== relationshipId) {
+      setWorkspace(null);
+      loadedRelationshipId.current = relationshipId;
+    }
     setWorkspaceLoading(true);
     setWorkspaceError(null);
     setWorkspaceErrorRequestId(null);
