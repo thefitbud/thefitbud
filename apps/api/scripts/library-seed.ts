@@ -2,7 +2,7 @@
 /**
  * Load library v2 into local D1 (.wrangler/state). Refuses --remote.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCommandSync } from "./lib/run-command.js";
@@ -30,6 +30,13 @@ function runFile(rel: string): void {
   if (!existsSync(file)) {
     console.error(`Missing seed file: ${file}`);
     process.exit(1);
+  }
+  // 02b and 08 ship as comments only until a correction lands; wrangler rejects a file
+  // with no statement ("SQL code did not contain a statement"), so skip it.
+  const statements = readFileSync(file, "utf8").replace(/^\s*--.*$/gm, "").trim();
+  if (statements.length === 0) {
+    console.log(`→ ${rel} (no statements, skipped)`);
+    return;
   }
   console.log(`→ ${rel}`);
   runCommandSync(

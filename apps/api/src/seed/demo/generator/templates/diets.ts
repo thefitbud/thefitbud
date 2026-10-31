@@ -190,9 +190,9 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": true,
         "items": [
           {
-            "slug": "jowar-dosa",
-            "grams": 66,
-            "label": "2 jowar dosa"
+            "slug": "plain-dosa",
+            "grams": 70,
+            "label": "2 dosa"
           },
           {
             "slug": "avial",
@@ -243,17 +243,17 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "label": "2 roti"
           },
           {
-            "slug": "dal-dhokli",
+            "slug": "moong-dal-dhuli",
             "grams": 250,
             "label": "1 bowl"
           },
           {
-            "slug": "bharwa-bhindi",
+            "slug": "vegetable-curry",
             "grams": 100,
             "label": "1 katori"
           },
           {
-            "slug": "lauki-ka-raita",
+            "slug": "cucumber-raita",
             "grams": 120,
             "label": "1 bowl"
           }
@@ -284,13 +284,13 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": false,
         "items": [
           {
-            "slug": "panchmel-dal",
+            "slug": "chana-dal",
             "grams": 200,
             "label": "1 bowl"
           },
           {
-            "slug": "jowar-dosa",
-            "grams": 66,
+            "slug": "plain-dosa",
+            "grams": 70,
             "label": "2"
           },
           {
@@ -378,7 +378,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": true,
         "items": [
           {
-            "slug": "palak-mushroom-egg-bhurji",
+            "slug": "scrambled-egg",
             "grams": 200,
             "label": "1 bowl"
           },
@@ -599,9 +599,9 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": true,
         "items": [
           {
-            "slug": "tandoori-chicken",
+            "slug": "chicken-grilled-without-sauce-skin-not-eaten",
             "grams": 150,
-            "label": "4 pieces"
+            "label": "3 pieces"
           },
           {
             "slug": "chapati-roti",
@@ -609,7 +609,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "label": "2 roti"
           },
           {
-            "slug": "matar-ki-sabzi",
+            "slug": "aloo-matar",
             "grams": 100,
             "label": "1 katori"
           },
@@ -646,7 +646,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
           {
             "slug": "tea-black-brewed",
             "grams": 100,
-            "label": "100 g"
+            "label": "100 ml"
           }
         ]
       },
@@ -667,7 +667,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "label": "1 bowl meen curry"
           },
           {
-            "slug": "cabbage-carrot-thoran-with-coconut",
+            "slug": "avial",
             "grams": 100,
             "label": "1 katori"
           },
@@ -708,7 +708,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "label": "2 chapati"
           },
           {
-            "slug": "chicken-yakhni",
+            "slug": "chicken-curry",
             "grams": 250,
             "label": "1 bowl"
           },
@@ -817,7 +817,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "label": "3 roti"
           },
           {
-            "slug": "soyabean-curry",
+            "slug": "soybeans-boiled",
             "grams": 120,
             "label": "1 bowl"
           }
@@ -860,9 +860,9 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": true,
         "items": [
           {
-            "slug": "tandoori-chicken",
+            "slug": "chicken-grilled-without-sauce-skin-not-eaten",
             "grams": 200,
-            "label": "tandoori/grilled chicken"
+            "label": "grilled chicken"
           },
           {
             "slug": "naan",
@@ -1099,7 +1099,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "label": "paneer tikka (sendha namak)"
           },
           {
-            "slug": "lauki-ka-raita",
+            "slug": "cucumber-raita",
             "grams": 150,
             "label": "1 bowl"
           }
