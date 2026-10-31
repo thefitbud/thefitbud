@@ -20,7 +20,7 @@ On Android dev builds the module shows, updates and removes an ongoing workout n
 
 ## Context
 - v14 LA3 was one S task with native and JS work; it is split (LA3 native, LA3b JS wiring). The Kotlin scaffold exists (`apps/mobile/targets/android/WorkoutSetNotification.kt`, 75 lines) and is not compiled into the build.
-- Uses the `workout` channel (`apps/mobile/src/notifications/androidChannels.ts`), respects notifications-off. Rest timer on Android: **D-W3-3 (Open)**, recommendation: none, matching frame 27-android (the scaffold says no rest timer, `WorkoutSetNotification.kt:15`).
+- Uses the `workout` channel (`apps/mobile/src/notifications/androidChannels.ts`), respects notifications-off. Android rest timer: D-W3-3 (decided by Firoz, 1 Nov 2026): it is added, in LA3c (new frame); this task builds the notification without it (the scaffold comment at `WorkoutSetNotification.kt:15` is updated by LA3c).
 
 ## Gap list
 - `apps/mobile/targets/android/WorkoutSetNotification.kt:3-4`: not compiled; no receiver for the PendingIntents.
@@ -33,7 +33,7 @@ On Android dev builds the module shows, updates and removes an ongoing workout n
 - [ ] Device checklist for Firoz in the PR.
 
 ## Out of scope
-- Workout-screen wiring (LA3b). iOS.
+- Workout-screen wiring (LA3b). Rest timer (LA3c). iOS.
 - Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 
