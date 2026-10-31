@@ -77,7 +77,7 @@ PASS means layout, copy and states all match the frame. Tests and CI passing are
   - Never squash, never `--admin`.
   - Never touch PRs labelled `do-not-merge`.
   - Never close PRs, change labels or delete branches.
-- **Standing owner authorization (Firoz, 31 Oct 2026; applies to this and all future tasks).** Agents act without asking for approval:
+- **Standing owner authorization (repo owner, tech@thefitbud.com, in a Claude Code session on 31 Oct 2026; applies to this and all future tasks).** Agents act without asking for approval:
   - Open the PR when the work is done, get it reviewed by a fresh reviewer subagent that sees the specs and the diff (not your conclusions), fix what it confirms, and merge once `ci` is green and the review passes. This counts as the batch file allowing the merge. The merge rules above still apply (merge commits, never squash or `--admin`, `do-not-merge`, no label or branch changes).
   - Launch parallel sessions or subagents when the work benefits from it.
   - Still stop and report on the stop rules (a decision the spec leaves open, a destructive migration, another lane's file). Never run remote or deploy commands and never handle secrets; agents have no production credentials.
