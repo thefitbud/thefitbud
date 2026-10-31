@@ -29,9 +29,17 @@ routes = [{ pattern = "app-staging.thefitbud.com", custom_domain = true }]
 binding = "API"
 service = "fitbud-api-staging"
 
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
 [env.production]
 routes = [{ pattern = "app.thefitbud.com", custom_domain = true }]
 
 [[env.production.services]]
 binding = "API"
 service = "fitbud-api-production"
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.2
