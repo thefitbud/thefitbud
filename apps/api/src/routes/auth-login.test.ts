@@ -356,6 +356,40 @@ describe("auth login routes", () => {
     }
   });
 
+  it("still resets the password when the password-changed email fails", async () => {
+    const { email } = await seedPasswordUser(db, "reset-mailfail@example.com", "Str0ng-enough");
+    const post = (path: string, body: unknown, env: Env = testEnv()) =>
+      app.request(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, env);
+
+    // Real reset flow on the dev sink: OTP start -> code from the outbox -> verify -> proof.
+    expect((await post("/auth/otp/start", { identifier: email, purpose: "reset" })).status).toBe(202);
+    const [mail] = await db.select().from(schema.devMailOutbox);
+    const code = /\b(\d{6})\b/.exec(mail!.textBody)![1]!;
+    const verify = await post("/auth/otp/verify", { identifier: email, purpose: "reset", code });
+    expect(verify.status).toBe(200);
+    const { data: proof } = (await verify.json()) as { data: { resetProof: string } };
+
+    const realFetch = globalThis.fetch;
+    const zepto = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("zeptomail") ? zepto() : realFetch(input, init)) as typeof fetch);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const reset = await post(
+        "/auth/password/reset",
+        { resetProof: proof.resetProof, newPassword: "Reset-Str0ng-Passw0rd!" },
+        testEnv({ EMAIL_PROVIDER: "zeptomail", ZEPTOMAIL_TOKEN: "zepto-test-token-do-not-log" }),
+      );
+      expect(zepto).toHaveBeenCalledTimes(1);
+      expect(reset.status).toBe(200);
+      expect((await post("/auth/login", { identifier: email, password: "Reset-Str0ng-Passw0rd!" })).status).toBe(200);
+      expect(warn.mock.calls.map((call) => String(call[0])).join("\n")).toContain("auth.credential_change_notice");
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns generic OTP invalid for a bad verify attempt", async () => {
     await seedPasswordUser(db, "otp-verify@example.com", "Str0ng-enough");
     const response = await app.request(

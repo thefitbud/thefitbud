@@ -52,7 +52,6 @@ import {
 } from "../middleware/auth.js";
 import type { Env, Variables } from "../types.js";
 
-
 /** Safe warn line for an email that couldn't be sent: names and codes only. */
 function logEmailFailure(c: AppContext, operation: string, err: { name: string; code: string }): void {
   writeStructuredLog({
@@ -517,7 +516,7 @@ authLoginRoutes.post(
         text: passwordChangedEmailBody(),
       }).catch((err: unknown) => {
         if (!isEmailDeliveryFailure(err)) throw err;
-        logEmailFailure(c, "auth.password_changed_notice", err);
+        logEmailFailure(c, "auth.credential_change_notice", err);
       });
     }
     const token = await mintAuthToken(c.env, {
@@ -612,7 +611,7 @@ authLoginRoutes.post(
         text: passwordChangedEmailBody(),
       }).catch((err: unknown) => {
         if (!isEmailDeliveryFailure(err)) throw err;
-        logEmailFailure(c, "auth.password_changed_notice", err);
+        logEmailFailure(c, "auth.credential_change_notice", err);
       });
     }
     const [user] = await db
