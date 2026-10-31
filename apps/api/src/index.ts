@@ -209,9 +209,10 @@ const worker = {
     env: Env,
   ): Promise<void> {
     await handleScheduledReminders(env, new Date(controller.scheduledTime));
-    await handleScheduledPushReceipts(env, new Date(controller.scheduledTime));
     await handleScheduledReplenishment(env, new Date(controller.scheduledTime));
     await runCoachAskMaintenance(createDb(env.DB));
+    // Last, so a slow or failing receipts call never delays the jobs above.
+    await handleScheduledPushReceipts(env, new Date(controller.scheduledTime));
   },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
     await handleReminderQueueBatch(batch, env);
