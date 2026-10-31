@@ -517,21 +517,22 @@ describe("FitBudApiClient", () => {
       expect(calls).toHaveLength(1);
     });
 
-    it("reconnects realtime once with a refreshed token when the handshake fails", async () => {
+    // Replaces "reconnects realtime once with a refreshed token when the
+    // handshake fails". That behaviour is deliberately gone (owner's call, 31
+    // Oct): the refresh hook is the session's own refresh and clears the
+    // session on a refusal, so routing a failed upgrade into it signed the
+    // user out whenever a socket could not connect for reasons unrelated to
+    // the token. The assertion is inverted on purpose, not relaxed.
+    it("never calls the refresh hook when the handshake fails", async () => {
       const urls: string[] = [];
       type Listener = (event: unknown) => void;
       class FakeSocket {
         private listeners: Record<string, Listener[]> = {};
         constructor(url: string) {
           urls.push(url);
-          const accepted = url.includes("access_token=fresh");
           setTimeout(() => {
-            if (accepted) {
-              this.emit("open", {});
-            } else {
-              this.emit("error", { type: "error" });
-              this.emit("close", {});
-            }
+            this.emit("error", { type: "error" });
+            this.emit("close", {});
           }, 0);
         }
         addEventListener(type: string, fn: Listener) {
@@ -544,16 +545,12 @@ describe("FitBudApiClient", () => {
           this.emit("close", {});
         }
       }
-      let token = "stale";
-      const refresh = vi.fn(async () => {
-        token = "fresh";
-        return token;
-      });
+      const refresh = vi.fn(async () => "fresh");
       const onError = vi.fn();
       const onClose = vi.fn();
       const client = new FitBudApiClient({
         baseUrl: "https://example.test",
-        getAccessToken: () => token,
+        getAccessToken: () => "stale",
         refreshAccessToken: refresh,
       });
 
@@ -564,11 +561,47 @@ describe("FitBudApiClient", () => {
         WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
       });
       await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(refresh).toHaveBeenCalledTimes(1);
-      expect(urls).toHaveLength(2);
-      expect(urls[1]).toContain("access_token=fresh");
-      expect(onError).not.toHaveBeenCalled();
-      expect(onClose).not.toHaveBeenCalled();
+      // No refresh, no reconnect: one socket attempt, reported and done.
+      expect(refresh).not.toHaveBeenCalled();
+      expect(urls).toHaveLength(1);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      sub.close();
+    });
+
+    it("a socket that closes after opening does not call the refresh hook", async () => {
+      type Listener = (event: unknown) => void;
+      class FakeSocket {
+        private listeners: Record<string, Listener[]> = {};
+        constructor() {
+          setTimeout(() => {
+            this.emit("open", {});
+            this.emit("close", {});
+          }, 0);
+        }
+        addEventListener(type: string, fn: Listener) {
+          (this.listeners[type] ??= []).push(fn);
+        }
+        emit(type: string, event: unknown) {
+          for (const fn of this.listeners[type] ?? []) fn(event);
+        }
+        close() {}
+      }
+      const refresh = vi.fn(async () => "fresh");
+      const onClose = vi.fn();
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => "tok",
+        refreshAccessToken: refresh,
+      });
+      const sub = client.subscribeRealtime("44444444-4444-4444-8444-444444444444", {
+        onEvent: () => undefined,
+        onClose,
+        WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(refresh).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalledTimes(1);
       sub.close();
     });
 
