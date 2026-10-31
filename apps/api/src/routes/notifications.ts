@@ -55,6 +55,7 @@ import {
 import { deriveReminderStatus } from "../domain/reminder-status.js";
 import { createId, nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   optionalAuthMiddleware,
@@ -651,7 +652,8 @@ notificationRoutes.post(
     const result = await evaluateAndEnqueueReminders(db, {
       now: parsed.data.now,
       queue,
-      pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+      pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+      expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
       deliverInline: !queue,
     });
     return ok(c, evaluateRemindersResponseSchema.parse(result));
@@ -845,7 +847,8 @@ notificationRoutes.post(
       activityId: parsed.data.activityId,
       now: c.env.AUTH_MODE === "test" ? parsed.data.now : undefined,
       queue: reminderQueueFromEnv(c.env),
-      pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+      pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+      expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
       deliverInline: !c.env.REMINDER_QUEUE,
     });
     if (!result.ok) {
