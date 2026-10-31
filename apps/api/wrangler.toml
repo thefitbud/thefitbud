@@ -51,7 +51,7 @@ class_name = "RelationshipRealtimeRoom"
 
 [[migrations]]
 tag = "v1-realtime"
-new_classes = ["RelationshipRealtimeRoom"]
+new_sqlite_classes = ["RelationshipRealtimeRoom"]
 
 [vars]
 FIREBASE_PROJECT_ID = "fitbud-local"
@@ -66,17 +66,96 @@ APP_HOST = "localhost:5173"
 SYSTEM_EMAIL_FROM = "FitBud <tech@thefitbud.com>"
 ADMIN_ALERT_EMAILS = "tech@thefitbud.com"
 
-# Per-environment vars (decision D-W1-8, option a).
+# Per-environment config (decisions D-W1-8, D-W1-9; task I4a). Wrangler does
+# not inherit bindings or vars into [env.*], so each env repeats them all.
 # FIREBASE_WEB_API_KEY values are public Firebase Web identifiers shipped to
-# browsers — not secrets. The rest of each env's vars and bindings are added
-# by task I4a. Secrets are set with `wrangler secret put <NAME> --env <env>`,
-# never committed here.
+# browsers — not secrets. Secrets (MEDIA_SIGNING_SECRET and the rest) are set
+# with `wrangler secret put <NAME> --env <env>`, never committed here.
+[env.staging]
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "fitbud-staging"
+database_id = "1a82ab03-98e8-42e2-863a-11b0c159a468"
+migrations_dir = "drizzle"
+
+[[env.staging.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "fitbud-media-nonprod"
+
+[[env.staging.queues.producers]]
+binding = "REMINDER_QUEUE"
+queue = "fitbud-jobs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "fitbud-jobs-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "fitbud-jobs-staging-dlq"
+
+[env.staging.triggers]
+crons = ["*/5 * * * *"]
+
+[[env.staging.durable_objects.bindings]]
+name = "RELATIONSHIP_REALTIME"
+class_name = "RelationshipRealtimeRoom"
+
 [env.staging.vars]
 ENVIRONMENT = "staging"
 FIREBASE_PROJECT_ID = "thefitbud-staging"
 FIREBASE_WEB_API_KEY = "AIzaSyBJgtoIJSNrqB0klTt1-rjiSI6F_HqxQqQ"
+AUTH_MODE = "firebase"
+PUSH_PROVIDER_MODE = "expo"
+EMAIL_PROVIDER = "zeptomail"
+APP_HOST = "app-staging.thefitbud.com"
+MEDIA_PREFIX = "staging/"
+SESSION_COOKIE_NAME = "fitbud_session"
+SUPPORT_EMAIL = "tech@thefitbud.com"
+ADMIN_ALERT_EMAILS = "tech@thefitbud.com"
+SYSTEM_EMAIL_FROM = "FitBud <no-reply@thefitbud.com>"
+SYSTEM_EMAIL_REPLY_TO = "tech@thefitbud.com"
+
+[env.production]
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "fitbud-prod"
+database_id = "4fba80cf-18bd-48a0-aaaf-40c2bd9c6147"
+migrations_dir = "drizzle"
+
+[[env.production.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "fitbud-media-prod"
+
+[[env.production.queues.producers]]
+binding = "REMINDER_QUEUE"
+queue = "fitbud-jobs-prod"
+
+[[env.production.queues.consumers]]
+queue = "fitbud-jobs-prod"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "fitbud-jobs-prod-dlq"
+
+[env.production.triggers]
+crons = ["*/5 * * * *"]
+
+[[env.production.durable_objects.bindings]]
+name = "RELATIONSHIP_REALTIME"
+class_name = "RelationshipRealtimeRoom"
 
 [env.production.vars]
 ENVIRONMENT = "production"
 FIREBASE_PROJECT_ID = "thefitbud-prod"
 FIREBASE_WEB_API_KEY = "AIzaSyCTZXLWvlDjEDTQtyd_bmLV_ALf7ceQqYE"
+AUTH_MODE = "firebase"
+PUSH_PROVIDER_MODE = "expo"
+EMAIL_PROVIDER = "zeptomail"
+APP_HOST = "app.thefitbud.com"
+SESSION_COOKIE_NAME = "fitbud_session"
+SUPPORT_EMAIL = "tech@thefitbud.com"
+ADMIN_ALERT_EMAILS = "tech@thefitbud.com"
+SYSTEM_EMAIL_FROM = "FitBud <no-reply@thefitbud.com>"
+SYSTEM_EMAIL_REPLY_TO = "tech@thefitbud.com"

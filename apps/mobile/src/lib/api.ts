@@ -6,11 +6,12 @@ import { apiBaseUrlForDevice, deviceApiHost, preferredDevServerHost } from "./ap
 /** Local Wrangler default. Override with EXPO_PUBLIC_API_BASE_URL. */
 export const DEFAULT_API_BASE_URL = "http://127.0.0.1:8787";
 
+/**
+ * Keep the literal `process.env.EXPO_PUBLIC_API_BASE_URL` member expression:
+ * Expo's Babel transform only inlines that exact form into the bundle.
+ */
 function readEnvApiBaseUrl(): string | undefined {
-  const env = (
-    globalThis as { process?: { env?: Record<string, string | undefined> } }
-  ).process?.env;
-  return env?.EXPO_PUBLIC_API_BASE_URL;
+  return process.env.EXPO_PUBLIC_API_BASE_URL;
 }
 
 function readBundleDevServerUrl(): string | null {

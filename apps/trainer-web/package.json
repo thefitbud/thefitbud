@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter thefitbud build:packages",
+    "predev": "pnpm -w run build:packages",
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "lint": "eslint src --max-warnings=0",
