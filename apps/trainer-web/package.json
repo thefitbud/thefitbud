@@ -7,13 +7,15 @@
     "predev": "pnpm -w run build:packages",
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "lint": "eslint src --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src",
+    "lint": "eslint src worker --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json",
+    "test": "vitest run src worker",
     "test:e2e": "playwright test",
     "test:e2e:banned": "playwright test -c playwright.banned.config.ts",
     "capture:screens": "node scripts/capture-tw-screens.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:staging": "pnpm build && wrangler deploy --env staging",
+    "deploy:production": "pnpm build && wrangler deploy --env production"
   },
   "dependencies": {
     "@fitbud/api-client": "workspace:*",
@@ -41,6 +43,7 @@
     "typescript": "catalog:",
     "typescript-eslint": "^8.29.1",
     "vite": "^6.3.2",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "wrangler": "^4.12.0"
   }
 }
