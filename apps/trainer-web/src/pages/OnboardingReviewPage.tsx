@@ -78,7 +78,9 @@ function ClampedAnswer({ text }: { text: string }) {
 export function OnboardingReviewPage() {
   const { relationshipId = "" } = useParams();
   const navigate = useNavigate();
-  const { workspace } = useOutletContext<WorkspaceOutletContext>();
+  // refreshEpoch: the workspace stays mounted while it refreshes (#88), so
+  // refetch on its refresh (saves, realtime hints) instead of a remount.
+  const { workspace, refreshEpoch } = useOutletContext<WorkspaceOutletContext>();
   const [intake, setIntake] = useState<OnboardingFormResponse | null>(null);
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(
     null,
@@ -159,7 +161,7 @@ export function OnboardingReviewPage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshEpoch]);
 
   const answerRows = useMemo((): AnswerRow[] => {
     if (!definition || !intake) return [];

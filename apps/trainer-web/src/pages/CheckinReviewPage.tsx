@@ -47,6 +47,9 @@ export function CheckinReviewPage() {
     useParams();
   const outlet = useOutletContext<WorkspaceOutletContext | undefined>();
   const workspace = outlet?.workspace ?? null;
+  // The workspace stays mounted while it refreshes (#88), so refetch on its
+  // refresh (saves, realtime hints) instead of relying on a remount.
+  const refreshEpoch = outlet?.refreshEpoch ?? 0;
 
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +110,7 @@ export function CheckinReviewPage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshEpoch]);
 
   useEffect(() => {
     if (!fromInbox || !checkinId) {

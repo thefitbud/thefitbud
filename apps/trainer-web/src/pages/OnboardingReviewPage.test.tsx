@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 
 const REL_ID = "55555555-5555-4555-8555-555555555555";
@@ -21,7 +21,7 @@ import { OnboardingReviewPage } from "./OnboardingReviewPage";
 
 type Lifecycle = "ended" | "active" | "coaching_ready" | "onboarding_submitted";
 
-function renderPage(onboardingStatus: Lifecycle) {
+function pageTree(onboardingStatus: Lifecycle, refreshEpoch = 0) {
   const context = {
     workspace: {
       header: {
@@ -32,10 +32,11 @@ function renderPage(onboardingStatus: Lifecycle) {
       },
     },
     relationshipId: REL_ID,
+    refreshEpoch,
     online: true,
     ended: onboardingStatus === "ended",
   };
-  return render(
+  return (
     <MemoryRouter initialEntries={[`/clients/${REL_ID}/onboarding`]}>
       <Routes>
         <Route
@@ -46,8 +47,12 @@ function renderPage(onboardingStatus: Lifecycle) {
           <Route path="configure" element={<p>configure route</p>} />
         </Route>
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderPage(onboardingStatus: Lifecycle) {
+  return render(pageTree(onboardingStatus));
 }
 
 beforeEach(() => {
@@ -100,5 +105,16 @@ describe("OnboardingReviewPage footer (CE2)", () => {
       await screen.findByRole("button", { name: "Mark ready & configure" }),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "View coaching setup" })).toBeNull();
+  });
+});
+
+describe("OnboardingReviewPage refresh", () => {
+  it("refetches when the workspace refreshes without remounting the page", async () => {
+    const view = render(pageTree("onboarding_submitted", 0));
+    await screen.findByRole("button", { name: "Mark ready & configure" });
+    expect(api.getOnboardingResponse).toHaveBeenCalledTimes(1);
+
+    view.rerender(pageTree("onboarding_submitted", 1));
+    await waitFor(() => expect(api.getOnboardingResponse).toHaveBeenCalledTimes(2));
   });
 });
