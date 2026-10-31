@@ -1,5 +1,4 @@
 {
-  "name": "FitBud",
   "slug": "fitbud",
   "version": "0.0.0",
   "orientation": "portrait",
@@ -12,18 +11,16 @@
     "backgroundColor": "#FAF7F2"
   },
   "ios": {
-    "supportsTablet": true,
-    "bundleIdentifier": "com.thefitbud.mobile"
+    "supportsTablet": true
   },
   "web": {
     "bundler": "metro"
   },
   "android": {
-    "package": "com.thefitbud.mobile",
     "adaptiveIcon": {
       "foregroundImage": "../../packages/brand/app/adaptive-foreground.png",
       "backgroundColor": "#FAF7F2"
     }
   },
-  "plugins": ["./plugins/withLiveActivity", "expo-dev-client"]
+  "plugins": ["expo-dev-client"]
 }
