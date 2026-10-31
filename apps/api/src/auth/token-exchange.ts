@@ -87,8 +87,14 @@ async function postToGoogle(
     return { ok: false, reason: "unavailable" };
   }
   if (!response.ok) {
-    const unavailable = response.status >= 500 || response.status === 429;
-    return { ok: false, reason: unavailable ? "unavailable" : "invalid" };
+    // Only a 400 is a verdict against the credential. Firebase answers 400 for
+    // an expired, revoked or malformed refresh token and for a disabled user;
+    // a 403 is the canonical answer when the web API key is restricted, the
+    // Identity Toolkit or Secure Token API is disabled for the project, or
+    // quota is refused — all operator faults. The harm is asymmetric: calling
+    // an outage `invalid` destroys every good session, while calling a refusal
+    // `unavailable` only parks one session in retry until the user signs out.
+    return { ok: false, reason: response.status === 400 ? "invalid" : "unavailable" };
   }
   let body: unknown;
   try {

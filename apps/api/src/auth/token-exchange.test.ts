@@ -103,11 +103,14 @@ describe("exchangeCustomToken", () => {
     },
   );
 
-  it.each([401, 403, 404])("reports `invalid` for a Google %i", async (status) => {
+  // Only a 400 is a verdict against the credential. A 403 is what Google
+  // answers for a restricted key, a disabled API or refused quota, so calling
+  // it `invalid` would sign out every signed-in user over an operator fault.
+  it.each([401, 403, 404])("reports `unavailable` for a Google %i", async (status) => {
     stubFetch(jsonResponse({ error: { code: status } }, status));
     await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
       ok: false,
-      reason: "invalid",
+      reason: "unavailable",
     });
   });
 
@@ -176,6 +179,14 @@ describe("refreshIdToken", () => {
 
   it("reports `unavailable` when the network fails", async () => {
     stubFetch(new TypeError("network down"));
+    await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+
+  it.each([401, 403, 404])("reports `unavailable` for a Google %i", async (status) => {
+    stubFetch(jsonResponse({ error: { code: status } }, status));
     await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({
       ok: false,
       reason: "unavailable",

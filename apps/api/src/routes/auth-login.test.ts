@@ -769,6 +769,7 @@ describe("auth routes with AUTH_MODE=firebase", () => {
     { label: "a 500 from Google", status: 500 },
     { label: "a 503 from Google", status: 503 },
     { label: "an upstream rate limit", status: 429 },
+    { label: "a restricted key or disabled API", status: 403 },
   ])("refresh returns 503 AUTH_PROVIDER_UNAVAILABLE on $label", async ({ status }) => {
     vi.stubGlobal(
       "fetch",
