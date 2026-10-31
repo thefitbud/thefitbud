@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
+import { AppState } from "react-native";
 import type { ExerciseExecution, SetExecution, WorkoutExecution } from "@fitbud/contracts";
-import type { LiveActivityState, LoggedSet } from "./liveActivity";
+import { withRest, type LiveActivityState, type LoggedSet, type RestWindow } from "./liveActivity";
 import {
   liveActivityNative,
   type LiveActivityContent,
@@ -110,9 +111,10 @@ export function liveActivityContentFor(
 
   // Last: the set before this one (as logged, else as prescribed, like the
   // screen's "Previous" column), else the previous session's same set, else
-  // the plan (LA1c can make "Last" optional; the widget needs a number).
+  // unknown: the activity then shows no "Last" (the screen says "first time").
   let lastKg = planKg;
   let lastReps = planReps;
+  let lastKnown = true;
   const lastSource = finished ? set : prior;
   if (lastSource) {
     lastKg = actualKg(lastSource);
@@ -122,6 +124,8 @@ export function liveActivityContentFor(
     if (history) {
       lastKg = history.kg;
       lastReps = history.reps;
+    } else {
+      lastKnown = false;
     }
   }
 
@@ -136,6 +140,7 @@ export function liveActivityContentFor(
     lastReps,
     loggedSet,
     finished,
+    ...(lastKnown ? {} : { lastKnown: false }),
   };
   return { exerciseName: exercise.name, state };
 }
@@ -144,6 +149,8 @@ export type WorkoutLiveActivityInput = {
   execution: WorkoutExecution;
   workoutName: string;
   historyByKey?: Record<string, string>;
+  /** The app's running rest after a logged set (27c, LA1c); null when none. */
+  rest?: RestWindow | null;
 };
 
 /** One workout's activity: start once, update on change, end once. */
@@ -168,9 +175,12 @@ export function createLiveActivitySession(native: LiveActivityNative = liveActiv
     return enqueue(() => native.end(final));
   }
 
-  function sync({ execution, workoutName, historyByKey }: WorkoutLiveActivityInput): Promise<unknown> {
+  function sync({ execution, workoutName, historyByKey, rest }: WorkoutLiveActivityInput): Promise<unknown> {
     if (ended) return queue;
-    const content = liveActivityContentFor(execution, historyByKey);
+    const mapped = liveActivityContentFor(execution, historyByKey);
+    // One update when rest starts and one when it ends or is skipped; the
+    // device counts down by itself. A finished workout never rests.
+    const content = mapped ? { ...mapped, state: withRest(mapped.state, rest ?? null) } : null;
     if (content) lastContent = content;
     if (DONE_STATUSES.has(execution.status) || !content) return end();
 
@@ -186,18 +196,43 @@ export function createLiveActivitySession(native: LiveActivityNative = liveActiv
     return enqueue(() => native.update(content));
   }
 
-  return { sync, end };
+  /**
+   * True when the activity's rest was skipped on the lock screen (the widget's
+   * Skip clears it there only). Asked when the app becomes active.
+   */
+  function restSkippedOnActivity(): boolean {
+    if (!started || ended || lastContent?.state.restEndsAt == null) return false;
+    return native.hasRest() === false;
+  }
+
+  return { sync, end, restSkippedOnActivity };
 }
 
-/** The workout screen's only Live Activity call. */
-export function useWorkoutLiveActivity(input: WorkoutLiveActivityInput): void {
+/**
+ * The workout screen's only Live Activity call. `onRestSkipped` runs when the
+ * app becomes active and the activity's rest was skipped on the lock screen,
+ * so the screen ends its own rest too.
+ */
+export function useWorkoutLiveActivity(
+  input: WorkoutLiveActivityInput & { onRestSkipped?: () => void },
+): void {
   const sessionRef = useRef<ReturnType<typeof createLiveActivitySession> | null>(null);
   if (sessionRef.current === null) sessionRef.current = createLiveActivitySession();
-  const { execution, workoutName, historyByKey } = input;
+  const { execution, workoutName, historyByKey, rest, onRestSkipped } = input;
+  const onRestSkippedRef = useRef(onRestSkipped);
+  onRestSkippedRef.current = onRestSkipped;
 
   useEffect(() => {
-    void sessionRef.current?.sync({ execution, workoutName, historyByKey });
-  }, [execution, workoutName, historyByKey]);
+    void sessionRef.current?.sync({ execution, workoutName, historyByKey, rest });
+  }, [execution, workoutName, historyByKey, rest]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active") return;
+      if (sessionRef.current?.restSkippedOnActivity()) onRestSkippedRef.current?.();
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     const session = sessionRef.current;

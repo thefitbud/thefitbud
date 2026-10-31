@@ -22,6 +22,7 @@ function fakeModule(overrides: Partial<LiveActivityNativeModule> = {}) {
     start: vi.fn(async () => "activity-1"),
     update: vi.fn(async () => undefined),
     end: vi.fn(async () => undefined),
+    restState: vi.fn(() => ({ running: true, restEndsAt: null as number | null })),
     ...overrides,
   } satisfies LiveActivityNativeModule;
 }
@@ -47,6 +48,8 @@ describe("toNativeContentState", () => {
       lastReps: 9,
       loggedLine: "Set 2 logged · 25 kg × 9",
       finished: false,
+      restEndsAt: null,
+      restSeconds: null,
     });
   });
 
@@ -75,6 +78,8 @@ describe("toNativeContentState", () => {
       lastReps: 7,
       loggedLine: "Set 1 logged · 25 kg × 7",
       finished: true,
+      restEndsAt: null,
+      restSeconds: null,
     });
   });
 
@@ -94,8 +99,59 @@ describe("toNativeContentState", () => {
         "lastReps",
         "loggedLine",
         "finished",
+        "restEndsAt",
+        "restSeconds",
       ].sort(),
     );
+  });
+});
+
+describe("rest and unknown Last mapping (LA1c)", () => {
+  it("sends rest fields and null Last when unknown", () => {
+    const state = {
+      ...DEMO_LIVE_ACTIVITY,
+      lastKnown: false,
+      restEndsAt: 1_792_000_090_000,
+      restSeconds: 90,
+    };
+    expect(toNativeContentState({ exerciseName: "Squat", state })).toMatchObject({
+      lastKilograms: null,
+      lastReps: null,
+      restEndsAt: 1_792_000_090_000,
+      restSeconds: 90,
+    });
+  });
+
+  it("never sends rest on a finished state", () => {
+    const state = { ...DEMO_LIVE_ACTIVITY, finished: true, restEndsAt: 1, restSeconds: 90 };
+    expect(toNativeContentState({ exerciseName: "Squat", state })).toMatchObject({
+      restEndsAt: null,
+      restSeconds: null,
+    });
+  });
+
+  it("hasRest reads the running activity and never throws", () => {
+    const mod = fakeModule({ restState: vi.fn(() => ({ running: true, restEndsAt: 5 })) });
+    const native = createLiveActivityNative({ platformOS: "ios", loadModule: () => mod });
+    expect(native.hasRest()).toBe(true);
+    vi.mocked(mod.restState).mockReturnValue({ running: true, restEndsAt: null });
+    expect(native.hasRest()).toBe(false);
+    vi.mocked(mod.restState).mockReturnValue({ running: false, restEndsAt: null });
+    expect(native.hasRest()).toBeNull();
+    const warn = vi.fn();
+    const throwing = createLiveActivityNative({
+      platformOS: "ios",
+      loadModule: () =>
+        fakeModule({
+          restState: vi.fn(() => {
+            throw new TypeError("x");
+          }),
+        }),
+      warn,
+    });
+    expect(throwing.hasRest()).toBeNull();
+    expect(warn).toHaveBeenCalledWith("[liveActivity] restState failed: TypeError");
+    expect(createLiveActivityNative({ platformOS: "android", loadModule: () => mod }).hasRest()).toBeNull();
   });
 });
 
