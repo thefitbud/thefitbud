@@ -57,24 +57,64 @@ describe("exchangeCustomToken", () => {
     });
   });
 
-  it("returns an error result for a Google 400", async () => {
+  // A 4xx is Google's verdict against the credential; everything else leaves
+  // the credential's validity unknown, and callers must not sign the user out
+  // on it.
+  it("reports `invalid` for a Google 400", async () => {
     stubFetch(jsonResponse({ error: { code: 400, message: "INVALID_CUSTOM_TOKEN" } }, 400));
-    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({ ok: false });
+    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "invalid",
+    });
   });
 
-  it("returns an error result for malformed JSON", async () => {
+  it("reports `unavailable` for malformed JSON", async () => {
     stubFetch(new Response("<html>bad gateway</html>", { status: 200 }));
-    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({ ok: false });
+    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
   });
 
-  it("returns an error result when fields are missing or invalid", async () => {
+  it("reports `unavailable` when fields are missing or invalid", async () => {
     stubFetch(jsonResponse({ idToken: "id-token-1", refreshToken: "", expiresIn: "soon" }));
-    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({ ok: false });
+    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
   });
 
-  it("returns an error result when the network fails", async () => {
+  it("reports `unavailable` when the network fails", async () => {
     stubFetch(new TypeError("network down"));
-    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({ ok: false });
+    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+
+  it.each([500, 502, 503, 504, 429])(
+    "reports `unavailable` for an upstream %i",
+    async (status) => {
+      stubFetch(new Response("upstream", { status }));
+      await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
+        ok: false,
+        reason: "unavailable",
+      });
+    },
+  );
+
+  it.each([401, 403, 404])("reports `invalid` for a Google %i", async (status) => {
+    stubFetch(jsonResponse({ error: { code: status } }, status));
+    await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+  });
+
+  it("never surfaces Google's response body", async () => {
+    stubFetch(jsonResponse({ error: { code: 400, message: "INVALID_CUSTOM_TOKEN" } }, 400));
+    const result = await exchangeCustomToken(API_KEY, "custom-token-1");
+    expect(JSON.stringify(result)).not.toContain("INVALID_CUSTOM_TOKEN");
   });
 });
 
@@ -107,13 +147,46 @@ describe("refreshIdToken", () => {
     expect(init.body).toBe("grant_type=refresh_token&refresh_token=refresh-token-1");
   });
 
-  it("returns an error result for a Google 400", async () => {
+  it("reports `invalid` for a Google 400", async () => {
     stubFetch(jsonResponse({ error: { code: 400, message: "TOKEN_EXPIRED" } }, 400));
-    await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({ ok: false });
+    await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "invalid",
+    });
   });
 
-  it("returns an error result for malformed JSON", async () => {
+  it("reports `unavailable` for malformed JSON", async () => {
     stubFetch(new Response("not json", { status: 200 }));
-    await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({ ok: false });
+    await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+
+  // An outage must not read as an expired refresh token: /auth/refresh turns
+  // `invalid` into a 401 that signs the user out and `unavailable` into a 503
+  // that the clients retry.
+  it.each([500, 503, 429])("reports `unavailable` for an upstream %i", async (status) => {
+    stubFetch(new Response("upstream", { status }));
+    await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+
+  it("reports `unavailable` when the network fails", async () => {
+    stubFetch(new TypeError("network down"));
+    await expect(refreshIdToken(API_KEY, "refresh-token-1")).resolves.toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+
+  it("never surfaces the refresh token or Google's body in the result", async () => {
+    stubFetch(jsonResponse({ error: { code: 400, message: "TOKEN_EXPIRED" } }, 400));
+    const result = await refreshIdToken(API_KEY, "refresh-token-secret");
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("refresh-token-secret");
+    expect(serialized).not.toContain("TOKEN_EXPIRED");
   });
 });
