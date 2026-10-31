@@ -678,6 +678,17 @@ authLoginRoutes.post(
     }
     const refreshed = await refreshIdToken(apiKey, parsed.data.refreshToken);
     if (!refreshed.ok) {
+      // Only a verdict against the token ends the session. An unreachable or
+      // throttled provider is a 503, which clients retry instead of signing
+      // out, so a Google outage no longer logs every trainer out (W2 follow-up).
+      if (refreshed.reason === "unavailable") {
+        return fail(
+          c,
+          503,
+          "AUTH_PROVIDER_UNAVAILABLE",
+          "Could not reach the authentication provider. Try again.",
+        );
+      }
       return fail(c, 401, "AUTH_REFRESH_FAILED", "Session expired. Sign in again.");
     }
     return ok(

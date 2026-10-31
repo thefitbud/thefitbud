@@ -762,6 +762,50 @@ describe("auth routes with AUTH_MODE=firebase", () => {
     expect(body.error.code).toBe("AUTH_REFRESH_FAILED");
   });
 
+  // A refused refresh token ends the session; an unreachable provider must not.
+  // Both clients sign out only on 400/401/403 and retry anything else, so a
+  // Google outage used to log every signed-in user out (W2 follow-up).
+  it.each([
+    { label: "a 500 from Google", status: 500 },
+    { label: "a 503 from Google", status: 503 },
+    { label: "an upstream rate limit", status: 429 },
+    { label: "a restricted key or disabled API", status: 403 },
+  ])("refresh returns 503 AUTH_PROVIDER_UNAVAILABLE on $label", async ({ status }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("upstream", { status })),
+    );
+    const response = await post("/auth/refresh", { refreshToken: "r" }, firebaseEnv());
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("AUTH_PROVIDER_UNAVAILABLE");
+  });
+
+  it("refresh returns 503 AUTH_PROVIDER_UNAVAILABLE when the provider is unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("network error");
+      }),
+    );
+    const response = await post("/auth/refresh", { refreshToken: "r" }, firebaseEnv());
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("AUTH_PROVIDER_UNAVAILABLE");
+  });
+
+  it("refresh returns 503 and no token when Google accepts but answers unusably", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ id_token: "only-an-id-token" })),
+    );
+    const response = await post("/auth/refresh", { refreshToken: "r" }, firebaseEnv());
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("AUTH_PROVIDER_UNAVAILABLE");
+    expect(JSON.stringify(body)).not.toContain("only-an-id-token");
+  });
+
   it("refresh returns 400 for a missing refresh token", async () => {
     const response = await post("/auth/refresh", {}, firebaseEnv());
     expect(response.status).toBe(400);
