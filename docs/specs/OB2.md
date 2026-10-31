@@ -2,8 +2,8 @@
 id: OB2
 title: Structured logs for errors, cron and queue runs
 batch: W2
-depends_on: [OB1, I8]
-lane: api-ops
+depends_on: [OB1, I8, X4a]
+lane: api
 files_owned:
   - apps/api/src/index.ts
   - apps/api/src/index.logging.test.ts
@@ -20,6 +20,7 @@ Every unhandled error, cron run and queue batch writes one structured log line w
 
 ## Context
 - v14 OB2. Use `writeStructuredLog` and `SafeLogFields` in `apps/api/src/lib/log.ts` (fields: requestId, operation, method, path, status, latencyMs, actorType, actorUserId, errorCode, errorName). Never log `err.message`, stacks, request bodies, emails, phone numbers or tokens.
+- X4a (just before in this lane) edits `domain/reminders.ts` and `jobs/reminders.ts` and adds the receipts job to `scheduled()`; log that job too (`operation: cron.push_receipts`).
 - I8 (W1) edits `apps/api/src/domain/reminders.ts` first; re-check the line numbers below after I8 merges.
 - `jobs/reminders.ts:54` retries the message on error; keep that behavior.
 

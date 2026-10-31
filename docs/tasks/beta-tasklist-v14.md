@@ -4,6 +4,8 @@ Updated Sat 31 Oct 2026 (rev 2: Firoz's answers of 31 Oct; Live Activity in beta
 
 Rev 3 (Sat 31 Oct 2026, W2 specs): W1 specs merged (PRs #73, #78), so W1 tasks are **specs ready, not built**. W2 specs written in `docs/specs/` (paths in §4 and §7). Splits: AU1c → AU1c + AU1d; LA1 → LA1 + LA1b. New: AU1e (invitation accept returns an ID token). I2c, I2d, I8 moved to W1 (per W1.md). New Open decisions D-W2-6 to D-W2-15 in `docs/specs/batches/W2.md`, including the line-108 conflict below (D-W2-6).
 
+Rev 4 (Sat 31 Oct 2026, Firoz's W2 answers): D-W2-6 to D-W2-15 decided (see `docs/specs/batches/W2.md`). Live Activity is in the beta (post-beta note fixed). Domains: `api.` / `app.` (+ `-staging`), `thefitbud.com` for landing and sign-in redirect. X4a moved W3 → W2 (lane `api`: I5 → X4a → OB2). New: X7 (mobile trainer-web link, S, son), LA1c (lock-screen rest timer, frame 27c, M). I5 declares `MEDIA_PREFIX` in `Env`. CLAUDE.md is the source of truth; Agents.md gets aligned.
+
 **What this file is.** This is the working list for the **closed beta only**: every task needed for beta, with enough detail for the bots to write self-contained specs. It replaces v13's Beta cut section and the beta tasks' details.
 **What it is not.** v13 stays the master list for everything post-beta: redesign phases, seed polish, gap buckets, Phase 10. Don't schedule those until the beta ships.
 
@@ -87,13 +89,13 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 | AU1c | API client + trainer web store the refresh token and refresh the ID token (new; split, spec `docs/specs/AU1c.md`) | W2 | client-auth | AU1b | S | opus |
 | AU1d | Mobile stores the refresh token and refreshes the ID token (split from AU1c; `docs/specs/AU1d.md`) | W2 | client-auth | AU1c, AU1e, X2 | S | opus |
 | AU1e | Invitation accept returns a Firebase ID token + refresh token (new; `docs/specs/AU1e.md`) | W2 | auth-api | AU1b | S | opus |
-| I5 | ZeptoMail transactional email (`docs/specs/I5.md`) | W2 | email | I4c, AU2 | S | son |
+| I5 | ZeptoMail transactional email; declares `MEDIA_PREFIX` in `Env` (`docs/specs/I5.md`) | W2 | api | I4c, AU2 | S | son |
 | WD1 | Trainer-web hosting (same-origin `/api` proxy) + custom domains + `APP_HOST` per env (new; `docs/specs/WD1.md`) | W2 | infra | I4c | M | opus |
 | OB1 | Workers Logs per env (`docs/specs/OB1.md`) | W2 | infra | WD1, I4a | S | son |
-| OB2 | Logging in scheduled/queue handlers; replace silent `catch {}` (`docs/specs/OB2.md`) | W2 | api-ops | OB1, I8 | S | son |
+| OB2 | Logging in scheduled/queue handlers; replace silent `catch {}` (`docs/specs/OB2.md`) | W2 | api | OB1, I8, X4a | S | son |
 | X3 | EAS dev build on physical phones (owner F, with the X6 guide) | W2 | human | X6, CF2 | M | F |
-| I6 | First staging deploy (owner F) | W2→W3 | human | AU2, I4c, I2d, I5, WD1, CF2 | S | F |
-| X4a | Push sender: Expo Push Service + receipts | W3 | push-api | I4a | S | opus |
+| I6 | First staging deploy (owner F) | W2→W3 | human | AU2, I4c, I2d, I5, X4a, WD1, CF2 | S | F |
+| X4a | Push sender: Expo Push Service + receipts (moved to W2, D-W2-9; `docs/specs/X4a.md`) | W2 | api | I5, I4a | M | opus |
 | X4b | Device registration for trainees and trainers with real Expo tokens | W3 | push-mobile + push-api | X4a, X3 | S | opus |
 | X4c | Reminder pushes end to end (meal, workout, check-in) | W3 | push-api | X4a | S | plan |
 | X4d | Notification tap → deep link to the right screen | W3 | push-mobile | X4b | S | son |
@@ -103,14 +105,16 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 | BT2 | Basic crash reporting (Sentry, Expo + Worker) | W4 | mobile + api-ops | X3, I4a | S | son |
 | LA1 | iOS Live Activity: build target + native bridge (start/update/end, local only) (split; `docs/specs/LA1.md`) | W2 | mobile-native | X6 | M | opus |
 | LA1b | Workout screen starts/updates/ends the Live Activity (split from LA1; `docs/specs/LA1b.md`) | W2 | mobile-native | LA1 | S | opus |
-| LA2 | Live Activity buttons → App Group outbox → sync outbox | W3 | mobile-native | LA1b | S | opus |
+| LA1c | Lock-screen rest timer in the Live Activity, frame 27c (new, D-W2-12; `docs/specs/LA1c.md`) | W2 | mobile-native | LA1b | M | opus |
+| X7 | Mobile trainer-web link → `app.thefitbud.com` (new, D-W2-7; `docs/specs/X7.md`) | W2 | mobile-links | X6 | S | son |
+| LA2 | Live Activity buttons → App Group outbox → sync outbox | W3 | mobile-native | LA1c | S | opus |
 | LA3 | Android ongoing workout notification (frame 27 Android) via the same outbox path | W3 | mobile-native | LA2 | S | opus |
 | BT1 | TestFlight + Play closed-track builds (EAS build + submit) | W4 | mobile + F | X3, X6, BT3 | M | son + F |
 | BT5 | Beta dress rehearsal on staging with real phones (new) | W4 | human + QA agent | I6, X4c, X4d | S | F |
 | I6b | Production deploy + production library seed (owner F, new) | W4 | human | BT5 passed, CF2 prod secrets | S | F |
 
 Post-beta, before public release: **BP1** in-app account deletion, **BP2** automated D1 backups (v13 details unchanged).
-Post-beta: everything else in v13, including I2e (C1), Live Activity (C3; conflicts with C13/D-B7, Open as D-W2-6), WhatsApp OTP (C4), the open draft PRs #50 AC1a and #57 AC1b, and OB3/OB4.
+Post-beta: everything else in v13, including I2e (C1), WhatsApp OTP (C4), the open draft PRs #50 AC1a and #57 AC1b, and OB3/OB4.
 
 ## 5. Task details (for spec writers)
 
@@ -251,7 +255,7 @@ Each spec must paste the relevant bullets below into its **Context** section. Re
 
 ### Live Activity (C13, D-B7)
 
-These tasks need a **dev build on a real device**. Agents can't compile Swift or run iOS in the cloud (Linux), so each spec includes a device test checklist that Firoz runs on his EAS dev build (X3) and reports back. Frames: `27-*`, `27b-*`, `27c-*` (iOS), `27-*android*` in `docs/design/mockups/png/`. Use exact file names. There is no rest timer (per the existing code and plugin comments).
+These tasks need a **dev build on a real device**. Agents can't compile Swift or run iOS in the cloud (Linux), so each spec includes a device test checklist that Firoz runs on his EAS dev build (X3) and reports back. Frames: `27-*`, `27b-*`, `27c-*` (iOS), `27-*android*` in `docs/design/mockups/png/`. Use exact file names. The lock-screen rest timer (frame `27c-*`) is in the beta (D-W2-12, Firoz, 31 Oct; task LA1c).
 
 **LA1 · iOS Live Activity: target + bridge** (rev 3: split into LA1 target + bridge and LA1b workout-screen wiring; see `docs/specs/LA1.md`, `LA1b.md`)
 - Add `@bacons/apple-targets`, at a version compatible with Expo SDK 52, to the plugins. The `targets/FitBudLiveActivity` widget (deployment target 17.0, App Group) must build in EAS.
@@ -353,11 +357,11 @@ These tasks need a **dev build on a real device**. Agents can't compile Swift or
 | Batch | Lanes (in order) | Firoz in parallel | Target |
 |---|---|---|---|
 | **W1** | auth: AU1 → AU1b → AU2 · infra: I7 → I4a → I4b → I4c · mobile: X2 → X6 · library: I2b → I2f (→ I2c) · api-perf: I1b if a slot is free | CF2 steps 1–5; DS5; legal text (Q3) | merged by Wed 4 Nov |
-| **W2** | client-auth: AU1c → AU1d · auth-api: AU1e · email: I5 · infra: WD1 → OB1 · api-ops: OB2 · mobile-native: LA1 → LA1b (starts once X6 is merged) | X3 dev build; CF2 steps 6–8; **I6 first staging deploy** | staging up by Sat 7 Nov |
-| **W3** | push-api: X4a → X4c · push-mobile: X4b → X4d · web: BT3 · ops-docs: BT4 · mobile-native: LA2 → LA3 (LA cut-line Thu 12 Nov) | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
+| **W2** | client-auth: AU1c → AU1d · auth-api: AU1e · api: I5 → X4a → OB2 · infra: WD1 → OB1 · mobile-native: LA1 → LA1b → LA1c (starts once X6 is merged) · mobile-links: X7 | X3 dev build; CF2 steps 6–8; **I6 first staging deploy** | staging up by Sat 7 Nov |
+| **W3** | push-api: X4c (X4a moved to W2) · push-mobile: X4b → X4d · web: BT3 · ops-docs: BT4 · mobile-native: LA2 → LA3 (LA cut-line Thu 12 Nov) | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
 | **W4** | mobile/api: BT2 · release: BT1 (agents prepare, Firoz submits) · QA: BT5 checklist | BT5 rehearsal on staging (Thu 12 Nov) → **I6b production deploy** → TestFlight external review (~1–2 days) + Play closed track | invites out Sun 15 Nov |
 
-**Status (rev 3, 31 Oct):** W1 specs ready, not built (PRs #73, #78 merged; specs in `docs/specs/`, batch file `docs/specs/batches/W1.md`). W2 specs written: `docs/specs/{AU1c,AU1d,AU1e,I5,WD1,OB1,OB2,LA1,LA1b}.md`, batch file `docs/specs/batches/W2.md` (Draft; Open decisions D-W2-6 to D-W2-15).
+**Status (rev 3, 31 Oct):** W1 specs ready, not built (PRs #73, #78 merged; specs in `docs/specs/`, batch file `docs/specs/batches/W1.md`). W2 specs written: `docs/specs/{AU1c,AU1d,AU1e,I5,X4a,WD1,OB1,OB2,LA1,LA1b,LA1c,X7}.md`, batch file `docs/specs/batches/W2.md` (Draft; all decisions made, rev 4).
 
 `docs/specs/batches/W1.md` is the draft for W1. The bots update it from this section, then draft W2–W4. Specs for a batch are written once the previous batch's decisions are made.
 

@@ -24,7 +24,7 @@ The mobile app passes AU1c's refresh hook to the shared client, keeps the refres
 
 ## Context
 - Split from v14 AU1c in W2.md (AU1c was larger than M across three codebases). Same rules as AU1c (D-W2-3).
-- Storage today: `apps/mobile/src/lib/sessionStorage.ts` persists the token in localStorage (`fitbud.accessToken`) on web only; on native the token lives in memory, so the user signs in again after an app restart. D-W2-3 says store the refresh token "the same way", so on native it stays in memory. Whether native should persist it in secure storage is **D-W2-13, Open**; this spec does not depend on the answer and must not add secure storage.
+- Storage today: `apps/mobile/src/lib/sessionStorage.ts` persists the token in localStorage (`fitbud.accessToken`) on web only; on native the token lives in memory, so the user signs in again after an app restart. D-W2-3 says store the refresh token "the same way", so on native it stays in memory. D-W2-13 (decided by Firoz, 31 Oct 2026): the refresh token stays in memory only on native. Do not add secure storage.
 - X2 (W1) owns `apps/mobile/src/lib/api.ts` before this task; merge after X2.
 - AU1e makes the invitation-accept response carry `refreshToken`/`expiresIn`, used by `AcceptInviteScreen`.
 
@@ -45,7 +45,7 @@ The mobile app passes AU1c's refresh hook to the shared client, keeps the refres
 - [ ] Test mode (no `refreshToken`) behaves as today.
 
 ## Out of scope
-- Secure-storage persistence on native (D-W2-13). Shared client changes (AU1c). API changes (AU1b, AU1e).
+- Secure-storage persistence on native (D-W2-13: memory only). Shared client changes (AU1c). API changes (AU1b, AU1e).
 - Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 
@@ -59,7 +59,6 @@ The mobile app passes AU1c's refresh hook to the shared client, keeps the refres
 - n/a (no UI change).
 
 ## Stop conditions
-- D-W2-13 is settled as "persist on native" before this task starts (then the spec needs a new storage file and must be rewritten).
 - A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** in `docs/specs/batches/W2.md`.
 - A file outside `files_owned` must change.
 - The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.

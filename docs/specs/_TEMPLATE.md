@@ -4,7 +4,7 @@ id: XX1
 title: One-line task title
 batch: W1
 depends_on: []            # task IDs that must be merged to main first
-lane: api                 # api | api-perf | infra | seed | web | mobile | ops
+lane: api                 # any lane named in the batch file's Lanes table (e.g. api, infra, web, mobile, mobile-native, ops)
 files_owned:              # globs this task may change. Two tasks in one batch never share a path.
   - apps/api/src/example/**
 frames:                   # [] for non-UI tasks. Use file names from docs/design/mockups/png/.

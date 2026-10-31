@@ -23,7 +23,7 @@ size: M
 An EAS dev build includes the `FitBudLiveActivity` widget target, and the app can start, update and end a `FitBudWorkoutAttributes` Live Activity from JS through a small local Expo module; on Android, web and iOS below 16.2 the calls do nothing.
 
 ## Context
-- v14 LA1, split in W2.md: this task is the build target and bridge; LA1b wires the bridge into the workout screen. v14 C13 and D-B7: local updates only, no APNs push; cut-line Thu 12 Nov. Whether Live Activity is in the beta at all is **D-W2-6, Open** (v14 line 108 still lists it as post-beta).
+- v14 LA1, split in W2.md: this task is the build target and bridge; LA1b wires the bridge into the workout screen. v14 C13 and D-B7: local updates only, no APNs push; cut-line Thu 12 Nov. D-W2-6 (decided by Firoz, 31 Oct 2026): Live Activity is in the beta.
 - Already written: widget UI and `LiveActivityIntent`s in `apps/mobile/targets/FitBudLiveActivity/FitBudLiveActivity.swift` (`FitBudWorkoutAttributes` at `:34-52`, `ContentState` fields `exerciseName, setIndex, setCount, kilograms, reps, planKilograms, planReps, lastKilograms, lastReps, loggedLine, finished`; attributes `workoutName`, `openUrl`), target config `apps/mobile/targets/FitBudLiveActivity/expo-target.config.js` (widget, iOS 17.0, App Group), plugin `apps/mobile/plugins/withLiveActivity.js` (`NSSupportsLiveActivities`, App Group), JS state in `apps/mobile/src/notifications/liveActivity.ts` (`LiveActivityState`, `reduceLiveActivity`).
 - X6 (W1) owns `app.json`, `app.config.js`, `withLiveActivity.js`, `expo-target.config.js` and the Swift App Group constant, and makes the App Group per variant. Merge after X6; edit only the plugins list in `app.config.js` and do not touch X6's files otherwise.
 - The native module must declare its own copy of `FitBudWorkoutAttributes` with identical field names and types (ActivityKit matches by type name and Codable shape); a comment in both places says they must stay in sync. Do not edit the widget Swift file.
@@ -44,7 +44,7 @@ An EAS dev build includes the `FitBudLiveActivity` widget target, and the app ca
 - [ ] PR has the device checklist: install dev build; a debug-only call starts an activity on the lock screen; update changes kg/reps; end removes it; Dynamic Island shows on a supported phone.
 
 ## Out of scope
-- Calling it from the workout screen (LA1b). Widget buttons → sync outbox (LA2, W3). Android notification (LA3, W3). Push updates (post-beta). Rest timer (D-W2-12).
+- Calling it from the workout screen (LA1b). Widget buttons → sync outbox (LA2, W3). Android notification (LA3, W3). Push updates (post-beta). Rest timer (LA1c).
 - Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 
@@ -56,7 +56,7 @@ An EAS dev build includes the `FitBudLiveActivity` widget target, and the app ca
 - Firoz on device (X3 dev build) compares the activity with `27-trainee-lock-live-activity-ios.png` and `27b-trainee-live-activity-expanded-ios.png`; result goes in the PR. No agent screenshot is possible.
 
 ## Stop conditions
-- D-W2-6 (Live Activity in the beta) is still **Open** in W2.md, or the cut-line (Thu 12 Nov) has passed without LA1 working on Firoz's iPhone.
+- The cut-line (Thu 12 Nov) has passed without LA1 working on Firoz's iPhone.
 - The work needs a Mac, Xcode or an `eas build`; write the code, list the device checklist for Firoz, and stop there.
 - A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** in `docs/specs/batches/W2.md`.
 - A file outside `files_owned` must change.

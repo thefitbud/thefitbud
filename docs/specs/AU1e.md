@@ -19,7 +19,7 @@ In Firebase mode, accepting an invitation returns a Firebase ID token plus refre
 ## Context
 - New in W2 (found while reading code for AU1c). AU1b (W1) exchanges the custom token in the four `auth-login.ts` routes but its gap list does not include `invitations.ts`, which also returns `mintAuthToken` output. With `AUTH_MODE=firebase`, AU1 accepts only ID tokens, so the token returned on invite accept would be rejected and the new trainee lands signed out.
 - Use the exchange helper AU1b adds in `apps/api/src/auth/token-exchange.ts` and the same error mapping (Google error → 401 `AUTH_EXCHANGE_FAILED`). Do not edit `token-exchange.ts`.
-- If W1's AU1b has not started when this spec lands, folding this gap into AU1b is an alternative (W2.md notes). Either way, the behavior is the same.
+- D-W2-14 (decided by Firoz, 31 Oct 2026): this stays its own W2 task; AU1b is not reopened.
 
 ## Gap list
 - `apps/api/src/routes/invitations.ts:721-735`: returns `{ token, tokenKind, userId, relationshipId }` straight from `mintAuthToken`; no exchange, no `refreshToken`/`expiresIn`.
