@@ -35,6 +35,21 @@ describe("parseDeployArgs", () => {
     });
   });
 
+  it("refuses a second --env so a staging script cannot target production", () => {
+    expect(() =>
+      parseDeployArgs(["deploy", "--env", "staging", "--", "--env", "production", "--yes"]),
+    ).toThrow(/more than once/);
+    expect(() =>
+      parseDeployArgs(["migrate", "--env", "staging", "--env=production"]),
+    ).toThrow(/more than once/);
+  });
+
+  it("refuses --env without a value", () => {
+    expect(() => parseDeployArgs(["deploy", "--env"])).toThrow(/needs a value/);
+    expect(() => parseDeployArgs(["deploy", "--env", "--yes"])).toThrow(/needs a value/);
+    expect(() => parseDeployArgs(["deploy", "--env="])).toThrow(/needs a value/);
+  });
+
   it("rejects unknown env names, actions and flags", () => {
     expect(() => parseDeployArgs(["deploy", "--env", "local"])).toThrow(/Unknown env "local"/);
     expect(() => parseDeployArgs(["deploy", "--env", "prod"])).toThrow(/Unknown env/);
@@ -104,6 +119,27 @@ describe("runDeployEnv", () => {
       ["exec", "wrangler", "deploy", "--dry-run", "--env", "staging"],
       { cwd: "/api" },
     );
+  });
+
+  it("logs the command before running it with --yes", () => {
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(runDeployEnv(["deploy", "--env", "staging", "--yes"], "/api")).toBe(0);
+    expect(logs.mock.calls.flat().join("\n")).toContain("pnpm exec wrangler deploy --env staging");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("only prints for a migrate dry run, even with --yes", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(runDeployEnv(["migrate", "--env", "production", "--yes", "--dry-run"], "/api")).toBe(0);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("refuses a second --env end to end without calling Wrangler", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(
+      runDeployEnv(["migrate", "--env", "staging", "--", "--env", "production", "--yes"], "/api"),
+    ).toBe(1);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("only prints for a migrate dry run", () => {

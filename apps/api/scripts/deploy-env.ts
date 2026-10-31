@@ -45,11 +45,20 @@ export function parseDeployArgs(argv: string[]): DeployArgs {
     if (arg === "--") {
       // pnpm forwards the separator in `pnpm deploy:staging -- --dry-run`.
       continue;
-    } else if (arg === "--env") {
-      env = rest[i + 1];
-      i += 1;
-    } else if (arg?.startsWith("--env=")) {
-      env = arg.slice("--env=".length);
+    } else if (arg === "--env" || arg?.startsWith("--env=")) {
+      // A second --env must not retarget a script such as deploy:staging.
+      if (env !== undefined) {
+        throw new Error("--env given more than once.");
+      }
+      if (arg === "--env") {
+        env = rest[i + 1];
+        i += 1;
+      } else {
+        env = arg.slice("--env=".length);
+      }
+      if (!env || env.startsWith("--")) {
+        throw new Error("--env needs a value: staging or production.");
+      }
     } else if (arg === "--yes") {
       yes = true;
     } else if (arg === "--dry-run") {
