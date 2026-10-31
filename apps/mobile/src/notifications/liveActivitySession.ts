@@ -22,9 +22,16 @@ import {
 
 const DONE_STATUSES = new Set<WorkoutExecution["status"]>(["completed", "skipped", "modified"]);
 
-/** fitbud://workout/{assignmentId}, parsed by src/navigation/linking.ts. */
+/**
+ * The activity's "Open" link. It must bring the trainee back to the active
+ * workout, but the app has no route for that yet: `fitbud://workout/{id}`
+ * opens the workout overview, which unmounts this screen and ends the
+ * activity. So the link only opens the app (src/navigation/linking.ts parses
+ * it to null and navigates nowhere), leaving the active workout on screen.
+ * The assignment id keeps it unique per workout for the native reuse check.
+ */
 export function workoutOpenUrl(assignmentId: string): string {
-  return `fitbud://workout/${assignmentId}`;
+  return `fitbud://?workout=${encodeURIComponent(assignmentId)}`;
 }
 
 /** "22.5 kg" → 22.5; bodyweight, empty or unparseable → 0. */
@@ -82,10 +89,20 @@ export function liveActivityContentFor(
   const set = sets[position]!;
   const prior = position > 0 ? sets[position - 1]! : null;
 
-  // When finished, the "current" set is the last logged one.
-  const loggedSource = finished ? set : prior && setDone(prior) ? prior : null;
-  const loggedSet: LoggedSet | null = loggedSource
-    ? { setIndex: position + (finished ? 1 : 0), kilograms: actualKg(loggedSource), reps: actualReps(loggedSource) }
+  // Logged line: the set logged just before this one, in workout order. When
+  // finished, the "current" set is the last logged one. On a new exercise's
+  // first set, that is the previous exercise's last set.
+  let logged: { set: SetExecution; index: number } | null = null;
+  if (finished) logged = { set, index: position + 1 };
+  else if (prior) logged = setDone(prior) ? { set: prior, index: position } : null;
+  else {
+    const previousExercise = exercises[exercises.indexOf(exercise) - 1];
+    const previousSets = previousExercise ? sortedSets(previousExercise) : [];
+    const last = previousSets[previousSets.length - 1];
+    if (last && setDone(last)) logged = { set: last, index: previousSets.length };
+  }
+  const loggedSet: LoggedSet | null = logged
+    ? { setIndex: logged.index, kilograms: actualKg(logged.set), reps: actualReps(logged.set) }
     : null;
 
   const planKg = loadKg(set.prescribedLoadLabel);
@@ -138,7 +155,7 @@ export function createLiveActivitySession(native: LiveActivityNative = liveActiv
   // Native calls are async; run them in order so an update never overtakes its start.
   let queue: Promise<unknown> = Promise.resolve();
   const enqueue = (call: () => Promise<unknown>) => {
-    queue = queue.then(call, call);
+    queue = queue.then(call, call).catch(() => undefined);
     return queue;
   };
 

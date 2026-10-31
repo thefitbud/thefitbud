@@ -10,6 +10,7 @@ vi.mock("expo-modules-core", () => ({
 
 import type { ExerciseExecution, SetExecution, WorkoutExecution } from "@fitbud/contracts";
 import { createLiveActivityNative, type LiveActivityNative } from "./liveActivityNative";
+import { parseDeepLinkUrl } from "../navigation/linking";
 import {
   createLiveActivitySession,
   historyPair,
@@ -126,8 +127,11 @@ describe("parsing helpers", () => {
     expect(historyPair(undefined)).toBeNull();
   });
 
-  it("deep-links back to the workout", () => {
-    expect(workoutOpenUrl(ASSIGNMENT)).toBe(`fitbud://workout/${ASSIGNMENT}`);
+  it("opens the app without navigating, so the active workout stays on screen", () => {
+    expect(workoutOpenUrl(ASSIGNMENT)).toBe(`fitbud://?workout=${ASSIGNMENT}`);
+    // fitbud://workout/{id} would open the overview and unmount the screen.
+    expect(parseDeepLinkUrl(workoutOpenUrl(ASSIGNMENT))).toBeNull();
+    expect(parseDeepLinkUrl(`fitbud://workout/${ASSIGNMENT}`)).toMatchObject({ kind: "workout" });
   });
 });
 
@@ -161,10 +165,20 @@ describe("liveActivityContentFor", () => {
   });
 
   it("moves to the next exercise and marks finished after the last set", () => {
-    let ex = logNext(logNext(frame27()));
+    let ex = logNext(logNext(frame27()), { load: "25 kg", reps: 8 });
     expect(liveActivityContentFor(ex)!).toMatchObject({
       exerciseName: "Goblet squat",
-      state: { setIndex: 1, setCount: 2, kilograms: 16, reps: 12, finished: false },
+      state: {
+        setIndex: 1,
+        setCount: 2,
+        kilograms: 16,
+        reps: 12,
+        lastKg: 16,
+        lastReps: 12,
+        // The logged line carries the previous exercise's last set (set 3).
+        loggedSet: { setIndex: 3, kilograms: 25, reps: 8 },
+        finished: false,
+      },
     });
     ex = logNext(logNext(ex, { reps: 10 }), { load: "18 kg", reps: 11 });
     expect(liveActivityContentFor(ex)).toEqual({
@@ -201,7 +215,7 @@ describe("createLiveActivitySession", () => {
 
     expect(native.start).toHaveBeenCalledTimes(1);
     expect(native.start).toHaveBeenCalledWith(
-      { workoutName: "Lower body B", openUrl: `fitbud://workout/${ASSIGNMENT}` },
+      { workoutName: "Lower body B", openUrl: `fitbud://?workout=${ASSIGNMENT}` },
       liveActivityContentFor(ex),
     );
     expect(native.update).not.toHaveBeenCalled();
@@ -306,6 +320,16 @@ describe("createLiveActivitySession", () => {
     releaseStart();
     await pending;
     expect(order).toEqual(["start", "update"]);
+  });
+
+  it("keeps going after a native call rejects", async () => {
+    const native = fakeNative();
+    native.start.mockRejectedValueOnce(new Error("boom"));
+    const session = createLiveActivitySession(native);
+    const ex = frame27();
+    await expect(session.sync(input(ex))).resolves.toBeUndefined();
+    await expect(session.sync(input(logNext(ex)))).resolves.toBeUndefined();
+    expect(native.update).toHaveBeenCalledTimes(1);
   });
 
   it("makes no native call on Android", async () => {
