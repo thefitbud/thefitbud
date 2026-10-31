@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   useNavigate,
@@ -47,8 +47,6 @@ export function CheckinReviewPage() {
     useParams();
   const outlet = useOutletContext<WorkspaceOutletContext | undefined>();
   const workspace = outlet?.workspace ?? null;
-  // The workspace stays mounted while it refreshes (#88), so refetch on its
-  // refresh (saves, realtime hints) instead of relying on a remount.
   const refreshEpoch = outlet?.refreshEpoch ?? 0;
 
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
@@ -61,6 +59,9 @@ export function CheckinReviewPage() {
   const [visibleToClient, setVisibleToClient] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  // Read by a background refresh, which must never discard a review being edited.
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   const [comparePhotos, setComparePhotos] = useState(false);
   const [nextReview, setNextReview] = useState<{
     checkinId: string;
@@ -83,13 +84,20 @@ export function CheckinReviewPage() {
   const clientWa = workspace?.header.clientWhatsappE164 ?? null;
   const fromInbox = searchParams.get("from") === "inbox";
 
-  const load = useCallback(async () => {
+  /**
+   * "initial" (open, change of check-in, after a save) shows the loading state
+   * and seeds the review form. "refresh" (workspace refresh: saves elsewhere,
+   * realtime hints) updates the data quietly and leaves a form the trainer is
+   * editing untouched.
+   */
+  const load = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (!checkinId) return;
-    setLoading(true);
+    if (mode === "initial") setLoading(true);
     setError(null);
     try {
       const result = await apiClient.getCheckinReviewContext(checkinId);
       setContext(result);
+      if (mode === "refresh" && editingRef.current) return;
       if (result.checkin.review) {
         setOutcome(result.checkin.review.outcome);
         setNoteBody(result.checkin.review.notes ?? "");
@@ -104,12 +112,21 @@ export function CheckinReviewPage() {
           : "Could not load review context.",
       );
     } finally {
-      setLoading(false);
+      if (mode === "initial") setLoading(false);
     }
   }, [checkinId]);
 
   useEffect(() => {
-    void load();
+    void load("initial");
+  }, [load]);
+
+  // The workspace stays mounted while it refreshes (#88): refetch on its
+  // refresh instead of relying on a remount.
+  const seenRefreshEpoch = useRef(refreshEpoch);
+  useEffect(() => {
+    if (seenRefreshEpoch.current === refreshEpoch) return;
+    seenRefreshEpoch.current = refreshEpoch;
+    void load("refresh");
   }, [load, refreshEpoch]);
 
   useEffect(() => {

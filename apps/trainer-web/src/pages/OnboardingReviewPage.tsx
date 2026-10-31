@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -78,8 +78,6 @@ function ClampedAnswer({ text }: { text: string }) {
 export function OnboardingReviewPage() {
   const { relationshipId = "" } = useParams();
   const navigate = useNavigate();
-  // refreshEpoch: the workspace stays mounted while it refreshes (#88), so
-  // refetch on its refresh (saves, realtime hints) instead of a remount.
   const { workspace, refreshEpoch } = useOutletContext<WorkspaceOutletContext>();
   const [intake, setIntake] = useState<OnboardingFormResponse | null>(null);
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(
@@ -99,9 +97,10 @@ export function OnboardingReviewPage() {
   const clientWhatsapp =
     header?.clientWhatsappE164 ?? null;
 
-  const load = useCallback(async () => {
+  /** "refresh" (workspace refresh) updates quietly, without the full-page loading swap. */
+  const load = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (!relationshipId) return;
-    setLoading(true);
+    if (mode === "initial") setLoading(true);
     setError(null);
     setIntakeMissing(false);
     try {
@@ -160,7 +159,16 @@ export function OnboardingReviewPage() {
   }, [relationshipId]);
 
   useEffect(() => {
-    void load();
+    void load("initial");
+  }, [load]);
+
+  // The workspace stays mounted while it refreshes (#88): refetch on its
+  // refresh instead of relying on a remount.
+  const seenRefreshEpoch = useRef(refreshEpoch);
+  useEffect(() => {
+    if (seenRefreshEpoch.current === refreshEpoch) return;
+    seenRefreshEpoch.current = refreshEpoch;
+    void load("refresh");
   }, [load, refreshEpoch]);
 
   const answerRows = useMemo((): AnswerRow[] => {
