@@ -61,8 +61,8 @@ Use a real trainer account on the staging Firebase project (the demo seed is loc
 - [ ] Reload `https://app-staging.thefitbud.com/clients` directly: the SPA loads (no 404).
 - [ ] Sign in. Browser dev tools → Network: requests go to `https://app-staging.thefitbud.com/api/...` and return 200; Application → Cookies shows `fitbud_session` on `app-staging.thefitbud.com`. No CORS errors in the console.
 - [ ] Open a client: the client workspace loads with its data.
-- [ ] Realtime connects: Network → WS shows a `wss://app-staging.thefitbud.com/api/realtime/...` connection with status 101. Change something for that client from another session (for example the phone) and the web page updates without a reload.
+- [ ] Realtime (known issue, not a rollback reason): trainer web does not open its realtime WebSocket yet, on staging or locally. The shared API client builds the WebSocket URL from the relative base `/api` and fails silently; a follow-up task fixes it in `packages/api-client`. Until then the page shows new data on reload. Once that fix is deployed: Network → WS shows `wss://app-staging.thefitbud.com/api/realtime/relationships/<id>/ws` with status 101, and a change from another session (for example the phone) shows without a reload.
 - [ ] Invite link: create an invitation, open its `https://app-staging.thefitbud.com/i/<token>` link in a private window: the invite page from the API opens (not the trainer web sign-in page).
 - [ ] Sign out and sign in again.
 
-If a step fails, roll back with Workers & Pages → the Worker → Deployments → the previous version → Rollback, and tell an agent what you saw (no tokens or cookies in the message).
+If any other step fails, roll back with Workers & Pages → the Worker → Deployments → the previous version → Rollback, and tell an agent what you saw (no tokens or cookies in the message).

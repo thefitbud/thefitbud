@@ -92,7 +92,7 @@ The AU2 guard refuses to serve staging until the configured push and email modes
 
 ## 9. First staging deploy (I6), in order
 
-Follow `docs/runbooks/trainer-web-deploy.md` once WD1 is merged; it has the exact commands (the API scripts need `--yes`). The outline:
+Follow `docs/runbooks/trainer-web-deploy.md` once WD1 is merged. The outline:
 
 1. Steps 1–6 above done for staging.
 2. `pnpm --filter @fitbud/api db:migrate:staging`

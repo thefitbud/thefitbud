@@ -66,10 +66,10 @@ describe("trainer web Worker", () => {
     expect(await forwarded.json()).toEqual({ email: "rahul.coach@demo.fitbud.test" });
   });
 
-  it("passes the WebSocket upgrade for /api/realtime through", async () => {
+  it("passes the WebSocket upgrade for the realtime socket through", async () => {
     const { API, env } = setup();
     await worker.fetch(
-      new Request(`${ORIGIN}/api/realtime?relationshipId=r-1`, {
+      new Request(`${ORIGIN}/api/realtime/relationships/r-1/ws?role=trainer`, {
         headers: {
           Upgrade: "websocket",
           Connection: "Upgrade",
@@ -82,8 +82,8 @@ describe("trainer web Worker", () => {
     );
     const forwarded = API.requests[0]!;
     const url = new URL(forwarded.url);
-    expect(url.pathname).toBe("/realtime");
-    expect(url.search).toBe("?relationshipId=r-1");
+    expect(url.pathname).toBe("/realtime/relationships/r-1/ws");
+    expect(url.search).toBe("?role=trainer");
     expect(forwarded.headers.get("upgrade")).toBe("websocket");
     expect(forwarded.headers.get("sec-websocket-key")).toBe("dGhlIHNhbXBsZSBub25jZQ==");
     expect(forwarded.headers.get("cookie")).toBe("fitbud_session=abc");
