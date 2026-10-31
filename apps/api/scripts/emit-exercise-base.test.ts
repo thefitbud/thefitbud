@@ -22,6 +22,19 @@ describe("emit-exercise-base (I2c)", () => {
     expect(readFileSync(OUTPUT_FILE, "utf8")).toBe(first);
   });
 
+  it("writes comments the statement splitter cannot misread (no quote or ';' in a comment line)", () => {
+    const sql = buildExerciseBaseSql(base, instructionsSql);
+    const comments = sql.split("\n").filter((line) => line.startsWith("--"));
+    expect(comments.length).toBeGreaterThan(0);
+    expect(comments.filter((line) => /['";]/.test(line))).toEqual([]);
+    const expected = 1 + base.count * (1 + 6) + // PRAGMA (with header), items, child deletes
+      base.exercises.reduce(
+        (n, e) => n + e.primary_muscles.length + e.secondary_muscles.length + e.equipment.length + e.aliases.length + e.media.length + e.relations.length,
+        0,
+      ) + 14037;
+    expect(splitSqlStatements(sql)).toHaveLength(expected);
+  });
+
   it("keys the n-th media entry exercises/<slug>/<n>.<ext>", () => {
     expect(mediaStorageKey("bench-press-barbell", 1, "media/bench-press-barbell/everkinetic-0042-start.png")).toBe(
       "exercises/bench-press-barbell/1.png",

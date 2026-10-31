@@ -50,13 +50,22 @@ export type SeedOptions =
 
 /** Parses argv (after the script path). Returns an error message instead of options when invalid. */
 export function parseSeedArgs(argv: string[]): SeedOptions | { error: string } {
-  const remote = argv.includes("--remote");
-  const print = argv.includes("--print");
+  let remote = false;
+  let print = false;
+  let yes = false;
   let env: string | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
-    if (arg === "--env") env = argv[i + 1];
-    else if (arg.startsWith("--env=")) env = arg.slice("--env=".length);
+    if (arg === "--remote") remote = true;
+    else if (arg === "--print") print = true;
+    else if (arg === "--yes") yes = true;
+    else if (arg === "--env" || arg.startsWith("--env=")) {
+      if (env !== undefined) return { error: "--env is given more than once." };
+      env = arg === "--env" ? (argv[(i += 1)] ?? "") : arg.slice("--env=".length);
+    } else {
+      // A misspelt --print must not turn a dry run into a real remote write.
+      return { error: `unknown argument "${arg}" (expected --remote, --env <staging|production>, --yes, --print).` };
+    }
   }
   if (!remote) {
     if (env !== undefined) return { error: "--env is only used with --remote." };
@@ -65,7 +74,7 @@ export function parseSeedArgs(argv: string[]): SeedOptions | { error: string } {
   if (env !== "staging" && env !== "production") {
     return { error: "--remote needs --env staging or --env production." };
   }
-  if (!argv.includes("--yes")) {
+  if (!yes) {
     return { error: `--remote writes to the ${env} D1 (${REMOTE_DATABASES[env]}); add --yes to confirm.` };
   }
   return { mode: "remote", env, print };
@@ -141,10 +150,17 @@ export function runLibrarySeed(argv: string[], deps: Deps): number {
   const target =
     options.mode === "local" ? "local D1" : `${options.env} D1 ${REMOTE_DATABASES[options.env]} (remote)`;
   let chunkDir: string | undefined;
-  const steps = planSeed(options, {
-    seedDir: deps.seedDir,
-    chunkDir: () => (chunkDir = (deps.chunkDir ?? (() => mkdtempSync(path.join(tmpdir(), "fitbud-library-seed-"))))()),
-  });
+  let steps: SeedStep[];
+  try {
+    steps = planSeed(options, {
+      seedDir: deps.seedDir,
+      chunkDir: () => (chunkDir = (deps.chunkDir ?? (() => mkdtempSync(path.join(tmpdir(), "fitbud-library-seed-"))))()),
+    });
+  } catch (error) {
+    if (chunkDir && !deps.chunkDir) rmSync(chunkDir, { recursive: true, force: true });
+    deps.error(`library-seed: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
   if (options.print) {
     deps.log(`Planned library seed into ${target}. Nothing is run.`);
     for (const step of steps) {

@@ -284,7 +284,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": false,
         "items": [
           {
-            "slug": "chana-dal",
+            "slug": "lentil-curry",
             "grams": 200,
             "label": "1 bowl"
           },

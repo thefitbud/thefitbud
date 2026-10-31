@@ -156,7 +156,7 @@ export function buildExerciseBaseSql(base: ExerciseBase, instructionsSql: string
     "-- Loads after 03_exercises.sql: same ids and slugs for its 353 exercises, replaced in place.",
     "PRAGMA defer_foreign_keys = true;",
     "",
-    "-- exercises (global). created_at survives the replace, updated_at is the base's generated_at.",
+    "-- exercises (global). created_at survives the replace, updated_at is generated_at of the base.",
   ];
   for (const e of base.exercises) {
     if (e.steps.length === 0) throw new Error(`${e.slug} has no steps`);
