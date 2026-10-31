@@ -65,6 +65,7 @@ import {
   workoutExecutions,
 } from "../db/schema";
 import { createId, nowIso } from "../lib/crypto";
+import { writeStructuredLog, type SafeLogFields } from "../lib/log";
 import { selectInChunks } from "../lib/in-array-chunks";
 import {
   routingPayloadForNotification,
@@ -73,6 +74,28 @@ import {
 } from "../lib/push-provider";
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * Safe fields for a caught error: its name, and its `code` when that is a plain
+ * constant (e.g. a D1 or domain code). Never `message` or the stack.
+ */
+export function errorLogFields(error: unknown): Pick<SafeLogFields, "errorName" | "errorCode"> {
+  const name = error instanceof Error ? error.name : typeof error;
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)
+    ? { errorName: name, errorCode: code }
+    : { errorName: name };
+}
+
+/** One warn line for a caught error in reminder code; control flow is the caller's. */
+function logCaught(operation: string, error: unknown): void {
+  writeStructuredLog({
+    level: "warn",
+    message: "reminders.caught_error",
+    operation,
+    ...errorLogFields(error),
+  });
+}
 type NotificationRow = typeof notifications.$inferSelect;
 type RelationshipRow = typeof coachingRelationships.$inferSelect;
 
@@ -241,7 +264,8 @@ function readMealLocalTime(mealPrescriptionJson: string): string | null {
     );
     if (!parsed.success) return null;
     return parsed.data.localTime ?? null;
-  } catch {
+  } catch (error) {
+    logCaught("reminders.meal_local_time_parse", error);
     return null;
   }
 }
@@ -253,7 +277,8 @@ function mealSlotKey(mealPrescriptionJson: string): string | null {
     );
     if (!parsed.success) return null;
     return parsed.data.mealType ?? null;
-  } catch {
+  } catch (error) {
+    logCaught("reminders.meal_slot_parse", error);
     return null;
   }
 }
@@ -1077,7 +1102,8 @@ async function persistReminder(
           .update(notifications)
           .set({ dedupeKey: candidate.dedupeKey, state: "suppressed" })
           .where(eq(notifications.id, deferredRow.id));
-      } catch {
+      } catch (error) {
+        logCaught("reminders.persist_suppressed_from_deferred", error);
         counters.notificationsDeduped += 1;
         return { outcome: "deduped" };
       }
@@ -1100,7 +1126,8 @@ async function persistReminder(
         createdAt: now,
         readAt: null,
       });
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_suppressed", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
@@ -1129,7 +1156,8 @@ async function persistReminder(
         createdAt: now,
         readAt: null,
       });
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_deferred", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
@@ -1146,7 +1174,8 @@ async function persistReminder(
         .update(notifications)
         .set({ dedupeKey: candidate.dedupeKey, state: "queued" })
         .where(eq(notifications.id, deferredRow.id));
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_promote_deferred", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
@@ -1169,7 +1198,8 @@ async function persistReminder(
         createdAt: now,
         readAt: null,
       });
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_queued", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }

@@ -2,8 +2,10 @@ import { reminderQueueMessageSchema } from "@fitbud/contracts";
 import { createDb } from "../db/client";
 import {
   deliverReminderMessage,
+  errorLogFields,
   evaluateAndEnqueueReminders,
 } from "../domain/reminders";
+import { writeStructuredLog } from "../lib/log";
 import { resolvePushProviderMode } from "../lib/push-provider";
 import type { Env } from "../types";
 
@@ -40,7 +42,9 @@ export async function handleScheduledReminders(
 export async function handleReminderQueueBatch(
   batch: MessageBatch<unknown>,
   env: Env,
-): Promise<void> {
+): Promise<{ acked: number; retried: number }> {
+  let acked = 0;
+  let retried = 0;
   const db = createDb(env.DB);
   const mode = resolvePushProviderMode(env.PUSH_PROVIDER_MODE);
 
@@ -48,6 +52,7 @@ export async function handleReminderQueueBatch(
     const parsed = reminderQueueMessageSchema.safeParse(message.body);
     if (!parsed.success) {
       message.ack();
+      acked += 1;
       continue;
     }
     try {
@@ -55,8 +60,19 @@ export async function handleReminderQueueBatch(
         expoAccessToken: env.EXPO_ACCESS_TOKEN,
       });
       message.ack();
-    } catch {
+      acked += 1;
+    } catch (error) {
+      writeStructuredLog({
+        level: "error",
+        message: "queue.message_failed",
+        operation: "queue.reminders.deliver",
+        entityType: "notification_delivery",
+        entityId: parsed.data.deliveryId,
+        ...errorLogFields(error),
+      });
       message.retry();
+      retried += 1;
     }
   }
+  return { acked, retried };
 }
