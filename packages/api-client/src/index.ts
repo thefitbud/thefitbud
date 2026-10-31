@@ -2217,6 +2217,24 @@ export class FitBudApiClient {
   }
 
   /**
+   * Resolve a request target that may sit behind a relative `baseUrl`.
+   *
+   * The trainer web app serves the API from the same origin under `/api`
+   * (D-W2-2), so its `baseUrl` is the relative `/api` and `new URL(target)`
+   * alone throws. A relative base resolves against the document location;
+   * runtimes without one (Node, React Native) always configure an absolute
+   * `baseUrl`, so the plain parse applies there.
+   */
+  private absoluteUrl(target: string): URL {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return new URL(target);
+    const href = (globalThis as { location?: { href?: string } }).location?.href;
+    if (href) return new URL(target, href);
+    throw new Error(
+      `Cannot build an absolute URL for "${target}": the API client baseUrl is relative and this runtime has no location to resolve it against. Pass an absolute baseUrl.`,
+    );
+  }
+
+  /**
    * Build a WebSocket URL for a relationship room.
    * Pass accessToken as query for environments that cannot set WS headers.
    * On message: parse RealtimeEvent and refetch/sync — never treat as state.
@@ -2226,7 +2244,7 @@ export class FitBudApiClient {
     options?: { accessToken?: string | null; role?: string | null },
   ): string {
     const path = relationshipRealtimePath(relationshipId);
-    const url = new URL(`${this.baseUrl}${path}`);
+    const url = this.absoluteUrl(`${this.baseUrl}${path}`);
     if (options?.accessToken) {
       url.searchParams.set("access_token", options.accessToken);
     }

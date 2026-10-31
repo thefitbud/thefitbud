@@ -23,10 +23,13 @@ export function useRealtimeHints(
   const onHintRef = useRef(onHint);
   onHintRef.current = onHint;
 
-  const ids = toIdList(relationshipIds);
-  const idsKey = ids.join(",");
+  // Only the joined key is a dependency: callers pass a fresh array each
+  // render (HomePage spreads a Map's keys), so depending on the array itself
+  // tore every socket down and reopened it on each render.
+  const idsKey = toIdList(relationshipIds).join(",");
 
   useEffect(() => {
+    const ids = idsKey.length === 0 ? [] : idsKey.split(",");
     if (ids.length === 0) return;
 
     const subscriptions = ids.map((relationshipId) =>
@@ -45,5 +48,5 @@ export function useRealtimeHints(
         subscription.close();
       }
     };
-  }, [api, ids, idsKey]);
+  }, [api, idsKey]);
 }
