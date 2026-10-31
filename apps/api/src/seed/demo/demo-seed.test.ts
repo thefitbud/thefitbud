@@ -522,13 +522,10 @@ describe("demo seed", () => {
         protein += (item.calculated.proteinScaled ?? 0) / NUTRIENT_SCALE;
       }
     }
-    // I2b: library 2026.10.9 dropped afghani-chicken, safed-chana-curry-chole and
-    // mint-and-peanut-raita, and the owner chose to drop them from the base plan rather
-    // than remap (31 Oct). What is left: egg + roti, rice, roti, an empty snack.
-    expect(kcal).toBeGreaterThan(700);
-    expect(kcal).toBeLessThan(800);
-    expect(protein).toBeGreaterThanOrEqual(25);
-    expect(protein).toBeLessThanOrEqual(35);
+    expect(kcal).toBeGreaterThan(1700);
+    expect(kcal).toBeLessThan(2000);
+    expect(protein).toBeGreaterThanOrEqual(90);
+    expect(protein).toBeLessThanOrEqual(140);
 
     // Original accounts keep 3 sessions/week; generated clients follow their template (1–6).
     const legacyEmails = new Set(DEMO_ACCOUNTS.map((a) => a.email));
@@ -748,23 +745,13 @@ describe("demo seed", () => {
     });
 
     it("has believable nutrition, weights and no negatives", () => {
-      // I2b: the 16 foods missing from library 2026.10.9 were dropped, not remapped (owner,
-      // 31 Oct). That leaves the original accounts' base plan and Siddharth's Jain N03 plan
-      // under 1,000 kcal; every other plan keeps the floor.
-      const SHRUNK_BY_I2B = new Set(["siddharth.yearly@demo.fitbud.test", ...DEMO_ACCOUNTS.map((a) => a.email)]);
-      const plans = q(
-        `SELECT ui.email_norm, pv.content_json FROM plan_versions pv
-         JOIN plans p ON p.id = pv.plan_id
-         JOIN coaching_relationships cr ON cr.id = p.coaching_relationship_id
-         JOIN user_identities ui ON ui.user_id = cr.trainee_user_id`,
-      );
-      expect(plans.length).toBe(one("SELECT COUNT(*) FROM plan_versions"));
-      for (const [email, json] of plans) {
+      const plans = q("SELECT content_json FROM plan_versions");
+      for (const [json] of plans) {
         const content = JSON.parse(String(json)) as PlanContent;
         if (content.mealPrescriptions.length === 0) continue;
         let kcal = 0;
         for (const meal of content.mealPrescriptions) for (const item of meal.items ?? []) kcal += (item.calculated.energyKcalScaled ?? 0) / NUTRIENT_SCALE;
-        expect(kcal, String(email)).toBeGreaterThan(SHRUNK_BY_I2B.has(String(email)) ? 600 : 1000);
+        expect(kcal).toBeGreaterThan(1000);
         expect(kcal).toBeLessThan(3800);
       }
       expect(one("SELECT COUNT(*) FROM meal_compliance WHERE kcal_scaled < 0 OR protein_scaled < 0 OR carbs_scaled < 0 OR fat_scaled < 0")).toBe(0);

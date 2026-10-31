@@ -313,7 +313,7 @@ describe("migration chain and seeds", () => {
           handle.sqlite.exec(
             "SELECT COUNT(*) FROM food_library_items WHERE ownership='global' AND status='active'",
           )[0]?.values[0]?.[0];
-        expect(foodCount).toBe(1243);
+        expect(foodCount).toBe(693);
         const exerciseCount =
           handle.sqlite.exec(
             "SELECT COUNT(*) FROM exercise_library_items WHERE ownership='global' AND status='active'",
