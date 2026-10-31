@@ -5,7 +5,7 @@
  * - deep history before the 28-day window + the 8 generated personas
  */
 export { addTrainerLibrary, planTemplateId } from "./library-rows.js";
-export { addGeneratedPersona, addLegacyDeepHistory, startedAtFor, checkinFormFor, type WorldInput } from "./generated.js";
+export { addGeneratedPersona, addLegacyDeepHistory, askInsideWindowMs, startedAtFor, checkinFormFor, type WorldInput } from "./generated.js";
 export { buildPlanChain, insertPlanRows, insertSubscriptionChain, versionForDate, type ChainVersion } from "./plans.js";
 export { PERSONA_CONFIGS, GENERATED_PERSONA_EMAILS, personaConfig } from "./personas.js";
 export { SeedRows } from "./sql.js";

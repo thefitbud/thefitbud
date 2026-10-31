@@ -2,22 +2,12 @@
  * TW-D behavioural proofs: plan tab, builders, publish modal.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { signIn } from "./support/session";
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 const DEEPAK = "f2a64fdb-96ad-46f3-a95e-99151b4a25f1";
 
 const BANNED = [/Library snapshot [0-9a-f]{8}-/i, /\[object Object\]/, /\bundefined\b/, /\bNaN\b/];
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
-}
 
 async function expectNoBannedStrings(page: Page) {
   const text = await page.locator("body").innerText();
@@ -68,8 +58,12 @@ test.describe("TW-D plan and builders", () => {
     await expect(strip).toContainText("Sun");
     await expect(strip).toContainText(/Rest|Upper|Lower|Push|Pull|Legs|Full/i);
     await expect(strip).toContainText(/\d meals?/);
-    await expect(page.getByRole("button", { name: /^Adjust plan$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Replace from template/ })).toBeVisible();
+    // The current-plan card's own actions. The demo seed's configuration (3
+    // sessions) differs from Rohan's plan (4), so the plan/configuration
+    // banner adds a second "Adjust plan" above it.
+    const planActions = page.locator(".current-plan-actions");
+    await expect(planActions.getByRole("button", { name: /^Adjust plan$/ })).toBeVisible();
+    await expect(planActions.getByRole("button", { name: /Replace from template/ })).toBeVisible();
     await page.getByRole("button", { name: /more plan actions/i }).click();
     await expect(page.getByRole("menuitem", { name: /Duplicate as template/ })).toBeVisible();
     await page.keyboard.press("Escape");
@@ -88,7 +82,10 @@ test.describe("TW-D plan and builders", () => {
 
   test("Adjust plan opens the builder; Publish… opens the schedule modal", async ({ page }) => {
     await discardDraftIfAny(page);
-    await page.getByRole("button", { name: /^Adjust plan$/ }).click();
+    await page
+      .locator(".current-plan-actions")
+      .getByRole("button", { name: /^Adjust plan$/ })
+      .click();
     await expect(page).toHaveURL(new RegExp(`/clients/${ROHAN}/plan/[^/]+/versions/[^/]+/edit`));
     await expect(page.getByTestId("screen-TW-13")).toBeVisible();
     await expect(page.getByTestId("autosave-status")).toContainText(/Draft v\d+/);
@@ -146,7 +143,10 @@ test.describe("TW-D plan and builders", () => {
   test("publishing for a client in another timezone schedules the plan", async ({ page }) => {
     await page.goto(`/clients/${DEEPAK}/plan`);
     await page.getByTestId("screen-TW-12").waitFor();
-    await page.getByRole("button", { name: /^Adjust plan$/ }).click();
+    await page
+      .locator(".current-plan-actions")
+      .getByRole("button", { name: /^Adjust plan$/ })
+      .click();
     await expect(page.getByTestId("screen-TW-13")).toBeVisible();
     await page.getByRole("button", { name: /^Publish…$/ }).click();
     const modal = page.getByTestId("screen-TW-16");
@@ -164,7 +164,10 @@ test.describe("TW-D plan and builders", () => {
     await page.setViewportSize({ width: 768, height: 900 });
     await page.goto(`/clients/${ROHAN}/plan`);
     await page.getByTestId("screen-TW-12").waitFor();
-    await page.getByRole("button", { name: /^Adjust plan$/ }).click();
+    await page
+      .locator(".current-plan-actions")
+      .getByRole("button", { name: /^Adjust plan$/ })
+      .click();
     await expect(page.getByTestId("builder-small-screen")).toContainText("Open on a larger screen");
     await expect(page.getByRole("button", { name: /^Publish…$/ })).toBeDisabled();
   });

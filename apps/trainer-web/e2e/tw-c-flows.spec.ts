@@ -1,10 +1,23 @@
 /**
  * TW-C behavioural proofs for workspace header, overview, intake, configure, notes.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
+import { API, apiToken, signIn } from "./support/session";
+import { CLIENT_WORKSPACE_TABS } from "../src/components/workspace/workspaceTabs";
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
+async function expectClientWorkspaceTabStrip(tabs: Locator) {
+  const links = tabs.getByRole("link");
+  await expect(links).toHaveCount(CLIENT_WORKSPACE_TABS.length);
+  for (const [index, tab] of CLIENT_WORKSPACE_TABS.entries()) {
+    await expect(links.nth(index)).toContainText(tab.label);
+  }
+  for (const forbidden of ["Sessions", "Packages", "Configure"] as const) {
+    await expect(
+      tabs.getByRole("link", { name: forbidden, exact: true }),
+    ).toHaveCount(0);
+  }
+}
+
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 const SNEHA = "6a68b615-c47c-4bfc-a7f8-550becf7878a";
 const VIKRAM = "2fe7a6d8-4c61-443d-9614-18b4210186ee";
@@ -12,13 +25,35 @@ const DEEPAK = "f2a64fdb-96ad-46f3-a95e-99151b4a25f1";
 const KAVYA = "b9f01670-8acc-45f6-adab-d7728bca88a6";
 const UNKNOWN = "00000000-0000-4000-8000-000000000000";
 
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
+/** Submitted (unreviewed) check-ins per relationship, from the trainer inbox the badge reads. */
+async function submittedCheckinsByRelationship(): Promise<Map<string, number>> {
+  const res = await fetch(`${API}/checkins/inbox`, {
+    headers: { Authorization: `Bearer ${await apiToken()}` },
+  });
+  const body = (await res.json()) as {
+    data: {
+      items: Array<{ coachingRelationshipId: string; checkin: { status: string } }>;
+    };
+  };
+  const counts = new Map<string, number>();
+  for (const item of body.data.items) {
+    if (item.checkin.status !== "submitted") continue;
+    counts.set(
+      item.coachingRelationshipId,
+      (counts.get(item.coachingRelationshipId) ?? 0) + 1,
+    );
+  }
+  return counts;
+}
+
+/** Check-ins is the only tab that may carry a count badge, and it shows the inbox count. */
+async function expectCheckinsBadge(tabs: Locator, expected: number) {
+  await expect(tabs.locator(".tab-badge")).toHaveCount(expected > 0 ? 1 : 0);
+  if (expected > 0) {
+    await expect(
+      tabs.getByRole("link", { name: /^Check-ins/ }).locator(".tab-badge"),
+    ).toHaveText(String(expected));
+  }
 }
 
 test.describe("TW-C workspace", () => {
@@ -48,14 +83,38 @@ test.describe("TW-C workspace", () => {
     expect(href).toMatch(/^https:\/\/wa\.me\/919000000007/);
     await expect(page.getByRole("button", { name: /Review issue/i })).toBeVisible();
     const tabs = page.getByRole("navigation", { name: /Client sections/i });
-    await expect(tabs.getByRole("link", { name: /Overview/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Plan/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Activity/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Progress/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /Check-ins/i })).toBeVisible();
-    await expect(tabs.getByRole("link", { name: /History/i })).toBeVisible();
-    // Check-ins is the only tab that may carry a count badge.
-    await expect(tabs.locator(".tab-badge")).toHaveCount(1);
+    await expectClientWorkspaceTabStrip(tabs);
+    // The demo seed reviews every Rohan check-in (so Today shows the coach
+    // reply), so his badge follows the inbox rather than frame 03's "1".
+    const submitted = await submittedCheckinsByRelationship();
+    await expectCheckinsBadge(tabs, submitted.get(ROHAN) ?? 0);
+    // A client with a check-in waiting shows its count on the Check-ins tab.
+    const waiting = [...submitted.entries()].find(([id]) => id !== ROHAN);
+    expect(waiting, "demo seed has a submitted check-in awaiting review").toBeTruthy();
+    await page.goto(`/clients/${waiting![0]}/overview`);
+    await expectCheckinsBadge(
+      page.getByRole("navigation", { name: /Client sections/i }),
+      waiting![1],
+    );
+    for (const segment of [
+      "",
+      "overview",
+      "plan",
+      "activity",
+      "progress",
+      "check-ins",
+      "history",
+      "configure",
+      "onboarding",
+    ]) {
+      await page.goto(
+        segment ? `/clients/${ROHAN}/${segment}` : `/clients/${ROHAN}`,
+      );
+      await expectClientWorkspaceTabStrip(
+        page.getByRole("navigation", { name: /Client sections/i }),
+      );
+    }
+    await page.goto(`/clients/${ROHAN}/overview`);
     await page.getByRole("button", { name: /more actions/i }).click();
     await expect(
       page.getByRole("menuitem", { name: /Configure coaching/i }),
@@ -162,7 +221,8 @@ test.describe("TW-C workspace", () => {
     await expect(page.getByText(/820\s*\/\s*1000/)).toBeVisible();
     await visibility.check();
     await expect(
-      page.getByText(/will see this on their Today screen/i),
+      // Uses the client's pronoun ("his" for Rohan), like frame 188's "He sees it on Today".
+      page.getByText(/Rohan will see this on (his|her|their) Today screen/i),
     ).toBeVisible();
     await expect(page.getByText(/From rahul · just now/i)).toBeVisible();
     await visibility.uncheck();

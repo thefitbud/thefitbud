@@ -46,7 +46,8 @@ Architectural rules
 - Support trainer and trainee modes in the Expo mobile application.
 - Treat D1 and the API as authoritative. SQLite, notifications, and realtime events are projections or delivery mechanisms.
 - Use REST and sync for normal state. Use Durable Objects and WebSockets only for selected change notifications.
-- Do not add in-app chat, payment tracking, organization roles, or trainer-team permissions to the MVP.
+- Do not add in-app chat, payment processing or collection, in-app video or voice calling, organization roles, or trainer-team permissions to the MVP.
+- Payment tracking is allowed (30 Oct 2026): per client, the trainer records amount, subscription type, coaching mode, start and due dates, paid/unpaid status and method (cash/UPI/bank). Session counting is out of scope. Calendar entries may carry an external meeting link. Steps (HealthKit / Health Connect, trainer-visible) and push notifications are MVP.
 Provider portability rule
 - Cloudflare is an infrastructure choice, not a domain-model choice.
 - Product behavior, domain rules, shared contracts, and client behavior must remain provider-neutral.
@@ -69,6 +70,12 @@ Product invariants
 - Exceptions retain their source signal and do not replace it.
 - FitBud presents context to trainers; it does not make automatic coaching decisions.
 - The normal trainee path should require minimal input. Ask for detail only when the workflow requires it.
+Design source of truth (locked 28 Oct 2026)
+- The locked UI design lives in `docs/design/` on main. The frames are in `docs/design/mockups/png/`, with HTML sources in `docs/design/mockups/html/`. Start from `docs/design/README.md` for the screen index, precedence, and lock status, and read `DESIGN-NOTES.md` and `DECISIONS-21OCT.md` there too.
+- Every UI task names its frame IDs. Build to those frames: match layout, copy, and every state. Do not invent screens, states, or copy. If a frame is missing, stop and report instead of guessing.
+- `docs/spec/mockups/` and `docs/spec/mockups-v2/` were retired and removed. Do not use older frames from git history.
+- UI QA compares the built screen side by side with the named frames. Tests and CI alone do not pass a UI task.
+
 Design rules
 - Design screens from domain state and transitions, not from a feature inventory.
 - Every visible dynamic value must have a defined backend source.
@@ -176,18 +183,14 @@ Risks or questions
 
 Done when
 - Observable acceptance criteria
-Human approval required
-Stop before implementing when a task would:
-- Change MVP scope or a documented non-goal.
-- Introduce a new role, application, provider, or infrastructure service.
-- Change authentication or authorization boundaries.
-- Change ownership semantics.
-- Make a destructive or irreversible migration.
-- Remove or rewrite historical coaching records.
-- Change published-plan immutability or version-effective behavior.
-- Choose unspecified conflict resolution that could discard user data.
-- Put sensitive information in notifications, logs, or analytics.
-- Require production credentials or direct production-data access.
+Decisions and stop rules (30 Oct 2026: no mid-task human approval)
+Agents do not wait for human approval during a task. Product, architecture, provider, auth and migration decisions are made before a batch starts and are written into the task spec (`docs/specs/<ID>.md`) and its batch file. Firoz reviews the finished batch, not individual steps.
+Stop and report, instead of guessing, only when:
+- The spec does not answer a question whose answer changes product behavior, scope, architecture, auth, ownership, or data.
+- The work would make a destructive or irreversible migration, rewrite historical coaching records, change published-plan immutability, or discard user data, and the spec does not say so explicitly.
+- A file outside the spec's `files_owned` must change.
+- The work would need a remote or deploy command, a production credential, or production data. Agents never have these.
+Never put sensitive information in notifications, logs, or analytics.
 Required verification
 Run the checks relevant to the changed scope using root workspace scripts:
 - Formatting and linting.
@@ -211,7 +214,7 @@ Testing and data realism rules
 - A test helper may create fixture data, but it must create the same persisted entities and valid relationships that the production workflow expects.
 - Do not weaken production validation or introduce test-only behavior into domain logic merely to simplify tests.
 - When a product decision changes the data model or workflow, update the affected fixtures and integration tests so they continue to represent the real product flow.
-- Subscription tests must use a persisted relationship-owned subscription version and exercise plan name, payment frequency, civil start and renewal dates, derived renewal state in the trainer timezone, the trainer attention list, and the `subscription_renewal_reminder` path. Do not invent amounts, invoices, or payment collection.
+- Subscription tests must use a persisted relationship-owned subscription version and exercise plan name, payment frequency, civil start and renewal dates, derived renewal state in the trainer timezone, the trainer attention list, and the `subscription_renewal_reminder` path. Amount, subscription type, coaching mode, paid/unpaid status and payment method are tracking-only fields (30 Oct 2026); tests may exercise them once they exist. Do not add invoices, payment collection, a payment gateway, or session counting.
 Definition of done
 A task is complete only when:
 - The requested user outcome works.

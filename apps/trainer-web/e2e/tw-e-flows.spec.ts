@@ -1,23 +1,14 @@
 /**
  * TW-E behavioural proofs: activity, progress, check-ins, review, inbox.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { signIn } from "./support/session";
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 const AARAV = "30e514e1-e3f4-4dac-ae4b-5f45e72c3df6";
 const DEEPAK = "f2a64fdb-96ad-46f3-a95e-99151b4a25f1";
+const HARPREET = "519b5b84-c1bf-4bf3-ab4f-3cbb71e12f84";
 const CHECKIN = "744e2975-255c-4469-9f9a-6da0a853c8f2";
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
-}
 
 test.describe("TW-E activity, progress, check-ins", () => {
   test.beforeEach(async ({ page }) => {
@@ -43,7 +34,9 @@ test.describe("TW-E activity, progress, check-ins", () => {
   });
 
   test("TW-18 progress: empty weigh-ins copy", async ({ page }) => {
-    await page.goto(`/clients/${ROHAN}/progress`);
+    // Rohan has an 8-week weigh-in series in the demo seed; Harpreet
+    // (coaching ready) has none yet.
+    await page.goto(`/clients/${HARPREET}/progress`);
     await expect(page.getByTestId("screen-TW-18")).toBeVisible();
     await expect(
       page.getByRole("heading", {

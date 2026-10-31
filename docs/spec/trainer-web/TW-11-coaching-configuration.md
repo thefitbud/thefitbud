@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1312–1367. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-11 -->
 ### TW-11 · Coaching configuration ("Configure")
@@ -25,8 +25,6 @@
 1. **Purpose.** Set the coaching baseline: goal, workout and nutrition expectations, check-in cadence, tracking requirements, subscription dates, and (new here) **automatic reminders on or off per category**.
 2. **Entry.** After TW-10, the header overflow, and the Home Renewals CTA.
 3. **Legacy (do not keep).** `shots/d1440_10_client1_configure.png`. A long page (about 2,000 px) with every section expanded. It fires 404s for clients with no subscription or configuration. It doesn't load reminder rules.
-
-   ![Implemented configure (top of page)](../img/impl_d1440_10_client1_configure.jpg){.shot}
 
 4. **Gaps to close.**
    - No progressive disclosure.
@@ -43,7 +41,7 @@
    | Check-ins | cadence (weekly, biweekly, monthly), due window hours, form (select from check-in templates, TW-25) | "Weekly · 48 h window · Standard check-in" |
    | Tracking | body weight, progress photos, session RPE (switches) | "Weight weekly · photos · RPE" |
    | **Automatic reminders** | Workout, Meal, Check-in switches (the `reminder_rules` booleans) plus a read-only note | "On for workouts and meals · off for check-ins" |
-   | Subscription | plan name, payment frequency, start date, renewal date (no amounts) | "Monthly · renews 1 Nov" |
+   | Subscription | plan name, payment frequency, start date, renewal date (30 Oct 2026: subscription settings also track amount, type, coaching mode, paid/unpaid and method; no payment collection) | "Monthly · renews 1 Nov" |
 
    - The **Automatic reminders** note reads: "FitBud times reminders around Priya's meal times and workout time, only when something isn't logged, and never in her quiet hours (10 pm–7 am). Priya controls her own notification settings and can adjust her meal times." When she has changed any times, the note adds "Priya's meal times: Lunch 2:30 pm (plan 1:30 pm)" (D24).
    - **WhatsApp reminders** status line (read-only). While `wa_automation` is off, which is today's state: "WhatsApp reminders · **Coming soon**. FitBud reminds Priya in the app for now." When it's on: "WhatsApp reminders: opted in · used when app notifications don't reach Priya" or "Not opted in". The trainer can't opt a client in (D17).
@@ -78,13 +76,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY: shows old UI, do not copy** (embedded in the guide section): `impl_d1440_10_client1_configure.jpg`
-
-  ![impl_d1440_10_client1_configure.jpg](../img/impl_d1440_10_client1_configure.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
@@ -121,3 +115,12 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **1440×900** (desktop, Chromium). Save it as `docs/spec/evidence/TW-11.png`. Save extra states as `docs/spec/evidence/TW-11--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+Location and sections (mockups 148, 149):
+- Configure lives in the client **Plan tab** as the sub-tab **Coaching setup** (next to *Plans*); route `/clients/:rid/plan?view=setup`. Entry: Plan tab; onboarding page › *Mark ready & configure*; header ⋯ › *Coaching setup*; Home Renewals CTA → Subscription section.
+- Accordion order: **Goal** (goalShort shown to the client, 120 chars; **detailed goal**, private, 500) · **Basics** (age, sex, height, start weight from intake, diet preference, timezone) · **Expectations** · Workouts · Nutrition · Check-ins · Reminders · Subscription. Tracking switches move into Expectations.
+- **Expectations** table: Expectation · Target · "Raises a flag when". Rows: Workouts per week + log window; Meals logged per week ("at least 22 of 28"); Check-in cadence + window; Weight trend range per week + weigh-in day; Steps (optional, only when the client connects a health app). Each row states which Attention/Critical rule it feeds. Counts only, no %. Changes apply from tomorrow and never re-flag past days. Saving on an active setup creates a new version (sticky footer: status pill + Save as vN).
+- **Open question (behaviour):** today's exception thresholds are global (00-foundations "does not reopen accepted behaviour"). Making them per-client from Expectations needs product sign-off and an API change.

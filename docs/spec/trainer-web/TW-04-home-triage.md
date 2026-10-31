@@ -16,7 +16,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 813–940. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-04 -->
 ### TW-04 · Home triage
@@ -28,8 +28,6 @@
 3. **Legacy (do not keep).** `shots/d1440_02_home.png` and `m390_02_home.png`, with the side-by-side in `sbs/home.png`.
    - A greeting, 3 KPI tiles, filter chips (All / Needs Attention 50 / Today's Work 26), then an unbounded list of exception cards (50) with repeated "Active / Critical / Missed workout" pills.
    - The page is about 2,630 px tall and overflows at 390.
-
-   ![Figma (left) vs implemented (right): Home](../img/sbs_home.jpg){.shot}
 
 4. **Gaps to close.**
    - It's unbounded: there's no grouping by client and no "View all".
@@ -107,8 +105,6 @@
    - Adopt: the NN/g definition of cards [R95] https://www.nngroup.com/articles/cards-component/ (cards suit heterogeneous, browsable content, not scanning comparable items) and Material 3 lists and cards [R97].
    - Adopt: the WAI-ARIA Authoring Practices grid pattern and keyboard interface [R96] https://www.w3.org/WAI/ARIA/apg/patterns/grid/
 
-   ![Reference: Everfit check-in dashboard (help-centre screenshot)](../img/ref_everfit_checkin_dashboard_2.jpg){.shot}
-
 10. **UX decisions and why.**
     - Grouping by client cuts 50 rows to about 15 and matches how trainers think ("Priya", not "exception 32").
     - **Rows, not cards, for web Needs attention (D32).** The comparison:
@@ -151,33 +147,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY + REFERENCE (side by side): left = Figma/Stitch reference for density and hierarchy only (its banned elements, per 00-foundations.md §1.5, must not be built); right = old implemented UI, LEGACY: do not copy** (embedded in the guide section): `sbs_home.jpg`
-
-  ![sbs_home.jpg](../img/sbs_home.jpg)
-
-- **REFERENCE: external inspiration (competitor help-centre screenshot)** (embedded in the guide section): `ref_everfit_checkin_dashboard_2.jpg`
-
-  ![ref_everfit_checkin_dashboard_2.jpg](../img/ref_everfit_checkin_dashboard_2.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_d1440_02_home.jpg`
-
-  ![impl_d1440_02_home.jpg](../img/impl_d1440_02_home.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_m390_02_home.jpg`
-
-  ![impl_m390_02_home.jpg](../img/impl_m390_02_home.jpg)
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (cited by the section or by guide Appendix D): `figma_trainer_01_home.jpg`
-
-  ![figma_trainer_01_home.jpg](../img/figma_trainer_01_home.jpg)
-
-- **REFERENCE: external inspiration (competitor help-centre screenshot)** (cited by the section or by guide Appendix D): `ref_everfit_checkin_dashboard_1.jpg`
-
-  ![ref_everfit_checkin_dashboard_1.jpg](../img/ref_everfit_checkin_dashboard_1.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { hashPassword } from "../auth/password.js";
 import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
+import { assertNoForeignKeyViolations } from "../test-support/foreign-key-check.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
@@ -383,8 +384,7 @@ describe("migration chain and seeds", () => {
           libraryIndex,
         });
         handle.sqlite.exec(demoSql);
-        const fk = handle.sqlite.exec("PRAGMA foreign_key_check");
-        expect(fk[0]?.values ?? []).toEqual([]);
+        assertNoForeignKeyViolations(handle.sqlite);
 
         const foodCount =
           handle.sqlite.exec(
