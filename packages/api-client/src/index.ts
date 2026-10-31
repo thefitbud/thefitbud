@@ -2294,9 +2294,6 @@ export class FitBudApiClient {
       });
       const current = new WebSocketImpl(url);
       socket = current;
-      current.addEventListener("open", () => {
-        // Nothing to do: staying open is the success case.
-      });
       current.addEventListener("message", (message) => {
         try {
           const data =
