@@ -36,6 +36,7 @@ const LOCAL_LOAD_ORDER = [
   "sql/05_search.sql",
 ];
 
+
 const FOOD_TYPES = ["ingredient", "dish", "beverage", "packaged_or_prepared"];
 const COOKING_STATES = ["raw", "cooked", "ready_to_eat", "as_purchased"];
 
@@ -100,10 +101,9 @@ describe("library seed 2026.10.9", () => {
     expect(withoutComments(sql)).toBe("");
   });
 
-  it("08_post_seed.sql holds comments only, no SQL statements", () => {
+  it("08_post_seed.sql exists (its corrections are covered by library-post-seed.test.ts)", () => {
     const sql = readFileSync(join(seedDir, "sql/08_post_seed.sql"), "utf8");
     expect(sql.trim()).not.toBe("");
-    expect(withoutComments(sql)).toBe("");
   });
 
   describe("loaded into D1 with the demo seed", () => {
