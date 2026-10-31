@@ -98,6 +98,10 @@ dead_letter_queue = "fitbud-jobs-staging-dlq"
 [env.staging.triggers]
 crons = ["*/5 * * * *"]
 
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
 [[env.staging.durable_objects.bindings]]
 name = "RELATIONSHIP_REALTIME"
 class_name = "RelationshipRealtimeRoom"
@@ -143,6 +147,10 @@ dead_letter_queue = "fitbud-jobs-prod-dlq"
 
 [env.production.triggers]
 crons = ["*/5 * * * *"]
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.2
 
 [[env.production.durable_objects.bindings]]
 name = "RELATIONSHIP_REALTIME"
