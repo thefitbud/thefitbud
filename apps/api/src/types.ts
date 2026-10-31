@@ -24,14 +24,19 @@ export type Env = {
   /** `test` uses the documented Firebase token test double. */
   AUTH_MODE: "test" | "firebase";
   /**
-   * `test` records provider acceptance via a local FCM double.
-   * `fcm` requires production credentials (not wired in MVP local).
+   * `test` records provider acceptance via a local double (local only).
+   * `expo` sends through the Expo Push Service (staging, production).
+   * `fcm` is kept for compatibility and is not configured.
    */
-  PUSH_PROVIDER_MODE?: "test" | "fcm";
+  PUSH_PROVIDER_MODE?: "test" | "fcm" | "expo";
+  /** Optional Expo Push access token (Worker secret). Never logged. */
+  EXPO_ACCESS_TOKEN?: string;
   /** HMAC secret for time-limited media upload/download URLs. */
   MEDIA_SIGNING_SECRET: string;
   ENVIRONMENT?: "local" | "staging" | "production" | "preview";
-  EMAIL_PROVIDER?: "dev_sink" | "disabled" | "resend" | "ses";
+  EMAIL_PROVIDER?: "dev_sink" | "disabled" | "zeptomail" | "resend" | "ses";
+  /** ZeptoMail send-mail token (Worker secret). Never logged. */
+  ZEPTOMAIL_TOKEN?: string;
   SYSTEM_EMAIL_FROM?: string;
   SYSTEM_EMAIL_REPLY_TO?: string;
   ADMIN_ALERT_EMAILS?: string;
@@ -41,6 +46,8 @@ export type Env = {
   FLAG_WA_AUTOMATION?: string;
   FLAG_STEPS_ENABLED?: string;
   LIBRARY_MEDIA_BASE_URL?: string;
+  /** R2 key prefix per env; applied only by mediaKey(). */
+  MEDIA_PREFIX?: string;
   FIREBASE_SERVICE_ACCOUNT_JSON?: string;
   /** Public Firebase Web API key; used for the server-side token exchange and refresh. */
   FIREBASE_WEB_API_KEY?: string;
