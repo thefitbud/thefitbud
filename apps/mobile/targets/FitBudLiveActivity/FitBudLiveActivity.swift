@@ -224,9 +224,13 @@ struct LiveActivityRestView: View {
         Spacer()
         if #available(iOS 17.0, *) {
           Button(intent: SkipRestIntent()) {
+            // Touch target at least 44 pt (CLAUDE.md); 27c draws a ~50 pt circle.
             Text("Skip")
+              .frame(minWidth: 44, minHeight: 44)
+              .padding(.horizontal, 4)
           }
           .buttonStyle(.bordered)
+          .buttonBorderShape(.circle)
           .accessibilityLabel("Skip rest")
         }
       }
