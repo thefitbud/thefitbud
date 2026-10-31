@@ -34,6 +34,17 @@ const TEST_MODES: Array<[string, Partial<Env>, string]> = [
   ["PUSH_PROVIDER_MODE unset", { PUSH_PROVIDER_MODE: undefined }, "PUSH_PROVIDER_MODE=unset"],
   ["EMAIL_PROVIDER=dev_sink", { EMAIL_PROVIDER: "dev_sink" }, "EMAIL_PROVIDER=dev_sink"],
   ["EMAIL_PROVIDER unset", { EMAIL_PROVIDER: undefined }, "EMAIL_PROVIDER=unset"],
+  // Named in wrangler.toml (I4a) before X4a / I5 implement them.
+  [
+    "PUSH_PROVIDER_MODE=expo (not implemented yet)",
+    { PUSH_PROVIDER_MODE: "expo" as unknown as Env["PUSH_PROVIDER_MODE"] },
+    "PUSH_PROVIDER_MODE=expo",
+  ],
+  [
+    "EMAIL_PROVIDER=zeptomail (not implemented yet)",
+    { EMAIL_PROVIDER: "zeptomail" as unknown as Env["EMAIL_PROVIDER"] },
+    "EMAIL_PROVIDER=zeptomail",
+  ],
 ];
 
 let errorLog: ReturnType<typeof vi.spyOn>;
