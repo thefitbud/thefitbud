@@ -344,7 +344,7 @@ export function ConfigureCoachingPage() {
     void load();
   }, [load]);
 
-  const status = configuration?.status ?? null;
+  const status: string | null = configuration?.status ?? null;
   const expectedVersion = configuration?.recordVersion ?? 0;
   const canEdit =
     !relationshipEnded &&
@@ -605,7 +605,8 @@ export function ConfigureCoachingPage() {
     setGoalError(null);
     try {
       let current = configuration;
-      if (current.status === "draft" || current.status === "configured") {
+      const currentStatus: string = current.status;
+      if (currentStatus === "draft" || currentStatus === "configured") {
         if (!form.goalShort.trim()) {
           setGoalError("A short goal is required.");
           setForceGoalOpen(true);

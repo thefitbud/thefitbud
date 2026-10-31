@@ -366,11 +366,6 @@ body.is-offline .button-destructive {
   color: #b45309;
 }
 
-.status-config-configured {
-  background: #eff6ff;
-  color: var(--info);
-}
-
 .status-config-active {
   background: #ecfdf5;
   color: #047857;
@@ -913,10 +908,6 @@ body.is-offline .button-destructive {
 
 .status-draft .status-dot {
   background: var(--info);
-}
-
-.status-configured .status-dot {
-  background: var(--warning);
 }
 
 .status-active .status-dot {

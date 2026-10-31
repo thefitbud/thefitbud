@@ -3,7 +3,6 @@ import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 
 export const coachingConfigurationStatusSchema = z.enum([
   "draft",
-  "configured",
   "active",
   "superseded",
 ]);
@@ -77,6 +76,7 @@ export const coachingConfigurationSchema = z.object({
   nutrition: nutritionExpectationsSchema,
   checkin: checkinScheduleExpectationsSchema,
   tracking: trackingRequirementsSchema,
+  /** @deprecated Unused. Responses return null. The column stays for existing rows. */
   configuredAt: isoDateTimeSchema.nullable(),
   activatedAt: isoDateTimeSchema.nullable(),
   createdAt: isoDateTimeSchema,
