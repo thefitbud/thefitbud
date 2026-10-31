@@ -17,10 +17,15 @@ struct FitBudWorkoutAttributes: ActivityAttributes {
     var reps: Int
     var planKilograms: Double
     var planReps: Int
-    var lastKilograms: Double
-    var lastReps: Int
+    /// Nil when there is no previous value: no "Last" is shown.
+    var lastKilograms: Double?
+    var lastReps: Int?
     var loggedLine: String?
     var finished: Bool
+    /// Rest after a logged set (frame 27c). The device counts down to it.
+    var restEndsAt: Date?
+    /// Full rest length, for the progress bar.
+    var restSeconds: Int?
   }
 
   var workoutName: String
@@ -43,10 +48,20 @@ struct WorkoutStateRecord: Record {
   @Field var reps: Int = 0
   @Field var planKilograms: Double = 0
   @Field var planReps: Int = 0
-  @Field var lastKilograms: Double = 0
-  @Field var lastReps: Int = 0
+  @Field var lastKilograms: Double? = nil
+  @Field var lastReps: Int? = nil
   @Field var loggedLine: String? = nil
   @Field var finished: Bool = false
+  /// Epoch milliseconds from JS.
+  @Field var restEndsAt: Double? = nil
+  @Field var restSeconds: Int? = nil
+
+  /// Rest end as a Date, only while it is in the future and the set isn't the last.
+  var restEndDate: Date? {
+    guard !finished, let ms = restEndsAt else { return nil }
+    let date = Date(timeIntervalSince1970: ms / 1000)
+    return date > Date() ? date : nil
+  }
 
   @available(iOS 16.1, *)
   func toContentState() -> FitBudWorkoutAttributes.ContentState {
@@ -61,8 +76,17 @@ struct WorkoutStateRecord: Record {
       lastKilograms: lastKilograms,
       lastReps: lastReps,
       loggedLine: loggedLine,
-      finished: finished
+      finished: finished,
+      restEndsAt: restEndDate,
+      restSeconds: restEndDate == nil ? nil : restSeconds
     )
+  }
+
+  /// iOS redraws the activity when rest ends, so the widget shows the next
+  /// set without the app running.
+  @available(iOS 16.2, *)
+  func toContent() -> ActivityContent<FitBudWorkoutAttributes.ContentState> {
+    ActivityContent(state: toContentState(), staleDate: restEndDate)
   }
 }
 
@@ -81,7 +105,7 @@ public class LiveActivityModule: Module {
     AsyncFunction("start") { (attributes: WorkoutAttributesRecord, state: WorkoutStateRecord) async throws -> String? in
       guard LiveActivityModule.supported() else { return nil }
       guard #available(iOS 16.2, *) else { return nil }
-      let content = ActivityContent(state: state.toContentState(), staleDate: nil)
+      let content = state.toContent()
       var reused: Activity<FitBudWorkoutAttributes>?
       for activity in Activity<FitBudWorkoutAttributes>.activities {
         if reused == nil && activity.attributes.openUrl == attributes.openUrl {
@@ -109,10 +133,23 @@ public class LiveActivityModule: Module {
     AsyncFunction("update") { (state: WorkoutStateRecord) async in
       guard LiveActivityModule.supported() else { return }
       guard #available(iOS 16.2, *) else { return }
-      let content = ActivityContent(state: state.toContentState(), staleDate: nil)
+      let content = state.toContent()
       for activity in Activity<FitBudWorkoutAttributes>.activities {
         await activity.update(content)
       }
+    }
+
+    /// The running activity's rest, read when the app becomes active: if Skip
+    /// was tapped on the lock screen, the app ends its own rest (LA1c).
+    Function("restState") { () -> [String: Any] in
+      guard #available(iOS 16.2, *) else { return ["running": false] }
+      guard let activity = Activity<FitBudWorkoutAttributes>.activities.first else {
+        return ["running": false]
+      }
+      guard let endsAt = activity.content.state.restEndsAt, endsAt > Date() else {
+        return ["running": true]
+      }
+      return ["running": true, "restEndsAt": endsAt.timeIntervalSince1970 * 1000]
     }
 
     /// Ends the running activity and removes it from the lock screen.

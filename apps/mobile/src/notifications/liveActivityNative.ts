@@ -36,6 +36,12 @@ export type LiveActivityNative = {
   start(workout: LiveActivityWorkout, content: LiveActivityContent): Promise<string | null>;
   update(content: LiveActivityContent): Promise<void>;
   end(finalContent?: LiveActivityContent): Promise<void>;
+  /**
+   * Whether the running activity still has rest. Null when unsupported, on
+   * error, or when no activity is running. Used when the app becomes active:
+   * a rest skipped on the lock screen ends the app's own rest (LA1c).
+   */
+  hasRest(): boolean | null;
 };
 
 export type LiveActivityNativeDeps = {
@@ -57,10 +63,12 @@ export function toNativeContentState({
     reps: state.reps,
     planKilograms: state.planKg,
     planReps: state.planReps,
-    lastKilograms: state.lastKg,
-    lastReps: state.lastReps,
+    lastKilograms: state.lastKnown === false ? null : state.lastKg,
+    lastReps: state.lastKnown === false ? null : state.lastReps,
     loggedLine: loggedSetLine(state),
     finished: state.finished,
+    restEndsAt: state.finished ? null : (state.restEndsAt ?? null),
+    restSeconds: state.finished ? null : (state.restSeconds ?? null),
   };
 }
 
@@ -125,6 +133,19 @@ export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActi
         await mod.update(toNativeContentState(content));
       } catch (error) {
         warn(`[liveActivity] update failed: ${errorName(error)}`);
+      }
+    },
+
+    hasRest() {
+      const mod = supportedModule();
+      if (!mod) return null;
+      try {
+        const rest = mod.restState();
+        if (!rest?.running) return null;
+        return rest.restEndsAt != null;
+      } catch (error) {
+        warn(`[liveActivity] restState failed: ${errorName(error)}`);
+        return null;
       }
     },
 

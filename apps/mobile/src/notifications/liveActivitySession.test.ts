@@ -103,12 +103,18 @@ function logNext(ex: WorkoutExecution, actual?: { load?: string; reps?: number }
   };
 }
 
+/** Content as the session sends it: with explicit "no rest" fields. */
+function sent(content: ReturnType<typeof liveActivityContentFor>) {
+  return { ...content!, state: { ...content!.state, restEndsAt: null, restSeconds: null } };
+}
+
 function fakeNative() {
   return {
     isSupported: vi.fn(() => true),
     start: vi.fn<LiveActivityNative["start"]>(async () => "activity-1"),
     update: vi.fn<LiveActivityNative["update"]>(async () => undefined),
     end: vi.fn<LiveActivityNative["end"]>(async () => undefined),
+    hasRest: vi.fn<LiveActivityNative["hasRest"]>(() => null),
   } satisfies LiveActivityNative;
 }
 
@@ -154,14 +160,16 @@ describe("liveActivityContentFor", () => {
     });
   });
 
-  it("uses the previous session for a first set, else the plan", () => {
+  it("uses the previous session for a first set, else no Last", () => {
     const fresh = execution([
       exercise(RDL_ID, "Romanian deadlift", 1, [set(1, "22.5 kg", 10), set(2, "22.5 kg", 10)]),
     ]);
     const withHistory = liveActivityContentFor(fresh, { [`${RDL_ID}:1`]: "20 × 8" })!;
     expect(withHistory.state).toMatchObject({ setIndex: 1, lastKg: 20, lastReps: 8, loggedSet: null });
+    expect(withHistory.state.lastKnown).toBeUndefined();
     const noHistory = liveActivityContentFor(fresh)!;
-    expect(noHistory.state).toMatchObject({ lastKg: 22.5, lastReps: 10, loggedSet: null });
+    // No previous value: "Last" is unknown, not the plan (LA1b follow-up).
+    expect(noHistory.state).toMatchObject({ lastKnown: false, loggedSet: null });
   });
 
   it("moves to the next exercise and marks finished after the last set", () => {
@@ -216,7 +224,7 @@ describe("createLiveActivitySession", () => {
     expect(native.start).toHaveBeenCalledTimes(1);
     expect(native.start).toHaveBeenCalledWith(
       { workoutName: "Lower body B", openUrl: `fitbud://?workout=${ASSIGNMENT}` },
-      liveActivityContentFor(ex),
+      sent(liveActivityContentFor(ex)),
     );
     expect(native.update).not.toHaveBeenCalled();
 
@@ -236,6 +244,8 @@ describe("createLiveActivitySession", () => {
         lastReps: 8,
         loggedSet: { setIndex: 2, kilograms: 25, reps: 8 },
         finished: false,
+        restEndsAt: null,
+        restSeconds: null,
       },
     });
 
@@ -270,7 +280,7 @@ describe("createLiveActivitySession", () => {
     expect(native.end).toHaveBeenCalledTimes(1);
     expect(native.end).toHaveBeenCalledWith({
       exerciseName: "Romanian deadlift",
-      state: { ...liveActivityContentFor(ex)!.state, finished: true },
+      state: { ...sent(liveActivityContentFor(ex)).state, finished: true },
     });
   });
 
@@ -332,9 +342,71 @@ describe("createLiveActivitySession", () => {
     expect(native.update).toHaveBeenCalledTimes(1);
   });
 
+  describe("rest (LA1c, 27c)", () => {
+    const NOW = Date.UTC(2026, 9, 19, 7, 25, 0);
+    const REST = { endsAt: NOW + 90_000, seconds: 90 };
+
+    it("sends one update at rest start and one at rest end or skip", async () => {
+      const native = fakeNative();
+      const session = createLiveActivitySession(native);
+      const ex = frame27();
+      await session.sync(input(ex));
+
+      // Logging set 2 starts the app's rest: one update carries both.
+      const logged = logNext(ex);
+      await session.sync({ ...input(logged), rest: REST });
+      await session.sync({ ...input(logged), rest: REST }); // re-render, same rest
+      expect(native.update).toHaveBeenCalledTimes(1);
+      expect(native.update.mock.calls[0]?.[0].state).toMatchObject({
+        setIndex: 3,
+        loggedSet: { setIndex: 2 },
+        restEndsAt: NOW + 90_000,
+        restSeconds: 90,
+      });
+
+      // Rest ends (expiry or skip in the app): one update without rest.
+      await session.sync({ ...input(logged), rest: null });
+      await session.sync({ ...input(logged), rest: null });
+      expect(native.update).toHaveBeenCalledTimes(2);
+      expect(native.update.mock.calls[1]?.[0].state).toMatchObject({ restEndsAt: null, restSeconds: null });
+    });
+
+    it("never rests after the last set", async () => {
+      const native = fakeNative();
+      const session = createLiveActivitySession(native);
+      let ex = execution([exercise(RDL_ID, "Romanian deadlift", 1, [set(1, "20 kg", 10), set(2, "20 kg", 10)])]);
+      await session.sync(input(ex));
+      ex = logNext(logNext(ex));
+      await session.sync({ ...input(ex), rest: REST });
+      expect(native.update.mock.calls.at(-1)?.[0].state).toMatchObject({
+        finished: true,
+        restEndsAt: null,
+        restSeconds: null,
+      });
+    });
+
+    it("reports a rest skipped on the lock screen only while the app thinks it rests", async () => {
+      const native = fakeNative();
+      const session = createLiveActivitySession(native);
+      const ex = frame27();
+      await session.sync(input(ex));
+      native.hasRest.mockReturnValue(false);
+      expect(session.restSkippedOnActivity()).toBe(false); // app has no rest
+
+      await session.sync({ ...input(logNext(ex)), rest: REST });
+      native.hasRest.mockReturnValue(true);
+      expect(session.restSkippedOnActivity()).toBe(false); // still resting there
+      native.hasRest.mockReturnValue(null);
+      expect(session.restSkippedOnActivity()).toBe(false); // no activity / unsupported
+      native.hasRest.mockReturnValue(false);
+      expect(session.restSkippedOnActivity()).toBe(true); // Skip tapped on the activity
+    });
+  });
+
   it("makes no native call on Android", async () => {
     const mod = {
       isSupported: vi.fn(() => true),
+      restState: vi.fn(() => ({ running: false })),
       start: vi.fn(async () => "x"),
       update: vi.fn(async () => undefined),
       end: vi.fn(async () => undefined),

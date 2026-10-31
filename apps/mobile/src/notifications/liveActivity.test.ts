@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   DEMO_LIVE_ACTIVITY,
+  clearExpiredRest,
+  clearRest,
   currentValueLine,
   formatKg,
   loggedSetLine,
+  nextValueLine,
   reduceLiveActivity,
+  restActive,
   setLogFromState,
   setProgressLine,
   stepWeight,
+  withRest,
 } from "./liveActivity";
 
 describe("live activity set logging", () => {
@@ -69,5 +74,53 @@ describe("live activity set logging", () => {
     const nudged = reduceLiveActivity(third, { type: "weight", direction: 1 });
     expect(nudged.kilograms).toBe(22.5);
     expect(reduceLiveActivity(third, { type: "log_set" })).toEqual(third);
+  });
+});
+
+describe("lock-screen rest (27c)", () => {
+  const NOW = Date.UTC(2026, 9, 19, 7, 25, 0);
+  const rest = { endsAt: NOW + 90_000, seconds: 90 };
+
+  it("sets rest fields when a set is logged with rest", () => {
+    const logged = reduceLiveActivity(DEMO_LIVE_ACTIVITY, { type: "log_set" });
+    const resting = withRest(logged, rest);
+    expect(resting.restEndsAt).toBe(NOW + 90_000);
+    expect(resting.restSeconds).toBe(90);
+    expect(restActive(resting, NOW + 32_000)).toBe(true);
+    expect(loggedSetLine(resting)).toBe("Set 2 logged · 22.5 kg × 10");
+    expect(nextValueLine(resting)).toBe("Next 22.5 kg × 10");
+  });
+
+  it("clears rest on skip", () => {
+    const resting = withRest(DEMO_LIVE_ACTIVITY, rest);
+    expect(clearRest(resting)).toMatchObject({ restEndsAt: null, restSeconds: null });
+    expect(withRest(resting, null)).toMatchObject({ restEndsAt: null, restSeconds: null });
+  });
+
+  it("clears rest on expiry and keeps it before", () => {
+    const resting = withRest(DEMO_LIVE_ACTIVITY, rest);
+    expect(clearExpiredRest(resting, NOW + 89_999)).toBe(resting);
+    expect(restActive(resting, NOW + 90_000)).toBe(false);
+    expect(clearExpiredRest(resting, NOW + 90_000)).toMatchObject({ restEndsAt: null, restSeconds: null });
+  });
+
+  it("has no rest state on the last set", () => {
+    const lastSet = { ...DEMO_LIVE_ACTIVITY, setIndex: 3, setCount: 3 };
+    const finished = reduceLiveActivity(lastSet, { type: "log_set" });
+    expect(finished.finished).toBe(true);
+    expect(withRest(finished, rest)).toMatchObject({ restEndsAt: null, restSeconds: null });
+  });
+
+  it("ignores a zero-length rest", () => {
+    expect(withRest(DEMO_LIVE_ACTIVITY, { endsAt: NOW, seconds: 0 }).restEndsAt).toBeNull();
+  });
+});
+
+describe("unknown Last", () => {
+  it("drops Last from the progress line until a set is logged", () => {
+    const first = { ...DEMO_LIVE_ACTIVITY, setIndex: 1, lastKnown: false };
+    expect(setProgressLine(first)).toBe("Set 1 of 3");
+    const logged = reduceLiveActivity(first, { type: "log_set" });
+    expect(setProgressLine(logged)).toBe("Set 2 of 3 · Last: 22.5 kg × 10");
   });
 });
