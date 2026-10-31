@@ -14,11 +14,15 @@ export const DEMO_ANITA_PENDING_INVITE_TOKEN =
 
 export const DEMO_LIBRARY_FOOD_SLUGS = [
   "chapati-roti",
+  "poha",
   "idli",
   "sambar",
   "oatmeal-cooked-with-water",
   "scrambled-egg",
+  "safed-chana-curry-chole",
+  "afghani-chicken",
   "rice-boiled-parboiled",
+  "mint-and-peanut-raita",
 ] as const;
 
 export const DEMO_LIBRARY_EXERCISE_SLUGS = [
@@ -55,6 +59,7 @@ export const DEMO_DEVIATION_FOOD_SLUGS = [
   "butter-chicken",
   "naan",
   "vegetable-biryani",
+  "egg-fried-rice-indo-chinese",
   "plain-dosa",
   "vegetable-samosa",
   "mutton-biryani",
@@ -481,7 +486,9 @@ export function buildStandardPlanContent(
         photoRequired: false,
         required: true,
         items: [
+          food("afghani-chicken", 1),
           food("rice-boiled-parboiled", 0.7),
+          food("safed-chana-curry-chole", 0.5),
         ],
       },
       {
@@ -496,7 +503,9 @@ export function buildStandardPlanContent(
         photoRequired: false,
         required: true,
         items: [
+          food("afghani-chicken", 1),
           food("chapati-roti", 2),
+          food("safed-chana-curry-chole", 1),
         ],
       },
       {
@@ -510,7 +519,7 @@ export function buildStandardPlanContent(
         instructions: null,
         photoRequired: false,
         required: false,
-        items: [],
+        items: [food("mint-and-peanut-raita", 1)],
       },
     ],
   };
