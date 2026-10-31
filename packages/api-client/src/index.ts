@@ -2226,7 +2226,11 @@ export class FitBudApiClient {
     options?: { accessToken?: string | null; role?: string | null },
   ): string {
     const path = relationshipRealtimePath(relationshipId);
-    const url = new URL(`${this.baseUrl}${path}`);
+    // Trainer web uses a relative base (`/api`); resolve it against the page
+    // origin. An absolute base (mobile) ignores the second argument.
+    const pageOrigin = (globalThis as { location?: { origin?: string } })
+      .location?.origin;
+    const url = new URL(`${this.baseUrl}${path}`, pageOrigin);
     if (options?.accessToken) {
       url.searchParams.set("access_token", options.accessToken);
     }

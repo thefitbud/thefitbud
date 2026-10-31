@@ -607,4 +607,68 @@ describe("FitBudApiClient", () => {
       expect(String((err as Error).message)).not.toContain("xxxx");
     });
   });
+
+  describe("realtimeWebSocketUrl", () => {
+    const relId = "44444444-4444-4444-8444-444444444444";
+    const fetchStub = async () => new Response(null, { status: 204 });
+
+    function withLocation(origin: string) {
+      vi.stubGlobal("location", new URL(origin));
+    }
+
+    it("resolves a relative base against an https page origin as wss", () => {
+      withLocation("https://app-staging.thefitbud.com/clients/abc");
+      try {
+        const client = new FitBudApiClient({ baseUrl: "/api", fetch: fetchStub });
+        expect(client.realtimeWebSocketUrl(relId)).toBe(
+          `wss://app-staging.thefitbud.com/api/realtime/relationships/${relId}/ws`,
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("resolves a relative base against an http page origin as ws", () => {
+      withLocation("http://localhost:5173/");
+      try {
+        const client = new FitBudApiClient({ baseUrl: "/api/", fetch: fetchStub });
+        const url = new URL(
+          client.realtimeWebSocketUrl(relId, { accessToken: "tok", role: "trainer" }),
+        );
+        expect(url.protocol).toBe("ws:");
+        expect(url.host).toBe("localhost:5173");
+        expect(url.pathname).toBe(`/api/realtime/relationships/${relId}/ws`);
+        expect(url.searchParams.get("access_token")).toBe("tok");
+        expect(url.searchParams.get("role")).toBe("trainer");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("keeps an absolute base unchanged (mobile), ignoring any page origin", () => {
+      withLocation("http://localhost:8081/");
+      try {
+        const client = new FitBudApiClient({
+          baseUrl: "https://api-staging.thefitbud.com",
+          fetch: fetchStub,
+        });
+        expect(client.realtimeWebSocketUrl(relId)).toBe(
+          `wss://api-staging.thefitbud.com/realtime/relationships/${relId}/ws`,
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("builds a ws URL from an absolute http base with no page origin", () => {
+      expect((globalThis as { location?: unknown }).location).toBeUndefined();
+      const client = new FitBudApiClient({
+        baseUrl: "http://10.0.2.2:8787",
+        fetch: fetchStub,
+      });
+      expect(client.realtimeWebSocketUrl(relId)).toBe(
+        `ws://10.0.2.2:8787/realtime/relationships/${relId}/ws`,
+      );
+    });
+  });
 });
