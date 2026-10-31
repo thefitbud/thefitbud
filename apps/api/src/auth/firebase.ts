@@ -1,12 +1,36 @@
 /**
  * Firebase identity verification.
  *
- * Local / unit tests use AUTH_MODE=test with structured unsigned tokens:
+ * AUTH_MODE=test (local / unit tests) accepts structured unsigned tokens:
  *   test.<base64url({ "uid": "...", "email"?: "..." })>
  *
- * Production mode (AUTH_MODE=firebase) is not wired in Phase A — stop before
- * introducing production credentials. Emulator verification can be added later.
+ * AUTH_MODE=firebase verifies a real Firebase ID token: RS256 only, signed by a
+ * key in Google's securetoken JWKS, `iss` and `aud` bound to FIREBASE_PROJECT_ID,
+ * `exp` / `iat` / `auth_time` checked with at most 60 s clock skew, non-empty
+ * `sub`. Any failure returns null; token contents are never logged.
  */
+
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+
+const FIREBASE_JWKS_URL =
+  "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+const CLOCK_SKEW_SECONDS = 60;
+
+let remoteJwks: JWTVerifyGetKey | null = null;
+let jwksOverride: JWTVerifyGetKey | null = null;
+
+function firebaseJwks(): JWTVerifyGetKey {
+  if (jwksOverride) {
+    return jwksOverride;
+  }
+  remoteJwks ??= createRemoteJWKSet(new URL(FIREBASE_JWKS_URL));
+  return remoteJwks;
+}
+
+/** Tests only: verify against a local key set instead of Google's JWKS. Pass null to reset. */
+export function setFirebaseJwksForTests(jwks: JWTVerifyGetKey | null): void {
+  jwksOverride = jwks;
+}
 
 export type VerifiedFirebaseIdentity = {
   uid: string;
@@ -21,10 +45,45 @@ export async function verifyFirebaseIdToken(
     return verifyTestToken(idToken);
   }
 
-  // Phase A: production Firebase Admin verification is intentionally not enabled.
-  // Callers must use AUTH_MODE=test for local work.
-  void options.projectId;
-  return null;
+  return verifyRealIdToken(idToken, options.projectId);
+}
+
+async function verifyRealIdToken(
+  idToken: string,
+  projectId: string,
+): Promise<VerifiedFirebaseIdentity | null> {
+  if (!projectId) {
+    return null;
+  }
+
+  try {
+    const { payload } = await jwtVerify(idToken, firebaseJwks(), {
+      algorithms: ["RS256"],
+      issuer: `https://securetoken.google.com/${projectId}`,
+      audience: projectId,
+      clockTolerance: CLOCK_SKEW_SECONDS,
+      requiredClaims: ["exp", "iat", "sub", "auth_time"],
+    });
+
+    const now = Math.floor(Date.now() / 1000);
+    const authTime = payload.auth_time;
+    if (typeof payload.iat !== "number" || payload.iat > now + CLOCK_SKEW_SECONDS) {
+      return null;
+    }
+    if (typeof authTime !== "number" || authTime > now + CLOCK_SKEW_SECONDS) {
+      return null;
+    }
+    if (typeof payload.sub !== "string" || payload.sub.length === 0) {
+      return null;
+    }
+
+    return {
+      uid: payload.sub,
+      email: typeof payload.email === "string" ? payload.email : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function verifyTestToken(idToken: string): VerifiedFirebaseIdentity | null {

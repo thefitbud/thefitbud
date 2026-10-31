@@ -17,11 +17,11 @@ size: S
 Tapping a push (app in background or killed) opens the screen the payload routes to, after sign-in if needed, and the screen refetches its data.
 
 ## Context
-- v14 X4d: use `deepLinkFromNotificationPayload` (`apps/mobile/src/notifications/routing.ts:83`). `AuthProvider.handleNotificationOpen` already stores a pending link (`apps/mobile/src/auth/AuthProvider.tsx:299-303`) and `TraineeShell` consumes it (`apps/mobile/src/trainee/TraineeShell.tsx:651-657`).
+- v14 X4d: use `deepLinkFromNotificationPayload` (`apps/mobile/src/notifications/routing.ts:83`). `AuthProvider.handleNotificationOpen` already stores a pending link (`apps/mobile/src/auth/AuthProvider.tsx:341-345`) and `TraineeShell` consumes it (`apps/mobile/src/trainee/TraineeShell.tsx:651-657`).
 - Payloads carry routing only (X4a); screens refetch, the payload is not authoritative.
 
 ## Gap list
-- No `addNotificationResponseReceivedListener` or `getLastNotificationResponseAsync` anywhere in `apps/mobile/src`; nothing calls `handleNotificationOpen`.
+- The only response listener is the meal-action one (`apps/mobile/src/notifications/nativeActions.ts:44`, registered from `App.tsx:11`), which handles meal Open/Snooze only; no `getLastNotificationResponseAsync` (cold start), and nothing calls `handleNotificationOpen`. The new listener must not double-handle a meal tap the meal listener already routes.
 - `apps/mobile/App.tsx:23-30`: no listener mounted inside `AuthProvider`.
 
 ## Acceptance criteria

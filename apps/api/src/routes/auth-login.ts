@@ -8,9 +8,17 @@ import {
   authOtpVerifyResponseSchema,
   authPasswordResetRequestSchema,
   authPasswordSetRequestSchema,
+  authRefreshRequestSchema,
+  authRefreshResponseSchema,
   authTokenResponseSchema,
 } from "@fitbud/contracts";
-import { mintAuthToken } from "../auth/custom-token.js";
+import {
+  authTokenErrorStatus,
+  mintAuthToken,
+  sessionTokenFields,
+  type AuthTokenError,
+} from "../auth/custom-token.js";
+import { refreshIdToken } from "../auth/token-exchange.js";
 import {
   findIdentityByIdentifierHash,
   identifierHash,
@@ -34,14 +42,27 @@ import {
 import { otpEmailBody, otpEmailSubject } from "../emails/otp.js";
 import { passwordChangedEmailBody, passwordChangedEmailSubject } from "../emails/password-changed.js";
 import { createId, nowIso, sha256Hex } from "../lib/crypto.js";
-import { fail, ok } from "../lib/envelope.js";
-import { sendSystemEmail } from "../lib/email.js";
+import { fail, ok, type AppContext } from "../lib/envelope.js";
+import { isEmailDeliveryFailure, sendSystemEmail } from "../lib/email.js";
+import { writeStructuredLog } from "../lib/log.js";
 import { operation } from "../openapi/document.js";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
 } from "../middleware/auth.js";
 import type { Env, Variables } from "../types.js";
+
+/** Safe warn line for an email that couldn't be sent: names and codes only. */
+function logEmailFailure(c: AppContext, operation: string, err: { name: string; code: string }): void {
+  writeStructuredLog({
+    level: "warn",
+    message: "Email send failed",
+    requestId: c.get("requestId"),
+    operation,
+    errorName: err.name,
+    errorCode: err.code,
+  });
+}
 
 export const authLoginRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -93,15 +114,39 @@ async function bumpRateLimit(
   return false;
 }
 
-function assertAuthRuntimeReady(env: import("../types.js").Env): string | null {
-  const authMode = env.AUTH_MODE === "firebase" ? "firebase" : "test";
-  if (authMode === "test" && env.ENVIRONMENT !== "local") {
-    return "Test auth (AUTH_MODE=test) requires ENVIRONMENT=local. Set both in wrangler.toml [vars] or apps/api/.dev.vars.";
+/** Staging/production with test auth is refused earlier by the runtime guard. */
+function authRuntimeError(
+  c: AppContext,
+): Response | null {
+  const authMode = c.env.AUTH_MODE === "firebase" ? "firebase" : "test";
+  if (authMode === "test" && c.env.ENVIRONMENT !== "local") {
+    return fail(
+      c,
+      500,
+      "RUNTIME_MISCONFIGURED",
+      "Test auth (AUTH_MODE=test) requires ENVIRONMENT=local. Set both in wrangler.toml [vars] or apps/api/.dev.vars.",
+    );
   }
-  if (authMode === "firebase" && !env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    return "AUTH_MODE=firebase requires FIREBASE_SERVICE_ACCOUNT_JSON in .dev.vars.";
+  if (authMode === "firebase" && !c.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return fail(
+      c,
+      503,
+      "AUTH_NOT_CONFIGURED",
+      "AUTH_MODE=firebase requires FIREBASE_SERVICE_ACCOUNT_JSON in .dev.vars.",
+    );
   }
   return null;
+}
+
+function tokenFailure(c: AppContext, error: AuthTokenError) {
+  return fail(
+    c,
+    authTokenErrorStatus(error),
+    error,
+    error === "AUTH_EXCHANGE_FAILED"
+      ? "Sign-in could not be completed. Try again."
+      : "Authentication provider is not configured.",
+  );
 }
 
 async function findIdentityByIdentifier(
@@ -138,9 +183,9 @@ authLoginRoutes.post(
     response: authTokenResponseSchema,
   }),
   async (c) => {
-    const configError = assertAuthRuntimeReady(c.env);
+    const configError = authRuntimeError(c);
     if (configError) {
-      return fail(c, 503, "AUTH_NOT_CONFIGURED", configError);
+      return configError;
     }
     const body = await c.req.json().catch(() => null);
     const parsed = authLoginRequestSchema.safeParse(body);
@@ -198,13 +243,12 @@ authLoginRoutes.post(
       email: identity.email ?? undefined,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return tokenFailure(c, token.error);
     }
     return ok(
       c,
       authTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId: user.id,
       }),
     );
@@ -260,17 +304,25 @@ authLoginRoutes.post(
           createdAt: nowIso(),
           ipHash: null,
         });
-        await sendSystemEmail(c.env, db, {
-          to: identifier.value,
-          template: "otp",
-          subject: otpEmailSubject(code),
-          text: otpEmailBody(code),
-        });
+        try {
+          await sendSystemEmail(c.env, db, {
+            to: identifier.value,
+            template: "otp",
+            subject: otpEmailSubject(code),
+            text: otpEmailBody(code),
+          });
+        } catch (err) {
+          // Keep the generic 202 an unknown identifier gets: an error here would
+          // tell a caller the account exists. The user asks for a new code.
+          if (!isEmailDeliveryFailure(err)) throw err;
+          logEmailFailure(c, "auth.otp.start", err);
+        }
         channels.push("email");
       }
     }
     const flags = await getFlags(c.env, db);
-    if (flags.wa_otp && identifier?.kind === "mobile") {
+    // D-W1-4: outside local, OTP is email-only even when wa_otp is on.
+    if (c.env.ENVIRONMENT === "local" && flags.wa_otp && identifier?.kind === "mobile") {
       channels.push("whatsapp");
     }
     return ok(
@@ -357,14 +409,13 @@ authLoginRoutes.post(
         email: identifier.value,
       });
       if ("error" in token) {
-        return fail(c, 503, token.error, "Authentication provider is not configured.");
+        return tokenFailure(c, token.error);
       }
       return ok(
         c,
         authOtpVerifyResponseSchema.parse({
           purpose: "login",
-          token: token.token,
-          tokenKind: token.tokenKind,
+          ...sessionTokenFields(token),
           userId: user.id,
         }),
       );
@@ -457,11 +508,15 @@ authLoginRoutes.post(
       return fail(c, 401, "RESET_PROOF_INVALID", "Reset proof is invalid or expired.");
     }
     if (identity.email) {
+      // The password is already changed: a failed notice must not turn that into an error.
       await sendSystemEmail(c.env, db, {
         to: identity.email,
         template: "password_changed",
         subject: passwordChangedEmailSubject(),
         text: passwordChangedEmailBody(),
+      }).catch((err: unknown) => {
+        if (!isEmailDeliveryFailure(err)) throw err;
+        logEmailFailure(c, "auth.credential_change_notice", err);
       });
     }
     const token = await mintAuthToken(c.env, {
@@ -469,13 +524,12 @@ authLoginRoutes.post(
       email: identity.email ?? undefined,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return tokenFailure(c, token.error);
     }
     return ok(
       c,
       authTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId: user.id,
       }),
     );
@@ -549,11 +603,15 @@ authLoginRoutes.post(
       });
     }
     if (identity?.email) {
+      // The password is already changed: a failed notice must not turn that into an error.
       await sendSystemEmail(c.env, db, {
         to: identity.email,
         template: "password_changed",
         subject: passwordChangedEmailSubject(),
         text: passwordChangedEmailBody(),
+      }).catch((err: unknown) => {
+        if (!isEmailDeliveryFailure(err)) throw err;
+        logEmailFailure(c, "auth.credential_change_notice", err);
       });
     }
     const [user] = await db
@@ -566,14 +624,80 @@ authLoginRoutes.post(
       email: identity?.email ?? undefined,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return tokenFailure(c, token.error);
     }
     return ok(
       c,
       authTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId: actor.userId,
+      }),
+    );
+  },
+);
+
+authLoginRoutes.post(
+  "/refresh",
+  operation({
+    tag: "Auth",
+    summary: "Refresh session token",
+    description:
+      "Exchanges a Firebase refresh token for a new ID token. The response carries the rotated refresh token. Firebase mode only.",
+    security: "public",
+    body: authRefreshRequestSchema,
+    response: authRefreshResponseSchema,
+  }),
+  async (c) => {
+    if (c.env.AUTH_MODE !== "firebase") {
+      return fail(
+        c,
+        400,
+        "REFRESH_NOT_SUPPORTED",
+        "Token refresh is only available with Firebase sign-in.",
+      );
+    }
+    const apiKey = c.env.FIREBASE_WEB_API_KEY;
+    if (!apiKey) {
+      return fail(
+        c,
+        503,
+        "AUTH_PROVIDER_NOT_CONFIGURED",
+        "Authentication provider is not configured.",
+      );
+    }
+    const body = await c.req.json().catch(() => null);
+    const parsed = authRefreshRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid refresh request.");
+    }
+    const db = createDb(c.env.DB);
+    const ip = c.req.header("CF-Connecting-IP") ?? "0.0.0.0";
+    const ipHash = await sha256Hex(ip);
+    if (await bumpRateLimit(db, `auth:refresh:ip:${ipHash}`, 15, 15)) {
+      return fail(c, 429, "RATE_LIMITED", "Too many attempts.");
+    }
+    const refreshed = await refreshIdToken(apiKey, parsed.data.refreshToken);
+    if (!refreshed.ok) {
+      // Only a verdict against the token ends the session. An unreachable or
+      // throttled provider is a 503, which clients retry instead of signing
+      // out, so a Google outage no longer logs every trainer out (W2 follow-up).
+      if (refreshed.reason === "unavailable") {
+        return fail(
+          c,
+          503,
+          "AUTH_PROVIDER_UNAVAILABLE",
+          "Could not reach the authentication provider. Try again.",
+        );
+      }
+      return fail(c, 401, "AUTH_REFRESH_FAILED", "Session expired. Sign in again.");
+    }
+    return ok(
+      c,
+      authRefreshResponseSchema.parse({
+        token: refreshed.idToken,
+        tokenKind: "firebase_id_token",
+        refreshToken: refreshed.refreshToken,
+        expiresIn: refreshed.expiresIn,
       }),
     );
   },

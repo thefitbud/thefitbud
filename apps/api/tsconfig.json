@@ -12,6 +12,8 @@
     "scripts/db-reset.ts",
     "scripts/library-seed.ts",
     "scripts/local-traces.ts",
+    "scripts/deploy-env.ts",
+    "scripts/deploy-env.test.ts",
     "scripts/lib/**/*.ts"
   ]
 }

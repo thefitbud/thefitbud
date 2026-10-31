@@ -32,7 +32,7 @@ An EAS dev build includes the `FitBudLiveActivity` widget target, and the app ca
 
 ## Gap list
 - `apps/mobile/package.json`: no `@bacons/apple-targets`.
-- `apps/mobile/app.json:28` plugins are `["./plugins/withLiveActivity", "expo-dev-client"]`; the target is never added to the build (`expo-target.config.js` header says so).
+- `apps/mobile/app.json` plugins (line 28 when this was specced; X6 has since moved config to `app.config.js`) were `["./plugins/withLiveActivity", "expo-dev-client"]`; the target is never added to the build (`expo-target.config.js` header says so).
 - `apps/mobile/modules/`: does not exist; no native start/update/end.
 - `apps/mobile/src/notifications/liveActivity.ts`: pure state helpers only; nothing calls ActivityKit.
 

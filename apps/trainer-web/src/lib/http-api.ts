@@ -7,22 +7,35 @@ import {
   type PlanTemplateListResponse,
 } from "@fitbud/contracts";
 import { getStoredAccessToken } from "./session";
-import { resolveApiUrl } from "./api";
+import { refreshTrainerAccessToken, resolveApiUrl } from "./api";
 
 async function authedJson<T>(
   path: string,
   parse: (json: unknown) => T,
   init?: RequestInit,
 ): Promise<T> {
-  const token = getStoredAccessToken();
-  const res = await fetch(resolveApiUrl(path), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
+  const send = (token: string | null) =>
+    fetch(resolveApiUrl(path), {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  const sentToken = getStoredAccessToken();
+  let res = await send(sentToken);
+  if (res.status === 401) {
+    // Same rule as the shared client: refresh once, retry once (same headers,
+    // so the same Idempotency-Key). Reuse a token another call already refreshed.
+    const current = getStoredAccessToken();
+    const nextToken =
+      current && current !== sentToken ? current : await refreshTrainerAccessToken();
+    if (nextToken) {
+      const retry = await send(nextToken);
+      if (retry.status !== 401) res = retry;
+    }
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed (${res.status})`);

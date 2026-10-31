@@ -2,7 +2,7 @@
 id: X4c
 title: Reminder pushes end to end through the Expo sender
 batch: W3
-depends_on: [X4a]
+depends_on: [X4a, X4b]
 lane: reminders
 files_owned:
   - apps/api/src/domain/reminders.ts
@@ -16,13 +16,13 @@ size: S
 Meal, workout and check-in reminders go from the cron schedule through the queue to one mocked Expo send each, respecting quiet hours, dedupe and notifications-off.
 
 ## Context
-- v14 X4c. Quiet hours, dedupe and notifications-off already exist (`apps/api/src/domain/reminders.ts:753-756` dedupe, `:772` push enabled, `:781-782` quiet hours); X4a (W2) added the Expo path at the send (`:1653`).
-- Trainer notification types: D-W3-1 (decided by Firoz, 1 Nov 2026): trainer inbox events are also pushed, built in X4f and X4h (same lane, after this task). This task covers the trainee reminder types only.
+- v14 X4c. Quiet hours, dedupe and notifications-off already exist (`apps/api/src/domain/reminders.ts:900` dedupe, `:1875-1881` push and category enabled, `:1909-1910` quiet hours); X4a (W2) added the Expo path at the send (`:1974`).
+- Trainer notification types: D-W3-1 (decided by Firoz, 1 Nov 2026): trainer inbox events are also pushed, built in X4f and X4h (same lane, after this task and X4i). At-most-once delivery (D-W3-8) is X4i, next in the lane. This task covers the trainee reminder types only.
 - Model: v14 says plan; the batch rule (S, not auth/migration/concurrency) gives sonnet. Listed as a conflict in W3.md.
 
 ## Gap list
 - No test covers schedule → queue → provider call in `expo` mode for each reminder type.
-- `apps/api/src/domain/reminders.ts:1653`: sends per token; check that a revoked token (X4a) is skipped and a provider failure doesn't block the other tokens.
+- `apps/api/src/domain/reminders.ts:1974`: sends per token; check that a revoked token (X4a) is skipped and a provider failure doesn't block the other tokens.
 
 ## Acceptance criteria
 - [ ] One test per type (`meal_reminder`, `workout_reminder`, `checkin_reminder`) runs the cron candidate, the queue batch and the delivery with a mocked `fetch` to `exp.host`, and asserts one send with a routing-only payload.

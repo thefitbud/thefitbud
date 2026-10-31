@@ -1,33 +1,32 @@
 ---
 id: DC1
-title: Align Agents.md with CLAUDE.md as the source of truth
+title: Confirm AGENTS.md ranks the task spec first
 batch: W3
 depends_on: []
 lane: docs
 files_owned:
-  - Agents.md
+  - AGENTS.md
 frames: []
 model: sonnet
 size: S
 ---
 
 ## Outcome
-`Agents.md` points to CLAUDE.md and the task spec as the source of truth and no longer tells agents to read wiki pages first.
+`AGENTS.md` ranks the task spec and its batch decisions first and treats the wiki as reference only. If `main` already says so, the task closes with no change.
 
 ## Context
-- D-W2-10 (decided by Firoz, 31 Oct 2026) and v14 Rev 4: CLAUDE.md is the source of truth; Agents.md gets aligned.
-- `Agents.md` lines 5-14 list wiki pages as sources of truth and say to stop on conflicts; CLAUDE.md "Source of truth for a task" (line 9) says the spec and CLAUDE.md win.
+- D-W2-10 (decided by Firoz, 31 Oct 2026). File changed to `AGENTS.md` (decided by Firoz, 1 Nov 2026): `Agents.md` was renamed on `main` by DOC1, which made `AGENTS.md` the one rulebook and `CLAUDE.md` a pointer to it.
+- On `main` today the "Source of truth" list starts with the task spec (`AGENTS.md:19`) and says the wiki is reference only (`AGENTS.md:25`), so the original gap looks closed.
 
 ## Gap list
-- `Agents.md` "Sources of truth" list (lines 7-14) and "Context loading rule" table rank wiki pages above the spec and CLAUDE.md.
+- None known on `main`. Check the rest of `AGENTS.md` for any line that still ranks the wiki above the spec.
 
 ## Acceptance criteria
-- [ ] The sources list starts with: the task spec, then CLAUDE.md, then repository code and tests; wiki pages are "reference only".
-- [ ] The context-loading table no longer requires wiki pages.
-- [ ] Nothing else in `Agents.md` changes; no product rule changes.
+- [ ] Either a PR that removes any remaining line ranking the wiki above the spec, or a note in the batch report: "DC1: no gap on main, closed with no change".
+- [ ] No product rule changes.
 
 ## Out of scope
-- CLAUDE.md (unchanged). Wiki pages.
+- CLAUDE.md. Wiki pages.
 - Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 

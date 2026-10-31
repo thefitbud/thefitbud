@@ -2,8 +2,11 @@ import { reminderQueueMessageSchema } from "@fitbud/contracts";
 import { createDb } from "../db/client";
 import {
   deliverReminderMessage,
+  errorLogFields,
   evaluateAndEnqueueReminders,
 } from "../domain/reminders";
+import { writeStructuredLog } from "../lib/log";
+import { resolvePushProviderMode } from "../lib/push-provider";
 import type { Env } from "../types";
 
 /**
@@ -26,33 +29,50 @@ export async function handleScheduledReminders(
   await evaluateAndEnqueueReminders(db, {
     now: scheduledTime.toISOString(),
     queue,
-    pushProviderMode: env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+    pushProviderMode: resolvePushProviderMode(env.PUSH_PROVIDER_MODE),
+    expoAccessToken: env.EXPO_ACCESS_TOKEN,
     deliverInline: !queue,
   });
 }
 
 /**
- * Queue consumer: send push via provider double/FCM and record provider
+ * Queue consumer: send push via the provider (Expo, or the local double) and record provider
  * acceptance separately from application completion.
  */
 export async function handleReminderQueueBatch(
   batch: MessageBatch<unknown>,
   env: Env,
-): Promise<void> {
+): Promise<{ acked: number; retried: number }> {
+  let acked = 0;
+  let retried = 0;
   const db = createDb(env.DB);
-  const mode = env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test";
+  const mode = resolvePushProviderMode(env.PUSH_PROVIDER_MODE);
 
   for (const message of batch.messages) {
     const parsed = reminderQueueMessageSchema.safeParse(message.body);
     if (!parsed.success) {
       message.ack();
+      acked += 1;
       continue;
     }
     try {
-      await deliverReminderMessage(db, parsed.data, mode);
+      await deliverReminderMessage(db, parsed.data, mode, undefined, {
+        expoAccessToken: env.EXPO_ACCESS_TOKEN,
+      });
       message.ack();
-    } catch {
+      acked += 1;
+    } catch (error) {
+      writeStructuredLog({
+        level: "error",
+        message: "queue.message_failed",
+        operation: "queue.reminders.deliver",
+        entityType: "notification_delivery",
+        entityId: parsed.data.deliveryId,
+        ...errorLogFields(error),
+      });
       message.retry();
+      retried += 1;
     }
   }
+  return { acked, retried };
 }

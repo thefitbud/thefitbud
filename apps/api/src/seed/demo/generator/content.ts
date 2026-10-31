@@ -143,12 +143,16 @@ export type QuantityClamp = {
  * The first plausible household serving that divides evenly (within 6%) wins;
  * otherwise the plausible default stays, so the gram amount is unchanged.
  * An implausible default falls back to the gram serving, or the next plausible serving.
+ * With `metricUnit` (the template amount is written as "100 g" / "100 ml"), a plausible
+ * serving in that unit replaces the default, so an amount no household serving divides
+ * stays in the unit the instruction text uses.
  */
 export function foodByGrams(
   lib: DemoLibraryIndex,
   slug: string,
   grams: number,
   onClamp?: (clamp: QuantityClamp) => void,
+  metricUnit?: "g" | "ml",
 ) {
   const entry = lib.foods[slug];
   if (!entry) throw new Error(`Demo seed: food ${slug} not loaded`);
@@ -164,6 +168,8 @@ export function foodByGrams(
     // The library default is plausible = 0. Use the gram serving, else the next plausible one.
     best = plausible.find((s) => s.unit === "g") ?? plausible[0]!;
   }
+  const metric = metricUnit ? plausible.find((s) => s.unit === metricUnit) : undefined;
+  if (metric) best = metric;
   let bestQty = grams / gramsOf(best.conversionScaled!);
   for (const serving of servings) {
     if (serving.unit === "g" || implausible.has(serving.id)) continue;
@@ -190,6 +196,12 @@ export function foodByGrams(
     });
   }
   return foodSnapshotFromLibrary(entry.item, best.id, qtyScaled);
+}
+
+/** "100 g" → "g", "250 ml" → "ml"; household labels ("1 katori") → undefined. */
+function metricLabelUnit(label: string): "g" | "ml" | undefined {
+  const match = /^\d+(?:\.\d+)? (g|ml)$/.exec(label);
+  return match ? (match[1] as "g" | "ml") : undefined;
 }
 
 export function mealPrescriptionsFor(
@@ -222,7 +234,13 @@ export function mealPrescriptionsFor(
       photoRequired: false,
       required: meal.mealType !== "snack",
       items: meal.items.map((item) =>
-        foodByGrams(lib, item.slug, Math.max(5, Math.round((item.grams * scale) / 5) * 5), opts.onClamp),
+        foodByGrams(
+          lib,
+          item.slug,
+          Math.max(5, Math.round((item.grams * scale) / 5) * 5),
+          opts.onClamp,
+          metricLabelUnit(item.label),
+        ),
       ),
     };
   });

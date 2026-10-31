@@ -2,7 +2,7 @@
 id: X4f
 title: Push trainer inbox events through the Expo sender
 batch: W3
-depends_on: [X4c]
+depends_on: [X4i]
 lane: reminders
 files_owned:
   - apps/api/src/domain/inbox-notify.ts
@@ -20,11 +20,11 @@ When a trainer inbox event is stored (`trainer_ask_coach`, `trainer_meal_times_c
 - D-W3-1 (decided by Firoz, 1 Nov 2026): trainer inbox events are pushed in the beta.
 - Inbox events are written by `storeInboxNotification` (`apps/api/src/domain/inbox-notify.ts:17`) with `state: "delivered"` (`:41`) and no push. Callers: `apps/api/src/routes/coach-asks.ts:198` (`trainer_ask_coach`), `apps/api/src/domain/meal-times-update.ts:25` (`trainer_meal_times_changed`), plus trainee-facing callers that stay in-app only.
 - Trainer categories exist in the contract (`packages/contracts/src/notification.ts:95-103`: `askCoach`, `checkinSubmitted`, `intakeSubmitted`, `mealTimesChanged`, ...), set on web and mobile settings (TW-29).
-- Reuse the delivery path X4a/X4c use (`apps/api/src/domain/reminders.ts:1653`), with the routing-only payload; no new provider code. Push failure never fails the request that stored the event.
+- Reuse the delivery path X4a/X4c use (`apps/api/src/domain/reminders.ts:1974`), with the routing-only payload; no new provider code. Push failure never fails the request that stored the event.
 
 ## Gap list
 - `apps/api/src/domain/inbox-notify.ts:17-60`: stores only; no push, no category or quiet-hours check.
-- `apps/api/src/domain/reminders.ts:1653`: the send is internal to reminder delivery; no helper other modules can call.
+- `apps/api/src/domain/reminders.ts:1974`: the send is internal to reminder delivery; no helper other modules can call.
 
 ## Acceptance criteria
 - [ ] For trainer types, after the row is stored, one push per active device of the recipient; a deduped (already stored) event sends nothing.
