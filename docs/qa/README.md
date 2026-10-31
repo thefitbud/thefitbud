@@ -10,4 +10,6 @@ Every QA report lives here, so cloud agents can read it. The old `/workspace/qa/
 
 | Report | Task / PR | Verdict | Date |
 |---|---|---|---|
+| [QA-I2b.md](QA-I2b.md) | I2b foods library 2026.10.9 | PASS (numbers) | 31 Oct 2026 |
+| [QA-I2c.md](QA-I2c.md) | I2c exercise base 2026.10.21-v3 | PASS (numbers) | 31 Oct 2026 |
 | (add rows as reports land) | | | |
