@@ -21,6 +21,7 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { useAuth } from "../auth/AuthProvider";
 import { localDateInTimezone } from "../lib/dates";
+import { useWorkoutLiveActivity } from "../notifications/liveActivitySession";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import {
@@ -296,6 +297,10 @@ export function ActiveWorkoutScreen({
     if (currentExerciseIndex < 0) return [];
     return execution.exercises.slice(currentExerciseIndex + 1);
   }, [currentExerciseIndex, execution.exercises]);
+
+  // iOS Live Activity (LA1b): starts, updates per logged set, ends on finish,
+  // skip or leaving. No-op on Android and web.
+  useWorkoutLiveActivity({ execution, workoutName: title, historyByKey: previousByKey });
 
   useEffect(() => {
     const deactivate = tryActivateKeepAwake();
