@@ -5,6 +5,8 @@ import {
   authOtpStartRequestSchema,
   authOtpStartResponseSchema,
   authOtpVerifyRequestSchema,
+  authRefreshRequestSchema,
+  authRefreshResponseSchema,
   authOtpVerifyResponseSchema,
   acceptInvitationResponseSchema,
   acceptInvitationWithTokenResponseSchema,
@@ -152,6 +154,7 @@ import {
   type AuthOtpStartResponse,
   type AuthOtpVerifyRequest,
   type AuthOtpVerifyResponse,
+  type AuthRefreshResponse,
   type AcceptInvitationRequest,
   type AcceptInvitationResponse,
   type AcceptInvitationWithTokenResponse,
@@ -306,6 +309,12 @@ export type ApiClientOptions = {
   getIdempotencyKey?: () => string | null | Promise<string | null>;
   getSelectedRole?: () => string | null | Promise<string | null>;
   fetch?: typeof fetch;
+  /**
+   * Called when an authenticated request gets HTTP 401. Return a fresh access
+   * token to retry that request once, or null to give up. Concurrent 401s share
+   * one in-flight call. Leave unset to keep the old behavior (no retry).
+   */
+  refreshAccessToken?: () => Promise<string | null>;
 };
 
 export class ApiClientError extends Error {
@@ -330,11 +339,32 @@ export class ApiClientError extends Error {
   }
 }
 
+function toApiClientError(status: number, json: unknown): ApiClientError {
+  const parsedError = apiErrorBodySchema.safeParse(json);
+  if (parsedError.success) {
+    return new ApiClientError({
+      code: parsedError.data.error.code,
+      message: parsedError.data.error.message,
+      requestId: parsedError.data.error.requestId,
+      status,
+      details: parsedError.data.error.details,
+    });
+  }
+  return new ApiClientError({
+    code: "UNKNOWN_ERROR",
+    message: `Request failed with status ${status}`,
+    requestId: "unknown",
+    status,
+  });
+}
+
 export class FitBudApiClient {
   private readonly baseUrl: string;
   private readonly getAccessToken?: ApiClientOptions["getAccessToken"];
   private readonly getIdempotencyKey?: ApiClientOptions["getIdempotencyKey"];
   private readonly getSelectedRole?: ApiClientOptions["getSelectedRole"];
+  private readonly refreshAccessToken?: ApiClientOptions["refreshAccessToken"];
+  private refreshInFlight: Promise<string | null> | null = null;
   private readonly fetchImpl: typeof fetch;
   private configCache: { fetchedAt: number; value: import("@fitbud/contracts").ConfigResponse } | null =
     null;
@@ -344,6 +374,7 @@ export class FitBudApiClient {
     this.getAccessToken = options.getAccessToken;
     this.getIdempotencyKey = options.getIdempotencyKey;
     this.getSelectedRole = options.getSelectedRole;
+    this.refreshAccessToken = options.refreshAccessToken;
     // Bind to globalThis so calling `this.fetchImpl(...)` does not throw Illegal invocation.
     this.fetchImpl =
       options.fetch ?? ((input, init) => globalThis.fetch(input, init));
@@ -382,6 +413,23 @@ export class FitBudApiClient {
       createWebSessionResponseSchema,
       { body: parsed },
     );
+  }
+
+  /** Exchange a refresh token for a new ID token (Firebase mode only). */
+  async refreshAuth(refreshToken: string): Promise<AuthRefreshResponse> {
+    const parsed = authRefreshRequestSchema.safeParse({ refreshToken });
+    if (!parsed.success) {
+      // Never echo the token back in an error.
+      throw new ApiClientError({
+        code: "VALIDATION_ERROR",
+        message: "Refresh token is missing or malformed.",
+        requestId: "client",
+        status: 400,
+      });
+    }
+    return this.request("POST", "/auth/refresh", authRefreshResponseSchema, {
+      body: parsed.data,
+    });
   }
 
   async endWebSession(): Promise<void> {
@@ -1972,8 +2020,10 @@ export class FitBudApiClient {
     const usesSignedUrl =
       uploadUrlOrMediaAssetId.includes("exp=") &&
       uploadUrlOrMediaAssetId.includes("sig=");
+    let sentToken: string | null = null;
     if (!usesSignedUrl) {
       const token = this.getAccessToken ? await this.getAccessToken() : null;
+      sentToken = token;
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
@@ -1986,33 +2036,27 @@ export class FitBudApiClient {
     const path = usesSignedUrl
       ? uploadUrlOrMediaAssetId
       : `/files/${uploadUrlOrMediaAssetId}/content`;
-    const response = await this.fetchImpl(
-      path.startsWith("http") ? path : `${this.baseUrl}${path}`,
-      {
+    const url = path.startsWith("http") ? path : `${this.baseUrl}${path}`;
+    const send = () =>
+      this.fetchImpl(url, {
         method: "PUT",
         headers,
         body,
         credentials: "include",
-      },
-    );
-    const json: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const parsedError = apiErrorBodySchema.safeParse(json);
-      if (parsedError.success) {
-        throw new ApiClientError({
-          code: parsedError.data.error.code,
-          message: parsedError.data.error.message,
-          requestId: parsedError.data.error.requestId,
-          status: response.status,
-          details: parsedError.data.error.details,
-        });
-      }
-      throw new ApiClientError({
-        code: "UNKNOWN_ERROR",
-        message: `Request failed with status ${response.status}`,
-        requestId: "unknown",
-        status: response.status,
       });
+    let response = await send();
+    let json: unknown = await response.json().catch(() => null);
+    if (response.status === 401 && !usesSignedUrl && this.refreshAccessToken) {
+      const firstError = toApiClientError(response.status, json);
+      const nextToken = await this.tokenAfter401(sentToken);
+      if (!nextToken) throw firstError;
+      headers.Authorization = `Bearer ${nextToken}`;
+      response = await send();
+      json = await response.json().catch(() => null);
+      if (response.status === 401) throw firstError;
+    }
+    if (!response.ok) {
+      throw toApiClientError(response.status, json);
     }
     const envelope = json as { data: unknown };
     return mediaAssetSchema.parse(envelope.data);
@@ -2215,33 +2259,68 @@ export class FitBudApiClient {
     let closed = false;
     let socket: WebSocket | null = null;
 
+    // With a refresh hook, a socket that fails before it opens (an expired
+    // token is rejected at the handshake) refreshes once and reconnects once.
+    const connect = (token: string | null, role: string | null, canRetry: boolean) => {
+      const url = this.realtimeWebSocketUrl(relationshipId, {
+        accessToken: token,
+        role,
+      });
+      const current = new WebSocketImpl(url);
+      socket = current;
+      let opened = false;
+      let retrying = false;
+      let handshakeError: unknown = null;
+      current.addEventListener("open", () => {
+        opened = true;
+      });
+      current.addEventListener("message", (message) => {
+        try {
+          const data =
+            typeof message.data === "string"
+              ? JSON.parse(message.data)
+              : message.data;
+          const event = realtimeEventSchema.parse(data);
+          handlers.onEvent(event);
+        } catch (error) {
+          handlers.onError?.(error);
+        }
+      });
+      current.addEventListener("error", (error) => {
+        if (canRetry && !opened) {
+          handshakeError = error;
+          return;
+        }
+        handlers.onError?.(error);
+      });
+      current.addEventListener("close", () => {
+        if (canRetry && !opened && !closed && !retrying) {
+          retrying = true;
+          void (async () => {
+            const nextToken = await this.tokenAfter401(token);
+            if (closed) return;
+            if (nextToken) {
+              try {
+                connect(nextToken, role, false);
+              } catch (error) {
+                handlers.onError?.(error);
+              }
+              return;
+            }
+            if (handshakeError !== null) handlers.onError?.(handshakeError);
+            handlers.onClose?.();
+          })();
+          return;
+        }
+        if (!closed) handlers.onClose?.();
+      });
+    };
+
     void (async () => {
       try {
         const token = this.getAccessToken ? await this.getAccessToken() : null;
         const role = this.getSelectedRole ? await this.getSelectedRole() : null;
-        const url = this.realtimeWebSocketUrl(relationshipId, {
-          accessToken: token,
-          role,
-        });
-        socket = new WebSocketImpl(url);
-        socket.addEventListener("message", (message) => {
-          try {
-            const data =
-              typeof message.data === "string"
-                ? JSON.parse(message.data)
-                : message.data;
-            const event = realtimeEventSchema.parse(data);
-            handlers.onEvent(event);
-          } catch (error) {
-            handlers.onError?.(error);
-          }
-        });
-        socket.addEventListener("error", (error) => {
-          handlers.onError?.(error);
-        });
-        socket.addEventListener("close", () => {
-          if (!closed) handlers.onClose?.();
-        });
+        connect(token, role, Boolean(this.refreshAccessToken));
       } catch (error) {
         handlers.onError?.(error);
       }
@@ -2257,6 +2336,33 @@ export class FitBudApiClient {
         }
       },
     };
+  }
+
+  /**
+   * After a 401: if another caller already refreshed (the stored token changed
+   * since this request was sent), reuse that token; otherwise run the refresh
+   * hook. Concurrent callers share one in-flight refresh. A throwing hook
+   * counts as null.
+   */
+  private async tokenAfter401(sentToken: string | null): Promise<string | null> {
+    if (!this.refreshAccessToken) return null;
+    if (!this.refreshInFlight) {
+      const current = this.getAccessToken ? await this.getAccessToken() : null;
+      if (current && current !== sentToken) return current;
+    }
+    if (!this.refreshInFlight) {
+      const hook = this.refreshAccessToken;
+      this.refreshInFlight = (async () => {
+        try {
+          return await hook();
+        } catch {
+          return null;
+        } finally {
+          this.refreshInFlight = null;
+        }
+      })();
+    }
+    return this.refreshInFlight;
   }
 
   async request<T>(
@@ -2279,8 +2385,10 @@ export class FitBudApiClient {
       headers["Content-Type"] = "application/json";
     }
 
+    let sentToken: string | null = null;
     if (options.auth) {
       const token = this.getAccessToken ? await this.getAccessToken() : null;
+      sentToken = token;
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
@@ -2290,6 +2398,7 @@ export class FitBudApiClient {
       }
     }
 
+    // Resolved once so a retry after refresh reuses the same key.
     const idempotencyKey =
       options.idempotencyKey ??
       (this.getIdempotencyKey ? await this.getIdempotencyKey() : null);
@@ -2297,35 +2406,32 @@ export class FitBudApiClient {
       headers["Idempotency-Key"] = idempotencyKey;
     }
 
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      credentials: "include",
-    });
+    const send = () =>
+      this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        credentials: "include",
+      });
 
-    const json: unknown = await response.json().catch(() => null);
+    let response = await send();
+    let json: unknown = await response.json().catch(() => null);
+
+    if (response.status === 401 && options.auth && this.refreshAccessToken) {
+      const firstError = toApiClientError(response.status, json);
+      const nextToken = await this.tokenAfter401(sentToken);
+      if (!nextToken) throw firstError;
+      headers.Authorization = `Bearer ${nextToken}`;
+      response = await send();
+      json = await response.json().catch(() => null);
+      if (response.status === 401) throw firstError;
+    }
 
     if (!response.ok) {
       if (options.notFoundAsNull && response.status === 404) {
         return null as T;
       }
-      const parsedError = apiErrorBodySchema.safeParse(json);
-      if (parsedError.success) {
-        throw new ApiClientError({
-          code: parsedError.data.error.code,
-          message: parsedError.data.error.message,
-          requestId: parsedError.data.error.requestId,
-          status: response.status,
-          details: parsedError.data.error.details,
-        });
-      }
-      throw new ApiClientError({
-        code: "UNKNOWN_ERROR",
-        message: `Request failed with status ${response.status}`,
-        requestId: "unknown",
-        status: response.status,
-      });
+      throw toApiClientError(response.status, json);
     }
 
     if (schema === undefined) {
