@@ -12,7 +12,8 @@ import { handleScheduledPushReceipts } from "./jobs/push-receipts";
 import { handleScheduledReplenishment } from "./jobs/replenishment";
 import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
-import { ok } from "./lib/envelope";
+import { fail, ok } from "./lib/envelope";
+import { EmailNotConfiguredError, EmailSendError } from "./lib/email";
 import { writeStructuredLog, type SafeLogFields } from "./lib/log";
 import { errorLogFields } from "./domain/reminders";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -187,19 +188,38 @@ function routePattern(c: Context): string {
   return "unmatched";
 }
 
+/**
+ * Known provider failures that reach onError get a stable code instead of the
+ * generic 500, so clients and on-call can tell "email is down / not set up"
+ * apart from a bug. The messages are fixed text: nothing from the provider.
+ */
+function knownProviderFailure(err: unknown): { status: 502 | 503; code: string; message: string } | null {
+  if (err instanceof EmailSendError) {
+    return { status: 502, code: "EMAIL_SEND_FAILED", message: "The email could not be sent. Try again in a moment." };
+  }
+  if (err instanceof EmailNotConfiguredError) {
+    return { status: 503, code: "EMAIL_PROVIDER_NOT_CONFIGURED", message: "Email sending is not set up on this server." };
+  }
+  return null;
+}
+
 app.onError((err, c) => {
   // Safe fields only: never err.message, stacks, bodies or the raw URL.
   const actor = c.get("actor");
+  const known = knownProviderFailure(err);
   writeStructuredLog({
     level: "error",
     message: "Unhandled API error",
     requestId: c.get("requestId"),
     method: c.req.method,
     path: routePattern(c),
-    status: 500,
+    status: known?.status ?? 500,
     ...(actor?.userId ? { actorUserId: actor.userId } : {}),
     ...errorLogFields(err),
   });
+  if (known) {
+    return fail(c, known.status, known.code, known.message);
+  }
   const requestId = c.get("requestId") ?? "unknown";
   if (c.env.ENVIRONMENT === "local") {
     return c.json(
