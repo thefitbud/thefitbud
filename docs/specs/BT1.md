@@ -19,7 +19,7 @@ size: M
 - v14 BT1 (M). Agents prepare config and the checklist; Firoz runs `eas build`, `eas submit` and the consoles. D-W4-2: closed beta (TestFlight internal + external, Play closed testing). D-W4-3: production variant `com.thefitbud.mobile`.
 - `apps/mobile/eas.json` is created by X6 (W1) and edited by X7 (W2); this task adds `build.production` details and `submit.production`.
 - Store privacy URL: `https://app.thefitbud.com/privacy` (BT3). Steps/HealthKit don't ship in the beta: no HealthKit or Health Connect declarations. No in-app payments (D-B4).
-- Build numbers: **D-W4-8 (Open)**, recommendation: `appVersionSource: "remote"` with `autoIncrement` on production.
+- Build numbers: D-W4-8 (decided by Firoz, 1 Nov 2026): `appVersionSource: "remote"` with `autoIncrement` on production.
 
 ## Gap list
 - `apps/mobile/eas.json` (X6): no `submit` section; production profile has no auto-increment or channel.

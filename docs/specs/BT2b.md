@@ -21,7 +21,7 @@ Staging and production app builds report JS crashes and native crashes to Sentry
 
 ## Context
 - v14 BT2 (mobile half, split, new ID BT2b). `@sentry/react-native` at the version Expo SDK 52 documents, with its config plugin.
-- DSN comes from `EXPO_PUBLIC_SENTRY_DSN` per EAS profile (the mobile DSN is public by design). Source maps: `SENTRY_AUTH_TOKEN` as an EAS secret (Firoz, manual); **D-W4-7 (Open)**, recommendation: upload source maps for production builds only.
+- DSN comes from `EXPO_PUBLIC_SENTRY_DSN` per EAS profile (the mobile DSN is public by design). Source maps: `SENTRY_AUTH_TOKEN` as an EAS secret (Firoz, manual); D-W4-7 (decided by Firoz, 1 Nov 2026): upload source maps on production builds only, using `SENTRY_AUTH_TOKEN`. Tracing: D-W4-6 (decided): errors only, `tracesSampleRate: 0`.
 - Same scrubbing rules as BT2: no names, emails, notes, health values, tokens.
 
 ## Gap list
