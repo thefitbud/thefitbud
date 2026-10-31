@@ -1,3 +1,4 @@
+import { format } from "node:util";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportPKCS8, generateKeyPair } from "jose";
@@ -32,6 +33,36 @@ function testEnv(): Env {
     ENVIRONMENT: "local",
     EMAIL_PROVIDER: "dev_sink",
   };
+}
+
+async function firebaseEnv(): Promise<Env> {
+  const serviceAccount = await generateKeyPair("RS256", { extractable: true });
+  return {
+    ...testEnv(),
+    AUTH_MODE: "firebase",
+    FIREBASE_WEB_API_KEY: "test-web-api-key",
+    FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+      client_email: "firebase-adminsdk@fitbud-local.iam.gserviceaccount.com",
+      private_key: await exportPKCS8(serviceAccount.privateKey),
+    }),
+  };
+}
+
+/** Everything written to the console during `run`, as one string. */
+async function captureConsole(run: () => Promise<void>): Promise<string> {
+  const lines: string[] = [];
+  const spies = (["log", "info", "warn", "error", "debug"] as const).map((level) =>
+    vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+      // util.format keeps Error messages and stacks (JSON.stringify drops them).
+      lines.push(format(...args));
+    }),
+  );
+  try {
+    await run();
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
+  return lines.join("\n");
 }
 
 async function createTrainerSession(email: string) {
@@ -227,6 +258,118 @@ describe("invitations accept (password + otp)", () => {
         expiresIn: 3600,
       });
       expect(googleFetch).toHaveBeenCalledTimes(1);
+      // The custom token goes to Google only; it is never in the response.
+      const googleCalls = googleFetch.mock.calls as unknown as Array<[string, RequestInit]>;
+      const sentToGoogle = JSON.parse(String(googleCalls[0]![1].body)) as { token: string };
+      expect(sentToGoogle.token.split(".")).toHaveLength(3);
+      expect(JSON.stringify(body)).not.toContain(sentToGoogle.token);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("returns 401 AUTH_EXCHANGE_FAILED when the token exchange fails, and the invitation stays accepted", async () => {
+    const trainer = await createTrainerSession("invite-fbfail-coach@example.com");
+    const recipientEmail = "invite-fbfail-trainee@example.com";
+    const invite = await createInvitation(trainer.cookie, recipientEmail);
+    const otpProof = await inviteOtpProof(recipientEmail);
+    const env = await firebaseEnv();
+
+    const googleFetch = vi.fn(async () =>
+      Response.json(
+        { error: { code: 400, message: "INVALID_CUSTOM_TOKEN google-detail-xyz" } },
+        { status: 400 },
+      ),
+    );
+    vi.stubGlobal("fetch", googleFetch);
+    let status = 0;
+    let body: { error?: { code: string; message: string } } = {};
+    let logs = "";
+    try {
+      logs = await captureConsole(async () => {
+        const accept = await app.request(
+          "/invitations/accept",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: invite.data.token,
+              password: "Str0ng-enough",
+              otpProof,
+              displayName: "Invite Trainee",
+            }),
+          },
+          env,
+        );
+        status = accept.status;
+        body = (await accept.json()) as typeof body;
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(status).toBe(401);
+    expect(body.error?.code).toBe("AUTH_EXCHANGE_FAILED");
+    expect(googleFetch).toHaveBeenCalledTimes(1);
+    const googleCalls = googleFetch.mock.calls as unknown as Array<[string, RequestInit]>;
+    const customToken = (JSON.parse(String(googleCalls[0]![1].body)) as { token: string }).token;
+    // The capture sees Error objects too, so a logged error could not hide a leak.
+    const probe = await captureConsole(async () => {
+      console.error("probe", new Error("probe-detail"));
+    });
+    expect(probe).toContain("probe-detail");
+    // Neither the error body nor the logs carry tokens, the password or Google's response.
+    for (const secret of [customToken, invite.data.token, otpProof, "Str0ng-enough", "google-detail-xyz"]) {
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(logs).not.toContain(secret);
+    }
+
+    // The account and relationship were created; the user can sign in with a code.
+    const tokenHash = await sha256Hex(invite.data.token);
+    const [row] = await db
+      .select()
+      .from(schema.clientInvitations)
+      .where(eq(schema.clientInvitations.tokenHash, tokenHash));
+    expect(row?.status).toBe("accepted");
+    expect(row?.acceptedUserId).toBeTruthy();
+    const relationships = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.invitationId, row!.id));
+    expect(relationships).toHaveLength(1);
+    expect(relationships[0]?.status).toBe("active");
+    expect(relationships[0]?.traineeUserId).toBe(row?.acceptedUserId);
+  });
+
+  it("returns the test-mode token response unchanged (no refresh fields, no Google call)", async () => {
+    const trainer = await createTrainerSession("invite-testmode-coach@example.com");
+    const recipientEmail = "invite-testmode-trainee@example.com";
+    const invite = await createInvitation(trainer.cookie, recipientEmail);
+    const otpProof = await inviteOtpProof(recipientEmail);
+    const googleFetch = vi.fn(async () => Response.json({}));
+    vi.stubGlobal("fetch", googleFetch);
+    try {
+      const accept = await app.request(
+        "/invitations/accept",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: invite.data.token,
+            password: "Str0ng-enough",
+            otpProof,
+            displayName: "Invite Trainee",
+          }),
+        },
+        testEnv(),
+      );
+      expect(accept.status).toBe(200);
+      const body = (await accept.json()) as { data: Record<string, unknown> };
+      expect(Object.keys(body.data).sort()).toEqual(
+        ["relationshipId", "token", "tokenKind", "userId"],
+      );
+      expect(body.data.tokenKind).toBe("test_id_token");
+      expect(googleFetch).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }
