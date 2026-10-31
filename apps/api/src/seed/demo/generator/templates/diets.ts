@@ -190,11 +190,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": true,
         "items": [
           {
-            "slug": "jowar-dosa",
-            "grams": 66,
-            "label": "2 jowar dosa"
-          },
-          {
             "slug": "avial",
             "grams": 150,
             "label": "1 katori"
@@ -241,21 +236,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "slug": "chapati-roti",
             "grams": 72,
             "label": "2 roti"
-          },
-          {
-            "slug": "dal-dhokli",
-            "grams": 250,
-            "label": "1 bowl"
-          },
-          {
-            "slug": "bharwa-bhindi",
-            "grams": 100,
-            "label": "1 katori"
-          },
-          {
-            "slug": "lauki-ka-raita",
-            "grams": 120,
-            "label": "1 bowl"
           }
         ]
       },
@@ -283,16 +263,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "mealType": "dinner" as const,
         "photoRequired": false,
         "items": [
-          {
-            "slug": "panchmel-dal",
-            "grams": 200,
-            "label": "1 bowl"
-          },
-          {
-            "slug": "jowar-dosa",
-            "grams": 66,
-            "label": "2"
-          },
           {
             "slug": "tossed-salad",
             "grams": 100,
@@ -377,11 +347,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "mealType": "dinner" as const,
         "photoRequired": true,
         "items": [
-          {
-            "slug": "palak-mushroom-egg-bhurji",
-            "grams": 200,
-            "label": "1 bowl"
-          },
           {
             "slug": "chapati-roti",
             "grams": 36,
@@ -599,19 +564,9 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "photoRequired": true,
         "items": [
           {
-            "slug": "tandoori-chicken",
-            "grams": 150,
-            "label": "4 pieces"
-          },
-          {
             "slug": "chapati-roti",
             "grams": 72,
             "label": "2 roti"
-          },
-          {
-            "slug": "matar-ki-sabzi",
-            "grams": 100,
-            "label": "1 katori"
           },
           {
             "slug": "cucumber-raita",
@@ -667,11 +622,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "label": "1 bowl meen curry"
           },
           {
-            "slug": "cabbage-carrot-thoran-with-coconut",
-            "grams": 100,
-            "label": "1 katori"
-          },
-          {
             "slug": "buttermilk-low-fat",
             "grams": 250,
             "label": "1 glass moru"
@@ -706,11 +656,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "slug": "chapati-roti",
             "grams": 72,
             "label": "2 chapati"
-          },
-          {
-            "slug": "chicken-yakhni",
-            "grams": 250,
-            "label": "1 bowl"
           },
           {
             "slug": "beans-thoran",
@@ -815,11 +760,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "slug": "chapati-roti",
             "grams": 108,
             "label": "3 roti"
-          },
-          {
-            "slug": "soyabean-curry",
-            "grams": 120,
-            "label": "1 bowl"
           }
         ]
       }
@@ -859,11 +799,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
         "mealType": "lunch" as const,
         "photoRequired": true,
         "items": [
-          {
-            "slug": "tandoori-chicken",
-            "grams": 200,
-            "label": "tandoori/grilled chicken"
-          },
           {
             "slug": "naan",
             "grams": 53,
@@ -1097,11 +1032,6 @@ export const DIET_TEMPLATES: DietTemplate[] = [
             "slug": "paneer-tikka",
             "grams": 150,
             "label": "paneer tikka (sendha namak)"
-          },
-          {
-            "slug": "lauki-ka-raita",
-            "grams": 150,
-            "label": "1 bowl"
           }
         ]
       }
