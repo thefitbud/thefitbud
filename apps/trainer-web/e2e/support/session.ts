@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
+export const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
 
 export const DEMO_TRAINER_EMAIL = "rahul.coach@demo.fitbud.test";
 export const DEMO_PASSWORD = "FitBud-demo-2026";
@@ -30,18 +30,26 @@ async function login(email: string, password: string): Promise<string> {
   return token;
 }
 
-export async function signIn(
-  page: Page,
+/** API token for a demo user, from the same one-per-worker login as signIn. */
+export function apiToken(
   email = DEMO_TRAINER_EMAIL,
   password = DEMO_PASSWORD,
-): Promise<void> {
+): Promise<string> {
   let token = tokens.get(email);
   if (!token) {
     token = login(email, password);
     tokens.set(email, token);
     token.catch(() => tokens.delete(email));
   }
-  const value = await token;
+  return token;
+}
+
+export async function signIn(
+  page: Page,
+  email = DEMO_TRAINER_EMAIL,
+  password = DEMO_PASSWORD,
+): Promise<void> {
+  const value = await apiToken(email, password);
   await page.addInitScript(
     ([tokenKey, emailKey, t, e]) => {
       if (!sessionStorage.getItem(tokenKey)) {
