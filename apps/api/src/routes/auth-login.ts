@@ -43,13 +43,26 @@ import { otpEmailBody, otpEmailSubject } from "../emails/otp.js";
 import { passwordChangedEmailBody, passwordChangedEmailSubject } from "../emails/password-changed.js";
 import { createId, nowIso, sha256Hex } from "../lib/crypto.js";
 import { fail, ok, type AppContext } from "../lib/envelope.js";
-import { sendSystemEmail } from "../lib/email.js";
+import { isEmailDeliveryFailure, sendSystemEmail } from "../lib/email.js";
+import { writeStructuredLog } from "../lib/log.js";
 import { operation } from "../openapi/document.js";
 import {
   optionalAuthMiddleware,
   requireAuthMiddleware,
 } from "../middleware/auth.js";
 import type { Env, Variables } from "../types.js";
+
+/** Safe warn line for an email that couldn't be sent: names and codes only. */
+function logEmailFailure(c: AppContext, operation: string, err: { name: string; code: string }): void {
+  writeStructuredLog({
+    level: "warn",
+    message: "Email send failed",
+    requestId: c.get("requestId"),
+    operation,
+    errorName: err.name,
+    errorCode: err.code,
+  });
+}
 
 export const authLoginRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -291,12 +304,19 @@ authLoginRoutes.post(
           createdAt: nowIso(),
           ipHash: null,
         });
-        await sendSystemEmail(c.env, db, {
-          to: identifier.value,
-          template: "otp",
-          subject: otpEmailSubject(code),
-          text: otpEmailBody(code),
-        });
+        try {
+          await sendSystemEmail(c.env, db, {
+            to: identifier.value,
+            template: "otp",
+            subject: otpEmailSubject(code),
+            text: otpEmailBody(code),
+          });
+        } catch (err) {
+          // Keep the generic 202 an unknown identifier gets: an error here would
+          // tell a caller the account exists. The user asks for a new code.
+          if (!isEmailDeliveryFailure(err)) throw err;
+          logEmailFailure(c, "auth.otp.start", err);
+        }
         channels.push("email");
       }
     }
@@ -488,11 +508,15 @@ authLoginRoutes.post(
       return fail(c, 401, "RESET_PROOF_INVALID", "Reset proof is invalid or expired.");
     }
     if (identity.email) {
+      // The password is already changed: a failed notice must not turn that into an error.
       await sendSystemEmail(c.env, db, {
         to: identity.email,
         template: "password_changed",
         subject: passwordChangedEmailSubject(),
         text: passwordChangedEmailBody(),
+      }).catch((err: unknown) => {
+        if (!isEmailDeliveryFailure(err)) throw err;
+        logEmailFailure(c, "auth.credential_change_notice", err);
       });
     }
     const token = await mintAuthToken(c.env, {
@@ -579,11 +603,15 @@ authLoginRoutes.post(
       });
     }
     if (identity?.email) {
+      // The password is already changed: a failed notice must not turn that into an error.
       await sendSystemEmail(c.env, db, {
         to: identity.email,
         template: "password_changed",
         subject: passwordChangedEmailSubject(),
         text: passwordChangedEmailBody(),
+      }).catch((err: unknown) => {
+        if (!isEmailDeliveryFailure(err)) throw err;
+        logEmailFailure(c, "auth.credential_change_notice", err);
       });
     }
     const [user] = await db
