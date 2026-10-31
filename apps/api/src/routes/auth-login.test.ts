@@ -248,6 +248,37 @@ describe("auth login routes", () => {
     });
   });
 
+  it("keeps the generic OTP start response when ZeptoMail fails for a known user", async () => {
+    await seedPasswordUser(db, "otp-mailfail@example.com", "Str0ng-enough");
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const start = (identifier: string) =>
+        app.request(
+          "/auth/otp/start",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier, purpose: "login" }),
+          },
+          testEnv({ EMAIL_PROVIDER: "zeptomail", ZEPTOMAIL_TOKEN: "zepto-test-token-do-not-log" }),
+        );
+      const known = await start("otp-mailfail@example.com");
+      const unknown = await start("otp-nobody@example.com");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(known.status).toBe(202);
+      expect(await known.json()).toEqual(await unknown.json());
+      const logged = warn.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(logged).toContain("OTP email send failed");
+      expect(logged).not.toContain("otp-mailfail@example.com");
+      expect(logged).not.toContain("zepto-test-token-do-not-log");
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns generic OTP invalid for a bad verify attempt", async () => {
     await seedPasswordUser(db, "otp-verify@example.com", "Str0ng-enough");
     const response = await app.request(
@@ -358,7 +389,7 @@ describe("auth login routes", () => {
       testEnv({
         ENVIRONMENT: "staging",
         AUTH_MODE: "firebase",
-        PUSH_PROVIDER_MODE: "fcm",
+        PUSH_PROVIDER_MODE: "expo",
         EMAIL_PROVIDER: "disabled",
         FLAG_WA_OTP: "true",
       }),

@@ -20,8 +20,8 @@ function deployedEnv(overrides: Partial<Env>): Env {
     FIREBASE_PROJECT_ID: "thefitbud-staging",
     SESSION_COOKIE_NAME: "fitbud_session",
     AUTH_MODE: "firebase",
-    PUSH_PROVIDER_MODE: "fcm",
-    EMAIL_PROVIDER: "disabled",
+    PUSH_PROVIDER_MODE: "expo",
+    EMAIL_PROVIDER: "zeptomail",
     MEDIA_SIGNING_SECRET: "fitbud-test-signing-secret",
     ...overrides,
   };
@@ -34,6 +34,10 @@ const TEST_MODES: Array<[string, Partial<Env>, string]> = [
   ["PUSH_PROVIDER_MODE unset", { PUSH_PROVIDER_MODE: undefined }, "PUSH_PROVIDER_MODE=unset"],
   ["EMAIL_PROVIDER=dev_sink", { EMAIL_PROVIDER: "dev_sink" }, "EMAIL_PROVIDER=dev_sink"],
   ["EMAIL_PROVIDER unset", { EMAIL_PROVIDER: undefined }, "EMAIL_PROVIDER=unset"],
+  // Named in Env but not implemented: every send would fail.
+  ["PUSH_PROVIDER_MODE=fcm", { PUSH_PROVIDER_MODE: "fcm" }, "PUSH_PROVIDER_MODE=fcm"],
+  ["EMAIL_PROVIDER=resend", { EMAIL_PROVIDER: "resend" }, "EMAIL_PROVIDER=resend"],
+  ["EMAIL_PROVIDER=ses", { EMAIL_PROVIDER: "ses" }, "EMAIL_PROVIDER=ses"],
 ];
 
 let errorLog: ReturnType<typeof vi.spyOn>;
@@ -91,6 +95,16 @@ describe("runtime guard", () => {
         "/health",
         {},
         deployedEnv({ ENVIRONMENT: environment, PUSH_PROVIDER_MODE: "expo" }),
+      );
+      expect(response.status).toBe(200);
+      expect(guardLogLines()).toHaveLength(0);
+    });
+
+    it(`${environment} with EMAIL_PROVIDER=disabled serves normally`, async () => {
+      const response = await app.request(
+        "/health",
+        {},
+        deployedEnv({ ENVIRONMENT: environment, EMAIL_PROVIDER: "disabled" }),
       );
       expect(response.status).toBe(200);
       expect(guardLogLines()).toHaveLength(0);

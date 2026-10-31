@@ -43,7 +43,8 @@ import { otpEmailBody, otpEmailSubject } from "../emails/otp.js";
 import { passwordChangedEmailBody, passwordChangedEmailSubject } from "../emails/password-changed.js";
 import { createId, nowIso, sha256Hex } from "../lib/crypto.js";
 import { fail, ok, type AppContext } from "../lib/envelope.js";
-import { sendSystemEmail } from "../lib/email.js";
+import { EmailSendError, sendSystemEmail } from "../lib/email.js";
+import { writeStructuredLog } from "../lib/log.js";
 import { operation } from "../openapi/document.js";
 import {
   optionalAuthMiddleware,
@@ -291,12 +292,27 @@ authLoginRoutes.post(
           createdAt: nowIso(),
           ipHash: null,
         });
-        await sendSystemEmail(c.env, db, {
-          to: identifier.value,
-          template: "otp",
-          subject: otpEmailSubject(code),
-          text: otpEmailBody(code),
-        });
+        try {
+          await sendSystemEmail(c.env, db, {
+            to: identifier.value,
+            template: "otp",
+            subject: otpEmailSubject(code),
+            text: otpEmailBody(code),
+          });
+        } catch (err) {
+          // Keep the generic 202 an unknown identifier gets: an error here would
+          // tell a caller the account exists. The user asks for a new code.
+          if (!(err instanceof EmailSendError)) throw err;
+          writeStructuredLog({
+            level: "warn",
+            message: "OTP email send failed",
+            requestId: c.get("requestId"),
+            operation: "auth.otp.start",
+            errorName: err.name,
+            errorCode: err.code,
+            ...(err.status !== undefined ? { status: err.status } : {}),
+          });
+        }
         channels.push("email");
       }
     }
