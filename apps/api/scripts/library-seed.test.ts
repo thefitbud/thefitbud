@@ -54,7 +54,8 @@ describe("library-seed (I2d)", () => {
       "sql/08_post_seed.sql",
       "sql/05_search.sql",
     ]);
-    expect(REMOTE_FILES).toEqual(LOCAL_FILES.filter((f) => f !== "00_wipe_legacy_dev.sql" && f !== "07_post_wipe_dev.sql"));
+    // Owner decision (31 Oct): remote runs the legacy cleanup too, in the local order.
+    expect(REMOTE_FILES).toEqual(LOCAL_FILES);
   });
 
   it("runs the local order against local D1, skipping only the comment-only 02b", () => {
@@ -87,13 +88,12 @@ describe("library-seed (I2d)", () => {
     expect(errors.join("\n")).toMatch(message);
   });
 
-  it("prints the staging plan without 00/07, in list order, chunks ≤ 5 MB, and runs nothing", () => {
+  it("prints the staging plan in list order (00 and 07 included), chunks ≤ 5 MB, and runs nothing", () => {
     expect(seed(["--remote", "--yes", "--env", "staging", "--print"])).toBe(0);
     expect(run).not.toHaveBeenCalled();
     const commands = logs.filter((line) => line.startsWith("pnpm "));
     for (const line of commands) {
       expect(line).toContain("wrangler d1 execute fitbud-staging --env staging --remote --file ");
-      expect(line).not.toMatch(/00_wipe_legacy_dev|07_post_wipe_dev/);
     }
     const files = commands.map((line) => line.slice(line.indexOf("--file ") + "--file ".length));
     const sources = files.map(sourceOf);
@@ -128,7 +128,7 @@ describe("library-seed (I2d)", () => {
 });
 
 describe("library-seed remote chunks load into D1 (I2d)", () => {
-  it("applies the staging plan chunk by chunk, one transaction each, twice, with foreign keys on", async () => {
+  it("applies the staging plan to a freshly migrated D1 chunk by chunk, twice, leaving only the release", async () => {
     const { planSeed } = await import("./library-seed.js");
     const { createMemoryDb } = await import("../src/test-support/memory-db.js");
     const { foreignKeyViolations } = await import("../src/test-support/foreign-key-check.js");
@@ -151,6 +151,15 @@ describe("library-seed remote chunks load into D1 (I2d)", () => {
         expect(one("SELECT count(*) FROM exercise_library_media")).toBe(919);
         expect(one("SELECT count(*) FROM exercise_library_instructions")).toBe(14037);
         expect(foreignKeyViolations(handle.sqlite)).toEqual([]);
+        // The migrations' legacy dev foods and servings are gone; only the release remains.
+        expect(one("SELECT count(*) FROM food_library_items WHERE ownership = 'global' AND seed_version IS NULL")).toBe(0);
+        expect(one("SELECT count(*) FROM food_library_servings WHERE seed_version IS NULL")).toBe(0);
+        expect(
+          one(
+            `SELECT count(*) FROM food_library_items f WHERE f.status = 'active' AND (
+               SELECT count(*) FROM food_library_servings s WHERE s.food_library_item_id = f.id AND s.is_default = 1) <> 1`,
+          ),
+        ).toBe(0);
       }
     } finally {
       handle.close();

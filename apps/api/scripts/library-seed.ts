@@ -2,9 +2,9 @@
 /**
  * Load the FitBud library into D1.
  *
- * Local (default): local D1 in .wrangler/state, with the dev-only wipe (00) and redirects (07).
- * Remote: `--remote --env staging|production --yes` loads the same release into that env's D1
- * and skips 00/07. Add `--print` to list the planned wrangler commands and run nothing.
+ * Local (default): local D1 in .wrangler/state.
+ * Remote: `--remote --env staging|production --yes` loads the same files, in the same order,
+ * into that env's D1. Add `--print` to list the planned wrangler commands and run nothing.
  * Files over 5 MB are split between statements into chunks before `wrangler d1 execute`.
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -38,8 +38,12 @@ export const LOCAL_FILES = [
   "sql/05_search.sql",
 ];
 
-/** 00 and 07 rewrite legacy dev rows; they never run against staging or production. */
-export const REMOTE_FILES = [...RELEASE_FILES, "sql/08_post_seed.sql", "sql/05_search.sql"];
+/**
+ * Same order as local (owner decision, 31 Oct 2026, over the I2d spec text that skipped 00/07):
+ * on a freshly migrated D1, 00 and 07 touch only the migration-seeded legacy dev rows (three
+ * global templates, the NULL-seed_version foods and servings), so only the release remains.
+ */
+export const REMOTE_FILES = LOCAL_FILES;
 
 export const REMOTE_DATABASES = { staging: "fitbud-staging", production: "fitbud-prod" } as const;
 export type RemoteEnv = keyof typeof REMOTE_DATABASES;
