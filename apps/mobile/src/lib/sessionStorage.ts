@@ -81,6 +81,20 @@ export function persistSession(input: {
   }
 }
 
+/**
+ * Persist a token-session change (AU1d). Keeps the current role with the new
+ * access token; a cleared state removes the refresh keys. No-op on native.
+ */
+export function persistTokenState(
+  state: { accessToken: string | null; refreshToken: string | null; expiresAt: number | null },
+  selectedRole: Role | null,
+): void {
+  if (state.accessToken) {
+    persistSession({ accessToken: state.accessToken, selectedRole });
+  }
+  persistRefreshState({ refreshToken: state.refreshToken, expiresAt: state.expiresAt });
+}
+
 export function clearPersistedSession(): void {
   persistSession({ accessToken: null, selectedRole: null });
   persistRefreshState({ refreshToken: null, expiresAt: null });

@@ -11,6 +11,7 @@ import {
   REFRESH_LEAD_MS,
   createMobileApiClient,
   createTokenSession,
+  isForegroundAppState,
   pickSessionRefresh,
   resolveApiBaseUrl,
   type TokenState,
@@ -291,6 +292,65 @@ describe("mobile token refresh (AU1d)", () => {
     finish();
     await expect(pending).resolves.toBeNull();
     expect(session.getState()).toEqual({ accessToken: null, refreshToken: null, expiresAt: null });
+  });
+
+  it("a new sign-in does not join the old session's in-flight refresh", async () => {
+    let releaseOld: () => void = () => undefined;
+    const oldGate = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    const { calls, session } = wire(async (call) => {
+      const body = JSON.parse(call.body) as { refreshToken: string };
+      if (body.refreshToken === "refresh-old") await oldGate;
+      return json(200, {
+        data: {
+          token: `${body.refreshToken}-id`,
+          tokenKind: "firebase_id_token",
+          refreshToken: `${body.refreshToken}-next`,
+          expiresIn: 3600,
+        },
+      });
+    });
+    session.signIn("id-old", { refreshToken: "refresh-old", expiresIn: 3600 });
+    const oldRefresh = session.refresh();
+    session.clear();
+    session.signIn("id-new", { refreshToken: "refresh-new", expiresIn: 3600 });
+
+    await expect(session.refresh()).resolves.toBe("refresh-new-id");
+    releaseOld();
+    await expect(oldRefresh).resolves.toBeNull();
+    expect(calls).toHaveLength(2);
+    expect(session.getState().refreshToken).toBe("refresh-new-next");
+    session.setForeground(false);
+  });
+
+  it("a short expiresIn refreshes at half-life, not back to back", async () => {
+    vi.useFakeTimers();
+    const { calls, session } = wire(() =>
+      json(200, {
+        data: {
+          token: "fresh-id",
+          tokenKind: "firebase_id_token",
+          refreshToken: "refresh-2",
+          expiresIn: 30,
+        },
+      }),
+    );
+    session.signIn("id-1", { refreshToken: "refresh-1", expiresIn: 30 });
+
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect(calls).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(1);
+    session.setForeground(false);
+  });
+
+  it("only the active AppState runs the timer", () => {
+    expect(isForegroundAppState("active")).toBe(true);
+    expect(isForegroundAppState("background")).toBe(false);
+    expect(isForegroundAppState("inactive")).toBe(false);
   });
 
   it("pickSessionRefresh reads refresh fields only when both are present", () => {

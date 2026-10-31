@@ -186,12 +186,18 @@ export function createTokenSession(deps: TokenSessionDeps) {
     refreshToken: null,
     expiresAt: null,
   };
-  let inFlight: Promise<string | null> | null = null;
+  // The refresh token the in-flight call is for: a new sign-in never joins
+  // the previous session's refresh.
+  let inFlight: { refreshToken: string; promise: Promise<string | null> } | null = null;
+  // Lifetime of the current access token, so a short expiresIn cannot make
+  // the timer fire back to back.
+  let lifetimeMs = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let foreground = true;
 
   function write(next: TokenState) {
     state = next;
+    lifetimeMs = next.expiresAt === null ? 0 : Math.max(0, next.expiresAt - now());
     deps.persist(state);
   }
 
@@ -216,7 +222,8 @@ export function createTokenSession(deps: TokenSessionDeps) {
       cancel();
       return;
     }
-    arm(Math.max(0, state.expiresAt - REFRESH_LEAD_MS - now()));
+    const lead = Math.min(REFRESH_LEAD_MS, lifetimeMs / 2);
+    arm(Math.max(0, state.expiresAt - lead - now()));
   }
 
   function clear() {
@@ -225,10 +232,10 @@ export function createTokenSession(deps: TokenSessionDeps) {
   }
 
   function refresh(): Promise<string | null> {
-    if (inFlight) return inFlight;
-    inFlight = (async () => {
-      const refreshToken = state.refreshToken;
-      if (!refreshToken) return null;
+    const refreshToken = state.refreshToken;
+    if (!refreshToken) return Promise.resolve(null);
+    if (inFlight && inFlight.refreshToken === refreshToken) return inFlight.promise;
+    const promise = (async () => {
       try {
         const result = await deps.refreshAuth(refreshToken);
         // Signed out or signed in again meanwhile: drop the result.
@@ -254,9 +261,10 @@ export function createTokenSession(deps: TokenSessionDeps) {
         return null;
       }
     })().finally(() => {
-      inFlight = null;
+      if (inFlight?.promise === promise) inFlight = null;
     });
-    return inFlight;
+    inFlight = { refreshToken, promise };
+    return promise;
   }
 
   return {
@@ -284,3 +292,8 @@ export function createTokenSession(deps: TokenSessionDeps) {
 }
 
 export type TokenSession = ReturnType<typeof createTokenSession>;
+
+/** AppState → foreground: only "active" runs the refresh timer. */
+export function isForegroundAppState(state: string | null | undefined): boolean {
+  return state === "active";
+}

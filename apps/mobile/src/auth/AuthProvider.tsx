@@ -21,6 +21,7 @@ import { AppState } from "react-native";
 import {
   createMobileApiClient,
   createTokenSession,
+  isForegroundAppState,
   resolveApiBaseUrl,
   type SessionRefresh,
   type TokenSession,
@@ -28,8 +29,8 @@ import {
 import {
   clearPersistedSession,
   loadPersistedSession,
-  persistRefreshState,
   persistSession,
+  persistTokenState,
 } from "../lib/sessionStorage";
 import {
   resolveAppRoute,
@@ -79,7 +80,8 @@ function messageFromError(error: unknown): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const persisted = loadPersistedSession();
+  // Read once: later renders must not re-read storage.
+  const [persisted] = useState(() => loadPersistedSession());
   const [accessToken, setAccessToken] = useState<string | null>(
     persisted.accessToken,
   );
@@ -123,16 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshAuth: (refreshToken) => client!.refreshAuth(refreshToken),
       persist: (state) => {
         setAccessToken(state.accessToken);
-        if (state.accessToken) {
-          persistSession({
-            accessToken: state.accessToken,
-            selectedRole: selectedRoleRef.current,
-          });
-        }
-        persistRefreshState({
-          refreshToken: state.refreshToken,
-          expiresAt: state.expiresAt,
-        });
+        persistTokenState(state, selectedRoleRef.current);
       },
       onExpired: () => onExpiredRef.current(),
     });
@@ -147,9 +140,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Timer runs in the foreground only; on return to the foreground it
   // refreshes straight away if the expiry has passed.
   useEffect(() => {
+    // The provider mounts while the app is on screen; currentState can still
+    // read "unknown" this early on some platforms.
     tokens.setForeground(AppState.currentState !== "background");
     const subscription = AppState.addEventListener("change", (next) => {
-      tokens.setForeground(next === "active");
+      tokens.setForeground(isForegroundAppState(next));
     });
     return () => {
       subscription.remove();

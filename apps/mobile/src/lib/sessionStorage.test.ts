@@ -8,6 +8,7 @@ import {
   loadPersistedSession,
   persistRefreshState,
   persistSession,
+  persistTokenState,
 } from "./sessionStorage";
 
 function memoryStorage(): Storage {
@@ -85,5 +86,27 @@ describe("mobile session storage", () => {
       refreshToken: null,
       expiresAt: null,
     });
+  });
+
+  it("web: a refreshed token is persisted with the current role", () => {
+    platform.OS = "web";
+    persistTokenState(
+      { accessToken: "id-2", refreshToken: "refresh-2", expiresAt: 42 },
+      "trainer",
+    );
+    expect(loadPersistedSession()).toEqual({
+      accessToken: "id-2",
+      selectedRole: "trainer",
+      refreshToken: "refresh-2",
+      expiresAt: 42,
+    });
+  });
+
+  it("web: a cleared token state removes the refresh keys", () => {
+    platform.OS = "web";
+    persistTokenState({ accessToken: "id-1", refreshToken: "refresh-1", expiresAt: 1 }, "trainee");
+    persistTokenState({ accessToken: null, refreshToken: null, expiresAt: null }, null);
+    expect(storage.getItem("fitbud.refreshToken")).toBeNull();
+    expect(storage.getItem("fitbud.accessTokenExpiresAt")).toBeNull();
   });
 });
