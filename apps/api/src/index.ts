@@ -176,8 +176,11 @@ app.notFound((c) =>
  * which can hold ids or tokens. Middleware registered on `*` is skipped.
  */
 function routePattern(c: Context): string {
+  // Hono lists every matching route in registration order and runs the first
+  // handler; a later param sibling (`/exceptions/:id` after `/exceptions/attention`)
+  // never ran. Start at the route that was running when the error was thrown.
   const routes = matchedRoutes(c);
-  for (let i = routes.length - 1; i >= 0; i -= 1) {
+  for (let i = Math.max(0, c.req.routeIndex); i < routes.length; i += 1) {
     const route = routes[i]!;
     if (route.method !== "ALL" && !route.path.endsWith("*")) return route.path;
   }

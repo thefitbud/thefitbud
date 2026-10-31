@@ -60,6 +60,14 @@ app.get("/__ob2/clients/:clientId/fail-as-actor", (c) => {
   throw new DomainFailure();
 });
 
+// A static route before a param sibling, like /exceptions/attention and /exceptions/:exceptionId.
+app.get("/__ob2-overlap/attention", () => {
+  throw new DomainFailure();
+});
+app.get("/__ob2-overlap/:itemId", () => {
+  throw new DomainFailure();
+});
+
 // Mounted like the real route modules (app.route), to check the full pattern.
 const mounted = new Hono();
 mounted.get("/relationships/:relationshipId/fail", () => {
@@ -163,6 +171,15 @@ it("onError logs the full pattern of a route mounted with app.route", async () =
   const [line] = logLines().filter((l) => l.message === "Unhandled API error");
   expect(line).toMatchObject({ path: "/__ob2-mounted/relationships/:relationshipId/fail", status: 500 });
   expectNothingSensitive();
+});
+
+it("onError logs the static route that ran, not a later param sibling", async () => {
+  await app.request("/__ob2-overlap/attention", {}, env("production"));
+  await app.request(`/__ob2-overlap/${CLIENT_ID}`, {}, env("production"));
+  const paths = logLines()
+    .filter((l) => l.message === "Unhandled API error")
+    .map((l) => l.path);
+  expect(paths).toEqual(["/__ob2-overlap/attention", "/__ob2-overlap/:itemId"]);
 });
 
 describe("scheduled() (OB2)", () => {
