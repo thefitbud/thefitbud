@@ -6,6 +6,8 @@ Rev 3 (Sat 31 Oct 2026, W2 specs): W1 specs merged (PRs #73, #78), so W1 tasks a
 
 Rev 4 (Sat 31 Oct 2026, Firoz's W2 answers): D-W2-6 to D-W2-15 decided (see `docs/specs/batches/W2.md`). Live Activity is in the beta (post-beta note fixed). Domains: `api.` / `app.` (+ `-staging`), `thefitbud.com` for landing and sign-in redirect. X4a moved W3 → W2 (lane `api`: I5 → X4a → OB2). New: X7 (mobile trainer-web link, S, son), LA1c (lock-screen rest timer, frame 27c, M). I5 declares `MEDIA_PREFIX` in `Env`. CLAUDE.md is the source of truth; Agents.md gets aligned.
 
+Rev 5 (Sun 1 Nov 2026, Firoz's W3/W4 answers): D-W3-1 to D-W3-5 and D-W4-5 to D-W4-9 decided (see `docs/specs/batches/W3.md`, `W4.md`). Trainer inbox events are pushed: new X4f, X4h, X4g. At-most-once push (D-W3-8): new X4i (M, opus). Agents-only code review. Android rest timer added: new LA3c, planned frame `docs/design/mockups/png/27-android-rest.png` (412x915). Rows added for the W3 splits X4e, BT3b, LA3b and DC1; LA3 is M. Expo tokens use provider `"expo"`. Sentry: errors only, DSN as Worker secret, source maps on production builds. EAS remote auto-increment. No W5–W11 until after the beta ships.
+
 **What this file is.** This is the working list for the **closed beta only**: every task needed for beta, with enough detail for the bots to write self-contained specs. It replaces v13's Beta cut section and the beta tasks' details.
 **What it is not.** v13 stays the master list for everything post-beta: redesign phases, seed polish, gap buckets, Phase 10. Don't schedule those until the beta ships.
 
@@ -108,7 +110,16 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 | LA1c | Lock-screen rest timer in the Live Activity, frame 27c (new, D-W2-12; `docs/specs/LA1c.md`) | W2 | mobile-native | LA1b | M | opus |
 | X7 | Mobile trainer-web link → `app.thefitbud.com` (new, D-W2-7; `docs/specs/X7.md`) | W2 | mobile-links | X6 | S | son |
 | LA2 | Live Activity buttons → App Group outbox → sync outbox | W3 | mobile-native | LA1c | S | opus |
-| LA3 | Android ongoing workout notification (frame 27 Android) via the same outbox path | W3 | mobile-native | LA2 | S | opus |
+| LA3 | Android ongoing workout notification (frame 27 Android) via the same outbox path | W3 | mobile-native | LA2 | M | opus |
+| X4e | Mobile registers real Expo tokens (split from X4b) | W3 | push-mobile | X4b, AU1d | S | opus |
+| X4i | Push delivery at-most-once on queue retries, migration (D-W3-8) | W3 | reminders | X4c | M | opus |
+| X4f | Push trainer inbox events (D-W3-1) | W3 | reminders | X4i | S | son |
+| X4h | Store trainer check-in and intake submitted events (D-W3-1) | W3 | reminders | X4f | S | son |
+| X4g | Trainer app routes push taps (D-W3-1) | W3 | push-mobile | X4d | S | son |
+| BT3b | Mobile legal links (split from BT3) | W3 | mobile-legal | BT3, X7, AU1d | S | son |
+| LA3b | Live Activity JS wiring (split from LA3) | W3 | mobile-native | LA3 | S | opus |
+| LA3c | Android rest timer, frame 27-android-rest (D-W3-3) | W3 | mobile-native | LA3b | S | opus |
+| DC1 | Confirm AGENTS.md ranks the spec first (D-W2-10) | W3 | docs | — | S | son |
 | BT1 | TestFlight + Play closed-track builds (EAS build + submit) | W4 | mobile + F | X3, X6, BT3 | M | son + F |
 | BT5 | Beta dress rehearsal on staging with real phones (new) | W4 | human + QA agent | I6, X4c, X4d | S | F |
 | I6b | Production deploy + production library seed (owner F, new) | W4 | human | BT5 passed, CF2 prod secrets | S | F |
@@ -358,7 +369,7 @@ These tasks need a **dev build on a real device**. Agents can't compile Swift or
 |---|---|---|---|
 | **W1** | auth: AU1 → AU1b → AU2 · infra: I7 → I4a → I4b → I4c · mobile: X2 → X6 · library: I2b → I2f (→ I2c) · api-perf: I1b if a slot is free | CF2 steps 1–5; DS5; legal text (Q3) | merged by Wed 4 Nov |
 | **W2** | client-auth: AU1c → AU1d · auth-api: AU1e · api: I5 → X4a → OB2 · infra: WD1 → OB1 · mobile-native: LA1 → LA1b → LA1c (starts once X6 is merged) · mobile-links: X7 | X3 dev build; CF2 steps 6–8; **I6 first staging deploy** | staging up by Sat 7 Nov |
-| **W3** | push-api: X4c (X4a moved to W2) · push-mobile: X4b → X4d · web: BT3 · ops-docs: BT4 · mobile-native: LA2 → LA3 (LA cut-line Thu 12 Nov) | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
+| **W3** | reminders: X4b → X4c → X4i → X4f → X4h · push-mobile: X4e → X4d → X4g · web: BT3 · mobile-legal: BT3b · ops-docs: BT4 · docs: DC1 · mobile-native: LA2 → LA3 → LA3b → LA3c (LA cut-line Thu 12 Nov) | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
 | **W4** | mobile/api: BT2 · release: BT1 (agents prepare, Firoz submits) · QA: BT5 checklist | BT5 rehearsal on staging (Thu 12 Nov) → **I6b production deploy** → TestFlight external review (~1–2 days) + Play closed track | invites out Sun 15 Nov |
 
 **Status (rev 3, 31 Oct):** W1 specs ready, not built (PRs #73, #78 merged; specs in `docs/specs/`, batch file `docs/specs/batches/W1.md`). W2 specs written: `docs/specs/{AU1c,AU1d,AU1e,I5,X4a,WD1,OB1,OB2,LA1,LA1b,LA1c,X7}.md`, batch file `docs/specs/batches/W2.md` (Draft; all decisions made, rev 4).
