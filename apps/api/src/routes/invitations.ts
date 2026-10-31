@@ -41,7 +41,8 @@ import {
   normalizeEmail,
 } from "../domain/mappers";
 import { inviteEmailBody, inviteEmailSubject } from "../emails/invite.js";
-import { sendSystemEmail } from "../lib/email.js";
+import { isEmailDeliveryFailure, sendSystemEmail } from "../lib/email.js";
+import { writeStructuredLog } from "../lib/log.js";
 import { trainerProfiles, userIdentities } from "../db/schema";
 import { verifyPurposeProof } from "../auth/proof.js";
 import {
@@ -275,16 +276,35 @@ invitationRoutes.post(
       .limit(1);
     const trainerName = trainerProfile?.displayName ?? "Your coach";
     if (parsed.data.sendEmail) {
-      await sendSystemEmail(c.env, db, {
-        to: recipientEmail,
-        template: "invite",
-        subject: inviteEmailSubject(trainerName),
-        text: inviteEmailBody(inviteUrl, trainerName),
-      });
-      await db
-        .update(clientInvitations)
-        .set({ emailSentAt: timestamp, updatedAt: timestamp })
-        .where(eq(clientInvitations.id, invitationId));
+      // The invitation already exists: if the email fails, still return it with
+      // its link (emailSentAt stays null) so the trainer can share it, instead of
+      // an error that strands it behind INVITE_PENDING.
+      let emailSent = true;
+      try {
+        await sendSystemEmail(c.env, db, {
+          to: recipientEmail,
+          template: "invite",
+          subject: inviteEmailSubject(trainerName),
+          text: inviteEmailBody(inviteUrl, trainerName),
+        });
+      } catch (err) {
+        if (!isEmailDeliveryFailure(err)) throw err;
+        emailSent = false;
+        writeStructuredLog({
+          level: "warn",
+          message: "Email send failed",
+          requestId: c.get("requestId"),
+          operation: "invitations.create",
+          errorName: err.name,
+          errorCode: err.code,
+        });
+      }
+      if (emailSent) {
+        await db
+          .update(clientInvitations)
+          .set({ emailSentAt: timestamp, updatedAt: timestamp })
+          .where(eq(clientInvitations.id, invitationId));
+      }
     }
     const data = createInvitationResponseSchema.parse({
       ...mapInvitation(row),

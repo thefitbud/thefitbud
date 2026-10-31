@@ -23,7 +23,7 @@ vi.mock("./domain/coach-asks", async (importOriginal) => ({
 import { Hono } from "hono";
 import worker, { app } from "./index.js";
 import { createMemoryR2Bucket } from "./lib/memory-r2.js";
-import { EmailSendError } from "./lib/zeptomail.js";
+import { EmailNotConfiguredError, EmailSendError } from "./lib/email.js";
 import type { ActorContext, Env } from "./types.js";
 
 const EMAIL = "priya.client@example.test";
@@ -64,8 +64,11 @@ app.get("/__ob2/clients/:clientId/fail-as-actor", (c) => {
 app.post("/__ob2/email-send-failed", () => {
   throw new EmailSendError(503);
 });
-app.post("/__ob2/email-not-configured", () => {
+app.post("/__ob2/plain-error-email-text", () => {
   throw new Error("EMAIL_PROVIDER_NOT_CONFIGURED");
+});
+app.post("/__ob2/email-not-configured", () => {
+  throw new EmailNotConfiguredError();
 });
 
 // A static route before a param sibling, like /exceptions/attention and /exceptions/:exceptionId.
@@ -95,7 +98,7 @@ function env(environment: Env["ENVIRONMENT"]): Env {
     ENVIRONMENT: environment,
     // A correctly configured deployed Worker passes AU2's guard.
     ...(environment === "staging" || environment === "production"
-      ? { AUTH_MODE: "firebase" as const, PUSH_PROVIDER_MODE: "expo" as const, EMAIL_PROVIDER: "zeptomail" as const }
+      ? { AUTH_MODE: "firebase" as const, PUSH_PROVIDER_MODE: "expo" as const, EMAIL_PROVIDER: "zeptomail" as const, ZEPTOMAIL_TOKEN: "zepto-test-token" }
       : {}),
   };
 }
@@ -133,7 +136,7 @@ afterEach(() => {
 describe("onError: email provider failures", () => {
   it.each([
     ["/__ob2/email-send-failed", 502, "EMAIL_SEND_FAILED", "EmailSendError"],
-    ["/__ob2/email-not-configured", 503, "EMAIL_PROVIDER_NOT_CONFIGURED", "Error"],
+    ["/__ob2/email-not-configured", 503, "EMAIL_PROVIDER_NOT_CONFIGURED", "EmailNotConfiguredError"],
   ] as const)("%s returns %i %s with fixed text and logs that status", async (path, status, code, errorName) => {
     const response = await app.request(path, { method: "POST" }, env("staging"));
     expect(response.status).toBe(status);
@@ -143,6 +146,14 @@ describe("onError: email provider failures", () => {
     expect(body.error.message).not.toMatch(/HTTP|503|zepto/i);
     const [line] = logLines().filter((l) => l.message === "Unhandled API error");
     expect(line).toMatchObject({ status, errorName, path });
+  });
+});
+
+describe("onError: only the email error classes map", () => {
+  it("a plain Error with the same text stays a generic 500", async () => {
+    const response = await app.request("/__ob2/plain-error-email-text", { method: "POST" }, env("production"));
+    expect(response.status).toBe(500);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe("INTERNAL_ERROR");
   });
 });
 

@@ -42,6 +42,9 @@ export function runtimeMisconfigurations(env: Env): string[] {
   }
   if (!env.EMAIL_PROVIDER || !DEPLOYABLE_EMAIL_PROVIDERS.has(env.EMAIL_PROVIDER)) {
     problems.push(`EMAIL_PROVIDER=${env.EMAIL_PROVIDER ?? "unset"}`);
+  } else if (env.EMAIL_PROVIDER === "zeptomail" && !env.ZEPTOMAIL_TOKEN?.trim()) {
+    // Without the secret every OTP email fails. Name only, never the value.
+    problems.push("ZEPTOMAIL_TOKEN=unset");
   }
   return problems;
 }

@@ -13,7 +13,7 @@ import { handleScheduledReplenishment } from "./jobs/replenishment";
 import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
 import { fail, ok } from "./lib/envelope";
-import { EmailSendError } from "./lib/zeptomail";
+import { EmailNotConfiguredError, EmailSendError } from "./lib/email";
 import { writeStructuredLog, type SafeLogFields } from "./lib/log";
 import { errorLogFields } from "./domain/reminders";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -197,7 +197,7 @@ function knownProviderFailure(err: unknown): { status: 502 | 503; code: string; 
   if (err instanceof EmailSendError) {
     return { status: 502, code: "EMAIL_SEND_FAILED", message: "The email could not be sent. Try again in a moment." };
   }
-  if (err instanceof Error && err.message === "EMAIL_PROVIDER_NOT_CONFIGURED") {
+  if (err instanceof EmailNotConfiguredError) {
     return { status: 503, code: "EMAIL_PROVIDER_NOT_CONFIGURED", message: "Email sending is not set up on this server." };
   }
   return null;

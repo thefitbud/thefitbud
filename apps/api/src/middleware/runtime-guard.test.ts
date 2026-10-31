@@ -22,6 +22,7 @@ function deployedEnv(overrides: Partial<Env>): Env {
     AUTH_MODE: "firebase",
     PUSH_PROVIDER_MODE: "expo",
     EMAIL_PROVIDER: "zeptomail",
+    ZEPTOMAIL_TOKEN: "zepto-guard-token-do-not-log",
     MEDIA_SIGNING_SECRET: "fitbud-test-signing-secret",
     ...overrides,
   };
@@ -38,6 +39,9 @@ const TEST_MODES: Array<[string, Partial<Env>, string]> = [
   ["PUSH_PROVIDER_MODE=fcm", { PUSH_PROVIDER_MODE: "fcm" }, "PUSH_PROVIDER_MODE=fcm"],
   ["EMAIL_PROVIDER=resend", { EMAIL_PROVIDER: "resend" }, "EMAIL_PROVIDER=resend"],
   ["EMAIL_PROVIDER=ses", { EMAIL_PROVIDER: "ses" }, "EMAIL_PROVIDER=ses"],
+  // zeptomail without its secret would fail every OTP email.
+  ["ZEPTOMAIL_TOKEN unset", { ZEPTOMAIL_TOKEN: undefined }, "ZEPTOMAIL_TOKEN=unset"],
+  ["ZEPTOMAIL_TOKEN blank", { ZEPTOMAIL_TOKEN: "  " }, "ZEPTOMAIL_TOKEN=unset"],
 ];
 
 let errorLog: ReturnType<typeof vi.spyOn>;
@@ -142,6 +146,7 @@ describe("runtime guard", () => {
     ]);
     const raw = errorLog.mock.calls.map((call) => String(call[0])).join("\n");
     expect(raw).not.toContain("do-not-log");
+    expect(raw).not.toContain("zepto-guard-token");
     expect(raw).not.toContain("fitbud-test-signing-secret");
   });
 
