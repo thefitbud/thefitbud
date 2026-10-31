@@ -111,6 +111,26 @@ describe("useRealtimeHints", () => {
     expect(api.closed).toBe(1);
   });
 
+  // HomePage rebuilds its id array from the clients-list response, which can
+  // come back in a different order; that is the same set, not a new one.
+  it("keeps the same sockets when the ids arrive in a different order", () => {
+    const api = fakeApi();
+    const onHint = vi.fn();
+    const { rerender } = render(
+      <Probe api={api.client} ids={["rid-2", "rid-1"]} onHint={onHint} />,
+    );
+    expect(api.subscribed).toHaveLength(2);
+    rerender(<Probe api={api.client} ids={["rid-1", "rid-2"]} onHint={onHint} />);
+    expect(api.subscribed).toHaveLength(2);
+    expect(api.closed).toBe(0);
+  });
+
+  it("opens one socket per relationship when an id is repeated", () => {
+    const api = fakeApi();
+    render(<Probe api={api.client} ids={["rid-1", "rid-1"]} onHint={vi.fn()} />);
+    expect(api.subscribed).toEqual(["rid-1"]);
+  });
+
   it("closes every socket on unmount", () => {
     const api = fakeApi();
     const { unmount } = render(

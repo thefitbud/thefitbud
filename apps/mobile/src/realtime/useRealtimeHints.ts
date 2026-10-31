@@ -2,12 +2,19 @@ import { useEffect, useRef } from "react";
 import type { FitBudApiClient } from "@fitbud/api-client";
 import type { RealtimeEvent } from "@fitbud/contracts";
 
+/**
+ * One sorted, de-duplicated id per relationship. Sorted so that a caller
+ * rebuilding its list in a different order does not look like a different set
+ * and churn every socket; de-duplicated so a repeated id opens one socket, not
+ * two.
+ */
 function toIdList(
   relationshipIds: string | readonly string[] | null | undefined,
 ): string[] {
   if (!relationshipIds) return [];
-  if (typeof relationshipIds === "string") return [relationshipIds];
-  return [...relationshipIds].filter((id) => id.length > 0);
+  const ids =
+    typeof relationshipIds === "string" ? [relationshipIds] : [...relationshipIds];
+  return [...new Set(ids.filter((id) => id.length > 0))].sort();
 }
 
 /**

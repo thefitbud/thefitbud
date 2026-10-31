@@ -2338,6 +2338,13 @@ export class FitBudApiClient {
       try {
         const token = this.getAccessToken ? await this.getAccessToken() : null;
         const role = this.getSelectedRole ? await this.getSelectedRole() : null;
+        // The caller can close before the token resolves — a React effect
+        // cleanup runs synchronously, so `close()` may already have run while
+        // `socket` was still null and had nothing to close. Opening here would
+        // leak a socket nobody holds a handle to. React StrictMode mounts,
+        // cleans up and remounts every effect, so this is the common path in
+        // development, not an edge case.
+        if (closed) return;
         connect(token, role, Boolean(this.refreshAccessToken));
       } catch (error) {
         handlers.onError?.(error);

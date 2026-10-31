@@ -668,6 +668,60 @@ describe("FitBudApiClient", () => {
       expect(() => client.realtimeWebSocketUrl(relationshipId)).toThrow(/absolute baseUrl/i);
     });
 
+    // A React effect cleanup runs synchronously, so close() can land while the
+    // token promise is still pending and `socket` is still null. Opening after
+    // that leaks a socket with no handle to close it — and StrictMode makes
+    // mount/cleanup/remount the normal path in development.
+    it("does not open a socket when closed before the token resolves", async () => {
+      vi.stubGlobal("location", { href: "https://app.thefitbud.com/" });
+      const constructed: unknown[] = [];
+      class FakeSocket {
+        constructor() {
+          constructed.push(this);
+        }
+        addEventListener() {}
+        close() {}
+      }
+      const client = new FitBudApiClient({
+        baseUrl: "/api",
+        getAccessToken: () =>
+          new Promise<string>((resolve) => setTimeout(() => resolve("tok"), 5)),
+      });
+      const sub = client.subscribeRealtime(relationshipId, {
+        onEvent: () => undefined,
+        onError: () => undefined,
+        WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+      });
+      sub.close();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(constructed).toHaveLength(0);
+    });
+
+    it("still opens a socket when it is not closed first", async () => {
+      vi.stubGlobal("location", { href: "https://app.thefitbud.com/" });
+      const constructed: unknown[] = [];
+      class FakeSocket {
+        constructor() {
+          constructed.push(this);
+        }
+        addEventListener() {}
+        close() {}
+      }
+      const client = new FitBudApiClient({
+        baseUrl: "/api",
+        getAccessToken: () =>
+          new Promise<string>((resolve) => setTimeout(() => resolve("tok"), 5)),
+      });
+      const sub = client.subscribeRealtime(relationshipId, {
+        onEvent: () => undefined,
+        onError: () => undefined,
+        WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(constructed).toHaveLength(1);
+      sub.close();
+    });
+
     it("subscribeRealtime reports the misconfiguration instead of opening a socket", async () => {
       vi.stubGlobal("location", undefined);
       const client = new FitBudApiClient({ baseUrl: "/api" });
