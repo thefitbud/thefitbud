@@ -109,6 +109,9 @@ importers:
       '@babel/runtime':
         specifier: ^7.25.0
         version: 7.29.7
+      '@bacons/apple-targets':
+        specifier: 0.2.1
+        version: 0.2.1
       '@expo-google-fonts/noto-sans-devanagari':
         specifier: ^0.4.1
         version: 0.4.1
@@ -276,6 +279,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 3.2.7(@types/node@26.6.3)(happy-dom@20.14.6)(lightningcss@1.27.0)(terser@5.51.2)(tsx@4.23.15)
+      wrangler:
+        specifier: ^4.20.0
+        version: 4.141.0(@types/node@26.6.3)
 
   packages/api-client:
     dependencies:
@@ -1199,6 +1205,12 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
+  '@bacons/apple-targets@0.2.1':
+    resolution: {integrity: sha512-ZaTBk6kjgY34BnYjbo2+i4cLyUjd3LxJFodKDQdTaoETgk2CXwfdnsWK4bK3jOYZEy/Z+v/Es3TnWEOWlkg9ag==}
+
+  '@bacons/xcode@1.0.0-alpha.24':
+    resolution: {integrity: sha512-RaYUNsGBJVp0t2vgXaT4L668WIvbhtdl1JFJHedPkebIPR6h/+E2Kq32O49t+8f4LUPW9UF4CfXBrDc+XdXUUQ==}
+
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
     engines: {node: '>=22.0.0'}
@@ -1964,6 +1976,9 @@ packages:
 
   '@expo/package-manager@1.13.1':
     resolution: {integrity: sha512-y/K+CaYYpZpNGZhSX4HyLT/vyIunFjNfyoxNysPBCefeLKI/VCx6f9LNPzrxayr3rCYO5bl9O8H+HRQK265Nkg==}
+
+  '@expo/plist@0.0.18':
+    resolution: {integrity: sha512-+48gRqUiz65R21CZ/IXa7RNBXgAI/uPSdvJqoN9x1hfL44DNbUoWHgHiEXTx7XelcATpDwNTz6sHLfy0iNqf+w==}
 
   '@expo/plist@0.2.2':
     resolution: {integrity: sha512-ZZGvTO6vEWq02UAPs3LIdja+HRO18+LRI5QuDl6Hs3Ps7KX7xU6Y6kjahWKY37Rx2YjNpX07dGpBFzzC+vKa2g==}
@@ -7059,6 +7074,23 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@bacons/apple-targets@0.2.1':
+    dependencies:
+      '@bacons/xcode': 1.0.0-alpha.24
+      '@react-native/normalize-colors': 0.76.9
+      debug: 4.4.3
+      glob: 10.5.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@bacons/xcode@1.0.0-alpha.24':
+    dependencies:
+      '@expo/plist': 0.0.18
+      debug: 4.4.3
+      uuid: 8.3.2
+    transitivePeerDependencies:
+      - supports-color
+
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
   '@cloudflare/unenv-preset@2.16.2(unenv@2.0.0-rc.24)(workerd@1.20260925.1)':
@@ -7685,6 +7717,12 @@ snapshots:
       npm-package-arg: 11.0.3
       ora: 3.4.0
       resolve-workspace-root: 2.0.1
+
+  '@expo/plist@0.0.18':
+    dependencies:
+      '@xmldom/xmldom': 0.7.13
+      base64-js: 1.5.1
+      xmlbuilder: 14.0.0
 
   '@expo/plist@0.2.2':
     dependencies:
@@ -10753,6 +10791,19 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  miniflare@5.20260925.0-alpha(@types/node@26.6.3):
+    dependencies:
+      '@cspotcode/source-map-support': 0.8.1
+      sharp: 0.35.4(@types/node@26.6.3)
+      undici: 7.29.0
+      workerd: 1.20260925.1
+      ws: 8.21.0
+      youch: 4.1.0-beta.10
+    transitivePeerDependencies:
+      - '@types/node'
+      - bufferutil
+      - utf-8-validate
+
   minimatch@10.2.6:
     dependencies:
       brace-expansion: 5.0.12
@@ -11492,6 +11543,39 @@ snapshots:
       '@img/sharp-win32-x64': 0.35.4
       '@types/node': 22.20.4
 
+  sharp@0.35.4(@types/node@26.6.3):
+    dependencies:
+      '@img/colour': 1.1.0
+      detect-libc: 2.1.2
+      semver: 7.8.5
+    optionalDependencies:
+      '@img/sharp-darwin-arm64': 0.35.4
+      '@img/sharp-darwin-x64': 0.35.4
+      '@img/sharp-freebsd-wasm32': 0.35.4
+      '@img/sharp-libvips-darwin-arm64': 1.3.3
+      '@img/sharp-libvips-darwin-x64': 1.3.3
+      '@img/sharp-libvips-linux-arm': 1.3.3
+      '@img/sharp-libvips-linux-arm64': 1.3.3
+      '@img/sharp-libvips-linux-ppc64': 1.3.3
+      '@img/sharp-libvips-linux-riscv64': 1.3.3
+      '@img/sharp-libvips-linux-s390x': 1.3.3
+      '@img/sharp-libvips-linux-x64': 1.3.3
+      '@img/sharp-libvips-linuxmusl-arm64': 1.3.3
+      '@img/sharp-libvips-linuxmusl-x64': 1.3.3
+      '@img/sharp-linux-arm': 0.35.4
+      '@img/sharp-linux-arm64': 0.35.4
+      '@img/sharp-linux-ppc64': 0.35.4
+      '@img/sharp-linux-riscv64': 0.35.4
+      '@img/sharp-linux-s390x': 0.35.4
+      '@img/sharp-linux-x64': 0.35.4
+      '@img/sharp-linuxmusl-arm64': 0.35.4
+      '@img/sharp-linuxmusl-x64': 0.35.4
+      '@img/sharp-webcontainers-wasm32': 0.35.4
+      '@img/sharp-win32-arm64': 0.35.4
+      '@img/sharp-win32-ia32': 0.35.4
+      '@img/sharp-win32-x64': 0.35.4
+      '@types/node': 26.6.3
+
   shebang-command@1.2.0:
     dependencies:
       shebang-regex: 1.0.0
@@ -12077,6 +12161,23 @@ snapshots:
       workerd: 1.20260925.1
     optionalDependencies:
       '@cloudflare/workers-types': 4.20260702.1
+      fsevents: 2.3.3
+    transitivePeerDependencies:
+      - '@types/node'
+      - bufferutil
+      - utf-8-validate
+
+  wrangler@4.141.0(@types/node@26.6.3):
+    dependencies:
+      '@cloudflare/kv-asset-handler': 0.5.0
+      '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20260925.1)
+      blake3-wasm: 2.1.5
+      esbuild: 0.28.1
+      miniflare: 5.20260925.0-alpha(@types/node@26.6.3)
+      path-to-regexp: 6.3.0
+      unenv: 2.0.0-rc.24
+      workerd: 1.20260925.1
+    optionalDependencies:
       fsevents: 2.3.3
     transitivePeerDependencies:
       - '@types/node'

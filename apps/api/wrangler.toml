@@ -72,6 +72,7 @@ ADMIN_ALERT_EMAILS = "tech@thefitbud.com"
 # browsers — not secrets. Secrets (MEDIA_SIGNING_SECRET and the rest) are set
 # with `wrangler secret put <NAME> --env <env>`, never committed here.
 [env.staging]
+routes = [{ pattern = "api-staging.thefitbud.com", custom_domain = true }]
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -97,6 +98,10 @@ dead_letter_queue = "fitbud-jobs-staging-dlq"
 [env.staging.triggers]
 crons = ["*/5 * * * *"]
 
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
 [[env.staging.durable_objects.bindings]]
 name = "RELATIONSHIP_REALTIME"
 class_name = "RelationshipRealtimeRoom"
@@ -117,6 +122,7 @@ SYSTEM_EMAIL_FROM = "FitBud <no-reply@thefitbud.com>"
 SYSTEM_EMAIL_REPLY_TO = "tech@thefitbud.com"
 
 [env.production]
+routes = [{ pattern = "api.thefitbud.com", custom_domain = true }]
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -141,6 +147,10 @@ dead_letter_queue = "fitbud-jobs-prod-dlq"
 
 [env.production.triggers]
 crons = ["*/5 * * * *"]
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.2
 
 [[env.production.durable_objects.bindings]]
 name = "RELATIONSHIP_REALTIME"
