@@ -42,7 +42,8 @@ The names must match `apps/api/wrangler.toml` exactly, or the deploy fails.
 - [ ] Add `GOOGLE_SERVICES_JSON` as an EAS file env var per EAS environment (`docs/runbooks/physical-device.md` step 2).
 - [ ] Let EAS create or upload the **APNs key** (iOS push) and upload the **FCM V1 service-account key** (Android push) for each app variant.
 - [ ] Optional: an `EXPO_ACCESS_TOKEN` for push sending (Worker secret, step 6).
-- [ ] Apple: App ID capabilities for App Groups and Live Activity (LA1).
+- [ ] Apple: App ID capabilities for App Groups and Live Activity (LA1). Also register the Live Activity widget's own bundle id (for the staging variant, `com.thefitbud.mobile.staging.widget`; EAS shows the exact id when it sets up credentials) and add it to the app's App Group (`group.com.thefitbud.mobile.staging`; production `group.com.thefitbud.mobile`).
+- [ ] On the dev build, run the Live Activity device checklist in PR #105 (covers LA1, LA1b, LA1c) before Thu 12 Nov, with photos against frames 27, 27b and 27c.
 - Then X3: the dev build on your phones, following `docs/runbooks/physical-device.md`.
 
 ## 5. ZeptoMail and DNS
@@ -80,7 +81,7 @@ Production (I6b) repeats steps 2, 3 and 6 with the prod project, prod queues and
 
 ## 8. Code that must be on `main` before I6
 
-The AU2 guard refuses to serve staging until the configured push and email modes exist in code. From W2:
+**Done (31 Oct): all of W2 is merged**, including the rows below. The AU2 guard now accepts only providers that have a sender (push `expo`; email `zeptomail` or `disabled`), and refuses `zeptomail` until the `ZEPTOMAIL_TOKEN` secret is set: staging answers every request with `RUNTIME_MISCONFIGURED` until step 6 is done.
 
 | Task | Why I6 needs it |
 |---|---|
@@ -92,10 +93,15 @@ The AU2 guard refuses to serve staging until the configured push and email modes
 
 ## 9. First staging deploy (I6), in order
 
-Follow `docs/runbooks/trainer-web-deploy.md` once WD1 is merged. The outline:
+Follow `docs/runbooks/trainer-web-deploy.md` (merged with WD1). The outline:
 
 1. Steps 1–6 above done for staging.
 2. `pnpm --filter @fitbud/api db:migrate:staging`
 3. `pnpm --filter @fitbud/api seed:library:staging` (includes the legacy wipe, D-W1 I2d)
 4. `pnpm --filter @fitbud/api deploy:staging`, then the web Worker deploy.
 5. Attach the custom domains and run the smoke test from the runbook.
+
+Known at the time of I6 (not blockers):
+- Trainer web doesn't open its realtime connection yet, so pages refresh on reload only. The runbook marks that smoke step as a known issue; don't roll back for it.
+- A wrong `EXPO_ACCESS_TOKEN` shows only as `provider_error` on deliveries. If pushes fail, check that secret first.
+- The `*.workers.dev` URLs of both Workers stay reachable alongside the custom domains.

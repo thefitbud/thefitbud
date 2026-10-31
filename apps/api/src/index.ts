@@ -1,5 +1,6 @@
 import { Scalar } from "@scalar/hono-api-reference";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import { matchedRoutes } from "hono/route";
 import { openAPIRouteHandler } from "hono-openapi";
 import { z } from "zod";
 import { healthResponseSchema } from "@fitbud/contracts";
@@ -7,11 +8,14 @@ import {
   handleReminderQueueBatch,
   handleScheduledReminders,
 } from "./jobs/reminders";
+import { handleScheduledPushReceipts } from "./jobs/push-receipts";
 import { handleScheduledReplenishment } from "./jobs/replenishment";
 import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
-import { ok } from "./lib/envelope";
-import { writeStructuredLog } from "./lib/log";
+import { fail, ok } from "./lib/envelope";
+import { EmailNotConfiguredError, EmailSendError } from "./lib/email";
+import { writeStructuredLog, type SafeLogFields } from "./lib/log";
+import { errorLogFields } from "./domain/reminders";
 import { requestIdMiddleware } from "./middleware/request-id";
 import { requestLogMiddleware } from "./middleware/request-log";
 import { authRoutes, meRoutes } from "./routes/auth";
@@ -168,14 +172,54 @@ app.notFound((c) =>
   ),
 );
 
+/**
+ * The matched route pattern (e.g. `/clients/:clientId`), never the raw URL,
+ * which can hold ids or tokens. Middleware registered on `*` is skipped.
+ */
+function routePattern(c: Context): string {
+  // Hono lists every matching route in registration order and runs the first
+  // handler; a later param sibling (`/exceptions/:id` after `/exceptions/attention`)
+  // never ran. Start at the route that was running when the error was thrown.
+  const routes = matchedRoutes(c);
+  for (let i = Math.max(0, c.req.routeIndex); i < routes.length; i += 1) {
+    const route = routes[i]!;
+    if (route.method !== "ALL" && !route.path.endsWith("*")) return route.path;
+  }
+  return "unmatched";
+}
+
+/**
+ * Known provider failures that reach onError get a stable code instead of the
+ * generic 500, so clients and on-call can tell "email is down / not set up"
+ * apart from a bug. The messages are fixed text: nothing from the provider.
+ */
+function knownProviderFailure(err: unknown): { status: 502 | 503; code: string; message: string } | null {
+  if (err instanceof EmailSendError) {
+    return { status: 502, code: "EMAIL_SEND_FAILED", message: "The email could not be sent. Try again in a moment." };
+  }
+  if (err instanceof EmailNotConfiguredError) {
+    return { status: 503, code: "EMAIL_PROVIDER_NOT_CONFIGURED", message: "Email sending is not set up on this server." };
+  }
+  return null;
+}
+
 app.onError((err, c) => {
-  // Log name/correlation only — never err.message or stacks (may contain payloads).
+  // Safe fields only: never err.message, stacks, bodies or the raw URL.
+  const actor = c.get("actor");
+  const known = knownProviderFailure(err);
   writeStructuredLog({
     level: "error",
     message: "Unhandled API error",
     requestId: c.get("requestId"),
-    errorName: err.name,
+    method: c.req.method,
+    path: routePattern(c),
+    status: known?.status ?? 500,
+    ...(actor?.userId ? { actorUserId: actor.userId } : {}),
+    ...errorLogFields(err),
   });
+  if (known) {
+    return fail(c, known.status, known.code, known.message);
+  }
   const requestId = c.get("requestId") ?? "unknown";
   if (c.env.ENVIRONMENT === "local") {
     return c.json(
@@ -201,18 +245,77 @@ app.onError((err, c) => {
   );
 });
 
+/**
+ * Runs every cron job even when an earlier one throws, logging one line per job
+ * (operation, latencyMs, errorName on failure). Rethrows the first failure at the
+ * end so the platform still records the run as failed.
+ */
+async function runScheduledJobs(jobs: Array<[operation: string, run: () => Promise<unknown>]>): Promise<void> {
+  let firstFailure: unknown;
+  let failed = false;
+  for (const [operation, run] of jobs) {
+    const started = Date.now();
+    try {
+      await run();
+      writeStructuredLog({ level: "info", message: "cron.completed", operation, latencyMs: Date.now() - started });
+    } catch (error) {
+      writeStructuredLog({
+        level: "error",
+        message: "cron.failed",
+        operation,
+        latencyMs: Date.now() - started,
+        ...errorLogFields(error),
+      });
+      if (!failed) {
+        failed = true;
+        firstFailure = error;
+      }
+    }
+  }
+  if (failed) throw firstFailure;
+}
+
 const worker = {
   fetch: app.fetch,
   async scheduled(
     controller: ScheduledController,
     env: Env,
   ): Promise<void> {
-    await handleScheduledReminders(env, new Date(controller.scheduledTime));
-    await handleScheduledReplenishment(env, new Date(controller.scheduledTime));
-    await runCoachAskMaintenance(createDb(env.DB));
+    const at = new Date(controller.scheduledTime);
+    await runScheduledJobs([
+      ["cron.reminders", () => handleScheduledReminders(env, at)],
+      ["cron.replenishment", () => handleScheduledReplenishment(env, at)],
+      ["cron.coach_ask", () => runCoachAskMaintenance(createDb(env.DB))],
+      // Last, so a slow receipts call never delays the jobs above.
+      ["cron.push_receipts", () => handleScheduledPushReceipts(env, at)],
+    ]);
   },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
-    await handleReminderQueueBatch(batch, env);
+    const started = Date.now();
+    const operation = "queue.reminders";
+    try {
+      const { retried } = await handleReminderQueueBatch(batch, env);
+      const fields: SafeLogFields & { batchSize: number; retried: number } = {
+        level: retried > 0 ? "warn" : "info",
+        message: "queue.batch_completed",
+        operation,
+        latencyMs: Date.now() - started,
+        batchSize: batch.messages.length,
+        retried,
+      };
+      writeStructuredLog(fields);
+    } catch (error) {
+      const fields: SafeLogFields & { batchSize: number } = {
+        level: "error",
+        message: "queue.batch_failed",
+        operation,
+        latencyMs: Date.now() - started,
+        batchSize: batch.messages.length,
+        ...errorLogFields(error),
+      };
+      writeStructuredLog(fields);
+      throw error;
+    }
   },
 };
 

@@ -14,13 +14,16 @@ import type { Env, Variables } from "../types";
 
 const GUARDED_ENVIRONMENTS = new Set(["staging", "production"]);
 
-/** Non-test modes this build implements. Extend when a provider task lands (X4a). */
-const DEPLOYABLE_PUSH_MODES: ReadonlySet<string> = new Set<NonNullable<Env["PUSH_PROVIDER_MODE"]>>(["fcm"]);
+/**
+ * Non-test modes this build actually implements for a deployed environment.
+ * `fcm` (push) and `resend` / `ses` (email) are named in `Env` but have no
+ * sender: every push or email would fail, so they are refused like test modes.
+ * Add a mode here only in the task that implements its sender.
+ */
+const DEPLOYABLE_PUSH_MODES: ReadonlySet<string> = new Set<NonNullable<Env["PUSH_PROVIDER_MODE"]>>(["expo"]);
 const DEPLOYABLE_EMAIL_PROVIDERS: ReadonlySet<string> = new Set<NonNullable<Env["EMAIL_PROVIDER"]>>([
   "disabled",
   "zeptomail",
-  "resend",
-  "ses",
 ]);
 
 let misconfigurationLogged = false;
@@ -39,6 +42,9 @@ export function runtimeMisconfigurations(env: Env): string[] {
   }
   if (!env.EMAIL_PROVIDER || !DEPLOYABLE_EMAIL_PROVIDERS.has(env.EMAIL_PROVIDER)) {
     problems.push(`EMAIL_PROVIDER=${env.EMAIL_PROVIDER ?? "unset"}`);
+  } else if (env.EMAIL_PROVIDER === "zeptomail" && !env.ZEPTOMAIL_TOKEN?.trim()) {
+    // Without the secret every OTP email fails. Name only, never the value.
+    problems.push("ZEPTOMAIL_TOKEN=unset");
   }
   return problems;
 }

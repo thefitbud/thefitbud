@@ -65,6 +65,7 @@ import {
   workoutExecutions,
 } from "../db/schema";
 import { createId, nowIso } from "../lib/crypto";
+import { writeStructuredLog, type SafeLogFields } from "../lib/log";
 import { selectInChunks } from "../lib/in-array-chunks";
 import {
   routingPayloadForNotification,
@@ -73,6 +74,28 @@ import {
 } from "../lib/push-provider";
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * Safe fields for a caught error: its name, and its `code` when that is a plain
+ * constant (e.g. a D1 or domain code). Never `message` or the stack.
+ */
+export function errorLogFields(error: unknown): Pick<SafeLogFields, "errorName" | "errorCode"> {
+  const name = error instanceof Error ? error.name : typeof error;
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)
+    ? { errorName: name, errorCode: code }
+    : { errorName: name };
+}
+
+/** One warn line for a caught error in reminder code; control flow is the caller's. */
+function logCaught(operation: string, error: unknown): void {
+  writeStructuredLog({
+    level: "warn",
+    message: "reminders.caught_error",
+    operation,
+    ...errorLogFields(error),
+  });
+}
 type NotificationRow = typeof notifications.$inferSelect;
 type RelationshipRow = typeof coachingRelationships.$inferSelect;
 
@@ -83,7 +106,14 @@ export type ReminderQueue = {
 type DeliveryOptions = {
   queue: ReminderQueue | null;
   pushProviderMode: PushProviderMode;
+  /** Optional Expo access token for `expo` mode (Worker secret). Never logged. */
+  expoAccessToken?: string;
   deliverInline: boolean;
+};
+
+export type PushDeliveryConfig = {
+  /** Optional Expo access token for `expo` mode (Worker secret). Never logged. */
+  expoAccessToken?: string;
 };
 
 type ReminderCounters = {
@@ -234,7 +264,8 @@ function readMealLocalTime(mealPrescriptionJson: string): string | null {
     );
     if (!parsed.success) return null;
     return parsed.data.localTime ?? null;
-  } catch {
+  } catch (error) {
+    logCaught("reminders.meal_local_time_parse", error);
     return null;
   }
 }
@@ -246,7 +277,8 @@ function mealSlotKey(mealPrescriptionJson: string): string | null {
     );
     if (!parsed.success) return null;
     return parsed.data.mealType ?? null;
-  } catch {
+  } catch (error) {
+    logCaught("reminders.meal_slot_parse", error);
     return null;
   }
 }
@@ -1015,7 +1047,9 @@ async function enqueueReminderDelivery(
   if (input.options.queue) {
     await input.options.queue.send(message);
   } else if (input.options.deliverInline) {
-    await deliverReminderMessage(db, message, input.options.pushProviderMode, input.now);
+    await deliverReminderMessage(db, message, input.options.pushProviderMode, input.now, {
+      expoAccessToken: input.options.expoAccessToken,
+    });
   }
 }
 
@@ -1068,7 +1102,8 @@ async function persistReminder(
           .update(notifications)
           .set({ dedupeKey: candidate.dedupeKey, state: "suppressed" })
           .where(eq(notifications.id, deferredRow.id));
-      } catch {
+      } catch (error) {
+        logCaught("reminders.persist_suppressed_from_deferred", error);
         counters.notificationsDeduped += 1;
         return { outcome: "deduped" };
       }
@@ -1091,7 +1126,8 @@ async function persistReminder(
         createdAt: now,
         readAt: null,
       });
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_suppressed", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
@@ -1120,7 +1156,8 @@ async function persistReminder(
         createdAt: now,
         readAt: null,
       });
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_deferred", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
@@ -1137,7 +1174,8 @@ async function persistReminder(
         .update(notifications)
         .set({ dedupeKey: candidate.dedupeKey, state: "queued" })
         .where(eq(notifications.id, deferredRow.id));
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_promote_deferred", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
@@ -1160,7 +1198,8 @@ async function persistReminder(
         createdAt: now,
         readAt: null,
       });
-    } catch {
+    } catch (error) {
+      logCaught("reminders.persist_queued", error);
       counters.notificationsDeduped += 1;
       return { outcome: "deduped" };
     }
@@ -1533,6 +1572,7 @@ export async function evaluateAndEnqueueReminders(
     now?: string;
     queue: ReminderQueue | null;
     pushProviderMode: PushProviderMode;
+    expoAccessToken?: string;
     deliverInline: boolean;
   },
 ): Promise<EvaluateRemindersResponse> {
@@ -1540,6 +1580,7 @@ export async function evaluateAndEnqueueReminders(
   const delivery: DeliveryOptions = {
     queue: options.queue,
     pushProviderMode: options.pushProviderMode,
+    expoAccessToken: options.expoAccessToken,
     deliverInline: options.deliverInline,
   };
   const counters: ReminderCounters = {
@@ -1611,6 +1652,7 @@ export async function createActivityNudge(
     now?: string;
     queue: ReminderQueue | null;
     pushProviderMode: PushProviderMode;
+    expoAccessToken?: string;
     deliverInline: boolean;
   },
 ): Promise<ActivityNudgeResult & { retryAfter?: number }> {
@@ -1733,6 +1775,7 @@ export async function createActivityNudge(
     {
       queue: input.queue,
       pushProviderMode: input.pushProviderMode,
+      expoAccessToken: input.expoAccessToken,
       deliverInline: input.deliverInline,
     },
     counters,
@@ -1765,7 +1808,7 @@ export async function createActivityNudge(
 }
 
 /**
- * Queue consumer: hand off to FCM (or test double) and record provider acceptance.
+ * Queue consumer: hand off to the push provider (Expo, or the local double) and record provider acceptance.
  * Acceptance is never treated as workflow completion.
  */
 export async function deliverReminderMessage(
@@ -1773,6 +1816,7 @@ export async function deliverReminderMessage(
   message: ReminderQueueMessage,
   pushMode: PushProviderMode,
   now = nowIso(),
+  config: PushDeliveryConfig = {},
 ): Promise<void> {
   const notificationRows = await db
     .select()
@@ -1931,6 +1975,7 @@ export async function deliverReminderMessage(
       mode: pushMode,
       deviceToken: token.token,
       payload,
+      expoAccessToken: config.expoAccessToken,
     });
     if (result.ok) {
       anyAccepted = true;
@@ -1939,6 +1984,13 @@ export async function deliverReminderMessage(
       break;
     }
     lastFailure = result.failureCategory;
+    if (result.failureCategory === "DeviceNotRegistered") {
+      // Expo says the app is gone from this device: stop using the token now.
+      await db
+        .update(deviceTokens)
+        .set({ status: "revoked", updatedAt: now })
+        .where(and(eq(deviceTokens.id, token.id), eq(deviceTokens.status, "active")));
+    }
   }
 
   if (anyAccepted) {

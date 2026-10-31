@@ -248,6 +248,148 @@ describe("auth login routes", () => {
     });
   });
 
+  it("keeps the generic OTP start response when ZeptoMail fails for a known user", async () => {
+    await seedPasswordUser(db, "otp-mailfail@example.com", "Str0ng-enough");
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const start = (identifier: string) =>
+        app.request(
+          "/auth/otp/start",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier, purpose: "login" }),
+          },
+          testEnv({ EMAIL_PROVIDER: "zeptomail", ZEPTOMAIL_TOKEN: "zepto-test-token-do-not-log" }),
+        );
+      const known = await start("otp-mailfail@example.com");
+      const unknown = await start("otp-nobody@example.com");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(known.status).toBe(202);
+      expect(await known.json()).toEqual(await unknown.json());
+      const logged = warn.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(logged).toContain("Email send failed");
+      expect(logged).not.toContain("otp-mailfail@example.com");
+      expect(logged).not.toContain("zepto-test-token-do-not-log");
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps the generic OTP start response when the ZeptoMail token is missing", async () => {
+    await seedPasswordUser(db, "otp-notoken@example.com", "Str0ng-enough");
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const start = (identifier: string) =>
+        app.request(
+          "/auth/otp/start",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifier, purpose: "login" }),
+          },
+          testEnv({ EMAIL_PROVIDER: "zeptomail" }),
+        );
+      const known = await start("otp-notoken@example.com");
+      const unknown = await start("otp-nobody-2@example.com");
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(known.status).toBe(202);
+      expect(await known.json()).toEqual(await unknown.json());
+      expect(warn.mock.calls.map((call) => String(call[0])).join("\n")).toContain("EMAIL_PROVIDER_NOT_CONFIGURED");
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("still sets the password when the password-changed email fails", async () => {
+    const password = "Str0ng-enough";
+    const { email } = await seedPasswordUser(db, "pw-mailfail@example.com", password);
+    const login = await app.request(
+      "/auth/login",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: email, password }),
+      },
+      testEnv(),
+    );
+    const { data } = (await login.json()) as { data: { token: string } };
+    const realFetch = globalThis.fetch;
+    const zepto = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("zeptomail") ? zepto() : realFetch(input, init)) as typeof fetch);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const response = await app.request(
+        "/auth/password/set",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${data.token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ currentPassword: password, newPassword: "An0ther-Str0ng-Passw0rd!" }),
+        },
+        testEnv({ EMAIL_PROVIDER: "zeptomail", ZEPTOMAIL_TOKEN: "zepto-test-token-do-not-log" }),
+      );
+      expect(zepto).toHaveBeenCalledTimes(1);
+      expect(response.status).toBe(200);
+      const relogin = await app.request(
+        "/auth/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: email, password: "An0ther-Str0ng-Passw0rd!" }),
+        },
+        testEnv(),
+      );
+      expect(relogin.status).toBe(200);
+      const logged = warn.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(logged).toContain("Email send failed");
+      expect(logged).not.toContain(email);
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("still resets the password when the password-changed email fails", async () => {
+    const { email } = await seedPasswordUser(db, "reset-mailfail@example.com", "Str0ng-enough");
+    const post = (path: string, body: unknown, env: Env = testEnv()) =>
+      app.request(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, env);
+
+    // Real reset flow on the dev sink: OTP start -> code from the outbox -> verify -> proof.
+    expect((await post("/auth/otp/start", { identifier: email, purpose: "reset" })).status).toBe(202);
+    const [mail] = await db.select().from(schema.devMailOutbox);
+    const code = /\b(\d{6})\b/.exec(mail!.textBody)![1]!;
+    const verify = await post("/auth/otp/verify", { identifier: email, purpose: "reset", code });
+    expect(verify.status).toBe(200);
+    const { data: proof } = (await verify.json()) as { data: { resetProof: string } };
+
+    const realFetch = globalThis.fetch;
+    const zepto = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("zeptomail") ? zepto() : realFetch(input, init)) as typeof fetch);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const reset = await post(
+        "/auth/password/reset",
+        { resetProof: proof.resetProof, newPassword: "Reset-Str0ng-Passw0rd!" },
+        testEnv({ EMAIL_PROVIDER: "zeptomail", ZEPTOMAIL_TOKEN: "zepto-test-token-do-not-log" }),
+      );
+      expect(zepto).toHaveBeenCalledTimes(1);
+      expect(reset.status).toBe(200);
+      expect((await post("/auth/login", { identifier: email, password: "Reset-Str0ng-Passw0rd!" })).status).toBe(200);
+      expect(warn.mock.calls.map((call) => String(call[0])).join("\n")).toContain("auth.credential_change_notice");
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns generic OTP invalid for a bad verify attempt", async () => {
     await seedPasswordUser(db, "otp-verify@example.com", "Str0ng-enough");
     const response = await app.request(
@@ -358,7 +500,7 @@ describe("auth login routes", () => {
       testEnv({
         ENVIRONMENT: "staging",
         AUTH_MODE: "firebase",
-        PUSH_PROVIDER_MODE: "fcm",
+        PUSH_PROVIDER_MODE: "expo",
         EMAIL_PROVIDER: "disabled",
         FLAG_WA_OTP: "true",
       }),

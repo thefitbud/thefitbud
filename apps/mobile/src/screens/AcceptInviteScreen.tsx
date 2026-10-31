@@ -15,6 +15,7 @@ import {
   M2InputRow,
   M2Screen,
 } from "../components/m2";
+import { pickSessionRefresh } from "../lib/api";
 import { stage1Api } from "../lib/stage1Api";
 
 function inviteParamsFromUrl(url: string | null): {
@@ -291,7 +292,7 @@ export function AcceptInviteScreen({
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       if ("token" in result && result.token) {
-        await signInWithToken(result.token);
+        await signInWithToken(result.token, pickSessionRefresh(result));
       } else {
         await refreshSession();
       }

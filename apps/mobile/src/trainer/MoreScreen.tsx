@@ -9,8 +9,16 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../lib/support";
 
-const TRAINER_WEB_URL =
-  process.env.EXPO_PUBLIC_TRAINER_WEB_URL ?? "https://coach.thefitbud.com";
+/** Trainer web (D-W2-7). Staging builds set EXPO_PUBLIC_TRAINER_WEB_URL in eas.json. */
+export const DEFAULT_TRAINER_WEB_URL = "https://app.thefitbud.com";
+
+/**
+ * Keep the literal `process.env.EXPO_PUBLIC_TRAINER_WEB_URL` member expression:
+ * Expo's Babel transform only inlines that exact form into the bundle.
+ */
+export function trainerWebUrl(): string {
+  return process.env.EXPO_PUBLIC_TRAINER_WEB_URL?.trim() || DEFAULT_TRAINER_WEB_URL;
+}
 
 type Props = {
   onOpenNotifications: () => void;
@@ -63,7 +71,7 @@ export function TrainerMoreScreen({
           label="Open FitBud on web"
           variant="secondary"
           onPress={() => {
-            void Linking.openURL(TRAINER_WEB_URL);
+            void Linking.openURL(trainerWebUrl());
           }}
         />
         <PrimaryButton

@@ -1,4 +1,9 @@
-/** In-app model of mockups 27, 27b, 27c, and 27-android. No rest timer. */
+/**
+ * In-app model of mockups 27, 27b, 27c, and 27-android. The lock-screen rest
+ * timer (27c, LA1c) is two optional fields: the device counts down to
+ * `restEndsAt` itself, so the app sends one update when rest starts and one
+ * when it ends or is skipped.
+ */
 
 export const WEIGHT_STEP_KG = 2.5;
 
@@ -19,6 +24,22 @@ export type LiveActivityState = {
   lastReps: number;
   loggedSet: LoggedSet | null;
   finished: boolean;
+  /**
+   * False when there is no previous value for this set (a first set with no
+   * history): the activity then shows no "Last". Absent means known.
+   */
+  lastKnown?: boolean;
+  /** Rest countdown end, epoch ms (27c). Absent or null: no rest. */
+  restEndsAt?: number | null;
+  /** Full rest length in seconds, for the progress bar. */
+  restSeconds?: number | null;
+};
+
+export type RestWindow = {
+  /** Epoch ms when rest ends. */
+  endsAt: number;
+  /** Full rest length in seconds. */
+  seconds: number;
 };
 
 export type LiveActivityEvent =
@@ -58,7 +79,38 @@ export function stepWeight(kg: number, direction: 1 | -1): number {
 }
 
 export function setProgressLine(state: LiveActivityState): string {
-  return `Set ${state.setIndex} of ${state.setCount} · Last: ${formatKg(state.lastKg)} kg × ${state.lastReps}`;
+  const set = `Set ${state.setIndex} of ${state.setCount}`;
+  if (state.lastKnown === false) return set;
+  return `${set} · Last: ${formatKg(state.lastKg)} kg × ${state.lastReps}`;
+}
+
+/**
+ * Rest after a logged set (27c). The last set of a workout has no rest: a
+ * finished state never carries rest fields.
+ */
+export function withRest(state: LiveActivityState, rest: RestWindow | null): LiveActivityState {
+  if (!rest || state.finished || rest.seconds <= 0) return clearRest(state);
+  return { ...state, restEndsAt: rest.endsAt, restSeconds: rest.seconds };
+}
+
+/** Skip (in the app or on the activity) and expiry both clear rest. */
+export function clearRest(state: LiveActivityState): LiveActivityState {
+  return { ...state, restEndsAt: null, restSeconds: null };
+}
+
+/** True while the countdown has time left at `now` (epoch ms). */
+export function restActive(state: LiveActivityState, now: number): boolean {
+  return state.restEndsAt != null && state.restEndsAt > now;
+}
+
+/** Clears rest once its end has passed, as the widget view does on its own. */
+export function clearExpiredRest(state: LiveActivityState, now: number): LiveActivityState {
+  return state.restEndsAt != null && !restActive(state, now) ? clearRest(state) : state;
+}
+
+/** 27c: "Next 22.5 kg × 10". */
+export function nextValueLine(state: LiveActivityState): string {
+  return `Next ${currentValueLine(state)}`;
 }
 
 export function loggedSetLine(state: LiveActivityState): string | null {
@@ -95,6 +147,7 @@ export function reduceLiveActivity(
         loggedSet,
         lastKg: state.kilograms,
         lastReps: state.reps,
+        lastKnown: true,
         setIndex: finished ? state.setIndex : nextIndex,
         kilograms: state.planKg,
         reps: state.planReps,
