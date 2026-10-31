@@ -16,7 +16,7 @@ Build the smallest coherent MVP that connects trainer expectations with low-fric
 
 ## Source of truth
 
-1. **The task spec**, `docs/specs/<ID>.md`. It is self-contained: you need nothing beyond it, the frames it names and the code it names. Its batch file is `docs/specs/batches/Wn.md`.
+1. **The task spec**, `docs/specs/<ID>.md`. Together with its batch file's decisions it is self-contained: you need nothing beyond them, the frames it names and the code it names. Its batch file is `docs/specs/batches/Wn.md`.
 2. **Decisions** are written once, in the batch file, as `D-Wn-x` ("decided by <who>, <date>"). Specs cite the ID; they don't copy the text. Where a spec and its batch file disagree, the batch file wins; report the difference.
 3. **Locked frames**, `docs/design/mockups/png/` (index and precedence: `docs/design/README.md`; also read `DESIGN-NOTES.md` and `DECISIONS-21OCT.md` there). Every frame is locked. Refer to a frame by its file name. `docs/spec/mockups*/` and older frames in git history are retired.
 4. **Content rules**, `docs/spec/01-product-rules.md` and `docs/spec/banned-strings.json`.
@@ -24,11 +24,11 @@ Build the smallest coherent MVP that connects trainer expectations with low-fric
 6. **Repository** contracts, code, Drizzle schema, migrations and tests for what is implemented.
 7. **Confluence is reference only** (D-W2-10). Read it if the connector is available and the spec points to it. Never block on it. If it disagrees with the spec, follow the spec and report the difference in the PR.
 
-When an accepted decision changes the documented model, update the doc it changes.
+Any other conflict between these sources: stop and report it; never silently pick an interpretation. When an accepted decision changes the documented model, update the doc it changes.
 
 ## Stop and ask
 
-There is **no mid-task human approval**: if the spec decides it (a new provider, an auth change), build it. Stop and report (comment on the PR or end the session with a question) only when:
+There is **no mid-task human approval** (owner, 30 Oct 2026): if the spec decides it (a new provider, an auth change), build it. Stop and report (comment on the PR or end the session with a question) only when:
 - The spec has no task file, or a frame or decision it needs is missing or still **Open**.
 - The spec leaves open a question whose answer changes product behaviour, scope, architecture, auth, ownership or data.
 - The work would make a destructive or irreversible migration, rewrite historical coaching records, change published-plan immutability or discard user data, and the spec doesn't say so explicitly.
@@ -74,9 +74,9 @@ PASS means layout, copy and every state match the frame. Tests and CI passing ar
 
 - No auto-resolve: only the trainer resolves an exception. A late log is "logged late", never auto-closed. Exceptions keep their source signal.
 - No auto-send: WhatsApp is a wa.me prefill that the user sends, contextual and secondary.
-- No percentages or streaks. No invented insights, risk scores, diagnoses or coaching recommendations.
+- No percentages or streaks. No invented insights, risk scores, diagnoses, coaching recommendations or unsupported live data. FitBud presents context to trainers; it never makes automatic coaching decisions.
 - Dates read like "Wed 21 Oct". No ISO dates or raw enum values in the UI.
-- Touch targets are at least 44 pt; web is keyboard-accessible. Never show state by colour alone.
+- Touch targets are at least 44 pt; web is keyboard-accessible. Keep semantic status colours, and never show state by colour alone.
 - Ended clients are read-only, on both the server and the UI.
 - Payments are tracking only (amount, subscription type, coaching mode, start and due dates, paid/unpaid, method Cash/UPI/Bank). No collection, gateway, invoices or session counting.
 - External meeting links on calendar entries are fine. No in-app chat, video or voice calling, organization roles or trainer-team permissions.
@@ -103,7 +103,7 @@ Update this map when the structure changes.
 - Apps depend on packages, never on another app's source. Only `apps/api` touches D1 or R2; schema and migrations live there.
 - Shared validation lives in `packages/contracts`; web and mobile use `packages/api-client`, not handwritten clients. Don't duplicate domain types across apps.
 - `packages/core` holds only genuinely shared rules and stays free of Cloudflare and any other provider.
-- Cloudflare (D1, R2, Workers, Queues, Cron, Durable Objects) is replaceable infrastructure, not a product concept. Keep provider code inside the API boundary; contracts describe FitBud behaviour. No speculative multi-provider abstractions.
+- Cloudflare (D1, R2, Workers, Queues, Cron, Durable Objects) is replaceable infrastructure, not a product concept. Keep provider code inside the API boundary; contracts describe FitBud behaviour. No speculative abstractions (multi-provider or otherwise) for possible future requirements. Cloudflare stays the MVP infrastructure unless an explicit architecture decision changes it.
 - D1 and the API are authoritative. SQLite, notifications and realtime events are projections or delivery, never workflow state. REST + sync for state; Durable Objects/WebSockets only for selected change notifications; everything stays correct without realtime.
 
 ## Domain invariants
@@ -123,19 +123,19 @@ Update this map when the structure changes.
 
 ## Tests
 
-- Tests exercise real workflows on persisted domain data through the same contracts and resolution logic as production. No mock-only domain keys or shortcuts that bypass configuration, lookup, ownership, versioning or state transitions. Fixtures look like realistic product data.
+- Tests exercise real workflows on persisted domain data through the same contracts and resolution logic as production. No mock-only domain keys or shortcuts that bypass configuration, lookup, ownership, versioning or state transitions. Fixtures look like realistic product data; a test helper creates the same persisted entities and valid relationships the production workflow expects. When a decision changes the data model or workflow, update the affected fixtures and integration tests.
 - Never weaken validation, authorization or tests, or add test-only behaviour to domain logic, to make a change pass.
-- Onboarding: invitation pins an exact form version → submission → trainer review → coaching-ready. A later form version never retargets an issued invitation. Cover global and trainer-specific definitions.
+- Onboarding: invitation pins an exact form version → submission → trainer review → coaching-ready. A later form version never retargets an issued invitation. Cover global and trainer-specific definitions, and check the submitted response stays tied to the pinned version on both paths.
 - Subscriptions: persisted relationship-owned subscription version; plan name, payment frequency, civil start and renewal dates, renewal state in the trainer's timezone, the attention list and `subscription_renewal_reminder`.
 - Run what the change touches: lint, typecheck, unit, contract, API authorization, migration validation, integration, e2e for critical paths, offline/retry for sync changes, accessibility and the visual check for UI. Never report a check as passing unless it ran; say plainly what you could not run.
 
 ## Git, PRs and merging
 
-- **One task, one branch, one PR, off the latest `main`.** Coding branches: `claude/<ID>-<slug>`. Planning branches: `grok/<batch>-specs`. PR title `<ID>: <summary>`; fill in `.github/pull_request_template.md`. Don't stack unless the spec says to. A slice may span the API, contracts, api-client and both apps; don't split one feature by directory, and keep no long-lived workstream branches.
-- **Planning PRs are the save point.** A planning agent opens its batch's PR as a draft on the first commit, and the description lists every spec in the batch with a tick as each is written. If the planner stops (for example, Grok's weekly limit), the next agent reads that PR and finishes the unticked specs.
-- Update a branch by merging `main` into it. Never rebase, force-push, amend a pushed commit or skip hooks.
-- **Keep PRs pure.** Backend/migration PRs are separate from UI PRs. One migration at a time: take the next free number from `apps/api/drizzle/meta/_journal.json` when the PR opens, renumber at merge if another landed first. Commit only the task's slice, never unrelated changes or secrets.
-- **Merging:** merge commits only, bottom-up, when `ci` is green and review passed. Never squash, never `--admin`. Never touch PRs labelled `do-not-merge`. Never close PRs, change labels or delete branches.
+- **Coding: one task, one branch, one PR, off the latest `main`**, branch `claude/<ID>-<slug>`. **Planning: one branch and PR per batch**, `grok/<batch>-specs`. PR title `<ID>: <summary>`; fill in `.github/pull_request_template.md`. Don't stack unless the spec says to. A slice may span the API, contracts, api-client and both apps; don't split one feature by directory, and keep no long-lived workstream branches or parallel backend and frontend copies of one feature.
+- **Planning PRs are the save point.** A planning agent opens its batch's PR as a draft on the first commit, and the description lists every spec in the batch with a tick as each is written. If the planner stops (for example, Grok's weekly limit), a Claude Code session may read that PR and finish the unticked specs; it writes specs only, and building still waits for Firoz's launch. **Firoz merges planning PRs**; reading and merging them is his check on the specs.
+- Update a branch by merging `main` into it. Never rebase, force-push, amend a pushed commit or skip hooks. Never hop branches silently. Never delete or rewrite unrelated work, yours or anyone else's.
+- **Keep PRs pure.** Backend/migration PRs are separate from UI PRs. One migration at a time: take the next free number from `apps/api/drizzle/meta/_journal.json` when the PR opens, renumber your own unmerged migration at merge time if another landed first. Never edit a migration that is merged or applied. Commit only the task's slice, never unrelated changes or secrets. Session plans are temporary; add a plan file only when a task requires a multi-session plan.
+- **Merging** (coding PRs, by coding agents, when the batch file or the standing authorization below allows it): merge commits only, bottom-up, when `ci` is green and review passed. Never squash, never `--admin`. Never touch PRs labelled `do-not-merge`. Never close PRs, change labels or delete branches.
 - **Never run remote or deploy commands** (`wrangler deploy`, `d1 … --remote`, `seed --remote`, `eas submit`, store consoles). Firoz runs them. **No secrets** in code, chat, logs or commits; only `.example` env files and the demo seed.
 
 ## No human code review (owner, 31 Oct 2026)
@@ -143,11 +143,11 @@ Update this map when the structure changes.
 No person reads code line by line. Agents write, review and merge code at every level, including auth, security, data, migrations and infrastructure config. This overrides any spec, batch file or template text that asks Firoz to review or approve code (such as older "What Firoz reviews" lines); treat it as superseded and update it when you touch that file.
 
 Agents compensate with care:
-- Every code PR gets a **fresh reviewer** that sees only the spec and the diff, never the builder's conclusions.
+- Every code PR gets a **fresh reviewer** that sees only the spec, its batch file's decisions, the diff and, for UI, the named frames and the QA screenshots; never the builder's conclusions.
 - Extra scrutiny and tests on auth, data and security changes; mutation-checked tests for fixes.
 - At most one fix round from review, then re-scope smaller.
 
-**Standing authorization (owner, 31 Oct 2026):** open the PR when the work is done, get the fresh review, fix what it confirms, and merge once `ci` is green and review passes. This counts as the batch file allowing the merge. The stop rules above still apply.
+**Standing authorization (owner, 31 Oct 2026), for coding agents only:** open the PR when the work is done, get the fresh review, fix what it confirms, and merge once `ci` is green and review passes. This counts as the batch file allowing the merge. The stop rules above still apply.
 
 ## Definition of done
 
