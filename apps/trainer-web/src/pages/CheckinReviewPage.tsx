@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   useNavigate,
@@ -61,7 +61,12 @@ export function CheckinReviewPage() {
   const [editing, setEditing] = useState(false);
   // Read by a background refresh, which must never discard a review being edited.
   const editingRef = useRef(editing);
-  editingRef.current = editing;
+  useLayoutEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
+  // Only the newest load may apply its response (a refresh can overlap a save
+  // or a change of check-in and resolve out of order).
+  const latestLoad = useRef(0);
   const [comparePhotos, setComparePhotos] = useState(false);
   const [nextReview, setNextReview] = useState<{
     checkinId: string;
@@ -92,10 +97,12 @@ export function CheckinReviewPage() {
    */
   const load = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (!checkinId) return;
+    const loadId = ++latestLoad.current;
     if (mode === "initial") setLoading(true);
     setError(null);
     try {
       const result = await apiClient.getCheckinReviewContext(checkinId);
+      if (loadId !== latestLoad.current) return;
       setContext(result);
       if (mode === "refresh" && editingRef.current) return;
       if (result.checkin.review) {
@@ -106,13 +113,15 @@ export function CheckinReviewPage() {
         setEditing(true);
       }
     } catch (err) {
+      if (loadId !== latestLoad.current) return;
       setError(
         err instanceof ApiClientError
           ? err.message
           : "Could not load review context.",
       );
     } finally {
-      if (mode === "initial") setLoading(false);
+      // The newest load ends loading, whichever mode it is (it may supersede an initial one).
+      if (loadId === latestLoad.current) setLoading(false);
     }
   }, [checkinId]);
 

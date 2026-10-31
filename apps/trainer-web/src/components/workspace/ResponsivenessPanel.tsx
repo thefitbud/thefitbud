@@ -135,7 +135,9 @@ export function ResponsivenessPanel({
     void stage1Api
       .getResponsiveness(relationshipId, 14)
       .then((value) => {
-        if (!cancelled) setData(value);
+        if (cancelled) return;
+        setData(value);
+        setError(null);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -147,7 +149,8 @@ export function ResponsivenessPanel({
     };
   }, [relationshipId, refreshEpoch]);
 
-  if (error) {
+  // A failed background refresh keeps the data already on screen.
+  if (error && !data) {
     return (
       <p className="form-error" role="alert">
         {error}

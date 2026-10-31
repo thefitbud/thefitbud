@@ -115,6 +115,9 @@ describe("OnboardingReviewPage refresh", () => {
     expect(api.getOnboardingResponse).toHaveBeenCalledTimes(1);
 
     view.rerender(pageTree("onboarding_submitted", 1));
+    // Quiet: the page stays on screen, no full-page loading swap.
+    expect(screen.queryByText("Loading intake…")).toBeNull();
     await waitFor(() => expect(api.getOnboardingResponse).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "Mark ready & configure" })).toBeTruthy();
   });
 });

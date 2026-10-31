@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import type { CheckinReviewContext } from "@fitbud/contracts";
 
@@ -124,6 +124,35 @@ describe("CheckinReviewPage on a workspace refresh", () => {
       "Rewritten note in progress",
     );
     expect(screen.queryByRole("button", { name: "Edit review" })).toBeNull();
+  });
+
+  it("shows the newest response when refreshes resolve out of order", async () => {
+    api.getCheckinReviewContext.mockResolvedValueOnce(reviewContext(true));
+    const view = render(pageTree(0));
+    await screen.findByRole("button", { name: "Edit review" });
+
+    // Refresh 1 is slow and returns old data; refresh 2 is fast and newer.
+    let resolveSlow: (value: CheckinReviewContext) => void = () => undefined;
+    api.getCheckinReviewContext.mockImplementationOnce(
+      () => new Promise<CheckinReviewContext>((resolve) => (resolveSlow = resolve)),
+    );
+    const newer = reviewContext(true);
+    newer.checkin.review = { ...newer.checkin.review!, outcome: "needs_follow_up" };
+    api.getCheckinReviewContext.mockResolvedValueOnce(newer);
+
+    view.rerender(pageTree(1));
+    await waitFor(() => expect(api.getCheckinReviewContext).toHaveBeenCalledTimes(2));
+    view.rerender(pageTree(2));
+    await waitFor(() => expect(api.getCheckinReviewContext).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText(/Needs follow-up/)).toBeTruthy();
+
+    // The stale response lands last; it must not replace the newer one.
+    await act(async () => {
+      resolveSlow(reviewContext(true));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByText(/Needs follow-up/)).toBeTruthy();
+    expect(screen.queryByText(/Loading review/i)).toBeNull();
   });
 
   it("keeps a first review the trainer is typing", async () => {
