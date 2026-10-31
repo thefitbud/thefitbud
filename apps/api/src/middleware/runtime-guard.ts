@@ -14,10 +14,11 @@ import type { Env, Variables } from "../types";
 
 const GUARDED_ENVIRONMENTS = new Set(["staging", "production"]);
 
-/** Non-test modes this build implements. Extend when a provider task lands (X4a, I5). */
+/** Non-test modes this build implements. Extend when a provider task lands (X4a). */
 const DEPLOYABLE_PUSH_MODES: ReadonlySet<string> = new Set<NonNullable<Env["PUSH_PROVIDER_MODE"]>>(["fcm"]);
 const DEPLOYABLE_EMAIL_PROVIDERS: ReadonlySet<string> = new Set<NonNullable<Env["EMAIL_PROVIDER"]>>([
   "disabled",
+  "zeptomail",
   "resend",
   "ses",
 ]);
