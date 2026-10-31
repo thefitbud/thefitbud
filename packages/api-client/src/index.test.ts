@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError, FitBudApiClient } from "./index.js";
 
 describe("FitBudApiClient", () => {
@@ -605,6 +605,83 @@ describe("FitBudApiClient", () => {
       const err = await client.refreshAuth(secret).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ApiClientError);
       expect(String((err as Error).message)).not.toContain("xxxx");
+    });
+  });
+
+  describe("realtimeWebSocketUrl", () => {
+    const relationshipId = "44444444-4444-4444-8444-444444444444";
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("builds a wss URL from an absolute https baseUrl", () => {
+      const client = new FitBudApiClient({ baseUrl: "https://api.example.test" });
+      const url = new URL(client.realtimeWebSocketUrl(relationshipId));
+      expect(url.protocol).toBe("wss:");
+      expect(url.host).toBe("api.example.test");
+      expect(url.pathname).toContain(relationshipId);
+    });
+
+    it("builds a ws URL from an absolute http baseUrl", () => {
+      const client = new FitBudApiClient({ baseUrl: "http://127.0.0.1:8787" });
+      expect(client.realtimeWebSocketUrl(relationshipId).startsWith("ws://127.0.0.1:8787/")).toBe(
+        true,
+      );
+    });
+
+    // The trainer web app proxies the API at a relative `/api` on its own
+    // origin (D-W2-2). This used to throw `Invalid URL`, and because
+    // subscribeRealtime routes a throw to onError (which the web hook ignores
+    // as non-fatal), the trainer web realtime connection silently never opened.
+    it("resolves a relative baseUrl against the document origin", () => {
+      vi.stubGlobal("location", { href: "https://app-staging.thefitbud.com/clients/abc" });
+      const client = new FitBudApiClient({ baseUrl: "/api" });
+      const url = new URL(client.realtimeWebSocketUrl(relationshipId));
+      expect(url.protocol).toBe("wss:");
+      expect(url.host).toBe("app-staging.thefitbud.com");
+      expect(url.pathname.startsWith("/api/")).toBe(true);
+      expect(url.pathname).toContain(relationshipId);
+    });
+
+    it("keeps a relative baseUrl on an insecure origin on ws", () => {
+      vi.stubGlobal("location", { href: "http://localhost:5173/" });
+      const client = new FitBudApiClient({ baseUrl: "/api" });
+      expect(client.realtimeWebSocketUrl(relationshipId).startsWith("ws://localhost:5173/api/")).toBe(
+        true,
+      );
+    });
+
+    it("carries the access token and role as query parameters", () => {
+      vi.stubGlobal("location", { href: "https://app.thefitbud.com/" });
+      const client = new FitBudApiClient({ baseUrl: "/api" });
+      const url = new URL(
+        client.realtimeWebSocketUrl(relationshipId, { accessToken: "tok", role: "trainer" }),
+      );
+      expect(url.searchParams.get("access_token")).toBe("tok");
+      expect(url.searchParams.get("role")).toBe("trainer");
+    });
+
+    it("explains the misconfiguration when a relative baseUrl has no origin", () => {
+      vi.stubGlobal("location", undefined);
+      const client = new FitBudApiClient({ baseUrl: "/api" });
+      expect(() => client.realtimeWebSocketUrl(relationshipId)).toThrow(/absolute baseUrl/i);
+    });
+
+    it("subscribeRealtime reports the misconfiguration instead of opening a socket", async () => {
+      vi.stubGlobal("location", undefined);
+      const client = new FitBudApiClient({ baseUrl: "/api" });
+      const onError = vi.fn();
+      const WebSocketImpl = vi.fn();
+      const sub = client.subscribeRealtime(relationshipId, {
+        onEvent: () => undefined,
+        onError,
+        WebSocketImpl: WebSocketImpl as unknown as typeof WebSocket,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(WebSocketImpl).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledTimes(1);
+      sub.close();
     });
   });
 });
