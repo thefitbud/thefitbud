@@ -1,3 +1,4 @@
+import { format } from "node:util";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { exportPKCS8, generateKeyPair } from "jose";
@@ -52,7 +53,8 @@ async function captureConsole(run: () => Promise<void>): Promise<string> {
   const lines: string[] = [];
   const spies = (["log", "info", "warn", "error", "debug"] as const).map((level) =>
     vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
-      lines.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+      // util.format keeps Error messages and stacks (JSON.stringify drops them).
+      lines.push(format(...args));
     }),
   );
   try {
@@ -311,6 +313,11 @@ describe("invitations accept (password + otp)", () => {
     expect(googleFetch).toHaveBeenCalledTimes(1);
     const googleCalls = googleFetch.mock.calls as unknown as Array<[string, RequestInit]>;
     const customToken = (JSON.parse(String(googleCalls[0]![1].body)) as { token: string }).token;
+    // The capture sees Error objects too, so a logged error could not hide a leak.
+    const probe = await captureConsole(async () => {
+      console.error("probe", new Error("probe-detail"));
+    });
+    expect(probe).toContain("probe-detail");
     // Neither the error body nor the logs carry tokens, the password or Google's response.
     for (const secret of [customToken, invite.data.token, otpProof, "Str0ng-enough", "google-detail-xyz"]) {
       expect(JSON.stringify(body)).not.toContain(secret);
