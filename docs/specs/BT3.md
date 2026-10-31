@@ -21,7 +21,7 @@ size: S
 `https://app.thefitbud.com/privacy`, `/terms` and `/credits` are public pages with the counsel-approved text, linked from the sign-in page and Settings → Help, giving stable URLs for the store listings.
 
 ## Context
-- v14 BT3 (web half; the mobile links are BT3b). D-B13: counsel writes the text; agents build pages and links only. Text source: **D-W3-4 (Open)**, recommendation: counsel's text committed by Firoz as markdown in `docs/legal/` and copied into `content.ts` by this task.
+- v14 BT3 (web half; the mobile links are BT3b). D-B13: counsel writes the text; agents build pages and links only. Text source: D-W3-4 (decided by Firoz, 1 Nov 2026): Firoz commits counsel's text as markdown in `docs/legal/` (`privacy.md`, `terms.md`, `credits.md`); this task copies it into `content.ts`.
 - Page layout follows the DS5 legal frame (Firoz, W2). The privacy text says account deletion is by email request to `SUPPORT_EMAIL` (`tech@thefitbud.com`, `apps/api/wrangler.toml:64`).
 - Credits list each CC BY-SA image: title, author, source, licence (D7).
 
