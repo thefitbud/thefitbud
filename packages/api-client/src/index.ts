@@ -2277,21 +2277,23 @@ export class FitBudApiClient {
     let closed = false;
     let socket: WebSocket | null = null;
 
-    // With a refresh hook, a socket that fails before it opens (an expired
-    // token is rejected at the handshake) refreshes once and reconnects once.
-    const connect = (token: string | null, role: string | null, canRetry: boolean) => {
+    // A failed handshake must never reach the refresh hook. The hook is the
+    // session's own refresh: on a refusal it clears the session and signs the
+    // user out. A socket can fail for reasons that say nothing about the
+    // token — a proxy that does not forward upgrades (the Vite dev proxy
+    // needed `ws: true`), a network blip, a blocked port — and both
+    // `useRealtimeHints` hooks already treat a socket failure as non-fatal
+    // because REST and sync stay authoritative. Wiring the two together meant
+    // one dropped upgrade logged the trainer out, so the socket no longer
+    // refreshes or reconnects: a stale token simply means no realtime until
+    // the next REST call refreshes it. (Owner's call, 31 Oct, after W2-FIX2.)
+    const connect = (token: string | null, role: string | null) => {
       const url = this.realtimeWebSocketUrl(relationshipId, {
         accessToken: token,
         role,
       });
       const current = new WebSocketImpl(url);
       socket = current;
-      let opened = false;
-      let retrying = false;
-      let handshakeError: unknown = null;
-      current.addEventListener("open", () => {
-        opened = true;
-      });
       current.addEventListener("message", (message) => {
         try {
           const data =
@@ -2305,31 +2307,9 @@ export class FitBudApiClient {
         }
       });
       current.addEventListener("error", (error) => {
-        if (canRetry && !opened) {
-          handshakeError = error;
-          return;
-        }
         handlers.onError?.(error);
       });
       current.addEventListener("close", () => {
-        if (canRetry && !opened && !closed && !retrying) {
-          retrying = true;
-          void (async () => {
-            const nextToken = await this.tokenAfter401(token);
-            if (closed) return;
-            if (nextToken) {
-              try {
-                connect(nextToken, role, false);
-              } catch (error) {
-                handlers.onError?.(error);
-              }
-              return;
-            }
-            if (handshakeError !== null) handlers.onError?.(handshakeError);
-            handlers.onClose?.();
-          })();
-          return;
-        }
         if (!closed) handlers.onClose?.();
       });
     };
@@ -2345,7 +2325,7 @@ export class FitBudApiClient {
         // cleans up and remounts every effect, so this is the common path in
         // development, not an edge case.
         if (closed) return;
-        connect(token, role, Boolean(this.refreshAccessToken));
+        connect(token, role);
       } catch (error) {
         handlers.onError?.(error);
       }
