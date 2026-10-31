@@ -22,6 +22,7 @@ import {
   users,
 } from "../db/schema";
 import {
+  createIdentityRequestCache,
   ensureRoleAndProfile,
   findOrCreateUserFromFirebase,
   loadActorByUserId,
@@ -834,11 +835,16 @@ invitationRoutes.post("/accept",
     identity.email?.split("@")[0] ??
     "Trainee";
 
-  await ensureRoleAndProfile(db, {
-    userId,
-    role: "trainee",
-    displayName,
-  });
+  const identityCache = createIdentityRequestCache();
+  await ensureRoleAndProfile(
+    db,
+    {
+      userId,
+      role: "trainee",
+      displayName,
+    },
+    identityCache,
+  );
 
   if (parsed.data.timezone) {
     await db
@@ -898,12 +904,16 @@ invitationRoutes.post("/accept",
   )[0]!;
 
   // Load actor so subsequent bearer calls succeed for this Firebase UID.
-  await loadActorByUserId(db, {
-    userId,
-    surface: "mobile",
-    authMethod: "bearer",
-    requestedRole: "trainee",
-  });
+  await loadActorByUserId(
+    db,
+    {
+      userId,
+      surface: "mobile",
+      authMethod: "bearer",
+      requestedRole: "trainee",
+    },
+    identityCache,
+  );
 
   const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
   return ok(
