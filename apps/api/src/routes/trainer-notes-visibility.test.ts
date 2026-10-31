@@ -547,7 +547,7 @@ describe("TW-C trainer note visibility", () => {
           "Content-Type": "application/json",
           "Idempotency-Key": "cinote-act",
         },
-        body: JSON.stringify({ expectedVersion: 2 }),
+        body: JSON.stringify({ expectedVersion: 1 }),
       },
       testEnv(),
     );

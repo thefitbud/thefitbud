@@ -56,6 +56,7 @@ import {
   deriveWorkoutAssignmentStatus,
   labelFor,
   materializePlanContent,
+  missingConfigurationSections,
   notificationInboxRoute,
   unscaleNutrient,
 } from "@fitbud/core";
@@ -268,35 +269,51 @@ export function mapCoachingConfiguration(input: {
   tracking: TrackingRequirementRow;
 }): CoachingConfiguration {
   const { configuration, workout, nutrition, checkin, tracking } = input;
+  const mappedWorkout = {
+    sessionsPerWeek: workout.sessionsPerWeek,
+    completionWindowHours: workout.completionWindowHours,
+  };
+  const mappedNutrition = {
+    mealsPerDay: nutrition.mealsPerDay,
+    confirmationWindowHours: nutrition.confirmationWindowHours,
+    photoRequirement: nutrition.photoRequirement,
+  };
+  const mappedCheckin = {
+    cadence: checkin.cadence,
+    dueWindowHours: checkin.dueWindowHours,
+    formVersionId: checkin.preferredCheckinFormVersionId ?? null,
+  };
+  const mappedTracking = {
+    requireBodyWeight: tracking.requireBodyWeight,
+    requireProgressPhotos: tracking.requireProgressPhotos,
+    requireSessionRpe: tracking.requireSessionRpe,
+  };
+  const status =
+    configuration.status === "configured" ? "draft" : configuration.status;
+  const missingSections =
+    status === "draft"
+      ? missingConfigurationSections({
+          goalShort: configuration.goalShort,
+          workout: mappedWorkout,
+          nutrition: mappedNutrition,
+          checkin: mappedCheckin,
+          tracking: mappedTracking,
+        })
+      : [];
   return {
     id: configuration.id,
     coachingRelationshipId: configuration.coachingRelationshipId,
-    status:
-      configuration.status === "configured" ? "draft" : configuration.status,
+    status,
     versionNumber: configuration.versionNumber,
     recordVersion: configuration.recordVersion,
     goalShort: configuration.goalShort,
     goalDescription: configuration.goalDescription,
     notes: configuration.notes,
-    workout: {
-      sessionsPerWeek: workout.sessionsPerWeek,
-      completionWindowHours: workout.completionWindowHours,
-    },
-    nutrition: {
-      mealsPerDay: nutrition.mealsPerDay,
-      confirmationWindowHours: nutrition.confirmationWindowHours,
-      photoRequirement: nutrition.photoRequirement,
-    },
-    checkin: {
-      cadence: checkin.cadence,
-      dueWindowHours: checkin.dueWindowHours,
-      formVersionId: checkin.preferredCheckinFormVersionId ?? null,
-    },
-    tracking: {
-      requireBodyWeight: tracking.requireBodyWeight,
-      requireProgressPhotos: tracking.requireProgressPhotos,
-      requireSessionRpe: tracking.requireSessionRpe,
-    },
+    workout: mappedWorkout,
+    nutrition: mappedNutrition,
+    checkin: mappedCheckin,
+    tracking: mappedTracking,
+    missingSections,
     configuredAt: null,
     activatedAt: configuration.activatedAt,
     createdAt: configuration.createdAt,

@@ -693,7 +693,7 @@ checkinRoutes.put(
       .from(coachingConfigurations)
       .where(eq(coachingConfigurations.coachingRelationshipId, relationship.id));
     const writable = configs.filter((row) =>
-      ["draft", "configured", "active"].includes(row.status),
+      ["draft", "active"].includes(row.status),
     );
     if (writable.length === 0) {
       return fail(

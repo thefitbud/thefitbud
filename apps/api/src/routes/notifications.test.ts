@@ -229,7 +229,7 @@ async function reachActiveCheckinConfig(suffix: string) {
         "Content-Type": "application/json",
         "Idempotency-Key": `act-push-${suffix}`,
       },
-      body: JSON.stringify({ expectedVersion: 2 }),
+      body: JSON.stringify({ expectedVersion: 1 }),
     },
     testEnv(),
   );

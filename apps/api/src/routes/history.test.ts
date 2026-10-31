@@ -196,7 +196,7 @@ async function reachActiveConfig(suffix: string) {
         "Content-Type": "application/json",
         "Idempotency-Key": `act-hist-${suffix}`,
       },
-      body: JSON.stringify({ expectedVersion: 2 }),
+      body: JSON.stringify({ expectedVersion: 1 }),
     },
     testEnv(),
   );

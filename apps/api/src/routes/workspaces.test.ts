@@ -292,7 +292,7 @@ async function reachActiveConfig(suffix: string, displayName: string) {
         "Content-Type": "application/json",
         "Idempotency-Key": `act-ws-${suffix}`,
       },
-      body: JSON.stringify({ expectedVersion: 2 }),
+      body: JSON.stringify({ expectedVersion: 1 }),
     },
     testEnv(),
   );

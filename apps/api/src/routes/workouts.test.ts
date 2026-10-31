@@ -240,7 +240,7 @@ async function reachEffectivePlan(suffix: string, requireSessionRpe = false) {
         "Content-Type": "application/json",
         "Idempotency-Key": `act-wo-${suffix}`,
       },
-      body: JSON.stringify({ expectedVersion: 2 }),
+      body: JSON.stringify({ expectedVersion: 1 }),
     },
     testEnv(),
   );
