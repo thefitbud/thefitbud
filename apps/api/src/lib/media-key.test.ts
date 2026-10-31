@@ -66,6 +66,7 @@ function stagingEnv(media: R2Bucket): Env {
     FIREBASE_PROJECT_ID: "fitbud-local",
     SESSION_COOKIE_NAME: "fitbud_session",
     AUTH_MODE: "test",
+    ENVIRONMENT: "local",
     MEDIA_SIGNING_SECRET: "fitbud-local-file-signing-secret",
     MEDIA_PREFIX: "staging/",
   };
