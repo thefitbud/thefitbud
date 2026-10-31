@@ -14,6 +14,8 @@ import { handleScheduledReminders } from "./reminders.js";
 const SEED = "2026-10-26T00:30:00.000Z";
 /** Mid-afternoon in India on the seed day: workout, meal and check-in reminders are due. */
 const RUN_AT = "2026-10-26T09:45:00.000Z";
+/** 21:35 in India: the daily summary is due for every client (reviewer finding on I8). */
+const EVENING_RUN_AT = "2026-10-26T16:05:00.000Z";
 const QUERY_BUDGET = 200;
 
 /** Staging and production bind REMINDER_QUEUE (I4a): the cron enqueues, the consumer delivers. */
@@ -41,11 +43,17 @@ function cronEnv(sent: unknown[] = []): Env {
 
 describe("scheduled reminder run query budget (I8)", () => {
   let handle: MemoryDbHandle;
-  const createdNotifications = () =>
+  /** Every queued delivery this run created must reach the queue (incl. promoted deferred rows). */
+  const deliveriesCreated = (at: string) =>
+    Number(
+      handle.sqlite.exec(`select count(*) from notification_deliveries where created_at = '${at}'`)[0]
+        ?.values[0]?.[0] ?? 0,
+    );
+  const createdNotifications = (at = RUN_AT) =>
     (
       handle.sqlite.exec(
         `select notification_type, recipient_user_id, domain_entity_type, domain_entity_id, dedupe_key, state
-           from notifications where created_at = '${RUN_AT}' order by dedupe_key, recipient_user_id`,
+           from notifications where created_at = '${at}' order by dedupe_key, recipient_user_id`,
       )[0]?.values ?? []
     ).map((row) => row.map(String).join(" | "));
 
@@ -73,6 +81,19 @@ describe("scheduled reminder run query budget (I8)", () => {
     expect(handle.queryCounter.count).toBeLessThanOrEqual(QUERY_BUDGET);
   });
 
+  it(`stays within ${QUERY_BUDGET} D1 queries when the daily summary is due (evening)`, async () => {
+    const sent: unknown[] = [];
+    await handleScheduledReminders(cronEnv(), new Date(RUN_AT));
+    handle.queryCounter.reset();
+    await handleScheduledReminders(cronEnv(sent), new Date(EVENING_RUN_AT));
+    console.info(`[I8] evening run: ${handle.queryCounter.count} D1 queries`);
+    const created = createdNotifications(EVENING_RUN_AT);
+    expect(created.some((row) => row.startsWith("daily_summary"))).toBe(true);
+    expect(created).toMatchSnapshot();
+    expect(sent).toHaveLength(deliveriesCreated(EVENING_RUN_AT));
+    expect(handle.queryCounter.count).toBeLessThanOrEqual(QUERY_BUDGET);
+  });
+
   it("a second run five minutes later creates nothing new and stays small", async () => {
     await handleScheduledReminders(cronEnv(), new Date(RUN_AT));
     const before = handle.sqlite.exec("select count(*) from notifications")[0]?.values[0]?.[0];
@@ -91,7 +112,6 @@ describe("scheduled reminder run query budget (I8)", () => {
     const created = createdNotifications();
     expect(created.length).toBeGreaterThan(0);
     expect(created).toMatchSnapshot();
-    const queued = created.filter((row) => row.endsWith("| queued")).length;
-    expect(sent).toHaveLength(queued);
+    expect(sent).toHaveLength(deliveriesCreated(RUN_AT));
   });
 });

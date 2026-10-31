@@ -381,6 +381,53 @@ async function countRemainingLogs(
   return remaining;
 }
 
+/** countRemainingLogs for the relationship's own "today", read from the run context. */
+function remainingLogsFromContext(
+  context: ReminderRunContext,
+  relationshipId: string,
+  today: string,
+  enabled: Set<ReminderType>,
+  now: string,
+): RemainingLogs {
+  const remaining: RemainingLogs = { workouts: 0, meals: 0, checkins: 0 };
+  if (enabled.has("workout_reminder")) {
+    const assignments = (context.workoutsByRelationship.get(relationshipId) ?? [])
+      .filter((assignment) => assignment.localDate === today)
+      .slice(0, 50);
+    for (const assignment of assignments) {
+      const execution = context.executionByAssignmentId.get(assignment.id);
+      if (!isWorkoutResolved(execution?.status ?? null)) remaining.workouts += 1;
+    }
+  }
+  if (enabled.has("meal_reminder")) {
+    const assignments = (context.mealsByRelationship.get(relationshipId) ?? [])
+      .filter((assignment) => assignment.localDate === today)
+      .slice(0, 50);
+    for (const assignment of assignments) {
+      if (!context.loggedMealAssignmentIds.has(assignment.id)) remaining.meals += 1;
+    }
+  }
+  if (enabled.has("checkin_reminder")) {
+    const rows = (context.todaysDraftCheckinsByRelationship.get(relationshipId) ?? [])
+      .filter((checkin) => checkin.localDate === today)
+      .slice(0, 5);
+    for (const checkin of rows) {
+      if (
+        isCheckinReminderEligible({
+          nowIso: now,
+          windowStartsAt: checkin.windowStartsAt,
+          windowEndsAt: checkin.windowEndsAt,
+          recordStatus: checkin.recordStatus,
+          hasReview: false,
+        })
+      ) {
+        remaining.checkins += 1;
+      }
+    }
+  }
+  return remaining;
+}
+
 /**
  * Everything one cron run reads per relationship, loaded in bulk (I8, D-W1-11):
  * a constant number of chunked queries instead of ~20 per active relationship.
@@ -397,6 +444,8 @@ type ReminderRunContext = {
   mealsByRelationship: Map<string, Array<typeof mealAssignments.$inferSelect>>;
   loggedMealAssignmentIds: Set<string>;
   draftCheckinsByRelationship: Map<string, Array<typeof checkins.$inferSelect>>;
+  /** Draft check-ins dated on each relationship's "today" (daily summary). */
+  todaysDraftCheckinsByRelationship: Map<string, Array<typeof checkins.$inferSelect>>;
   currentSubscriptionByRelationship: Map<string, typeof subscriptionVersions.$inferSelect>;
 };
 
@@ -554,6 +603,21 @@ async function loadReminderRunContext(
         ),
     RUN_CONTEXT_CHUNK,
   );
+  const todaysDraftCheckinRows = await selectInChunks(
+    relationshipIds,
+    (ids) =>
+      db
+        .select()
+        .from(checkins)
+        .where(
+          and(
+            inArray(checkins.coachingRelationshipId, ids),
+            eq(checkins.recordStatus, "draft"),
+            inArray(checkins.localDate, todays),
+          ),
+        ),
+    RUN_CONTEXT_CHUNK,
+  );
   const subscriptionRows = await selectInChunks(relationshipIds, (ids) =>
     db
       .select()
@@ -574,6 +638,10 @@ async function loadReminderRunContext(
     mealsByRelationship: groupBy(mealRows, (row) => row.coachingRelationshipId),
     loggedMealAssignmentIds: new Set(complianceRows.map((row) => row.assignmentId)),
     draftCheckinsByRelationship: groupBy(checkinRows, (row) => row.coachingRelationshipId),
+    todaysDraftCheckinsByRelationship: groupBy(
+      todaysDraftCheckinRows,
+      (row) => row.coachingRelationshipId,
+    ),
     currentSubscriptionByRelationship: firstBy(subscriptionRows, (row) => row.coachingRelationshipId),
   };
 }
@@ -749,8 +817,8 @@ async function collectCandidates(
         lastMealLocalTime,
       })
     ) {
-      const remaining = await countRemainingLogs(
-        db,
+      const remaining = remainingLogsFromContext(
+        context,
         relationship.id,
         today,
         enabled,
