@@ -5,10 +5,10 @@
  * redeemed through the Secure Token API. Both use the public web API key.
  *
  * Failures carry a `reason` but never Google's response body, the tokens or the
- * key: `invalid` means Google rejected the credential (the caller should make
- * the user sign in again), `unavailable` means the call never got a verdict —
- * a network error, a 429 or a 5xx — and the credential may well still be good,
- * so the caller must not treat it as a sign-out.
+ * key: `invalid` means Google refused the credential and the caller should make
+ * the user sign in again, `unavailable` means the call never got a verdict — a
+ * network error, any non-400 status, or a 2xx that cannot be used — and the
+ * credential may well still be good, so the caller must not sign the user out.
  */
 
 const SIGN_IN_WITH_CUSTOM_TOKEN_URL =
@@ -23,8 +23,9 @@ export type FirebaseSessionTokens = {
 };
 
 /**
- * `invalid`: Google gave a verdict and refused the credential.
- * `unavailable`: no verdict — transport failure, upstream throttling or 5xx.
+ * `invalid`: Google gave a verdict against the credential — only an HTTP 400.
+ * `unavailable`: no verdict — transport failure, any other status (401, 403,
+ * 404, 429, 5xx), or a 2xx whose body cannot be read or carries no tokens.
  */
 export type TokenExchangeFailureReason = "invalid" | "unavailable";
 
@@ -73,8 +74,9 @@ type GoogleResponse =
 
 /**
  * A refused credential and an unreachable provider must not look the same: a
- * Google outage used to sign every signed-in user out (W2 follow-up). Only a
- * 4xx other than 429 counts as a verdict against the credential.
+ * Google outage used to sign every signed-in user out (W2 follow-up). Only an
+ * HTTP 400 counts as a verdict against the credential; see the classification
+ * note below for why, and for the one operator fault it does not yet catch.
  */
 async function postToGoogle(
   url: string,
@@ -87,13 +89,22 @@ async function postToGoogle(
     return { ok: false, reason: "unavailable" };
   }
   if (!response.ok) {
-    // Only a 400 is a verdict against the credential. Firebase answers 400 for
-    // an expired, revoked or malformed refresh token and for a disabled user;
-    // a 403 is the canonical answer when the web API key is restricted, the
-    // Identity Toolkit or Secure Token API is disabled for the project, or
-    // quota is refused — all operator faults. The harm is asymmetric: calling
-    // an outage `invalid` destroys every good session, while calling a refusal
-    // `unavailable` only parks one session in retry until the user signs out.
+    // Only a 400 is a verdict against the credential. Every documented
+    // credential refusal is a 400 INVALID_ARGUMENT: TOKEN_EXPIRED,
+    // INVALID_REFRESH_TOKEN, MISSING_REFRESH_TOKEN, INVALID_GRANT_TYPE,
+    // USER_DISABLED, USER_NOT_FOUND. The other statuses are operator faults:
+    // 403 PERMISSION_DENIED for a restricted key, a disabled Identity Toolkit
+    // or Secure Token API, or refused quota; 401 only if no credential was
+    // sent at all (this endpoint is key-authenticated); 404 for a wrong path.
+    // The harm is asymmetric on purpose: calling an outage `invalid` destroys
+    // every good session at once, while calling a refusal `unavailable` only
+    // parks one session in retry until the user signs out.
+    //
+    // Known gap: a web API key that is *invalid* rather than restricted comes
+    // back as 400 API_KEY_INVALID, and CONFIGURATION_NOT_FOUND is also a 400,
+    // so those operator faults still read as a verdict and still sign everyone
+    // out. Closing it means inspecting the error body for a credential-shaped
+    // code before trusting a 400, without ever surfacing or logging that body.
     return { ok: false, reason: response.status === 400 ? "invalid" : "unavailable" };
   }
   let body: unknown;

@@ -31,6 +31,7 @@ In firebase mode, every sign-in route returns a Firebase **ID token** plus a ref
 - **gitleaks note:** gitleaks flags the two Firebase web API keys in `apps/api/wrangler.toml` (`[env.staging.vars]` and `[env.production.vars]`, added in PR #76) as `gcp-api-key`. They are public Firebase Web identifiers that ship to browsers (D-W1-8, Firoz, 31 Oct 2026). This finding is expected: do not remove or move the keys, and do not treat it as a stop condition.
 - In test mode nothing changes: `tokenKind: "test_id_token"`, no `refreshToken`, no `expiresIn`; `/auth/refresh` returns 400 `REFRESH_NOT_SUPPORTED` in test mode.
 - Error mapping: any non-2xx or malformed Google response → 401 with stable code `AUTH_EXCHANGE_FAILED` (login routes) or `AUTH_REFRESH_FAILED` (refresh). Missing `FIREBASE_WEB_API_KEY` in firebase mode → 503 `AUTH_PROVIDER_NOT_CONFIGURED` (existing code). Never log tokens, keys or Google response bodies.
+  - **Superseded for `/auth/refresh` by W2-FIX3 (31 Oct 2026).** Collapsing every Google failure into 401 signed every signed-in user out during an outage, because both clients sign out on 400/401/403. Only a Google 400 is now a verdict against the credential and still returns 401 `AUTH_REFRESH_FAILED`; any other status, a transport failure, or a 2xx that cannot be used returns 503 `AUTH_PROVIDER_UNAVAILABLE`, which the clients retry. The login routes still map every failure to 401 `AUTH_EXCHANGE_FAILED` as written here (deliberately out of scope, owner's call 31 Oct). Never logging tokens, keys or Google bodies is unchanged.
 
 ## Gap list
 - `apps/api/src/auth/custom-token.ts:4-6`: `AuthTokenResult` has only `token` + `tokenKind` (`test_id_token | firebase_custom_token`).
@@ -44,7 +45,7 @@ In firebase mode, every sign-in route returns a Firebase **ID token** plus a ref
 - [ ] In firebase mode, `/auth/login`, `/auth/otp/verify` (login purpose), the reset-password and set-password routes return `tokenKind: "firebase_id_token"`, `refreshToken` and numeric `expiresIn`.
 - [ ] The exchange sends exactly one `POST` to the Identity Toolkit URL above with `returnSecureToken: true`.
 - [ ] `POST /auth/refresh` with a valid refresh token returns a new `token`, a new `refreshToken` and `expiresIn`; the response's `refreshToken` is the one Google returned (rotation).
-- [ ] Google error on exchange → 401 `AUTH_EXCHANGE_FAILED`; on refresh → 401 `AUTH_REFRESH_FAILED`.
+- [ ] Google error on exchange → 401 `AUTH_EXCHANGE_FAILED`; on refresh → 401 `AUTH_REFRESH_FAILED`. **Refresh superseded by W2-FIX3 (31 Oct 2026):** only a Google 400 gives 401; every other failure gives 503 `AUTH_PROVIDER_UNAVAILABLE`.
 - [ ] `/auth/refresh` is rate-limited (16th call in the window from one IP → 429 `RATE_LIMITED`).
 - [ ] Test mode responses are byte-for-byte the same shape as today; `/auth/refresh` in test mode → 400 `REFRESH_NOT_SUPPORTED`.
 - [ ] `packages/contracts/src/auth.ts` exports `authRefreshRequestSchema` and `authRefreshResponseSchema`; `tokenKind` enums include `firebase_id_token`; `refreshToken` and `expiresIn` are optional on token responses.

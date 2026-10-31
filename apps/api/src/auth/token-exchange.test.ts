@@ -57,9 +57,8 @@ describe("exchangeCustomToken", () => {
     });
   });
 
-  // A 4xx is Google's verdict against the credential; everything else leaves
-  // the credential's validity unknown, and callers must not sign the user out
-  // on it.
+  // Only a 400 is Google's verdict against the credential; everything else
+  // leaves its validity unknown, and callers must not sign the user out on it.
   it("reports `invalid` for a Google 400", async () => {
     stubFetch(jsonResponse({ error: { code: 400, message: "INVALID_CUSTOM_TOKEN" } }, 400));
     await expect(exchangeCustomToken(API_KEY, "custom-token-1")).resolves.toEqual({
