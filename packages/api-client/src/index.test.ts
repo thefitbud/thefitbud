@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ApiClientError, FitBudApiClient } from "./index.js";
 
 describe("FitBudApiClient", () => {
@@ -265,6 +265,346 @@ describe("FitBudApiClient", () => {
 
     await expect(client.getNotificationPreferences()).resolves.toMatchObject({
       trainerCategories: { morningSummary: false, criticalDigest: false },
+    });
+  });
+
+  describe("refreshAccessToken (AU1c)", () => {
+    function errorResponse(status: number, requestId: string): Response {
+      return new Response(
+        JSON.stringify({
+          error: { code: "UNAUTHENTICATED", message: "Authentication required.", requestId },
+        }),
+        { status, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    function okResponse(data: unknown): Response {
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    type Call = { url: string; auth: string | null; idem: string | null; method: string };
+
+    /** Fake API: accepts only `Bearer fresh`; every other bearer gets 401. */
+    function fakeApi(calls: Call[], handler?: (call: Call) => Response | undefined) {
+      return async (...args: Parameters<typeof fetch>) => {
+        const headers = new Headers(args[1]?.headers);
+        const call = {
+          url: String(args[0]),
+          auth: headers.get("Authorization"),
+          idem: headers.get("Idempotency-Key"),
+          method: args[1]?.method ?? "GET",
+        };
+        calls.push(call);
+        const custom = handler?.(call);
+        if (custom) return custom;
+        if (call.auth !== "Bearer fresh") return errorResponse(401, `req-${calls.length}`);
+        return okResponse({ id: "ok" });
+      };
+    }
+
+    const echoSchema = { parse: (value: unknown) => value as { id: string } };
+
+    it("refreshes once on 401 and retries with the new token and the same idempotency key", async () => {
+      const calls: Call[] = [];
+      let token = "stale";
+      let keyCounter = 0;
+      const refresh = vi.fn(async () => {
+        token = "fresh";
+        return token;
+      });
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => token,
+        getIdempotencyKey: () => `idem-${++keyCounter}`,
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls),
+      });
+
+      await expect(
+        client.request("POST", "/things", echoSchema, { auth: true, body: {} }),
+      ).resolves.toEqual({ id: "ok" });
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(calls.map((c) => c.auth)).toEqual(["Bearer stale", "Bearer fresh"]);
+      expect(calls.map((c) => c.idem)).toEqual(["idem-1", "idem-1"]);
+    });
+
+    it("throws the original error when refresh returns null", async () => {
+      const calls: Call[] = [];
+      const refresh = vi.fn(async () => null);
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => "stale",
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls),
+      });
+
+      const err = await client.me().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect((err as ApiClientError).status).toBe(401);
+      expect((err as ApiClientError).requestId).toBe("req-1");
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(1);
+    });
+
+    it("treats a throwing refresh hook like null", async () => {
+      const calls: Call[] = [];
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => "stale",
+        refreshAccessToken: async () => {
+          throw new Error("network down");
+        },
+        fetch: fakeApi(calls),
+      });
+
+      const err = await client.me().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect((err as ApiClientError).requestId).toBe("req-1");
+      expect(calls).toHaveLength(1);
+    });
+
+    it("throws the original error when the retry also gets 401, without a second refresh", async () => {
+      const calls: Call[] = [];
+      const refresh = vi.fn(async () => "also-rejected");
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => "stale",
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls),
+      });
+
+      const err = await client.me().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect((err as ApiClientError).requestId).toBe("req-1");
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(calls.map((c) => c.auth)).toEqual(["Bearer stale", "Bearer also-rejected"]);
+    });
+
+    it("shares one refresh between parallel 401s", async () => {
+      const calls: Call[] = [];
+      let token = "stale";
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const refresh = vi.fn(async () => {
+        await gate;
+        token = "fresh";
+        return token;
+      });
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => token,
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls),
+      });
+
+      const a = client.request("GET", "/a", echoSchema, { auth: true });
+      const b = client.request("GET", "/b", echoSchema, { auth: true });
+      // Let both first attempts fail before the refresh finishes.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      release();
+      await expect(Promise.all([a, b])).resolves.toEqual([{ id: "ok" }, { id: "ok" }]);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(calls.filter((c) => c.auth === "Bearer fresh")).toHaveLength(2);
+    });
+
+    it("reuses a token another caller already refreshed instead of refreshing again", async () => {
+      const calls: Call[] = [];
+      let token = "stale";
+      const refresh = vi.fn(async () => "should-not-be-used");
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => token,
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls, () => {
+          // The token rotates while the first request is on the wire.
+          if (calls.length === 1) {
+            token = "fresh";
+            return errorResponse(401, "req-1");
+          }
+          return undefined;
+        }),
+      });
+
+      await expect(client.request("GET", "/a", echoSchema, { auth: true })).resolves.toEqual({
+        id: "ok",
+      });
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it("does not retry without a refresh hook", async () => {
+      const calls: Call[] = [];
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => "stale",
+        fetch: fakeApi(calls),
+      });
+
+      await expect(client.me()).rejects.toBeInstanceOf(ApiClientError);
+      expect(calls).toHaveLength(1);
+    });
+
+    it("does not refresh on a 401 from an unauthenticated call such as password login", async () => {
+      const calls: Call[] = [];
+      const refresh = vi.fn(async () => "fresh");
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls),
+      });
+
+      await expect(
+        (client as unknown as {
+          login: (b: { identifier: string; password: string }) => Promise<unknown>;
+        }).login({ identifier: "rahul.coach@demo.fitbud.test", password: "wrong-password" }),
+      ).rejects.toBeInstanceOf(ApiClientError);
+      expect(refresh).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1);
+    });
+
+    it("retries an upload once after refresh", async () => {
+      const calls: Call[] = [];
+      let token = "stale";
+      const refresh = vi.fn(async () => {
+        token = "fresh";
+        return token;
+      });
+      const asset = {
+        id: "33333333-3333-4333-8333-333333333333",
+      };
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => token,
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls, (call) =>
+          call.auth === "Bearer fresh" ? okResponse(asset) : undefined,
+        ),
+      });
+
+      // The schema may reject the minimal asset; we only care about the wire calls.
+      await client
+        .uploadMediaContent(asset.id, new Uint8Array([1, 2, 3]), "image/jpeg")
+        .catch(() => undefined);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(calls.map((c) => [c.method, c.auth])).toEqual([
+        ["PUT", "Bearer stale"],
+        ["PUT", "Bearer fresh"],
+      ]);
+    });
+
+    it("does not refresh for signed upload URLs", async () => {
+      const calls: Call[] = [];
+      const refresh = vi.fn(async () => "fresh");
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => "stale",
+        refreshAccessToken: refresh,
+        fetch: fakeApi(calls),
+      });
+
+      await expect(
+        client.uploadMediaContent(
+          "/files/abc/content?exp=1&sig=x",
+          new Uint8Array([1]),
+          "image/jpeg",
+        ),
+      ).rejects.toBeInstanceOf(ApiClientError);
+      expect(refresh).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1);
+    });
+
+    it("reconnects realtime once with a refreshed token when the handshake fails", async () => {
+      const urls: string[] = [];
+      type Listener = (event: unknown) => void;
+      class FakeSocket {
+        private listeners: Record<string, Listener[]> = {};
+        constructor(url: string) {
+          urls.push(url);
+          const accepted = url.includes("access_token=fresh");
+          setTimeout(() => {
+            if (accepted) {
+              this.emit("open", {});
+            } else {
+              this.emit("error", { type: "error" });
+              this.emit("close", {});
+            }
+          }, 0);
+        }
+        addEventListener(type: string, fn: Listener) {
+          (this.listeners[type] ??= []).push(fn);
+        }
+        emit(type: string, event: unknown) {
+          for (const fn of this.listeners[type] ?? []) fn(event);
+        }
+        close() {
+          this.emit("close", {});
+        }
+      }
+      let token = "stale";
+      const refresh = vi.fn(async () => {
+        token = "fresh";
+        return token;
+      });
+      const onError = vi.fn();
+      const onClose = vi.fn();
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        getAccessToken: () => token,
+        refreshAccessToken: refresh,
+      });
+
+      const sub = client.subscribeRealtime("44444444-4444-4444-8444-444444444444", {
+        onEvent: () => undefined,
+        onError,
+        onClose,
+        WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(urls).toHaveLength(2);
+      expect(urls[1]).toContain("access_token=fresh");
+      expect(onError).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      sub.close();
+    });
+
+    it("refreshAuth posts the refresh token in the body and parses the response", async () => {
+      const calls: Array<{ url: string; body: unknown }> = [];
+      const client = new FitBudApiClient({
+        baseUrl: "https://example.test",
+        fetch: async (...args: Parameters<typeof fetch>) => {
+          calls.push({ url: String(args[0]), body: JSON.parse(String(args[1]?.body)) });
+          return okResponse({
+            token: "new-id-token",
+            tokenKind: "firebase_id_token",
+            refreshToken: "rt-2",
+            expiresIn: 3600,
+          });
+        },
+      });
+
+      await expect(client.refreshAuth("rt-1")).resolves.toEqual({
+        token: "new-id-token",
+        tokenKind: "firebase_id_token",
+        refreshToken: "rt-2",
+        expiresIn: 3600,
+      });
+      expect(calls).toEqual([
+        { url: "https://example.test/auth/refresh", body: { refreshToken: "rt-1" } },
+      ]);
+      expect(calls[0]?.url).not.toContain("rt-1");
+    });
+
+    it("refreshAuth never echoes a malformed refresh token in its error", async () => {
+      const client = new FitBudApiClient({ baseUrl: "https://example.test" });
+      const secret = "x".repeat(5000);
+      const err = await client.refreshAuth(secret).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiClientError);
+      expect(String((err as Error).message)).not.toContain("xxxx");
     });
   });
 });

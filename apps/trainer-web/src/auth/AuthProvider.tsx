@@ -9,7 +9,12 @@ import {
 } from "react";
 import { ApiClientError } from "@fitbud/api-client";
 import type { MeResponse } from "@fitbud/contracts";
-import { apiClient } from "../lib/api";
+import {
+  apiClient,
+  cancelTokenRefresh,
+  scheduleTokenRefresh,
+  setSessionExpiredListener,
+} from "../lib/api";
 import {
   AuthFlowError,
   establishTrainerSession,
@@ -19,6 +24,7 @@ import {
   clearSession,
   getStoredAccessToken,
   getStoredEmail,
+  type SessionRefresh,
 } from "../lib/session";
 import { createTestIdToken } from "../lib/test-token";
 
@@ -28,7 +34,11 @@ type AuthContextValue = {
   loading: boolean;
   sessionError: string | null;
   signInWithPassword: (identifier: string, password: string) => Promise<void>;
-  signInWithToken: (token: string, identifier: string) => Promise<void>;
+  signInWithToken: (
+    token: string,
+    identifier: string,
+    refresh?: SessionRefresh,
+  ) => Promise<void>;
   signInDevTest: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
@@ -55,6 +65,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionError(null);
   }, []);
 
+  // Refresh failed (refresh token refused): the session is already cleared;
+  // dropping `me` sends RequireAuth to the sign-in page.
+  useEffect(() => {
+    setSessionExpiredListener(() => {
+      setMe(null);
+      setEmail(null);
+      setSessionError(null);
+    });
+    // Background tabs throttle timers; re-check the expiry when the tab is back.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") scheduleTokenRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      setSessionExpiredListener(null);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -63,10 +92,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!cancelled) setMe(null);
           return;
         }
+        scheduleTokenRefresh();
         await refreshMe();
       } catch (err) {
         if (cancelled) return;
+        // The client already tried one refresh before this 401 reached us.
         if (err instanceof ApiClientError && err.status === 401) {
+          cancelTokenRefresh();
           clearSession();
           setMe(null);
           setEmail(null);
@@ -98,12 +130,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const signInWithToken = useCallback(async (token: string, identifier: string) => {
-    setSessionError(null);
-    const profile = await establishTrainerSession(token, identifier);
-    setMe(profile);
-    setEmail(profile.email ?? identifier);
-  }, []);
+  const signInWithToken = useCallback(
+    async (token: string, identifier: string, refresh?: SessionRefresh) => {
+      setSessionError(null);
+      const profile = await establishTrainerSession(token, identifier, refresh);
+      setMe(profile);
+      setEmail(profile.email ?? identifier);
+    },
+    [],
+  );
 
   const signInDevTest = useCallback(async (rawEmail: string) => {
     if (!import.meta.env.DEV) {
@@ -121,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Local sessions may rely on Bearer only; still clear client state.
     }
+    cancelTokenRefresh();
     clearSession();
     setMe(null);
     setEmail(null);
