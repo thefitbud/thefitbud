@@ -25,6 +25,7 @@ Sets logged from the lock-screen Live Activity are saved: when the app becomes a
 
 ## Gap list
 - Nothing reads `liveActivityOutbox` from the App Group; the native module (LA1) has no read/clear.
+- W2 report follow-up: `@bacons/apple-targets` 0.2.1 ignores `infoPlist`, so the widget never gets its `FitBudAppGroup` key (`FitBudLiveActivity.swift:10` reads it) and its outbox writes land where the app can't read them. LA2's device check fails until the widget gets the App Group; if that needs a change outside `files_owned` (for example the target config or `plugins/withLiveActivity.js`, owned by LA3), stop and report.
 - No app-active hook in `apps/mobile/src/trainee/TraineeShell.tsx`.
 
 ## Acceptance criteria
