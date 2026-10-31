@@ -266,7 +266,7 @@ These tasks need a **dev build on a real device**. Agents can't compile Swift or
 
 **LA2 · Buttons → sync outbox**
 - The widget's `LiveActivityIntent` buttons already append `workout.log_set` rows to the App Group (`LiveActivityOutbox` in the Swift file).
-- When the app becomes active, drain those rows into the SQLite sync outbox, each with one stable mutation UUID and idempotency key (Agents.md offline rules). Clear only what was drained, and skip duplicates.
+- When the app becomes active, drain those rows into the SQLite sync outbox, each with one stable mutation UUID and idempotency key (AGENTS.md offline rules). Clear only what was drained, and skip duplicates.
 - Tests: drain logic, idempotency, and a duplicate tap that doesn't double-log.
 
 **LA3 · Android ongoing notification**

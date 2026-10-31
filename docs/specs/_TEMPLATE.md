@@ -17,11 +17,13 @@ size: S                   # S | M (never L; split instead)
 One or two sentences: what a trainer or trainee can do once this is merged.
 
 ## Context
-Everything the agent needs that is not in the code or frames: decisions with their IDs and dates, rules, background.
-Paste it in. Don't link to Confluence or /workspace paths.
+Everything the agent needs that is not in the code or frames: rules and background.
+Cite decisions by their batch-file ID (e.g. "D-W2-3") instead of copying their text; the batch file is where each decision lives.
+Paste other context in. Don't link to Confluence or /workspace paths.
 
 ## Gap list
 - What `main` does today vs the frame or decision. Give `file:line` where useful.
+- Written against `main` at <short SHA>. The implementer re-checks each item against the latest `main` before building (AGENTS.md).
 
 ## Acceptance criteria
 - [ ] Observable, testable statement.

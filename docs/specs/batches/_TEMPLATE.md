@@ -8,6 +8,8 @@
 - **D-Wn-1 <topic>.** The decision, and the options it was chosen over. Decided by <who>, <date>.
 - **D-Wn-2 <topic>. Open.** Only if it truly can't be decided yet: the options, the recommended one, and which tasks wait on it.
 
+This is the only place a decision's text lives. Specs and the task list cite it by ID.
+
 ## Lanes
 
 | Lane | Tasks (in order) | Model | Files owned | Spec |
@@ -24,7 +26,7 @@ Two lanes never own the same file. Run at most **3 implementer sessions at once*
 - [ ] Batch-level checks (e.g. a staging-like sign-in works end to end).
 
 ## What Firoz does
-- Reads the batch report and the QA screenshots in `docs/qa/`. Code is reviewed by agents, not by hand (CLAUDE.md, "No human code review").
+- Reads the batch report and the QA screenshots in `docs/qa/`. Code is reviewed by agents, not by hand (AGENTS.md, "No human code review").
 - Manual steps only he can do: secrets, store consoles, remote commands.
 
 ## Report (filled in by the orchestrator at the end)
