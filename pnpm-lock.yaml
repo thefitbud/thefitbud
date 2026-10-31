@@ -57,6 +57,9 @@ importers:
       hono-openapi:
         specifier: 1.3.3
         version: 1.3.3(hono@4.13.9)(zod-openapi@4.2.4(zod@3.25.76))(zod@3.25.76)
+      jose:
+        specifier: ^6.2.14
+        version: 6.2.14
       zod:
         specifier: 'catalog:'
         version: 3.25.76
@@ -4419,6 +4422,9 @@ packages:
 
   join-component@1.1.0:
     resolution: {integrity: sha512-bF7vcQxbODoGK1imE2P9GS9aw4zD0Sd+Hni68IMZLj7zRnquH7dXUmMw9hDI5S/Jzt7q+IyTXN0rSg2GI0IKhQ==}
+
+  jose@6.2.14:
+    resolution: {integrity: sha512-3JasLuki1NRLQvY4wCoC37KZk4qxoBx2k2aFqLxT84IezqW0bkJKnNtxnZj/Fu1xsQivoc/lytxaRHJoGLjJ1A==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -10382,6 +10388,8 @@ snapshots:
   jimp-compact@0.16.1: {}
 
   join-component@1.1.0: {}
+
+  jose@6.2.14: {}
 
   js-tokens@4.0.0: {}
 

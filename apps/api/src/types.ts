@@ -42,6 +42,8 @@ export type Env = {
   FLAG_STEPS_ENABLED?: string;
   LIBRARY_MEDIA_BASE_URL?: string;
   FIREBASE_SERVICE_ACCOUNT_JSON?: string;
+  /** Public Firebase Web API key; used for the server-side token exchange and refresh. */
+  FIREBASE_WEB_API_KEY?: string;
   WA_PHONE_NUMBER_ID?: string;
   WA_ACCESS_TOKEN?: string;
   WA_APP_SECRET?: string;
