@@ -81,7 +81,7 @@ Production (I6b) repeats steps 2, 3 and 6 with the prod project, prod queues and
 
 ## 8. Code that must be on `main` before I6
 
-**Done (31 Oct): all of W2 is merged**, including the rows below. The AU2 guard now accepts only providers that have a sender (push `expo`; email `zeptomail` or `disabled`).
+**Done (31 Oct): all of W2 is merged**, including the rows below. The AU2 guard now accepts only providers that have a sender (push `expo`; email `zeptomail` or `disabled`), and refuses `zeptomail` until the `ZEPTOMAIL_TOKEN` secret is set: staging answers every request with `RUNTIME_MISCONFIGURED` until step 6 is done.
 
 | Task | Why I6 needs it |
 |---|---|
