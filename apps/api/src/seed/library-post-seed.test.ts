@@ -7,6 +7,7 @@ import {
   type MemoryDbHandle,
   yieldToEventLoop,
 } from "../test-support/memory-db.js";
+import { LOCAL_FILES } from "../../scripts/library-seed.js";
 
 /**
  * Task I2f: 08_post_seed.sql removes the Jain tag from dal-lentil-curry-generic (D18)
@@ -16,17 +17,7 @@ const seedDir = join(dirname(fileURLToPath(import.meta.url)), "../../seed/librar
 const SLUG = "dal-lentil-curry-generic";
 
 /** scripts/library-seed.ts order up to (not including) 08_post_seed.sql. */
-const BEFORE_POST_SEED = [
-  "00_wipe_legacy_dev.sql",
-  "sql/01_lookups.sql",
-  "sql/02_foods.sql",
-  "sql/02b_food_extras.sql",
-  "sql/03_exercises.sql",
-  "sql/04_templates.sql",
-  "sql/05_search.sql",
-  "sql/06_seed_version.sql",
-  "07_post_wipe_dev.sql",
-];
+const BEFORE_POST_SEED = LOCAL_FILES.slice(0, LOCAL_FILES.indexOf("sql/08_post_seed.sql"));
 
 function applyFile(handle: MemoryDbHandle, rel: string): void {
   const sql = readFileSync(join(seedDir, rel), "utf8");

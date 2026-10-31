@@ -6,6 +6,7 @@ import { hashPassword } from "../auth/password.js";
 import { buildDemoSeedSql } from "./demo/build.js";
 import { loadDemoLibraryIndex } from "./demo/personas.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "./demo/spec.js";
+import { LOCAL_FILES } from "../../scripts/library-seed.js";
 import { foreignKeyViolations } from "../test-support/foreign-key-check.js";
 import {
   createMemoryDb,
@@ -15,25 +16,11 @@ import {
 
 /**
  * Task I2c: the locked exercise base 2026.10.21-v3 (03b_exercise_base.sql) on top of the
- * foods release, then the current demo seed (no I2e). 03b is not in library-seed.ts yet (I2d),
- * so this file loads it in the order I2d wires: 01, 02, 02b, 03, 03b, 04, 05, 06, 07, 08, 05.
+ * foods release, then the current demo seed (no I2e), in the `pnpm db:reset` order of
+ * scripts/library-seed.ts (LOCAL_FILES).
  */
 const seedDir = join(dirname(fileURLToPath(import.meta.url)), "../../seed/library");
 const FROZEN_REFERENCE_INSTANT = "2026-10-17T14:30:00.000Z";
-const LOAD_ORDER = [
-  "00_wipe_legacy_dev.sql",
-  "sql/01_lookups.sql",
-  "sql/02_foods.sql",
-  "sql/02b_food_extras.sql",
-  "sql/03_exercises.sql",
-  "sql/03b_exercise_base.sql",
-  "sql/04_templates.sql",
-  "sql/05_search.sql",
-  "sql/06_seed_version.sql",
-  "07_post_wipe_dev.sql",
-  "sql/08_post_seed.sql",
-  "sql/05_search.sql",
-];
 const MEDIA_KEY = /^exercises\/[a-z0-9-]+\/[0-9]+\.(jpg|jpeg|png|webp|gif|mp4)$/;
 
 describe("exercise base 2026.10.21-v3 (03b)", () => {
@@ -44,7 +31,7 @@ describe("exercise base 2026.10.21-v3 (03b)", () => {
 
   beforeAll(async () => {
     handle = await createMemoryDb({ foreignKeys: true });
-    for (const rel of LOAD_ORDER) {
+    for (const rel of LOCAL_FILES) {
       const sql = readFileSync(join(seedDir, rel), "utf8");
       handle.sqlite.exec("BEGIN");
       try {

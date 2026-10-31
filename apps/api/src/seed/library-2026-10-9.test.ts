@@ -7,6 +7,7 @@ import { hashPassword } from "../auth/password.js";
 import { buildDemoSeedSql } from "./demo/build.js";
 import { loadDemoLibraryIndex } from "./demo/personas.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "./demo/spec.js";
+import { LOCAL_FILES } from "../../scripts/library-seed.js";
 import { foreignKeyViolations } from "../test-support/foreign-key-check.js";
 import {
   createMemoryDb,
@@ -16,25 +17,10 @@ import {
 
 /**
  * Task I2b: the locked foods release 2026.10.9 as copied into seed/library, loaded in
- * the order `scripts/library-seed.ts` uses for `pnpm db:reset`, with the demo seed on top.
+ * the order `scripts/library-seed.ts` uses for `pnpm db:reset` (LOCAL_FILES), with the demo seed on top.
  */
 const seedDir = join(dirname(fileURLToPath(import.meta.url)), "../../seed/library");
 const FROZEN_REFERENCE_INSTANT = "2026-10-17T14:30:00.000Z";
-
-/** Same order as `files` in scripts/library-seed.ts. */
-const LOCAL_LOAD_ORDER = [
-  "00_wipe_legacy_dev.sql",
-  "sql/01_lookups.sql",
-  "sql/02_foods.sql",
-  "sql/02b_food_extras.sql",
-  "sql/03_exercises.sql",
-  "sql/04_templates.sql",
-  "sql/05_search.sql",
-  "sql/06_seed_version.sql",
-  "07_post_wipe_dev.sql",
-  "sql/08_post_seed.sql",
-  "sql/05_search.sql",
-];
 
 
 const FOOD_TYPES = ["ingredient", "dish", "beverage", "packaged_or_prepared"];
@@ -111,7 +97,7 @@ describe("library seed 2026.10.9", () => {
 
     beforeAll(async () => {
       handle = await createMemoryDb({ foreignKeys: true });
-      for (const rel of LOCAL_LOAD_ORDER) {
+      for (const rel of LOCAL_FILES) {
         const sql = readFileSync(join(seedDir, rel), "utf8");
         handle.sqlite.exec("BEGIN");
         try {
