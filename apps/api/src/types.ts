@@ -24,10 +24,13 @@ export type Env = {
   /** `test` uses the documented Firebase token test double. */
   AUTH_MODE: "test" | "firebase";
   /**
-   * `test` records provider acceptance via a local FCM double.
-   * `fcm` requires production credentials (not wired in MVP local).
+   * `test` records provider acceptance via a local double (local only).
+   * `expo` sends through the Expo Push Service (staging, production).
+   * `fcm` is kept for compatibility and is not configured.
    */
-  PUSH_PROVIDER_MODE?: "test" | "fcm";
+  PUSH_PROVIDER_MODE?: "test" | "fcm" | "expo";
+  /** Optional Expo Push access token (Worker secret). Never logged. */
+  EXPO_ACCESS_TOKEN?: string;
   /** HMAC secret for time-limited media upload/download URLs. */
   MEDIA_SIGNING_SECRET: string;
   ENVIRONMENT?: "local" | "staging" | "production" | "preview";

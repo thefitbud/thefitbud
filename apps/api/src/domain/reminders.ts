@@ -83,7 +83,14 @@ export type ReminderQueue = {
 type DeliveryOptions = {
   queue: ReminderQueue | null;
   pushProviderMode: PushProviderMode;
+  /** Optional Expo access token for `expo` mode (Worker secret). Never logged. */
+  expoAccessToken?: string;
   deliverInline: boolean;
+};
+
+export type PushDeliveryConfig = {
+  /** Optional Expo access token for `expo` mode (Worker secret). Never logged. */
+  expoAccessToken?: string;
 };
 
 type ReminderCounters = {
@@ -1015,7 +1022,9 @@ async function enqueueReminderDelivery(
   if (input.options.queue) {
     await input.options.queue.send(message);
   } else if (input.options.deliverInline) {
-    await deliverReminderMessage(db, message, input.options.pushProviderMode, input.now);
+    await deliverReminderMessage(db, message, input.options.pushProviderMode, input.now, {
+      expoAccessToken: input.options.expoAccessToken,
+    });
   }
 }
 
@@ -1533,6 +1542,7 @@ export async function evaluateAndEnqueueReminders(
     now?: string;
     queue: ReminderQueue | null;
     pushProviderMode: PushProviderMode;
+    expoAccessToken?: string;
     deliverInline: boolean;
   },
 ): Promise<EvaluateRemindersResponse> {
@@ -1540,6 +1550,7 @@ export async function evaluateAndEnqueueReminders(
   const delivery: DeliveryOptions = {
     queue: options.queue,
     pushProviderMode: options.pushProviderMode,
+    expoAccessToken: options.expoAccessToken,
     deliverInline: options.deliverInline,
   };
   const counters: ReminderCounters = {
@@ -1611,6 +1622,7 @@ export async function createActivityNudge(
     now?: string;
     queue: ReminderQueue | null;
     pushProviderMode: PushProviderMode;
+    expoAccessToken?: string;
     deliverInline: boolean;
   },
 ): Promise<ActivityNudgeResult & { retryAfter?: number }> {
@@ -1733,6 +1745,7 @@ export async function createActivityNudge(
     {
       queue: input.queue,
       pushProviderMode: input.pushProviderMode,
+      expoAccessToken: input.expoAccessToken,
       deliverInline: input.deliverInline,
     },
     counters,
@@ -1765,7 +1778,7 @@ export async function createActivityNudge(
 }
 
 /**
- * Queue consumer: hand off to FCM (or test double) and record provider acceptance.
+ * Queue consumer: hand off to the push provider (Expo, or the local double) and record provider acceptance.
  * Acceptance is never treated as workflow completion.
  */
 export async function deliverReminderMessage(
@@ -1773,6 +1786,7 @@ export async function deliverReminderMessage(
   message: ReminderQueueMessage,
   pushMode: PushProviderMode,
   now = nowIso(),
+  config: PushDeliveryConfig = {},
 ): Promise<void> {
   const notificationRows = await db
     .select()
@@ -1931,6 +1945,7 @@ export async function deliverReminderMessage(
       mode: pushMode,
       deviceToken: token.token,
       payload,
+      expoAccessToken: config.expoAccessToken,
     });
     if (result.ok) {
       anyAccepted = true;
@@ -1939,6 +1954,13 @@ export async function deliverReminderMessage(
       break;
     }
     lastFailure = result.failureCategory;
+    if (result.failureCategory === "DeviceNotRegistered") {
+      // Expo says the app is gone from this device: stop using the token now.
+      await db
+        .update(deviceTokens)
+        .set({ status: "revoked", updatedAt: now })
+        .where(and(eq(deviceTokens.id, token.id), eq(deviceTokens.status, "active")));
+    }
   }
 
   if (anyAccepted) {
