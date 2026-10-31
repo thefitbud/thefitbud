@@ -232,6 +232,40 @@ describe("http-api", () => {
     api.cancelTokenRefresh();
   });
 
+  it("drops a refresh that finishes after sign-out: nothing stored, no retry", async () => {
+    signedIn();
+    let finishRefresh: () => void = () => undefined;
+    stubApi((call) => {
+      if (call.url.endsWith("/auth/refresh")) {
+        return new Promise<Response>((resolve) => {
+          finishRefresh = () =>
+            resolve(
+              json(200, {
+                data: {
+                  token: "late-id-token",
+                  tokenKind: "firebase_id_token",
+                  refreshToken: "late-refresh",
+                  expiresIn: 3600,
+                },
+              }),
+            );
+        });
+      }
+      return json(401, unauthenticated);
+    });
+
+    const { clearSession } = await import("./session.js");
+    const { revokeInvitation } = await import("./http-api.js");
+    const pending = revokeInvitation(invitation.id, "idem-revoke-5").catch((e: unknown) => e);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    clearSession(); // the trainer signs out while /auth/refresh is in flight
+    finishRefresh();
+
+    expect(await pending).toBeInstanceOf(Error);
+    expect(storage.length).toBe(0);
+    expect(calls.filter((c) => c.url.includes("/revoke"))).toHaveLength(1);
+  });
+
   it("does not call /auth/refresh in test mode (no refresh token)", async () => {
     storage.setItem("fitbud.trainer.accessToken", "test-token");
     stubApi(() => json(401, unauthenticated));

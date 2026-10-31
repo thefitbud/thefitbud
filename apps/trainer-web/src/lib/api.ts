@@ -90,8 +90,9 @@ export function refreshTrainerAccessToken(): Promise<string | null> {
     if (!refreshToken) return null;
     try {
       const result = await apiClient.refreshAuth(refreshToken);
-      // Signed out (or signed in again) while the call was in flight.
-      if (getStoredRefreshToken() !== refreshToken) return getStoredAccessToken();
+      // Signed out (or signed in again) while the call was in flight: drop the
+      // result, and don't retry the old request under another session's token.
+      if (getStoredRefreshToken() !== refreshToken) return null;
       storeRefreshedTokens(result.token, {
         refreshToken: result.refreshToken,
         expiresIn: result.expiresIn,
