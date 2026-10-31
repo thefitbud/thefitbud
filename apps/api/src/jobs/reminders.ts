@@ -4,6 +4,7 @@ import {
   deliverReminderMessage,
   evaluateAndEnqueueReminders,
 } from "../domain/reminders";
+import { resolvePushProviderMode } from "../lib/push-provider";
 import type { Env } from "../types";
 
 /**
@@ -26,13 +27,14 @@ export async function handleScheduledReminders(
   await evaluateAndEnqueueReminders(db, {
     now: scheduledTime.toISOString(),
     queue,
-    pushProviderMode: env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+    pushProviderMode: resolvePushProviderMode(env.PUSH_PROVIDER_MODE),
+    expoAccessToken: env.EXPO_ACCESS_TOKEN,
     deliverInline: !queue,
   });
 }
 
 /**
- * Queue consumer: send push via provider double/FCM and record provider
+ * Queue consumer: send push via the provider (Expo, or the local double) and record provider
  * acceptance separately from application completion.
  */
 export async function handleReminderQueueBatch(
@@ -40,7 +42,7 @@ export async function handleReminderQueueBatch(
   env: Env,
 ): Promise<void> {
   const db = createDb(env.DB);
-  const mode = env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test";
+  const mode = resolvePushProviderMode(env.PUSH_PROVIDER_MODE);
 
   for (const message of batch.messages) {
     const parsed = reminderQueueMessageSchema.safeParse(message.body);
@@ -49,7 +51,9 @@ export async function handleReminderQueueBatch(
       continue;
     }
     try {
-      await deliverReminderMessage(db, parsed.data, mode);
+      await deliverReminderMessage(db, parsed.data, mode, undefined, {
+        expoAccessToken: env.EXPO_ACCESS_TOKEN,
+      });
       message.ack();
     } catch {
       message.retry();

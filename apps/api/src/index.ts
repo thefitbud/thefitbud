@@ -7,6 +7,7 @@ import {
   handleReminderQueueBatch,
   handleScheduledReminders,
 } from "./jobs/reminders";
+import { handleScheduledPushReceipts } from "./jobs/push-receipts";
 import { handleScheduledReplenishment } from "./jobs/replenishment";
 import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
@@ -208,6 +209,7 @@ const worker = {
     env: Env,
   ): Promise<void> {
     await handleScheduledReminders(env, new Date(controller.scheduledTime));
+    await handleScheduledPushReceipts(env, new Date(controller.scheduledTime));
     await handleScheduledReplenishment(env, new Date(controller.scheduledTime));
     await runCoachAskMaintenance(createDb(env.DB));
   },
