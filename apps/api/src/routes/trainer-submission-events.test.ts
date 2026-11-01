@@ -1,11 +1,13 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SAFE_PUSH_PAYLOAD_KEYS } from "@fitbud/contracts";
 import { formatLocalDate } from "@fitbud/core";
 import * as schema from "../db/schema.js";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { nowIso } from "../lib/crypto.js";
+import { storeInboxNotification } from "../domain/inbox-notify.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
 import type { Env } from "../types.js";
@@ -30,6 +32,8 @@ function testEnv(): Env {
     AUTH_MODE: "test",
     ENVIRONMENT: "local",
     MEDIA_SIGNING_SECRET: "fitbud-local-file-signing-secret",
+    PUSH_PROVIDER_MODE: "expo",
+    EXPO_ACCESS_TOKEN: "test-expo-access-token-x4h",
   };
 }
 
@@ -179,11 +183,20 @@ async function endRelationship(db: Db, relationshipId: string) {
     .where(eq(schema.coachingRelationships.id, relationshipId));
 }
 
+const TRAINER_DEVICE_TOKEN = "ExponentPushToken[x4h-trainer-phone]";
+type ExpoMessage = Record<string, unknown> & {
+  to: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+};
+
 const CHECKIN_ANSWERS = { wellbeing: "Strong week", notes: "Sleep was better", bodyWeightKg: 72.5 };
 
 describe("trainer inbox events on submit (X4h)", () => {
   let db: Db;
   let close: () => void;
+  let expoCalls: ExpoMessage[];
 
   function events(type: "trainer_checkin_submitted" | "trainer_intake_submitted") {
     return db
@@ -200,7 +213,45 @@ describe("trainer inbox events on submit (X4h)", () => {
     return row!.trainerUserId;
   }
 
+  /** Registers an active Expo device for the relationship's trainer. */
+  async function registerTrainerDevice(relationshipId: string) {
+    const userId = await trainerUserId(relationshipId);
+    const now = nowIso();
+    await db.insert(schema.deviceTokens).values({
+      id: "x4h-trainer-phone",
+      userId,
+      platform: "android",
+      provider: "expo",
+      token: TRAINER_DEVICE_TOKEN,
+      installationId: "x4h-trainer-phone-install",
+      status: "active",
+      lastSeenAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  function deliveries() {
+    return db.select().from(schema.notificationDeliveries);
+  }
+
   beforeEach(async () => {
+    // Midday in the trainer's timezone, so the default quiet hours never apply.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const noonIst = new Date();
+    noonIst.setUTCHours(6, 30, 0, 0);
+    vi.setSystemTime(noonIst);
+    expoCalls = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (_url, init) => {
+        const body = JSON.parse(String(init!.body)) as ExpoMessage[];
+        expoCalls.push(...body);
+        return Response.json({
+          data: body.map((_, i) => ({ status: "ok", id: `ticket-${expoCalls.length}-${i}` })),
+        });
+      }),
+    );
     const handle = await createMemoryDb();
     db = handle.db;
     close = handle.close;
@@ -208,6 +259,8 @@ describe("trainer inbox events on submit (X4h)", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
     setTestDbOverride(null);
     close();
   });
@@ -215,6 +268,7 @@ describe("trainer inbox events on submit (X4h)", () => {
   it("intake submit stores one event for the trainer, routed by relationship id; replay adds none", async () => {
     const ctx = await setup("intake");
     await saveIntakeDraft(ctx, INTAKE_ANSWERS);
+    await registerTrainerDevice(ctx.relationshipId);
     expect(await events("trainer_intake_submitted")).toHaveLength(0);
 
     expect((await submitIntake(ctx, "tse-intake-1")).status).toBe(200);
@@ -226,10 +280,25 @@ describe("trainer inbox events on submit (X4h)", () => {
     expect(event.domainEntityType).toBe("coaching_relationship");
     expect(event.domainEntityId).toBe(ctx.relationshipId);
 
+    expect(expoCalls).toHaveLength(1);
+    expect(expoCalls[0]!.to).toBe(TRAINER_DEVICE_TOKEN);
+    expect(Object.keys(expoCalls[0]!.data).sort()).toEqual([...SAFE_PUSH_PAYLOAD_KEYS].sort());
+    expect(expoCalls[0]!.data).toMatchObject({
+      notificationId: event.id,
+      notificationType: "trainer_intake_submitted",
+      domainEntityType: "coaching_relationship",
+      domainEntityId: ctx.relationshipId,
+    });
+    expect(expoCalls[0]!.title).toBe("FitBud");
+    expect(expoCalls[0]!.body).toBe("Intake submitted");
+    expect(await deliveries()).toHaveLength(1);
+
     // Same key replays; a new key on the already-submitted response also adds nothing.
     expect((await submitIntake(ctx, "tse-intake-1")).status).toBe(200);
     expect((await submitIntake(ctx, "tse-intake-2")).status).toBe(200);
     expect(await events("trainer_intake_submitted")).toHaveLength(1);
+    expect(expoCalls).toHaveLength(1);
+    expect(await deliveries()).toHaveLength(1);
   });
 
   it("rejected intake submits (incomplete, ended) store nothing", async () => {
@@ -247,6 +316,8 @@ describe("trainer inbox events on submit (X4h)", () => {
     const ctx = await setup("checkin");
     await reachActive(ctx, "checkin");
     const checkin = await scheduleCheckin(ctx, "checkin");
+    await registerTrainerDevice(ctx.relationshipId);
+    expoCalls.length = 0;
     expect(await events("trainer_checkin_submitted")).toHaveLength(0);
 
     const submit = (key: string, version = checkin.recordVersion) =>
@@ -265,10 +336,25 @@ describe("trainer inbox events on submit (X4h)", () => {
     expect(event.domainEntityId).toBe(checkin.id);
     expect(event.dedupeKey).toBe(`checkin-submitted:${checkin.id}`);
 
+    expect(expoCalls).toHaveLength(1);
+    expect(expoCalls[0]!.to).toBe(TRAINER_DEVICE_TOKEN);
+    expect(Object.keys(expoCalls[0]!.data).sort()).toEqual([...SAFE_PUSH_PAYLOAD_KEYS].sort());
+    expect(expoCalls[0]!.data).toMatchObject({
+      notificationId: event.id,
+      notificationType: "trainer_checkin_submitted",
+      domainEntityType: "checkin",
+      domainEntityId: checkin.id,
+    });
+    expect(expoCalls[0]!.title).toBe("FitBud");
+    expect(expoCalls[0]!.body).toBe("Check-in submitted");
+    expect(await deliveries()).toHaveLength(1);
+
     // Idempotent replay, then a different key on the already-submitted check-in (422).
     expect((await submit("tse-ci-1")).status).toBe(200);
     expect((await submit("tse-ci-2", 1)).status).toBe(422);
     expect(await events("trainer_checkin_submitted")).toHaveLength(1);
+    expect(expoCalls).toHaveLength(1);
+    expect(await deliveries()).toHaveLength(1);
   });
 
   it("rejected check-in submits (stale version, missing answers, ended) store nothing", async () => {
@@ -288,5 +374,33 @@ describe("trainer inbox events on submit (X4h)", () => {
     await endRelationship(db, ctx.relationshipId);
     expect((await submit("tse-cib-3", checkin.recordVersion, CHECKIN_ANSWERS)).status).toBe(409);
     expect(await events("trainer_checkin_submitted")).toHaveLength(0);
+  });
+
+  it("a retry after a crash between storing the event and the idempotency record stores and pushes nothing more", async () => {
+    const ctx = await setup("checkin-crash");
+    await reachActive(ctx, "checkin-crash");
+    const checkin = await scheduleCheckin(ctx, "checkin-crash");
+    await registerTrainerDevice(ctx.relationshipId);
+    expoCalls.length = 0;
+
+    // The first attempt stored (and pushed) the event, then died before saving the idempotency record.
+    const earlier = await storeInboxNotification(db, {
+      recipientUserId: await trainerUserId(ctx.relationshipId),
+      relationshipId: ctx.relationshipId,
+      notificationType: "trainer_checkin_submitted",
+      domainEntityId: checkin.id,
+      domainEntityType: "checkin",
+      dedupeKey: `checkin-submitted:${checkin.id}`,
+    });
+    expect(earlier.inserted).toBe(true);
+
+    const retry = await call(ctx.trainee, "POST", `/checkins/${checkin.id}/submit`, "tse-crash-1", {
+      expectedVersion: checkin.recordVersion,
+      answers: CHECKIN_ANSWERS,
+    });
+    expect(retry.status).toBe(200);
+    expect(await events("trainer_checkin_submitted")).toHaveLength(1);
+    expect(expoCalls).toHaveLength(0);
+    expect(await deliveries()).toHaveLength(0);
   });
 });

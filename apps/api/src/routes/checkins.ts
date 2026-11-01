@@ -2034,15 +2034,8 @@ checkinRoutes.post(
         mapCheckin(refreshed!.checkin, refreshed!.review, now),
       ),
     };
-    await saveIdempotencyRecord(db, {
-      actorUserId: actor.userId,
-      operation: SUBMIT_OPERATION,
-      idempotencyKey,
-      requestFingerprint: fingerprint,
-      responseStatus: 200,
-      responseBody,
-      expiresAt: addDaysIso(7),
-    });
+    // Stored before the idempotency record so a crash in between cannot lose the event on retry:
+    // the dedupe key makes a re-store a no-op and `inserted: false` suppresses a second push.
     // Trainer inbox event (D-W3-1). Recipient is the relationship's trainer, resolved server-side.
     const storedTrainerEvent = await storeInboxNotification(db, {
       recipientUserId: relationship.trainerUserId,
@@ -2058,6 +2051,15 @@ checkinRoutes.post(
         expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
       });
     }
+    await saveIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: SUBMIT_OPERATION,
+      idempotencyKey,
+      requestFingerprint: fingerprint,
+      responseStatus: 200,
+      responseBody,
+      expiresAt: addDaysIso(7),
+    });
     queueRealtimeHint(c.env, {
       eventType: "checkin_submitted",
       entityType: "checkin",

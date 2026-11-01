@@ -584,6 +584,27 @@ onboardingRoutes.post(
       mapOnboardingFormResponse(updated),
     );
     const responseBody = { data };
+    // Stored before the idempotency record so a crash in between cannot lose the event on retry:
+    // the dedupe key makes a re-store a no-op and `inserted: false` suppresses a second push.
+    // Trainer inbox event (D-W3-1). Recipient is the relationship's trainer, resolved server-side;
+    // the entity is the relationship, which is what trainer tap routing opens.
+    const storedTrainerEvent = await storeInboxNotification(db, {
+      recipientUserId: relationship.trainerUserId,
+      relationshipId: relationship.id,
+      notificationType: "trainer_intake_submitted",
+      domainEntityType: "coaching_relationship",
+      domainEntityId: relationship.id,
+      // `updated.id` is the single onboarding-response row id, so this key is effectively one per
+      // relationship. If a "changes requested, resubmit" flow is ever added, a resubmission would
+      // dedupe to nothing and store no event; give that flow a per-submission key.
+      dedupeKey: `intake-submitted:${relationship.id}:${updated.id}`,
+    });
+    if (storedTrainerEvent.inserted) {
+      await pushTrainerInboxEvent(db, storedTrainerEvent.notificationId, {
+        pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+      });
+    }
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
       operation: SUBMIT_OPERATION,
@@ -593,21 +614,6 @@ onboardingRoutes.post(
       responseBody,
       expiresAt: addDaysIso(7),
     });
-    // Trainer inbox event (D-W3-1). Recipient is the relationship's trainer, resolved server-side;
-    // the entity is the relationship, which is what trainer tap routing opens.
-    const storedTrainerEvent = await storeInboxNotification(db, {
-      recipientUserId: relationship.trainerUserId,
-      relationshipId: relationship.id,
-      notificationType: "trainer_intake_submitted",
-      domainEntityId: relationship.id,
-      dedupeKey: `intake-submitted:${relationship.id}:${updated.id}`,
-    });
-    if (storedTrainerEvent.inserted) {
-      await pushTrainerInboxEvent(db, storedTrainerEvent.notificationId, {
-        pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
-        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
-      });
-    }
     return ok(c, data);
   },
 );
