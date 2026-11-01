@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      WorkoutSetActionReceiver is declared in the app's manifest by
+      plugins/withLiveActivity.js (its Android part), so one file in the repo
+      says how the notification's buttons are registered.
+    -->
+</manifest>

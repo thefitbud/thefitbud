@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Expanded view of the ongoing workout notification (frame
+  27-android-trainee-workout-notif.png). The system draws the header
+  ("FitBud · Workout · now") around it: NotificationCompat.DecoratedCustomViewStyle.
+
+  Height stays under the 252 dp Android allows an expanded notification.
+  Every button is 48 dp, above the 44 pt minimum touch target. Colours come
+  from values/ and values-night/ so the notification follows the system
+  shade; nothing here shows state by colour alone.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="4dp">
+
+    <TextView
+        android:id="@+id/fitbud_workout_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
+        android:text="" />
+
+    <TextView
+        android:id="@+id/fitbud_workout_last"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="14sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:text="" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/fitbud_workout_group">
+
+            <Button
+                android:id="@+id/fitbud_workout_weight_down"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@android:color/transparent"
+                android:textSize="20sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textAllCaps="false"
+                android:text="@string/fitbud_workout_minus" />
+
+            <TextView
+                android:id="@+id/fitbud_workout_weight"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end|center_vertical"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:text="" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:text="@string/fitbud_workout_kg" />
+
+            <Button
+                android:id="@+id/fitbud_workout_weight_up"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@android:color/transparent"
+                android:textSize="20sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textAllCaps="false"
+                android:text="@string/fitbud_workout_plus" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/fitbud_workout_group">
+
+            <Button
+                android:id="@+id/fitbud_workout_reps_down"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@android:color/transparent"
+                android:textSize="20sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textAllCaps="false"
+                android:text="@string/fitbud_workout_minus" />
+
+            <TextView
+                android:id="@+id/fitbud_workout_reps"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end|center_vertical"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:text="" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:text="@string/fitbud_workout_reps" />
+
+            <Button
+                android:id="@+id/fitbud_workout_reps_up"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@android:color/transparent"
+                android:textSize="20sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textAllCaps="false"
+                android:text="@string/fitbud_workout_plus" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <Button
+            android:id="@+id/fitbud_workout_log"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/fitbud_workout_primary"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            android:textColor="@color/fitbud_workout_on_accent"
+            android:text="" />
+
+        <Button
+            android:id="@+id/fitbud_workout_open"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:minWidth="88dp"
+            android:background="@drawable/fitbud_workout_group"
+            android:textSize="16sp"
+            android:textAllCaps="false"
+            android:textColor="?android:attr/textColorPrimary"
+            android:text="@string/fitbud_workout_open" />
+    </LinearLayout>
+</LinearLayout>

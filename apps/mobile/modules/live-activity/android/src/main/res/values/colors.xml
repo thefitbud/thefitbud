@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Workout notification colours (LA3). Light shade: the FitBud brand tokens
+  (packages/tokens: indigo #4527C6, chalk #FAF7F2, pale lavender #EDEAFF).
+  values-night/ carries the dark shade of frame 27-android. These apply to the
+  notification shade only; the app itself stays light-theme (CLAUDE.md).
+-->
+<resources>
+    <color name="fitbud_workout_accent">#4527C6</color>
+    <color name="fitbud_workout_on_accent">#FAF7F2</color>
+    <color name="fitbud_workout_group">#EDEAFF</color>
+</resources>
