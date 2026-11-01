@@ -34,7 +34,9 @@ export type InboxNotificationType =
   | "coach_answered"
   | "trainer_meal_times_changed"
   | "activity_nudge"
-  | "checkin_reviewed";
+  | "checkin_reviewed"
+  | "trainer_checkin_submitted"
+  | "trainer_intake_submitted";
 
 export async function storeInboxNotification(
   db: Db,
