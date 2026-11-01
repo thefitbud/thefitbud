@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { NotificationType, PushPayload } from "@fitbud/contracts";
 import {
   deepLinkFromNotificationPayload,
+  notificationAudience,
   TRAINEE_NOTIFICATION_TYPES,
+  TRAINER_NOTIFICATION_TYPES,
 } from "./routing.js";
 
 const base = {
@@ -99,5 +101,76 @@ describe("notification routing", () => {
         answers: { wellbeing: "secret" },
       }),
     ).toBeNull();
+  });
+
+  describe("trainer types (X4g)", () => {
+    const route = (
+      notificationType: NotificationType,
+      domainEntityType: PushPayload["domainEntityType"],
+    ) =>
+      deepLinkFromNotificationPayload({
+        ...base,
+        notificationType,
+        domainEntityType,
+      });
+
+    it("check-in submitted opens the check-in review", () => {
+      expect(route("trainer_checkin_submitted", "checkin")?.trainerRoute).toEqual({
+        kind: "checkin",
+        checkinId: base.domainEntityId,
+      });
+    });
+
+    it("intake submitted and meal times changed open the client", () => {
+      for (const type of [
+        "trainer_intake_submitted",
+        "trainer_meal_times_changed",
+      ] as const) {
+        expect(route(type, "coaching_relationship")?.trainerRoute, type).toEqual({
+          kind: "client",
+          relationshipId: base.domainEntityId,
+        });
+      }
+    });
+
+    it("ask opens by ask id (the client is resolved from the server)", () => {
+      expect(
+        route("trainer_ask_coach", "coaching_relationship")?.trainerRoute,
+      ).toEqual({ kind: "ask", askId: base.domainEntityId });
+    });
+
+    it("never reads a mismatched entity type as a client or check-in id", () => {
+      expect(
+        route("trainer_checkin_submitted", "coaching_relationship")?.trainerRoute,
+      ).toEqual({ kind: "attention" });
+      expect(
+        route("trainer_intake_submitted", "checkin")?.trainerRoute,
+      ).toEqual({ kind: "attention" });
+    });
+
+    it("every trainer type has a route and trainee types have none", () => {
+      for (const type of TRAINER_NOTIFICATION_TYPES) {
+        const link = route(type, entityFor(type));
+        expect(link?.trainerRoute, type).not.toBeNull();
+        expect(notificationAudience(type)).toBe("trainer");
+      }
+      for (const type of TRAINEE_NOTIFICATION_TYPES) {
+        expect(route(type, entityFor(type))?.trainerRoute, type).toBeNull();
+        expect(notificationAudience(type)).toBe("trainee");
+      }
+    });
+
+    it("trainee and trainer allow-lists do not overlap; digest/renewal/admin route nowhere", () => {
+      for (const type of TRAINER_NOTIFICATION_TYPES) {
+        expect(TRAINEE_NOTIFICATION_TYPES).not.toContain(type);
+      }
+      for (const type of [
+        "trainer_critical_digest",
+        "trainer_renewal",
+        "admin_whatsapp_budget",
+      ] as const) {
+        expect(notificationAudience(type)).toBeNull();
+      }
+    });
   });
 });

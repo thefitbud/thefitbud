@@ -218,6 +218,111 @@ describe("re-tap after a role that could not route it", () => {
   });
 });
 
+describe("trainer taps (X4g)", () => {
+  const handle = vi.fn();
+  beforeEach(() => handle.mockReset());
+  const trainerTypes = [
+    "trainer_ask_coach",
+    "trainer_checkin_submitted",
+    "trainer_intake_submitted",
+    "trainer_meal_times_changed",
+  ] as const;
+  const askData = payload("trainer_ask_coach", "coaching_relationship");
+
+  it.each(trainerTypes)("routes %s in a signed-in trainer session", (type) => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    const data = payload(
+      type,
+      type === "trainer_checkin_submitted" ? "checkin" : "coaching_relationship",
+    );
+    expect(c.receive(tap(type, data))).toBe("routed");
+    expect(handle).toHaveBeenCalledWith(data);
+  });
+
+  it.each(["trainer_critical_digest", "trainer_renewal", "admin_whatsapp_budget"] as const)(
+    "does not route %s (no producer in the beta)",
+    (type) => {
+      const c = createNotificationOpenController({ handle });
+      c.setSession({ userId: USER_A, role: "trainer" });
+      expect(c.receive(tap(type, payload(type, "coaching_relationship")))).toBe(
+        "ignored",
+      );
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores a trainer payload in a trainee session without burning its key", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainee" });
+    expect(c.receive(tap("t1", askData))).toBe("ignored");
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(c.receive(tap("t1", askData))).toBe("routed");
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a trainer payload with extra keys or an unknown type", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(c.receive(tap("t1", { ...askData, body: "Rahul asked" }))).toBe("ignored");
+    expect(c.receive(tap("t2", { ...askData, notificationType: "trainer_x" }))).toBe(
+      "ignored",
+    );
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("queues a signed-out trainer tap and routes it once for the same trainer", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    c.setSession(null);
+    expect(c.receive(tap("t1", askData))).toBe("queued");
+    c.setSession({ userId: USER_A, role: null });
+    expect(handle).not.toHaveBeenCalled();
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(handle).toHaveBeenCalledTimes(1);
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+
+  it("never routes a queued trainer tap to a different trainer", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    c.setSession(null);
+    c.receive(tap("t1", askData));
+    c.setSession({ userId: USER_B, role: "trainer" });
+    expect(handle).not.toHaveBeenCalled();
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("drops a queued trainer tap when the same user picks the trainee role", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    c.setSession(null);
+    c.receive(tap("t1", askData));
+    c.setSession({ userId: USER_A, role: null });
+    c.setSession({ userId: USER_A, role: "trainee" });
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("drops a queued trainer tap when its user signs out before the role is picked", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: null });
+    c.receive(tap("t1", askData));
+    c.setSession(null);
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("does not route the same trainer tap twice", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    c.receive(tap("t1", askData));
+    expect(c.receive(tap("t1", askData))).toBe("ignored");
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("bindNotificationResponses", () => {
   const NATIVE_DEFAULT = "native.default.id";
   const calls: string[] = [];
