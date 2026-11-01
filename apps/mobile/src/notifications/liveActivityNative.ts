@@ -122,19 +122,24 @@ export function createLiveActivityModuleAccess(
   deps: LiveActivityModuleAccessDeps,
 ): LiveActivityModuleAccess {
   const warn = deps.warn ?? ((message: string) => console.warn(message));
-  let loaded = false;
   let cached: LiveActivityNativeModule | null = null;
+  let warned = false;
 
   function get(): LiveActivityNativeModule | null {
     if (!isLiveActivityPlatform(deps.platformOS)) return null;
-    if (!loaded) {
-      loaded = true;
-      try {
-        cached = deps.loadModule();
-      } catch (error) {
+    if (cached) return cached;
+    try {
+      // Cached on success only: a load that failed is retried on the next
+      // call, so one bad moment does not silence the activity, and a row
+      // already written is not left undrainable, for the life of the app.
+      cached = deps.loadModule();
+    } catch (error) {
+      // Warned once: the drain runs on every foreground and tab change.
+      if (!warned) {
+        warned = true;
         warn(`[liveActivity] load failed: ${errorName(error)}`);
-        cached = null;
       }
+      cached = null;
     }
     return cached;
   }
@@ -190,6 +195,14 @@ export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActi
     },
 
     hasRest() {
+      // Android has no rest on the notification yet (LA3c, D-W3-3) and no Skip
+      // to tap, so it can report nothing about rest: null, never false. False
+      // here means "the trainee skipped the rest on the activity"
+      // (liveActivitySession.restSkippedOnActivity), which on returning to the
+      // app clears the in-app countdown — a rest the trainee never skipped.
+      // Not detectable from the fields: iOS also omits restEndsAt when the rest
+      // is genuinely over, and that omission is the skip signal.
+      if (deps.platformOS === "android") return null;
       const mod = supportedModule();
       if (!mod) return null;
       try {

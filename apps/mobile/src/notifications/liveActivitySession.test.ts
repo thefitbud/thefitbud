@@ -405,6 +405,30 @@ describe("createLiveActivitySession", () => {
       native.hasRest.mockReturnValue(false);
       expect(session.restSkippedOnActivity()).toBe(true); // Skip tapped on the activity
     });
+
+    it("never reports a skip on Android, where the notification has no Skip", async () => {
+      // Through the real wrapper over LA3's module: the notification is up and
+      // answers `running` with no rest. Returning to the app must not clear a
+      // rest the trainee is still taking (there is no Skip until LA3c).
+      const mod = androidModule();
+      mod.restState.mockReturnValue({ running: true });
+      const session = createLiveActivitySession(
+        createLiveActivityNative({ platformOS: "android", loadModule: () => mod }),
+      );
+      const ex = frame27();
+      await session.sync(input(ex));
+      await session.sync({ ...input(logNext(ex)), rest: REST });
+
+      expect(session.restSkippedOnActivity()).toBe(false);
+
+      // And on iOS the same signal still ends the app's rest (LA1c).
+      const ios = fakeNative();
+      const iosSession = createLiveActivitySession(ios);
+      await iosSession.sync(input(ex));
+      await iosSession.sync({ ...input(logNext(ex)), rest: REST });
+      ios.hasRest.mockReturnValue(false);
+      expect(iosSession.restSkippedOnActivity()).toBe(true);
+    });
   });
 
   /** The Android module as LA3 implements it: no rest state, same call names. */

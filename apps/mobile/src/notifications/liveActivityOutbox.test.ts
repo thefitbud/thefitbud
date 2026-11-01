@@ -515,6 +515,13 @@ describe("drainLiveActivityOutbox", () => {
 });
 
 describe("drainLiveActivityOutbox on Android (LA3b)", () => {
+  // Rows are pinned to the workout they were first observed against, and that
+  // pin outlives a drain: every test here starts from a clean one, so no test
+  // depends on what another left behind.
+  beforeEach(() => {
+    liveActivityRowsOrigin.set(null);
+  });
+
   it("drains a notification row into the same mutation as iOS", async () => {
     // One function, one row shape, one dedupe key: the same tap on either
     // platform is the same mutation, so a set is never logged twice.
@@ -542,6 +549,7 @@ describe("drainLiveActivityOutbox on Android (LA3b)", () => {
         },
       });
       perPlatform[platformOS] = pushed.map((mutation) => mutation.mutationId);
+      // The next platform's run is a fresh observation, not a continuation.
       liveActivityRowsOrigin.set(null);
     }
     expect(perPlatform.android).toEqual(perPlatform.ios);
@@ -579,6 +587,32 @@ describe("drainLiveActivityOutbox on Android (LA3b)", () => {
     expect(result).toMatchObject({ rows: 2, enqueued: 0, kept: 2, cleared: 0 });
     expect(pushed).toEqual([]);
     expect(mod.state.rows).toHaveLength(2);
+  });
+
+  it("clears only the drained prefix, keeping a row tapped mid-drain", async () => {
+    // WorkoutSetStore.removeFirst is its own implementation of the contract no
+    // other JS test reaches: clear the leading `count` rows and nothing else.
+    // Removing from the wrong end would destroy the row tapped meanwhile, and
+    // shift the drained one's position — and so its idempotency key.
+    const mod = fakeModule([row()]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(
+      mod,
+      engine,
+      async () => {
+        mod.state.rows.push(row({ setIndex: 2 })); // Log set tapped in the shade
+        return runningExecution();
+      },
+      undefined,
+      "android",
+    );
+
+    expect(result).toMatchObject({ rows: 1, enqueued: 1, kept: 0, cleared: 1 });
+    expect(mod.removeOutbox).toHaveBeenCalledWith(1);
+    expect(mod.state.rows).toEqual([row({ setIndex: 2 })]);
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]!.payload).toMatchObject({ setExecutionId: SET_1_ID });
   });
 
   it("still drains rows written before notifications were turned off", async () => {

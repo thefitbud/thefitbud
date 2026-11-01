@@ -156,19 +156,20 @@ describe("rest and unknown Last mapping (LA1c)", () => {
     expect(createLiveActivityNative({ platformOS: "web", loadModule: () => mod }).hasRest()).toBeNull();
   });
 
-  it("reports no rest on Android, where the notification has no countdown", () => {
-    // The Android module answers only `running` (LA3c adds the countdown,
-    // D-W3-3): a running notification with no rest, never a crash.
-    const android = createLiveActivityNative({
-      platformOS: "android",
-      loadModule: () => fakeModule({ restState: vi.fn(() => ({ running: true })) }),
-    });
-    expect(android.hasRest()).toBe(false);
-    const idle = createLiveActivityNative({
-      platformOS: "android",
-      loadModule: () => fakeModule({ restState: vi.fn(() => ({ running: false })) }),
-    });
-    expect(idle.hasRest()).toBeNull();
+  it("reports nothing about rest on Android, where there is no Skip to tap", () => {
+    // The Android module answers `running` alone (LA3c adds the countdown and
+    // its Skip, D-W3-3). `false` would mean the trainee skipped the rest on the
+    // activity, and the workout screen would clear a countdown still running,
+    // so Android answers null however the notification reads, never false.
+    for (const running of [true, false]) {
+      const mod = fakeModule({ restState: vi.fn(() => ({ running })) });
+      const android = createLiveActivityNative({
+        platformOS: "android",
+        loadModule: () => mod,
+      });
+      expect(android.hasRest(), `running: ${running}`).toBeNull();
+      expect(mod.restState).not.toHaveBeenCalled();
+    }
   });
 });
 
@@ -372,15 +373,25 @@ describe("the shared module handle (LA3b)", () => {
     expect(access.supported()).toBeNull();
   });
 
-  it("warns once with the error name and stays null after a load failure", () => {
+  it("warns once with the error name, and retries a failed load", () => {
     const warn = vi.fn();
+    const mod = fakeModule();
+    let fail = true;
     const loadModule = vi.fn(() => {
-      throw new TypeError("Romanian deadlift 25 kg");
+      if (fail) throw new TypeError("Romanian deadlift 25 kg");
+      return mod;
     });
     const access = createLiveActivityModuleAccess({ platformOS: "android", loadModule, warn });
+
     expect(access.get()).toBeNull();
     expect(access.supported()).toBeNull();
-    expect(loadModule).toHaveBeenCalledTimes(1);
+    // Only a successful load is cached: a failure is not final for the life of
+    // the app, or a row already written could never be drained.
+    fail = false;
+    expect(access.get()).toBe(mod);
+    expect(access.get()).toBe(mod);
+    expect(loadModule).toHaveBeenCalledTimes(3);
+    // One warning, however many drains run: nothing but the error name.
     expect(warn.mock.calls).toEqual([["[liveActivity] load failed: TypeError"]]);
   });
 });
