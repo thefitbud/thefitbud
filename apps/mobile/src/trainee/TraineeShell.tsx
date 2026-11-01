@@ -33,6 +33,7 @@ import {
   routeFromParsedLink,
   type ParsedDeepLink,
 } from "../navigation/linking";
+import { useLiveActivityOutboxDrain } from "../notifications/liveActivityOutbox";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { CheckinScreen } from "./CheckinScreen";
@@ -119,6 +120,15 @@ export function TraineeShell({
   } | null>(null);
   const captureWorkoutRef = useRef<WorkoutExecution | null>(null);
   captureWorkoutRef.current = captureWorkout;
+
+  // Sets logged from the lock-screen Live Activity (LA2): drained into the
+  // sync outbox when the app becomes active and when the workout tab opens.
+  // iOS only; a no-op on Android and web.
+  useLiveActivityOutboxDrain({
+    sync,
+    api,
+    focusKey: tab === "workout" ? "workout" : "",
+  });
 
   const openOverlay: TraineeOverlayOpener = useCallback((next) => {
     setOverlay(next);

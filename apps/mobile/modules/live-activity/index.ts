@@ -39,6 +39,26 @@ export type NativeRestState = {
   restEndsAt?: number | null;
 };
 
+/**
+ * One row the lock-screen "Log set" button appended to the App Group (LA2).
+ * The widget writes these four values and nothing else; an unreadable row
+ * comes back with an empty name or set index 0.
+ */
+export type NativeOutboxRow = {
+  operation: string;
+  exerciseName: string;
+  setIndex: number;
+  kilograms: number;
+  reps: number;
+};
+
+/** What `readOutbox()` returns: the rows oldest first, plus the running activity. */
+export type NativeOutboxRead = {
+  rows: NativeOutboxRow[];
+  /** `fitbud://?workout={assignmentId}` of the running activity, when there is one. */
+  openUrl?: string | null;
+};
+
 export type LiveActivityNativeModule = {
   isSupported(): boolean;
   start(
@@ -48,6 +68,14 @@ export type LiveActivityNativeModule = {
   update(state: NativeWorkoutContentState): Promise<void>;
   end(finalState?: NativeWorkoutContentState | null): Promise<void>;
   restState(): NativeRestState;
+  /**
+   * Lock-screen rows waiting to be drained into the sync outbox (LA2).
+   * Optional: a dev build made before LA2 has no such function, and the
+   * drain then does nothing.
+   */
+  readOutbox?(): NativeOutboxRead;
+  /** Drops the first `count` rows (the drained ones); returns how many went. */
+  removeOutbox?(count: number): number;
 };
 
 export function loadLiveActivityModule(): LiveActivityNativeModule | null {
