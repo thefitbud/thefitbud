@@ -323,6 +323,18 @@ describe("trainer inbox events are pushed (X4f)", () => {
     expect(expoCalls).toHaveLength(1);
   });
 
+  it("a second push call for the same notification sends nothing", async () => {
+    expect((await askCoach()).status).toBe(201);
+    expect(expoCalls).toHaveLength(1);
+    const [stored] = await trainerNotifications("trainer_ask_coach");
+    await pushTrainerInboxEvent(handle.db, stored!.id, {
+      pushProviderMode: "expo",
+      expoAccessToken: "test-expo-access-token-x4f",
+    });
+    expect(expoCalls).toHaveLength(1);
+    expect(await deliveriesFor(stored!.id)).toHaveLength(1);
+  });
+
   it("trainee-facing inbox types are stored only", async () => {
     const [rel] = await handle.db
       .select()

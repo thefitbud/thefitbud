@@ -52,10 +52,12 @@ export async function storeInboxNotification(
   },
 ): Promise<StoredInboxNotification> {
   const now = nowIso();
-  const notificationId = createId();
-  try {
-    await db.insert(notifications).values({
-      id: notificationId,
+  // The database reports a dedupe-key collision (no row returned); no driver error text is parsed.
+  // Any other failure still throws.
+  const inserted = await db
+    .insert(notifications)
+    .values({
+      id: createId(),
       recipientUserId: input.recipientUserId,
       coachingRelationshipId: input.relationshipId,
       notificationType: input.notificationType as (typeof notifications.$inferInsert)["notificationType"],
@@ -70,36 +72,17 @@ export async function storeInboxNotification(
       mergeGroup: null,
       payloadJson: null,
       expiresAt: null,
-    });
-  } catch (error) {
-    // Only a collision on the dedupe key is a dedupe hit. Any other failure is real.
-    if (!isDedupeKeyCollision(error)) throw error;
-    const existing = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(eq(notifications.dedupeKey, input.dedupeKey))
-      .limit(1);
-    if (!existing[0]) {
-      throw new Error("NOTIFICATION_DEDUPE_FAILED");
-    }
-    return { inserted: false };
-  }
-  return { inserted: true, notificationId };
+    })
+    .onConflictDoNothing({ target: notifications.dedupeKey })
+    .returning({ id: notifications.id });
+  return inserted[0]
+    ? { inserted: true, notificationId: inserted[0].id }
+    : { inserted: false };
 }
 
 export type StoredInboxNotification =
   | { inserted: true; notificationId: string }
   | { inserted: false };
-
-/** Walks the error cause chain (drizzle wraps the driver error) for a dedupe-key unique violation. */
-function isDedupeKeyCollision(error: unknown): boolean {
-  for (let e: unknown = error, depth = 0; e && depth < 5; depth += 1) {
-    const message = e instanceof Error ? e.message : "";
-    if (/UNIQUE constraint failed:\s*notifications\.dedupe_key/i.test(message)) return true;
-    e = (e as { cause?: unknown }).cause;
-  }
-  return false;
-}
 
 /** Trainer inbox types that are pushed, with the trainer category toggle that gates each. */
 const TRAINER_PUSH_CATEGORY: Readonly<Record<string, keyof TrainerCategories>> = {
@@ -141,6 +124,14 @@ export async function pushTrainerInboxEvent(
     if (!notification) return;
     const category = TRAINER_PUSH_CATEGORY[notification.notificationType];
     if (!category) return;
+
+    // One push attempt per notification: any earlier delivery row means it already ran.
+    const [earlier] = await db
+      .select({ id: notificationDeliveries.id })
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.notificationId, notification.id))
+      .limit(1);
+    if (earlier) return;
 
     if (notification.coachingRelationshipId) {
       const [relationship] = await db
