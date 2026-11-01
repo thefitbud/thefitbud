@@ -18,6 +18,7 @@ import type {
   Role,
 } from "@fitbud/contracts";
 import { AppState } from "react-native";
+import { isTestIdToken } from "../lib/testToken";
 import {
   createMobileApiClient,
   createTokenSession,
@@ -39,7 +40,11 @@ import {
 } from "../navigation/resolveRoute";
 import type { ParsedDeepLink } from "../navigation/linking";
 import { useAppDeepLinks } from "../navigation/useAppDeepLinks";
-import { registerLocalDeviceToken } from "../notifications/register";
+import {
+  registerDeviceTokenForPush,
+  signOutPushRegistration,
+  watchPushTokenChanges,
+} from "../notifications/register";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { deepLinkFromNotificationPayload } from "../notifications/routing";
 
@@ -162,13 +167,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Set when a device token is registered, so sign-out can unregister it.
+  const pushInstallationRef = useRef<string | null>(null);
+  const stopPushTokenWatchRef = useRef<(() => void) | null>(null);
+
+  /**
+   * Register this device for push after `/me` succeeds, for either role
+   * (D-B9). Best-effort: permission denied, a refused token or a failed call
+   * never surfaces an error and never blocks the app.
+   */
   const registerPushToken = useCallback(async (client: FitBudApiClient) => {
+    const testMode = isTestIdToken(tokens.getAccessToken() ?? "");
     try {
-      await registerLocalDeviceToken(client);
+      const outcome = await registerDeviceTokenForPush(client, { testMode });
+      if (outcome.status !== "registered") {
+        // permission_denied, rejected (DEVICE_TOKEN_OWNED) or failed: push
+        // stays off for this install, the app carries on.
+        return;
+      }
+      pushInstallationRef.current = outcome.registration.installationId;
+      if (!stopPushTokenWatchRef.current) {
+        stopPushTokenWatchRef.current = await watchPushTokenChanges(client, {
+          testMode,
+        });
+      }
     } catch {
-      // Push registration is best-effort in local test mode.
+      // Push registration is best-effort.
     }
-  }, []);
+  }, [tokens]);
+
+  useEffect(
+    () => () => {
+      stopPushTokenWatchRef.current?.();
+      stopPushTokenWatchRef.current = null;
+    },
+    [],
+  );
 
   const applyMe = useCallback(
     async (
@@ -188,11 +222,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (role === "trainee" || role === "trainer") {
         await loadRelationships(client);
-        // Device-token registration is trainer-facing in local demo; trainee
-        // calls were 403-ing and polluting the console — skip for trainees.
-        if (role === "trainer") {
-          await registerPushToken(client);
-        }
+        // Both roles may register a device (D-B9); the route allows trainer
+        // and trainee once a role is selected.
+        await registerPushToken(client);
       } else {
         // Dual-role awaiting explicit selection.
         setRelationships([]);
@@ -310,6 +342,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
+    // Clear push state and unregister this installation before the session is
+    // cleared. The revoke runs on a client that holds the current token and
+    // role, so the request is authenticated whatever order the promises settle
+    // in. Fire-and-forget: sign-out never waits on it and never fails because
+    // of it; the module state is cleared either way.
+    const installationId = pushInstallationRef.current;
+    const accessToken = tokens.getAccessToken();
+    const role = selectedRoleRef.current;
+    stopPushTokenWatchRef.current?.();
+    stopPushTokenWatchRef.current = null;
+    pushInstallationRef.current = null;
+    signOutPushRegistration({
+      installationId,
+      client: accessToken
+        ? createMobileApiClient({
+            getAccessToken: () => accessToken,
+            getSelectedRole: () => role,
+          })
+        : null,
+    });
+
     tokens.clear();
     selectedRoleRef.current = null;
     setAccessToken(null);
