@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { SAFE_PUSH_PAYLOAD_KEYS } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import { setTestDbOverride } from "../db/client.js";
 import {
   deviceTokens,
@@ -76,6 +77,7 @@ describe("reminder pushes end to end through the Expo sender (X4c)", () => {
   let handle: MemoryDbHandle;
   let queued: QueueMessage[];
   let expoCalls: ExpoMessage[];
+  let expoUrls: string[];
 
   beforeAll(async () => {
     await prepareDemoSeededDb(SEED);
@@ -88,6 +90,7 @@ describe("reminder pushes end to end through the Expo sender (X4c)", () => {
     setTestDbOverride(handle.db);
     queued = [];
     expoCalls = [];
+    expoUrls = [];
   });
 
   afterEach(() => {
@@ -103,7 +106,8 @@ describe("reminder pushes end to end through the Expo sender (X4c)", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async (url, init) => {
-        expect(String(url)).toBe(SEND_URL);
+        // Recorded and asserted by the tests: an assertion thrown here would be swallowed by the sender.
+        expoUrls.push(String(url));
         const body = JSON.parse(String(init!.body)) as ExpoMessage[];
         expoCalls.push(...body);
         const first = reply(body[0]!.to);
@@ -192,6 +196,10 @@ describe("reminder pushes end to end through the Expo sender (X4c)", () => {
         domainEntityId: notification.domainEntityId,
       });
       expect(sent.title).toBe("FitBud");
+      // The lock-screen text is the type label only: no meal, plan, id or other coaching detail.
+      expect(sent.body).toBe(labelFor("notification_type", type));
+      expect(String(sent.body)).not.toContain(notification.domainEntityId);
+      expect(expoUrls).toEqual([SEND_URL]);
       const after = await state(message.notificationId, message.deliveryId);
       expect(after.delivery).toMatchObject({ providerStatus: "accepted", deviceTokenId: "x4c-3-live" });
       expect(after.notification.state).toBe("delivered");
@@ -259,8 +267,8 @@ describe("reminder pushes end to end through the Expo sender (X4c)", () => {
     expect(
       await handle.db.select().from(notifications).where(eq(notifications.dedupeKey, notification.dedupeKey)),
     ).toHaveLength(1);
-    // Messages of other, not yet delivered, reminders may be new; this one is not queued again.
-    expect(queued.length).toBeGreaterThanOrEqual(queuedBefore);
+    // Nothing at all is queued again: every reminder of the first tick is already persisted.
+    expect(queued).toHaveLength(queuedBefore);
 
     // The same queue message delivered again after acceptance is not sent again.
     await handleReminderQueueBatch(batchOf(message).batch, env());
