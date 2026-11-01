@@ -8,7 +8,11 @@ import {
   mealCompliance,
   users,
 } from "../db/schema.js";
-import { storeInboxNotification } from "./inbox-notify.js";
+import {
+  pushTrainerInboxEvent,
+  storeInboxNotification,
+  type TrainerPushConfig,
+} from "./inbox-notify.js";
 import { listMergedMealTimeSlots } from "./meal-time-slots.js";
 
 const TRAINER_MEAL_TIMES_MERGE_MS = 15 * 60 * 1000;
@@ -21,14 +25,18 @@ function trainerMealTimesDedupeKey(relationshipId: string, nowIso: string): stri
 export async function notifyTrainerMealTimesChanged(
   db: Db,
   input: { relationshipId: string; trainerUserId: string; now: string },
+  push?: TrainerPushConfig,
 ): Promise<void> {
-  await storeInboxNotification(db, {
+  const stored = await storeInboxNotification(db, {
     recipientUserId: input.trainerUserId,
     relationshipId: input.relationshipId,
     notificationType: "trainer_meal_times_changed",
     domainEntityId: input.relationshipId,
     dedupeKey: trainerMealTimesDedupeKey(input.relationshipId, input.now),
   });
+  if (stored.inserted && push) {
+    await pushTrainerInboxEvent(db, stored.notificationId, push, input.now);
+  }
 }
 
 function readPrescription(json: string): Record<string, unknown> | null {
@@ -136,15 +144,20 @@ export async function applyMealTimeOverrideUpdate(
     trainerUserId: string;
     now: string;
   },
+  push?: TrainerPushConfig,
 ): Promise<{ assignmentsUpdated: number }> {
   const assignmentsUpdated = await recomputeMealAssignmentTimes(db, {
     relationshipId: input.relationshipId,
     now: input.now,
   });
-  await notifyTrainerMealTimesChanged(db, {
-    relationshipId: input.relationshipId,
-    trainerUserId: input.trainerUserId,
-    now: input.now,
-  });
+  await notifyTrainerMealTimesChanged(
+    db,
+    {
+      relationshipId: input.relationshipId,
+      trainerUserId: input.trainerUserId,
+      now: input.now,
+    },
+    push,
+  );
   return { assignmentsUpdated };
 }
