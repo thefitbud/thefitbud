@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { deviceTokens } from "../db/schema.js";
+import {
+  deviceTokens,
+  notificationDeliveries,
+  notifications,
+} from "../db/schema.js";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
@@ -136,6 +140,51 @@ type DeviceTokenPayload = {
   };
 };
 
+/** Pins `nowIso()` so a test can prove a timestamp column was rewritten. */
+function setNow(instant: string | null) {
+  const globals = globalThis as { FITBUD_NOW?: string };
+  if (instant === null) {
+    delete globals.FITBUD_NOW;
+    return;
+  }
+  globals.FITBUD_NOW = instant;
+}
+
+/** A delivery row pointing at `deviceTokenId`, like a push that was sent. */
+async function recordDelivery(
+  db: Db,
+  input: { userId: string; deviceTokenId: string; suffix: string },
+) {
+  const notificationId = `notif-${input.suffix}`;
+  const deliveryId = `delivery-${input.suffix}`;
+  const now = new Date().toISOString();
+  await db.insert(notifications).values({
+    id: notificationId,
+    recipientUserId: input.userId,
+    coachingRelationshipId: null,
+    notificationType: "workout_reminder",
+    domainEntityType: "workout_assignment",
+    domainEntityId: `assignment-${input.suffix}`,
+    state: "delivered",
+    dedupeKey: `dedupe-${input.suffix}`,
+    createdAt: now,
+  });
+  await db.insert(notificationDeliveries).values({
+    id: deliveryId,
+    notificationId,
+    deviceTokenId: input.deviceTokenId,
+    channel: "push",
+    providerStatus: "accepted",
+    providerMessageId: `provider-${input.suffix}`,
+    failureCategory: null,
+    attemptNumber: 1,
+    acceptedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { notificationId, deliveryId };
+}
+
 describe("device tokens (X4b)", () => {
   let closeDb: (() => void) | undefined;
   let db: Db;
@@ -148,6 +197,7 @@ describe("device tokens (X4b)", () => {
   });
 
   afterEach(() => {
+    setNow(null);
     setTestDbOverride(null);
     closeDb?.();
   });
@@ -211,6 +261,7 @@ describe("device tokens (X4b)", () => {
 
   it("replaces the token of an existing installation instead of failing", async () => {
     const { traineeToken } = await createCoachingPair("reregister");
+    setNow("2026-11-01T06:00:00.000Z");
     const first = await register(
       { bearer: traineeToken, role: "trainee" },
       {
@@ -222,7 +273,14 @@ describe("device tokens (X4b)", () => {
     );
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as DeviceTokenPayload;
+    const firstRow = (
+      await db
+        .select()
+        .from(deviceTokens)
+        .where(eq(deviceTokens.id, firstBody.data.deviceToken.id))
+    )[0]!;
 
+    setNow("2026-11-01T07:30:00.000Z");
     const second = await register(
       { bearer: traineeToken, role: "trainee" },
       {
@@ -242,9 +300,14 @@ describe("device tokens (X4b)", () => {
     expect(secondBody.data.deviceToken.provider).toBe("expo");
     expect(secondBody.data.deviceToken.platform).toBe("ios");
     expect(secondBody.data.deviceToken.status).toBe("active");
+    // Strictly later: the clock advanced between the two registrations, so this
+    // fails if `lastSeenAt` (or `updatedAt`) is left at its stored value.
+    expect(firstRow.lastSeenAt).toBe("2026-11-01T06:00:00.000Z");
+    expect(secondBody.data.deviceToken.lastSeenAt).toBe(
+      "2026-11-01T07:30:00.000Z",
+    );
     expect(
-      secondBody.data.deviceToken.lastSeenAt >=
-        firstBody.data.deviceToken.lastSeenAt,
+      secondBody.data.deviceToken.lastSeenAt > firstRow.lastSeenAt,
     ).toBe(true);
 
     const rows = await db
@@ -253,6 +316,8 @@ describe("device tokens (X4b)", () => {
       .where(eq(deviceTokens.userId, secondBody.data.deviceToken.userId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.token).toBe("ExponentPushToken[rotated-expo-token]");
+    expect(rows[0]?.updatedAt).toBe("2026-11-01T07:30:00.000Z");
+    expect(rows[0]!.updatedAt > firstRow.updatedAt).toBe(true);
   });
 
   it("re-activates a revoked installation on re-registration", async () => {
@@ -340,9 +405,88 @@ describe("device tokens (X4b)", () => {
       .select()
       .from(deviceTokens)
       .where(eq(deviceTokens.userId, body.data.deviceToken.userId));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.installationId).toBe("install-new");
-    expect(rows[0]?.token).toBe("ExponentPushToken[moved-token]");
+    const active = rows.filter((row) => row.status === "active");
+    expect(active).toHaveLength(1);
+    expect(active[0]?.installationId).toBe("install-new");
+    expect(active[0]?.token).toBe("ExponentPushToken[moved-token]");
+    // The superseded registration is revoked and parked, never deleted.
+    const superseded = rows.filter((row) => row.status === "revoked");
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0]?.installationId).toMatch(/^revoked:/);
+  });
+
+  it("keeps delivery history when a token moves to a new installation", async () => {
+    const { traineeToken } = await createCoachingPair("delivery");
+    const old = await register(
+      { bearer: traineeToken, role: "trainee" },
+      {
+        token: "ExponentPushToken[delivery-moved-token]",
+        platform: "ios",
+        installationId: "install-delivery-old",
+        provider: "expo",
+      },
+    );
+    expect(old.status).toBe(200);
+    const oldBody = (await old.json()) as DeviceTokenPayload;
+
+    const current = await register(
+      { bearer: traineeToken, role: "trainee" },
+      {
+        token: "ExponentPushToken[delivery-other-token]",
+        platform: "ios",
+        installationId: "install-delivery-new",
+        provider: "expo",
+      },
+    );
+    expect(current.status).toBe(200);
+    const currentBody = (await current.json()) as DeviceTokenPayload;
+
+    // A push was already sent to the old installation's registration.
+    const { deliveryId } = await recordDelivery(db, {
+      userId: oldBody.data.deviceToken.userId,
+      deviceTokenId: oldBody.data.deviceToken.id,
+      suffix: "delivery-moved",
+    });
+
+    // App reinstalled: the same Expo token now reports the new installation id.
+    const moved = await register(
+      { bearer: traineeToken, role: "trainee" },
+      {
+        token: "ExponentPushToken[delivery-moved-token]",
+        platform: "ios",
+        installationId: "install-delivery-new",
+        provider: "expo",
+      },
+    );
+    expect(moved.status).toBe(200);
+    const movedBody = (await moved.json()) as DeviceTokenPayload;
+    expect(movedBody.data.deviceToken.id).toBe(oldBody.data.deviceToken.id);
+    expect(movedBody.data.deviceToken.status).toBe("active");
+
+    const rows = await db
+      .select()
+      .from(deviceTokens)
+      .where(eq(deviceTokens.userId, movedBody.data.deviceToken.userId));
+    const active = rows.filter((row) => row.status === "active");
+    expect(active).toHaveLength(1);
+    expect(active[0]?.id).toBe(oldBody.data.deviceToken.id);
+    expect(active[0]?.installationId).toBe("install-delivery-new");
+    expect(active[0]?.token).toBe("ExponentPushToken[delivery-moved-token]");
+
+    // The replaced registration keeps its id and is revoked, not deleted.
+    const superseded = rows.find(
+      (row) => row.id === currentBody.data.deviceToken.id,
+    );
+    expect(superseded?.status).toBe("revoked");
+    expect(superseded?.installationId).toMatch(/^revoked:/);
+
+    // The delivery still resolves to the device token it was sent to.
+    const deliveries = await db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.id, deliveryId));
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]?.deviceTokenId).toBe(oldBody.data.deviceToken.id);
   });
 
   it("rejects a token owned by another user with 403 DEVICE_TOKEN_OWNED", async () => {

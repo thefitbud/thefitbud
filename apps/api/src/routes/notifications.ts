@@ -202,20 +202,37 @@ notificationRoutes.post(
 
     const ownedByToken = existingByToken[0];
     const ownedByInstallation = existingByInstallation[0];
-    // One row per (user, installation): re-registering replaces the stored token.
-    const target = ownedByInstallation ?? ownedByToken;
+    // The same token reported from another installation of this user (app
+    // reinstalled, stable Expo token): two different rows hold the two unique
+    // keys we need.
+    const movedInstallation =
+      ownedByToken &&
+      ownedByInstallation &&
+      ownedByToken.id !== ownedByInstallation.id
+        ? ownedByInstallation
+        : null;
+    // One row per (user, installation): re-registering replaces the stored
+    // token. On a move we keep the row that already holds this token, because
+    // `notification_deliveries.device_token_id` references it.
+    const target = movedInstallation
+      ? ownedByToken
+      : (ownedByInstallation ?? ownedByToken);
 
     if (target) {
-      if (
-        ownedByToken &&
-        ownedByInstallation &&
-        ownedByToken.id !== ownedByInstallation.id
-      ) {
-        // The same token moved to another installation of this user; remove the
-        // stale registration so the unique token index stays free.
+      if (movedInstallation) {
+        // Free the (user, installation) unique key without deleting a row:
+        // deliveries reference device tokens with no ON DELETE clause, so a
+        // hard delete would fail and lose the delivery history. The superseded
+        // row is revoked and parked on a sentinel installation id; revoked rows
+        // are never sent to (domain/reminders.ts selects status "active").
         await db
-          .delete(deviceTokens)
-          .where(eq(deviceTokens.id, ownedByToken.id));
+          .update(deviceTokens)
+          .set({
+            status: "revoked",
+            installationId: `revoked:${movedInstallation.id}`,
+            updatedAt: now,
+          })
+          .where(eq(deviceTokens.id, movedInstallation.id));
       }
       await db
         .update(deviceTokens)
