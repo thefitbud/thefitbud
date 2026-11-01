@@ -41,9 +41,8 @@ import {
 import type { ParsedDeepLink } from "../navigation/linking";
 import { useAppDeepLinks } from "../navigation/useAppDeepLinks";
 import {
-  currentPushRegistration,
   registerDeviceTokenForPush,
-  unregisterDeviceTokenForPush,
+  signOutPushRegistration,
   watchPushTokenChanges,
 } from "../notifications/register";
 import type { NotificationDeepLink } from "../notifications/routing";
@@ -182,8 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const outcome = await registerDeviceTokenForPush(client, { testMode });
       if (outcome.status !== "registered") {
-        // permission_denied, unsupported, rejected (403 DEVICE_TOKEN_OWNED) or
-        // failed: push stays off for this install, the app carries on.
+        // permission_denied, rejected (DEVICE_TOKEN_OWNED) or failed: push
+        // stays off for this install, the app carries on.
         return;
       }
       pushInstallationRef.current = outcome.registration.installationId;
@@ -343,24 +342,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
-    // Unregister this installation before the session is cleared, on a client
-    // that holds the current token and role, so the request is authenticated
-    // whatever order the promises settle in. Fire-and-forget: sign-out never
-    // waits on it and never fails because of it.
-    const installationId =
-      pushInstallationRef.current ?? currentPushRegistration()?.installationId;
+    // Clear push state and unregister this installation before the session is
+    // cleared. The revoke runs on a client that holds the current token and
+    // role, so the request is authenticated whatever order the promises settle
+    // in. Fire-and-forget: sign-out never waits on it and never fails because
+    // of it; the module state is cleared either way.
+    const installationId = pushInstallationRef.current;
     const accessToken = tokens.getAccessToken();
     const role = selectedRoleRef.current;
     stopPushTokenWatchRef.current?.();
     stopPushTokenWatchRef.current = null;
     pushInstallationRef.current = null;
-    if (installationId && accessToken) {
-      const revokeClient = createMobileApiClient({
-        getAccessToken: () => accessToken,
-        getSelectedRole: () => role,
-      });
-      void unregisterDeviceTokenForPush(revokeClient, installationId);
-    }
+    signOutPushRegistration({
+      installationId,
+      client: accessToken
+        ? createMobileApiClient({
+            getAccessToken: () => accessToken,
+            getSelectedRole: () => role,
+          })
+        : null,
+    });
 
     tokens.clear();
     selectedRoleRef.current = null;

@@ -25,8 +25,6 @@ export type PushRegistration = {
 export type PushRegistrationOutcome =
   | { status: "registered"; registration: PushRegistration }
   | { status: "permission_denied" }
-  /** Expo web, or a build with no EAS project id: no Expo push token exists. */
-  | { status: "unsupported" }
   /** 403 DEVICE_TOKEN_OWNED — this token belongs to another FitBud user. */
   | { status: "rejected" }
   | { status: "failed" };
@@ -146,11 +144,12 @@ async function sendRegistration(
     };
     return { status: "registered", registration };
   } catch (error) {
-    const status = (error as { status?: unknown } | null)?.status;
-    if (status === 403) {
-      // DEVICE_TOKEN_OWNED: the token is registered to a different user and
-      // that row is never released. Stop trying; push stays off for this
-      // install until the token changes or the other user signs out of it.
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code === "DEVICE_TOKEN_OWNED") {
+      // The token is registered to a different user and that row is never
+      // released. Stop trying; push stays off for this install until the token
+      // changes or this user signs out. Keyed on the domain error code, so an
+      // unrelated 403 stays retryable.
       refusedToken = input.token;
       return { status: "rejected" };
     }
@@ -159,8 +158,10 @@ async function sendRegistration(
 }
 
 /**
- * Register the device for push. Safe to call on every `/me`: a token that is
- * already registered is re-sent only to refresh `lastSeenAt` once per token.
+ * Register the device for push. Safe to call on every `/me`: the POST is
+ * idempotent server-side (one row per user and installation), and every call
+ * re-sends the token, which refreshes `lastSeenAt`. A token already refused
+ * with DEVICE_TOKEN_OWNED is not sent again.
  */
 export async function registerDeviceTokenForPush(
   api: FitBudApiClient,
@@ -288,20 +289,21 @@ export async function unregisterDeviceTokenForPush(
 }
 
 /**
- * Register a device token for push. Uses a local synthetic FCM token in
- * AUTH_MODE=test — never requires production Firebase credentials.
+ * Sign-out teardown, the one path the provider takes. The module singletons
+ * (`refusedToken`, the registered token and registration) are cleared
+ * unconditionally, so no state of the signed-out user can reach the next
+ * session in the same app run; the revoke is best-effort on top of that and
+ * only runs when there is something to revoke and a client to revoke with.
  */
-export async function registerLocalDeviceToken(
-  api: FitBudApiClient,
-  options: { platform?: DeviceTokenPlatform } = {},
-): Promise<string> {
-  const result = await api.registerDeviceToken({
-    provider: "fcm",
-    platform: options.platform ?? "ios",
-    token: syntheticToken(),
-    installationId: localInstallationId(),
-  });
-  return result.deviceToken.id;
+export function signOutPushRegistration(input: {
+  installationId?: string | null;
+  /** A client holding the pre-sign-out token and role, or null if unusable. */
+  client: FitBudApiClient | null;
+}): void {
+  const installationId = input.installationId ?? registration?.installationId;
+  resetPushRegistration();
+  if (!installationId || !input.client) return;
+  void unregisterDeviceTokenForPush(input.client, installationId);
 }
 
 /**

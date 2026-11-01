@@ -26,7 +26,12 @@ const notificationsMock = {
   getExpoPushTokenAsync: vi.fn(async () => ({ data: EXPO_TOKEN })),
   addPushTokenListener: vi.fn((listener: () => void) => {
     pushListeners.push(listener);
-    return { remove: () => undefined };
+    return {
+      // Honest mock: remove really detaches, as expo-notifications does.
+      remove: () => {
+        pushListeners = pushListeners.filter((item) => item !== listener);
+      },
+    };
   }),
 };
 vi.mock("expo-notifications", () => notificationsMock);
@@ -36,6 +41,7 @@ import {
   installationIdForToken,
   registerDeviceTokenForPush,
   resetPushRegistration,
+  signOutPushRegistration,
   unregisterDeviceTokenForPush,
   watchPushTokenChanges,
 } from "./register";
@@ -71,11 +77,17 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-class HttpError extends Error {
-  constructor(readonly status: number) {
-    super(`HTTP ${status}`);
+/** Shaped like `ApiClientError`: the client throws `status` plus `code`. */
+class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(`${status} ${code}`);
   }
 }
+
+const OWNED = new ApiError(403, "DEVICE_TOKEN_OWNED");
 
 beforeEach(() => {
   resetPushRegistration();
@@ -209,7 +221,7 @@ describe("registerDeviceTokenForPush", () => {
   it("reports a 403 as rejected and never retries that token", async () => {
     const api = fakeApi({
       register: async () => {
-        throw new HttpError(403);
+        throw OWNED;
       },
     });
 
@@ -228,7 +240,23 @@ describe("registerDeviceTokenForPush", () => {
   it("reports other failures as failed and stays retryable", async () => {
     const api = fakeApi({
       register: async () => {
-        throw new HttpError(503);
+        throw new ApiError(503, "INTERNAL");
+      },
+    });
+
+    expect(await registerDeviceTokenForPush(api.client)).toEqual({
+      status: "failed",
+    });
+    expect(await registerDeviceTokenForPush(api.client)).toEqual({
+      status: "failed",
+    });
+    expect(api.registerDeviceToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an unrelated 403 retryable", async () => {
+    const api = fakeApi({
+      register: async () => {
+        throw new ApiError(403, "FORBIDDEN_ROLE");
       },
     });
 
@@ -348,7 +376,9 @@ describe("unregisterDeviceTokenForPush", () => {
   it("swallows a failed revoke so sign-out is never blocked", async () => {
     const api = fakeApi();
     await registerDeviceTokenForPush(api.client);
-    api.revokeDeviceToken.mockRejectedValue(new HttpError(404));
+    api.revokeDeviceToken.mockRejectedValue(
+      new ApiError(404, "DEVICE_TOKEN_NOT_FOUND"),
+    );
 
     await expect(unregisterDeviceTokenForPush(api.client)).resolves.toBe(false);
     expect(currentPushRegistration()).toBeNull();
@@ -361,11 +391,48 @@ describe("unregisterDeviceTokenForPush", () => {
     expect(api.revokeDeviceToken).not.toHaveBeenCalled();
   });
 
-  it("lets a refused token be tried again after sign-out", async () => {
-    let fail = true;
+});
+
+describe("signOutPushRegistration", () => {
+  it("revokes the installation and clears state on the provider's path", async () => {
+    const api = fakeApi();
+    await registerDeviceTokenForPush(api.client);
+
+    signOutPushRegistration({
+      installationId: installationIdForToken(EXPO_TOKEN),
+      client: api.client,
+    });
+    await flush();
+
+    expect(api.revokeDeviceToken).toHaveBeenCalledWith({
+      installationId: installationIdForToken(EXPO_TOKEN),
+    });
+    expect(currentPushRegistration()).toBeNull();
+  });
+
+  it("falls back to the registered installation id", async () => {
+    const api = fakeApi();
+    await registerDeviceTokenForPush(api.client);
+
+    signOutPushRegistration({ installationId: null, client: api.client });
+    await flush();
+
+    expect(api.revokeDeviceToken).toHaveBeenCalledWith({
+      installationId: installationIdForToken(EXPO_TOKEN),
+    });
+  });
+
+  /**
+   * After a DEVICE_TOKEN_OWNED refusal there is no installation id and the
+   * access token may be gone, so sign-out takes the no-revoke path. It must
+   * still clear the module state, or the next user in the same app run is
+   * refused without the API ever being called.
+   */
+  it("clears a refused token even when it cannot revoke anything", async () => {
+    let refuse = true;
     const api = fakeApi({
       register: async () => {
-        if (fail) throw new HttpError(403);
+        if (refuse) throw OWNED;
         return { deviceToken: { id: "dt-2" } };
       },
     });
@@ -373,11 +440,33 @@ describe("unregisterDeviceTokenForPush", () => {
     expect((await registerDeviceTokenForPush(api.client)).status).toBe(
       "rejected",
     );
-    await unregisterDeviceTokenForPush(api.client);
-    fail = false;
 
+    // Exactly what AuthProvider.signOut passes with no registration and no
+    // usable access token.
+    signOutPushRegistration({ installationId: null, client: null });
+    await flush();
+
+    expect(api.revokeDeviceToken).not.toHaveBeenCalled();
+    refuse = false;
     expect((await registerDeviceTokenForPush(api.client)).status).toBe(
       "registered",
     );
+    expect(api.registerDeviceToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops the token watch so a rotation cannot re-register the signed-out user", async () => {
+    const api = fakeApi();
+    await registerDeviceTokenForPush(api.client);
+    await watchPushTokenChanges(api.client);
+
+    expect(pushListeners).toHaveLength(1);
+
+    signOutPushRegistration({ installationId: null, client: null });
+    await flush();
+
+    // The listener is detached, so a later rotation cannot reach the API with
+    // the signed-out user's session.
+    expect(pushListeners).toHaveLength(0);
+    expect(api.registerDeviceToken).toHaveBeenCalledTimes(1);
   });
 });
