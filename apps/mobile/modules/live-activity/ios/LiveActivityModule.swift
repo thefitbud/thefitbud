@@ -90,6 +90,43 @@ struct WorkoutStateRecord: Record {
   }
 }
 
+/// Rows the lock-screen "Log set" button appended to the shared App Group
+/// (targets/FitBudLiveActivity/FitBudLiveActivity.swift writes them). The app
+/// drains them into the sync outbox when it becomes active (LA2); the widget
+/// never talks to the API.
+enum LiveActivityOutboxStore {
+  static let key = "liveActivityOutbox"
+
+  /// Per-variant App Group, written to the app's Info.plist by
+  /// plugins/withLiveActivity.js. Nil in Expo Go or a build without it: the
+  /// read and the clear then do nothing.
+  static var defaults: UserDefaults? {
+    guard
+      let suite = Bundle.main.object(forInfoDictionaryKey: "FitBudAppGroup") as? String,
+      !suite.isEmpty
+    else { return nil }
+    return UserDefaults(suiteName: suite)
+  }
+
+  static func rows() -> [[String: Any]] {
+    (defaults?.array(forKey: key) as? [[String: Any]]) ?? []
+  }
+
+  /// Only the fields the widget writes, typed for JS. A malformed row keeps
+  /// its position (JS clears a prefix by count) but reads as unusable: an
+  /// empty exercise name or set index 0, which JS keeps instead of logging.
+  static func sanitized(_ row: [String: Any]) -> [String: Any] {
+    let kilograms = (row["kilograms"] as? Double) ?? Double((row["kilograms"] as? Int) ?? 0)
+    return [
+      "operation": (row["operation"] as? String) ?? "",
+      "exerciseName": (row["exerciseName"] as? String) ?? "",
+      "setIndex": (row["setIndex"] as? Int) ?? 0,
+      "kilograms": kilograms,
+      "reps": (row["reps"] as? Int) ?? 0,
+    ]
+  }
+}
+
 public class LiveActivityModule: Module {
   public func definition() -> ModuleDefinition {
     Name("LiveActivity")
@@ -152,6 +189,31 @@ public class LiveActivityModule: Module {
       return ["running": true, "restEndsAt": endsAt.timeIntervalSince1970 * 1000]
     }
 
+    /// The App Group rows the lock-screen Log set button wrote, oldest first,
+    /// with the running activity's `openUrl` so the app knows which workout
+    /// they belong to. Empty rows when there is no App Group or no activity.
+    Function("readOutbox") { () -> [String: Any] in
+      let rows = LiveActivityOutboxStore.rows().map { LiveActivityOutboxStore.sanitized($0) }
+      var result: [String: Any] = ["rows": rows]
+      if let openUrl = LiveActivityModule.runningOpenUrl() {
+        result["openUrl"] = openUrl
+      }
+      return result
+    }
+
+    /// Drops the first `count` rows (the ones the app drained) and keeps the
+    /// rest, including any the widget appended while the app was draining.
+    /// Returns how many were removed.
+    Function("removeOutbox") { (count: Int) -> Int in
+      guard count > 0, let defaults = LiveActivityOutboxStore.defaults else { return 0 }
+      var rows = LiveActivityOutboxStore.rows()
+      let removed = min(count, rows.count)
+      guard removed > 0 else { return 0 }
+      rows.removeFirst(removed)
+      defaults.set(rows, forKey: LiveActivityOutboxStore.key)
+      return removed
+    }
+
     /// Ends the running activity and removes it from the lock screen.
     AsyncFunction("end") { (finalState: WorkoutStateRecord?) async in
       guard #available(iOS 16.2, *) else { return }
@@ -162,6 +224,13 @@ public class LiveActivityModule: Module {
         await activity.end(content, dismissalPolicy: .immediate)
       }
     }
+  }
+
+  /// The running activity's `fitbud://?workout=<assignmentId>` link, which is
+  /// how the app identifies the workout an outbox row belongs to.
+  static func runningOpenUrl() -> String? {
+    guard #available(iOS 16.2, *) else { return nil }
+    return Activity<FitBudWorkoutAttributes>.activities.first?.attributes.openUrl
   }
 
   static func supported() -> Bool {
