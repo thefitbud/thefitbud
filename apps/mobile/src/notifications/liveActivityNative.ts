@@ -13,14 +13,22 @@ import {
 } from "./liveActivity";
 
 /**
- * JS side of the iOS Live Activity bridge (task LA1). Local updates only:
- * no push token, APNs or network.
+ * JS side of the workout activity bridge (LA1 on iOS, LA3 on Android). Local
+ * updates only: no push token, APNs, FCM or network.
  *
- * - iOS 16.2+ with Live Activities on: calls the local `LiveActivity` module.
- * - Android, web, older iOS, Live Activities off, or a build without the
- *   module: every call does nothing (the module is never loaded off iOS).
+ * - iOS 16.2+ with Live Activities on: the local `LiveActivity` module shows
+ *   the Live Activity.
+ * - Android with notifications and the `workout` channel on: the same module
+ *   name, the same calls, an ongoing notification instead (LA3).
+ * - Web, older iOS, Live Activities or notifications off, or a build without
+ *   the module: every call does nothing (the module is never loaded off the
+ *   two native platforms, and `isSupported` decides the rest).
  * - Never throws. A native error becomes a no-op and one warning carrying
  *   only the error name (no workout data, no message text).
+ *
+ * The platform guard and the lazy module load live here once, in
+ * `createLiveActivityModuleAccess`, and liveActivityOutbox.ts drains through
+ * the same handle, so both platforms pass one guard (LA3b).
  */
 
 export type LiveActivityWorkout = NativeWorkoutAttributes;
@@ -44,10 +52,38 @@ export type LiveActivityNative = {
   hasRest(): boolean | null;
 };
 
-export type LiveActivityNativeDeps = {
+export type LiveActivityModuleAccessDeps = {
   platformOS: string;
   loadModule: () => LiveActivityNativeModule | null;
   warn?: (message: string) => void;
+};
+
+export type LiveActivityNativeDeps = LiveActivityModuleAccessDeps & {
+  /** An existing handle to reuse, so one app has one guard and one load. */
+  access?: LiveActivityModuleAccess;
+};
+
+/**
+ * The platforms that have a native `LiveActivity` module: iOS (Live Activity,
+ * LA1) and Android (ongoing notification, LA3). Anywhere else the module is
+ * never loaded.
+ */
+export function isLiveActivityPlatform(platformOS: string): boolean {
+  return platformOS === "ios" || platformOS === "android";
+}
+
+/** A lazy, cached, never-throwing handle on the native module. */
+export type LiveActivityModuleAccess = {
+  /**
+   * The module, or null off the native platforms, in a build without it, or
+   * after a load error (warned once).
+   */
+  get(): LiveActivityNativeModule | null;
+  /**
+   * The module only while it can show the activity now: iOS Live Activities
+   * on, or Android notifications and the `workout` channel on. Null otherwise.
+   */
+  supported(): LiveActivityNativeModule | null;
 };
 
 /** LiveActivityState → FitBudWorkoutAttributes.ContentState, field for field. */
@@ -76,35 +112,57 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
-export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActivityNative {
+/**
+ * The one platform guard and lazy module load for both native platforms. Used
+ * by the wrapper below and by the outbox drain (LA3b): the drain takes `get()`
+ * so a row written while notifications were on is still drained after they are
+ * turned off, and never a lost set.
+ */
+export function createLiveActivityModuleAccess(
+  deps: LiveActivityModuleAccessDeps,
+): LiveActivityModuleAccess {
   const warn = deps.warn ?? ((message: string) => console.warn(message));
-  let loaded = false;
   let cached: LiveActivityNativeModule | null = null;
+  let warned = false;
 
-  function nativeModule(): LiveActivityNativeModule | null {
-    if (deps.platformOS !== "ios") return null;
-    if (!loaded) {
-      loaded = true;
-      try {
-        cached = deps.loadModule();
-      } catch (error) {
+  function get(): LiveActivityNativeModule | null {
+    if (!isLiveActivityPlatform(deps.platformOS)) return null;
+    if (cached) return cached;
+    try {
+      // Cached on success only: a load that failed is retried on the next
+      // call, so one bad moment does not silence the activity, and a row
+      // already written is not left undrainable, for the life of the app.
+      cached = deps.loadModule();
+    } catch (error) {
+      // Warned once: the drain runs on every foreground and tab change.
+      if (!warned) {
+        warned = true;
         warn(`[liveActivity] load failed: ${errorName(error)}`);
-        cached = null;
       }
+      cached = null;
     }
     return cached;
   }
 
-  function supportedModule(): LiveActivityNativeModule | null {
-    const mod = nativeModule();
-    if (!mod) return null;
-    try {
-      return mod.isSupported() ? mod : null;
-    } catch (error) {
-      warn(`[liveActivity] isSupported failed: ${errorName(error)}`);
-      return null;
-    }
-  }
+  return {
+    get,
+    supported() {
+      const mod = get();
+      if (!mod) return null;
+      try {
+        return mod.isSupported() ? mod : null;
+      } catch (error) {
+        warn(`[liveActivity] isSupported failed: ${errorName(error)}`);
+        return null;
+      }
+    },
+  };
+}
+
+export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActivityNative {
+  const warn = deps.warn ?? ((message: string) => console.warn(message));
+  const access = deps.access ?? createLiveActivityModuleAccess(deps);
+  const supportedModule = () => access.supported();
 
   return {
     isSupported() {
@@ -137,6 +195,14 @@ export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActi
     },
 
     hasRest() {
+      // Android has no rest on the notification yet (LA3c, D-W3-3) and no Skip
+      // to tap, so it can report nothing about rest: null, never false. False
+      // here means "the trainee skipped the rest on the activity"
+      // (liveActivitySession.restSkippedOnActivity), which on returning to the
+      // app clears the in-app countdown — a rest the trainee never skipped.
+      // Not detectable from the fields: iOS also omits restEndsAt when the rest
+      // is genuinely over, and that omission is the skip signal.
+      if (deps.platformOS === "android") return null;
       const mod = supportedModule();
       if (!mod) return null;
       try {
@@ -161,10 +227,21 @@ export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActi
   };
 }
 
+/**
+ * The app's handle on the native module, shared with the outbox drain so the
+ * guard and the load exist once per app, not once per caller (LA3b).
+ */
+export const liveActivityModuleAccess: LiveActivityModuleAccess =
+  createLiveActivityModuleAccess({
+    platformOS: Platform.OS,
+    loadModule: loadLiveActivityModule,
+  });
+
 /** The app's instance. LA1b's liveActivitySession.ts is its only caller. */
 export const liveActivityNative: LiveActivityNative = createLiveActivityNative({
   platformOS: Platform.OS,
   loadModule: loadLiveActivityModule,
+  access: liveActivityModuleAccess,
 });
 
 /**

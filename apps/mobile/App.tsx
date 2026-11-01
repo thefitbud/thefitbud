@@ -9,6 +9,7 @@ import { FontsProvider } from "./src/providers/FontsProvider";
 import { SyncProvider } from "./src/sync/SyncProvider";
 import { ensureAndroidNotificationChannels } from "./src/notifications/androidChannels";
 import { ensureMealNotificationActions } from "./src/notifications/nativeActions";
+import { NotificationOpenListener } from "./src/notifications/openListener";
 
 export default function App() {
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function App() {
         <ConfigProvider>
           <AuthProvider>
             <CaptureBridgeActivator />
+            <NotificationOpenListener />
             <SyncProvider>
               <AppRouter />
               <StatusBar style="dark" />

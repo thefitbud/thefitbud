@@ -1,8 +1,10 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
 
 /**
- * Local Expo module `LiveActivity` (ios/LiveActivityModule.swift, task LA1).
- * iOS only; `null` on Android, web, Expo Go and any build without the module.
+ * Local Expo module `LiveActivity`: one module name, one call surface, two
+ * implementations — ios/LiveActivityModule.swift, a Live Activity (LA1), and
+ * android/.../LiveActivityModule.kt, an ongoing notification (LA3). `null` on
+ * web, in Expo Go and in any build without the module.
  * Call it through src/notifications/liveActivityNative.ts, never directly.
  */
 
@@ -33,16 +35,22 @@ export type NativeWorkoutContentState = {
   restSeconds: number | null;
 };
 
-/** The running activity's rest, read back when the app becomes active. */
+/**
+ * The running activity's rest, read back when the app becomes active. The
+ * Android notification has no countdown yet (LA3c, D-W3-3), so there it
+ * answers `running` alone.
+ */
 export type NativeRestState = {
   running: boolean;
   restEndsAt?: number | null;
 };
 
 /**
- * One row the lock-screen "Log set" button appended to the App Group (LA2).
- * The widget writes these four values and nothing else; an unreadable row
- * comes back with an empty name or set index 0.
+ * One row a "Log set" button appended outside the app: the iOS widget to the
+ * shared App Group (LA2), the Android notification's button to
+ * SharedPreferences (WorkoutSetStore, LA3). Either side writes these five
+ * values and nothing else; an unreadable row comes back with an empty name or
+ * set index 0.
  */
 export type NativeOutboxRow = {
   operation: string;
@@ -69,9 +77,10 @@ export type LiveActivityNativeModule = {
   end(finalState?: NativeWorkoutContentState | null): Promise<void>;
   restState(): NativeRestState;
   /**
-   * Lock-screen rows waiting to be drained into the sync outbox (LA2).
-   * Optional: a dev build made before LA2 has no such function, and the
-   * drain then does nothing.
+   * Rows waiting to be drained into the sync outbox: the App Group's on iOS
+   * (LA2), the notification store's on Android (LA3). Optional on both: a dev
+   * build made before them has no such function, and the drain then does
+   * nothing.
    */
   readOutbox?(): NativeOutboxRead;
   /** Drops the first `count` rows (the drained ones); returns how many went. */
