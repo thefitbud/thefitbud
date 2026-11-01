@@ -801,8 +801,8 @@ describe("coaching configuration", () => {
     const configuredBody = (await incomplete.json()) as {
       data: { status: string; recordVersion: number; configuredAt: string | null };
     };
-    expect(configuredBody.data.status).toBe("configured");
-    expect(configuredBody.data.configuredAt).toBeTruthy();
+    expect(configuredBody.data.status).toBe("draft");
+    expect(configuredBody.data.configuredAt).toBeNull();
 
     const activate = await app.request(
       `/configurations/relationships/${owner.relationshipId}/activate`,
