@@ -34,7 +34,6 @@ import {
   users,
 } from "../db/schema";
 import {
-  mapDeviceToken,
   mapNotification,
   mapNotificationPreferences,
   mapReminderRule,
@@ -71,6 +70,26 @@ export const notificationRoutes = new Hono<{
 }>();
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * Device-token row → contract shape. Local to these routes because the shared
+ * `mapDeviceToken` in `domain/mappers.ts` still types `provider` as `"fcm"`
+ * only and that file is outside X4b's `files_owned` (D-W3-2 added `"expo"`).
+ */
+function mapDeviceTokenRow(row: typeof deviceTokens.$inferSelect) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    platform: row.platform,
+    provider: row.provider,
+    status: row.status,
+    token: row.token,
+    installationId: row.installationId,
+    lastSeenAt: row.lastSeenAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
 
 function reminderQueueFromEnv(env: Env): ReminderQueue | null {
   if (!env.REMINDER_QUEUE) return null;
@@ -170,11 +189,55 @@ notificationRoutes.post(
       );
     }
 
-    if (existingByToken[0]) {
-      const row = existingByToken[0];
+    const existingByInstallation = await db
+      .select()
+      .from(deviceTokens)
+      .where(
+        and(
+          eq(deviceTokens.userId, actor.userId),
+          eq(deviceTokens.installationId, parsed.data.installationId),
+        ),
+      )
+      .limit(1);
+
+    const ownedByToken = existingByToken[0];
+    const ownedByInstallation = existingByInstallation[0];
+    // The same token reported from another installation of this user (app
+    // reinstalled, stable Expo token): two different rows hold the two unique
+    // keys we need.
+    const movedInstallation =
+      ownedByToken &&
+      ownedByInstallation &&
+      ownedByToken.id !== ownedByInstallation.id
+        ? ownedByInstallation
+        : null;
+    // One row per (user, installation): re-registering replaces the stored
+    // token. On a move we keep the row that already holds this token, because
+    // `notification_deliveries.device_token_id` references it.
+    const target = movedInstallation
+      ? ownedByToken
+      : (ownedByInstallation ?? ownedByToken);
+
+    if (target) {
+      if (movedInstallation) {
+        // Free the (user, installation) unique key without deleting a row:
+        // deliveries reference device tokens with no ON DELETE clause, so a
+        // hard delete would fail and lose the delivery history. The superseded
+        // row is revoked and parked on a sentinel installation id; revoked rows
+        // are never sent to (domain/reminders.ts selects status "active").
+        await db
+          .update(deviceTokens)
+          .set({
+            status: "revoked",
+            installationId: `revoked:${movedInstallation.id}`,
+            updatedAt: now,
+          })
+          .where(eq(deviceTokens.id, movedInstallation.id));
+      }
       await db
         .update(deviceTokens)
         .set({
+          token: parsed.data.token,
           platform: parsed.data.platform,
           provider: parsed.data.provider,
           installationId: parsed.data.installationId,
@@ -182,16 +245,16 @@ notificationRoutes.post(
           lastSeenAt: now,
           updatedAt: now,
         })
-        .where(eq(deviceTokens.id, row.id));
+        .where(eq(deviceTokens.id, target.id));
       const updated = await db
         .select()
         .from(deviceTokens)
-        .where(eq(deviceTokens.id, row.id))
+        .where(eq(deviceTokens.id, target.id))
         .limit(1);
       return ok(
         c,
         registerDeviceTokenResponseSchema.parse({
-          deviceToken: mapDeviceToken(updated[0]!),
+          deviceToken: mapDeviceTokenRow(updated[0]!),
         }),
       );
     }
@@ -217,7 +280,7 @@ notificationRoutes.post(
     return ok(
       c,
       registerDeviceTokenResponseSchema.parse({
-        deviceToken: mapDeviceToken(created[0]!),
+        deviceToken: mapDeviceTokenRow(created[0]!),
       }),
     );
   },
