@@ -9,7 +9,11 @@ vi.mock("expo-modules-core", () => ({
 }));
 
 import type { ExerciseExecution, SetExecution, WorkoutExecution } from "@fitbud/contracts";
-import { createLiveActivityNative, type LiveActivityNative } from "./liveActivityNative";
+import {
+  createLiveActivityNative,
+  toNativeContentState,
+  type LiveActivityNative,
+} from "./liveActivityNative";
 import { parseDeepLinkUrl } from "../navigation/linking";
 import {
   createLiveActivitySession,
@@ -401,19 +405,101 @@ describe("createLiveActivitySession", () => {
       native.hasRest.mockReturnValue(false);
       expect(session.restSkippedOnActivity()).toBe(true); // Skip tapped on the activity
     });
+
+    it("never reports a skip on Android, where the notification has no Skip", async () => {
+      // Through the real wrapper over LA3's module: the notification is up and
+      // answers `running` with no rest. Returning to the app must not clear a
+      // rest the trainee is still taking (there is no Skip until LA3c).
+      const mod = androidModule();
+      mod.restState.mockReturnValue({ running: true });
+      const session = createLiveActivitySession(
+        createLiveActivityNative({ platformOS: "android", loadModule: () => mod }),
+      );
+      const ex = frame27();
+      await session.sync(input(ex));
+      await session.sync({ ...input(logNext(ex)), rest: REST });
+
+      expect(session.restSkippedOnActivity()).toBe(false);
+
+      // And on iOS the same signal still ends the app's rest (LA1c).
+      const ios = fakeNative();
+      const iosSession = createLiveActivitySession(ios);
+      await iosSession.sync(input(ex));
+      await iosSession.sync({ ...input(logNext(ex)), rest: REST });
+      ios.hasRest.mockReturnValue(false);
+      expect(iosSession.restSkippedOnActivity()).toBe(true);
+    });
   });
 
-  it("makes no native call on Android", async () => {
-    const mod = {
-      isSupported: vi.fn(() => true),
+  /** The Android module as LA3 implements it: no rest state, same call names. */
+  function androidModule(overrides: { isSupported?: boolean } = {}) {
+    return {
+      isSupported: vi.fn(() => overrides.isSupported ?? true),
       restState: vi.fn(() => ({ running: false })),
-      start: vi.fn(async () => "x"),
+      start: vi.fn(async () => "1001"),
       update: vi.fn(async () => undefined),
       end: vi.fn(async () => undefined),
     };
+  }
+
+  // Android reaches the native module too, since D-W2-12 and D-W3-3 put the
+  // Android workout notification in the beta (LA3 native, LA3b JS). Before
+  // LA3b the wrapper returned early off iOS and these calls went nowhere.
+  it("drives the Android notification with the same calls and mapped state", async () => {
+    const mod = androidModule();
     const loadModule = vi.fn(() => mod);
     const session = createLiveActivitySession(
       createLiveActivityNative({ platformOS: "android", loadModule }),
+    );
+    const ex = frame27();
+
+    await session.sync(input(ex));
+    expect(loadModule).toHaveBeenCalled();
+    expect(mod.start).toHaveBeenCalledTimes(1);
+    expect(mod.start).toHaveBeenCalledWith(
+      { workoutName: "Lower body B", openUrl: `fitbud://?workout=${ASSIGNMENT}` },
+      toNativeContentState(sent(liveActivityContentFor(ex))),
+    );
+
+    const logged = logNext(ex, { load: "25 kg", reps: 8 });
+    await session.sync(input(logged));
+    expect(mod.update).toHaveBeenCalledTimes(1);
+    expect(mod.update).toHaveBeenCalledWith(
+      toNativeContentState(sent(liveActivityContentFor(logged))),
+    );
+
+    await session.sync(input({ ...logged, status: "completed" }));
+    await session.end();
+    expect(mod.end).toHaveBeenCalledTimes(1);
+    expect(mod.end).toHaveBeenCalledWith({
+      ...toNativeContentState(sent(liveActivityContentFor(logged))),
+      finished: true,
+    });
+    expect(mod.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes no Android native call when notifications are off", async () => {
+    // The Android module's isSupported is notificationsEnabled(): the session
+    // runs its whole course and nothing is posted, and nothing throws.
+    const mod = androidModule({ isSupported: false });
+    const session = createLiveActivitySession(
+      createLiveActivityNative({ platformOS: "android", loadModule: () => mod }),
+    );
+    const ex = frame27();
+    await session.sync(input(ex));
+    await session.sync(input(logNext(ex)));
+    await session.sync(input({ ...ex, status: "completed" }));
+    await session.end();
+    expect(mod.start).not.toHaveBeenCalled();
+    expect(mod.update).not.toHaveBeenCalled();
+    expect(mod.end).not.toHaveBeenCalled();
+  });
+
+  it("makes no native call on web", async () => {
+    const mod = androidModule();
+    const loadModule = vi.fn(() => mod);
+    const session = createLiveActivitySession(
+      createLiveActivityNative({ platformOS: "web", loadModule }),
     );
     const ex = frame27();
     await session.sync(input(ex));

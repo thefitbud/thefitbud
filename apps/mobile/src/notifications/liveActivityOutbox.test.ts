@@ -188,13 +188,15 @@ function drain(
   engine: SyncEngine,
   running: WorkoutExecution | null | (() => Promise<WorkoutExecution | null>),
   onKept?: (count: number) => void,
+  platformOS: string = "ios",
+  isSupported = true,
 ) {
   return drainLiveActivityOutbox({
     sync: engine,
     findRunningWorkout: typeof running === "function" ? running : async () => running,
-    platformOS: "ios",
+    platformOS,
     loadModule: () => ({
-      isSupported: () => true,
+      isSupported: () => isSupported,
       start: async () => "activity-1",
       update: async () => undefined,
       end: async () => undefined,
@@ -476,20 +478,19 @@ describe("drainLiveActivityOutbox", () => {
     expect(mod.state.rows).toHaveLength(1);
   });
 
-  it("does nothing on Android or web", async () => {
+  it("does nothing on web", async () => {
     const { engine, pushed } = engineWithPush();
     const loadModule = vi.fn(() => null);
 
-    for (const platformOS of ["android", "web"]) {
-      const result = await drainLiveActivityOutbox({
-        sync: engine,
-        findRunningWorkout: async () => runningExecution(),
-        platformOS,
-        loadModule,
-        warn: () => undefined,
-      });
-      expect(result).toMatchObject({ rows: 0, enqueued: 0, kept: 0, cleared: 0 });
-    }
+    const result = await drainLiveActivityOutbox({
+      sync: engine,
+      findRunningWorkout: async () => runningExecution(),
+      platformOS: "web",
+      loadModule,
+      warn: () => undefined,
+    });
+
+    expect(result).toMatchObject({ rows: 0, enqueued: 0, kept: 0, cleared: 0 });
     expect(loadModule).not.toHaveBeenCalled();
     expect(pushed).toEqual([]);
   });
@@ -510,6 +511,139 @@ describe("drainLiveActivityOutbox", () => {
       warn: () => undefined,
     });
     expect(result).toMatchObject({ rows: 0, enqueued: 0 });
+  });
+});
+
+describe("drainLiveActivityOutbox on Android (LA3b)", () => {
+  // Rows are pinned to the workout they were first observed against, and that
+  // pin outlives a drain: every test here starts from a clean one, so no test
+  // depends on what another left behind.
+  beforeEach(() => {
+    liveActivityRowsOrigin.set(null);
+  });
+
+  it("drains a notification row into the same mutation as iOS", async () => {
+    // One function, one row shape, one dedupe key: the same tap on either
+    // platform is the same mutation, so a set is never logged twice.
+    const perPlatform: Record<string, string[]> = {};
+    for (const platformOS of ["ios", "android"]) {
+      const mod = fakeModule([row({ setIndex: 2 })]);
+      const { engine, pushed } = engineWithPush();
+
+      const result = await drain(
+        mod,
+        engine,
+        runningExecution({ set1Done: true }),
+        undefined,
+        platformOS,
+      );
+
+      expect(result, platformOS).toMatchObject({ rows: 1, enqueued: 1, kept: 0, cleared: 1 });
+      expect(mod.state.rows).toEqual([]);
+      expect(pushed[0]).toMatchObject({
+        operation: "workout.complete_set",
+        recordId: EXECUTION_ID,
+        payload: {
+          setExecutionId: SET_2_ID,
+          body: { actualReps: 9, actualLoadLabel: "22.5 kg" },
+        },
+      });
+      perPlatform[platformOS] = pushed.map((mutation) => mutation.mutationId);
+      // The next platform's run is a fresh observation, not a continuation.
+      liveActivityRowsOrigin.set(null);
+    }
+    expect(perPlatform.android).toEqual(perPlatform.ios);
+    expect(perPlatform.android).toEqual([
+      mutationIdFromKey(outboxRowKey(EXECUTION_ID, row({ setIndex: 2 }), 0)),
+    ]);
+  });
+
+  it("logs two Log set taps in the shade as one set", async () => {
+    const mod = fakeModule([row(), row()]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(mod, engine, runningExecution(), undefined, "android");
+
+    expect(result).toMatchObject({ rows: 2, enqueued: 1, duplicates: 1, cleared: 2 });
+    expect(pushed).toHaveLength(1);
+    expect(await engine.store.listOutbox()).toHaveLength(1);
+    expect(mod.state.rows).toEqual([]);
+  });
+
+  it("stops at the first row it cannot place, as on iOS", async () => {
+    const mod = fakeModule([row({ exerciseName: "Back squat" }), row({ setIndex: 2 })]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(
+      mod,
+      engine,
+      runningExecution({ set1Done: true }),
+      undefined,
+      "android",
+    );
+
+    // WorkoutSetStore.removeFirst clears a leading prefix, exactly as the App
+    // Group does, so a kept row never shifts an enqueued row's position.
+    expect(result).toMatchObject({ rows: 2, enqueued: 0, kept: 2, cleared: 0 });
+    expect(pushed).toEqual([]);
+    expect(mod.state.rows).toHaveLength(2);
+  });
+
+  it("clears only the drained prefix, keeping a row tapped mid-drain", async () => {
+    // WorkoutSetStore.removeFirst is its own implementation of the contract no
+    // other JS test reaches: clear the leading `count` rows and nothing else.
+    // Removing from the wrong end would destroy the row tapped meanwhile, and
+    // shift the drained one's position — and so its idempotency key.
+    const mod = fakeModule([row()]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(
+      mod,
+      engine,
+      async () => {
+        mod.state.rows.push(row({ setIndex: 2 })); // Log set tapped in the shade
+        return runningExecution();
+      },
+      undefined,
+      "android",
+    );
+
+    expect(result).toMatchObject({ rows: 1, enqueued: 1, kept: 0, cleared: 1 });
+    expect(mod.removeOutbox).toHaveBeenCalledWith(1);
+    expect(mod.state.rows).toEqual([row({ setIndex: 2 })]);
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]!.payload).toMatchObject({ setExecutionId: SET_1_ID });
+  });
+
+  it("still drains rows written before notifications were turned off", async () => {
+    const mod = fakeModule([row()]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(
+      mod,
+      engine,
+      runningExecution(),
+      undefined,
+      "android",
+      false, // isSupported: notifications off since the tap
+    );
+
+    expect(result).toMatchObject({ rows: 1, enqueued: 1, cleared: 1 });
+    expect(pushed).toHaveLength(1);
+    expect(mod.state.rows).toEqual([]);
+  });
+
+  it("does nothing in an Android build made before LA3", async () => {
+    const { engine, pushed } = engineWithPush();
+    const result = await drainLiveActivityOutbox({
+      sync: engine,
+      findRunningWorkout: async () => runningExecution(),
+      platformOS: "android",
+      loadModule: () => null,
+      warn: () => undefined,
+    });
+    expect(result).toMatchObject({ rows: 0, enqueued: 0, kept: 0, cleared: 0 });
+    expect(pushed).toEqual([]);
   });
 });
 
