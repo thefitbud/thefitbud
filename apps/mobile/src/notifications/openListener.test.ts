@@ -6,7 +6,9 @@ vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: vi.fn() }));
 
 import {
+  bindNotificationResponses,
   createNotificationOpenController,
+  type NotificationsModule,
   DEFAULT_TAP_ACTION,
   type NotificationTap,
 } from "./openListener.js";
@@ -201,5 +203,129 @@ describe("notification open controller", () => {
       expect(handle).toHaveBeenCalledTimes(1);
       expect(handle).toHaveBeenCalledWith(meal);
     });
+  });
+});
+
+describe("re-tap after a role that could not route it", () => {
+  it("does not burn the key while the trainer role is selected", () => {
+    const handle = vi.fn();
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(c.receive(tap("n1", workoutData))).toBe("ignored");
+    c.setSession({ userId: USER_A, role: "trainee" });
+    expect(c.receive(tap("n1", workoutData))).toBe("routed");
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("bindNotificationResponses", () => {
+  const NATIVE_DEFAULT = "native.default.id";
+  const calls: string[] = [];
+  let listener: ((r: never) => void) | null;
+  let last: unknown;
+  const remove = vi.fn();
+
+  function response(actionIdentifier: string, key = "req-1") {
+    return {
+      actionIdentifier,
+      notification: {
+        date: 1,
+        request: { identifier: key, content: { data: workoutData } },
+      },
+    };
+  }
+
+  function fakeModule(): NotificationsModule {
+    return {
+      DEFAULT_ACTION_IDENTIFIER: NATIVE_DEFAULT,
+      addNotificationResponseReceivedListener: (l) => {
+        calls.push("listen");
+        listener = l as never;
+        return { remove };
+      },
+      getLastNotificationResponseAsync: async () => {
+        calls.push("getLast");
+        return last as never;
+      },
+      clearLastNotificationResponseAsync: async () => {
+        calls.push("clear");
+      },
+    };
+  }
+
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  beforeEach(() => {
+    calls.length = 0;
+    listener = null;
+    last = null;
+    remove.mockReset();
+  });
+
+  it("attaches the listener before the cold-start lookup, then clears after handling", async () => {
+    last = response(NATIVE_DEFAULT);
+    const receive = vi.fn(() => "routed" as const);
+    bindNotificationResponses({ receive }, async () => fakeModule());
+    await flush();
+    expect(calls).toEqual(["listen", "getLast", "clear"]);
+    expect(receive).toHaveBeenCalledWith(
+      expect.objectContaining({ actionId: DEFAULT_TAP_ACTION, data: workoutData }),
+    );
+  });
+
+  it("maps the library's own default identifier, not a hardcoded string", async () => {
+    const seen: NotificationTap[] = [];
+    const receive = (t: NotificationTap) => {
+      seen.push(t);
+      return "routed" as const;
+    };
+    bindNotificationResponses({ receive }, async () => fakeModule());
+    await flush();
+    listener?.(response(NATIVE_DEFAULT, "req-2") as never);
+    listener?.(response("meal_snooze_30", "req-3") as never);
+    expect(seen[0]?.actionId).toBe(DEFAULT_TAP_ACTION);
+    expect(seen[1]?.actionId).toBe("meal_snooze_30");
+  });
+
+  it("does not clear a response that was ignored", async () => {
+    last = response(NATIVE_DEFAULT);
+    bindNotificationResponses({ receive: () => "ignored" }, async () => fakeModule());
+    await flush();
+    expect(calls).toEqual(["listen", "getLast"]);
+  });
+
+  it("a torn-down run neither consumes nor clears the response", async () => {
+    last = response(NATIVE_DEFAULT);
+    const receive = vi.fn(() => "routed" as const);
+    let resolveModule: (m: NotificationsModule) => void = () => {};
+    const cleanup = bindNotificationResponses(
+      { receive },
+      () => new Promise((r) => (resolveModule = r)),
+    );
+    cleanup(); // torn down before the module loaded
+    resolveModule(fakeModule());
+    await flush();
+    expect(calls).toEqual([]);
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("a run torn down during the cold-start lookup does not handle or clear", async () => {
+    last = response(NATIVE_DEFAULT);
+    const receive = vi.fn(() => "routed" as const);
+    const mod = fakeModule();
+    let release: () => void = () => {};
+    mod.getLastNotificationResponseAsync = async () => {
+      calls.push("getLast");
+      await new Promise<void>((r) => (release = r));
+      return last as never;
+    };
+    const cleanup = bindNotificationResponses({ receive }, async () => mod);
+    await flush();
+    cleanup();
+    release();
+    await flush();
+    expect(calls).toEqual(["listen", "getLast"]);
+    expect(receive).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 });

@@ -98,6 +98,9 @@ export function createNotificationOpenController(input: {
     receive(tap: NotificationTap): "routed" | "queued" | "ignored" {
       if (tap.actionId !== DEFAULT_TAP_ACTION) return "ignored"; // Buttons: nativeActions.ts.
       if (!routable(tap.data)) return "ignored";
+      // A role that cannot route this tap must not burn its key: the user may
+      // switch to the trainee role and tap the same notification again.
+      if (session?.role && session.role !== "trainee") return "ignored"; // Trainer routing is X4g.
       if (!markHandled(tap.key)) return "ignored";
       if (!session) {
         pending = { data: tap.data, ownerUserId: lastUserId };
@@ -107,7 +110,6 @@ export function createNotificationOpenController(input: {
         pending = { data: tap.data, ownerUserId: session.userId };
         return "queued";
       }
-      if (session.role !== "trainee") return "ignored"; // Trainer routing is X4g.
       input.handle(tap.data);
       return "routed";
     },
@@ -115,6 +117,73 @@ export function createNotificationOpenController(input: {
 }
 
 const handledTaps = new Set<string>();
+
+type ResponseLike = {
+  actionIdentifier: string;
+  notification: {
+    date: number;
+    request: { identifier: string; content: { data: unknown } };
+  };
+};
+
+/** The slice of expo-notifications this binding uses (injectable for tests). */
+export type NotificationsModule = {
+  DEFAULT_ACTION_IDENTIFIER: string;
+  addNotificationResponseReceivedListener: (
+    listener: (response: ResponseLike) => void,
+  ) => { remove: () => void };
+  getLastNotificationResponseAsync: () => Promise<ResponseLike | null>;
+  clearLastNotificationResponseAsync: () => Promise<void>;
+};
+
+/**
+ * Attaches the response listener, then handles the cold-start response.
+ * Returns the cleanup. A torn-down run never consumes or clears the response.
+ */
+export function bindNotificationResponses(
+  controller: Pick<
+    ReturnType<typeof createNotificationOpenController>,
+    "receive"
+  >,
+  load: () => Promise<NotificationsModule>,
+): () => void {
+  let cancelled = false;
+  let subscription: { remove: () => void } | null = null;
+
+  void (async () => {
+    const Notifications = await load();
+    if (cancelled) return;
+    const toTap = (response: ResponseLike | null): NotificationTap | null =>
+      response && {
+        key: `${response.notification.request.identifier}:${response.notification.date}`,
+        // Read the library's own identifier so a rename cannot silently drop every tap.
+        actionId:
+          response.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER
+            ? DEFAULT_TAP_ACTION
+            : response.actionIdentifier,
+        data: response.notification.request.content.data,
+      };
+    // Subscribe first so a tap between the two calls is not missed; the
+    // shared key set keeps the cold-start response from being handled twice.
+    subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const tap = toTap(response);
+        if (tap) controller.receive(tap);
+      },
+    );
+    const last = toTap(await Notifications.getLastNotificationResponseAsync());
+    if (cancelled || !last) return;
+    // Clear only a response we took ownership of; an ignored one stays for a retry.
+    if (controller.receive(last) !== "ignored") {
+      void Notifications.clearLastNotificationResponseAsync();
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    subscription?.remove();
+  };
+}
 
 /** Mount once inside `AuthProvider`. */
 export function useNotificationOpenListener(): void {
@@ -139,40 +208,10 @@ export function useNotificationOpenListener(): void {
 
   useEffect(() => {
     if (Platform.OS === "web") return;
-    let cancelled = false;
-    let subscription: { remove: () => void } | null = null;
-
-    void (async () => {
-      const Notifications = await import("expo-notifications");
-      if (cancelled) return;
-      const toTap = (
-        response: Awaited<
-          ReturnType<typeof Notifications.getLastNotificationResponseAsync>
-        >,
-      ): NotificationTap | null =>
-        response && {
-          key: `${response.notification.request.identifier}:${response.notification.date}`,
-          actionId: response.actionIdentifier,
-          data: response.notification.request.content.data,
-        };
-      // Subscribe first so a tap between the two calls is not missed; the
-      // shared key set keeps the cold-start response from being handled twice.
-      subscription = Notifications.addNotificationResponseReceivedListener(
-        (response) => {
-          const tap = toTap(response);
-          if (tap) controller.receive(tap);
-        },
-      );
-      const last = toTap(await Notifications.getLastNotificationResponseAsync());
-      if (cancelled || !last) return;
-      controller.receive(last);
-      void Notifications.clearLastNotificationResponseAsync();
-    })();
-
-    return () => {
-      cancelled = true;
-      subscription?.remove();
-    };
+    return bindNotificationResponses(
+      controller,
+      () => import("expo-notifications"),
+    );
   }, [controller]);
 }
 
