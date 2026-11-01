@@ -1431,11 +1431,19 @@ export const notificationDeliveries = sqliteTable(
     deviceTokenId: text("device_token_id").references(() => deviceTokens.id),
     channel: text("channel", { enum: ["push"] }).notNull(),
     providerStatus: text("provider_status", {
-      enum: ["queued", "accepted", "failed", "skipped"],
+      // `uncertain`: an attempt was begun but its provider outcome was never
+      // recorded, so it is never retried (at-most-once, D-W3-8).
+      enum: ["queued", "accepted", "failed", "skipped", "uncertain"],
     }).notNull(),
     providerMessageId: text("provider_message_id"),
     failureCategory: text("failure_category"),
     attemptNumber: integer("attempt_number").notNull(),
+    /**
+     * Attempt marker (D-W3-8): set immediately before the provider call and
+     * cleared when a failure is recorded. A retry that finds it set with
+     * `provider_status = 'queued'` records `uncertain` instead of sending again.
+     */
+    attemptStartedAt: text("attempt_started_at"),
     acceptedAt: text("accepted_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

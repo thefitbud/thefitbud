@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import type {
   EvaluateRemindersResponse,
   NotificationDomainEntityType,
@@ -1807,9 +1807,71 @@ export async function createActivityNudge(
   };
 }
 
+/** Recorded on a delivery whose provider outcome was begun but never written. */
+const UNCERTAIN_OUTCOME = "unknown_provider_outcome";
+
+/**
+ * Failure categories that prove nothing is in flight for that token: Expo
+ * parsed the message and refused it, or no request ever left the Worker.
+ * `provider_error` is deliberately absent — the sender collapses timeout,
+ * abort, connection reset, non-2xx and unparseable JSON into it, so Expo may
+ * already have accepted the message and only the answer was lost.
+ */
+const ANSWERED_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
+  // Ticket-level errors parsed out of a 2xx Expo response.
+  "DeviceNotRegistered",
+  "MessageTooBig",
+  "InvalidCredentials",
+  // No provider call was made at all.
+  "invalid_token",
+  "fcm_not_configured",
+]);
+
+/**
+ * Settles a delivery that was attempted but whose provider outcome cannot be
+ * known, without sending anything. Only a delivery still carrying its attempt
+ * marker reaches this: `accepted` and `skipped` rows are left untouched.
+ */
+async function settleUncertainDelivery(
+  db: Db,
+  input: { deliveryId: string; notificationDedupeKey: string; now: string },
+): Promise<void> {
+  const settled = await db
+    .update(notificationDeliveries)
+    .set({
+      providerStatus: "uncertain",
+      failureCategory: UNCERTAIN_OUTCOME,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(notificationDeliveries.id, input.deliveryId),
+        inArray(notificationDeliveries.providerStatus, ["queued", "failed"]),
+      ),
+    )
+    .returning({ id: notificationDeliveries.id });
+  if (settled.length === 0) return;
+  await db
+    .update(scheduledJobs)
+    .set({
+      state: "failed",
+      attemptCount: 1,
+      lastErrorCategory: UNCERTAIN_OUTCOME,
+      updatedAt: input.now,
+    })
+    .where(eq(scheduledJobs.dedupeKey, `deliver:${input.notificationDedupeKey}`));
+}
+
 /**
  * Queue consumer: hand off to the push provider (Expo, or the local double) and record provider acceptance.
  * Acceptance is never treated as workflow completion.
+ *
+ * Delivery is at-most-once (D-W3-8): the attempt marker
+ * (`notification_deliveries.attempt_started_at`) is committed before the
+ * provider call, so a queue retry can tell "nothing was sent" from "something
+ * was sent and the outcome was never recorded". The second case is recorded as
+ * `provider_status = 'uncertain'` and never sent again — a reminder can rarely
+ * be lost, never doubled.
  */
 export async function deliverReminderMessage(
   db: Db,
@@ -1841,6 +1903,27 @@ export async function deliverReminderMessage(
         .set({ state: "delivered" })
         .where(eq(notifications.id, notification.id));
     }
+    return;
+  }
+
+  // Already settled as uncertain by an earlier retry: nothing more to send or record.
+  if (delivery.providerStatus === "uncertain") return;
+
+  // A delivery still carrying its attempt marker was handed to the provider
+  // without a definite answer coming back: either the outcome was never
+  // recorded (`queued`), or it was recorded as a failure the provider may never
+  // have answered (`failed` with `provider_error`). At-most-once wins over
+  // at-least-once: do not send again (D-W3-8). The notification state is left
+  // as it is — claiming `delivered` would be an invention.
+  if (
+    delivery.attemptStartedAt &&
+    (delivery.providerStatus === "queued" || delivery.providerStatus === "failed")
+  ) {
+    await settleUncertainDelivery(db, {
+      deliveryId: delivery.id,
+      notificationDedupeKey: notification.dedupeKey,
+      now,
+    });
     return;
   }
 
@@ -1965,10 +2048,36 @@ export async function deliverReminderMessage(
     createdAt: notification.createdAt,
   });
 
+  // Claim the attempt before any provider call. The write is conditional on the
+  // marker still being free, so two queue deliveries racing the same message
+  // can never both send: the loser records `uncertain` and stops. If this write
+  // fails the error propagates, nothing was sent, and the queue retry finds no
+  // marker and starts a clean attempt.
+  const claimed = await db
+    .update(notificationDeliveries)
+    .set({ attemptStartedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(notificationDeliveries.id, delivery.id),
+        isNull(notificationDeliveries.attemptStartedAt),
+      ),
+    )
+    .returning({ id: notificationDeliveries.id });
+  if (claimed.length === 0) {
+    await settleUncertainDelivery(db, {
+      deliveryId: delivery.id,
+      notificationDedupeKey: notification.dedupeKey,
+      now,
+    });
+    return;
+  }
+
   let anyAccepted = false;
   let lastMessageId: string | null = null;
   let lastFailure: string | null = null;
   let acceptedTokenId: string | null = null;
+  /** True once any token's failure leaves its outcome unknown. */
+  let anyOutcomeUnknown = false;
 
   for (const token of tokens) {
     const result = await sendPushToDevice({
@@ -1984,6 +2093,9 @@ export async function deliverReminderMessage(
       break;
     }
     lastFailure = result.failureCategory;
+    if (!ANSWERED_FAILURE_CATEGORIES.has(result.failureCategory)) {
+      anyOutcomeUnknown = true;
+    }
     if (result.failureCategory === "DeviceNotRegistered") {
       // Expo says the app is gone from this device: stop using the token now.
       await db
@@ -2015,6 +2127,14 @@ export async function deliverReminderMessage(
       .set({
         providerStatus: "failed",
         failureCategory: lastFailure ?? "provider_failure",
+        // Free the marker only when every token that was tried got a definite
+        // answer (or was never sent to). If any outcome is unknown the marker
+        // stays set, and a queue redelivery settles this delivery as
+        // `uncertain` instead of sending the same push again (D-W3-8). Freeing
+        // it does not itself trigger a resend: the queue message is acked and
+        // the cron dedupes on `notifications.dedupe_key`. It only means that if
+        // this message is delivered again, sending is the correct answer.
+        ...(anyOutcomeUnknown || !lastFailure ? {} : { attemptStartedAt: null }),
         updatedAt: now,
       })
       .where(eq(notificationDeliveries.id, delivery.id));

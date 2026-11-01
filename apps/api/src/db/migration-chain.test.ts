@@ -59,7 +59,7 @@ function tableColumns(
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 after 0029, 0031 after 0030, and 0032 after 0031", async () => {
+  it("places 0030 to 0033 in order after 0029, with 0033 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -69,18 +69,21 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 1]).toBe("0030_perf_indexes");
     expect(tags[previous + 2]).toBe("0031_library_schema");
     expect(tags[previous + 3]).toBe("0032_meal_compliance_local_date");
-    expect(tags.at(-1)).toBe("0032_meal_compliance_local_date");
+    expect(tags[previous + 4]).toBe("0033_reminder_attempt_marker");
+    expect(tags.at(-1)).toBe("0033_reminder_attempt_marker");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
     expect(journal[previous + 3]?.idx).toBe(32);
+    expect(journal[previous + 4]?.idx).toBe(33);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
     expect(files[previousFile + 1]).toBe("0030_perf_indexes.sql");
     expect(files[previousFile + 2]).toBe("0031_library_schema.sql");
     expect(files[previousFile + 3]).toBe("0032_meal_compliance_local_date.sql");
-    expect(files.at(-1)).toBe("0032_meal_compliance_local_date.sql");
+    expect(files[previousFile + 4]).toBe("0033_reminder_attempt_marker.sql");
+    expect(files.at(-1)).toBe("0033_reminder_attempt_marker.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -112,6 +115,10 @@ describe("migration chain and seeds", () => {
         "logged_at",
       ]);
       expect(tableColumns(handle.sqlite, "meal_compliance")).toContain("local_date");
+      // 0033 (X4i): the at-most-once attempt marker, nullable and not backfilled.
+      expect(tableColumns(handle.sqlite, "notification_deliveries")).toContain(
+        "attempt_started_at",
+      );
       expect(
         indexColumns(handle.sqlite, "meal_compliance_relationship_local_date_idx"),
       ).toEqual(["coaching_relationship_id", "local_date"]);
