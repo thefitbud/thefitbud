@@ -9,23 +9,31 @@ import {
 } from "../../modules/live-activity";
 import { enqueueAndPush } from "../sync/actions";
 import type { SyncEngine, TraineeSyncStore } from "../sync/engine";
+import {
+  createLiveActivityModuleAccess,
+  liveActivityModuleAccess,
+  type LiveActivityModuleAccess,
+} from "./liveActivityNative";
 
 /**
- * Lock-screen "Log set" taps → the sync outbox (task LA2).
+ * "Log set" taps outside the app → the sync outbox (LA2 on iOS, LA3b on
+ * Android).
  *
- * The Live Activity widget cannot reach the API, so its Log set button only
- * appends a row to the shared App Group (targets/FitBudLiveActivity). This
- * module drains those rows when the app becomes active and when the trainee
- * opens the workout tab: each row becomes one `workout.complete_set` mutation
- * (D-W3-5) against the running workout, with a mutation UUID derived from the
- * row so a re-drain or a double tap never logs the same set twice.
+ * Neither the iOS Live Activity widget nor the Android notification's button
+ * can reach the API, so a tap only appends a row to native storage: the shared
+ * App Group (targets/FitBudLiveActivity) on iOS, SharedPreferences
+ * (WorkoutSetStore) on Android. This module drains those rows when the app
+ * becomes active and when the trainee opens the workout tab: each row becomes
+ * one `workout.complete_set` mutation (D-W3-5) against the running workout,
+ * with a mutation UUID derived from the row so a re-drain or a double tap
+ * never logs the same set twice.
  *
- * iOS only. On Android (LA3, LA3b) and web every call is a no-op.
- *
- * Ownership note: the platform guard and module load are repeated here rather
- * than reused from liveActivityNative.ts because that file belongs to another
- * task in this batch (LA3b). They behave the same: never throw, no-op where
- * the module is absent.
+ * Both platforms drain through this one function, over the same module name
+ * and the same row shape, so the dedupe keys are identical (LA3b). On web, and
+ * in a build without the module or with one made before LA2/LA3, every call is
+ * a no-op. The rows are read through the handle's `get()`, not `supported()`:
+ * a set tapped while notifications were on is still drained after they are
+ * turned off, so a logged set is never lost.
  */
 
 /** What happened to one row in a drain. Only `kept` rows stay in the App Group. */
@@ -267,6 +275,8 @@ export type DrainDeps = {
   findRunningWorkout: RunningWorkoutLookup;
   platformOS?: string;
   loadModule?: () => LiveActivityNativeModule | null;
+  /** An existing module handle; built from the platform when absent. */
+  access?: LiveActivityModuleAccess;
   onKept?: (count: number) => void;
   warn?: (message: string) => void;
 };
@@ -281,13 +291,21 @@ function errorName(error: unknown): string {
  */
 export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainResult> {
   const warn = deps.warn ?? ((message: string) => console.warn(message));
-  const platformOS = deps.platformOS ?? Platform.OS;
-  if (platformOS !== "ios") return EMPTY_RESULT;
+  // One platform guard and one lazy load, iOS and Android alike: the handle in
+  // liveActivityNative.ts. Off those platforms `get()` returns null and the
+  // module is never loaded.
+  const access =
+    deps.access ??
+    createLiveActivityModuleAccess({
+      platformOS: deps.platformOS ?? Platform.OS,
+      loadModule: deps.loadModule ?? loadLiveActivityModule,
+      warn,
+    });
 
   let read;
   let mod: LiveActivityNativeModule | null = null;
   try {
-    mod = (deps.loadModule ?? loadLiveActivityModule)();
+    mod = access.get();
     if (!mod?.readOutbox) {
       deps.onKept?.(0);
       return EMPTY_RESULT;
@@ -419,6 +437,8 @@ export function useLiveActivityOutboxDrain(input: {
     void drainLiveActivityOutbox({
       sync,
       findRunningWorkout: createRunningWorkoutLookup({ api, store: sync.store }),
+      // The app's one handle, so the module is loaded once, not once per drain.
+      access: liveActivityModuleAccess,
       onKept: (count) => liveActivityKeptRows.set(count),
     }).finally(() => {
       running.current = false;

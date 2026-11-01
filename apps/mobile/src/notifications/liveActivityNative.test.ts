@@ -12,7 +12,9 @@ import type { LiveActivityNativeModule } from "../../modules/live-activity";
 import { DEMO_LIVE_ACTIVITY, reduceLiveActivity, type LiveActivityState } from "./liveActivity";
 import {
   createLiveActivityDemo,
+  createLiveActivityModuleAccess,
   createLiveActivityNative,
+  isLiveActivityPlatform,
   toNativeContentState,
 } from "./liveActivityNative";
 
@@ -151,7 +153,22 @@ describe("rest and unknown Last mapping (LA1c)", () => {
     });
     expect(throwing.hasRest()).toBeNull();
     expect(warn).toHaveBeenCalledWith("[liveActivity] restState failed: TypeError");
-    expect(createLiveActivityNative({ platformOS: "android", loadModule: () => mod }).hasRest()).toBeNull();
+    expect(createLiveActivityNative({ platformOS: "web", loadModule: () => mod }).hasRest()).toBeNull();
+  });
+
+  it("reports no rest on Android, where the notification has no countdown", () => {
+    // The Android module answers only `running` (LA3c adds the countdown,
+    // D-W3-3): a running notification with no rest, never a crash.
+    const android = createLiveActivityNative({
+      platformOS: "android",
+      loadModule: () => fakeModule({ restState: vi.fn(() => ({ running: true })) }),
+    });
+    expect(android.hasRest()).toBe(false);
+    const idle = createLiveActivityNative({
+      platformOS: "android",
+      loadModule: () => fakeModule({ restState: vi.fn(() => ({ running: false })) }),
+    });
+    expect(idle.hasRest()).toBeNull();
   });
 });
 
@@ -250,11 +267,60 @@ describe("createLiveActivityNative on iOS", () => {
   });
 });
 
-describe.each(["android", "web"])("createLiveActivityNative on %s", (platformOS) => {
+describe("createLiveActivityNative on Android (LA3)", () => {
+  it("starts, updates and ends through the same module with mapped state", async () => {
+    const mod = fakeModule();
+    const native = createLiveActivityNative({ platformOS: "android", loadModule: () => mod });
+    const content = { exerciseName: "Romanian deadlift", state: LOGGED };
+
+    expect(native.isSupported()).toBe(true);
+    expect(await native.start(WORKOUT, content)).toBe("activity-1");
+    await native.update(content);
+    await native.end({ exerciseName: "Romanian deadlift", state: { ...LOGGED, finished: true } });
+
+    const mapped = toNativeContentState(content);
+    expect(mod.start).toHaveBeenCalledWith(WORKOUT, mapped);
+    expect(mod.update).toHaveBeenCalledWith(mapped);
+    expect(mod.end).toHaveBeenCalledWith({ ...mapped, finished: true });
+  });
+
+  it("is a no-op when notifications are off", async () => {
+    // The Android module's isSupported is notificationsEnabled(): off, or the
+    // workout channel blocked, means no notification and no call.
+    const mod = fakeModule({ isSupported: vi.fn(() => false) });
+    const native = createLiveActivityNative({ platformOS: "android", loadModule: () => mod });
+    const content = { exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY };
+
+    expect(native.isSupported()).toBe(false);
+    expect(await native.start(WORKOUT, content)).toBeNull();
+    await native.update(content);
+    await native.end(content);
+    expect(mod.start).not.toHaveBeenCalled();
+    expect(mod.update).not.toHaveBeenCalled();
+    expect(mod.end).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op, and never throws, in a build without the module", async () => {
+    const warn = vi.fn();
+    const native = createLiveActivityNative({
+      platformOS: "android",
+      loadModule: () => {
+        throw new Error("missing");
+      },
+      warn,
+    });
+    expect(native.isSupported()).toBe(false);
+    expect(await native.start(WORKOUT, { exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY })).toBeNull();
+    await expect(native.update({ exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY })).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith("[liveActivity] load failed: Error");
+  });
+});
+
+describe("createLiveActivityNative on web", () => {
   it("never loads the module and makes no calls", async () => {
     const mod = fakeModule();
     const loadModule = vi.fn(() => mod);
-    const native = createLiveActivityNative({ platformOS, loadModule });
+    const native = createLiveActivityNative({ platformOS: "web", loadModule });
     const content = { exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY };
 
     expect(native.isSupported()).toBe(false);
@@ -267,6 +333,55 @@ describe.each(["android", "web"])("createLiveActivityNative on %s", (platformOS)
     expect(mod.start).not.toHaveBeenCalled();
     expect(mod.update).not.toHaveBeenCalled();
     expect(mod.end).not.toHaveBeenCalled();
+  });
+});
+
+describe("the shared module handle (LA3b)", () => {
+  it("is the native platforms, and nothing else", () => {
+    expect(isLiveActivityPlatform("ios")).toBe(true);
+    expect(isLiveActivityPlatform("android")).toBe(true);
+    expect(isLiveActivityPlatform("web")).toBe(false);
+    expect(isLiveActivityPlatform("windows")).toBe(false);
+  });
+
+  it("loads once per handle on both native platforms", () => {
+    for (const platformOS of ["ios", "android"]) {
+      const mod = fakeModule();
+      const loadModule = vi.fn(() => mod);
+      const access = createLiveActivityModuleAccess({ platformOS, loadModule });
+      expect(access.get()).toBe(mod);
+      expect(access.get()).toBe(mod);
+      expect(access.supported()).toBe(mod);
+      expect(loadModule).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("never loads off those platforms, and keeps the rows readable when unsupported", () => {
+    const loadModule = vi.fn(() => fakeModule());
+    expect(createLiveActivityModuleAccess({ platformOS: "web", loadModule }).get()).toBeNull();
+    expect(loadModule).not.toHaveBeenCalled();
+
+    // Notifications off (Android) or Live Activities off (iOS): the drain still
+    // reads the rows a button already wrote, so no logged set is lost.
+    const mod = fakeModule({ isSupported: vi.fn(() => false) });
+    const access = createLiveActivityModuleAccess({
+      platformOS: "android",
+      loadModule: () => mod,
+    });
+    expect(access.get()).toBe(mod);
+    expect(access.supported()).toBeNull();
+  });
+
+  it("warns once with the error name and stays null after a load failure", () => {
+    const warn = vi.fn();
+    const loadModule = vi.fn(() => {
+      throw new TypeError("Romanian deadlift 25 kg");
+    });
+    const access = createLiveActivityModuleAccess({ platformOS: "android", loadModule, warn });
+    expect(access.get()).toBeNull();
+    expect(access.supported()).toBeNull();
+    expect(loadModule).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls).toEqual([["[liveActivity] load failed: TypeError"]]);
   });
 });
 
