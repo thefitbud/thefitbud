@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import type {
   EvaluateRemindersResponse,
   NotificationDomainEntityType,
@@ -1807,9 +1807,19 @@ export async function createActivityNudge(
   };
 }
 
+/** Recorded on a delivery whose provider outcome was begun but never written. */
+const UNCERTAIN_OUTCOME = "unknown_provider_outcome";
+
 /**
  * Queue consumer: hand off to the push provider (Expo, or the local double) and record provider acceptance.
  * Acceptance is never treated as workflow completion.
+ *
+ * Delivery is at-most-once (D-W3-8): the attempt marker
+ * (`notification_deliveries.attempt_started_at`) is committed before the
+ * provider call, so a queue retry can tell "nothing was sent" from "something
+ * was sent and the outcome was never recorded". The second case is recorded as
+ * `provider_status = 'uncertain'` and never sent again — a reminder can rarely
+ * be lost, never doubled.
  */
 export async function deliverReminderMessage(
   db: Db,
@@ -1840,6 +1850,42 @@ export async function deliverReminderMessage(
         .update(notifications)
         .set({ state: "delivered" })
         .where(eq(notifications.id, notification.id));
+    }
+    return;
+  }
+
+  // Already settled as uncertain by an earlier retry: nothing more to send or record.
+  if (delivery.providerStatus === "uncertain") return;
+
+  // A marker with no recorded outcome means a provider call was begun and we do
+  // not know whether it was accepted. At-most-once wins over at-least-once: do
+  // not send again (D-W3-8). The notification state is left as it is — claiming
+  // `delivered` or `failed` would both be inventions.
+  if (delivery.attemptStartedAt && delivery.providerStatus === "queued") {
+    const settled = await db
+      .update(notificationDeliveries)
+      .set({
+        providerStatus: "uncertain",
+        failureCategory: UNCERTAIN_OUTCOME,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(notificationDeliveries.id, delivery.id),
+          eq(notificationDeliveries.providerStatus, "queued"),
+        ),
+      )
+      .returning({ id: notificationDeliveries.id });
+    if (settled.length > 0) {
+      await db
+        .update(scheduledJobs)
+        .set({
+          state: "failed",
+          attemptCount: 1,
+          lastErrorCategory: UNCERTAIN_OUTCOME,
+          updatedAt: now,
+        })
+        .where(eq(scheduledJobs.dedupeKey, `deliver:${notification.dedupeKey}`));
     }
     return;
   }
@@ -1965,6 +2011,38 @@ export async function deliverReminderMessage(
     createdAt: notification.createdAt,
   });
 
+  // Claim the attempt before any provider call. The write is conditional on the
+  // marker still being free, so two queue deliveries racing the same message
+  // can never both send: the loser records `uncertain` and stops. If this write
+  // fails the error propagates, nothing was sent, and the queue retry finds no
+  // marker and starts a clean attempt.
+  const claimed = await db
+    .update(notificationDeliveries)
+    .set({ attemptStartedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(notificationDeliveries.id, delivery.id),
+        isNull(notificationDeliveries.attemptStartedAt),
+      ),
+    )
+    .returning({ id: notificationDeliveries.id });
+  if (claimed.length === 0) {
+    await db
+      .update(notificationDeliveries)
+      .set({
+        providerStatus: "uncertain",
+        failureCategory: UNCERTAIN_OUTCOME,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(notificationDeliveries.id, delivery.id),
+          eq(notificationDeliveries.providerStatus, "queued"),
+        ),
+      );
+    return;
+  }
+
   let anyAccepted = false;
   let lastMessageId: string | null = null;
   let lastFailure: string | null = null;
@@ -2015,6 +2093,9 @@ export async function deliverReminderMessage(
       .set({
         providerStatus: "failed",
         failureCategory: lastFailure ?? "provider_failure",
+        // The provider answered and refused, so no attempt is in flight: free
+        // the marker and let the existing retry rule send again.
+        attemptStartedAt: null,
         updatedAt: now,
       })
       .where(eq(notificationDeliveries.id, delivery.id));
