@@ -13,7 +13,7 @@ Time Travel keeps 30 days of history on the production storage backend (paid pla
 ## Read this first
 
 - **A restore replaces the whole database**, not one table or one client. Every write after the chosen point is lost: trainer and trainee logs, check-ins, invitations, sign-ups, payments entries, reminder records.
-- Nothing is merged back. If you need only a few rows, do not restore; query the older state instead (see "Looking without restoring").
+- Nothing is merged back. If you need only a few rows, do not restore; fix those rows by hand. Time Travel cannot read an older state without replacing the current one.
 - **Production needs Firoz's explicit go**, every time, after you have decided the timestamp and written down what will be lost. Rehearse on staging first.
 - R2 files (`fitbud-media-nonprod`, `fitbud-media-prod`) and queues are **not** restored. Rows may then point at files that still exist, or files may exist with no row.
 
@@ -28,7 +28,8 @@ Do not restore for a bug that only shows wrong data on screen (fix the code), or
 
 Before you restore:
 - [ ] Write down what happened and the time it started (with timezone).
-- [ ] Decide whether to pause writes. Restoring while trainers and trainees are using the app loses their writes too. For production, tell the trainers first.
+- [ ] Decide what to do about writes. Restoring while trainers and trainees are using the app loses their writes too. For production, tell the trainers first.
+- Note: the reminder cron (`*/5 * * * *`) and the queue consumer in `wrangler.toml` keep writing reminder records, including right after a restore. The only real pause available today is to stop clients (ask trainers and trainees to close the app). A proper pause mechanism would need its own decision; this runbook does not invent one.
 
 ## 2. Look at the current state
 
@@ -45,27 +46,27 @@ It prints the **current bookmark** and the time it was taken. Copy the bookmark 
 
 Pick the last time the data was known good, from just before the damage began.
 
-- By time: `--timestamp` takes RFC3339 UTC (`2026-11-02T08:46:42.228Z`) or Unix seconds. It must be within the last 30 days.
+- By time: `--timestamp` takes RFC3339 UTC (`<ISO-UTC-time>`, in the form `YYYY-MM-DDThh:mm:ss.sssZ`) or Unix seconds. It must be within the last 30 days.
 - By bookmark: a bookmark taken earlier, such as one you saved from `info` before a risky migration.
 
 To see which bookmark a time maps to, without changing anything:
 
 ```bash
-pnpm exec wrangler d1 time-travel info <db> --env <env> --timestamp=2026-11-02T08:46:42.228Z
+pnpm exec wrangler d1 time-travel info <db> --env <env> --timestamp=<ISO-UTC-time>
 ```
 
 Convert from IST carefully: IST is UTC+5:30, so 14:16 IST is 08:46 UTC. Pick a time a little before the damage; anything after it is lost.
 
-## Looking without restoring (optional)
+## Not sure which time is right
 
-A read-only query cannot target an older point. If you are unsure which time is right, restore **staging** to the candidate time, check it with step 6, then decide for production.
+A read-only query cannot target an older point. If you are unsure which time is right, you can restore **staging** to the candidate time and check it with step 6 before deciding for production. This **replaces everything currently in staging** and loses its later writes; only do it if that is acceptable, and note the undo bookmark (step 5) first.
 
 ## 4. Restore
 
 Stop here if this is production and Firoz has not said go.
 
 ```bash
-pnpm exec wrangler d1 time-travel restore <db> --env <env> --timestamp=2026-11-02T08:46:42.228Z
+pnpm exec wrangler d1 time-travel restore <db> --env <env> --timestamp=<ISO-UTC-time>
 # or, from a saved bookmark:
 pnpm exec wrangler d1 time-travel restore <db> --env <env> --bookmark=<bookmark>
 ```
