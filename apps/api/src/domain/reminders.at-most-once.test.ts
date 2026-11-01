@@ -95,13 +95,15 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
   });
 
   /** Mocks only the outbound Expo call. */
-  function mockExpo(reply: () => Response | Record<string, unknown> = () => ({ status: "ok", id: "x4i-ticket" })) {
+  function mockExpo(
+    reply: (to: string) => Response | Record<string, unknown> = () => ({ status: "ok", id: "x4i-ticket" }),
+  ) {
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async (_url, init) => {
         const body = JSON.parse(String(init!.body)) as ExpoMessage[];
         expoCalls.push(...body);
-        const answer = reply();
+        const answer = reply(body[0]!.to);
         if (answer instanceof Response) return answer;
         return Response.json({ data: body.map(() => answer) });
       }),
@@ -139,8 +141,13 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
     await handleScheduledReminders(env(queued), new Date(RUN_AT));
   }
 
-  /** The first queued reminder, with its stored notification, and one live token for its recipient. */
-  async function firstQueuedReminder() {
+  /**
+   * The first queued reminder, with its stored notification, and exactly these
+   * live tokens for its recipient (in send order; one live token by default).
+   */
+  async function firstQueuedReminder(
+    tokens: Array<{ id: string; token: string }> = [{ id: "x4i-live-token", token: LIVE_TOKEN }],
+  ) {
     const message = queued[0];
     if (!message) throw new Error(`the cron queued no reminder on the demo seed at ${RUN_AT}`);
     const [notification] = await handle.db
@@ -149,18 +156,20 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
       .where(eq(notifications.id, message.notificationId));
     const recipientUserId = notification!.recipientUserId;
     await handle.db.delete(deviceTokens).where(eq(deviceTokens.userId, recipientUserId));
-    await handle.db.insert(deviceTokens).values({
-      id: "x4i-live-token",
-      userId: recipientUserId,
-      platform: "android",
-      provider: "expo",
-      token: LIVE_TOKEN,
-      installationId: "x4i-live-token-install",
-      status: "active",
-      lastSeenAt: SEED,
-      createdAt: SEED,
-      updatedAt: SEED,
-    });
+    for (const entry of tokens) {
+      await handle.db.insert(deviceTokens).values({
+        id: entry.id,
+        userId: recipientUserId,
+        platform: "android",
+        provider: "expo",
+        token: entry.token,
+        installationId: `${entry.id}-install`,
+        status: "active",
+        lastSeenAt: SEED,
+        createdAt: SEED,
+        updatedAt: SEED,
+      });
+    }
     return { message, notification: notification! };
   }
 
@@ -281,11 +290,14 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
     expect((await state(message)).delivery).toMatchObject({ providerStatus: "accepted" });
   }, 60_000);
 
-  it("a provider error is recorded as failed, frees the marker, and the retry sends exactly once more", async () => {
+  it("an unanswered request is recorded as failed but keeps the marker, and a redelivery sends nothing", async () => {
     await runCron();
-    const { message } = await firstQueuedReminder();
-    let refuse = true;
-    mockExpo(() => (refuse ? new Response("{}", { status: 503 }) : { status: "ok", id: "x4i-ticket-2" }));
+    const { message, notification } = await firstQueuedReminder();
+    let unanswered = true;
+    // 503 is one of the shapes the sender collapses into `provider_error`, along with
+    // timeout, abort, connection reset and unparseable JSON: Expo may have taken the
+    // message and only the answer was lost, so this outcome is not a refusal.
+    mockExpo(() => (unanswered ? new Response("{}", { status: 503 }) : { status: "ok", id: "x4i-ticket-2" }));
 
     const first = batchOf(message);
     await handleReminderQueueBatch(first.batch, env());
@@ -297,7 +309,52 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
       providerStatus: "failed",
       failureCategory: "provider_error",
     });
-    // The provider answered and refused: no attempt is in flight, so the marker is free.
+
+    // Queues are at-least-once, so the same message can come back even though it was
+    // acked. It must not be sent again, however healthy the provider now looks.
+    unanswered = false;
+    const second = batchOf(message);
+    await handleReminderQueueBatch(second.batch, env());
+
+    expect(expoCalls).toHaveLength(1);
+    expect(second.acked).toEqual([message.deliveryId]);
+    const after = await state(message);
+    expect(after.delivery).toMatchObject({
+      providerStatus: "uncertain",
+      failureCategory: "unknown_provider_outcome",
+      providerMessageId: null,
+    });
+    // The marker was kept through the failure, which is what stopped the resend.
+    expect(between.delivery.attemptStartedAt).toBe(RUN_AT);
+    expect(after.delivery.attemptStartedAt).toBe(RUN_AT);
+    expect(await job(notification.dedupeKey)).toMatchObject({
+      state: "failed",
+      lastErrorCategory: "unknown_provider_outcome",
+    });
+  }, 60_000);
+
+  it("a ticket-level refusal frees the marker, and a redelivery sends exactly once more", async () => {
+    await runCron();
+    const { message } = await firstQueuedReminder();
+    let refuse = true;
+    // A parsed ticket error inside a 2xx response: Expo answered and rejected this
+    // message, so nothing is in flight and a redelivery may legitimately send.
+    mockExpo(() =>
+      refuse
+        ? { status: "error", message: "too big", details: { error: "MessageTooBig" } }
+        : { status: "ok", id: "x4i-ticket-2" },
+    );
+
+    const first = batchOf(message);
+    await handleReminderQueueBatch(first.batch, env());
+
+    expect(expoCalls).toHaveLength(1);
+    expect(first.acked).toEqual([message.deliveryId]);
+    const between = await state(message);
+    expect(between.delivery).toMatchObject({
+      providerStatus: "failed",
+      failureCategory: "MessageTooBig",
+    });
     expect(between.delivery.attemptStartedAt).toBeNull();
 
     refuse = false;
@@ -312,9 +369,45 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
     });
   }, 60_000);
 
+  it("one unanswered token among refusals still keeps the marker", async () => {
+    await runCron();
+    const { message } = await firstQueuedReminder([
+      { id: "x4i-token-a", token: "ExponentPushToken[x4i-a]" },
+      { id: "x4i-token-b", token: "ExponentPushToken[x4i-b]" },
+    ]);
+    // Token A's request goes unanswered; token B is refused with a parsed ticket error.
+    // The last failure is a definite refusal, but A may still have been accepted.
+    mockExpo((to) =>
+      to.includes("x4i-a")
+        ? new Response("{}", { status: 503 })
+        : { status: "error", message: "too big", details: { error: "MessageTooBig" } },
+    );
+
+    const first = batchOf(message);
+    await handleReminderQueueBatch(first.batch, env());
+
+    expect(expoCalls.map((m) => m.to)).toEqual([
+      "ExponentPushToken[x4i-a]",
+      "ExponentPushToken[x4i-b]",
+    ]);
+    const between = await state(message);
+    expect(between.delivery).toMatchObject({
+      providerStatus: "failed",
+      failureCategory: "MessageTooBig",
+    });
+
+    const second = batchOf(message);
+    await handleReminderQueueBatch(second.batch, env());
+
+    // Still only the two sends of the first attempt: token A is never tried again.
+    expect(expoCalls).toHaveLength(2);
+    expect((await state(message)).delivery.providerStatus).toBe("uncertain");
+    expect(between.delivery.attemptStartedAt).toBe(RUN_AT);
+  }, 60_000);
+
   it("two queue deliveries of the same message race and only one push goes out", async () => {
     await runCron();
-    const { message } = await firstQueuedReminder();
+    const { message, notification } = await firstQueuedReminder();
     mockExpo();
 
     const a = batchOf(message);
@@ -328,5 +421,7 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
     expect([...a.acked, ...b.acked]).toEqual([message.deliveryId, message.deliveryId]);
     const after = await state(message);
     expect(["accepted", "uncertain"]).toContain(after.delivery.providerStatus);
+    // Whichever side lost the claim, the job row is settled rather than left pending.
+    expect((await job(notification.dedupeKey))?.state).not.toBe("pending");
   }, 60_000);
 });
