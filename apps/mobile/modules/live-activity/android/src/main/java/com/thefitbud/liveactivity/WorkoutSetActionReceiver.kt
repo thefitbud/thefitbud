@@ -69,8 +69,10 @@ class WorkoutSetActionReceiver : BroadcastReceiver() {
         store.writeState(next)
         next.loggedLine?.let { WorkoutSetNotification.showLogged(context, next, it) }
         if (next.finished) {
-            // No set is left to show: the confirmation line stays, the ongoing
-            // notification goes. The app ends the session itself (LA3b).
+            // No set is left to show: the ongoing notification goes and the
+            // confirmation line stays, as in the frame. The app ends the
+            // session (LA3b), and `end` clears that line too, so the trainee
+            // has nothing to swipe away by hand.
             WorkoutSetNotification.cancel(context)
         } else {
             WorkoutSetNotification.show(context, next)

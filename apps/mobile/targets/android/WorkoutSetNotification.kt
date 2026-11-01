@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
+import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
@@ -178,7 +179,10 @@ object WorkoutSetNotification {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
-                .setShowWhen(false)
+                // The frame's header reads "FitBud · Workout · now": the time
+                // is part of it. Every redraw is a fresh post, so it stays
+                // "now" while the trainee is working through the set.
+                .setShowWhen(true)
                 .setCategory(NotificationCompat.CATEGORY_WORKOUT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCustomBigContentView(expanded)
@@ -206,18 +210,32 @@ object WorkoutSetNotification {
     @SuppressLint("MissingPermission")
     fun show(context: Context, state: SetState) {
         if (!notificationsEnabled(context)) return
+        ensureChannel(context)
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, build(context, state))
     }
 
     @SuppressLint("MissingPermission")
     fun showLogged(context: Context, state: SetState, loggedLine: String) {
         if (!notificationsEnabled(context)) return
+        ensureChannel(context)
         NotificationManagerCompat.from(context)
             .notify(LOGGED_NOTIFICATION_ID, buildLogged(context, state, loggedLine))
     }
 
+    /** Takes the ongoing notification down; the logged line stays, as in the frame. */
     fun cancel(context: Context) {
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+    }
+
+    /**
+     * Takes both down. The session is over — after the last set the ongoing
+     * notification goes but the confirmation stays until here, so the trainee
+     * is never left with a card to swipe away by hand.
+     */
+    fun cancelAll(context: Context) {
+        val manager = NotificationManagerCompat.from(context)
+        manager.cancel(NOTIFICATION_ID)
+        manager.cancel(LOGGED_NOTIFICATION_ID)
     }
 
     /**
@@ -227,10 +245,32 @@ object WorkoutSetNotification {
     fun notificationsEnabled(context: Context): Boolean {
         val manager = NotificationManagerCompat.from(context)
         if (!manager.areNotificationsEnabled()) return false
-        // The channel is created by src/notifications/androidChannels.ts at
-        // startup; before that it is absent, which is not "off".
+        // Absent is not "off": ensureChannel creates it on the way to posting.
         val channel = manager.getNotificationChannel(CHANNEL_ID) ?: return true
         return channel.importance != android.app.NotificationManager.IMPORTANCE_NONE
+    }
+
+    /**
+     * src/notifications/androidChannels.ts creates this channel at app start,
+     * but the button receiver runs with no JS runtime — after a force-stop it
+     * is the first thing to post — and a notification on a channel that does
+     * not exist is dropped. Creating one that already exists changes nothing,
+     * and re-creating a channel the trainee turned off does not turn it back
+     * on: the system keeps their importance.
+     *
+     * KEEP IN SYNC with the `workout` entry in
+     * apps/mobile/src/notifications/androidChannels.ts (TR-16 §4).
+     */
+    private fun ensureChannel(context: Context) {
+        val channel =
+            NotificationChannelCompat.Builder(
+                CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_DEFAULT,
+            )
+                .setName("Workout reminders")
+                .setDescription("When a workout isn't logged after your usual time.")
+                .build()
+        NotificationManagerCompat.from(context).createNotificationChannel(channel)
     }
 
     private const val REQUEST_LESS_WEIGHT = 7311
@@ -270,13 +310,24 @@ object WorkoutSetNotification {
     }
 
     /**
-     * The notification icon the Expo config generated, when there is one, and
-     * the launcher icon otherwise. A notification without a small icon throws.
+     * The FitBud mark, white on transparent (res/drawable/ic_fitbud_notification).
+     *
+     * It ships with the module rather than being resolved by name: the app has
+     * no expo-notifications config plugin and so no generated
+     * `notification_icon`, and the launcher icon is an adaptive icon with an
+     * opaque background layer, which the shade — which draws a small icon as
+     * an alpha silhouette — would render as a solid blob. The launcher icon
+     * stays as a last resort only, because a notification without a small icon
+     * throws.
      */
     private fun smallIcon(context: Context): Int {
-        val generated =
-            context.resources.getIdentifier("notification_icon", "drawable", context.packageName)
-        return if (generated != 0) generated else context.applicationInfo.icon
+        val icon = R.drawable.ic_fitbud_notification
+        return try {
+            context.resources.getResourceTypeName(icon)
+            icon
+        } catch (error: android.content.res.Resources.NotFoundException) {
+            context.applicationInfo.icon
+        }
     }
 
     private fun formatKg(value: Double): String {

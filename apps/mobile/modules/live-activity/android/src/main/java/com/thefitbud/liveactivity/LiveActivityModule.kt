@@ -89,6 +89,8 @@ class LiveActivityModule : Module() {
             } else {
                 val next = state.toState(attributes.openUrl)
                 store.writeState(next)
+                // A previous workout's confirmation line has no place here.
+                WorkoutSetNotification.cancelAll(context)
                 WorkoutSetNotification.show(context, next)
                 WorkoutSetNotification.NOTIFICATION_ID.toString()
             }
@@ -109,10 +111,14 @@ class LiveActivityModule : Module() {
             }
         }
 
-        /** Removes the notification. Rows already written stay for the drain. */
+        /**
+         * Removes both notifications — the ongoing one and the last logged
+         * line — so no card is left behind. Rows already written stay for the
+         * drain; ending the session never discards a logged set.
+         */
         AsyncFunction("end") { _: WorkoutStateRecord? ->
             store.clearState()
-            WorkoutSetNotification.cancel(context)
+            WorkoutSetNotification.cancelAll(context)
         }
 
         /**
