@@ -16,7 +16,8 @@ import {
   trainerNotes,
   workoutAssignments,
 } from "../db/schema.js";
-import { storeInboxNotification } from "../domain/inbox-notify.js";
+import { pushTrainerInboxEvent, storeInboxNotification } from "../domain/inbox-notify.js";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { createId, nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
@@ -195,13 +196,19 @@ coachAskRoutes.post(
       answeredBy: null,
       trainerNoteId: null,
     });
-    await storeInboxNotification(db, {
+    const stored = await storeInboxNotification(db, {
       recipientUserId: relationship.trainerUserId,
       relationshipId: relationship.id,
       notificationType: "trainer_ask_coach",
       domainEntityId: id,
       dedupeKey: `coach-ask:${id}`,
     });
+    if (stored.inserted) {
+      await pushTrainerInboxEvent(db, stored.notificationId, {
+        pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+      });
+    }
     const [row] = await db.select().from(coachAsks).where(eq(coachAsks.id, id)).limit(1);
     return ok(c, coachAskSchema.parse(await mapAsk(db, row!)), 201);
   },
