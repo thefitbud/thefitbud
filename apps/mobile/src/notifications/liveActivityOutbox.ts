@@ -92,6 +92,7 @@ export function matchSetExecution(
   execution: WorkoutExecution,
   row: NativeOutboxRow,
 ): { setExecutionId: string; pending: boolean } | null {
+  if (row.operation !== "workout.log_set") return null;
   if (!row.exerciseName.trim() || !Number.isInteger(row.setIndex) || row.setIndex < 1) {
     return null;
   }
@@ -99,12 +100,15 @@ export function matchSetExecution(
     sameExercise(exercise.name, row.exerciseName),
   );
   if (named.length === 0) return null;
-  // Same name twice in one workout: the one still being worked through.
-  const exercise =
-    named.find((candidate) => candidate.sets.some((set) => set.status === "pending")) ??
-    named[0]!;
-  const sets = [...exercise.sets].sort((a, b) => a.order - b.order);
-  const set = sets[row.setIndex - 1];
+  const setAt = (exercise: (typeof named)[number]) =>
+    [...exercise.sets].sort((a, b) => a.order - b.order)[row.setIndex - 1];
+  // The widget's set index is per occurrence, so the same exercise name twice
+  // in one workout cannot be told apart from the row. With more than one
+  // occurrence still waiting at that index, keep the row rather than guess.
+  const waiting = named.filter((exercise) => setAt(exercise)?.status === "pending");
+  if (waiting.length > 1) return null;
+  const exercise = waiting[0] ?? named[0]!;
+  const set = setAt(exercise);
   if (!set) return null;
   return { setExecutionId: set.id, pending: set.status === "pending" };
 }
@@ -182,6 +186,26 @@ function createKeptRowsNotice() {
 }
 
 export const liveActivityKeptRows = createKeptRowsNotice();
+
+/**
+ * The workout the rows now in the App Group were first seen against. A row
+ * carries only an exercise name, so without this a row kept today would match
+ * a later workout's set of the same name and be logged into the wrong
+ * session's coaching record. Rows are only ever placed against this workout;
+ * under any other one they are kept and reported (the spec's rule), never
+ * discarded, expired or auto-cleared. Cleared when the App Group is empty.
+ */
+function createRowsOrigin() {
+  let assignmentId: string | null = null;
+  return {
+    get: () => assignmentId,
+    set(next: string | null) {
+      assignmentId = next;
+    },
+  };
+}
+
+export const liveActivityRowsOrigin = createRowsOrigin();
 
 export type RunningWorkoutLookup = (
   assignmentId: string | null,
@@ -264,34 +288,52 @@ export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainRes
   let mod: LiveActivityNativeModule | null = null;
   try {
     mod = (deps.loadModule ?? loadLiveActivityModule)();
-    if (!mod?.readOutbox) return EMPTY_RESULT;
+    if (!mod?.readOutbox) {
+      deps.onKept?.(0);
+      return EMPTY_RESULT;
+    }
     read = mod.readOutbox();
   } catch (error) {
     warn(`[liveActivityOutbox] read failed: ${errorName(error)}`);
+    deps.onKept?.(0);
     return EMPTY_RESULT;
   }
 
   const rows = read?.rows ?? [];
   if (rows.length === 0) {
+    liveActivityRowsOrigin.set(null);
     deps.onKept?.(0);
     return EMPTY_RESULT;
   }
 
-  const execution = await deps
-    .findRunningWorkout(assignmentIdFromOpenUrl(read?.openUrl))
-    .catch(() => null);
+  const activityAssignmentId = assignmentIdFromOpenUrl(read?.openUrl);
+  const running = await deps.findRunningWorkout(activityAssignmentId).catch(() => null);
+
+  // The workout these rows belong to. Recorded the first time rows are seen
+  // and kept until the App Group is empty again, so a row kept while nothing
+  // was running is never logged against a later workout.
+  const origin = liveActivityRowsOrigin.get();
+  const observed = origin ?? activityAssignmentId ?? running?.assignmentId ?? null;
+  if (observed !== null) liveActivityRowsOrigin.set(observed);
+  const execution = running && running.assignmentId === observed ? running : null;
 
   const outcomes: DrainOutcome[] = [];
   const loggedSetIds = new Set<string>();
   for (const [position, row] of rows.entries()) {
+    // A kept row stays where it is, and clearing is a prefix, so every row
+    // after it stays too: stop here, or a later row would be enqueued and
+    // then re-read at a different position (a different idempotency key).
+    const keepTheRest = () => {
+      while (outcomes.length < rows.length) outcomes.push("kept");
+    };
     if (!execution) {
-      outcomes.push("kept");
-      continue;
+      keepTheRest();
+      break;
     }
     const match = matchSetExecution(execution, row);
     if (!match) {
-      outcomes.push("kept");
-      continue;
+      keepTheRest();
+      break;
     }
     if (loggedSetIds.has(match.setExecutionId)) {
       outcomes.push("duplicate");
@@ -324,13 +366,14 @@ export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainRes
       outcomes.push("enqueued");
     } catch (error) {
       warn(`[liveActivityOutbox] enqueue failed: ${errorName(error)}`);
-      outcomes.push("kept");
+      while (outcomes.length < rows.length) outcomes.push("kept");
+      break;
     }
   }
 
-  // Clear only the drained rows. Rows are a queue, so clearing is a prefix:
-  // stop at the first kept row and leave it (and anything after it) for the
-  // next drain. Their keys make a re-drain reuse the same mutations.
+  // Clear only the drained rows: the leading run, which is every row the loop
+  // handled before it stopped. Anything kept stays, at its own position, so a
+  // re-drain rebuilds the same key and so the same mutation.
   let cleared = 0;
   while (cleared < outcomes.length && outcomes[cleared] !== "kept") cleared += 1;
   if (cleared > 0 && mod?.removeOutbox) {
@@ -341,6 +384,9 @@ export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainRes
       cleared = 0;
     }
   }
+  // Every observed row went: the next read is a fresh observation, which may
+  // legitimately be a different workout (rows the widget appended meanwhile).
+  if (cleared === rows.length) liveActivityRowsOrigin.set(null);
 
   const result: DrainResult = {
     rows: rows.length,

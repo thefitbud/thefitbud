@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-native", () => ({
   NativeModules: {},
@@ -19,6 +19,7 @@ import type { NativeOutboxRead, NativeOutboxRow } from "../../modules/live-activ
 import { createMemorySyncStore, createSyncEngine, type SyncEngine } from "../sync/engine";
 import {
   assignmentIdFromOpenUrl,
+  liveActivityRowsOrigin,
   createRunningWorkoutLookup,
   drainLiveActivityOutbox,
   keptLiveActivityRowsCopy,
@@ -95,6 +96,41 @@ function runningExecution(
   };
 }
 
+const SET_3_ID = "99999999-9999-4999-8999-999999999991";
+const SECOND_OCCURRENCE_SET_ID = "99999999-9999-4999-8999-999999999992";
+
+/** The same workout with a third pending set, for the partial-clear case. */
+function threeSetExecution(): WorkoutExecution {
+  const base = runningExecution();
+  const exercise = base.exercises[0]!;
+  const third = { ...exercise.sets[1]!, id: SET_3_ID, order: 3 };
+  return {
+    ...base,
+    exercises: [{ ...exercise, sets: [...exercise.sets, third] }],
+  };
+}
+
+/** One workout, the same exercise name twice: the row cannot tell them apart. */
+function repeatedExerciseExecution(
+  overrides: { firstDone?: boolean } = {},
+): WorkoutExecution {
+  const base = runningExecution({ set1Done: overrides.firstDone ?? false });
+  const first = base.exercises[0]!;
+  const second = {
+    ...first,
+    id: SECOND_OCCURRENCE_SET_ID,
+    order: 2,
+    sets: [{ ...first.sets[0]!, id: SECOND_OCCURRENCE_SET_ID, status: "pending" as const }],
+  };
+  return {
+    ...base,
+    exercises: [
+      { ...first, name: "Bench press", sets: [first.sets[0]!] },
+      { ...second, name: "Bench press" },
+    ],
+  };
+}
+
 function row(overrides: Partial<NativeOutboxRow> = {}): NativeOutboxRow {
   return {
     operation: "workout.log_set",
@@ -108,9 +144,9 @@ function row(overrides: Partial<NativeOutboxRow> = {}): NativeOutboxRow {
 
 /** The native module as a dev build behaves: rows in order, prefix clearing. */
 function fakeModule(rows: NativeOutboxRow[], openUrl: string | null = `fitbud://?workout=${ASSIGNMENT_ID}`) {
-  const state = { rows: [...rows] };
+  const state = { rows: [...rows], openUrl };
   const readOutbox = vi.fn(
-    (): NativeOutboxRead => ({ rows: [...state.rows], openUrl }),
+    (): NativeOutboxRead => ({ rows: [...state.rows], openUrl: state.openUrl }),
   );
   const removeOutbox = vi.fn((count: number) => {
     const removed = Math.min(count, state.rows.length);
@@ -150,12 +186,12 @@ function engineWithPush(): {
 function drain(
   mod: ReturnType<typeof fakeModule>,
   engine: SyncEngine,
-  execution: WorkoutExecution | null,
+  running: WorkoutExecution | null | (() => Promise<WorkoutExecution | null>),
   onKept?: (count: number) => void,
 ) {
   return drainLiveActivityOutbox({
     sync: engine,
-    findRunningWorkout: async () => execution,
+    findRunningWorkout: typeof running === "function" ? running : async () => running,
     platformOS: "ios",
     loadModule: () => ({
       isSupported: () => true,
@@ -170,6 +206,10 @@ function drain(
     warn: () => undefined,
   });
 }
+
+beforeEach(() => {
+  liveActivityRowsOrigin.set(null);
+});
 
 describe("assignmentIdFromOpenUrl", () => {
   it("reads the assignment id the activity carries", () => {
@@ -279,19 +319,116 @@ describe("drainLiveActivityOutbox", () => {
     expect(await engine.store.listOutbox()).toHaveLength(1);
   });
 
-  it("keeps a row it cannot place and still logs the rest", async () => {
+  it("stops at the first row it cannot place and keeps the rest", async () => {
     const mod = fakeModule([row({ exerciseName: "Back squat" }), row({ setIndex: 2 })]);
     const { engine, pushed } = engineWithPush();
 
     const result = await drain(mod, engine, runningExecution({ set1Done: true }));
 
-    expect(result).toMatchObject({ rows: 2, enqueued: 1, kept: 1, cleared: 0 });
-    expect(pushed).toHaveLength(1);
-    // Nothing was cleared, so a later drain sees both rows again — and the
-    // logged one reuses its mutation instead of logging twice.
+    // Clearing is a prefix, so nothing past the kept row may be enqueued: its
+    // position — and so its idempotency key — would change on the next read.
+    expect(result).toMatchObject({ rows: 2, enqueued: 0, kept: 2, cleared: 0 });
+    expect(pushed).toEqual([]);
     expect(mod.state.rows).toHaveLength(2);
-    await drain(mod, engine, runningExecution({ set1Done: true }));
-    expect(new Set(pushed.map((mutation) => mutation.mutationId)).size).toBe(1);
+  });
+
+  it("a partial clear then a re-drain still logs each set once", async () => {
+    // [enqueued, kept, would-be-enqueued]: the third row shifts position when
+    // the first is cleared, so draining past the kept row logged set 2 twice.
+    const mod = fakeModule([
+      row({ setIndex: 1 }),
+      row({ exerciseName: "Back squat" }),
+      row({ setIndex: 2 }),
+    ]);
+    const { engine, pushed } = engineWithPush();
+
+    const first = await drain(mod, engine, threeSetExecution());
+    await drain(mod, engine, threeSetExecution());
+    await drain(mod, engine, threeSetExecution());
+
+    // One mutation id per set, however often the rows are re-read.
+    const idsPerSet = new Map<unknown, Set<string>>();
+    for (const mutation of pushed) {
+      const setId = mutation.payload.setExecutionId;
+      const ids = idsPerSet.get(setId) ?? new Set<string>();
+      ids.add(mutation.mutationId);
+      idsPerSet.set(setId, ids);
+    }
+    for (const [setId, ids] of idsPerSet) {
+      expect(ids, `set ${String(setId)}`).toHaveLength(1);
+    }
+    expect(pushed.map((mutation) => mutation.payload.setExecutionId)).toEqual([SET_1_ID]);
+    expect(await engine.store.listOutbox()).toHaveLength(1);
+    expect(first).toMatchObject({ rows: 3, enqueued: 1, kept: 2, cleared: 1 });
+    expect(mod.state.rows).toHaveLength(2);
+  });
+
+  it("keeps a row it cannot tell apart from a repeated exercise", async () => {
+    const mod = fakeModule([row({ exerciseName: "Bench press" })]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(mod, engine, repeatedExerciseExecution());
+
+    expect(result).toMatchObject({ rows: 1, enqueued: 0, kept: 1, cleared: 0 });
+    expect(pushed).toEqual([]);
+    expect(mod.state.rows).toHaveLength(1);
+  });
+
+  it("places the row once only one occurrence is still waiting", async () => {
+    const mod = fakeModule([row({ exerciseName: "Bench press" })]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(mod, engine, repeatedExerciseExecution({ firstDone: true }));
+
+    expect(result).toMatchObject({ enqueued: 1, cleared: 1 });
+    expect(pushed[0]!.payload).toMatchObject({ setExecutionId: SECOND_OCCURRENCE_SET_ID });
+  });
+
+  it("never logs rows observed under one workout against another", async () => {
+    const mod = fakeModule([row()]);
+    const { engine, pushed } = engineWithPush();
+
+    // Monday: the lookup failed, so the row is kept against workout A.
+    const kept = await drain(mod, engine, null);
+    expect(kept).toMatchObject({ kept: 1, cleared: 0 });
+    expect(liveActivityRowsOrigin.get()).toBe(ASSIGNMENT_ID);
+
+    // Wednesday: a different workout is running, with the same exercise name.
+    const otherAssignment = "99999999-9999-4999-8999-999999999999";
+    mod.state.openUrl = `fitbud://?workout=${otherAssignment}`;
+    const result = await drain(mod, engine, {
+      ...runningExecution(),
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      assignmentId: otherAssignment,
+    });
+
+    expect(result).toMatchObject({ rows: 1, enqueued: 0, kept: 1, cleared: 0 });
+    expect(pushed).toEqual([]);
+    expect(mod.state.rows).toHaveLength(1);
+  });
+
+  it("keeps a row the widget appended while the drain was running", async () => {
+    const mod = fakeModule([row()]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(mod, engine, async () => {
+      mod.state.rows.push(row({ setIndex: 2 })); // Log set tapped mid-drain
+      return runningExecution();
+    });
+
+    expect(result).toMatchObject({ rows: 1, enqueued: 1, cleared: 1 });
+    expect(pushed).toHaveLength(1);
+    expect(mod.state.rows).toEqual([row({ setIndex: 2 })]);
+  });
+
+  it("keeps a row whose operation is not a logged set", async () => {
+    const mod = fakeModule([row({ operation: "workout.skip" })]);
+    const { engine, pushed } = engineWithPush();
+
+    const result = await drain(mod, engine, runningExecution());
+
+    expect(result).toMatchObject({ rows: 1, enqueued: 0, kept: 1, cleared: 0 });
+    expect(pushed).toEqual([]);
   });
 
   it("keeps every row and reports the count when no workout is running", async () => {
