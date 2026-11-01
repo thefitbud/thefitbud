@@ -27,6 +27,8 @@ import {
   onboardingFormVersions,
   onboardingReviews,
 } from "../db/schema";
+import { pushTrainerInboxEvent, storeInboxNotification } from "../domain/inbox-notify.js";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { onboardingStatusForRelationship } from "../domain/client-status";
 import { pinnedOnboardingVersionForRelationship } from "../domain/onboarding-forms";
 import { onboardingFormTemplateRoutes } from "./onboarding-templates";
@@ -591,6 +593,21 @@ onboardingRoutes.post(
       responseBody,
       expiresAt: addDaysIso(7),
     });
+    // Trainer inbox event (D-W3-1). Recipient is the relationship's trainer, resolved server-side;
+    // the entity is the relationship, which is what trainer tap routing opens.
+    const storedTrainerEvent = await storeInboxNotification(db, {
+      recipientUserId: relationship.trainerUserId,
+      relationshipId: relationship.id,
+      notificationType: "trainer_intake_submitted",
+      domainEntityId: relationship.id,
+      dedupeKey: `intake-submitted:${relationship.id}:${updated.id}`,
+    });
+    if (storedTrainerEvent.inserted) {
+      await pushTrainerInboxEvent(db, storedTrainerEvent.notificationId, {
+        pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+      });
+    }
     return ok(c, data);
   },
 );

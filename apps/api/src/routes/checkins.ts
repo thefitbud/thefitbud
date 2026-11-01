@@ -83,7 +83,8 @@ import {
   notifyTraineeNoteShared,
   setTrainerNoteVisibility,
 } from "../domain/trainer-note-share.js";
-import { storeInboxNotification } from "../domain/inbox-notify.js";
+import { pushTrainerInboxEvent, storeInboxNotification } from "../domain/inbox-notify.js";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -2042,6 +2043,21 @@ checkinRoutes.post(
       responseBody,
       expiresAt: addDaysIso(7),
     });
+    // Trainer inbox event (D-W3-1). Recipient is the relationship's trainer, resolved server-side.
+    const storedTrainerEvent = await storeInboxNotification(db, {
+      recipientUserId: relationship.trainerUserId,
+      relationshipId: relationship.id,
+      notificationType: "trainer_checkin_submitted",
+      domainEntityId: loaded.checkin.id,
+      domainEntityType: "checkin",
+      dedupeKey: `checkin-submitted:${loaded.checkin.id}`,
+    });
+    if (storedTrainerEvent.inserted) {
+      await pushTrainerInboxEvent(db, storedTrainerEvent.notificationId, {
+        pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+      });
+    }
     queueRealtimeHint(c.env, {
       eventType: "checkin_submitted",
       entityType: "checkin",
