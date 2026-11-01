@@ -34,7 +34,6 @@ import {
   users,
 } from "../db/schema";
 import {
-  mapDeviceToken,
   mapNotification,
   mapNotificationPreferences,
   mapReminderRule,
@@ -71,6 +70,26 @@ export const notificationRoutes = new Hono<{
 }>();
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * Device-token row → contract shape. Local to these routes because the shared
+ * `mapDeviceToken` in `domain/mappers.ts` still types `provider` as `"fcm"`
+ * only and that file is outside X4b's `files_owned` (D-W3-2 added `"expo"`).
+ */
+function mapDeviceTokenRow(row: typeof deviceTokens.$inferSelect) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    platform: row.platform,
+    provider: row.provider,
+    status: row.status,
+    token: row.token,
+    installationId: row.installationId,
+    lastSeenAt: row.lastSeenAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
 
 function reminderQueueFromEnv(env: Env): ReminderQueue | null {
   if (!env.REMINDER_QUEUE) return null;
@@ -170,11 +189,38 @@ notificationRoutes.post(
       );
     }
 
-    if (existingByToken[0]) {
-      const row = existingByToken[0];
+    const existingByInstallation = await db
+      .select()
+      .from(deviceTokens)
+      .where(
+        and(
+          eq(deviceTokens.userId, actor.userId),
+          eq(deviceTokens.installationId, parsed.data.installationId),
+        ),
+      )
+      .limit(1);
+
+    const ownedByToken = existingByToken[0];
+    const ownedByInstallation = existingByInstallation[0];
+    // One row per (user, installation): re-registering replaces the stored token.
+    const target = ownedByInstallation ?? ownedByToken;
+
+    if (target) {
+      if (
+        ownedByToken &&
+        ownedByInstallation &&
+        ownedByToken.id !== ownedByInstallation.id
+      ) {
+        // The same token moved to another installation of this user; remove the
+        // stale registration so the unique token index stays free.
+        await db
+          .delete(deviceTokens)
+          .where(eq(deviceTokens.id, ownedByToken.id));
+      }
       await db
         .update(deviceTokens)
         .set({
+          token: parsed.data.token,
           platform: parsed.data.platform,
           provider: parsed.data.provider,
           installationId: parsed.data.installationId,
@@ -182,16 +228,16 @@ notificationRoutes.post(
           lastSeenAt: now,
           updatedAt: now,
         })
-        .where(eq(deviceTokens.id, row.id));
+        .where(eq(deviceTokens.id, target.id));
       const updated = await db
         .select()
         .from(deviceTokens)
-        .where(eq(deviceTokens.id, row.id))
+        .where(eq(deviceTokens.id, target.id))
         .limit(1);
       return ok(
         c,
         registerDeviceTokenResponseSchema.parse({
-          deviceToken: mapDeviceToken(updated[0]!),
+          deviceToken: mapDeviceTokenRow(updated[0]!),
         }),
       );
     }
@@ -217,7 +263,7 @@ notificationRoutes.post(
     return ok(
       c,
       registerDeviceTokenResponseSchema.parse({
-        deviceToken: mapDeviceToken(created[0]!),
+        deviceToken: mapDeviceTokenRow(created[0]!),
       }),
     );
   },

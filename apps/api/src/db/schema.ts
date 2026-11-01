@@ -1242,7 +1242,7 @@ export const deviceTokens = sqliteTable(
       .notNull()
       .references(() => users.id),
     platform: text("platform", { enum: ["ios", "android", "web"] }).notNull(),
-    provider: text("provider", { enum: ["fcm"] }).notNull(),
+    provider: text("provider", { enum: ["fcm", "expo"] }).notNull(),
     token: text("token").notNull(),
     installationId: text("installation_id").notNull(),
     status: text("status", { enum: ["active", "revoked"] }).notNull(),
