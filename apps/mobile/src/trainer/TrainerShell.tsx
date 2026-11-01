@@ -76,7 +76,7 @@ export function TrainerShell() {
     });
   }
 
-  async function openClientById(relationshipId: string) {
+  async function openClientById(relationshipId: string, push?: number) {
     let displayName = "Client";
     let statusLabelText = "Unknown";
     try {
@@ -94,6 +94,8 @@ export function TrainerShell() {
         statusLabelText = onboardingStatusLabel(relationship.onboardingStatus);
       }
     }
+    // A newer push opened something else while the client list loaded.
+    if (push !== undefined && push !== latestPushRef.current) return;
     setOverlay({
       kind: "client",
       relationshipId,
@@ -113,8 +115,8 @@ export function TrainerShell() {
   useEffect(() => {
     if (!pendingNotificationLink) return;
     const route = pendingNotificationLink.trainerRoute;
-    clearPendingNotificationLink(); // Navigate once per link.
     if (!route) return; // Not a trainer push; the trainee shell owns those.
+    clearPendingNotificationLink(); // Navigate once per link.
     const push = ++latestPushRef.current;
     void refreshSession();
     setRefreshNonce((n) => n + 1);
@@ -129,26 +131,7 @@ export function TrainerShell() {
         });
         return;
       case "client":
-        void openClientById(route.relationshipId);
-        return;
-      case "ask":
-        // The push holds the ask id; the server says which client it belongs to.
-        void (async () => {
-          try {
-            const asks = await s1.listCoachAsks();
-            const ask = asks.items.find((item) => item.id === route.askId);
-            if (push !== latestPushRef.current) return;
-            if (ask) {
-              await openClientById(ask.relationshipId);
-              return;
-            }
-          } catch {
-            // Fall through to the attention list.
-          }
-          if (push !== latestPushRef.current) return;
-          setOverlay(null);
-          setTab("attention");
-        })();
+        void openClientById(route.relationshipId, push);
         return;
       case "attention":
         setOverlay(null);

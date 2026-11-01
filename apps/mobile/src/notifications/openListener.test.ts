@@ -314,6 +314,17 @@ describe("trainer taps (X4g)", () => {
     expect(handle).not.toHaveBeenCalled();
   });
 
+  it("evicts the oldest handled key after 50, so only the newest 50 stay deduped", () => {
+    const c = createNotificationOpenController({ handle });
+    c.setSession({ userId: USER_A, role: "trainer" });
+    for (let i = 0; i < 51; i++) c.receive(tap(`k${i}`, askData));
+    expect(handle).toHaveBeenCalledTimes(51);
+    expect(c.receive(tap("k50", askData))).toBe("ignored"); // newest still deduped
+    expect(c.receive(tap("k1", askData))).toBe("ignored"); // within the last 50
+    expect(c.receive(tap("k0", askData))).toBe("routed"); // evicted
+    expect(handle).toHaveBeenCalledTimes(52);
+  });
+
   it("does not route the same trainer tap twice", () => {
     const c = createNotificationOpenController({ handle });
     c.setSession({ userId: USER_A, role: "trainer" });

@@ -9,12 +9,11 @@ import type { ResolvedAppRoute } from "../navigation/linking";
 
 /**
  * Where a trainer push opens. The payload carries ids only; the shell refetches
- * (and, for an ask, resolves the client from the server) before showing anything.
+ * before showing anything.
  */
 export type TrainerNotificationRoute =
   | { kind: "checkin"; checkinId: string }
   | { kind: "client"; relationshipId: string }
-  | { kind: "ask"; askId: string }
   | { kind: "attention" };
 
 export type NotificationDeepLink = {
@@ -95,8 +94,8 @@ function trainerRouteFromPayload(
         ? { kind: "client", relationshipId: id }
         : { kind: "attention" };
     case "trainer_ask_coach":
-      // The API stores the ask id here (not the relationship id).
-      return { kind: "ask", askId: id };
+      // Asks are shown and answered under the Attention tab's Asked filter.
+      return { kind: "attention" };
     default:
       return { kind: "attention" };
   }

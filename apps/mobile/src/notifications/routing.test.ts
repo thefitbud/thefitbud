@@ -133,10 +133,10 @@ describe("notification routing", () => {
       }
     });
 
-    it("ask opens by ask id (the client is resolved from the server)", () => {
+    it("ask opens the Attention tab, where asks are answered", () => {
       expect(
         route("trainer_ask_coach", "coaching_relationship")?.trainerRoute,
-      ).toEqual({ kind: "ask", askId: base.domainEntityId });
+      ).toEqual({ kind: "attention" });
     });
 
     it("never reads a mismatched entity type as a client or check-in id", () => {
