@@ -25,8 +25,6 @@ export type PushRegistration = {
 export type PushRegistrationOutcome =
   | { status: "registered"; registration: PushRegistration }
   | { status: "permission_denied" }
-  /** 403 DEVICE_TOKEN_OWNED — this token belongs to another FitBud user. */
-  | { status: "rejected" }
   | { status: "failed" };
 
 type RegisterOptions = {
@@ -55,8 +53,6 @@ async function loadNotifications(): Promise<ExpoNotificationsModule> {
 /** In-memory only. Never logged, never handed to callers. */
 let registeredToken: string | null = null;
 let registration: PushRegistration | null = null;
-/** Set after a 403 so a refused token is not retried in a loop. */
-let refusedToken: string | null = null;
 let tokenWatch: { remove: () => void } | null = null;
 
 export function currentPushRegistration(): PushRegistration | null {
@@ -69,7 +65,6 @@ export function resetPushRegistration(): void {
   tokenWatch = null;
   registeredToken = null;
   registration = null;
-  refusedToken = null;
 }
 
 function defaultPlatform(): DeviceTokenPlatform {
@@ -124,10 +119,6 @@ async function sendRegistration(
     installationId: string;
   },
 ): Promise<PushRegistrationOutcome> {
-  if (refusedToken === input.token) {
-    // Already refused once for this signed-in user — do not retry.
-    return { status: "rejected" };
-  }
   try {
     const result = await api.registerDeviceToken({
       provider: input.provider,
@@ -143,16 +134,7 @@ async function sendRegistration(
       platform: input.platform,
     };
     return { status: "registered", registration };
-  } catch (error) {
-    const code = (error as { code?: unknown } | null)?.code;
-    if (code === "DEVICE_TOKEN_OWNED") {
-      // The token is registered to a different user and that row is never
-      // released. Stop trying; push stays off for this install until the token
-      // changes or this user signs out. Keyed on the domain error code, so an
-      // unrelated 403 stays retryable.
-      refusedToken = input.token;
-      return { status: "rejected" };
-    }
+  } catch {
     return { status: "failed" };
   }
 }
@@ -160,8 +142,9 @@ async function sendRegistration(
 /**
  * Register the device for push. Safe to call on every `/me`: the POST is
  * idempotent server-side (one row per user and installation), and every call
- * re-sends the token, which refreshes `lastSeenAt`. A token already refused
- * with DEVICE_TOKEN_OWNED is not sent again.
+ * re-sends the token, which refreshes `lastSeenAt`. A token held by another
+ * user is reassigned to the caller by the API (D-W3-9), so there is no refusal
+ * to remember.
  */
 export async function registerDeviceTokenForPush(
   api: FitBudApiClient,
@@ -251,7 +234,10 @@ export async function watchPushTokenChanges(
           installationId: installationIdForToken(next.data),
         });
         if (outcome.status === "registered" && previous) {
-          // Best-effort: the rotated-out token can never be delivered to.
+          // Best-effort: the rotated-out token can never be delivered to. A
+          // by-token revoke is not idempotent (X4k): once sign-out has parked
+          // the row on a sentinel, a replayed DELETE answers 404
+          // DEVICE_TOKEN_NOT_FOUND. That is expected, hence the swallow.
           await api.revokeDeviceToken({ token: previous }).catch(() => undefined);
         }
       } catch {
@@ -290,7 +276,7 @@ export async function unregisterDeviceTokenForPush(
 
 /**
  * Sign-out teardown, the one path the provider takes. The module singletons
- * (`refusedToken`, the registered token and registration) are cleared
+ * (the registered token and registration) are cleared
  * unconditionally, so no state of the signed-out user can reach the next
  * session in the same app run; the revoke is best-effort on top of that and
  * only runs when there is something to revoke and a client to revoke with.

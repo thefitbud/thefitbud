@@ -41,12 +41,17 @@ class WorkoutStateRecord : Record {
     @Field var loggedLine: String? = null
     @Field var finished: Boolean = false
 
-    /** Rest is iOS-only for now; LA3c adds the Android countdown (D-W3-3). */
+    /**
+     * End of the running rest, epoch ms, or null when there is no rest. The
+     * same field iOS uses (LA1c); on Android it drives the notification's
+     * countdown (LA3c, D-W3-3). It arrives as a Double because JS numbers do.
+     */
     @Field var restEndsAt: Double? = null
 
+    /** Full rest length in seconds, as the app set it. */
     @Field var restSeconds: Int? = null
 
-    fun toState(openUrl: String): WorkoutSetNotification.SetState =
+    fun toState(openUrl: String, workoutName: String): WorkoutSetNotification.SetState =
         WorkoutSetNotification.SetState(
             exerciseName = exerciseName,
             setIndex = setIndex,
@@ -60,6 +65,9 @@ class WorkoutStateRecord : Record {
             loggedLine = loggedLine,
             finished = finished,
             openUrl = openUrl,
+            workoutName = workoutName,
+            restEndsAt = restEndsAt?.toLong(),
+            restSeconds = restSeconds,
         )
 }
 
@@ -87,7 +95,7 @@ class LiveActivityModule : Module() {
             if (!WorkoutSetNotification.notificationsEnabled(context)) {
                 null
             } else {
-                val next = state.toState(attributes.openUrl)
+                val next = state.toState(attributes.openUrl, attributes.workoutName)
                 store.writeState(next)
                 // A previous workout's confirmation line has no place here.
                 WorkoutSetNotification.cancelAll(context)
@@ -98,11 +106,13 @@ class LiveActivityModule : Module() {
 
         /**
          * Redraws the running notification from the app's state. The openUrl
-         * is kept from `start`: the app does not resend it.
+         * and the workout name are kept from `start`: the app does not resend
+         * them. Rest comes with each update, so one update starts the
+         * countdown and one ends it — the device counts in between.
          */
         AsyncFunction("update") { state: WorkoutStateRecord ->
             val current = store.readState() ?: return@AsyncFunction
-            val next = state.toState(current.openUrl)
+            val next = state.toState(current.openUrl, current.workoutName)
             store.writeState(next)
             if (next.finished) {
                 WorkoutSetNotification.cancel(context)
@@ -122,11 +132,28 @@ class LiveActivityModule : Module() {
         }
 
         /**
-         * Android has no rest countdown yet (D-W3-3 puts it in LA3c), so this
-         * only answers whether the notification is up.
+         * The running notification's rest, read back when the app becomes
+         * active (LA3c). Field for field what iOS answers, because one JS
+         * wrapper reads both: `running` alone when the notification is up but
+         * is not counting down, and `restEndsAt` with it while a countdown is
+         * still running. A rest whose end has passed is no longer a rest, on
+         * either platform.
+         *
+         * So an omitted `restEndsAt` means the same thing here as there: the
+         * activity is no longer resting, because the trainee pressed Skip rest
+         * or the countdown ran out. It never means "this platform cannot say",
+         * which is what it meant before the countdown existed and is what made
+         * the app clear a rest the trainee was still taking (LA3b).
          */
         Function("restState") {
-            mapOf("running" to (store.readState() != null))
+            val state = store.readState()
+            if (state == null) {
+                mapOf("running" to false)
+            } else if (WorkoutSetNotification.resting(state)) {
+                mapOf("running" to true, "restEndsAt" to (state.restEndsAt?.toDouble() ?: 0.0))
+            } else {
+                mapOf("running" to true)
+            }
         }
 
         /**

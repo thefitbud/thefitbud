@@ -87,8 +87,6 @@ class ApiError extends Error {
   }
 }
 
-const OWNED = new ApiError(403, "DEVICE_TOKEN_OWNED");
-
 beforeEach(() => {
   resetPushRegistration();
   pushListeners = [];
@@ -216,25 +214,6 @@ describe("registerDeviceTokenForPush", () => {
     expect(outcome.status).toBe("registered");
     expect(api.calls()[0]?.provider).toBe("fcm");
     expect(notificationsMock.getExpoPushTokenAsync).not.toHaveBeenCalled();
-  });
-
-  it("reports a 403 as rejected and never retries that token", async () => {
-    const api = fakeApi({
-      register: async () => {
-        throw OWNED;
-      },
-    });
-
-    expect(await registerDeviceTokenForPush(api.client)).toEqual({
-      status: "rejected",
-    });
-    expect(await registerDeviceTokenForPush(api.client)).toEqual({
-      status: "rejected",
-    });
-
-    // One attempt only: a token owned by another user is never retried.
-    expect(api.registerDeviceToken).toHaveBeenCalledTimes(1);
-    expect(currentPushRegistration()).toBeNull();
   });
 
   it("reports other failures as failed and stays retryable", async () => {
@@ -423,23 +402,16 @@ describe("signOutPushRegistration", () => {
   });
 
   /**
-   * After a DEVICE_TOKEN_OWNED refusal there is no installation id and the
-   * access token may be gone, so sign-out takes the no-revoke path. It must
-   * still clear the module state, or the next user in the same app run is
-   * refused without the API ever being called.
+   * With no installation id and no usable access token, sign-out takes the
+   * no-revoke path. It must still clear the module state, or the next user in
+   * the same app run would inherit the signed-out user's registration.
    */
-  it("clears a refused token even when it cannot revoke anything", async () => {
-    let refuse = true;
-    const api = fakeApi({
-      register: async () => {
-        if (refuse) throw OWNED;
-        return { deviceToken: { id: "dt-2" } };
-      },
-    });
-
+  it("clears the registration even when it cannot revoke anything", async () => {
+    const api = fakeApi();
     expect((await registerDeviceTokenForPush(api.client)).status).toBe(
-      "rejected",
+      "registered",
     );
+    expect(currentPushRegistration()).not.toBeNull();
 
     // Exactly what AuthProvider.signOut passes with no registration and no
     // usable access token.
@@ -447,7 +419,7 @@ describe("signOutPushRegistration", () => {
     await flush();
 
     expect(api.revokeDeviceToken).not.toHaveBeenCalled();
-    refuse = false;
+    expect(currentPushRegistration()).toBeNull();
     expect((await registerDeviceTokenForPush(api.client)).status).toBe(
       "registered",
     );

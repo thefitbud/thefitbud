@@ -173,6 +173,12 @@ internal class WorkoutSetStore(context: Context) {
                 .put("loggedLine", state.loggedLine ?: JSONObject.NULL)
                 .put("finished", state.finished)
                 .put("openUrl", state.openUrl)
+                .put("workoutName", state.workoutName)
+                // The rest countdown the app set (LA3c). It is stored so the
+                // notification survives a process death mid-rest, and so
+                // restState() can answer the app honestly when it comes back.
+                .put("restEndsAt", state.restEndsAt ?: JSONObject.NULL)
+                .put("restSeconds", state.restSeconds ?: JSONObject.NULL)
 
         fun stateFromJson(json: JSONObject): WorkoutSetNotification.SetState =
             WorkoutSetNotification.SetState(
@@ -188,6 +194,9 @@ internal class WorkoutSetStore(context: Context) {
                 loggedLine = if (json.isNull("loggedLine")) null else json.optString("loggedLine"),
                 finished = json.optBoolean("finished", false),
                 openUrl = json.optString("openUrl", ""),
+                workoutName = json.optString("workoutName", ""),
+                restEndsAt = if (json.isNull("restEndsAt")) null else json.optLong("restEndsAt"),
+                restSeconds = if (json.isNull("restSeconds")) null else json.optInt("restSeconds"),
             )
     }
 }
