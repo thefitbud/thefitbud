@@ -9,10 +9,10 @@
 
 | Role | Who | Responsibility |
 |---|---|---|
-| Data Protection / Grievance contact | [[NAME]] | Receives, decides and answers everything in this document |
-| Deputy, for absence | [[NAME or "none — see §1.1"]] | |
+| Data Protection / Grievance contact | [[PARTNER 1 — NAME]] | Receives, decides and answers everything in this document. Named publicly in the Privacy Policy |
+| Deputy, for absence | [[PARTNER 2 — NAME]] | Acts when the contact is unreachable for more than two working days |
 
-**1.1** With one person, absence is the single biggest operational risk here. If [[NAME]] is unreachable for a week, a statutory clock still runs. Minimum mitigation: `tech@thefitbud.com` is monitored daily, and anything in this document is flagged the day it arrives, not the week it arrives.
+**1.1** Two partners means the deputy slot can be filled properly, which removes the worst operational risk here: a statutory clock runs whether or not anyone is reading email. Both partners have access to `tech@thefitbud.com`, it is checked every working day, and anything in this document is flagged the day it arrives rather than the week it arrives. Agree between you which partner holds this and write it into the partnership deed, so it is not renegotiated during an incident.
 
 ## 2. The request log
 

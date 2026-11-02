@@ -29,6 +29,16 @@ This folder holds FitBud's legal documentation. It has two levels, and the diffe
 
 Read 00 first. Read 09 before 04 — the privacy policy is only as true as the inventory behind it.
 
+[`FILL-SHEET.md`](FILL-SHEET.md) lists every placeholder in the drafts, with the five blocking values separated from everything that can wait.
+
+## The contracting party
+
+The drafts name **M/s FitBud**, a partnership firm of two partners, as the party to every agreement. Two people operating the business together are a partnership firm under the Indian Partnership Act, 1932 by operation of law, whether or not a deed exists — a sole proprietorship has one owner by definition and does not fit.
+
+The partners are named **twice in total** across all user-facing documents: once in Terms of Service §1 and once in the Privacy Policy's grievance block. Everywhere else the party is "FitBud". This is deliberate. Terms of Service §18.3 transfers the agreements to a company on incorporation without re-signature, and provides that a change in the firm's constitution does not disturb them.
+
+Open items on this, for counsel (brief §3): confirmation that a partnership is the right characterisation; whether the firm's unregistered status must be disclosed; and the consequence of section 69 of the Partnership Act, under which an unregistered firm cannot sue to enforce a contract.
+
 ## Conventions in the drafts
 
 - `[[LIKE THIS]]` is a placeholder that must be filled before anything ships.

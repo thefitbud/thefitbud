@@ -11,11 +11,11 @@ These Terms apply to everyone who uses FitBud. Two supplements add to them: the 
 
 ## 1. Who you are contracting with
 
-FitBud is operated by **[[FIROZ — LEGAL NAME]]**, an individual carrying on business as a sole proprietor under the trading name "FitBud", at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]] ("**FitBud**", "**we**", "**us**").
+FitBud is operated by **M/s FitBud**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]] ("**FitBud**", "**we**", "**us**"). Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]].
 
 You can reach us at **tech@thefitbud.com** for any matter, including legal notices and privacy requests.
 
-> **COUNSEL:** if the founder incorporates before launch, this clause and §18.3 both change. "FitBud" is used as an unregistered trade mark; a registration application is pending and no ® symbol is used anywhere.
+> **COUNSEL:** this is the only place in the user-facing documents where the partners are named, which is deliberate — the firm is the contracting party throughout. Please confirm this is sufficient identification of the counterparty for a consumer contract, and whether the firm's registration status (see the brief §3) must be disclosed. "FitBud" is used as an unregistered trade mark; a registration application is pending and no ® symbol is used anywhere. If the partners incorporate a company, this clause and §18.3 both change.
 
 ## 2. What FitBud is, and what it is not
 
@@ -177,7 +177,7 @@ We may change these Terms. If a change is material, we will tell you by email an
 
 **18.2 Order of precedence.** If they conflict: the Beta Terms first, then the role supplement that applies to you, then these Terms, then the other documents.
 
-**18.3 Assignment.** You may not transfer your rights under these Terms. We may transfer ours, including to any company incorporated by the proprietor to carry on the FitBud business, in which case that company becomes a party in place of the proprietor and we will notify you by email. Your rights will not be reduced by the transfer.
+**18.3 Assignment and reorganisation.** You may not transfer your rights under these Terms. We may transfer ours, including to any company incorporated by the partners to carry on the FitBud business, in which case that company becomes a party in place of the firm and assumes its obligations, and we will notify you by email. A change in the constitution of the firm, including the admission or retirement of a partner, does not affect these Terms. Your rights will not be reduced by any such transfer or change.
 
 **18.4 Severability.** If a clause is unenforceable, the rest stands.
 

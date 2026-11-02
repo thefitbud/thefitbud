@@ -16,6 +16,10 @@ FitBud is in closed beta. These terms add to, and where they conflict override, 
 
 **1.3** The software is **pre-release**. It will have bugs. Some features are incomplete, some are switched off, and some will change or be removed.
 
+## 1A. Who operates the beta
+
+FitBud is operated during the beta by **M/s FitBud**, a partnership firm, as identified in the Terms of Service §1. The partners intend to incorporate a company to carry on the business; if they do, the Terms of Service §18.3 transfers these agreements to it and we will tell you by email. Nothing about your use of FitBud changes because of it.
+
 ## 2. Free of charge
 
 FitBud charges you nothing during the beta — not trainers, not clients. We may introduce fees for trainers afterwards, on notice, as the Terms of Service §15 describes. Your use of the beta creates no entitlement to free use later and no obligation to pay for anything.

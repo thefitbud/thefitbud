@@ -2,7 +2,7 @@
 
 **Status:** DRAFT for review · prepared 2 Nov 2026 · not legal advice
 **Prepared by:** Claude Code, from the FitBud repository at `1578371` and the owner's product decisions of 14 Oct – 2 Nov 2026
-**Instructing party:** [[FIROZ — LEGAL NAME]], tech@thefitbud.com
+**Instructing party:** M/s FitBud (partners: [[PARTNER 1 — LEGAL NAME]], [[PARTNER 2 — LEGAL NAME]]), tech@thefitbud.com
 
 Read this document before the others. It states what FitBud is, what it actually does with personal data, every assumption the drafts rest on, and the questions only you can answer.
 
@@ -28,7 +28,7 @@ What it is **not**, by deliberate product design:
 | Stage | Closed beta: Apple TestFlight + Google Play closed testing, approximately 20 trainers and their clients |
 | Market | India only |
 | Operating location | Hyderabad, Telangana |
-| Legal entity | **None registered yet** — see §3 |
+| Legal entity | **Unregistered partnership firm of two partners** — see §3 |
 | Brand | "FitBud" trademark application pending; no registration |
 | Governing law | Indian law |
 | Fees charged by FitBud | None, during the beta |
@@ -37,20 +37,23 @@ What it is **not**, by deliberate product design:
 
 ## 3. The contracting party — the first thing to resolve
 
-There is no registered entity. The drafts therefore name:
+No company or LLP has been incorporated. **Two individuals operate the business together**, which we understand makes them a partnership firm under the Indian Partnership Act, 1932 by operation of law, whether or not a deed exists. A partnership deed is being prepared; the firm is not yet registered with the Registrar of Firms.
 
-> **[[FIROZ — LEGAL NAME]]**, an individual carrying on business as a sole proprietor under the trading name "FitBud", at [[REGISTERED BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]
+The drafts therefore name the firm as the contracting party:
 
-and include, in clause 01 §18, an assignment-on-incorporation clause so the agreements transfer to the company without re-signature.
+> **M/s FitBud**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]. Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]].
+
+The partners are named **once**, here, and once more in the Privacy Policy's grievance block. Everywhere else the party is "FitBud". This is a deliberate choice by the founders, who do not want individual names recurring through user-facing documents. Clause 01 §18.3 carries an assignment-on-incorporation clause so the agreements transfer to a company without re-signature, and provides that a change in the firm's constitution does not disturb them.
 
 The consequences we have assumed, and ask you to confirm:
 
-1. **The proprietor is personally liable** for everything in these documents. The limitation-of-liability clauses are drafted as tightly as we believe Indian law permits, but there is no corporate shield behind them.
-2. **The proprietor is the Data Fiduciary** under the DPDP Act, in his own name, including for grievance redressal.
-3. **App store accounts.** Apple and Google require a legal seller identity. An individual developer account can distribute a closed test, but the store listing will show an individual's name, and switching an app from an individual to an organisation account later is awkward on both stores.
-4. **No fees may be charged** by FitBud until the tax and registration position is sorted (GST registration threshold, professional tax, trade licence as applicable in Telangana).
+1. **Both partners are liable, jointly and severally, and without limit** for everything in these documents, including for each other's acts in the firm's business. The limitation-of-liability clauses are drafted as tightly as we believe Indian law permits, but there is no corporate shield behind them.
+2. **The firm is the Data Fiduciary** under the DPDP Act, with one named partner as the grievance contact.
+3. **An unregistered firm cannot sue to enforce a contract** (s.69, Partnership Act), though it can be sued. This is tolerable for a free beta and stops being tolerable once fees are charged. We recommend registering the firm.
+4. **App store accounts are already purchased in the partners' personal names**, with personal email addresses, and the founders are content with that for the closed beta. We have flagged in draft 11 that a public launch on an individual account publishes an individual's name and address on the store listing, and that neither store appears to support converting an individual account into an organisation account.
+5. **No fees may be charged** by FitBud until the tax and registration position is settled (GST, professional tax, Shops and Establishments as applicable in Telangana).
 
-> **COUNSEL:** our recommendation to the founder is to contract as a proprietorship for the closed beta and to incorporate a private limited company before (a) any public release or (b) any revenue, whichever comes first. Please confirm, and tell us if the proprietorship route creates a problem for the store accounts, the DPDP grievance obligation, or the WhatsApp Business account (which will be applied for in a business name).
+> **COUNSEL:** please confirm (a) that two people operating this business together are indeed a partnership firm rather than anything else, (b) that naming the partners once, as above, sufficiently identifies the counterparty in a consumer contract, (c) whether the firm's unregistered status must be disclosed to users, and (d) whether the partnership route creates any problem for the DPDP grievance obligation or for the WhatsApp Business account, which will be applied for in the firm's name. The founders' plan is to run the closed beta as a firm and to incorporate before the public launch, which they expect in approximately four months.
 
 ## 4. The DPDP allocation — the second thing to resolve
 
@@ -127,7 +130,7 @@ Following the format of the compliance-check workflow, applied to the closed bet
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Unregistered entity: personal liability, store identity, no shield | **High** | Proprietorship + novation clause now; incorporate before public launch or first rupee of revenue |
+| Unregistered firm: both partners personally liable without limit, no shield, and the firm cannot sue on a contract while unregistered | **High** | Partnership deed now, firm registration when convenient, novation clause in place; incorporate before the public launch or the first rupee of revenue. Consider professional indemnity and cyber cover, which responds to the claim rather than only shielding assets |
 | A trainee is injured following a trainer's plan and sues FitBud as well as the trainer | **High** | Drafts 01 §12, 02 §3, 05 in full: no coaching by FitBud, trainer warranties, medical clearance acknowledgement, assumption of risk, liability cap |
 | DPDP allocation challenged — trainers held to be fiduciaries | **Medium-high** | §4 above; counsel to rule before trainers sign up |
 | Health data held with no approved notice and no retention limit | **Medium-high** | Drafts 04 and 09; the retention schedule needs to become code, not only a document |
@@ -141,9 +144,9 @@ Following the format of the compliance-check workflow, applied to the closed bet
 
 ### Recommended actions, in order
 
-1. Name the contracting party and fill every `[[PLACEHOLDER]]` in drafts 01–05 (founder, one sitting).
+1. Fill every `[[PLACEHOLDER]]` in drafts 01–05 with the firm name, the two partners' names and the one operating address (founders, one sitting). Nothing else blocks BT3.
 2. Send drafts 00, 09, 01–06 to counsel with the two rulings asked for in §3 and §4.
-3. Name a grievance/DPO contact person and publish the address.
+3. Name one partner as the grievance contact, and publish a business address rather than a home address.
 4. Sign off the retention schedule in draft 09 §5, then raise the product tasks it implies.
 5. Establish the Cloudflare data-location facts and write them into draft 04 and draft 11.
 6. Raise the three product gaps these drafts expose: consent capture at acceptance, the 18+ age gate, and the credit line on exercise drawings.
@@ -152,7 +155,7 @@ Following the format of the compliance-check workflow, applied to the closed bet
 ### Further review recommended
 
 - Whether FitBud is an "intermediary" for the Intermediary Guidelines, and whether the E-Commerce Rules bite on a platform that charges nothing (§8 below).
-- The proprietorship-versus-company decision, with tax input.
+- The partnership-versus-company decision, with tax input, and the terms of the partnership deed — in particular that the FitBud brand, the codebase and all other intellectual property vest in the firm rather than in either partner individually, so that they can be assigned cleanly to the company on incorporation.
 - Professional-liability exposure for a platform that hosts fitness prescriptions it does not author, and whether insurance is available and worth buying at this stage.
 - The DPDP allocation in §4.
 
@@ -170,7 +173,7 @@ Every factual statement about what the system does was read out of the repositor
 
 | # | Question | Why it matters | Our provisional position |
 |---|---|---|---|
-| Q1 | Proprietorship now with novation, or incorporate first? | Blocks signature and store accounts | Proprietorship now; incorporate before public launch or revenue |
+| Q1 | Partnership firm now with novation, or incorporate first? | Blocks the identity block in every document | Firm now, registered with the Registrar of Firms; incorporate before the public launch, expected in about four months |
 | Q2 | Is FitBud the sole Data Fiduciary, with trainers as authorised users? (§4) | Changes drafts 02, 04, 10 and the notice copy | Yes, sole fiduciary |
 | Q3 | Do the SPDI Rules 2011 still require a separate policy alongside the DPDP notice? | May add a document | One combined notice |
 | Q4 | Is FitBud an intermediary under s.79 / the 2021 Guidelines? | Adds a grievance officer with prescribed timelines and published rules | Probably yes in part; we name a grievance officer regardless |

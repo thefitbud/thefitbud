@@ -25,7 +25,7 @@ This summary is for orientation only; the sections below govern.
 
 ## 2. Who we are
 
-FitBud is operated by **[[FIROZ — LEGAL NAME]]**, carrying on business as a sole proprietor under the trading name "FitBud", at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]].
+FitBud is operated by **M/s FitBud**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]. Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]].
 
 For the purposes of the **Digital Personal Data Protection Act, 2023**, we are the **Data Fiduciary** for the personal data described here. Your trainer accesses your information as an authorised user of FitBud, bound by our Trainer Terms, and is separately responsible for any copy they keep outside FitBud.
 
@@ -205,8 +205,8 @@ If personal data in our care is lost, exposed or accessed by someone who should 
 
 If you are unhappy with how we have handled your personal data, write to:
 
-**[[GRIEVANCE OFFICER NAME]]**
-[[DESIGNATION]], FitBud
+**[[GRIEVANCE OFFICER NAME — one of the two partners]]**
+Partner, M/s FitBud
 [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]
 **tech@thefitbud.com**
 
