@@ -43,7 +43,19 @@ export type LiveActivityNative = {
   isSupported(): boolean;
   /** Starts (or reuses) the workout activity; resolves to its id, or null. */
   start(workout: LiveActivityWorkout, content: LiveActivityContent): Promise<string | null>;
-  update(content: LiveActivityContent): Promise<void>;
+  /**
+   * Posts new content to the running activity. Resolves true when the native
+   * side took it and false when the native call failed (LA3f), so the caller
+   * can post it again instead of believing a countdown is showing that never
+   * arrived. Off the native platforms, or with the activity unsupported,
+   * there is nothing to deliver and nothing to retry: it resolves true.
+   * Never throws.
+   *
+   * So `true` means "stop retrying", not "the trainee can see this". A caller
+   * that needs the second question must ask `hasRest()`, which answers null
+   * whenever no activity is running.
+   */
+  update(content: LiveActivityContent): Promise<boolean>;
   end(finalContent?: LiveActivityContent): Promise<void>;
   /**
    * Whether the running activity still has rest. Null when unsupported, on
@@ -189,11 +201,15 @@ export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActi
 
     async update(content) {
       const mod = supportedModule();
-      if (!mod) return;
+      // Nothing is showing and nothing can be: treat it as settled, so the
+      // caller does not post the same content on every sync forever.
+      if (!mod) return true;
       try {
         await mod.update(toNativeContentState(content));
+        return true;
       } catch (error) {
         warn(`[liveActivity] update failed: ${errorName(error)}`);
+        return false;
       }
     },
 
