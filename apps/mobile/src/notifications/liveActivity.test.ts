@@ -104,6 +104,20 @@ describe("lock-screen rest (27c)", () => {
     expect(clearExpiredRest(resting, NOW + 90_000)).toMatchObject({ restEndsAt: null, restSeconds: null });
   });
 
+  it("asks the shared rule about the finished workout too, not just the clock", () => {
+    // withRest clears rest on a finished state, so this state is not reachable
+    // through the reducer - it is built by hand on purpose. The Android
+    // notification's resting() refuses to rest a finished workout whatever the
+    // rest fields say, and restActive has to agree, or the rule shared with it
+    // is only half shared.
+    const restingButFinished = {
+      ...withRest(DEMO_LIVE_ACTIVITY, rest),
+      finished: true,
+    };
+    expect(restingButFinished.restEndsAt).toBe(NOW + 90_000);
+    expect(restActive(restingButFinished, NOW + 32_000)).toBe(false);
+  });
+
   it("has no rest state on the last set", () => {
     const lastSet = { ...DEMO_LIVE_ACTIVITY, setIndex: 3, setCount: 3 };
     const finished = reduceLiveActivity(lastSet, { type: "log_set" });

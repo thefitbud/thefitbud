@@ -5,6 +5,8 @@
  * when it ends or is skipped.
  */
 
+import { restCountdownRender } from "./restCountdown";
+
 export const WEIGHT_STEP_KG = 2.5;
 
 export type LoggedSet = {
@@ -98,9 +100,27 @@ export function clearRest(state: LiveActivityState): LiveActivityState {
   return { ...state, restEndsAt: null, restSeconds: null };
 }
 
-/** True while the countdown has time left at `now` (epoch ms). */
+/**
+ * True while the countdown has time left at `now` (epoch ms). The rule lives
+ * in restCountdown.ts, shared with the Android notification's repaint (LA3d),
+ * so one definition decides when a rest is over on both surfaces.
+ */
 export function restActive(state: LiveActivityState, now: number): boolean {
-  return state.restEndsAt != null && state.restEndsAt > now;
+  return (
+    restCountdownRender(
+      {
+        restEndsAt: state.restEndsAt,
+        restSeconds: state.restSeconds,
+        // Forwarded so this caller asks the same question the Android
+        // notification does. `withRest` already clears rest on a finished
+        // state, so today no stored state carries `finished` with a rest still
+        // running - but leaving it out meant the shared rule was only half
+        // shared, and nothing failed if the finished clamp was removed here.
+        finished: state.finished,
+      },
+      now,
+    ).kind === "resting"
+  );
 }
 
 /** Clears rest once its end has passed, as the widget view does on its own. */

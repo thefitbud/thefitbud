@@ -100,6 +100,9 @@ class LiveActivityModule : Module() {
                 // A previous workout's confirmation line has no place here.
                 WorkoutSetNotification.cancelAll(context)
                 WorkoutSetNotification.show(context, next)
+                // Drops the previous workout's repaint and, if this state is
+                // already resting, schedules this one's (LA3d).
+                RestAlarm.apply(context, next)
                 WorkoutSetNotification.NOTIFICATION_ID.toString()
             }
         }
@@ -109,11 +112,16 @@ class LiveActivityModule : Module() {
          * and the workout name are kept from `start`: the app does not resend
          * them. Rest comes with each update, so one update starts the
          * countdown and one ends it — the device counts in between.
+         *
+         * The repaint scheduled for the rest's end is replaced here too, so an
+         * update that shortens, extends, skips or finishes the rest can never
+         * leave the previous rest's repaint to fire later (LA3d).
          */
         AsyncFunction("update") { state: WorkoutStateRecord ->
             val current = store.readState() ?: return@AsyncFunction
             val next = state.toState(current.openUrl, current.workoutName)
             store.writeState(next)
+            RestAlarm.apply(context, next)
             if (next.finished) {
                 WorkoutSetNotification.cancel(context)
             } else {
@@ -128,6 +136,9 @@ class LiveActivityModule : Module() {
          */
         AsyncFunction("end") { _: WorkoutStateRecord? ->
             store.clearState()
+            // Before the notifications go, so no repaint survives the
+            // session that scheduled it (LA3d).
+            RestAlarm.cancel(context)
             WorkoutSetNotification.cancelAll(context)
         }
 
