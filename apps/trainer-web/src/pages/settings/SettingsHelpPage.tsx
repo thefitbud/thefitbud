@@ -32,15 +32,20 @@ export function SettingsHelpPage() {
         We&apos;ll get back to you within a day.
       </p>
       <h3>Legal</h3>
-      <ul className="settings-help-legal">
+      <nav
+        aria-label="Legal"
+        style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
+      >
         {LEGAL_NAV.map((item) => (
-          <li key={item.path}>
-            <Link className="settings-help-row button-secondary" to={item.path}>
-              {item.label}
-            </Link>
-          </li>
+          <Link
+            key={item.path}
+            className="settings-help-row button-secondary"
+            to={item.path}
+          >
+            {item.label}
+          </Link>
         ))}
-      </ul>
+      </nav>
     </div>
   );
 }

@@ -196,11 +196,6 @@ export const credits: CreditsDocument = {
         line: "Exercise names, steps, muscles, equipment",
         licence: "The Unlicense (public domain)",
       },
-      {
-        name: "wger.de",
-        line: "Exercise text from wger is Creative Commons BY-SA and is credited to wger wherever it is shown.",
-        licence: "CC BY-SA",
-      },
     ],
   },
 };

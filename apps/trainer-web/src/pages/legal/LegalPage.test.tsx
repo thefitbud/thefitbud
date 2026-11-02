@@ -89,6 +89,27 @@ describe("public legal pages", () => {
     expect(licenceLinks).toContain("https://creativecommons.org/licenses/by-sa/3.0/");
     expect(screen.getByRole("heading", { name: "Indian Nutrient Databank (INDB)" })).toBeTruthy();
   });
+
+  it("credits states the drawing counts and licence split from credits-and-licences.md", async () => {
+    renderAt("/credits");
+    const V4 = "https://creativecommons.org/licenses/by-sa/4.0/";
+    const V3 = "https://creativecommons.org/licenses/by-sa/3.0/";
+    const expected: [string, string, string[]][] = [
+      ["Everkinetic (everkinetic.com)", "912", [V4, V3]],
+      ["CFCF", "4", [V4]],
+      ["wger.de", "2", [V3]],
+      ["hans", "1", [V4]],
+    ];
+    for (const [author, count, hrefs] of expected) {
+      const row = (await screen.findByRole("rowheader", { name: author })).closest("tr");
+      if (!row) throw new Error(`no row for ${author}`);
+      const cells = within(row).getAllByRole("cell");
+      expect(cells[0]?.textContent).toBe(count);
+      expect(within(row).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual(hrefs);
+    }
+    expect(screen.getByText(/919 drawings for 460 exercises/)).toBeTruthy();
+    expect(screen.getByText(/574 are CC BY-SA 4\.0 and 338 are CC BY-SA 3\.0/)).toBeTruthy();
+  });
 });
 
 describe("sign-in footer", () => {
