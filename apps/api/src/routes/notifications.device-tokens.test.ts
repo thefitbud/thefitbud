@@ -827,6 +827,79 @@ describe("device tokens (X4b)", () => {
       expect(bDelivery?.deviceTokenId).toBe(bBody.data.deviceToken.id);
     });
 
+    it("reassigns a token that is already shaped like a park sentinel", async () => {
+      // `token` accepts any string of 8 to 4096 characters, so the sentinel
+      // prefix is not reserved: a client can post `revoked:<id>` itself. If a
+      // park were single-valued, parking a row whose token already equals its
+      // own sentinel would write the value it already holds -- a no-op leaving
+      // the row holding the token -- and the registration that follows would
+      // fail on `device_tokens_token_uidx` with a 500.
+      const a = await createCoachingPair("sentinel-shaped-a");
+      const b = await createCoachingPair("sentinel-shaped-b");
+
+      const first = await register(
+        { bearer: a.traineeToken, role: "trainee" },
+        {
+          token: "ExponentPushToken[sentinel-shaped]",
+          platform: "ios",
+          installationId: "install-shared-phone",
+          provider: "expo",
+        },
+      );
+      expect(first.status).toBe(200);
+      const aBody = (await first.json()) as DeviceTokenPayload;
+      const collidingToken = `revoked:${aBody.data.deviceToken.id}`;
+
+      // A re-registers with a token that is exactly its own row's sentinel
+      // shape. Same user, same installation, so this is X4b's update path.
+      const posted = await register(
+        { bearer: a.traineeToken, role: "trainee" },
+        {
+          token: collidingToken,
+          platform: "ios",
+          installationId: "install-shared-phone",
+          provider: "expo",
+        },
+      );
+      expect(posted.status).toBe(200);
+      const postedBody = (await posted.json()) as DeviceTokenPayload;
+      expect(postedBody.data.deviceToken.id).toBe(aBody.data.deviceToken.id);
+      expect(postedBody.data.deviceToken.token).toBe(collidingToken);
+
+      // B registers that same value. The park must move A's row off it.
+      const second = await register(
+        { bearer: b.traineeToken, role: "trainee" },
+        {
+          token: collidingToken,
+          platform: "ios",
+          installationId: "install-shared-phone",
+          provider: "expo",
+        },
+      );
+      expect(second.status).toBe(200);
+      const bBody = (await second.json()) as DeviceTokenPayload;
+      expect(bBody.data.deviceToken.status).toBe("active");
+      expect(bBody.data.deviceToken.token).toBe(collidingToken);
+
+      const holders = await db
+        .select()
+        .from(deviceTokens)
+        .where(eq(deviceTokens.token, collidingToken));
+      expect(holders).toHaveLength(1);
+      expect(holders[0]?.id).toBe(bBody.data.deviceToken.id);
+      expect(holders[0]?.status).toBe("active");
+
+      const aRow = (
+        await db
+          .select()
+          .from(deviceTokens)
+          .where(eq(deviceTokens.id, aBody.data.deviceToken.id))
+      )[0];
+      expect(aRow).toBeDefined();
+      expect(aRow?.status).toBe("revoked");
+      expect(aRow?.token).not.toBe(collidingToken);
+    });
+
     it("reassigns the constant test-mode token and installation id", async () => {
       // In AUTH_MODE=test the mobile client reports the same token and
       // installation id for every user of the build

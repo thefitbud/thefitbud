@@ -147,12 +147,19 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
 
 /**
  * Sentinel value that frees a unique index on `device_tokens` without deleting
- * the row. It is derived from the row id, so it is unique per row and can never
- * collide with a client-sent token or installation id. X4b parks a superseded
- * `installationId` the same way; D-W3-9 parks a released token.
+ * the row. X4b parks a superseded `installationId` this way; D-W3-9 parks a
+ * released token.
+ *
+ * It carries the row id so a parked value can be traced back, plus a fresh
+ * random id so every park is a distinct value. The random part is what makes
+ * the write safe, not the prefix: `token` accepts any string of 8 to 4096
+ * characters (`registerDeviceTokenRequestSchema`), so a client is free to post
+ * `revoked:<something>` itself. Without it, parking a row whose token already
+ * equals its own sentinel would be a no-op, the row would keep the token, and
+ * the insert that follows would hit `device_tokens_token_uidx`.
  */
 function revokedSentinel(rowId: string) {
-  return `revoked:${rowId}`;
+  return `revoked:${rowId}:${createId()}`;
 }
 
 notificationRoutes.post(
