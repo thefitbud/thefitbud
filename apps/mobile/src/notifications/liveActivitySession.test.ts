@@ -402,6 +402,49 @@ describe("createLiveActivitySession", () => {
       expect(native.update).toHaveBeenCalledTimes(1);
     });
 
+    it("never credits an older post's result to the newer post that superseded it", async () => {
+      // The trainee presses −15 while the rest post is still in flight, so an
+      // older post settles under a newer, still-undelivered one. Crediting it
+      // would make `restSkippedOnActivity` report a Skip for a rest the native
+      // side has never been given.
+      const native = fakeNative();
+      const releases: Array<(delivered: boolean) => void> = [];
+      native.update.mockImplementation(
+        () =>
+          new Promise<boolean>((resolve) => {
+            releases.push(resolve);
+          }),
+      );
+      const session = createLiveActivitySession(native);
+      const ex = frame27();
+      await session.sync(input(ex));
+
+      const logged = logNext(ex);
+      void session.sync({ ...input(logged), rest: REST });
+      await vi.waitFor(() => expect(native.update).toHaveBeenCalledTimes(1));
+      // The screen's −15 control: it moves `endsAt` only (ActiveWorkoutScreen).
+      const shortened = { endsAt: REST.endsAt - 15_000, seconds: REST.seconds };
+      void session.sync({ ...input(logged), rest: shortened });
+
+      // Nothing has been delivered yet. A post still in flight is not a rest
+      // the activity can show, so the activity's "not resting" is not a Skip.
+      native.hasRest.mockReturnValue(false);
+      expect(session.restSkippedOnActivity()).toBe(false);
+
+      // The first post lands. Its result belongs to the 90 s rest it carried,
+      // never to the shortened rest that replaced it and is still in flight.
+      releases[0]!(true);
+      await vi.waitFor(() => expect(native.update).toHaveBeenCalledTimes(2));
+      expect(native.update.mock.calls[1]?.[0].state).toMatchObject({
+        restEndsAt: shortened.endsAt,
+      });
+      expect(session.restSkippedOnActivity()).toBe(false);
+
+      // Only once the shortened rest itself is taken does a Skip read as one.
+      releases[1]!(true);
+      await vi.waitFor(() => expect(session.restSkippedOnActivity()).toBe(true));
+    });
+
     it("reads a failed rest post as its own failure, not as Skip", async () => {
       const native = fakeNative();
       const session = createLiveActivitySession(native);

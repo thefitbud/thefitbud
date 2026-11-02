@@ -50,6 +50,10 @@ export type LiveActivityNative = {
    * arrived. Off the native platforms, or with the activity unsupported,
    * there is nothing to deliver and nothing to retry: it resolves true.
    * Never throws.
+   *
+   * So `true` means "stop retrying", not "the trainee can see this". A caller
+   * that needs the second question must ask `hasRest()`, which answers null
+   * whenever no activity is running.
    */
   update(content: LiveActivityContent): Promise<boolean>;
   end(finalContent?: LiveActivityContent): Promise<void>;

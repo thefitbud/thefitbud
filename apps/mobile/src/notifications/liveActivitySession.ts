@@ -237,6 +237,14 @@ export function createLiveActivitySession(native: LiveActivityNative = liveActiv
   /**
    * True when the activity's rest was skipped on the lock screen (the widget's
    * Skip clears it there only). Asked when the app becomes active.
+   *
+   * Known, deliberate false negative: after a post that supersedes an earlier
+   * delivered one fails, a real lock-screen Skip is not detected until the
+   * retry lands; the in-app rest expires on its own instead. That is the
+   * fail-safe direction — a rest kept a little too long, never one cleared
+   * that nobody skipped. Do not "fix" it by trusting hasRest() after a failed
+   * post: believing the activity about a rest it was never given is precisely
+   * the defect LA3f removed.
    */
   function restSkippedOnActivity(): boolean {
     if (!started || ended || lastContent?.state.restEndsAt == null) return false;
