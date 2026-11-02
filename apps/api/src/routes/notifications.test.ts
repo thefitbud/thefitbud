@@ -316,7 +316,10 @@ describe("notifications and reminders (D4)", () => {
     expect(body.data.deviceToken.userId).toBe(meBody.data.userId);
   });
 
-  it("rejects registering another user's device token", async () => {
+  // D-W3-9 (Firoz, 2 Nov 2026) replaced the 403 this case used to assert: a
+  // push token identifies the installation, not the person, so the last user to
+  // sign in on a shared phone takes the token over. Owned end to end by X4k.
+  it("reassigns another user's device token to the user who registers it", async () => {
     const a = await reachActiveCheckinConfig("own-a");
     const b = await reachActiveCheckinConfig("own-b");
 
@@ -338,6 +341,9 @@ describe("notifications and reminders (D4)", () => {
       testEnv(),
     );
     expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as {
+      data: { deviceToken: { id: string; userId: string } };
+    };
 
     const second = await app.request(
       "/notifications/device-tokens",
@@ -356,7 +362,38 @@ describe("notifications and reminders (D4)", () => {
       },
       testEnv(),
     );
-    expect(second.status).toBe(403);
+    expect(second.status).toBe(200);
+    const secondBody = (await second.json()) as {
+      data: {
+        deviceToken: { id: string; userId: string; token: string; status: string };
+      };
+    };
+    expect(secondBody.data.deviceToken.status).toBe("active");
+    expect(secondBody.data.deviceToken.token).toBe("shared-fcm-token-xyz12345");
+    expect(secondBody.data.deviceToken.userId).not.toBe(
+      firstBody.data.deviceToken.userId,
+    );
+
+    // The second user is the only active holder of the token.
+    const holders = await db
+      .select()
+      .from(schema.deviceTokens)
+      .where(eq(schema.deviceTokens.token, "shared-fcm-token-xyz12345"));
+    expect(holders).toHaveLength(1);
+    expect(holders[0]?.id).toBe(secondBody.data.deviceToken.id);
+    expect(holders[0]?.status).toBe("active");
+
+    // The first user's row is kept (deliveries reference it) but revoked and
+    // released, so it can never be sent to again.
+    const previous = (
+      await db
+        .select()
+        .from(schema.deviceTokens)
+        .where(eq(schema.deviceTokens.id, firstBody.data.deviceToken.id))
+    )[0];
+    expect(previous).toBeDefined();
+    expect(previous?.status).toBe("revoked");
+    expect(previous?.token).not.toBe("shared-fcm-token-xyz12345");
   });
 
   it("evaluates due check-in reminders with dedupe and safe payloads; provider acceptance ≠ completion", async () => {
