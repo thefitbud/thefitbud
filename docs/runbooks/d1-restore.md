@@ -40,7 +40,16 @@ pnpm exec wrangler d1 time-travel info <db> --env <env>
 
 For staging: `pnpm exec wrangler d1 time-travel info fitbud-staging --env staging`.
 
-It prints the **current bookmark** and the time it was taken. Copy the bookmark into the rehearsal log or incident notes now. This is your undo point (step 5).
+It prints the **current bookmark** (it does not print a time). Wrangler 4.141.0 output:
+
+```
+🚧 Time Traveling...
+⚠️ The current bookmark is '<bookmark>'
+⚡️ To restore to this specific bookmark, run:
+ `wrangler d1 time-travel restore fitbud-staging --bookmark=<bookmark>`
+```
+
+The suggested command leaves out `--env`; add `--env <env>` when you run it. Copy the bookmark into the rehearsal log or incident notes now. This is your undo point (step 5).
 
 ## 3. Choose the point to go back to
 
@@ -54,6 +63,8 @@ To see which bookmark a time maps to, without changing anything:
 ```bash
 pnpm exec wrangler d1 time-travel info <db> --env <env> --timestamp=<ISO-UTC-time>
 ```
+
+It prints `⚠️ Timestamp '<time>' corresponds with bookmark '<bookmark>'` followed by the same suggested restore command.
 
 Convert from IST carefully: IST is UTC+5:30, so 14:16 IST is 08:46 UTC. Pick a time a little before the damage; anything after it is lost.
 
@@ -71,11 +82,20 @@ pnpm exec wrangler d1 time-travel restore <db> --env <env> --timestamp=<ISO-UTC-
 pnpm exec wrangler d1 time-travel restore <db> --env <env> --bookmark=<bookmark>
 ```
 
-Wrangler shows what it will do and asks you to confirm. Read the target and the point in time before typing yes. Then it prints the **previous bookmark**.
+Wrangler 4.141.0 prints:
+
+```
+🚧 Restoring database <db> from bookmark <bookmark>
+⚠️ This will overwrite all data in database <db>.
+In-flight queries and transactions will be cancelled.
+? OK to proceed (y/N)
+```
+
+Read the database name and the bookmark or time before typing `y` (in a non-interactive shell wrangler auto-answers yes, so check the command before running it). Then it prints `⚡️ Time travel in progress...`, `✅ Database <db> restored back to bookmark <bookmark>` and the **previous bookmark**. The restore took about 3 seconds on staging.
 
 ## 5. Note the bookmark for undo
 
-The restore prints a line like "To undo this operation, you can restore to the previous bookmark: `<bookmark>`". **Copy it into the rehearsal log or incident notes before doing anything else.** Restoring to that bookmark puts the database back as it was just before this restore, including the writes you rolled back:
+The restore prints `↩️ To undo this operation, you can restore to the previous bookmark: <bookmark>` (no quotes or backticks around the bookmark). **Copy it into the rehearsal log or incident notes before doing anything else.** Restoring to that bookmark puts the database back as it was just before this restore, including the writes you rolled back:
 
 ```bash
 pnpm exec wrangler d1 time-travel restore <db> --env <env> --bookmark=<previous-bookmark>
@@ -112,4 +132,4 @@ Firoz rehearses once on staging before the closed beta, and again after any chan
 
 | Date | Env | Timestamp or bookmark restored to | Previous bookmark (undo) | Result (verify steps passed? time taken) |
 |---|---|---|---|---|
-| | | | | |
+| 2 Nov 2026, 16:39 IST | staging (`fitbud-staging`) | bookmark `00000001-00002824-00005117-e3c3efe6c6affe8b356a48d9e4e939ed` (taken after the I6 migrations, library seed and smoke test) | `00000001-ffffffff-00005117-4e1b7d6371b67315fa83cf158ba7997b` | Passed. A marker table created after the bookmark was gone after the restore; library counts unchanged (1362 exercise, 1243 food); users 0, relationships 0; newest migration `0033_reminder_attempt_marker.sql` matches `drizzle/`, so no redeploy; `/api/health` 200 afterwards. Restore ~3 s. Undo not run (it would only bring back the marker table). Sign-in check not done (no staging trainer account yet). |
