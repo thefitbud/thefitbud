@@ -173,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Register this device for push after `/me` succeeds, for either role
-   * (D-B9). Best-effort: permission denied, a refused token or a failed call
+   * (D-B9). Best-effort: permission denied, or a failed call
    * never surfaces an error and never blocks the app.
    */
   const registerPushToken = useCallback(async (client: FitBudApiClient) => {
@@ -181,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const outcome = await registerDeviceTokenForPush(client, { testMode });
       if (outcome.status !== "registered") {
-        // permission_denied, rejected (DEVICE_TOKEN_OWNED) or failed: push
+        // permission_denied or failed: push
         // stays off for this install, the app carries on.
         return;
       }
