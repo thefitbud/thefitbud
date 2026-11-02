@@ -26,6 +26,21 @@ import android.content.Intent
  * fire in Doze without `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM`, neither of
  * which this app holds and neither of which is worth a store review for
  * repainting a notification.
+ *
+ * What inexact costs, stated plainly because it is the half that does not
+ * favour this fix: `setAndAllowWhileIdle` is both imprecise and rate limited —
+ * while the device is idle, Android delivers roughly one such alarm per app
+ * per 9 minutes, and inexact alarms are batched. A rest is 60-120 seconds, so
+ * on a frozen device the repaint can land minutes after the rest's end
+ * instant, and the negative Chronometer stays on the lock screen for that
+ * window.
+ *
+ * So this turns "negative until the trainee opens the app" into "negative for
+ * a bounded window", not "stops at zero". That is accepted: the alternative is
+ * an exact-alarm permission the trainee is asked about and the stores review.
+ * A device check that sees a negative countdown linger briefly after a rest
+ * ends on a frozen phone is seeing expected behaviour, not a failure; a
+ * countdown that stays negative until the app is opened is the defect.
  */
 internal object RestAlarm {
     /** Only this receiver's own alarm; never sent by anything else. */

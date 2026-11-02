@@ -108,7 +108,16 @@ export function clearRest(state: LiveActivityState): LiveActivityState {
 export function restActive(state: LiveActivityState, now: number): boolean {
   return (
     restCountdownRender(
-      { restEndsAt: state.restEndsAt, restSeconds: state.restSeconds },
+      {
+        restEndsAt: state.restEndsAt,
+        restSeconds: state.restSeconds,
+        // Forwarded so this caller asks the same question the Android
+        // notification does. `withRest` already clears rest on a finished
+        // state, so today no stored state carries `finished` with a rest still
+        // running - but leaving it out meant the shared rule was only half
+        // shared, and nothing failed if the finished clamp was removed here.
+        finished: state.finished,
+      },
       now,
     ).kind === "resting"
   );

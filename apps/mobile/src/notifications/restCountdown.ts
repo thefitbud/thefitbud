@@ -13,12 +13,25 @@
  *   not need the JS process to be alive. On Android that is a one-shot alarm
  *   scheduled from `restAlarmPlan` below.
  *
- * KEEP IN SYNC with RestCountdown.kt in
- * modules/live-activity/android/src/main/java/com/thefitbud/liveactivity:
- * the Kotlin side is the same two functions, field for field, and this file's
- * test (restCountdown.test.ts) is the executable specification for both.
- * Kotlin cannot run in this repo's CI, so this is the only place the rules are
- * checked.
+ * KEEP IN SYNC with the Kotlin side, which is split across two files and two
+ * directories:
+ *
+ * - `RestAlarm.plan` in
+ *   modules/live-activity/android/src/main/java/com/thefitbud/liveactivity/RestAlarm.kt
+ *   mirrors `restAlarmPlan` below;
+ * - the rest-over rule itself is `WorkoutSetNotification.resting` in
+ *   targets/android/WorkoutSetNotification.kt (LA3c), which is the exact
+ *   complement of `restCountdownRender` returning "ended".
+ *
+ * Only `kind`/`fireAtMs` are mirrored. `remainingMs`, `elapsedMs` and
+ * `totalMs` have no Kotlin counterpart: nothing draws a progress bar yet
+ * (see the note on them below).
+ *
+ * This file's test (restCountdown.test.ts) is the executable specification for
+ * both sides. Kotlin cannot be compiled or run in this repo's CI, so it is the
+ * only place these rules are actually checked, and this comment is the only
+ * thing tying the two languages together — if you move or rename either Kotlin
+ * site, fix it here.
  *
  * Two rules carry the defect this file fixes, and both are asserted:
  * - rest is over at its end instant, not after it: `endsAt <= now` ends it;
