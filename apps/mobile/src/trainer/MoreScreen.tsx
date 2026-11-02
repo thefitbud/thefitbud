@@ -8,17 +8,18 @@ import { useAuth } from "../auth/AuthProvider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../lib/support";
-
-/** Trainer web (D-W2-7). Staging builds set EXPO_PUBLIC_TRAINER_WEB_URL in eas.json. */
-export const DEFAULT_TRAINER_WEB_URL = "https://app.thefitbud.com";
+import {
+  DEFAULT_TRAINER_WEB_URL,
+  legalUrl,
+  trainerWebUrl,
+} from "../lib/legalLinks";
 
 /**
- * Keep the literal `process.env.EXPO_PUBLIC_TRAINER_WEB_URL` member expression:
- * Expo's Babel transform only inlines that exact form into the bundle.
+ * The trainer-web base URL now lives in `lib/legalLinks.ts`, which the legal rows
+ * and both More screens share. Re-exported here so existing importers of
+ * `./MoreScreen` keep working with identical behaviour.
  */
-export function trainerWebUrl(): string {
-  return process.env.EXPO_PUBLIC_TRAINER_WEB_URL?.trim() || DEFAULT_TRAINER_WEB_URL;
-}
+export { DEFAULT_TRAINER_WEB_URL, trainerWebUrl };
 
 type Props = {
   onOpenNotifications: () => void;
@@ -83,6 +84,27 @@ export function TrainerMoreScreen({
               screenId: "TM-07",
               role: "trainer",
             });
+          }}
+        />
+        <PrimaryButton
+          label="Privacy policy"
+          variant="secondary"
+          onPress={() => {
+            void Linking.openURL(legalUrl("/privacy"));
+          }}
+        />
+        <PrimaryButton
+          label="Terms of use"
+          variant="secondary"
+          onPress={() => {
+            void Linking.openURL(legalUrl("/terms"));
+          }}
+        />
+        <PrimaryButton
+          label="Credits and licences"
+          variant="secondary"
+          onPress={() => {
+            void Linking.openURL(legalUrl("/credits"));
           }}
         />
         {me?.permittedRoles.includes("trainee") ? (
