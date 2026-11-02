@@ -64,31 +64,36 @@ Terms of use, opens in your browser
 Both are a full 44 pt tall and nothing paints over them. The trainee More rows use `M2Row`
 (`minHeight: 56`) and the trainer More rows use `PrimaryButton`, both already ≥ 44 pt.
 
-### Not captured — the two More screens
+### The two More screens — captured by the reviewer, and the harness note corrected
 
-**Outstanding.** Both More screens are behind sign-in, and sign-in could not be completed in the
-Expo-web harness. Exactly what was run and what happened:
+**Correction.** The first version of this document said Expo-web sign-in "issues **no HTTP
+request at all**" and concluded the two More screens could not be captured in this container.
+**That was wrong**, and the fresh reviewer refuted it by signing in and capturing both screens.
 
-1. `pnpm setup:local` (exit 0), `pnpm db:reset` (exit 0, demo seed loaded).
-2. `pnpm api` — came up on **port 8790** (not the documented 8787);
-   `curl http://127.0.0.1:8790/health` → `{"data":{"status":"ok","service":"fitbud-api"}}`.
-3. Restarted Expo web with `EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8790`.
-4. In Playwright: filled both fields (verified by reading `inputValue()` back), first with
-   `fill()` and then with `pressSequentially()` so React's onChange would fire, and pressed the
-   `Sign in` button — located as `getByRole('button', { name: 'Sign in', exact: true })` after
-   confirming by enumeration that it is a real button, and also clicked by raw
-   `page.mouse.click()` at its measured centre `{"x":24,"y":514,"width":345,"height":48}`.
+What was actually happening: on web the client hard-codes its base URL as
+`${window.location.origin}/__fitbud_api` (`apps/mobile/src/lib/api.ts:102`), so the sign-in POST
+goes to the **Expo dev server's own origin** — `POST /__fitbud_api/auth/login` — and was missed
+by a filter looking for traffic to the API port. `EXPO_PUBLIC_API_BASE_URL` is **not** read by
+the client on web at all; it is read by `apps/mobile/metro.config.js:6` as the *proxy target* for
+Metro's `/__fitbud_api` middleware.
 
-Result: the app stays on the sign-in screen, shows **no** error banner, and issues **no HTTP
-request at all** — not to 8790, not to the 8787 default. With `requestfailed`, `console` and
-`pageerror` all logged, the only network failure in the whole session is the blocked font host.
-The app makes no API call even on mount (ConfigProvider never fetches), which is why the
-"WhatsApp · Coming soon" default-config note is showing. This is an Expo-web harness limitation
-in this container, not a behaviour introduced by this task, and fixing it is outside this spec.
+**So the recipe for any mobile visual check in this container is:** start the API, then start
+Expo with `EXPO_PUBLIC_API_BASE_URL` pointing at it, so Metro's `/__fitbud_api` proxy resolves.
+Sign-in then works and every authenticated screen is reachable. The suggested follow-up "QA1"
+rested on the false premise and is withdrawn.
 
-The legal rows on both More screens are instead covered by automated render tests
-(`apps/mobile/src/lib/legalLinks.test.ts`), which assert each row's label, hint, and the exact URL
-passed to `Linking.openURL` for both the default and the staging base URL.
+**What the reviewer observed**, signed in as both personas against a seeded API:
+
+- **Trainee More** (`rohan.slipping@demo.fitbud.test`): `LEGAL` heading, the three rows with the
+  correct icons, hints and external-link glyphs, sitting between the Privacy group and
+  Help/Sign out — **matches `ds5-ios-more-legal.png`**. Rows measure 359x56; all three opened
+  `https://app.thefitbud.com/privacy|/terms|/credits` with `window.open` stubbed.
+- **Trainer More**: the three entries render as secondary buttons after Help. There is **no DS5
+  frame for the trainer More screen**, and that screen already diverges wholesale from
+  `51-trainer-mobile-more-ios.png` (pre-existing) — the frame question is **BT3d**.
+
+Those captures were taken in a worktree that has since been removed, so they are not in this
+directory. Re-running the recipe above reproduces them.
 
 ### Device checklist for Firoz
 

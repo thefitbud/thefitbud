@@ -86,9 +86,17 @@ export function TrainerMoreScreen({
             });
           }}
         />
+        {/*
+          These three leave the app. The trainer screen has no frame showing a
+          Legal group (BT3d), and these buttons look exactly like Notifications,
+          Profile and Help, which navigate in-app — so the accessible name is
+          the only thing telling a screen-reader user that the browser opens.
+          The trainee rows and the sign-in footer carry the same wording.
+        */}
         <PrimaryButton
           label="Privacy policy"
           variant="secondary"
+          accessibilityLabel="Privacy policy, opens in your browser"
           onPress={() => {
             void Linking.openURL(legalUrl("/privacy"));
           }}
@@ -96,6 +104,7 @@ export function TrainerMoreScreen({
         <PrimaryButton
           label="Terms of use"
           variant="secondary"
+          accessibilityLabel="Terms of use, opens in your browser"
           onPress={() => {
             void Linking.openURL(legalUrl("/terms"));
           }}
@@ -103,6 +112,7 @@ export function TrainerMoreScreen({
         <PrimaryButton
           label="Credits and licences"
           variant="secondary"
+          accessibilityLabel="Credits and licences, opens in your browser"
           onPress={() => {
             void Linking.openURL(legalUrl("/credits"));
           }}

@@ -254,6 +254,29 @@ describe("trainer More legal rows", () => {
     press(trainerMore(), byLabelProp("Open FitBud on web"));
     expect(Linking.openURL).toHaveBeenCalledWith("https://app.thefitbud.com");
   });
+
+  // These three buttons are visually identical to Notifications, Profile and
+  // Help, which navigate in the app. There is no frame for a trainer Legal
+  // group (BT3d), so until there is, the accessible name is the only thing
+  // telling a screen-reader user that the browser opens. Same wording as the
+  // trainee rows and the sign-in footer.
+  it.each([
+    ["Privacy policy", "Privacy policy, opens in your browser"],
+    ["Terms of use", "Terms of use, opens in your browser"],
+    ["Credits and licences", "Credits and licences, opens in your browser"],
+  ])("%s says it leaves the app", (label, accessibilityLabel) => {
+    const found = find(trainerMore(), byLabelProp(label));
+    expect(found).toBeTruthy();
+    expect(found!.props.accessibilityLabel).toBe(accessibilityLabel);
+  });
+
+  it("leaves the in-app trainer destinations announced as themselves", () => {
+    // Guards against blanket-applying the browser wording: Help navigates
+    // inside the app and must not claim otherwise.
+    const help = find(trainerMore(), byLabelProp("Help"));
+    expect(help).toBeTruthy();
+    expect(help!.props.accessibilityLabel).toBeUndefined();
+  });
 });
 
 describe("new legal copy against docs/spec/banned-strings.json", () => {
