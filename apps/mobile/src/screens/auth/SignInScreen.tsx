@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -22,6 +23,7 @@ import { Field } from "../../components/Field";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { isWhatsAppOtpEnabled } from "../../lib/config";
 import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../../lib/support";
+import { legalUrl } from "../../lib/legalLinks";
 
 type Props = {
   loading: boolean;
@@ -170,6 +172,30 @@ export function SignInScreen({
           >
             <Text style={styles.link}>Need help?</Text>
           </Pressable>
+
+          <View style={styles.legal}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Privacy policy, opens in your browser"
+              style={styles.legalLink}
+              onPress={() => {
+                void Linking.openURL(legalUrl("/privacy"));
+              }}
+            >
+              <Text style={styles.legalText}>Privacy</Text>
+            </Pressable>
+            <Text style={styles.legalDot}>·</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Terms of use, opens in your browser"
+              style={styles.legalLink}
+              onPress={() => {
+                void Linking.openURL(legalUrl("/terms"));
+              }}
+            >
+              <Text style={styles.legalText}>Terms</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </View>
     </View>
@@ -283,5 +309,29 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
     minHeight: 44,
     justifyContent: "center",
+  },
+  legal: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "center",
+    marginTop: spacing.xs,
+  },
+  legalLink: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+  },
+  legalText: {
+    color: colors.midGrey,
+    fontFamily: fontFamilyMedium,
+    fontSize: typeScale.caption,
+    textDecorationLine: "underline",
+  },
+  legalDot: {
+    color: colors.midGrey,
+    fontFamily,
+    fontSize: typeScale.caption,
   },
 });
