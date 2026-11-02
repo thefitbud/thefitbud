@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The fixed labels of the workout notification (frame 27-android). Everything
-  that depends on the set is set from Kotlin (WorkoutSetNotification), so the
-  copy that changes lives in one place.
+  The fixed labels of the workout notification (frames 27-android and
+  27-android-rest). Everything that depends on the set is set from Kotlin
+  (WorkoutSetNotification), so the copy that changes lives in one place.
 -->
 <resources>
     <string name="fitbud_workout_minus">−</string>
@@ -10,4 +10,6 @@
     <string name="fitbud_workout_kg">kg</string>
     <string name="fitbud_workout_reps">reps</string>
     <string name="fitbud_workout_open">Open</string>
+    <string name="fitbud_workout_rest">Rest</string>
+    <string name="fitbud_workout_skip_rest">Skip rest</string>
 </resources>

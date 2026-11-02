@@ -12,10 +12,12 @@ import android.content.Intent
  * state — including killed — which is why every button works on the stored
  * state alone and writes it back before the notification is redrawn.
  *
- * "Log set" cannot reach the API from here, so it appends one row for the app
- * to drain into the sync outbox (src/notifications/liveActivityOutbox.ts),
- * exactly like the iOS lock-screen button. Nothing here decides anything
- * coaching-related: it records what the trainee entered.
+ * "Skip rest" only clears the rest the app set; nothing else about the set
+ * changes and no row is written. "Log set" cannot reach the API from here, so
+ * it appends one row for the app to drain into the sync outbox
+ * (src/notifications/liveActivityOutbox.ts), exactly like the iOS lock-screen
+ * button. Nothing here decides anything coaching-related: it records what the
+ * trainee entered.
  */
 class WorkoutSetActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -31,6 +33,12 @@ class WorkoutSetActionReceiver : BroadcastReceiver() {
             WorkoutSetNotification.ACTION_MORE_REPS ->
                 redraw(context, store, WorkoutSetNotification.stepReps(state, 1))
             WorkoutSetNotification.ACTION_LOG_SET -> logSet(context, store, state)
+            // Skip rest (LA3c, frame 27-android-rest): the countdown goes and
+            // the next set comes back. The app reads the cleared rest through
+            // restState() when it is next active and ends its own countdown
+            // too, so both surfaces show the same coaching state.
+            WorkoutSetNotification.ACTION_SKIP_REST ->
+                redraw(context, store, WorkoutSetNotification.skipRest(state))
             else -> Unit
         }
     }

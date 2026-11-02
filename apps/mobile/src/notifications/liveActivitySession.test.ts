@@ -406,12 +406,13 @@ describe("createLiveActivitySession", () => {
       expect(session.restSkippedOnActivity()).toBe(true); // Skip tapped on the activity
     });
 
-    it("never reports a skip on Android, where the notification has no Skip", async () => {
-      // Through the real wrapper over LA3's module: the notification is up and
-      // answers `running` with no rest. Returning to the app must not clear a
-      // rest the trainee is still taking (there is no Skip until LA3c).
+    it("reports an Android skip, and only a skip (LA3c)", async () => {
+      // Through the real wrapper over a module that answers the way LA3c's
+      // Kotlin does: it reports the rest the notification is actually showing.
+      // While the countdown runs, returning to the app must change nothing —
+      // that is the LA3b defect, where the module could only say `running` and
+      // the app read it as a skip, wiping a rest the trainee was still taking.
       const mod = androidModule();
-      mod.restState.mockReturnValue({ running: true });
       const session = createLiveActivitySession(
         createLiveActivityNative({ platformOS: "android", loadModule: () => mod }),
       );
@@ -419,7 +420,14 @@ describe("createLiveActivitySession", () => {
       await session.sync(input(ex));
       await session.sync({ ...input(logNext(ex)), rest: REST });
 
+      expect(mod.restState()).toEqual({ running: true, restEndsAt: REST.endsAt });
       expect(session.restSkippedOnActivity()).toBe(false);
+
+      // Skip rest on the notification clears its rest; now the app ends its
+      // own countdown on the next foreground.
+      mod.skipRest();
+      expect(mod.restState()).toEqual({ running: true });
+      expect(session.restSkippedOnActivity()).toBe(true);
 
       // And on iOS the same signal still ends the app's rest (LA1c).
       const ios = fakeNative();
@@ -431,14 +439,38 @@ describe("createLiveActivitySession", () => {
     });
   });
 
-  /** The Android module as LA3 implements it: no rest state, same call names. */
+  /**
+   * The Android module as LA3 and LA3c implement it: the same call names, and
+   * a restState() that answers from the state the notification was last given
+   * — `restEndsAt` while the countdown is running, `running` alone once Skip
+   * rest cleared it or it ran out. `skipRest()` stands in for the trainee
+   * pressing that button, which is handled natively with no call into JS.
+   */
   function androidModule(overrides: { isSupported?: boolean } = {}) {
+    // The fixed clock these tests write rest against (REST ends 90 s later).
+    const now = Date.UTC(2026, 9, 19, 7, 25, 0);
+    let shown: { restEndsAt?: number | null } | null = null;
     return {
       isSupported: vi.fn(() => overrides.isSupported ?? true),
-      restState: vi.fn(() => ({ running: false })),
-      start: vi.fn(async () => "1001"),
-      update: vi.fn(async () => undefined),
-      end: vi.fn(async () => undefined),
+      restState: vi.fn(() => {
+        if (shown === null) return { running: false };
+        const endsAt = shown.restEndsAt;
+        if (endsAt == null || endsAt <= now) return { running: true };
+        return { running: true, restEndsAt: endsAt };
+      }),
+      skipRest: () => {
+        if (shown) shown = { ...shown, restEndsAt: null };
+      },
+      start: vi.fn(async (_attributes: unknown, state: { restEndsAt?: number | null }) => {
+        shown = state;
+        return "1001";
+      }),
+      update: vi.fn(async (state: { restEndsAt?: number | null }) => {
+        shown = state;
+      }),
+      end: vi.fn(async () => {
+        shown = null;
+      }),
     };
   }
 

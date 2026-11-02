@@ -156,20 +156,71 @@ describe("rest and unknown Last mapping (LA1c)", () => {
     expect(createLiveActivityNative({ platformOS: "web", loadModule: () => mod }).hasRest()).toBeNull();
   });
 
-  it("reports nothing about rest on Android, where there is no Skip to tap", () => {
-    // The Android module answers `running` alone (LA3c adds the countdown and
-    // its Skip, D-W3-3). `false` would mean the trainee skipped the rest on the
-    // activity, and the workout screen would clear a countdown still running,
-    // so Android answers null however the notification reads, never false.
-    for (const running of [true, false]) {
-      const mod = fakeModule({ restState: vi.fn(() => ({ running })) });
-      const android = createLiveActivityNative({
-        platformOS: "android",
-        loadModule: () => mod,
-      });
-      expect(android.hasRest(), `running: ${running}`).toBeNull();
-      expect(mod.restState).not.toHaveBeenCalled();
-    }
+  it("reads Android's rest exactly as iOS's, three answers and no fourth (LA3c)", () => {
+    // The Android module now answers with the rest the notification is
+    // showing (D-W3-3): `restEndsAt` while the countdown runs, `running`
+    // alone once it does not. So `false` here means one thing — the activity
+    // is up and is no longer resting, because Skip rest was pressed or the
+    // countdown ran out — and never "this platform cannot say", which is what
+    // it meant before the countdown existed and what wiped a running rest on
+    // every foreground (LA3b).
+    const mod = fakeModule({ restState: vi.fn(() => ({ running: true, restEndsAt: 5 })) });
+    const android = createLiveActivityNative({ platformOS: "android", loadModule: () => mod });
+
+    // Counting down: there is rest, so returning to the app changes nothing.
+    expect(android.hasRest()).toBe(true);
+    expect(mod.restState).toHaveBeenCalled();
+
+    // Up, not resting: Skip rest, or the countdown ran out.
+    vi.mocked(mod.restState).mockReturnValue({ running: true, restEndsAt: null });
+    expect(android.hasRest()).toBe(false);
+    vi.mocked(mod.restState).mockReturnValue({ running: true });
+    expect(android.hasRest()).toBe(false);
+
+    // No notification at all: nothing to report either way.
+    vi.mocked(mod.restState).mockReturnValue({ running: false });
+    expect(android.hasRest()).toBeNull();
+  });
+
+  it("reports nothing about rest on Android when notifications are off", () => {
+    // isSupported() is notificationsEnabled() there: with the channel off
+    // there is no notification to have skipped a rest on.
+    const mod = fakeModule({
+      isSupported: vi.fn(() => false),
+      restState: vi.fn(() => ({ running: true })),
+    });
+    const android = createLiveActivityNative({ platformOS: "android", loadModule: () => mod });
+    expect(android.hasRest()).toBeNull();
+    expect(mod.restState).not.toHaveBeenCalled();
+  });
+
+  it("sends the rest fields to the Android module on start and on update (LA3c)", async () => {
+    // The countdown and its Skip are drawn from these two fields alone; a
+    // notification that never receives them can only show a set.
+    const mod = fakeModule();
+    const android = createLiveActivityNative({ platformOS: "android", loadModule: () => mod });
+    const resting = { ...LOGGED, restEndsAt: 1_792_000_090_000, restSeconds: 90 };
+    const content = { exerciseName: "Romanian deadlift", state: resting };
+
+    await android.start(WORKOUT, content);
+    await android.update(content);
+
+    expect(vi.mocked(mod.start).mock.calls[0]?.[1]).toMatchObject({
+      restEndsAt: 1_792_000_090_000,
+      restSeconds: 90,
+    });
+    expect(vi.mocked(mod.update).mock.calls[0]?.[0]).toMatchObject({
+      restEndsAt: 1_792_000_090_000,
+      restSeconds: 90,
+    });
+
+    // Skip, in the app or on the notification, clears both: one update ends
+    // the countdown, and the notification goes back to the next set.
+    await android.update({ exerciseName: "Romanian deadlift", state: LOGGED });
+    expect(vi.mocked(mod.update).mock.calls[1]?.[0]).toMatchObject({
+      restEndsAt: null,
+      restSeconds: null,
+    });
   });
 });
 
