@@ -155,11 +155,117 @@ type Finding = {
   expression: string;
 };
 
+/**
+ * A copy of `src` with COMMENT text blanked to spaces, keeping every offset
+ * and newline. The occurrence scan matches against this so that prose
+ * mentioning accessibilityRole - including the explanatory comment in
+ * Screen.tsx, which ends "not an Android accessibilityRole:" - is not read as
+ * a real occurrence. Values are still read from the original source.
+ */
+function maskComments(src: string): string {
+  const out = src.split("");
+  let i = 0;
+  const blank = (from: number, to: number) => {
+    for (let k = from; k < to && k < out.length; k += 1) {
+      if (out[k] !== "\n") out[k] = " ";
+    }
+  };
+  while (i < src.length) {
+    const ch = src[i]!;
+    if (ch === "/" && src[i + 1] === "/") {
+      const nl = src.indexOf("\n", i);
+      const end = nl === -1 ? src.length : nl;
+      blank(i, end);
+      i = end;
+      continue;
+    }
+    if (ch === "/" && src[i + 1] === "*") {
+      const close = src.indexOf("*/", i);
+      const end = close === -1 ? src.length : close + 2;
+      blank(i, end);
+      i = end;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      // Strings are stepped over but NOT blanked: a computed key
+      // `["accessibilityRole"]:` needs its name intact to be matched.
+      i = skipString(src, i);
+      continue;
+    }
+    i += 1;
+  }
+  return out.join("");
+}
+
+/** Index of `ch` at brace/bracket/paren depth 0, or -1. */
+function indexAtDepthZero(src: string, ch: string, from = 0): number {
+  let depth = 0;
+  let i = from;
+  while (i < src.length) {
+    const c = src[i]!;
+    if (c === '"' || c === "'" || c === "`") {
+      i = skipString(src, i);
+      continue;
+    }
+    if (c === "{" || c === "[" || c === "(") depth += 1;
+    else if (c === "}" || c === "]" || c === ")") depth -= 1;
+    else if (c === ch && depth === 0) return i;
+    i += 1;
+  }
+  return -1;
+}
+
+/**
+ * The positions in a value expression that actually become the prop's value.
+ *
+ * This is what stops an `as` cast laundering an unresolvable value. The bug
+ * this file guards against was `{"main" as "summary"}`: the asserted type is
+ * not the value, so the type is dropped and only the operand is kept. Without
+ * that, `{SOME_IMPORT as "summary"}` would look resolved, because the cast's
+ * own `"summary"` is a perfectly valid role.
+ *
+ * A ternary's condition is likewise not a value; its two branches are. So
+ * `{tappable ? "button" : "text"}` yields two slots, both literals, and
+ * `{cond ? SOME_IMPORT : "text"}` yields a slot that is not.
+ */
+function valueSlots(expression: string): string[] {
+  let e = expression.trim();
+  if (e.startsWith("{") && e.endsWith("}")) e = e.slice(1, -1).trim();
+
+  // Drop `as <Type>` / `satisfies <Type>`, keeping the operand.
+  let prev: string;
+  do {
+    prev = e;
+    e = e
+      .replace(
+        /\s+(?:as|satisfies)\s+(?:"[^"]*"|'[^']*'|`[^`]*`|[A-Za-z_$][\w$.]*(?:\s*\[\s*\])*)/g,
+        "",
+      )
+      .trim();
+  } while (e !== prev);
+
+  const q = indexAtDepthZero(e, "?");
+  if (q !== -1) {
+    const c = indexAtDepthZero(e, ":", q + 1);
+    if (c !== -1) {
+      return [...valueSlots(e.slice(q + 1, c)), ...valueSlots(e.slice(c + 1))];
+    }
+  }
+  return [e];
+}
+
+/** True when the slot is wholly one string literal with no interpolation. */
+function isResolvedLiteral(slot: string): boolean {
+  return /^(["'`])((?:[^"'`\\$]|\$(?!\{))*)\1$/.test(slot.trim());
+}
+
 type Occurrence = {
   file: string;
   line: number;
   expression: string;
   literals: string[];
+  /** Value positions that are not a plain string literal (see valueSlots). */
+  unresolved: string[];
 };
 
 function scan(): { occurrences: Occurrence[]; findings: Finding[] } {
@@ -169,14 +275,30 @@ function scan(): { occurrences: Occurrence[]; findings: Finding[] } {
   for (const root of SCAN_ROOTS) {
     for (const file of tsxFiles(root)) {
       const src = readFileSync(file, "utf8");
-      const pattern = /\baccessibilityRole\b\s*[=:]/g;
+      const scannable = maskComments(src);
+      // Also matches a computed key, `["accessibilityRole"]:`, which a plain
+      // \baccessibilityRole\b[=:] would miss inside a spread object.
+      const pattern = /(?:\baccessibilityRole\b|\[\s*["'`]accessibilityRole["'`]\s*\])\s*[=:]/g;
       let match: RegExpExecArray | null;
 
-      while ((match = pattern.exec(src)) !== null) {
+      while ((match = pattern.exec(scannable)) !== null) {
         const expression = readValueExpression(src, match.index + match[0].length);
         const line = src.slice(0, match.index).split("\n").length;
         const display = relative(repoRoot, file);
-        if (expression === null) continue;
+        if (expression === null) {
+          // A bare identifier (`{ accessibilityRole: ROLE }`) is not readable
+          // as a literal expression. Record it as unresolved rather than
+          // skipping it, or the occurrence would vanish silently.
+          const rest = src.slice(match.index + match[0].length).split("\n")[0]!.trim();
+          occurrences.push({
+            file: display,
+            line,
+            expression: rest,
+            literals: [],
+            unresolved: [rest || "(unreadable)"],
+          });
+          continue;
+        }
 
         // Every string literal in the value expression is a candidate value:
         // this covers `"main" as "summary"` casts, both branches of a ternary
@@ -186,7 +308,10 @@ function scan(): { occurrences: Occurrence[]; findings: Finding[] } {
         const literals = [
           ...expression.matchAll(/(["'`])((?:[^"'`\\$]|\$(?!\{))*)\1/g),
         ].map((m) => m[2]!);
-        occurrences.push({ file: display, line, expression, literals });
+        const unresolved = valueSlots(expression).filter(
+          (slot) => slot !== "" && !isResolvedLiteral(slot),
+        );
+        occurrences.push({ file: display, line, expression, literals, unresolved });
 
         for (const value of literals) {
           if (!allowed.has(value)) {
@@ -225,15 +350,22 @@ describe("accessibilityRole values are valid on Android", () => {
   });
 
   it("resolves every accessibilityRole value to a string literal", () => {
-    // A text scan cannot follow a value through a variable, a concatenation of
-    // variables or a `.join()`, so an expression with no literal in it cannot
-    // be checked at all. Rather than pass such a value silently, fail and make
-    // the author inline the literal (or move a web landmark to `role`).
-    const unresolved = occurrences.filter((o) => o.literals.length === 0);
+    // A text scan cannot follow a value through a variable, a concatenation or
+    // a `.join()`, so such a value cannot be checked at all. Rather than pass
+    // it silently, fail and make the author inline the literal (or move a web
+    // landmark to `role`).
+    //
+    // This keys on every VALUE POSITION being a literal, not on the expression
+    // containing at least one literal somewhere. That distinction is the whole
+    // point: `{SOME_IMPORT as "summary"}` contains a valid literal, but the
+    // value is still unknowable - and that is exactly the shape of the bug
+    // this file exists to catch.
+    const unresolved = occurrences.filter((o) => o.unresolved.length > 0);
     const message = unresolved
       .map(
         (o) =>
-          `${o.file}:${o.line} computes its accessibilityRole (${o.expression.replace(/\s+/g, " ")}), ` +
+          `${o.file}:${o.line} computes its accessibilityRole (${o.expression.replace(/\s+/g, " ")}; ` +
+          `unresolved: ${o.unresolved.join(", ")}), ` +
           `so this guard cannot check the value. Use a string literal, or the \`role\` prop for a ` +
           `web/ARIA landmark.`,
       )

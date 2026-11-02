@@ -72,26 +72,42 @@ Two changes closed the gap:
 
 1. The literal regex now accepts backticks, so plain template literals resolve.
 2. A new case, **"resolves every accessibilityRole value to a string literal"**, fails on any
-   occurrence where the scanner finds no literal at all. That converts the silent `const` /
-   `.join()` / computed-value escape into a loud failure telling the author to inline the literal
-   or move a web landmark to `role`.
+   occurrence whose value is not a plain literal. That converts the silent `const` / `.join()` /
+   computed-value escape into a loud failure telling the author to inline the literal or move a
+   web landmark to `role`.
 
-After hardening, **all ten attempts are reported** (the `const` case as "computes its
-accessibilityRole … so this guard cannot check the value"). Zero occurrences on `main` are
-unresolved, so the new case is green today.
+**A later fresh review found four more evasions, all now closed.** They are recorded here because
+the first version of this document claimed more than the test delivered:
+
+| Evasion | Was | Now |
+|---|---|---|
+| `accessibilityRole={IMPORTED as "summary"}` | **passed** — the cast's own valid literal satisfied the check | flagged |
+| `accessibilityRole={cond ? ROLE : "text"}` | **passed** — one valid literal anywhere satisfied it | flagged |
+| `{ accessibilityRole: ROLE }` in an object literal | **passed** — a bare identifier was skipped before any check | flagged |
+| `<View {...{ ["accessibilityRole"]: "main" }} />` | **passed** — a computed key did not match the pattern | flagged |
+
+The first is the one that mattered: an unresolvable value wearing an `as "<valid role>"` cast is
+**exactly the shape of the bug this file guards against**. The cause was that the catch-all keyed
+on the expression containing *zero* literals rather than on every **value position** being a
+literal. It now drops `as`/`satisfies` type annotations (the asserted type is not the value) and
+splits a ternary into its two branches, ignoring the condition — so
+`tappable ? "button" : "text"` still passes while `cond ? ROLE : "text"` does not.
+
+Closing it surfaced a further weakness: the scan matched `accessibilityRole` **inside comments**,
+including the explanatory comment in `Screen.tsx` ending "not an Android accessibilityRole:".
+Comments are now blanked before matching (strings are not, so a computed key keeps its name).
 
 **What still gets through, honestly:**
 
-- **A value crossing a module boundary.** `accessibilityRole={props.role}` is now flagged at the
-  forwarding site, so the pattern cannot exist silently — but the scanner never resolves the value
-  itself, and a reviewer must.
+- **A value crossing a module boundary.** `accessibilityRole={props.role}` is flagged at the
+  forwarding site, but the scanner never resolves the value itself and a reviewer must.
 - **`.ts` files are not scanned**, only `.tsx` in `apps/mobile/src` and `packages/ui-mobile/src`
   (the spec's scope). There are no `accessibilityRole` occurrences in any `.ts` file today, so the
-  hole is empty, but a props object built in a `.ts` helper would miss the scan. The test file
-  cannot scan `.ts` without scanning itself and tripping on its own doc comments.
+  hole is empty, but a props object built in a `.ts` helper would miss the scan.
 - **`"ma" + "in"` fails for the wrong reason** — the message names the fragments, not `main`.
 - It is a text scan, not a type check: it cannot see through a third-party component that renames
-  the prop.
+  the prop. An ESLint rule on the JSX attribute would close the `.ts` and cross-module cases at
+  lint level; suggested as a follow-up.
 
 This is a guard, not a proof. It pins the one class of bug that caused AB2 and makes the
 unresolvable cases loud rather than silent.
