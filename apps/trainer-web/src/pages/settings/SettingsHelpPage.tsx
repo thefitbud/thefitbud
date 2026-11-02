@@ -1,4 +1,6 @@
+import { Link } from "react-router-dom";
 import { useConfig } from "../../lib/config";
+import { LEGAL_NAV } from "../legal/content";
 
 const APP_VERSION = "0.0.0";
 const SCREEN_NAME = "Help";
@@ -29,6 +31,16 @@ export function SettingsHelpPage() {
       <p className="muted help-promise">
         We&apos;ll get back to you within a day.
       </p>
+      <h3>Legal</h3>
+      <ul className="settings-help-legal">
+        {LEGAL_NAV.map((item) => (
+          <li key={item.path}>
+            <Link className="settings-help-row button-secondary" to={item.path}>
+              {item.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
