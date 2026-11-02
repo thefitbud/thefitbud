@@ -1,0 +1,56 @@
+---
+id: ZB6
+title: Check-in form: standard question keys in the schema and validation
+batch: W6
+depends_on: [ZB2, ZA11]
+lane: forms
+files_owned:
+  - packages/contracts/src/checkin-form-v2.ts
+  - packages/core/src/checkin-keys.ts
+  - packages/core/src/checkin-keys.test.ts
+  - apps/api/src/routes/checkin-forms.ts
+  - apps/api/src/routes/checkin-forms-keys.test.ts
+frames: []
+model: sonnet
+size: S
+---
+
+## Outcome
+Standard questions (weight, chosen measurements, photos, four 1–5 ratings) are typed and validated by key, so they can be charted; a trainer's own questions are kept but never charted.
+
+## Context
+- Covers master-list (v13) items B2b. Everything the implementer needs from those rows is pasted here.
+- Keys from ZB2. A trainer form may include the standard keys (each at most once) plus custom questions with no key.
+- Rating questions accept integers 1–5 only; weight 20–300 kg; measurements 10–250 cm; photos are file ids.
+- Frames it feeds: 14 (trainee check-in) and 171/171b (form builder with the measurement picker).
+
+## Gap list
+- `apps/api/src/routes/checkin-forms.ts:114`, `:225`, `:339`: create/update/version routes accept question JSON without key rules.
+- No shared key list exists in `packages/core`.
+- Written against `main` at 4d6d264. The implementer re-checks each item against the latest `main` before building (AGENTS.md).
+
+## Acceptance criteria
+- [ ] `CHECKIN_STANDARD_KEYS` and `validateCheckinAnswer(key, value)` live in core and are used by the API on form save and on check-in submit.
+- [ ] Saving a form with a duplicate standard key returns 422 naming it.
+- [ ] Submitting a rating 0 or 6 returns 422; a custom question accepts free text.
+- [ ] Existing v1 forms keep working (no key needed).
+- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass.
+
+## Out of scope
+- Series API (ZB7).
+- Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
+- Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
+
+## Tests to add
+- `checkin-keys.test.ts` (core).
+- `checkin-forms-keys.test.ts`: form save and submit validation.
+- Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`.
+
+## Visual check
+- Non-UI: no screenshot. The PR lists the test names that cover each criterion.
+
+## Stop conditions
+- A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** or listed as a question in `docs/specs/batches/W6.md`.
+- A file outside `files_owned` must change.
+- The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.
+- The task would need a remote command (`wrangler deploy`, `wrangler d1 … --remote`, `seed --remote`, `eas build`, `eas submit`), a secret, production data or a deploy.

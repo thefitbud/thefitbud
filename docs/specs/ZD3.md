@@ -1,0 +1,59 @@
+---
+id: ZD3
+title: Client settings: edit subscription with validation, ended read-only, renewal rows point here
+batch: W8
+depends_on: [ZD2]
+lane: settings
+files_owned:
+  - apps/trainer-web/src/pages/client-settings/**
+  - apps/trainer-web/src/pages/HomePage.tsx
+  - apps/trainer-web/src/pages/home-views/RenewalsViewPage.tsx
+frames:
+  - { frame: "211-trainer-web-client-subscription-edit-v3-web.png", viewport: "1440x900" }
+  - { frame: "211b-trainer-web-client-subscription-error-v3-web.png", viewport: "1440x900" }
+  - { frame: "212-trainer-web-client-settings-ended-v3-web.png", viewport: "1440x900" }
+model: sonnet
+size: S
+---
+
+## Outcome
+The trainer edits a client's subscription in a drawer that refuses a renewal before the start, ended clients see the page read-only, and renewal rows on Home open this subscription section.
+
+## Context
+- Covers master-list (v13) items W2a, W2b, D14 (final destination). Everything the implementer needs from those rows is pasted here.
+- Tracking only (resolved 30 Oct): amount ₹, subscription type, coaching mode, start and due dates, Paid/Unpaid, method Cash/UPI/Bank. Never build collect, pay, invoice, gateway or session-count parts that appear in the frames.
+- Drawer is frame 211 (hybrid variant); error 211b. Do not build the frame's session-package fields.
+- D14: once this ships, the Home and Renewals full-view rows go to `/clients/<id>/settings#subscription` instead of the Coaching setup interim.
+- Ended (212): no edit actions; uses `ReadOnlyField` from W7 ZC13.
+- Design guide for every UI task: `docs/design/README.md` (v3 rules and the frame index), `docs/design/DESIGN-NOTES.md` (palette, type, spacing, components, data and time), `docs/design/DECISIONS-21OCT.md`, and the screen spec in `docs/spec/`. Dates read like "Wed 21 Oct" (never ISO), enums always go through `labelFor` (`packages/core/src/labels.ts`), touch targets are at least 44 pt / 44 px, counts and kcal use tabular numbers.
+- Design-review step (W5 ZA1): after capturing, run `node scripts/qa/visual/diff.mjs --task <ID>` on the captures and attach the generated `docs/qa/<ID>/design-review.md` to the PR. A frame difference the spec does not explain is fixed or listed in the PR as a follow-up, never silently left.
+
+## Gap list
+- `apps/trainer-web/src/pages/HomePage.tsx:1418-1421`: renewal link goes to `/configure` (interim).
+- `apps/trainer-web/src/pages/home-views/RenewalsViewPage.tsx` (W7 ZC10) uses the interim destination.
+- Written against `main` at 4d6d264. The implementer re-checks each item against the latest `main` before building (AGENTS.md).
+
+## Acceptance criteria
+- [ ] Save creates a new subscription version (ZB8); renewal-before-start shows 211b inline.
+- [ ] Ended: matches 212, no write controls, server 409 handled.
+- [ ] Both renewal row sources point to the settings subscription anchor.
+- [ ] No ISO dates, raw enum values, percentages or streaks on the changed screens; `docs/spec/banned-strings.json` passes.
+- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass.
+
+## Out of scope
+- Payments (ZD4).
+- Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
+- Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
+
+## Tests to add
+- `apps/trainer-web/src/pages/client-settings/SubscriptionDrawer.test.tsx`; ended render; renewal link update in `HomePage.rows.test.tsx` is not owned, so assert the link in a new `apps/trainer-web/src/pages/client-settings/renewalLinks.test.tsx` that renders both.
+- Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm --filter @fitbud/trainer-web e2e` (local) and the banned-strings check.
+
+## Visual check
+- The frames and viewports above. Capture each state to `docs/qa/ZD3/` (file name = frame name with the viewport), run the design-review step, and attach both to the PR.
+
+## Stop conditions
+- A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** or listed as a question in `docs/specs/batches/W8.md`.
+- A file outside `files_owned` must change.
+- The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.
+- The task would need a remote command (`wrangler deploy`, `wrangler d1 … --remote`, `seed --remote`, `eas build`, `eas submit`), a secret, production data or a deploy.

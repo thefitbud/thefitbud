@@ -1,0 +1,59 @@
+---
+id: ZB8
+title: Client settings API: basic details, subscription edit and payment records
+batch: W6
+depends_on: [ZB3, ZA11]
+lane: settings
+files_owned:
+  - apps/api/src/routes/client-settings.ts
+  - apps/api/src/routes/client-settings.test.ts
+  - apps/api/src/routes/client-settings.authz.test.ts
+  - apps/api/src/domain/client-settings.ts
+  - packages/contracts/src/client-settings.ts
+  - packages/api-client/src/client-settings-augment.ts
+frames: []
+model: opus
+size: M
+---
+
+## Outcome
+The trainer can edit a client's basic details and subscription (amount, type, mode, dates) and mark payments paid or unpaid, with the server refusing any edit on an ended client.
+
+## Context
+- Covers master-list (v13) items B3b. Everything the implementer needs from those rows is pasted here.
+- Endpoints under `/client-settings/relationships/:id`: `GET` (details + current subscription + payments), `PATCH /basic` (display name, phone, goal note), `PUT /subscription` (creates a new subscription version; never edits history), `POST /payments`, `PATCH /payments/:paymentId` (status, paid_on, method, note).
+- Validation: due/renewal date after start; amount ≥ 0; method required when paid. Ended relationship → 409 `relationship_ended` on every write (rule: ended is read-only on the server).
+- No collect, invoice, reminder-to-pay or gateway endpoint. Phone format stays as stored by onboarding; do not log it.
+- Frames it feeds: 209, 210, 211, 211b, 212, IP-08.
+
+## Gap list
+- `apps/api/src/routes/subscriptions.ts` handles renewals attention only; no edit endpoint.
+- `apps/trainer-web/src/pages/ConfigureCoachingPage.tsx:166-219` edits the subscription inside Coaching setup (D14 interim).
+- Written against `main` at 4d6d264. The implementer re-checks each item against the latest `main` before building (AGENTS.md).
+
+## Acceptance criteria
+- [ ] Every endpoint above validated by contract schemas; writes are idempotent with the existing `Idempotency-Key` handling.
+- [ ] Ended relationship writes → 409; reads work.
+- [ ] A subscription edit makes vN+1 and keeps vN; the renewals list (`/subscriptions`) reads the newest version.
+- [ ] No personal data in logs (test with a log spy).
+- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass.
+
+## Out of scope
+- Settings UI (W8).
+- Moving the D14 interim out of Coaching setup (W8 ZD5).
+- Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
+- Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
+
+## Tests to add
+- `client-settings.test.ts`: each endpoint, validation, versioning, ended 409.
+- `client-settings.authz.test.ts`.
+- Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm --filter @fitbud/trainer-web e2e` (local) and the banned-strings check.
+
+## Visual check
+- Non-UI: no screenshot. The PR lists the test names that cover each criterion.
+
+## Stop conditions
+- A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** or listed as a question in `docs/specs/batches/W6.md`.
+- A file outside `files_owned` must change.
+- The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.
+- The task would need a remote command (`wrangler deploy`, `wrangler d1 … --remote`, `seed --remote`, `eas build`, `eas submit`), a secret, production data or a deploy.
