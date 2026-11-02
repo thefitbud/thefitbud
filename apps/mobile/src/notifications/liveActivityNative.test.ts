@@ -267,6 +267,30 @@ describe("createLiveActivityNative on iOS", () => {
     expect(await native.start(WORKOUT, { exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY })).toBeNull();
   });
 
+  it("says whether an update reached the native side (LA3f)", async () => {
+    const warn = vi.fn();
+    const content = { exerciseName: "Romanian deadlift", state: LOGGED };
+
+    const ok = fakeModule();
+    const taken = createLiveActivityNative({ platformOS: "ios", loadModule: () => ok, warn });
+    await expect(taken.update(content)).resolves.toBe(true);
+
+    const broken = fakeModule({
+      update: vi.fn(async () => {
+        throw new Error("activity gone");
+      }),
+    });
+    const failed = createLiveActivityNative({ platformOS: "ios", loadModule: () => broken, warn });
+    await expect(failed.update(content)).resolves.toBe(false);
+
+    // Unsupported (Live Activities or notifications off): no activity to post
+    // to, nothing to post again.
+    const off = fakeModule({ isSupported: vi.fn(() => false) });
+    const unsupported = createLiveActivityNative({ platformOS: "ios", loadModule: () => off, warn });
+    await expect(unsupported.update(content)).resolves.toBe(true);
+    expect(off.update).not.toHaveBeenCalled();
+  });
+
   it("never throws; warns with the error name only", async () => {
     const secret = new TypeError("Romanian deadlift 25 kg for asg-1");
     const warn = vi.fn();
@@ -285,7 +309,9 @@ describe("createLiveActivityNative on iOS", () => {
     const content = { exerciseName: "Romanian deadlift", state: LOGGED };
 
     await expect(native.start(WORKOUT, content)).resolves.toBeNull();
-    await expect(native.update(content)).resolves.toBeUndefined();
+    // False, not a throw: the content never reached the activity, so the
+    // session posts it again rather than deduping it away (LA3f).
+    await expect(native.update(content)).resolves.toBe(false);
     await expect(native.end(content)).resolves.toBeUndefined();
 
     expect(warn.mock.calls).toEqual([
@@ -363,7 +389,11 @@ describe("createLiveActivityNative on Android (LA3)", () => {
     });
     expect(native.isSupported()).toBe(false);
     expect(await native.start(WORKOUT, { exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY })).toBeNull();
-    await expect(native.update({ exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY })).resolves.toBeUndefined();
+    // Nothing is showing and nothing can be: settled, so the session does not
+    // post the same content on every sync forever (LA3f).
+    await expect(native.update({ exerciseName: "Squat", state: DEMO_LIVE_ACTIVITY })).resolves.toBe(
+      true,
+    );
     expect(warn).toHaveBeenCalledWith("[liveActivity] load failed: Error");
   });
 });
