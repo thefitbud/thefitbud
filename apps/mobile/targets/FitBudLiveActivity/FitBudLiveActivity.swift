@@ -1,13 +1,18 @@
 import ActivityKit
 import AppIntents
+import Foundation
 import SwiftUI
 import WidgetKit
 
 /// Shared with the Expo app through the App Group. A dev build drains this
 /// into the sync outbox. Expo web cannot read it.
 enum LiveActivityOutbox {
-  /// Per-variant App Group, written to Info.plist by plugins/withLiveActivity.js.
-  static let suite = Bundle.main.object(forInfoDictionaryKey: "FitBudAppGroup") as? String
+  /// Per-variant App Group, compiled in from GeneratedAppGroup.swift, which
+  /// plugins/withLiveActivity.js writes on every prebuild. It is not read from
+  /// Info.plist: @bacons/apple-targets 0.2.1 ignores a target's `infoPlist`, so
+  /// in the widget bundle that lookup is nil and the rows would go to the
+  /// widget's own defaults, where the app can never read them.
+  static let suite = FitBudAppGroup.identifier
   static let key = "liveActivityOutbox"
 
   static func append(exerciseName: String, setIndex: Int, kilograms: Double, reps: Int) {
