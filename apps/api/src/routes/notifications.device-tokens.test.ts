@@ -9,51 +9,12 @@ import { app } from "../index.js";
 import { deliverReminderMessage } from "../domain/reminders.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
-import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
-import type { Env } from "../types.js";
-
-function dummyD1(): D1Database {
-  return {
-    prepare() {
-      throw new Error("D1 should not be used when test DB override is set");
-    },
-    dump: async () => new ArrayBuffer(0),
-    batch: async () => [],
-    exec: async () => ({ count: 0, duration: 0 }),
-  } as unknown as D1Database;
-}
-
-function testEnv(): Env {
-  return {
-    DB: dummyD1(),
-    MEDIA: createMemoryR2Bucket(),
-    FIREBASE_PROJECT_ID: "fitbud-local",
-    SESSION_COOKIE_NAME: "fitbud_session",
-    AUTH_MODE: "test",
-    ENVIRONMENT: "local",
-    PUSH_PROVIDER_MODE: "test",
-    MEDIA_SIGNING_SECRET: "fitbud-local-file-signing-secret",
-  };
-}
-
-/** Signs a trainer into trainer web and returns their session cookie. */
-async function createTrainerSession(email: string) {
-  const idToken = createTestIdToken(`trainer-${email}`, email);
-  const response = await app.request(
-    "/auth/session",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken, timezone: "Asia/Kolkata" }),
-    },
-    testEnv(),
-  );
-  expect(response.status).toBe(200);
-  const setCookie = response.headers.get("set-cookie");
-  expect(setCookie).toBeTruthy();
-  return { cookie: setCookie!.split(";")[0]!, idToken };
-}
+import {
+  createTrainerSession,
+  register,
+  testEnv,
+} from "../test-support/notification-routes.js";
 
 async function createInvitation(cookie: string, suffix: string) {
   const created = await app.request(
@@ -101,30 +62,6 @@ async function createCoachingPair(suffix: string) {
   );
   expect(accept.status).toBe(200);
   return { trainerCookie: trainer.cookie, traineeToken };
-}
-
-type RegisterBody = {
-  token: string;
-  platform: "ios" | "android" | "web";
-  installationId: string;
-  provider?: "fcm" | "expo";
-};
-
-async function register(
-  auth: { bearer?: string; cookie?: string; role?: "trainer" | "trainee" },
-  body: RegisterBody,
-) {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (auth.bearer) headers.Authorization = `Bearer ${auth.bearer}`;
-  if (auth.cookie) headers.Cookie = auth.cookie;
-  if (auth.role) headers["x-fitbud-role"] = auth.role;
-  return app.request(
-    "/notifications/device-tokens",
-    { method: "POST", headers, body: JSON.stringify(body) },
-    testEnv(),
-  );
 }
 
 type DeviceTokenPayload = {
