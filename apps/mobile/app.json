@@ -1,5 +1,6 @@
 {
-  "slug": "fitbud",
+  "owner": "tech-fitbuds-team",
+  "slug": "thefitbud",
   "version": "0.0.0",
   "orientation": "portrait",
   "userInterfaceStyle": "light",
@@ -22,5 +23,15 @@
       "backgroundColor": "#FAF7F2"
     }
   },
-  "plugins": ["expo-dev-client"]
+  "plugins": [
+    "expo-dev-client"
+  ],
+  "updates": {
+    "url": "https://u.expo.dev/ae19f5e7-c839-48a3-8e62-ae9ba2fc86d7"
+  },
+  "extra": {
+    "eas": {
+      "projectId": "ae19f5e7-c839-48a3-8e62-ae9ba2fc86d7"
+    }
+  }
 }

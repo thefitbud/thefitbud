@@ -64,8 +64,11 @@ export function Screen({
         }
       >
         <View
-          // RN types omit landmark roles; Expo web maps this to <main>.
-          accessibilityRole={"main" as "summary"}
+          // `main` is a web/ARIA landmark, not an Android accessibilityRole:
+          // react-native-web renders role="main" as <main>, and on Android the
+          // `role` prop goes through the nullable Role.fromValue, so it is
+          // ignored instead of throwing. See apps/mobile/src/components/accessibilityRole.test.ts.
+          role="main"
           style={styles.main}
         >
           {showHeader ? (
