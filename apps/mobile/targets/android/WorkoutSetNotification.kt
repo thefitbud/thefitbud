@@ -28,8 +28,15 @@ import androidx.core.app.NotificationManagerCompat
  * - Log set writes workout.log_set and advances to the next set
  * - Open uses the fitbud://workout/{assignmentId} deep link
  *
- * There is no rest timer. A logged set collapses to one line ("Set 2 logged · 22.5 kg × 10"),
- * shown as its own short notification while the ongoing one moves to the next set.
+ * With rest on (LA3c, D-W3-3, frame 27-android-rest.png) the same notification
+ * shows a rest countdown with Skip rest instead of the set controls, and goes
+ * back to the next set when the trainee skips. The countdown is a Chronometer
+ * counting down to `restEndsAt`: the device counts, so rest costs no repost
+ * per second and no timer in JS. Rest itself is decided by the app, exactly as
+ * on iOS (27c) — the notification never starts a rest of its own.
+ *
+ * A logged set collapses to one line ("Set 2 logged · 22.5 kg × 10"), shown as
+ * its own short notification while the ongoing one moves to the next set.
  */
 object WorkoutSetNotification {
     const val CHANNEL_ID = "workout"
@@ -38,6 +45,7 @@ object WorkoutSetNotification {
     const val ACTION_FEWER_REPS = "com.thefitbud.mobile.workout.FEWER_REPS"
     const val ACTION_MORE_REPS = "com.thefitbud.mobile.workout.MORE_REPS"
     const val ACTION_LOG_SET = "com.thefitbud.mobile.workout.LOG_SET"
+    const val ACTION_SKIP_REST = "com.thefitbud.mobile.workout.SKIP_REST"
     const val WEIGHT_STEP_KG = 2.5
 
     /** The ongoing set notification; one workout at a time, so one id. */
@@ -46,8 +54,18 @@ object WorkoutSetNotification {
     /** The short "Set n logged · …" confirmation that follows a logged set. */
     const val LOGGED_NOTIFICATION_ID = 7302
 
-    /** Shown next to the app name in the system header (frame 27-android). */
+    /**
+     * Shown next to the app name in the system header while the trainee is on
+     * a set ("FitBud · Workout · now", frame
+     * 27-android-trainee-workout-notif.png). During rest the header carries
+     * the workout name and the countdown instead ("FitBud · Lower body B",
+     * frame 27-android-rest.png), so each frame's header is what the trainee
+     * sees in that state.
+     */
     const val SUB_TEXT = "Workout"
+
+    /** The rest state's collapsed title; the countdown sits in the header. */
+    const val REST_TITLE = "Rest"
 
     data class SetState(
         val exerciseName: String,
@@ -63,7 +81,32 @@ object WorkoutSetNotification {
         val loggedLine: String?,
         val finished: Boolean,
         val openUrl: String,
+        /** "Lower body B": the header during rest (frame 27-android-rest). */
+        val workoutName: String = "",
+        /**
+         * End of the running rest, epoch ms, or null when there is no rest
+         * (LA1c's field, same meaning on both platforms). The app sends one
+         * update when rest starts and one when it ends or is skipped.
+         */
+        val restEndsAt: Long? = null,
+        /** Full rest length in seconds, as the app set it. */
+        val restSeconds: Int? = null,
     )
+
+    /** True while a rest countdown is still running at `now` (epoch ms). */
+    fun resting(state: SetState, now: Long = System.currentTimeMillis()): Boolean {
+        if (state.finished) return false
+        val endsAt = state.restEndsAt ?: return false
+        return endsAt > now
+    }
+
+    /**
+     * Skip rest, from the notification's own button. It clears rest and
+     * nothing else: the set, the values and the outbox are untouched, so the
+     * trainee lands on the next set exactly as the countdown running out would
+     * have left them.
+     */
+    fun skipRest(state: SetState): SetState = state.copy(restEndsAt = null, restSeconds = null)
 
     fun logSet(state: SetState): SetState {
         if (state.finished) return state
@@ -79,6 +122,10 @@ object WorkoutSetNotification {
             kilograms = state.planKilograms,
             reps = state.planReps,
             finished = finished,
+            // A new set never inherits the previous set's countdown; the app
+            // sends the next rest, as it does for a set logged in the app.
+            restEndsAt = null,
+            restSeconds = null,
         )
     }
 
@@ -109,6 +156,13 @@ object WorkoutSetNotification {
     fun valuesLine(state: SetState): String =
         "${formatKg(state.kilograms)} kg × ${state.reps}"
 
+    /** "Next · Romanian deadlift · Set 3 of 3" (frame 27-android-rest). */
+    fun nextLine(state: SetState): String = "Next · ${titleLine(state)}"
+
+    /** The Skip rest button's label for TalkBack: what skipping leads to. */
+    fun skipRestDescription(state: SetState): String =
+        "Skip rest, next: ${titleLine(state)}, ${valuesLine(state)}"
+
     /** "Log set 2" (the ✓ is drawn in the layout, so the label stays readable). */
     fun logSetLabel(state: SetState): String = "Log set ${state.setIndex}"
 
@@ -118,6 +172,7 @@ object WorkoutSetNotification {
      * and it opens the workout when tapped.
      */
     fun build(context: Context, state: SetState): Notification {
+        if (resting(state)) return buildResting(context, state)
         val expanded = RemoteViews(context.packageName, R.layout.fitbud_workout_set)
         expanded.setTextViewText(R.id.fitbud_workout_title, titleLine(state))
 
@@ -183,6 +238,83 @@ object WorkoutSetNotification {
                 // is part of it. Every redraw is a fresh post, so it stays
                 // "now" while the trainee is working through the set.
                 .setShowWhen(true)
+                .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setCustomBigContentView(expanded)
+                .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+        if (open != null) builder.setContentIntent(open)
+        return builder.build()
+    }
+
+    /**
+     * The same ongoing notification during rest (frame 27-android-rest.png):
+     * the countdown, what was just logged, what comes next, Skip rest and
+     * Open. No set controls — the trainee is resting, not entering a set.
+     *
+     * The countdown is a Chronometer, in the big view and in the system header
+     * (setUsesChronometer + setChronometerCountDown, API 24+): the device
+     * counts down on its own, so one post covers the whole rest. Nothing here
+     * reposts per second, and no JS timer drives it.
+     *
+     * The frame's thin progress bar under the countdown is not drawn: a
+     * RemoteViews progress bar cannot follow a clock, so it could only be a
+     * value frozen at the moment of posting, sitting beside a countdown that
+     * is live. Deviation reported in the PR.
+     */
+    private fun buildResting(context: Context, state: SetState): Notification {
+        val endsAt = state.restEndsAt ?: return build(context, skipRest(state))
+        val expanded = RemoteViews(context.packageName, R.layout.fitbud_workout_rest)
+        // The Chronometer counts on the elapsed-realtime clock, so the wall
+        // clock end is carried over to it once, here.
+        val base = android.os.SystemClock.elapsedRealtime() + (endsAt - System.currentTimeMillis())
+        expanded.setChronometer(R.id.fitbud_rest_timer, base, null, true)
+        expanded.setChronometerCountDown(R.id.fitbud_rest_timer, true)
+
+        val logged = state.loggedLine
+        if (logged == null) {
+            expanded.setViewVisibility(R.id.fitbud_rest_logged, android.view.View.GONE)
+        } else {
+            expanded.setViewVisibility(R.id.fitbud_rest_logged, android.view.View.VISIBLE)
+            expanded.setTextViewText(R.id.fitbud_rest_logged, logged)
+        }
+
+        expanded.setTextViewText(R.id.fitbud_rest_next, nextLine(state))
+        expanded.setTextViewText(R.id.fitbud_rest_next_weight, formatKg(state.kilograms))
+        expanded.setTextViewText(R.id.fitbud_rest_next_reps, "× ${state.reps}")
+        expanded.setContentDescription(
+            R.id.fitbud_rest_next_row,
+            "${nextLine(state)}, ${valuesLine(state)}",
+        )
+
+        expanded.setContentDescription(R.id.fitbud_rest_skip, skipRestDescription(state))
+        expanded.setContentDescription(R.id.fitbud_rest_open, "Open the workout")
+        expanded.setOnClickPendingIntent(
+            R.id.fitbud_rest_skip,
+            action(context, ACTION_SKIP_REST, REQUEST_SKIP_REST),
+        )
+        val open = openIntent(context, state.openUrl)
+        if (open != null) {
+            expanded.setOnClickPendingIntent(R.id.fitbud_rest_open, open)
+        } else {
+            expanded.setViewVisibility(R.id.fitbud_rest_open, android.view.View.GONE)
+        }
+
+        val builder =
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(smallIcon(context))
+                // "FitBud · Lower body B" in the rest frame's header, against
+                // "FitBud · Workout" on a set: each frame's own header.
+                .setSubText(state.workoutName.ifBlank { SUB_TEXT })
+                .setContentTitle(REST_TITLE)
+                .setContentText(logged ?: nextLine(state))
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                // The header's own countdown, next to the app name.
+                .setShowWhen(true)
+                .setWhen(endsAt)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
                 .setCategory(NotificationCompat.CATEGORY_WORKOUT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCustomBigContentView(expanded)
@@ -279,6 +411,7 @@ object WorkoutSetNotification {
     private const val REQUEST_MORE_REPS = 7314
     private const val REQUEST_LOG_SET = 7315
     private const val REQUEST_OPEN = 7316
+    private const val REQUEST_SKIP_REST = 7317
 
     /** An explicit, app-private broadcast: no other app can press these buttons. */
     private fun action(context: Context, action: String, requestCode: Int): PendingIntent {

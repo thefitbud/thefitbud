@@ -19,7 +19,8 @@ import {
  * - iOS 16.2+ with Live Activities on: the local `LiveActivity` module shows
  *   the Live Activity.
  * - Android with notifications and the `workout` channel on: the same module
- *   name, the same calls, an ongoing notification instead (LA3).
+ *   name, the same calls, an ongoing notification instead (LA3), with its own
+ *   rest countdown and Skip rest (LA3c).
  * - Web, older iOS, Live Activities or notifications off, or a build without
  *   the module: every call does nothing (the module is never loaded off the
  *   two native platforms, and `isSupported` decides the rest).
@@ -46,8 +47,10 @@ export type LiveActivityNative = {
   end(finalContent?: LiveActivityContent): Promise<void>;
   /**
    * Whether the running activity still has rest. Null when unsupported, on
-   * error, or when no activity is running. Used when the app becomes active:
-   * a rest skipped on the lock screen ends the app's own rest (LA1c).
+   * error, or when no activity is running; false when it is running and no
+   * longer resting. Used when the app becomes active: a rest skipped on the
+   * lock screen (iOS, LA1c) or on the notification (Android, LA3c) ends the
+   * app's own rest.
    */
   hasRest(): boolean | null;
 };
@@ -195,14 +198,18 @@ export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActi
     },
 
     hasRest() {
-      // Android has no rest on the notification yet (LA3c, D-W3-3) and no Skip
-      // to tap, so it can report nothing about rest: null, never false. False
-      // here means "the trainee skipped the rest on the activity"
-      // (liveActivitySession.restSkippedOnActivity), which on returning to the
-      // app clears the in-app countdown — a rest the trainee never skipped.
-      // Not detectable from the fields: iOS also omits restEndsAt when the rest
-      // is genuinely over, and that omission is the skip signal.
-      if (deps.platformOS === "android") return null;
+      // One reading for both platforms (LA3c). `false` means the activity is
+      // running and is no longer resting — the trainee pressed Skip, or the
+      // countdown ran out — which is what ends the app's own rest. It is read
+      // only while the app believes rest is running
+      // (liveActivitySession.restSkippedOnActivity), so it never clears a rest
+      // the trainee is still taking.
+      //
+      // Both modules answer the same way: `restEndsAt` while a countdown is
+      // still running, `running` alone once it is not. Before LA3c the Android
+      // module could only answer `running` alone, whatever the notification
+      // showed, and reading that as a skip wiped a running rest on every
+      // foreground; now its answer carries the rest it is actually showing.
       const mod = supportedModule();
       if (!mod) return null;
       try {
