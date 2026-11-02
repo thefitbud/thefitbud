@@ -35,6 +35,8 @@ describe("sendPushToDevice", () => {
     expect(accepted.ok && accepted.providerMessageId).toMatch(/^test-fcm-/);
     expect(await sendPushToDevice({ mode: "test", deviceToken: "short", payload: PAYLOAD })).toEqual({
       ok: false,
+      // Rejected before any call left the Worker: a definite answer (X4q).
+      outcome: "answered",
       failureCategory: "invalid_token",
     });
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -45,7 +47,7 @@ describe("sendPushToDevice", () => {
     vi.stubGlobal("fetch", fetchSpy);
     expect(
       await sendPushToDevice({ mode: "fcm", deviceToken: "fcm-test-token-abcdefgh", payload: PAYLOAD }),
-    ).toEqual({ ok: false, failureCategory: "fcm_not_configured" });
+    ).toEqual({ ok: false, outcome: "answered", failureCategory: "fcm_not_configured" });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -77,6 +79,15 @@ describe("sendPushToDevice", () => {
     );
     expect(
       await sendPushToDevice({ mode: "expo", deviceToken: "ExponentPushToken[abc]", payload: PAYLOAD }),
-    ).toEqual({ ok: false, failureCategory: "DeviceNotRegistered" });
+    ).toEqual({ ok: false, outcome: "answered", failureCategory: "DeviceNotRegistered" });
+  });
+
+  it("expo reports an unanswered request as an unknown outcome, not a refusal", async () => {
+    // 503, a timeout, a reset and an unparseable body all collapse into
+    // `provider_error`: Expo may already have the message (X4q, D-W3-8).
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => new Response("{}", { status: 503 })));
+    expect(
+      await sendPushToDevice({ mode: "expo", deviceToken: "ExponentPushToken[abc]", payload: PAYLOAD }),
+    ).toEqual({ ok: false, outcome: "unknown", failureCategory: "provider_error" });
   });
 });
