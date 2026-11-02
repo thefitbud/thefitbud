@@ -12,7 +12,7 @@ FitBud is in closed beta. These terms add to, and where they conflict override, 
 
 **1.1** FitBud is distributed to a limited group — approximately 20 trainers and the clients they invite — through **Apple TestFlight** and **Google Play closed testing**. It is not publicly available.
 
-**1.2** You are here because we invited you, or because a trainer we invited invited you. Do not share your build, your invitation or your access with anyone else, and do not publish screenshots or recordings of unreleased features without asking us first.
+**1.2** You are here because you asked to take part and we accepted, or because a trainer in the beta invited you as their client. Taking part is voluntary: you are not engaged, employed or retained by us, we are not paying you, and you owe us nothing beyond these terms. Do not share your build, your invitation or your access with anyone else, and do not publish screenshots or recordings of unreleased features without asking us first.
 
 **1.3** The software is **pre-release**. It will have bugs. Some features are incomplete, some are switched off, and some will change or be removed.
 
