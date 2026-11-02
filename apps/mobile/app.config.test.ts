@@ -1,6 +1,10 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import appJson from "./app.json";
 import appConfig from "./app.config.js";
+import liveActivityPlugin from "./plugins/withLiveActivity.js";
 import liveActivityTarget from "./targets/FitBudLiveActivity/expo-target.config.js";
 
 const APP_GROUPS = "com.apple.security.application-groups";
@@ -8,6 +12,38 @@ const APP_GROUPS = "com.apple.security.application-groups";
 function configFor(variant: string | undefined) {
   vi.stubEnv("APP_VARIANT", variant);
   return appConfig({ config: structuredClone(appJson) });
+}
+
+/**
+ * Runs the plugin's iOS prebuild mod into a throwaway project root and returns
+ * the Swift the widget compiles. `expo config` never runs mods, and nothing
+ * else can catch a regression here: eslint does not look at `plugins/`, tsc
+ * does not typecheck it, and the Swift is only compiled by a device build.
+ */
+async function generatedAppGroupSwift(
+  config: ReturnType<typeof configFor>,
+): Promise<string> {
+  const mod = config.mods?.ios?.dangerous;
+  expect(typeof mod).toBe("function");
+  const projectRoot = mkdtempSync(join(tmpdir(), "fitbud-app-group-"));
+  try {
+    await mod({
+      ...config,
+      modRequest: { platform: "ios", projectRoot, nextMod: (c: unknown) => c },
+      modResults: {},
+    });
+    return readFileSync(
+      join(projectRoot, liveActivityPlugin.APP_GROUP_SWIFT_PATH),
+      "utf8",
+    );
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true });
+  }
+}
+
+/** The one line the widget's `LiveActivityOutbox.suite` resolves to. */
+function appGroupInGeneratedSwift(source: string): string | undefined {
+  return /static let identifier = "([^"]*)"/.exec(source)?.[1];
 }
 
 describe("app.config.js variants", () => {
@@ -37,6 +73,36 @@ describe("app.config.js variants", () => {
     expect(config.ios.entitlements[APP_GROUPS]).toEqual([appGroup]);
     expect(config.ios.infoPlist.FitBudAppGroup).toBe(appGroup);
     expect(liveActivityTarget(config).entitlements[APP_GROUPS]).toEqual([appGroup]);
+  });
+
+  it.each([
+    ["production", "group.com.thefitbud.mobile"],
+    ["staging", "group.com.thefitbud.mobile.staging"],
+    ["development", "group.com.thefitbud.mobile.staging"],
+  ])("%s: the widget compiles in the same App Group as the app", async (variant, appGroup) => {
+    const config = configFor(variant);
+    const source = await generatedAppGroupSwift(config);
+    expect(source).toContain(`static let identifier = "${appGroup}"`);
+    // The invariant the app side depends on: it reads FitBudAppGroup from the
+    // host app's Info.plist (modules/live-activity/ios/LiveActivityModule.swift),
+    // the widget reads this constant. If the two ever differ, lock-screen sets
+    // are written where the app cannot see them and silently vanish.
+    expect(appGroupInGeneratedSwift(source)).toBe(
+      config.ios.infoPlist.FitBudAppGroup,
+    );
+  });
+
+  it("rejects an App Group name that is not a plain group identifier", () => {
+    const { appGroupSwiftSource } = liveActivityPlugin;
+    expect(() => appGroupSwiftSource("com.thefitbud.mobile")).toThrow(
+      /not a usable App Group name/,
+    );
+    expect(() => appGroupSwiftSource('group.a" + evil + "')).toThrow(
+      /not a usable App Group name/,
+    );
+    expect(appGroupSwiftSource("group.com.thefitbud.mobile")).toContain(
+      'static let identifier = "group.com.thefitbud.mobile"',
+    );
   });
 
   it("treats an unset APP_VARIANT as development", () => {
