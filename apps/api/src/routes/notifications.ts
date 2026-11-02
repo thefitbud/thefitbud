@@ -145,6 +145,16 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
   return created[0]!;
 }
 
+/**
+ * Sentinel value that frees a unique index on `device_tokens` without deleting
+ * the row. It is derived from the row id, so it is unique per row and can never
+ * collide with a client-sent token or installation id. X4b parks a superseded
+ * `installationId` the same way; D-W3-9 parks a released token.
+ */
+function revokedSentinel(rowId: string) {
+  return `revoked:${rowId}`;
+}
+
 notificationRoutes.post(
   "/device-tokens",
   operation({
@@ -174,20 +184,45 @@ notificationRoutes.post(
 
     const db = createDb(c.env.DB);
     const now = nowIso();
-    const existingByToken = await db
+    const tokenRows = await db
       .select()
       .from(deviceTokens)
       .where(eq(deviceTokens.token, parsed.data.token))
       .limit(1);
 
-    if (existingByToken[0] && existingByToken[0].userId !== actor.userId) {
-      return fail(
-        c,
-        403,
-        "DEVICE_TOKEN_OWNED",
-        "This device token is registered to another user.",
-      );
+    // D-W3-9: an Expo push token identifies the installation, not the person,
+    // so every FitBud user of one phone reports the same token (in
+    // AUTH_MODE=test the token and the installation id are constants). A
+    // signed-in user registering a token that currently belongs to someone
+    // else means that other user has signed out on this device: always
+    // reassign the token, whether their row is active or revoked. This route
+    // never answers 403 DEVICE_TOKEN_OWNED.
+    const foreignRow =
+      tokenRows[0] && tokenRows[0].userId !== actor.userId
+        ? tokenRows[0]
+        : null;
+    if (foreignRow) {
+      // Release the token's unique index without deleting the row:
+      // `notification_deliveries.device_token_id` references device_tokens
+      // with no ON DELETE clause, so a hard delete would raise a foreign-key
+      // error and destroy the delivery history the receipts job reads. Park
+      // the token on a sentinel and revoke the row. A revoked row is inert:
+      // the sender selects `status = "active"` (domain/reminders.ts), the
+      // receipts job updates by id and `status = "active"`, and responsiveness
+      // reads only the status. The previous user stops getting pushes here.
+      await db
+        .update(deviceTokens)
+        .set({
+          status: "revoked",
+          token: revokedSentinel(foreignRow.id),
+          updatedAt: now,
+        })
+        .where(eq(deviceTokens.id, foreignRow.id));
     }
+
+    // Once a foreign row has released the token, no row holds it any more, so
+    // the rest of the flow is the plain "token new to this user" path.
+    const existingByToken = foreignRow ? [] : tokenRows;
 
     const existingByInstallation = await db
       .select()
@@ -335,9 +370,18 @@ notificationRoutes.delete(
     }
 
     for (const row of rows) {
+      // Signing out releases the token as well as revoking the row, so the
+      // unique index `device_tokens_token_uidx` is not held by a signed-out
+      // user: the next person to sign in on this device registers the same
+      // Expo token on a row of their own (D-W3-9). The row itself is kept --
+      // never deleted -- so its delivery history stays attributed to this user.
       await db
         .update(deviceTokens)
-        .set({ status: "revoked", updatedAt: now })
+        .set({
+          status: "revoked",
+          token: revokedSentinel(row.id),
+          updatedAt: now,
+        })
         .where(eq(deviceTokens.id, row.id));
     }
 
