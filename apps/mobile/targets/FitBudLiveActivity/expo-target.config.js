@@ -16,14 +16,13 @@ module.exports = (config) => {
     displayName: "FitBud",
     deploymentTarget: "17.0",
     frameworks: ["ActivityKit", "AppIntents", "SwiftUI", "WidgetKit"],
-    // @bacons/apple-targets 0.2.1 never writes a target's infoPlist into the
-    // widget bundle (it only seeds targets/FitBudLiveActivity/Info.plist when
-    // that file is absent). Kept so a later version can honour it; the widget
-    // does not depend on it, it reads the generated Swift constant instead
-    // (GeneratedAppGroup.swift, plugins/withLiveActivity.js).
-    infoPlist: {
-      FitBudAppGroup: appGroup,
-    },
+    // No `infoPlist` here on purpose. @bacons/apple-targets 0.2.1 has no such
+    // field: it spreads this object with no schema and no warning, so the key
+    // was silently dropped and the widget read nil. The widget gets the group
+    // as a compiled-in constant instead (GeneratedAppGroup.swift, written by
+    // plugins/withLiveActivity.js). Do not add it back: a later version that
+    // honoured it would give the group two sources of truth, and the constant
+    // would have to go in the same change.
     entitlements: {
       "com.apple.security.application-groups": [appGroup],
     },
