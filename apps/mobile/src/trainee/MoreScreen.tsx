@@ -12,6 +12,9 @@ import {
   Bell,
   ChevronRight,
   Cloud,
+  Copyright,
+  ExternalLink,
+  FileText,
   Globe,
   KeyRound,
   Languages,
@@ -42,6 +45,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { useAuth } from "../auth/AuthProvider";
 import { useConfig } from "../providers/ConfigProvider";
 import { isStepsEnabled } from "../lib/config";
+import { legalUrl, legalUrlHint } from "../lib/legalLinks";
 import {
   buildSupportMailto,
   DEFAULT_SUPPORT_EMAIL,
@@ -450,6 +454,56 @@ export function MoreScreen({ relationship, onOpenOverlay }: Props) {
       </View>
 
       <View style={styles.group}>
+        <Text style={styles.groupLabel} accessibilityRole="header">
+          Legal
+        </Text>
+        <M2Group>
+          <M2Row
+            tile="neutral"
+            icon={<Shield color={ink[500]} size={17} strokeWidth={1.75} />}
+            label="Privacy policy"
+            hint={`Opens ${legalUrlHint("/privacy")}`}
+            showChevron={false}
+            trailing={
+              <ExternalLink color={ink[500]} size={18} strokeWidth={1.75} />
+            }
+            accessibilityLabel="Privacy policy, opens in your browser"
+            onPress={() => {
+              void Linking.openURL(legalUrl("/privacy"));
+            }}
+          />
+          <M2Row
+            tile="neutral"
+            icon={<FileText color={ink[500]} size={17} strokeWidth={1.75} />}
+            label="Terms of use"
+            hint={`Opens ${legalUrlHint("/terms")}`}
+            showChevron={false}
+            trailing={
+              <ExternalLink color={ink[500]} size={18} strokeWidth={1.75} />
+            }
+            accessibilityLabel="Terms of use, opens in your browser"
+            onPress={() => {
+              void Linking.openURL(legalUrl("/terms"));
+            }}
+          />
+          <M2Row
+            tile="neutral"
+            icon={<Copyright color={ink[500]} size={17} strokeWidth={1.75} />}
+            label="Credits and licences"
+            hint="Exercise drawings and food data"
+            showChevron={false}
+            trailing={
+              <ExternalLink color={ink[500]} size={18} strokeWidth={1.75} />
+            }
+            accessibilityLabel="Credits and licences, opens in your browser"
+            onPress={() => {
+              void Linking.openURL(legalUrl("/credits"));
+            }}
+          />
+        </M2Group>
+      </View>
+
+      <View style={styles.group}>
         <M2Group>
           <M2Row
             tile="neutral"
@@ -656,6 +710,15 @@ const styles = StyleSheet.create({
   },
   group: {
     marginTop: 16,
+  },
+  groupLabel: {
+    color: ink[500],
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    marginLeft: 4,
+    textTransform: "uppercase",
   },
   prof: {
     alignItems: "center",

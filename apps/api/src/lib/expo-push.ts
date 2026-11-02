@@ -8,6 +8,7 @@
 
 import type { PushPayload } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
+import type { PushSendOutcome } from "./push-provider.js";
 
 export const EXPO_PUSH_SEND_URL = "https://exp.host/--/api/v2/push/send";
 export const EXPO_PUSH_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
@@ -23,7 +24,14 @@ export type ExpoFailureCategory =
 
 export type ExpoTicketResult =
   | { ok: true; ticketId: string }
-  | { ok: false; failureCategory: ExpoFailureCategory };
+  /**
+   * `outcome` records whether Expo answered, at the one place that knows: a
+   * recognised ticket-level error is a definite refusal (`answered`), while
+   * anything that leaves the message's fate open — timeout, abort, connection
+   * reset, non-2xx, unparseable body, a missing ticket — is `unknown`. Callers
+   * read this field; they never infer certainty from `failureCategory`.
+   */
+  | { ok: false; outcome: PushSendOutcome; failureCategory: ExpoFailureCategory };
 
 export type ExpoReceiptResult = { ok: true } | { ok: false; failureCategory: ExpoFailureCategory };
 
@@ -52,6 +60,23 @@ function categoryFor(value: unknown): ExpoFailureCategory {
   return typeof error === "string" && KNOWN_ERRORS.has(error as ExpoFailureCategory)
     ? (error as ExpoFailureCategory)
     : "provider_error";
+}
+
+/**
+ * The failure for one ticket slot of an Expo response the Worker could parse.
+ * A recognised ticket error is Expo refusing that message outright, so nothing
+ * is in flight. Anything else — an error code FitBud does not recognise (it may
+ * describe a transient condition in which the message was still queued), a
+ * ticket with no id, a missing ticket — leaves the message's fate unknown, and
+ * a retry must not send it again.
+ */
+function ticketFailure(
+  ticket: Record<string, unknown> | undefined,
+): Extract<ExpoTicketResult, { ok: false }> {
+  const failureCategory = ticket?.status === "error" ? categoryFor(ticket) : "provider_error";
+  return failureCategory === "provider_error"
+    ? { ok: false, outcome: "unknown", failureCategory: "provider_error" }
+    : { ok: false, outcome: "answered", failureCategory };
 }
 
 /**
@@ -109,7 +134,8 @@ async function postJson(url: string, body: unknown, options: ExpoClientOptions):
 
 /**
  * Sends messages in requests of at most 100. Returns one result per message,
- * in input order. A failed request maps every message in it to `provider_error`.
+ * in input order. A failed request maps every message in it to `provider_error`
+ * with an `unknown` outcome: Expo may already have accepted it.
  */
 export async function sendExpoPushMessages(
   messages: readonly ExpoPushMessage[],
@@ -129,10 +155,8 @@ export async function sendExpoPushMessages(
       const ticket = Array.isArray(tickets) ? (tickets[i] as Record<string, unknown> | undefined) : undefined;
       if (ticket?.status === "ok" && typeof ticket.id === "string" && ticket.id) {
         results.push({ ok: true, ticketId: ticket.id });
-      } else if (ticket?.status === "error") {
-        results.push({ ok: false, failureCategory: categoryFor(ticket) });
       } else {
-        results.push({ ok: false, failureCategory: "provider_error" });
+        results.push(ticketFailure(ticket));
       }
     }
   }

@@ -49,6 +49,10 @@ class WorkoutSetActionReceiver : BroadcastReceiver() {
         next: WorkoutSetNotification.SetState,
     ) {
         store.writeState(next)
+        // Skip rest clears the rest, so this drops its scheduled repaint; the
+        // weight and reps buttons leave a running rest alone and so re-arm the
+        // same one (LA3d).
+        RestAlarm.apply(context, next)
         WorkoutSetNotification.show(context, next)
     }
 
@@ -75,6 +79,9 @@ class WorkoutSetActionReceiver : BroadcastReceiver() {
         )
         val next = WorkoutSetNotification.logSet(state)
         store.writeState(next)
+        // A logged set never inherits the previous set's countdown, so the
+        // repaint scheduled for it goes with it (LA3d).
+        RestAlarm.apply(context, next)
         next.loggedLine?.let { WorkoutSetNotification.showLogged(context, next, it) }
         if (next.finished) {
             // No set is left to show: the ongoing notification goes and the
