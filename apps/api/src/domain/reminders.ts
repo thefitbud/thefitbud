@@ -1811,23 +1811,6 @@ export async function createActivityNudge(
 const UNCERTAIN_OUTCOME = "unknown_provider_outcome";
 
 /**
- * Failure categories that prove nothing is in flight for that token: Expo
- * parsed the message and refused it, or no request ever left the Worker.
- * `provider_error` is deliberately absent — the sender collapses timeout,
- * abort, connection reset, non-2xx and unparseable JSON into it, so Expo may
- * already have accepted the message and only the answer was lost.
- */
-const ANSWERED_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
-  // Ticket-level errors parsed out of a 2xx Expo response.
-  "DeviceNotRegistered",
-  "MessageTooBig",
-  "InvalidCredentials",
-  // No provider call was made at all.
-  "invalid_token",
-  "fcm_not_configured",
-]);
-
-/**
  * Settles a delivery that was attempted but whose provider outcome cannot be
  * known, without sending anything. Only a delivery still carrying its attempt
  * marker reaches this: `accepted` and `skipped` rows are left untouched.
@@ -2093,7 +2076,16 @@ export async function deliverReminderMessage(
       break;
     }
     lastFailure = result.failureCategory;
-    if (!ANSWERED_FAILURE_CATEGORIES.has(result.failureCategory)) {
+    // The sender says whether the provider answered; this never guesses from
+    // the failure category (X4q, D-W3-8).
+    //
+    // Tested as "not answered" rather than "=== unknown" on purpose: freeing
+    // the attempt marker is the unsafe side of D-W3-8, because a redelivery
+    // then sends the push a second time. Only a definite "answered" may take
+    // that branch, so a third outcome added to PushSendOutcome later keeps the
+    // marker and loses at most one reminder, instead of silently doubling
+    // sends. The compiler cannot catch a widened union here.
+    if (result.outcome !== "answered") {
       anyOutcomeUnknown = true;
     }
     if (result.failureCategory === "DeviceNotRegistered") {

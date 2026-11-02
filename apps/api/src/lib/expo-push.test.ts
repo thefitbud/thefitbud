@@ -100,14 +100,16 @@ describe("sendExpoPushMessages", () => {
     );
     expect(results).toEqual([
       { ok: true, ticketId: "ticket-ok" },
-      { ok: false, failureCategory: "DeviceNotRegistered" },
-      { ok: false, failureCategory: "MessageTooBig" },
-      { ok: false, failureCategory: "InvalidCredentials" },
-      { ok: false, failureCategory: "provider_error" },
-      { ok: false, failureCategory: "provider_error" },
-      { ok: false, failureCategory: "provider_error" },
+      // A recognised ticket error is Expo answering with a refusal (X4q).
+      { ok: false, outcome: "answered", failureCategory: "DeviceNotRegistered" },
+      { ok: false, outcome: "answered", failureCategory: "MessageTooBig" },
+      { ok: false, outcome: "answered", failureCategory: "InvalidCredentials" },
+      // An unrecognised code, no details, and a ticket with no id: fate unknown.
+      { ok: false, outcome: "unknown", failureCategory: "provider_error" },
+      { ok: false, outcome: "unknown", failureCategory: "provider_error" },
+      { ok: false, outcome: "unknown", failureCategory: "provider_error" },
       // Missing ticket for the 8th message.
-      { ok: false, failureCategory: "provider_error" },
+      { ok: false, outcome: "unknown", failureCategory: "provider_error" },
     ]);
   });
 
@@ -129,8 +131,8 @@ describe("sendExpoPushMessages", () => {
         { fetchImpl: fn, accessToken: ACCESS },
       );
       expect(results).toEqual([
-        { ok: false, failureCategory: "provider_error" },
-        { ok: false, failureCategory: "provider_error" },
+        { ok: false, outcome: "unknown", failureCategory: "provider_error" },
+        { ok: false, outcome: "unknown", failureCategory: "provider_error" },
       ]);
     }
   });
@@ -148,7 +150,9 @@ describe("sendExpoPushMessages", () => {
     expect(fn.mock.calls[0]![1]!.signal!.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(EXPO_PUSH_TIMEOUT_MS).toBe(10_000);
-    await expect(pending).resolves.toEqual([{ ok: false, failureCategory: "provider_error" }]);
+    await expect(pending).resolves.toEqual([
+      { ok: false, outcome: "unknown", failureCategory: "provider_error" },
+    ]);
   });
 
   it("never logs", async () => {
