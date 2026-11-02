@@ -116,7 +116,7 @@ function fakeNative() {
   return {
     isSupported: vi.fn(() => true),
     start: vi.fn<LiveActivityNative["start"]>(async () => "activity-1"),
-    update: vi.fn<LiveActivityNative["update"]>(async () => undefined),
+    update: vi.fn<LiveActivityNative["update"]>(async () => true),
     end: vi.fn<LiveActivityNative["end"]>(async () => undefined),
     hasRest: vi.fn<LiveActivityNative["hasRest"]>(() => null),
   } satisfies LiveActivityNative;
@@ -324,6 +324,7 @@ describe("createLiveActivitySession", () => {
     );
     native.update.mockImplementation(async () => {
       order.push("update");
+      return true;
     });
     const session = createLiveActivitySession(native);
     const ex = frame27();
@@ -344,6 +345,108 @@ describe("createLiveActivitySession", () => {
     await expect(session.sync(input(ex))).resolves.toBeUndefined();
     await expect(session.sync(input(logNext(ex)))).resolves.toBeUndefined();
     expect(native.update).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a post the native side never took (LA3f)", () => {
+    const NOW = Date.UTC(2026, 9, 19, 7, 25, 0);
+    const REST = { endsAt: NOW + 90_000, seconds: 90 };
+
+    it("posts the same content again, and stops once it is taken", async () => {
+      const native = fakeNative();
+      const session = createLiveActivitySession(native);
+      const ex = frame27();
+      await session.sync(input(ex));
+
+      // The rest post fails: nothing on the lock screen or in the
+      // notification is counting down, so the content is not deduped away.
+      native.update.mockResolvedValueOnce(false);
+      const logged = logNext(ex);
+      await session.sync({ ...input(logged), rest: REST });
+      expect(native.update).toHaveBeenCalledTimes(1);
+
+      await session.sync({ ...input(logged), rest: REST });
+      expect(native.update).toHaveBeenCalledTimes(2);
+      expect(native.update.mock.calls[1]?.[0]).toEqual(native.update.mock.calls[0]?.[0]);
+      expect(native.update.mock.calls[1]?.[0].state).toMatchObject({
+        restEndsAt: REST.endsAt,
+        restSeconds: 90,
+      });
+
+      // Taken this time: further syncs of the same content post nothing.
+      await session.sync({ ...input(logged), rest: REST });
+      await session.sync({ ...input(logged), rest: REST });
+      expect(native.update).toHaveBeenCalledTimes(2);
+    });
+
+    it("posts content once while its first post is still in flight", async () => {
+      const native = fakeNative();
+      let release: (delivered: boolean) => void = () => {};
+      native.update.mockImplementation(
+        () =>
+          new Promise<boolean>((resolve) => {
+            release = resolve;
+          }),
+      );
+      const session = createLiveActivitySession(native);
+      const ex = frame27();
+      await session.sync(input(ex));
+
+      const logged = logNext(ex);
+      const first = session.sync({ ...input(logged), rest: REST });
+      void session.sync({ ...input(logged), rest: REST });
+      void session.sync({ ...input(logged), rest: REST });
+      await vi.waitFor(() => expect(native.update).toHaveBeenCalled());
+      expect(native.update).toHaveBeenCalledTimes(1);
+      release(true);
+      await first;
+      expect(native.update).toHaveBeenCalledTimes(1);
+    });
+
+    it("reads a failed rest post as its own failure, not as Skip", async () => {
+      const native = fakeNative();
+      const session = createLiveActivitySession(native);
+      const ex = frame27();
+      await session.sync(input(ex));
+
+      native.update.mockResolvedValueOnce(false);
+      const logged = logNext(ex);
+      await session.sync({ ...input(logged), rest: REST });
+      // The activity truthfully reports no rest: it was never given one. The
+      // app's own countdown must keep running.
+      native.hasRest.mockReturnValue(false);
+      expect(session.restSkippedOnActivity()).toBe(false);
+
+      // The retry lands, and from then on a real Skip still ends the rest.
+      await session.sync({ ...input(logged), rest: REST });
+      expect(session.restSkippedOnActivity()).toBe(true);
+    });
+
+    it("keeps an Android rest running after a failed post, then retries it (LA3c, LA3f)", async () => {
+      // Through the real wrapper over the LA3c module, with no platform
+      // branch anywhere: one failed update must not look like Skip rest.
+      const mod = androidModule();
+      const session = createLiveActivitySession(
+        createLiveActivityNative({ platformOS: "android", loadModule: () => mod, warn: () => {} }),
+      );
+      const ex = frame27();
+      await session.sync(input(ex));
+
+      mod.update.mockRejectedValueOnce(new Error("no notification permission"));
+      const logged = logNext(ex);
+      await session.sync({ ...input(logged), rest: REST });
+      // The notification still shows the pre-rest content, so it answers
+      // "running, not resting" — which is not a skip.
+      expect(mod.restState()).toEqual({ running: true });
+      expect(session.restSkippedOnActivity()).toBe(false);
+
+      await session.sync({ ...input(logged), rest: REST });
+      expect(mod.update).toHaveBeenCalledTimes(2);
+      expect(mod.restState()).toEqual({ running: true, restEndsAt: REST.endsAt });
+      expect(session.restSkippedOnActivity()).toBe(false);
+
+      mod.skipRest();
+      expect(session.restSkippedOnActivity()).toBe(true);
+    });
   });
 
   describe("rest (LA1c, 27c)", () => {
