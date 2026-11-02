@@ -158,7 +158,15 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
         subtitle={lastSyncedLabel(syncedAt)}
       />
 
-      {keptRowsCopy ? <M2Note>{keptRowsCopy}</M2Note> : null}
+      {keptRowsCopy ? (
+        // Announced when a drain makes it appear: the whole point of the
+        // notice is telling a trainee something they would otherwise never
+        // learn. Informational, not an error, so "polite" (the screen's
+        // other dynamic text uses the same prop).
+        <View accessibilityLiveRegion="polite">
+          <M2Note>{keptRowsCopy}</M2Note>
+        </View>
+      ) : null}
 
       {waiting.length === 0 ? (
         <Text style={styles.muted}>Nothing waiting.</Text>
