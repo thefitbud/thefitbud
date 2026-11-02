@@ -8,7 +8,7 @@ Step-by-step help for secrets, Apple and push: the W2 manual-steps guide (shared
 
 | # | Pri | Step | Blocks (batch) | Deadline |
 |---|---|---|---|---|
-| 1 | P0 | Expo/EAS: Android dev build (blocked by AB1) and install on your phone; iOS part on hold | X3, LA1/LA1b/LA1c device checks (W2); X4e, X4d, X4g, LA2, LA3, LA3b, LA3c checks (W3) | after AB1 merges |
+| 1 | P0 | Expo/EAS: **run** the Android dev build (AB1 and #139 are merged) and install on your phone; iOS part on hold | X3, LA1/LA1b/LA1c device checks (W2); X4e, X4d, X4g, LA2, LA3, LA3b, LA3c checks (W3) | now unblocked |
 | 2 | P0 | Apple App IDs, App Groups, Push capability (**on hold by Firoz, 1 Nov**) | LA1 (W2), X4e (W3) | before W2 |
 | 3 | P0 | ZeptoMail: Mail Agent restored and `ZEPTOMAIL_TOKEN` set | I5 check, I6 (W2) | before W2 ends |
 | 4 | P0 | DS5 legal frame and counsel's legal text | BT3 (W3), BT3b (W3), BT1 (W4) | before W3 (text by Mon 9 Nov) |
@@ -27,7 +27,7 @@ Step-by-step help for secrets, Apple and push: the W2 manual-steps guide (shared
 
 ## Details
 
-**1. Expo/EAS (P0, W2–W3).** Done 2 Nov: the EAS project is linked (PR #139, `app.json` only; merge it first), FCM V1 is uploaded for the staging Android app, and `EXPO_ACCESS_TOKEN` is set on staging. Left: (a) the Android dev build: `eas build --profile development --platform android` for the staging variant fails at Gradle `:app:compileDebugJavaWithJavac` (`expo.core.ExpoModulesPackage` not found in the generated `PackageList.java`; builds `fa0acab2`, `5e0295a7`), fixed by spec AB1 (W3); after AB1 merges, rerun the build and keep the install link; (b) install it on your Android phone; (c) the iOS part (`eas device:create`, `--platform ios`, Developer Mode) is on hold with step 2. Secrets: none in the repo.
+**1. Expo/EAS (P0, W2–W3).** Done 2 Nov: the EAS project is linked (PR #139, `app.json` only; merge it first), FCM V1 is uploaded for the staging Android app, and `EXPO_ACCESS_TOKEN` is set on staging. Left: (a) **the Android dev build — now unblocked.** It failed at Gradle `:app:compileDebugJavaWithJavac` (`expo.core.ExpoModulesPackage` not found in the generated `PackageList.java`; builds `fa0acab2`, `5e0295a7`); **AB1 (#143) is merged** and fixes it, and **#139 is merged** so the project is linked. Run `cd apps/mobile && eas build --profile development --platform android` and keep the install link. If you reinstall locally first, AB1 changed `public-hoist-pattern`, so pnpm prompts to purge `node_modules` — use `pnpm install --config.confirmModulesPurge=false`. Confirm `GOOGLE_SERVICES_JSON` is set as an EAS **file** secret on the `development` profile; `app.config.js` reads it and the Android build needs it. If `expo.core` appears again, the fix did not reach EAS — keep the log; (b) install it on your Android phone; (c) the iOS part (`eas device:create`, `--platform ios`, Developer Mode) is on hold with step 2. Secrets: none in the repo.
 
 **2. Apple (P0, W2, on hold by Firoz, 1 Nov).** In the developer portal (or let EAS do it during the build): App Groups `group.com.thefitbud.mobile` and `group.com.thefitbud.mobile.staging`; App IDs `com.thefitbud.mobile` and `.staging` with App Groups and Push Notifications on; the widget extension App ID with the same App Group. Hand back: the widget bundle ID, a capabilities screenshot, phone model and iOS version.
 
