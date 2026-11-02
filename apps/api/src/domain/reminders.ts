@@ -2078,7 +2078,14 @@ export async function deliverReminderMessage(
     lastFailure = result.failureCategory;
     // The sender says whether the provider answered; this never guesses from
     // the failure category (X4q, D-W3-8).
-    if (result.outcome === "unknown") {
+    //
+    // Tested as "not answered" rather than "=== unknown" on purpose: freeing
+    // the attempt marker is the unsafe side of D-W3-8, because a redelivery
+    // then sends the push a second time. Only a definite "answered" may take
+    // that branch, so a third outcome added to PushSendOutcome later keeps the
+    // marker and loses at most one reminder, instead of silently doubling
+    // sends. The compiler cannot catch a widened union here.
+    if (result.outcome !== "answered") {
       anyOutcomeUnknown = true;
     }
     if (result.failureCategory === "DeviceNotRegistered") {
