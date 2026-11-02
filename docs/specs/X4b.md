@@ -21,6 +21,7 @@ size: S
 - v14 X4b (backend half; the mobile half is X4e, because backend and UI never share a spec). D-B9: letting trainees register their own device is decided.
 - Conflict listed in W3.md: v14 C3 says the route returns 403 for trainees, but the route already allows both roles (`apps/api/src/routes/notifications.ts:135`, `:141`); the 403 is `FORBIDDEN_ROLE` when no role is selected (`apps/api/src/middleware/auth.ts:96`). This spec keeps the role rule and adds a test proving a trainee with a selected role gets 200.
 - Provider value: D-W3-2 (decided by Firoz, 1 Nov 2026): add `"expo"`, no migration: `device_tokens.provider` is plain `text` with no CHECK (`apps/api/drizzle/0010_notifications.sql:6`).
+- Foreign tokens: D-W3-9 (decided by Firoz, 2 Nov 2026) replaces this spec's 403 with reassignment to the caller; see X4k.
 - X4a (W2) sends with Expo; X4a owns the sender, this spec owns the routes.
 
 ## Gap list
@@ -31,7 +32,7 @@ size: S
 ## Acceptance criteria
 - [ ] Provider enum is `["fcm", "expo"]` in the contract and the Drizzle schema; default stays `fcm` for old clients.
 - [ ] Registering a new token for an existing `(user, installationId)` updates that row (token, provider, platform, `status: active`, `lastSeenAt`) and returns 200.
-- [ ] A token owned by another user still returns 403 `DEVICE_TOKEN_OWNED`.
+- [ ] ~~A token owned by another user still returns 403 `DEVICE_TOKEN_OWNED`.~~ **Superseded by D-W3-9 (2 Nov 2026):** a token held by another user is always reassigned to the caller, with no 403. Built in X4k.
 - [ ] A trainee with `x-fitbud-role: trainee` registers and deletes a device token (200).
 - [ ] No migration file. No token value in logs or error details.
 
@@ -41,7 +42,7 @@ size: S
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 
 ## Tests to add
-- `apps/api/src/routes/notifications.device-tokens.test.ts` (new): expo provider accepted; same installation new token → one row, updated; other user's token → 403; trainee register/delete → 200; no role → 403 `FORBIDDEN_ROLE`.
+- `apps/api/src/routes/notifications.device-tokens.test.ts` (new): expo provider accepted; same installation new token → one row, updated; other user's token → 403 (**superseded by D-W3-9**: X4k replaces it with reassignment tests); trainee register/delete → 200; no role → 403 `FORBIDDEN_ROLE`.
 - Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 
 ## Visual check
