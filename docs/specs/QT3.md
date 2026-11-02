@@ -32,7 +32,7 @@ A Maestro suite drives the Android staging-variant app (`com.thefitbud.mobile.st
   7. `trainee/checkin.yaml`: open check-in → fill → submit → sent state.
   8. `trainee/progress.yaml`, `trainee/settings.yaml` (profile, notifications, privacy, sign out).
   9. `trainer/clients.yaml`: Clients list shows QA Aarav and QA Rohan; open QA Rohan → status.
-  10. `trainer/attention.yaml`: Attention inbox shows ≥2 items for QA Rohan; open an exception → review screen (do **not** resolve automatically in the shared nightly run unless the reset runs first; QT7 runs reset first, so resolving one is allowed and asserted).
+  10. `trainer/attention.yaml`: Attention inbox shows ≥2 items for QA Rohan; open an exception → review screen → resolve one as the trainer (allowed on QA accounts only, D-QA1-7; QT7's reset restores it nightly) and assert it leaves the inbox.
   11. `trainer/checkin-review.yaml`: open the pending check-in → review → mark reviewed.
   12. `trainer/notes-more.yaml`: add a note on a client; More screen renders.
 - **Every flow:** `takeScreenshot` at each key screen with a stable name `<flow>__<step>` (e.g. `trainee-today__loaded`), then `runFlow: ../common/assert-no-crash.yaml` (QT4). Screenshots land in the output dir set by `--test-output-dir` (QT7/QT8 collect them).
