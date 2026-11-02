@@ -24,13 +24,14 @@ After a set is logged with rest on, the Android ongoing notification shows a res
 - Use the same rest fields as LA1c (`restEndsAt`, `restSeconds`); a Chronometer counting down (`setUsesChronometer` + `setChronometerCountDown`, API 24+) so no per-second updates; Skip clears rest. Notifications-off respected.
 
 ## Gap list
-- `apps/mobile/targets/android/WorkoutSetNotification.kt:15`: "There is no rest timer".
+- `apps/mobile/targets/android/WorkoutSetNotification.kt`: the notification is built in `build()` (`:174`, the set controls) and posted by `show()` (`:343`); before LA3c its header comment said "There is no rest timer". The file is not in the live-activity module's own source tree: `apps/mobile/modules/live-activity/android/build.gradle:25` adds `targets/android` to the module's `java.srcDirs`, and the module's Kotlin files (`WorkoutSetActionReceiver.kt`, `WorkoutSetStore.kt`, `LiveActivityModule.kt` under `modules/live-activity/android/src/main/java/com/thefitbud/liveactivity/`) call `WorkoutSetNotification.show`/`cancel`.
+- Status on `main` at 56a83ba: LA3c is merged (#132). Rest is drawn by `buildResting()` (`:264`), with `resting()` (`:97`) and `skipRest()` (`:109`); the header comment (`:31-36`) describes rest. These line numbers are post-LA3c and are for reference only.
 - LA3's module and LA3b's wrapper carry no rest fields on Android.
 
 ## Acceptance criteria
 - [ ] With rest on, the notification shows the countdown and a Skip action; at zero or on Skip it shows the next set.
 - [ ] Rest state comes from the same JS state as iOS; no extra wake-ups or timers in JS.
-- [ ] The scaffold comment is updated; device checklist in the PR.
+- [ ] The header comment of `WorkoutSetNotification.kt` describes rest; device checklist in the PR.
 
 ## Out of scope
 - iOS rest (LA1c, W2). Sounds or vibration at rest end.
