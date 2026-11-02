@@ -157,13 +157,45 @@ export type WorkoutLiveActivityInput = {
 export function createLiveActivitySession(native: LiveActivityNative = liveActivityNative) {
   let started = false;
   let ended = false;
-  let lastSent: string | null = null;
+  // Dedupe (LA1b), fixed in LA3f. `posted` is the content of the most recent
+  // post and `postedState` says how that post went, so the same content is
+  // posted once — but a post the native side never took is posted again on
+  // the next sync instead of being deduped away. Recording the key before the
+  // call, as LA1c and LA3 did, made a failed rest post permanent: the app
+  // believed the activity was counting down a rest the native side had never
+  // been given.
+  let posted: string | null = null;
+  let postedState: "pending" | "delivered" | "failed" = "pending";
+  // Intent, not delivery: what the app wants shown. It stays eager, so `end()`
+  // always carries the latest content and `restSkippedOnActivity` keeps
+  // gating on the app's own rest window. Tying it to delivery would roll the
+  // final content back to older state after a failed post.
   let lastContent: LiveActivityContent | null = null;
   // Native calls are async; run them in order so an update never overtakes its start.
   let queue: Promise<unknown> = Promise.resolve();
   const enqueue = (call: () => Promise<unknown>) => {
     queue = queue.then(call, call).catch(() => undefined);
     return queue;
+  };
+
+  /**
+   * Posts `content`'s key once and records whether the native side took it.
+   * `pending` until the call settles, so a re-render while the call is in
+   * flight does not post the same content twice.
+   */
+  const post = (key: string, call: () => Promise<boolean>): Promise<unknown> => {
+    posted = key;
+    postedState = "pending";
+    const settle = (state: "delivered" | "failed") => {
+      // Only while this is still the latest post; a newer one owns the state.
+      if (posted === key) postedState = state;
+    };
+    return enqueue(() =>
+      call().then(
+        (delivered) => settle(delivered ? "delivered" : "failed"),
+        () => settle("failed"),
+      ),
+    );
   };
 
   function end(): Promise<unknown> {
@@ -187,21 +219,42 @@ export function createLiveActivitySession(native: LiveActivityNative = liveActiv
     const key = JSON.stringify(content);
     if (!started) {
       started = true;
-      lastSent = key;
       const workout = { workoutName, openUrl: workoutOpenUrl(execution.assignmentId) };
-      return enqueue(() => native.start(workout, content));
+      // A start that resolves null is either unsupported or failed; either way
+      // no activity is running, so there is no content stranded on a surface
+      // the trainee can see, and nothing to post again.
+      return post(key, async () => {
+        await native.start(workout, content);
+        return true;
+      });
     }
-    if (key === lastSent) return queue;
-    lastSent = key;
-    return enqueue(() => native.update(content));
+    // Skip content whose post is in flight or was taken; content the native
+    // side refused is posted again.
+    if (key === posted && postedState !== "failed") return queue;
+    return post(key, () => native.update(content));
   }
 
   /**
    * True when the activity's rest was skipped on the lock screen (the widget's
    * Skip clears it there only). Asked when the app becomes active.
+   *
+   * Known, deliberate false negative: after a post that supersedes an earlier
+   * delivered one fails, a real lock-screen Skip is not detected until the
+   * retry lands; the in-app rest expires on its own instead. That is the
+   * fail-safe direction — a rest kept a little too long, never one cleared
+   * that nobody skipped. Do not "fix" it by trusting hasRest() after a failed
+   * post: believing the activity about a rest it was never given is precisely
+   * the defect LA3f removed.
    */
   function restSkippedOnActivity(): boolean {
     if (!started || ended || lastContent?.state.restEndsAt == null) return false;
+    // Ask only about a rest the activity was actually given (LA3f). When the
+    // post carrying this rest never reached the native side, its truthful
+    // "not resting" is this app's failed post, not the trainee pressing Skip,
+    // and reading it as a skip would clear a rest nobody skipped. The meaning
+    // of `false` from hasRest() is unchanged (LA3c): the activity is up and is
+    // no longer resting. The post is retried on the next sync.
+    if (postedState !== "delivered" || posted !== JSON.stringify(lastContent)) return false;
     return native.hasRest() === false;
   }
 

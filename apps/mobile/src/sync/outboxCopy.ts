@@ -116,3 +116,30 @@ export function indicatorFromCounts(input: {
   }
   return { kind: "synced", label: "Synced", visible: false };
 }
+
+/**
+ * The lock-screen (or notification) sets that were drained but could not be
+ * matched to a running workout. They are kept, never dropped, so the sync
+ * status screen says so. Shaped for `useSyncExternalStore`: the snapshot is the
+ * store's own copy, read on every call, so it can never go stale behind a
+ * drain. `null` means there is nothing to report and the screen renders nothing.
+ */
+export type KeptRowsStore = {
+  copy: () => string | null;
+  subscribe: (listener: (next: number) => void) => () => unknown;
+};
+
+export function createKeptRowsBinding(store: KeptRowsStore): {
+  subscribe: (onChange: () => void) => () => void;
+  snapshot: () => string | null;
+} {
+  return {
+    subscribe: (onChange: () => void) => {
+      const unsubscribe = store.subscribe(() => onChange());
+      return () => {
+        unsubscribe();
+      };
+    },
+    snapshot: () => store.copy(),
+  };
+}

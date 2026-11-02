@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { StyleSheet, View } from "react-native";
 import {
   Check,
@@ -21,11 +26,21 @@ import { Linking } from "react-native";
 import { useSyncEngine } from "../../sync/SyncProvider";
 import {
   conflictCopy,
+  createKeptRowsBinding,
   describeOutboxEntry,
   lastSyncedLabel,
 } from "../../sync/outboxCopy";
+import { liveActivityKeptRows } from "../../notifications/liveActivityOutbox";
 import type { OutboxEntry } from "../../sync/engine";
 import { M2Button, M2Group, M2Hero, M2Note, M2Page, M2Row } from "./m2";
+
+/**
+ * Sets tapped on the lock screen (iOS Live Activity) or in the notification
+ * shade (Android) that the drain kept because no workout was running. Bound
+ * once, at module scope, so the screen reads the live store rather than a copy
+ * taken when it mounted.
+ */
+const keptRows = createKeptRowsBinding(liveActivityKeptRows);
 
 type Props = {
   onBack: () => void;
@@ -45,6 +60,11 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [diagOpen, setDiagOpen] = useState(false);
+  const keptRowsCopy = useSyncExternalStore(
+    keptRows.subscribe,
+    keptRows.snapshot,
+    keptRows.snapshot,
+  );
 
   const load = useCallback(async () => {
     setError(null);
@@ -137,6 +157,16 @@ export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
         title={heroTitle}
         subtitle={lastSyncedLabel(syncedAt)}
       />
+
+      {keptRowsCopy ? (
+        // Announced when a drain makes it appear: the whole point of the
+        // notice is telling a trainee something they would otherwise never
+        // learn. Informational, not an error, so "polite" (the screen's
+        // other dynamic text uses the same prop).
+        <View accessibilityLiveRegion="polite">
+          <M2Note>{keptRowsCopy}</M2Note>
+        </View>
+      ) : null}
 
       {waiting.length === 0 ? (
         <Text style={styles.muted}>Nothing waiting.</Text>
