@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -103,6 +103,20 @@ test.describe("host guard: navigation", () => {
 });
 
 test.describe("host guard: the real config", () => {
+  // Every child results dir this file created and has not removed yet. `listWith` clears
+  // its own entry in a `finally`; `afterAll` is the backstop for anything that escaped.
+  const childResultsDirs = new Set<string>();
+
+  function removeChildResultsDir(dir: string): void {
+    // `force` so a child that never wrote (it refused before the reporter ran) is fine too.
+    rmSync(dir, { recursive: true, force: true });
+    childResultsDirs.delete(dir);
+  }
+
+  test.afterAll(() => {
+    for (const dir of [...childResultsDirs]) removeChildResultsDir(dir);
+  });
+
   // Runs `playwright test -c playwright.staging.config.ts --list` in a child process, so
   // this proves the config itself refuses, not just the helper it calls.
   function listWith(env: Record<string, string>) {
@@ -116,13 +130,23 @@ test.describe("host guard: the real config", () => {
           k !== LOCAL_REHEARSAL_FLAG,
       ),
     ) as Record<string, string>;
-    return spawnSync(process.execPath, [cli, "test", "-c", "playwright.staging.config.ts", "--list"], {
-      cwd: trainerWebDir,
-      // Own results dir: the child loads the same config and LogReporter, and must never write
-      // into (or truncate) this run's log and reports, whether QA_RESULTS_DIR is set or not.
-      env: { ...clean, QA_RESULTS_DIR: mkdtempSync(path.join(tmpdir(), "qt5-child-")), ...env },
-      encoding: "utf8",
-    });
+    // Own results dir: the child loads the same config and LogReporter, and must never write
+    // into (or truncate) this run's log and reports, whether QA_RESULTS_DIR is set or not.
+    const childResultsDir = mkdtempSync(path.join(tmpdir(), "qt5-child-"));
+    childResultsDirs.add(childResultsDir);
+    try {
+      // `spawnSync` returns however the child ended — clean exit, non-zero status, signal,
+      // spawn error or timeout — so the `finally` removes the dir on every one of those
+      // paths, not just the one where the child exits 0. Nothing reads the dir afterwards:
+      // the assertions below only look at the child's status, stdout and stderr.
+      return spawnSync(process.execPath, [cli, "test", "-c", "playwright.staging.config.ts", "--list"], {
+        cwd: trainerWebDir,
+        env: { ...clean, QA_RESULTS_DIR: childResultsDir, ...env },
+        encoding: "utf8",
+      });
+    } finally {
+      removeChildResultsDir(childResultsDir);
+    }
   }
 
   test("refuses to load for the production web host", () => {
