@@ -208,8 +208,8 @@ app, so expect platform chrome to differ.
 | trainee-meal-log__something-different | 08-trainee-something-different-ios.png | |
 | trainee-meal-log__food-search | 09-trainee-food-search-ios.png | |
 | trainee-meal-log__logged | 07-trainee-diet-ios.png | after a changed meal |
-| trainee-checkin__form | 14-trainee-check-in-v3-ios.png | only when a check-in is startable |
-| trainee-checkin__sent | 100-trainee-checkin-sent-ios.png | only when a check-in is startable |
+| trainee-checkin__form | 14-trainee-check-in-v3-ios.png | |
+| trainee-checkin__sent | 100-trainee-checkin-sent-ios.png | |
 | trainee-progress__loaded | 13-trainee-progress-ios.png | |
 | trainee-settings__more | 16-trainee-more-ios.png | |
 | trainee-settings__reminders | 79-trainee-reminder-settings-android.png | |
@@ -244,13 +244,23 @@ change. Known gaps, to be fixed in a follow-up (QT3b) that touches app code:
   `TextInput` would make that a plain tap. TODO(QT3b).
 - **Role select** cannot be reached: the QA seed has no account with both roles.
   The flow asserts the single-role skip instead. TODO(QT3b) with a dual-role account.
-- **Check-in fill-and-send** runs only when Today offers a due or overdue
-  check-in. The QA seed guarantees a *submitted* check-in waiting for the trainer
-  (`pendingCheckinsSlipping`), not a startable one. TODO(QT2b): guarantee one.
+- **Check-in fill-and-send** is unconditional (CU11). The QA seed guarantees
+  exactly one check-in the slipping trainee can start on the seed's reference date
+  (`guarantees.startableCheckinsSlipping`), with its window open for the whole
+  civil day in that trainee's own timezone, as well as the *submitted* one waiting
+  for the trainer (`guarantees.pendingCheckinsSlipping`, for
+  `trainer/checkin-review.yaml`).
 - **Resolve** happens on the exception screen, reached from the client status.
   The review sheet's "Resolve…" is not wired in the Attention tab, and "Mark
   reviewed" only moves a client to Reviewed.
 - **Rest timer** assertions use the visible countdown ("N s left"); the flow
   checks that the number changes, not how long a second takes.
-- None of these flows has run yet: this was written in a session with no
-  emulator and no Maestro. The first real run is QT7's workflow or a local run.
+- The flows first ran on 3 Nov 2026, in the `android` job of QA run
+  41648846215 (CU18, which fixed the `common/` subflows the suite could not
+  parse). All four `smoke` flows executed: `auth/sign-in-password.yaml` and
+  `trainer/clients.yaml` passed, `auth/sign-in-code.yaml` and
+  `trainee/today.yaml` failed on their own assertions. The suite runs; it is not
+  green, and the failures are not yet diagnosed. A pull-request run never resets
+  the staging QA accounts (D-QA1-7), so the data it reads is whatever the last
+  nightly left; a dispatch from `main`, which does reset, is the run to judge the
+  flows by.
