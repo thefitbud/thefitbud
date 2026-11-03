@@ -1,6 +1,6 @@
 # W3b · Cleanup: QA1 and W3 review follow-ups, qa-scripts required
 
-**Status:** Draft (3 Nov 2026). Specs written for every W3b task (see Lanes). Approved by Firoz, 3 Nov 2026: turn the QA1/W3 review follow-ups into one small cleanup batch, built **after AB5** (merged, #175) and **before W4**. Decisions D-W3b-1 and D-W3b-2 decided by Firoz, 3 Nov 2026; D-W3b-5 and D-W3b-6 recorded by the orchestrator the same day. CU16 added 3 Nov 2026 (top priority) after the QA run's Android APK build failed. D-W3b-7 and D-W3b-8 recorded by the orchestrator, 3 Nov 2026; **D-W3b-7 decided by Firoz the same day (option (b))**, **D-W3b-9 by Firoz the same day (CU10 splits)**; D-W3b-10 recorded by the orchestrator. No open questions.
+**Status:** Draft (3 Nov 2026). Specs written for every W3b task (see Lanes). Approved by Firoz, 3 Nov 2026: turn the QA1/W3 review follow-ups into one small cleanup batch, built **after AB5** (merged, #175) and **before W4**. Decisions D-W3b-1 and D-W3b-2 decided by Firoz, 3 Nov 2026; D-W3b-5 and D-W3b-6 recorded by the orchestrator the same day. CU16 added 3 Nov 2026 (top priority) after the QA run's Android APK build failed. D-W3b-7 and D-W3b-8 recorded by the orchestrator, 3 Nov 2026; **D-W3b-7 decided by Firoz the same day (option (b))**, **D-W3b-9 by Firoz the same day (CU10 splits)**; D-W3b-10 recorded by the orchestrator. CU17 added 3 Nov 2026 (**P0, first in line**) after the trainer sign-in red box on iOS; D-W3b-11 is Open (Firoz).
 **Source:** `docs/specs/batches/QA1.md` "Follow-ups raised" and `docs/specs/batches/W3.md` "3 Nov continuation" → "Follow-ups raised on 3 Nov" (written by ff7fcb8).
 **Goal:** the QA workflow's Android APK builds again, no misleading error on the password-reset screen, honest docs and tests for the auth/router seams, a required and never-stuck `qa-scripts` check, and the QA suite's known gaps closed before W4's dress rehearsal.
 **Launch rule:** Firoz's launch message is the go. If a decision below is still marked **Open**, the tasks that need it stop and report.
@@ -47,10 +47,12 @@
   **The resolution** follows D-W3b-3's precedent exactly: fold the work into the task that already owns the files. CU10 merges its **lint** coverage and its `qt5-child-*` temp-dir leak fix (measured over five runs, including a forced-timeout run where every child was killed and nothing was left behind). The **typecheck** half, together with relocating `TEST_OTP_IDENTIFIER_RE` into a shared package so the drift test survives without a cross-app import, becomes a BT2 criterion. **CU10 therefore does not deliver its full Outcome, and its PR says so.**
   Also corrected: CU10's Context claims "(this PR edits it)" of `docs/specs/BT2.md`. Nothing was needed — BT2.md on `main` already carried both halves of D-W3b-3 from `18c3a60`. Used by CU10 and BT2.
 - **D-W3b-10 Per-lane scratchpad subdirectories; the session scratchpad is shared.** Recorded by the orchestrator, 3 Nov 2026, after CU10 found it the hard way: its `gh api` call posted another lane's PR payload because a sibling overwrote `pr.json` between write and read, and GitHub rejected it only because that PR already existed ("A pull request already exists for thefitbud:claude/CU4-qa-scripts-required"). Nothing was lost — #186's title and body were verified to be CU4's own — but the next collision might not be caught. The scratchpad directory is shared across sibling lanes, not per-session, so **a generic filename there is unsafe for any lane**. Every lane writes under its own subdirectory (`scratchpad/<task-id>/`). Also noted: a `rm -rf /tmp/qt5-child-*` sweep was correctly denied as a shared-scratch operation, which is why CU10's temp-dir measurements used a private `TMPDIR`.
+- **D-W3b-11 Trainer zone when the stored value is the `UTC` default. Open (Firoz), 3 Nov 2026.** CU17 moves trainer screens off the hardcoded `Asia/Kolkata` onto `me.timezone`. `users.timezone` defaults to `UTC`. Option (a) stored value wins (recommended); (b) prefer the device zone when the stored value is the default. If Open at launch, CU17 ships (a) and says so. Used by CU17.
 
 ## Lanes
 | lane | tasks | model | files_owned (summary) | specs |
 |---|---|---|---|---|
+| mobile-tz | CU17 **[P0, first in line]** | opus | `packages/core/src/timezone*.ts`, `packages/core/src/zone*.ts` (new), `packages/core/src/format.ts`, `greeting.ts`, `reminder.ts` (Intl calls only), `packages/core/src/index.ts` export; `apps/mobile/src/trainer/AttentionTab.tsx`, `ClientsTab.tsx`, `CheckinReviewScreen.tsx` | CU17.md |
 | mobile | CU16 **[top priority]** | sonnet | `apps/mobile/package.json` (`metro-resolver`), `pnpm-lock.yaml`, `apps/mobile/metro.config.js` only for the alternative path (CU16) | CU16.md |
 | mobile | CU1 **[top priority]** → CU2 **[top priority]** → CU3 **[top priority]** → CU5 → CU6 → CU7 → CU15 | sonnet (CU1, CU2, CU3, CU5, CU7, CU15), opus (CU6) | `apps/mobile/src/trainee/settings/PasswordScreen.tsx`, `passwordResetErrors*.ts` (CU1); `apps/mobile/src/lib/api.ts` comment (CU2); `apps/mobile/src/navigation/AppRouter.tsx`, `routerView*.ts` (CU3); `apps/mobile/src/lib/reportError*.ts` (CU5); `apps/mobile/package.json` devDeps, `pnpm-lock.yaml` (after CU16), `apps/mobile/vitest.config.ts`, `apps/mobile/src/test/render.tsx`, `ErrorBanner.render.test.tsx` (CU6); `apps/mobile/src/trainer/MoreScreen*.ts*` (CU7); `apps/mobile/src/components/Field*.tsx`, `apps/mobile/.maestro/common/sign-in-code.yaml` (CU15) | CU1.md, CU2.md, CU3.md, CU5.md, CU6.md, CU7.md, CU15.md |
 | ci | CU4 **[top priority]** | sonnet | `.github/workflows/qa.yml`; branch protection after merge (D-W3b-1) | CU4.md |
@@ -63,14 +65,16 @@
 Two tasks never own the same file. `qa-scripts` (CU4) runs on CU9 because CU9 touches `scripts/qa/**`, which proves the required check end to end. Migrations: none. Lockfile: CU16 then CU6, same lane (D-W3b-2). The mobile lane has two chains: CU16 alone, and CU1 → … → CU15; CU6 joins after both CU5 and CU16. Cross-batch: BT2 (W4) gains `qa-smoke` lint (D-W3b-3); W3b runs before W4, so nothing in W4 waits on a W3b file except BT2 merging `main` in as usual.
 
 ## Order (3 implementer slots, one Max seat)
+0. **First in line: CU17** (P0: trainer sign-in crashes on iPhone). It takes the first free slot before anything else; no other task owns its files.
 1. **Start:** slot 1 **CU16** (top priority: the QA Android build is red until it lands), slot 2 **CU1** (top priority, honest-error rule). Slot 3 stays free until CU1 merges, so the top-priority tasks land first.
 2. **Then, in order:** **CU2** (after CU1), **CU3** (after CU2), **CU4** (after CU3; top priority, D-W3b-1), then the QA hygiene and the rest as slots free: **CU9** (after CU4), **CU11** (after CU4), **CU5** (after CU3 and CU4), **CU10** (after CU9), **CU12** (after CU11), **CU6** (after CU5 and CU16), **CU13** (after CU12), **CU8** (after CU4), **CU14** (after CU4), **CU7** (after CU6), **CU15** (after CU6 and CU7). Never more than 3 at once.
 3. **Merge** each PR when it is ready: `ci` green, `qa-scripts` green or skipped (required from CU4 on), review PASS, merge commits, bottom-up within a lane.
 4. **After CU4 merges:** CU4's implementer applies the branch protection (D-W3b-1) and pastes the before/after required-checks read in the PR.
-5. **FitBud UI:** after the next dev build (AB5's iOS build and the Android rebuild), capture the AB4 screenshots into `docs/qa/AB4/`.
+5. **Firoz + FitBud UI (CU17 test on device):** on an iPhone dev build from CU17's branch, sign in as the QA trainer (Attention tab renders, correct date) and the QA trainee (Today renders); Firoz tests, FitBud UI confirms in the PR. Firoz also runs CU17's Intl probe on the current build first.
+6. **FitBud UI:** after the next dev build (AB5's iOS build and the Android rebuild), capture the AB4 screenshots into `docs/qa/AB4/`.
 
 ## Specs (written 3 Nov)
-`docs/specs/` has CU1–CU16, each with `batch: W3b`. `docs/specs/BT2.md` (W4) gains the `qa-smoke` lint criterion (D-W3b-3).
+`docs/specs/` has CU1–CU17, each with `batch: W3b`. `docs/specs/BT2.md` (W4) gains the `qa-smoke` lint criterion (D-W3b-3).
 
 ## Done when
 - All CU tasks merged; CU16's `workflow_dispatch` (`suites=android`) run builds the APK and runs Maestro; `qa-scripts` listed as a required check on `main` and a PR that does not touch `scripts/qa/**` merges with it skipped.
@@ -78,6 +82,6 @@ Two tasks never own the same file. `qa-scripts` (CU4) runs on CU9 because CU9 to
 - CU10 lands its lint half only; its typecheck half is a BT2 criterion (D-W3b-9), so `e2e-staging/**` is lint-covered in W3b and typecheck-covered in W4.
 
 ## What Firoz reviews
-- CU1's copy table, CU4's protection before/after, CU7/CU8 screenshots, CU13's reported api-client mismatch (a decision for later).
+- CU17's device probe output and the on-device run; D-W3b-11. CU1's copy table, CU4's protection before/after, CU7/CU8 screenshots, CU13's reported api-client mismatch (a decision for later).
 
 ## Report (filled in by the orchestrator at the end)
