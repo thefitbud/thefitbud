@@ -6,6 +6,7 @@ depends_on: [OB2, QT2]
 lane: api-ops
 files_owned:
   - apps/api/package.json
+  - apps/api/qa-smoke/**  # lint fixes only (D-QA1-15, folded from W3b CU10)
   - apps/api/src/lib/sentry.ts
   - apps/api/src/lib/sentry.test.ts
   - apps/api/src/index.ts  # export wrapper only
@@ -45,6 +46,7 @@ On staging and production, unhandled errors in the API Worker's fetch, scheduled
 - [ ] Local and tests never call Sentry.
 - [ ] `Env` has `QA_TEST_OTP_ENABLED?: string` and `QA_TEST_OTP_CODE?: string`. `TestOtpEnv` no longer exists (`rg TestOtpEnv apps/api` is empty), and QT1's tests pass unchanged in behaviour.
 - [ ] `pnpm --filter @fitbud/api qa:seed -- --reference-date 2026-11-02` and `qa:reset` run QT2's scripts locally (`node --experimental-strip-types`), write only to `apps/api/.qa-seed/`, and run no remote command.
+- [ ] `apps/api/package.json` `lint` also covers `qa-smoke` (`eslint src scripts qa-smoke --max-warnings=0`), per D-QA1-15; lint errors it finds are fixed in `apps/api/qa-smoke/**` without changing assertions. Folded in from W3b (CU10, decided 3 Nov 2026) because BT2 owns `apps/api/package.json`.
 
 ## Out of scope
 - Mobile (BT2b). Source-map upload for the Worker (post-beta). Alerts and dashboards (Firoz, manual).
