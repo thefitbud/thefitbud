@@ -167,7 +167,17 @@ export type TokenSessionDeps = {
   initial?: TokenState;
   /** Calls `POST /auth/refresh` (the client's `refreshAuth`). */
   refreshAuth: (refreshToken: string) => Promise<AuthRefreshResponse>;
-  /** Persist after every change (web: localStorage; native: no-op). */
+  /**
+   * Persist after every change (D-W3-11). The app passes `persistTokenState`
+   * from `./sessionStorage`; this module does not care where it writes.
+   * - Native (Android, iOS): `expo-secure-store` (OS keychain/keystore), under
+   *   `fitbud.refreshToken`. In test mode only (no refresh token) the short
+   *   test token goes to `fitbud.testToken`. The ~1 KB Firebase ID token is
+   *   never stored; it is re-minted from the refresh token. A value over 2000
+   *   bytes is not stored.
+   * - Web: `localStorage` (access token, refresh token and expiry).
+   * Not a no-op on native: do not remove it.
+   */
   persist: (state: TokenState) => void;
   /** The API refused the refresh token; the state is already cleared. */
   onExpired: () => void;
