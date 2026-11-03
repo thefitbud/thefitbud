@@ -136,7 +136,7 @@ test.describe("host guard: the real config", () => {
     childResultsDirs.add(childResultsDir);
     try {
       // `spawnSync` returns however the child ended — clean exit, non-zero status, signal,
-      // spawn error or timeout -- so the `finally` removes the dir on every one of those
+      // spawn error or timeout — so the `finally` removes the dir on every one of those
       // paths, not just the one where the child exits 0. Nothing reads the dir afterwards:
       // the assertions below only look at the child's status, stdout and stderr.
       return spawnSync(process.execPath, [cli, "test", "-c", "playwright.staging.config.ts", "--list"], {
