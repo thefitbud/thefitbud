@@ -1,4 +1,5 @@
 import { IST_TIME_ZONE } from "./clock.js";
+import { zonedDateTimeFormat } from "./zone.js";
 
 /**
  * Greeting from the client's timezone. Never the device clock.
@@ -10,22 +11,14 @@ export function greetingFor(
   now = new Date(),
 ): string {
   const first = name.trim().split(/\s+/)[0] || "there";
-  const hour = hourInTimeZone(timeZone.trim() || IST_TIME_ZONE, now);
+  const hour = readHour(timeZone.trim() || IST_TIME_ZONE, now);
   if (hour < 12) return `Good morning, ${first}`;
   if (hour < 17) return `Good afternoon, ${first}`;
   return `Good evening, ${first}`;
 }
 
-function hourInTimeZone(timeZone: string, now: Date): number {
-  try {
-    return readHour(timeZone, now);
-  } catch {
-    return readHour(IST_TIME_ZONE, now);
-  }
-}
-
 function readHour(timeZone: string, now: Date): number {
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  const parts = zonedDateTimeFormat("en-GB", {
     timeZone,
     hour: "numeric",
     hourCycle: "h23",

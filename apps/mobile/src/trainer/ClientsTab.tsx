@@ -92,7 +92,9 @@ function isOfflineError(err: unknown): boolean {
 }
 
 export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) {
-  const { api } = useAuth();
+  const { api, me } = useAuth();
+  // Trainer's stored zone; stored value wins (D-W3b-11 option (a)).
+  const trainerZone = me?.timezone ?? "UTC";
   const [segment, setSegment] = useState<Segment>(initialSegment);
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<ClientListFilter>("all");
@@ -225,7 +227,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
       {offlineAt ? (
         <Text style={styles.offline}>
           You're offline. Showing the last update from{" "}
-          {formatClockTime(offlineAt, "Asia/Kolkata")}.
+          {formatClockTime(offlineAt, trainerZone)}.
         </Text>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}

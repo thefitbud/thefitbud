@@ -68,8 +68,6 @@ type ReviewSheetState = {
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
 type Segment = "needs_you" | "asked" | "checkins";
 
-const TRAINER_ZONE = "Asia/Kolkata";
-
 type Props = {
   onReviewException: (exceptionId: string) => void;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
@@ -126,7 +124,10 @@ export function AttentionTab({
   onReviewException,
   onReviewCheckin,
 }: Props) {
-  const { api, relationships, refreshSession } = useAuth();
+  const { api, me, relationships, refreshSession } = useAuth();
+  // The trainer's own stored zone (`users.timezone`, default "UTC"); the
+  // stored value wins, per D-W3b-11 option (a).
+  const trainerZone = me?.timezone ?? "UTC";
   const s1 = stage1Api(api);
   const [segment, setSegment] = useState<Segment>("needs_you");
   const [lists, setLists] = useState<AttentionLists>(EMPTY_LISTS);
@@ -214,7 +215,7 @@ export function AttentionTab({
   );
 
   const offline = offlineAt != null;
-  const todayLabel = formatCivilDate(localDateInTimezone(TRAINER_ZONE));
+  const todayLabel = formatCivilDate(localDateInTimezone(trainerZone));
   const sections = attentionSectionModel({
     dateLabel: todayLabel,
     needsYouCount: needsYouCards.length,
@@ -502,7 +503,7 @@ export function AttentionTab({
         <View style={styles.offline}>
           <Text style={styles.offlineText}>
             You're offline. Showing the last update from{" "}
-            {formatClockTime(offlineAt!, TRAINER_ZONE)}.
+            {formatClockTime(offlineAt!, trainerZone)}.
           </Text>
         </View>
       ) : null}
@@ -609,7 +610,7 @@ export function AttentionTab({
               const row = reviewedRowModel({
                 items,
                 issue: attentionIssueLine(projected?.items ?? items),
-                timeZone: TRAINER_ZONE,
+                timeZone: trainerZone,
               });
               return (
                 <View key={card.relationshipId}>

@@ -13,6 +13,7 @@ import { deriveCheckinStatus } from "./checkin.js";
 import { routeForLinkKind } from "./links.js";
 import { addDaysToLocalDate, isQualifyingWorkoutExecution } from "./workout.js";
 import { formatLocalDate, localDateTimeToUtcIso } from "./timezone.js";
+import { zonedDateTimeFormat } from "./zone.js";
 
 /** Reminder engine v2 (§3.6) — system clocks; trainers only enable categories. */
 /** Minutes after preferred (or fallback) workout time to nudge if still unlogged (60–90; default 75). */
@@ -609,21 +610,22 @@ export function localTimeHhMm(
   nowUtcIso: string,
   timezone: string,
 ): string | null {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-GB", {
-      timeZone: timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    });
-    const parts = formatter.formatToParts(new Date(nowUtcIso));
-    const hour = parts.find((part) => part.type === "hour")?.value;
-    const minute = parts.find((part) => part.type === "minute")?.value;
-    if (!hour || !minute) return null;
-    return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
-  } catch {
-    return null;
-  }
+  const instant = new Date(nowUtcIso);
+  // An unparseable instant is the caller's data problem and has no local time;
+  // an unusable time zone throws UnsupportedTimeZoneError from the resolver
+  // rather than being swallowed into a plausible-looking null (D-W3-12).
+  if (Number.isNaN(instant.getTime())) return null;
+  const formatter = zonedDateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(instant);
+  const hour = parts.find((part) => part.type === "hour")?.value;
+  const minute = parts.find((part) => part.type === "minute")?.value;
+  if (!hour || !minute) return null;
+  return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
 }
 
 /** HH:MM local time inside quiet hours (supports overnight ranges). */

@@ -18,7 +18,7 @@ import type {
   CheckinReviewOutcome,
   CoachingRelationship,
 } from "@fitbud/contracts";
-import { formatCivilDate } from "@fitbud/core";
+import { formatCivilDate, zonedDateTimeFormat } from "@fitbud/core";
 import {
   colors,
   radii,
@@ -934,7 +934,7 @@ export function CheckinScreen({
 
   const dueLabel = `Due ${formatCivilDate(checkin.localDate)}, 11:59 pm`;
   const draftTimeLabel = draftSavedAt
-    ? new Intl.DateTimeFormat("en-IN", {
+    ? zonedDateTimeFormat("en-IN", {
         hour: "numeric",
         minute: "2-digit",
         timeZone,

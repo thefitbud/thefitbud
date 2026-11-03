@@ -148,7 +148,9 @@ export function CheckinReviewScreen({
   const submitted = context?.checkin.submittedAt;
   const subtitle = context
     ? `Weekly check-in · ${formatCivilDate(context.checkin.localDate)}${
-        submitted ? `, ${formatClockTime(submitted, "Asia/Kolkata")}` : ""
+        submitted
+          ? `, ${formatClockTime(submitted, me?.timezone ?? "UTC")}`
+          : ""
       }`
     : "";
 

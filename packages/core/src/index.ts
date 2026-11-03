@@ -95,6 +95,14 @@ export {
   workoutWindowForLocalDate,
 } from "./timezone.js";
 
+export {
+  UnsupportedTimeZoneError,
+  clearTimeZoneResolutionCache,
+  resolveIntlTimeZone,
+  timeZoneCandidates,
+  zonedDateTimeFormat,
+} from "./zone.js";
+
 export { IST_TIME_ZONE, istDate, istInstantAt } from "./clock.js";
 export { greetingFor } from "./greeting.js";
 
