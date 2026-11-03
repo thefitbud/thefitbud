@@ -34,6 +34,8 @@ import androidx.core.app.NotificationManagerCompat
  * counting down to `restEndsAt`: the device counts, so rest costs no repost
  * per second and no timer in JS. Rest itself is decided by the app, exactly as
  * on iOS (27c) — the notification never starts a rest of its own.
+ * Rest shows the countdown only: no progress bar and no foreground service
+ * (D-W3-13, frame 27-android-rest.png).
  *
  * A logged set collapses to one line ("Set 2 logged · 22.5 kg × 10"), shown as
  * its own short notification while the ongoing one moves to the next set.
@@ -256,10 +258,14 @@ object WorkoutSetNotification {
      * counts down on its own, so one post covers the whole rest. Nothing here
      * reposts per second, and no JS timer drives it.
      *
-     * The frame's thin progress bar under the countdown is not drawn: a
-     * RemoteViews progress bar cannot follow a clock, so it could only be a
-     * value frozen at the moment of posting, sitting beside a countdown that
-     * is live. Deviation reported in the PR.
+     * There is no progress bar and no foreground service, by decision
+     * (D-W3-13, Firoz, 3 Nov 2026), and the redrawn frame
+     * 27-android-rest.png shows none. A notification bar only moves when the
+     * app reposts, and a rest cannot be reposted reliably: alarms while the
+     * device is idle are inexact and rate limited (see RestAlarm), and a
+     * foreground service costs battery and needs a declared service type for
+     * Play. The Chronometer is kept exact by the system from this one post.
+     * Do not add a ProgressBar, setProgress or another alarm for rest.
      */
     private fun buildResting(context: Context, state: SetState): Notification {
         val endsAt = state.restEndsAt ?: return build(context, skipRest(state))
