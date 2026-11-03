@@ -94,6 +94,11 @@ type Fixtures = {
 export const test = base.extend<Fixtures>({
   // Declared first, so it runs before the browser is launched.
   secretsGate: [
+    // Playwright reads a fixture's dependencies from this parameter's destructuring
+    // pattern and throws "First argument must use the object destructuring pattern" for
+    // anything else, so a fixture that depends on no other fixture has to be written
+    // `({}, use)`. Renaming it to `_` would break the run, hence the disable.
+    // eslint-disable-next-line no-empty-pattern
     async ({}, use, testInfo) => {
       const message = missingSecretsMessage();
       if (message) {
@@ -131,6 +136,9 @@ export const test = base.extend<Fixtures>({
     { auto: true },
   ],
 
+  // As above: Playwright requires the empty destructuring pattern for a fixture that
+  // depends on no other fixture.
+  // eslint-disable-next-line no-empty-pattern
   qa: async ({}, use) => {
     const expectations = loadExpectations();
     await use({

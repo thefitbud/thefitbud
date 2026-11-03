@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@fitbud/config/tsconfig/base.json",
+  "compilerOptions": {
+    // The staging Playwright suite is Node code that drives a browser: `node:fs`,
+    // `node:child_process` and `process.env` on one side, `page.evaluate` bodies that
+    // touch `document` and `sessionStorage` on the other.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // `node` for the above. `@cloudflare/workers-types` because 00-host-guard.spec.ts
+    // imports TEST_OTP_IDENTIFIER_RE from apps/api/src/auth/test-otp.ts (deliberately, to
+    // catch QT1/QT2 drift), which pulls apps/api/src/types.ts and its D1Database, R2Bucket,
+    // Queue and DurableObjectNamespace globals into this program.
+    "types": ["node", "@cloudflare/workers-types"],
+    "noEmit": true
+  },
+  "include": ["."]
+}
