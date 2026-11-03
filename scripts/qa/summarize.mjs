@@ -51,8 +51,17 @@ const ALNUM = /[A-Za-z0-9]/;
  *   letters, quotes, `=`, `:`, `_` or `/` and is left alone only inside a longer number;
  * - a letter edge is continued by any letter or digit, which is what stops a short value
  *   from garbling an ordinary word;
- * - a non-alphanumeric edge is never treated as continued, so such a value is redacted
- *   everywhere, exactly like a long one.
+ * - a non-alphanumeric edge is never continued, so that edge is always a boundary.
+ *
+ * Be exact about what that last point does and does not buy, because `replaceOnBoundaries`
+ * ORs the two edge tests: a short value is redacted *everywhere* only when **both** its
+ * first and its last character are non-alphanumeric. With punctuation on one side only the
+ * alphanumeric side can still be continued, and the occurrence is then left alone: `-ab`
+ * inside `x-abz`, `ab=` inside `xab=y`, `b64==` inside `xb64==y` and `a.c*` inside `xa.c*y`
+ * all stay intact. That is the behaviour CU9 specifies (a short value is replaced on token
+ * boundaries, never inside a longer word) and `summarize.test.mjs` pins it — but do not
+ * read this rule as "punctuation makes a short secret safe anywhere". The unconditional
+ * guarantees are exactly two: 8+ characters, or both edges non-alphanumeric.
  */
 function extendsToken(edge, neighbour) {
   if (neighbour === "") return false;
@@ -61,7 +70,16 @@ function extendsToken(edge, neighbour) {
   return false;
 }
 
-/** Replaces the token-boundary occurrences of `secret`; leaves the ones inside a longer token. */
+/**
+ * Replaces the token-boundary occurrences of `secret`; leaves the ones inside a longer
+ * token. An occurrence counts as inside a longer token when *either* edge is continued
+ * (see `extendsToken` for what one-sided punctuation does and does not guarantee).
+ *
+ * The scan does not overlap: after an occurrence is kept, it resumes past the whole match,
+ * so a boundary-clean occurrence starting inside a kept one is skipped. That is reachable
+ * only for a self-overlapping secret (one whose own prefix is also its suffix) and carries
+ * no practical exposure, but it is a deliberate simplification rather than an oversight.
+ */
 function replaceOnBoundaries(text, secret) {
   const first = secret[0];
   const last = secret[secret.length - 1];

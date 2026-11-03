@@ -315,13 +315,34 @@ test("short credential values are redacted on token boundaries only; long ones a
   assert.equal(redact("1482913"), "1482913");
 });
 
-test("a credential value with non-word edges or regex metacharacters is redacted everywhere", () => {
+test("a short value with BOTH edges non-alphanumeric is redacted everywhere", () => {
   // `\b` would anchor on the value's own edges and miss these; the boundary test looks at
   // the surrounding text instead, and the scan is indexOf, so nothing needs escaping.
-  const redact = makeRedactor({ FLAG_TOKEN: "-ab-", META_SECRET: "a.c*", PAD_KEY: "b64==" });
+  const redact = makeRedactor({ FLAG_TOKEN: "-ab-", META_SECRET: "*a.c*", PAD_KEY: "=b64==" });
   assert.equal(redact("q-ab-r"), "q[redacted]r");
-  assert.equal(redact("x+a.c*+y"), "x+[redacted]+y");
-  assert.equal(redact("v=b64==;"), "v=[redacted];");
-  // A metacharacter value must not be interpreted: this text does not contain it.
+  assert.equal(redact("x*a.c*y"), "x[redacted]y");
+  assert.equal(redact("v=b64==y"), "v[redacted]y");
+  // A metacharacter value must not be interpreted as a pattern: this text does not hold it.
   assert.equal(redact("abc and axc"), "abc and axc");
+});
+
+test("a short value with punctuation on ONE edge only is still left alone inside a token", () => {
+  // The two edge tests are ORed, so one-sided punctuation does NOT make a short value
+  // redacted everywhere: the alphanumeric edge can still be continued. This is CU9's
+  // specced limit (a short value is "replaced only on token boundaries"), pinned here so
+  // the real boundary is documented by a test rather than by prose, and so nobody widens
+  // it by accident without a decision.
+  for (const [secret, text] of [
+    ["-ab", "x-abz"],
+    ["ab-", "xab-z"],
+    ["ab=", "xab=y"],
+    ["_ab", "x_aby"],
+    ["b64==", "xb64==y"],
+    ["a.c*", "xa.c*y"],
+    ["eyJ-_a", "xeyJ-_ay"], // JWT-shaped but 6 characters; a real JWT is 8+ and replaced anywhere
+  ]) {
+    assert.equal(makeRedactor({ A_SECRET: secret })(text), text, `${secret} in ${text}`);
+    // ...while the same value on a boundary is redacted, so this is a token rule, not a miss.
+    assert.equal(makeRedactor({ A_SECRET: secret })(`saw ${secret} here`), "saw [redacted] here", secret);
+  }
 });
