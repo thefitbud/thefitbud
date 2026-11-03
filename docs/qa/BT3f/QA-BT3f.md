@@ -36,10 +36,19 @@ seed). Real renders, no stubbing.
   with zero pairwise overlaps. This is the rule the old absolute positioning was
   protecting; it still holds. (On `main`, 320 and 360 had a **real overlap** and
   at >=1024 the help link was only 17px tall, so both are improvements.)
-- **Vertical position:** the legal text now lands ~34px off the bottom, against
-  the frame's ~34px. Before the fix it was 89px, because `.auth-formside` has
-  `padding-bottom: 4.5rem` which the absolutely positioned help line used to
-  bypass and the in-flow stack is subject to.
+- **Vertical position (at the default 16px root font size):** the legal text now
+  lands ~34px off the bottom, against the frame's ~34px — the review measured the
+  legal row on the *identical pixel rows* as the frame, 855-866. Before the fix it
+  was 89px, because `.auth-formside` has `padding-bottom: 4.5rem` which the
+  absolutely positioned help line used to bypass and the in-flow stack is subject to.
+- **Known drift with a larger root font size.** The compensating offset is `-55px`
+  while the padding it cancels is `4.5rem`, so the two desynchronise if the browser's
+  default font size is not 16px: measured 17px off the bottom at 16px root, 26px at
+  18px, 35px at 20px, 53px at 24px. The 44pt rule, non-overlap, one-line nav and
+  ordering hold at every size, so nothing unsafe breaks - only the frame match drifts.
+  Making the offset rem-consistent on `.auth-formside` (outside this task's
+  `.auth-help` scope) or asserting the nav's distance from the document bottom in the
+  e2e would close it; both are carried as follow-ups.
 
 ## Declared deviation: the inter-line gap
 The frame's two footer lines are **27px** centre to centre. Here they are **48px**.
@@ -61,7 +70,8 @@ width (actual minimum is 53px everywhere), and its overlap predicate allows 1px
 of tolerance, so a genuine 1px overlap would pass.
 
 ## Comparison with the frame
-Order, copy, separators and vertical position match. The frame shows a filled
+Order, copy, separators and vertical position match at the default 16px root font
+size (see the drift note above). The frame shows a filled
 email and password; these captures show the empty form — that difference is form
 state. The inter-line gap is the one genuine deviation, declared above.
 
