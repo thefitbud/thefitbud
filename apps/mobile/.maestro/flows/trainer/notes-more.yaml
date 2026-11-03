@@ -55,8 +55,12 @@ env:
     timeout: 20000
 - tapOn: "‹ Clients"
 - tapOn: "More"
+# Wait on an exact M2Row label, not the "Settings" group header: that header is
+# a Text node styled textTransform: uppercase (MoreScreen.tsx groupLabel), so
+# whether Maestro matches "Settings" or "SETTINGS" cannot be checked without
+# the CLI. "Notifications" is a plain label on the same screen either way.
 - extendedWaitUntil:
-    visible: "Settings"
+    visible: "Notifications"
     timeout: 20000
 - assertVisible: "Sign out"
 - takeScreenshot: trainer-more__loaded
