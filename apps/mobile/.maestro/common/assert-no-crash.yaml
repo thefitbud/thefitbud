@@ -23,11 +23,14 @@
 # 41643989194). `appId` is not optional in that config section and is not
 # inherited from the caller: MaestroFlowParser's YamlConfig rejects a config with
 # neither `appId` nor `url` ("missing_app_target"), and it throws while parsing,
-# before any caller is known. The value is inert here all the same -- Orchestra's
-# runSubFlow executes a subflow's commands under the CALLING flow's config, and
-# the subflow's own configuration command is a no-op -- so this names the one
-# application id the whole suite uses (every file in flows/ and
-# session-persists.yaml name the same one).
+# before any caller is known. So this names the application id the suite targets.
+# All 18 appId values under .maestro/ are this one, which makes the choice
+# behaviourally moot: whether Maestro treats a subflow's appId as inert (reading
+# Orchestra, runSubFlow executes a subflow's commands under the CALLING flow's
+# config, and the subflow's own configuration command is a no-op) or applies it,
+# the result is the same. The app does have a second variant,
+# com.thefitbud.mobile (apps/mobile/app.config.js), which this suite does not
+# target; a flow for it would set its own appId, as every flow already does.
 # No `tags:` here, deliberately: a tagged file can be collected as a top-level
 # flow by `maestro test --include-tags`, which would run these bare assertions
 # with no app launched. config.yaml already limits collection to `flows/**`, and

@@ -255,12 +255,28 @@ change. Known gaps, to be fixed in a follow-up (QT3b) that touches app code:
   reviewed" only moves a client to Reviewed.
 - **Rest timer** assertions use the visible countdown ("N s left"); the flow
   checks that the number changes, not how long a second takes.
-- The flows first ran on 3 Nov 2026, in the `android` job of QA run
-  41648846215 (CU18, which fixed the `common/` subflows the suite could not
-  parse). All four `smoke` flows executed: `auth/sign-in-password.yaml` and
-  `trainer/clients.yaml` passed, `auth/sign-in-code.yaml` and
-  `trainee/today.yaml` failed on their own assertions. The suite runs; it is not
-  green, and the failures are not yet diagnosed. A pull-request run never resets
-  the staging QA accounts (D-QA1-7), so the data it reads is whatever the last
-  nightly left; a dispatch from `main`, which does reset, is the run to judge the
-  flows by.
+- The flows first ran on 3 Nov 2026, in the `android` job of QA runs 41648846215
+  and 41651787474 (CU18, which fixed the `common/` subflows the suite could not
+  parse). **The suite runs. It is not green, nothing about why is settled, and the
+  two runs disagree** — on byte-identical flow files, with the APK built and
+  installed both times:
+  - 41648846215 collected and ran all four `smoke` flows.
+    `auth/sign-in-password.yaml` and `trainer/clients.yaml` passed.
+    `auth/sign-in-code.yaml` failed waiting for the `6-digit code` field after
+    "Send code"; `trainee/today.yaml` failed on
+    `assertNotVisible: ".*is preparing your plan.*"` *after* `Today's workout` was
+    already visible.
+  - 41651787474 failed all four, each on its first step: the 30-second wait for
+    "Sign in with a code instead" straight after `launchApp`. The app never
+    reached the auth screen, so that run says nothing about any later assertion.
+  Do **not** read the first run's two failures as stale QA data. A pull-request
+  run does not write staging (D-QA1-6), but the accounts had been reset and
+  seeded successfully at 13:24 UTC that day — the `seed-reset` job of run
+  41643846967, dispatched from `main` — that run's own `android` job was cancelled
+  13 seconds later without installing an APK or running a flow, and its
+  `api-smoke` and `web-staging` jobs were skipped. Nothing wrote the accounts
+  between that seed and 14:09, when the suite ran. Both failures are therefore
+  undiagnosed and may well be real defects; `trainee/today.yaml` in particular
+  points at a plan the seed creates that the app does not treat as live
+  (`TodayTab.tsx` gates that copy on `hasLivePlan`). A dispatch from `main` with
+  `suites=android` is the next run to learn anything from.
