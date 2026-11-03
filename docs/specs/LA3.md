@@ -19,11 +19,11 @@ size: M
 On Android dev builds the module shows, updates and removes an ongoing workout notification matching frame 27-android, and its buttons write rows to an Android outbox the app can read.
 
 ## Context
-- v14 LA3 was one S task with native and JS work; it is split (LA3 native, LA3b JS wiring). The Kotlin scaffold exists (`apps/mobile/targets/android/WorkoutSetNotification.kt`, 75 lines) and is not compiled into the build.
-- Uses the `workout` channel (`apps/mobile/src/notifications/androidChannels.ts`), respects notifications-off. Android rest timer: D-W3-3 (decided by Firoz, 1 Nov 2026): it is added, in LA3c (new frame); this task builds the notification without it (the scaffold comment at `WorkoutSetNotification.kt:15` is updated by LA3c).
+- v14 LA3 was one S task with native and JS work; it is split (LA3 native, LA3b JS wiring). The Kotlin scaffold exists (`apps/mobile/targets/android/WorkoutSetNotification.kt`, 75 lines when this spec was written) and is not compiled into the build. After LA3 (#120) it is compiled through the module: `apps/mobile/modules/live-activity/android/build.gradle:25` adds `targets/android` to `java.srcDirs`.
+- Uses the `workout` channel (`apps/mobile/src/notifications/androidChannels.ts`), respects notifications-off. Android rest timer: D-W3-3 (decided by Firoz, 1 Nov 2026): it is added, in LA3c (new frame); this task builds the notification without it (the scaffold's "There is no rest timer" comment, line 15 when this spec was written, is replaced by LA3c, #132).
 
 ## Gap list
-- `apps/mobile/targets/android/WorkoutSetNotification.kt:3-4`: not compiled; no receiver for the PendingIntents.
+- `apps/mobile/targets/android/WorkoutSetNotification.kt` (scaffold lines 3-4 when this spec was written, since rewritten by LA3): not compiled; no receiver for the PendingIntents.
 - `apps/mobile/modules/live-activity/`: iOS only (LA1).
 
 ## Acceptance criteria
