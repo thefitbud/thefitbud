@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="api" tests="5" failures="0" time="1.570">
+<testsuite name="api" tests="5" failures="0" skipped="0" timestamp="2026-11-03T20:30:12" time="1.570">
+  <testcase name="GET /v1/health" classname="api" time="0.120"/>
+  <testcase name="GET /v1/trainer/clients" classname="api" time="0.310"/>
+  <testcase name="POST /v1/auth/otp/start rejects non-QA email" classname="api" time="0.180"/>
+  <testcase name="GET /v1/trainee/today" classname="api" time="0.440"/>
+  <testcase name="GET /v1/trainer/exceptions" classname="api" time="0.520"/>
+</testsuite>
+</testsuites>

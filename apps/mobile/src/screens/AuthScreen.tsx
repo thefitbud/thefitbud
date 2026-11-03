@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { useAuth } from "../auth/AuthProvider";
 import { pickSessionRefresh } from "../lib/api";
@@ -7,6 +7,7 @@ import { AcceptInviteScreen } from "./AcceptInviteScreen";
 import { CodeSignInScreen } from "./auth/CodeSignInScreen";
 import { ForgotPasswordScreen } from "./auth/ForgotPasswordScreen";
 import { SignInScreen } from "./auth/SignInScreen";
+import { createCodeVerifier } from "./auth/verifyCodeErrorFlow";
 
 type AuthMode = "password" | "code" | "forgot" | "invite";
 
@@ -44,6 +45,23 @@ export function AuthScreen() {
       await signInWithToken(result.token, pickSessionRefresh(result));
     },
     [clearError, signInWithToken],
+  );
+
+  // The controller outlives renders; it reads the latest closures through this ref.
+  const latest = useRef({ identifier, s1, finishAuth });
+  latest.current = { identifier, s1, finishAuth };
+  const verifier = useRef(
+    createCodeVerifier({
+      verify: (code: string) =>
+        latest.current.s1.verifyOtp({
+          identifier: latest.current.identifier.trim(),
+          purpose: "login",
+          code,
+        }),
+      finish: async (result) => {
+        if (result.purpose === "login") await latest.current.finishAuth(result);
+      },
+    }),
   );
 
   async function signInPassword(id: string, password: string) {
@@ -86,21 +104,13 @@ export function AuthScreen() {
       setLocalError("Enter the 6-digit code.");
       return;
     }
+    // Synchronous guard first: a second tap in the same frame must do nothing.
+    if (verifier.current.busy) return;
     setLoading(true);
     setLocalError(null);
     try {
-      const result = await s1.verifyOtp({
-        identifier: identifier.trim(),
-        purpose: "login",
-        code,
-      });
-      if (result.purpose !== "login") {
-        setLocalError("That code didn't work. Check the latest message or tap Resend.");
-        return;
-      }
-      await finishAuth(result);
-    } catch {
-      setLocalError("That code didn't work. Check the latest message or tap Resend.");
+      const outcome = await verifier.current.submit(code, identifier.trim());
+      if (outcome.kind === "error") setLocalError(outcome.message);
     } finally {
       setLoading(false);
     }
