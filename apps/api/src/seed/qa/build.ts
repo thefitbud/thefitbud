@@ -7,7 +7,7 @@
  *
  * 1. migrations + library seed into an in-memory `node:sqlite` database,
  * 2. `buildDemoSeedSql` with a fixed reference instant,
- * 3. keep the rows owned by the three personas (`ownership.ts`, strict scope),
+ * 3. keep the rows owned by the QA personas (`ownership.ts`, strict scope),
  * 4. rewrite them onto the QA identities: new ids, QA emails, fixed firebase uids,
  *    no phone numbers, `QA `-prefixed display names,
  * 5. emit `INSERT OR IGNORE` statements sorted by table then primary key, so the
@@ -17,16 +17,35 @@
  * Nothing is ever emitted for the demo personas themselves: the QA rows carry
  * different primary keys, so applying this file to staging cannot update or delete a
  * row belonging to Firoz's real-email accounts.
+ *
+ * The world holds two trainers (`accounts.ts`): the main one with two clients and a
+ * second one with a single client. The second trainer is what lets the staging smoke
+ * check ownership against real ids — a trainer reading another trainer's client — and
+ * it costs no new secret and no second code path, because every scope predicate and
+ * the whole reset are anchored on {@link QA_ACCOUNTS}.
+ *
+ * Two hand adjustments are made to the generated world, both on the slipping client
+ * and both documented where they happen: the newest submitted check-in is left
+ * unreviewed ({@link leaveNewestCheckinUnreviewed}), and the open draft check-in is
+ * moved onto the reference date so there is always one the trainee can start
+ * ({@link makeOneCheckinDueOnReferenceDate}).
  */
 import { hashPassword } from "../../auth/password.js";
 import { createMemoryDb, yieldToEventLoop } from "../../test-support/memory-db.js";
 import { buildDemoSeedSql, kolkataLocalDate } from "../demo/build.js";
-import { demoUuid, sha256HexSync, sqlQuote } from "../demo/ids.js";
+import {
+  addDaysFromLocalDate,
+  demoUuid,
+  localDayStartIso,
+  sha256HexSync,
+  sqlQuote,
+} from "../demo/ids.js";
 import { loadDemoLibraryIndex } from "../demo/personas.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../demo/spec.js";
 import {
   QA_ACCOUNTS,
   QA_EMAIL_PATTERN,
+  qaAccount,
   qaRowId,
   qaUserId,
   type QaAccount,
@@ -60,6 +79,11 @@ export type QaAccountExpectation = {
     loggedMealCount: number;
     openExceptionCount: number;
     pendingCheckinId: string | null;
+    /**
+     * The check-in the trainee can start today: draft, window open, on the reference
+     * date. `null` for a trainee the seed makes no such guarantee for.
+     */
+    startableCheckinId: string | null;
   };
   /**
    * A scheduled workout with no execution yet, so a suite can always open one and
@@ -89,8 +113,13 @@ export type QaExpectations = {
     loggedMealsTodayOnTrack: number;
     openExceptionsSlippingMin: number;
     pendingCheckinsSlipping: number;
+    /** Check-ins the slipping client can start on the reference date (QT2b). */
+    startableCheckinsSlipping: number;
     loggableWorkoutsPerTrainee: number;
     workoutAssignmentsTodayMax: number;
+    /** Clients of the main QA trainer, and of the second one (CU11). */
+    clientsFirstTrainer: number;
+    clientsSecondTrainer: number;
   };
   accounts: QaAccountExpectation[];
   /** Rows the seed inserts per table, for the reset + reseed round trip. */
@@ -154,8 +183,11 @@ export const QA_GUARANTEES: QaExpectations["guarantees"] = {
   loggedMealsTodayOnTrack: 1,
   openExceptionsSlippingMin: 2,
   pendingCheckinsSlipping: 1,
+  startableCheckinsSlipping: 1,
   loggableWorkoutsPerTrainee: 1,
   workoutAssignmentsTodayMax: 1,
+  clientsFirstTrainer: 2,
+  clientsSecondTrainer: 1,
 };
 
 /** Midday in Asia/Kolkata: the day is under way, so "today" has logged and pending items. */
@@ -265,7 +297,7 @@ function quoteIdentifier(name: string): string {
 }
 
 /**
- * The demo world's rows for the three personas, keyed by table, in plan order.
+ * The demo world's rows for the QA personas, keyed by table, in plan order.
  */
 function readOwnedRows(sqlite: Sqlite): Map<string, Row[]> {
   const identity = demoScopeIdentity();
@@ -336,7 +368,90 @@ function leaveNewestCheckinUnreviewed(
   return checkinId;
 }
 
-/** old id → QA id, for every row the QA world owns plus the three accounts. */
+/**
+ * Moves the slipping client's open draft check-in onto the reference date, so the
+ * trainee always has one they can start.
+ *
+ * The generator already writes the next due check-in as a draft, but its date
+ * follows the client's weekly cadence, so on most reference dates the window has not
+ * opened yet and the status is `scheduled` — nothing to fill in. QT3's fill-and-send
+ * flow therefore had to branch on whether one happened to be startable
+ * (`apps/mobile/.maestro/flows/trainee/checkin.yaml`). Moving that same row — same
+ * id, same pinned form version, same schedule — is the smallest change that makes
+ * the guarantee hold on every reference date, and it fabricates nothing: no row is
+ * created, and no row's identity changes.
+ *
+ * The window opens at the *start* of the civil day, not at the generator's 09:00:
+ * the nightly QA job runs at 02:00 IST (`.github/workflows/qa.yml`), and a 09:00
+ * window would still read `scheduled` when the suites run. It closes
+ * `dueWindowHours` later, as the schedule says, so the check-in reads `due` (never
+ * `overdue`) for the whole of the reference date.
+ *
+ * A check-in that already carries an exception is never moved: an exception keeps
+ * its source signal, and rewriting the signal's date underneath it would make the
+ * two disagree.
+ */
+function makeOneCheckinDueOnReferenceDate(input: {
+  owned: Map<string, Row[]>;
+  relationshipId: string;
+  referenceDate: string;
+  timezone: string;
+}): string {
+  const { owned, relationshipId, referenceDate, timezone } = input;
+  const mine = (owned.get("checkins") ?? []).filter(
+    (row) => row.coaching_relationship_id === relationshipId,
+  );
+  const signalled = new Set(
+    (owned.get("exceptions") ?? [])
+      .filter((row) => row.source_entity_type === "checkin")
+      .map((row) => String(row.source_entity_id)),
+  );
+  const drafts = mine
+    .filter(
+      (row) =>
+        row.record_status === "draft" &&
+        row.submitted_at === null &&
+        !signalled.has(String(row.id)),
+    )
+    .sort((a, b) =>
+      `${String(a.local_date)}|${String(a.id)}`.localeCompare(
+        `${String(b.local_date)}|${String(b.id)}`,
+      ),
+    );
+  const chosen = drafts.at(-1);
+  if (!chosen) {
+    throw new Error(
+      "QA seed: the slipping client has no open draft check-in to make due on the reference date",
+    );
+  }
+  const taken = mine.find(
+    (row) => row.id !== chosen.id && row.local_date === referenceDate,
+  );
+  if (taken) {
+    // checkins_relationship_local_date_uidx: one check-in per relationship per day.
+    throw new Error(
+      `QA seed: the slipping client already has check-in ${String(taken.id)} on ${referenceDate}`,
+    );
+  }
+  const scheduleRow = (owned.get("checkin_schedules") ?? []).find(
+    (row) => row.coaching_relationship_id === relationshipId,
+  );
+  const windowHours = Number(scheduleRow?.due_window_hours ?? 48);
+  if (!Number.isFinite(windowHours) || windowHours <= 0) {
+    throw new Error(`QA seed: check-in schedule for ${relationshipId} has no due window`);
+  }
+  const startsAt = localDayStartIso(referenceDate, "00:00", timezone);
+  chosen.local_date = referenceDate;
+  chosen.window_starts_at = startsAt;
+  chosen.window_ends_at = new Date(
+    Date.parse(startsAt) + windowHours * 60 * 60 * 1000,
+  ).toISOString();
+  chosen.created_at = startsAt;
+  chosen.updated_at = startsAt;
+  return String(chosen.id);
+}
+
+/** old id → QA id, for every row the QA world owns plus the QA accounts. */
 function buildIdMap(owned: Map<string, Row[]>): Map<string, string> {
   const map = new Map<string, string>();
   for (const account of QA_ACCOUNTS) {
@@ -588,9 +703,14 @@ function emitSql(
   return { sql: `${parts.join("\n")}\n`, rowCounts, rowKeys };
 }
 
-function localDateFor(sqlite: Sqlite, userId: string, instant: string): string {
+/** The user's stored timezone; every QA expectation about a civil day reads it. */
+function timezoneOf(sqlite: Sqlite, userId: string): string {
   const rows = query(sqlite, `SELECT timezone FROM users WHERE id = ${sqlQuote(userId)}`);
-  const timezone = String(rows[0]?.timezone ?? "Asia/Kolkata");
+  return String(rows[0]?.timezone ?? "Asia/Kolkata");
+}
+
+function localDateFor(sqlite: Sqlite, userId: string, instant: string): string {
+  const timezone = timezoneOf(sqlite, userId);
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
@@ -645,12 +765,30 @@ function buildExpectations(input: {
   referenceInstant: string;
   rowCounts: Record<string, number>;
   pendingCheckinId: string;
+  startableCheckinId: string;
 }): QaExpectations {
   const { owned, referenceDate, rowCounts } = input;
-  const trainer = QA_ACCOUNTS.find((account) => account.role === "trainer")!;
   const relationshipByTrainee = new Map<string, string>();
+  const clientCountByTrainer = new Map<string, number>();
   for (const row of owned.get("coaching_relationships") ?? []) {
     relationshipByTrainee.set(String(row.trainee_user_id), String(row.id));
+    const trainerUserId = String(row.trainer_user_id);
+    clientCountByTrainer.set(trainerUserId, (clientCountByTrainer.get(trainerUserId) ?? 0) + 1);
+  }
+  // Two trainers, each with their own clients (CU11): the staging smoke reads one
+  // trainer's relationship ids as the other trainer and must be refused, so the
+  // second world has to be here and has to be separate.
+  for (const [key, expected] of [
+    ["trainer", QA_GUARANTEES.clientsFirstTrainer],
+    ["trainer2", QA_GUARANTEES.clientsSecondTrainer],
+  ] as const) {
+    const account = qaAccount(key);
+    const actual = clientCountByTrainer.get(qaUserId(account)) ?? 0;
+    if (actual !== expected) {
+      throw new Error(
+        `QA seed: ${account.email} has ${actual} clients, expected ${expected}`,
+      );
+    }
   }
   const accounts: QaAccountExpectation[] = QA_ACCOUNTS.map((account) => {
     const userId = qaUserId(account);
@@ -668,9 +806,10 @@ function buildExpectations(input: {
     }
     const relationshipId = relationshipByTrainee.get(userId);
     if (!relationshipId) {
-      throw new Error(`QA seed: ${account.email} has no relationship with ${trainer.email}`);
+      throw new Error(`QA seed: ${account.email} has no relationship with a QA trainer`);
     }
-    const localDate = localDateFor(input.sqlite, demoUuid("user", account.demoEmail), input.referenceInstant);
+    const demoUserId = demoUuid("user", account.demoEmail);
+    const localDate = localDateFor(input.sqlite, demoUserId, input.referenceInstant);
     const workouts = (owned.get("workout_assignments") ?? []).filter(
       (row) => row.coaching_relationship_id === relationshipId && row.local_date === localDate,
     );
@@ -693,6 +832,22 @@ function buildExpectations(input: {
         row.coaching_relationship_id === relationshipId &&
         row.submitted_at !== null &&
         !(owned.get("checkin_reviews") ?? []).some((review) => review.checkin_id === row.id),
+    );
+    // Startable = a draft on the trainee's own civil day whose window is open for
+    // every instant of that day. Comparing the window to the day's own bounds, not
+    // to the reference instant, is what makes the guarantee independent of the hour
+    // the nightly job happens to run at.
+    const timezone = timezoneOf(input.sqlite, demoUserId);
+    const dayStart = localDayStartIso(localDate, "00:00", timezone);
+    const dayEnd = localDayStartIso(addDaysFromLocalDate(localDate, 1), "00:00", timezone);
+    const startableCheckins = (owned.get("checkins") ?? []).filter(
+      (row) =>
+        row.coaching_relationship_id === relationshipId &&
+        row.record_status === "draft" &&
+        row.submitted_at === null &&
+        String(row.local_date) === localDate &&
+        String(row.window_starts_at) <= dayStart &&
+        String(row.window_ends_at) >= dayEnd,
     );
     if (workouts.length > QA_GUARANTEES.workoutAssignmentsTodayMax) {
       throw new Error(
@@ -729,6 +884,14 @@ function buildExpectations(input: {
       if (String(pendingCheckins[0]!.id) !== input.pendingCheckinId) {
         throw new Error("QA seed: the pending check-in is not the one the build left unreviewed");
       }
+      if (startableCheckins.length !== QA_GUARANTEES.startableCheckinsSlipping) {
+        throw new Error(
+          `QA seed: ${account.email} has ${startableCheckins.length} check-ins due on ${localDate}, expected ${QA_GUARANTEES.startableCheckinsSlipping}`,
+        );
+      }
+      if (String(startableCheckins[0]!.id) !== input.startableCheckinId) {
+        throw new Error("QA seed: the due check-in is not the one the build moved onto today");
+      }
     }
     return {
       ...base,
@@ -740,12 +903,13 @@ function buildExpectations(input: {
         loggedMealCount,
         openExceptionCount,
         pendingCheckinId: pendingCheckins[0] ? String(pendingCheckins[0].id) : null,
+        startableCheckinId: startableCheckins[0] ? String(startableCheckins[0].id) : null,
       },
     };
   });
   return {
     $comment:
-      "Generated by apps/api/scripts/qa-seed.ts (QT2). `accounts[].email|role|displayName|userId|firebaseUid|signIn|relationshipId` and `guarantees` are the same for every reference date; `today`, `loggableWorkout`, `rowCounts` and `referenceDate` describe the run that produced this file. The generated plan trains four days a week, so `today.workoutName` is null on a rest day (roughly three days in seven) — a suite that must open and log a workout uses `loggableWorkout`, which every reference date has. The nightly job writes the current run's copy to apps/api/.qa-seed/expectations.json.",
+      "Generated by apps/api/scripts/qa-seed.ts (QT2). `accounts[].email|role|displayName|userId|firebaseUid|signIn|relationshipId` and `guarantees` are the same for every reference date; `today`, `loggableWorkout`, `rowCounts` and `referenceDate` describe the run that produced this file. The generated plan trains four days a week, so `today.workoutName` is null on a rest day (roughly three days in seven) — a suite that must open and log a workout uses `loggableWorkout`, which every reference date has. `today.startableCheckinId` is the check-in the slipping client can start on that date (QT2b), and `guarantees.clientsSecondTrainer` is the second trainer's client world the ownership checks read (CU11). The nightly job writes the current run's copy to apps/api/.qa-seed/expectations.json.",
     referenceDate,
     guarantees: QA_GUARANTEES,
     accounts,
@@ -815,6 +979,12 @@ export async function buildQaSeed(input: QaSeedInput): Promise<QaSeedResult> {
       owned,
       String(slippingRelationship.id),
     );
+    const dueDemoCheckinId = makeOneCheckinDueOnReferenceDate({
+      owned,
+      relationshipId: String(slippingRelationship.id),
+      referenceDate: input.referenceDate,
+      timezone: timezoneOf(sqlite, slippingDemoUserId),
+    });
 
     const idMap = buildIdMap(owned);
     rewriteRows(owned, {
@@ -834,6 +1004,7 @@ export async function buildQaSeed(input: QaSeedInput): Promise<QaSeedResult> {
       referenceInstant,
       rowCounts,
       pendingCheckinId: idMap.get(pendingDemoCheckinId) ?? pendingDemoCheckinId,
+      startableCheckinId: idMap.get(dueDemoCheckinId) ?? dueDemoCheckinId,
     });
     await yieldToEventLoop();
     verifyAgainstDemoWorld(sqlite, sql, rowCounts);
