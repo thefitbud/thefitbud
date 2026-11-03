@@ -248,8 +248,8 @@
 
 /* Sign-in footer: Privacy, Terms, Credits and licences (ds5-web-signin-footer.png). */
 .auth-legal-links {
-  /* In flow under the form so it never sits beneath the absolutely positioned .auth-help. */
-  margin-top: 16px;
+  /* In flow below the help line (D-W3-15). */
+  margin-top: 4px;
   display: flex;
   justify-content: center;
   align-items: center;
