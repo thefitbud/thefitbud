@@ -15,11 +15,21 @@
  * - no predicate can ever match a row that does not reference one of those ids
  *   (there is no clause that is not anchored on the list), and
  * - deleting in reverse order is safe: a table's parents are still present when
- *   its own rows are deleted (`ownership.test.ts` asserts both properties).
+ *   its own rows are deleted.
  *
- * The schema declares no foreign keys (see `drizzle/`), so the order and the
- * predicates here are the only thing keeping the reset honest. Treat a change to
- * this file as a data-destruction change.
+ * `apps/api/scripts/qa-seed.test.ts` asserts both properties, reads the schema's
+ * foreign keys to check this order against them, and proves the boundary from a
+ * source other than these predicates: the reset changes nothing at all when no QA
+ * row is present, and leaves every non-QA row untouched beside the demo world.
+ *
+ * The schema declares 127 foreign keys, 18 of them `ON DELETE CASCADE` and none
+ * `ON DELETE SET NULL` (`PRAGMA foreign_key_list`, migrations in `drizzle/`).
+ * They are why the order matters, and they are also safe for the reset: every
+ * cascading child of a table in this plan is itself in this plan, so a cascade from
+ * a QA row can only reach rows that reference that QA row — it can never leave the
+ * QA world. **Adding a table to the schema with an `ON DELETE CASCADE` reference to
+ * one of the tables below, without adding it here, breaks that argument.** Re-check
+ * it when you touch this file, and treat a change here as a data-destruction change.
  */
 
 export type QaTablePlan = {

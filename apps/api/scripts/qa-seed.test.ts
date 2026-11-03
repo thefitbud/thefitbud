@@ -34,7 +34,7 @@ import {
   type QaSeedResult,
 } from "../src/seed/qa/build.js";
 import { qaScopeIdentity } from "../src/seed/qa/identity.js";
-import { QA_TABLE_PLAN, qaScopePredicate } from "../src/seed/qa/ownership.js";
+import { QA_TABLE_PLAN } from "../src/seed/qa/ownership.js";
 import { qaPasswordHash } from "../src/seed/qa/password.js";
 import { buildQaResetSql, qaResetGuardSql } from "../src/seed/qa/reset.js";
 
@@ -78,75 +78,154 @@ function tableNames(sqlite: Sqlite): string[] {
   ).map((row) => String(row[0]));
 }
 
-function rowsOf(sqlite: Sqlite, sql: string): string[] {
-  const [result] = sqlite.exec(sql);
+/**
+ * Primary key columns of `table`, from the schema.
+ *
+ * Everything below identifies QA rows by the primary keys the seed emitted
+ * (`QaSeedResult.rowKeys`), never by `qaScopePredicate`. Classifying rows with the
+ * same predicate the reset deletes by would make an over-broad predicate invisible:
+ * the rows it wrongly matched would be filed as "QA" and excluded from the "no other
+ * row changed" checksum. These helpers come from a different source, so a widened
+ * predicate shows up as other people's rows disappearing.
+ */
+function pkColumns(sqlite: Sqlite, table: string): string[] {
+  return (
+    sqlite.exec(
+      `SELECT name FROM pragma_table_info('${table}') WHERE pk > 0 ORDER BY pk`,
+    )[0]?.values ?? []
+  ).map((row) => String(row[0]));
+}
+
+type TableRow = { key: string; json: string };
+
+function tableRows(sqlite: Sqlite, table: string): TableRow[] {
+  const [result] = sqlite.exec(`SELECT * FROM ${table}`);
   if (!result) {
     return [];
   }
-  return result.values.map((values) => JSON.stringify(values)).sort();
+  const indexes = pkColumns(sqlite, table).map((column) => result.columns.indexOf(column));
+  return result.values.map((values) => ({
+    key: indexes.map((index) => String(values[index])).join("\u0000"),
+    json: JSON.stringify(values),
+  }));
 }
 
-/** Hash of every row of every table, so any change anywhere shows up. */
 function checksum(entries: Array<[string, string[]]>): string {
   const hash = createHash("sha256");
   for (const [table, rows] of entries.sort(([a], [b]) => a.localeCompare(b))) {
     hash.update(`${table}:${rows.length}\n`);
-    for (const row of rows) {
+    for (const row of [...rows].sort()) {
       hash.update(`${row}\n`);
     }
   }
   return hash.digest("hex");
 }
 
-/** `mode: "qa"` selects the rows the reset deletes; `"other"` selects everything else. */
-function worldChecksum(sqlite: Sqlite, mode: "qa" | "other"): string {
-  const identity = qaScopeIdentity();
-  const planned = new Map(
-    QA_TABLE_PLAN.map((plan) => [
-      plan.table,
-      qaScopePredicate(plan.table, identity, "reset"),
+/** Every row of every table — no filtering, so there is nothing to get wrong. */
+function fullChecksum(sqlite: Sqlite): string {
+  return checksum(
+    tableNames(sqlite).map((table) => [table, tableRows(sqlite, table).map((row) => row.json)]),
+  );
+}
+
+type RowKeys = Record<string, string[]>;
+
+function keySets(rowKeys: RowKeys): Map<string, Set<string>> {
+  return new Map(
+    Object.entries(rowKeys).map(([table, keys]) => [table, new Set(keys)] as const),
+  );
+}
+
+/** Every row whose primary key the seed did NOT emit, i.e. everyone else's rows. */
+function othersChecksum(sqlite: Sqlite, rowKeys: RowKeys): string {
+  const qa = keySets(rowKeys);
+  return checksum(
+    tableNames(sqlite).map((table) => {
+      const keys = qa.get(table);
+      return [
+        table,
+        tableRows(sqlite, table)
+          .filter((row) => !keys?.has(row.key))
+          .map((row) => row.json),
+      ];
+    }),
+  );
+}
+
+/** Every row whose primary key the seed emitted, i.e. exactly the seeded QA rows. */
+function qaChecksum(sqlite: Sqlite, rowKeys: RowKeys): string {
+  const qa = keySets(rowKeys);
+  return checksum(
+    [...qa].map(([table, keys]) => [
+      table,
+      tableRows(sqlite, table)
+        .filter((row) => keys.has(row.key))
+        .map((row) => row.json),
     ]),
   );
-  const entries: Array<[string, string[]]> = [];
-  for (const table of tableNames(sqlite)) {
-    const predicate = planned.get(table);
-    if (!predicate) {
-      // Not in the ownership plan: the reset must leave the whole table alone.
-      if (mode === "other") {
-        entries.push([table, rowsOf(sqlite, `SELECT * FROM ${table}`)]);
-      }
-      continue;
-    }
-    const want = mode === "qa" ? 1 : 0;
-    entries.push([
-      table,
-      rowsOf(sqlite, `SELECT * FROM ${table} WHERE coalesce(${predicate}, 0) = ${want}`),
-    ]);
-  }
-  return checksum(entries);
 }
 
-/** Rows of `table` the reset would delete — not the whole table, which holds library rows. */
-function qaTableCount(sqlite: Sqlite, table: string): number {
-  const predicate = qaScopePredicate(table, qaScopeIdentity(), "reset");
-  return Number(
-    sqlite.exec(`SELECT count(*) FROM ${table} WHERE coalesce(${predicate}, 0) = 1`)[0]
-      ?.values[0]?.[0] ?? 0,
-  );
-}
-
-function qaRowCount(sqlite: Sqlite): number {
-  const identity = qaScopeIdentity();
+/** How many of the seed's own rows are in the database. */
+function seededRowsPresent(sqlite: Sqlite, rowKeys: RowKeys): number {
   let total = 0;
-  for (const plan of QA_TABLE_PLAN) {
-    const predicate = qaScopePredicate(plan.table, identity, "reset");
-    total += Number(
-      sqlite.exec(
-        `SELECT count(*) FROM ${plan.table} WHERE coalesce(${predicate}, 0) = 1`,
-      )[0]?.values[0]?.[0] ?? 0,
-    );
+  for (const [table, keys] of keySets(rowKeys)) {
+    total += tableRows(sqlite, table).filter((row) => keys.has(row.key)).length;
   }
   return total;
+}
+
+/** Rows of `table` whose primary key the seed emitted. */
+function seededRowsIn(sqlite: Sqlite, rowKeys: RowKeys, table: string): number {
+  const keys = new Set(rowKeys[table] ?? []);
+  return tableRows(sqlite, table).filter((row) => keys.has(row.key)).length;
+}
+
+/**
+ * Rows still carrying a QA user id in one of the plan's own user columns — found from
+ * the plan's column metadata, not from its predicates. This catches rows the nightly
+ * run created, which the seed's key list cannot know about.
+ */
+function rowsReferencingQaUsers(sqlite: Sqlite, userIds: readonly string[]): string[] {
+  const ids = userIds.map((id) => `'${id}'`).join(", ");
+  const found: string[] = [];
+  for (const plan of QA_TABLE_PLAN) {
+    for (const column of plan.userColumns ?? []) {
+      const count = Number(
+        sqlite.exec(`SELECT count(*) FROM ${plan.table} WHERE ${column} IN (${ids})`)[0]
+          ?.values[0]?.[0] ?? 0,
+      );
+      if (count > 0) {
+        found.push(`${plan.table}.${column}=${count}`);
+      }
+    }
+  }
+  return found;
+}
+
+/** Rows of any plan table still pointing at one of the QA relationships. */
+function rowsReferencingRelationships(
+  sqlite: Sqlite,
+  relationshipIds: readonly string[],
+): string[] {
+  const ids = relationshipIds.map((id) => `'${id}'`).join(", ");
+  const found: string[] = [];
+  for (const plan of QA_TABLE_PLAN) {
+    const columns = (
+      sqlite.exec(`SELECT name FROM pragma_table_info('${plan.table}')`)[0]?.values ?? []
+    )
+      .map((row) => String(row[0]))
+      .filter((name) => name === "coaching_relationship_id" || name === "relationship_id");
+    for (const column of columns) {
+      const count = Number(
+        sqlite.exec(`SELECT count(*) FROM ${plan.table} WHERE ${column} IN (${ids})`)[0]
+          ?.values[0]?.[0] ?? 0,
+      );
+      if (count > 0) {
+        found.push(`${plan.table}.${column}=${count}`);
+      }
+    }
+  }
+  return found;
 }
 
 async function login(email: string, password: string): Promise<string> {
@@ -198,6 +277,61 @@ describe("QA seed (QT2)", () => {
       built.expectations.accounts.map((account) => account.userId),
     );
   }, 240_000);
+
+  it("builds on every day of the week, rest days included", async () => {
+    // Mon 2026-11-02 to Sun 2026-11-08. The generated plan trains four days a week,
+    // so three of these are rest days for both QA trainees; the nightly job seeds
+    // whatever today is, so every one of them has to build.
+    const week = [
+      "2026-11-02",
+      "2026-11-03",
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06",
+      "2026-11-07",
+      "2026-11-08",
+    ];
+    const seen = new Map<string, string>();
+    let restDays = 0;
+    for (const referenceDate of week) {
+      const result = await buildQaSeed({
+        referenceDate,
+        qaPasswordHash: qaPasswordHash(TEST_QA_PASSWORD),
+        forbiddenStrings: [TEST_QA_PASSWORD],
+      });
+      expect(result.expectations.referenceDate).toBe(referenceDate);
+      seen.set(referenceDate, createHash("sha256").update(result.sql).digest("hex"));
+      for (const account of result.expectations.accounts) {
+        if (account.role !== "trainee") {
+          continue;
+        }
+        const today = account.today!;
+        // What every date guarantees.
+        expect(today.mealNames.length, `${referenceDate} ${account.email} meals`).
+          toBeGreaterThanOrEqual(result.expectations.guarantees.mealAssignmentsTodayMin);
+        expect(account.loggableWorkout, `${referenceDate} ${account.email}`).toBeTruthy();
+        expect(account.loggableWorkout!.localDate <= referenceDate).toBe(true);
+        if (account.key === "ontrack") {
+          expect(today.loggedMealCount).toBeGreaterThanOrEqual(
+            result.expectations.guarantees.loggedMealsTodayOnTrack,
+          );
+        }
+        if (account.key === "slipping") {
+          expect(today.openExceptionCount).toBeGreaterThanOrEqual(
+            result.expectations.guarantees.openExceptionsSlippingMin,
+          );
+          expect(today.pendingCheckinId).toBeTruthy();
+        }
+        if (today.workoutName === null) {
+          restDays += 1;
+        }
+      }
+    }
+    // Each date is its own world, and rest days really do occur in that week — if the
+    // generator ever trained seven days a week this test would stop proving anything.
+    expect(new Set(seen.values()).size).toBe(week.length);
+    expect(restDays).toBeGreaterThan(0);
+  }, 600_000);
 
   it("uses only allowlisted QA addresses and no real person's identity", () => {
     for (const account of QA_ACCOUNTS) {
@@ -251,15 +385,15 @@ describe("QA seed (QT2)", () => {
     try {
       handle.sqlite.exec(built.sql);
       await yieldToEventLoop();
-      const once = worldChecksum(handle.sqlite, "qa");
-      const others = worldChecksum(handle.sqlite, "other");
+      const once = qaChecksum(handle.sqlite, built.rowKeys);
+      const others = othersChecksum(handle.sqlite, built.rowKeys);
       for (const [table, expected] of Object.entries(built.expectations.rowCounts)) {
-        expect(qaTableCount(handle.sqlite, table), table).toBe(expected);
+        expect(seededRowsIn(handle.sqlite, built.rowKeys, table), table).toBe(expected);
       }
       handle.sqlite.exec(built.sql);
       await yieldToEventLoop();
-      expect(worldChecksum(handle.sqlite, "qa")).toBe(once);
-      expect(worldChecksum(handle.sqlite, "other")).toBe(others);
+      expect(qaChecksum(handle.sqlite, built.rowKeys)).toBe(once);
+      expect(othersChecksum(handle.sqlite, built.rowKeys)).toBe(others);
     } finally {
       handle.close();
     }
@@ -270,12 +404,16 @@ describe("QA seed (QT2)", () => {
     try {
       handle.sqlite.exec(built.sql);
       await yieldToEventLoop();
-      const seeded = worldChecksum(handle.sqlite, "qa");
+      const seeded = qaChecksum(handle.sqlite, built.rowKeys);
       setTestDbOverride(handle.db);
 
       const trainer = built.expectations.accounts.find((a) => a.key === "trainer")!;
       const onTrack = built.expectations.accounts.find((a) => a.key === "ontrack")!;
       const slipping = built.expectations.accounts.find((a) => a.key === "slipping")!;
+      const qaIds = built.expectations.accounts.map((account) => account.userId);
+      const relationshipIds = built.expectations.accounts
+        .map((account) => account.relationshipId)
+        .filter((id): id is string => Boolean(id));
 
       const trainerToken = await login(trainer.email, TEST_QA_PASSWORD);
       const trainerHeaders = {
@@ -368,17 +506,49 @@ describe("QA seed (QT2)", () => {
         testEnv(),
       );
       expect(acknowledged.status, await acknowledged.clone().text()).toBe(200);
-      expect(worldChecksum(handle.sqlite, "qa")).not.toBe(seeded);
+      // The run left rows the seed never emitted: a new compliance row and a new
+      // exception action, neither in `rowKeys`.
+      const afterMutations = seededRowsPresent(handle.sqlite, built.rowKeys);
+      expect(
+        rowsReferencingQaUsers(handle.sqlite, qaIds).length,
+      ).toBeGreaterThan(0);
+      expect(
+        Number(
+          handle.sqlite.exec(
+            `SELECT count(*) FROM meal_compliance WHERE assignment_id = '${pendingMeal!.id}'`,
+          )[0]?.values[0]?.[0] ?? 0,
+        ),
+      ).toBe(1);
+      expect(
+        Number(
+          handle.sqlite.exec(
+            `SELECT count(*) FROM exception_actions WHERE exception_id = '${slippingGroup!.items[0]!.id}'`,
+          )[0]?.values[0]?.[0] ?? 0,
+        ),
+      ).toBeGreaterThan(0);
 
       setTestDbOverride(null);
       handle.sqlite.exec(resetSql);
       await yieldToEventLoop();
-      expect(qaRowCount(handle.sqlite)).toBe(0);
+      // Nothing of the QA accounts' survives: not the seeded rows, not the rows the
+      // run created. Each check comes from a different source than the predicates.
+      expect(seededRowsPresent(handle.sqlite, built.rowKeys)).toBe(0);
+      expect(afterMutations).toBeGreaterThan(0);
+      expect(rowsReferencingQaUsers(handle.sqlite, qaIds)).toEqual([]);
+      expect(rowsReferencingRelationships(handle.sqlite, relationshipIds)).toEqual([]);
+      expect(
+        Number(
+          handle.sqlite.exec(
+            `SELECT count(*) FROM meal_compliance WHERE assignment_id = '${pendingMeal!.id}'`,
+          )[0]?.values[0]?.[0] ?? 0,
+        ),
+      ).toBe(0);
+
       handle.sqlite.exec(built.sql);
       await yieldToEventLoop();
-      expect(worldChecksum(handle.sqlite, "qa")).toBe(seeded);
+      expect(qaChecksum(handle.sqlite, built.rowKeys)).toBe(seeded);
       for (const [table, expected] of Object.entries(built.expectations.rowCounts)) {
-        expect(qaTableCount(handle.sqlite, table), table).toBe(expected);
+        expect(seededRowsIn(handle.sqlite, built.rowKeys, table), table).toBe(expected);
       }
     } finally {
       setTestDbOverride(null);
@@ -433,6 +603,50 @@ describe("QA reset (QT2)", () => {
           ).toBeLessThan(index);
         }
       }
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it("has every cascading child of a plan table in the plan", async () => {
+    // Why a cascade cannot leave the QA world: a CASCADE can only delete rows that
+    // reference the row being deleted, and every table that cascades from a table
+    // here is itself here, so the reset's own predicates still bound what goes. A new
+    // cascading table added to the schema but not to the plan would break that.
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      const planned = new Set(QA_TABLE_PLAN.map((plan) => plan.table));
+      const tables = (
+        handle.sqlite.exec(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%\\_fts%' ESCAPE '\\' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        )[0]?.values ?? []
+      ).map((row) => String(row[0]));
+      const escaping: string[] = [];
+      const setNull: string[] = [];
+      let cascades = 0;
+      for (const table of tables) {
+        const fks =
+          handle.sqlite.exec(
+            `SELECT "from", "table", on_delete FROM pragma_foreign_key_list('${table}')`,
+          )[0]?.values ?? [];
+        for (const [column, target, onDelete] of fks) {
+          const action = String(onDelete).toUpperCase();
+          if (action === "SET NULL") {
+            setNull.push(`${table}.${String(column)}`);
+          }
+          if (action !== "CASCADE") {
+            continue;
+          }
+          cascades += 1;
+          if (planned.has(String(target)) && !planned.has(table)) {
+            escaping.push(`${table}.${String(column)} -> ${String(target)}`);
+          }
+        }
+      }
+      expect(cascades).toBeGreaterThan(0);
+      // SET NULL would let a delete change a row instead of removing it.
+      expect(setNull).toEqual([]);
+      expect(escaping).toEqual([]);
     } finally {
       handle.close();
     }
@@ -494,16 +708,29 @@ describe("QA reset beside the staging demo world (QT2)", () => {
     try {
       // Staging-like: the demo personas Firoz's real-email accounts point at, with the
       // QA world applied beside them.
-      const demoOnly = worldChecksum(handle.sqlite, "other");
+      // The QA keys must not already exist, or excluding them would quietly drop a
+      // demo row from the "everyone else" set.
+      expect(seededRowsPresent(handle.sqlite, seed.rowKeys)).toBe(0);
+      const beforeAnything = fullChecksum(handle.sqlite);
+      const demoOnly = othersChecksum(handle.sqlite, seed.rowKeys);
+      expect(demoOnly).not.toBe("");
+
+      // The reset with no QA row present must be a complete no-op. This needs no
+      // classification of rows at all, so a widened predicate cannot hide here.
+      handle.sqlite.exec(buildQaResetSql(qaScopeIdentity()));
+      await yieldToEventLoop();
+      expect(fullChecksum(handle.sqlite)).toBe(beforeAnything);
+
       handle.sqlite.exec(seed.sql);
       await yieldToEventLoop();
-      expect(qaRowCount(handle.sqlite)).toBeGreaterThan(4000);
-      expect(worldChecksum(handle.sqlite, "other")).toBe(demoOnly);
+      expect(seededRowsPresent(handle.sqlite, seed.rowKeys)).toBeGreaterThan(4000);
+      expect(othersChecksum(handle.sqlite, seed.rowKeys)).toBe(demoOnly);
 
       handle.sqlite.exec(buildQaResetSql(qaScopeIdentity()));
       await yieldToEventLoop();
-      expect(qaRowCount(handle.sqlite)).toBe(0);
-      expect(worldChecksum(handle.sqlite, "other")).toBe(demoOnly);
+      expect(seededRowsPresent(handle.sqlite, seed.rowKeys)).toBe(0);
+      expect(othersChecksum(handle.sqlite, seed.rowKeys)).toBe(demoOnly);
+      expect(fullChecksum(handle.sqlite)).toBe(beforeAnything);
 
       // The demo personas the QA accounts were generated from are untouched.
       for (const account of QA_ACCOUNTS) {
