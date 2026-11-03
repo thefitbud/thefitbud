@@ -65,6 +65,21 @@ describe("reportError in dev", () => {
   });
 });
 
+describe("reportError scrubs zod issue paths", () => {
+  it("does not log an email, token or code that appears as a path segment", () => {
+    vi.stubGlobal("__DEV__", true);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const err = new Error("x");
+    err.name = "ZodError";
+    (err as unknown as { issues: unknown[] }).issues = [
+      { path: [EMAIL, TOKEN, "123456"], code: "unrecognized_keys", message: "Unrecognized key" },
+    ];
+    reportError("paths", err);
+    const logged = JSON.stringify(warn.mock.calls);
+    for (const secret of [EMAIL, TOKEN, "123456"]) expect(logged).not.toContain(secret);
+  });
+});
+
 describe("reportError in a release build", () => {
   it("is a no-op without a reporter and never logs", () => {
     vi.stubGlobal("__DEV__", false);

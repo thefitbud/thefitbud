@@ -19,7 +19,13 @@ import {
   classifyAuthError,
   mismatchedResponseCopy,
 } from "./authErrors";
-import { OTP_INVALID_COPY } from "../screens/auth/verifyCodeError";
+import {
+  OTP_FINISH_FAILED_COPY,
+  OTP_INVALID_COPY,
+  OTP_NETWORK_COPY,
+  verifyCodeError,
+} from "../screens/auth/verifyCodeError";
+import { createCodeVerifier } from "../screens/auth/verifyCodeErrorFlow";
 
 function apiError(status: number, code: string, message = "Server said no.") {
   return new ApiClientError({ code, message, requestId: "req-1", status });
@@ -148,6 +154,13 @@ describe("classifyAuthError", () => {
     expect(classifyAuthError("a string", "general").code).toBe("AUTH-UNK");
   });
 
+  it("a 4xx while starting the session is AUTH-SESSION, not the API's message", () => {
+    expect(classifyAuthError(apiError(403, "FORBIDDEN", "Nope."), "session")).toEqual({
+      code: "AUTH-SESSION",
+      copy: SESSION_COPY,
+    });
+  });
+
   it("never shows a raw error message for an unknown error", () => {
     expect(classifyAuthError(new Error("secret internal detail"), "general").copy).not.toContain(
       "secret",
@@ -175,6 +188,8 @@ describe("incident regression: staging firebase_id_token against stale contracts
     const err = parsed.success ? null : parsed.error;
     expect(err?.issues[0]?.path).toEqual(["tokenKind"]);
 
+    // The login-code screen (where the incident happened) goes through QT9's
+    // mapper and controller, not authErrors; see the dedicated test below.
     for (const ctx of ["reset-verify", "invite-verify", "password-login", "session"] as const) {
       const out = classifyAuthError(err, ctx);
       expect(out).toEqual({ code: "AUTH-PARSE", copy: PARSE_COPY });
@@ -189,6 +204,55 @@ describe("incident regression: staging firebase_id_token against stale contracts
         purpose: "login",
       }),
     ).rejects.toSatisfy((e: unknown) => classifyAuthError(e, "reset-verify").code === "AUTH-PARSE");
+  });
+
+  it("the login-code screen path (D-W3-18): a ZodError from verifyOtp shows AUTH-PARSE and logs the path", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("__DEV__", true);
+    const stale = stagingVerifyReply({ tokenKind: "firebase_id_token_x" });
+    const finish = vi.fn(async () => {});
+    // The real controller, the real client and the real schema, as AuthScreen wires them.
+    const verifier = createCodeVerifier({
+      verify: (code: string) =>
+        clientReplying(stale).verifyOtp({
+          identifier: "trainee@example.test",
+          purpose: "login",
+          code,
+        }),
+      finish,
+    });
+    const outcome = await verifier.submit("123456", "trainee@example.test");
+    vi.unstubAllGlobals();
+
+    expect(outcome).toEqual({ kind: "error", message: PARSE_COPY });
+    expect(outcome.kind === "error" && outcome.message).not.toBe(OTP_NETWORK_COPY);
+    expect(outcome.kind === "error" && outcome.message).not.toBe(OTP_INVALID_COPY);
+    expect(finish).not.toHaveBeenCalled();
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain("tokenKind");
+    expect(logged).not.toContain("123456");
+    expect(logged).not.toContain("trainee@example.test");
+  });
+
+  it("the login-code screen keeps QT9's wording for everything else", () => {
+    expect(verifyCodeError(apiError(401, "OTP_INVALID"))).toBe(OTP_INVALID_COPY);
+    expect(verifyCodeError(new TypeError("Network request failed"))).toBe(OTP_NETWORK_COPY);
+    expect(verifyCodeError(apiError(500, "INTERNAL"))).toBe("Something went wrong (code 500). Try again.");
+  });
+
+  it("a failure while finishing sign-in is logged, not swallowed", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("__DEV__", true);
+    const verifier = createCodeVerifier({
+      verify: async () => ({ purpose: "login" }),
+      finish: async () => {
+        throw new Error("secure store unavailable");
+      },
+    });
+    const outcome = await verifier.submit("123456", "trainee@example.test");
+    vi.unstubAllGlobals();
+    expect(outcome).toEqual({ kind: "error", message: OTP_FINISH_FAILED_COPY });
+    expect(JSON.stringify(warn.mock.calls)).toContain("secure store unavailable");
   });
 
   it("a purpose mismatch is reported as a response mismatch, not a wrong code", () => {

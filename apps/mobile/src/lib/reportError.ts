@@ -52,7 +52,7 @@ export function scrub(text: string): string {
 /** Path, code and message only. The zod `received` value is dropped. */
 export function summarizeZodIssues(err: ZodLike): ZodIssueSummary[] {
   return err.issues.map((issue) => ({
-    path: (issue.path ?? []).join("."),
+    path: scrub((issue.path ?? []).join(".")),
     code: String(issue.code ?? "unknown"),
     message: scrub(String(issue.message ?? "").replace(/,?\s*received\b.*$/i, "")),
   }));

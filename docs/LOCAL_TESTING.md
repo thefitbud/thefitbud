@@ -26,7 +26,8 @@ What guards you now:
 - The Metro dev server bundles `contracts`, `api-client` and `core` from `src`, so those can no longer be stale. Release (EAS) bundles still use `dist`.
 - For the packages still read from `dist` (`tokens`, `ui-mobile`), Metro prints `[fitbud] packages/<name>/dist is missing or older than its src` in the terminal at start-up. If you see it, run `pnpm -w run build:packages`.
 - A dev build shows `JS <short commit>` at the bottom-left of the sign-in screen, so you can check which commit the running bundle came from.
-- Auth failures show a short code, for example `(AUTH-PARSE)` for a response the app could not read. In a dev build the Metro/console line `[auth] <where> ZodError ...` lists the failing field paths, never values. Codes: `AUTH-NET` network or timeout, `AUTH-RATE` 429, `AUTH-SRV` 5xx, `AUTH-PARSE` client and server disagree on a response (rebuild packages first), `AUTH-SESSION` sign-in succeeded but the session could not be started, `AUTH-UNK` anything else.
+- A response the app cannot read (a ZodError) shows `(AUTH-PARSE)` on every sign-in screen, including the sign-in-code screen, and the dev console line `[auth] verifyCode ZodError ...` lists the failing field paths. Other failures on the sign-in-code screen keep their approved wording (D-QA1-4): a network failure reads "Couldn't reach FitBud..." and a server error reads "Something went wrong (code <status>)", without an `AUTH-` code.
+- On the other auth screens failures show a short code, for example `(AUTH-PARSE)` for a response the app could not read. In a dev build the Metro/console line `[auth] <where> ZodError ...` lists the failing field paths, never values. Codes: `AUTH-NET` network or timeout, `AUTH-RATE` 429, `AUTH-SRV` 5xx, `AUTH-PARSE` client and server disagree on a response (rebuild packages first), `AUTH-SESSION` sign-in succeeded but the session could not be started, `AUTH-UNK` anything else.
 
 Pending invite for accept-flow testing:
 

@@ -126,11 +126,12 @@ export function classifyAuthError(
     if (err.status === 429) return { code: "AUTH-RATE", copy: RATE_COPY };
     if (err.status >= 500) return { code: "AUTH-SRV", copy: SRV_COPY };
   }
-  // The API's own message for a 4xx on these calls is curated and says what it
-  // checked (for example "invitation not found"); it is never a guess.
+  // A 4xx from the API carries the API's own curated message in its one error
+  // body (for example "Invitation not found."). Only on these two contexts,
+  // and only for ApiClientError: no other error's message is ever shown.
   if (
     err instanceof ApiClientError &&
-    (context === "invite-accept" || context === "session" || context === "general") &&
+    (context === "invite-accept" || context === "general") &&
     err.message
   ) {
     return { code: null, copy: err.message };
