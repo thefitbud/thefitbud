@@ -1,6 +1,6 @@
 # QA1 · Automated end-to-end QA: test-mode OTP, QA seed, Maestro, staging Playwright and API smoke, nightly CI
 
-**Status:** Draft (2 Nov 2026). Specs written for every QA1 task (see Lanes). Decisions D-QA1-1 to D-QA1-6 decided by the planning bot; D-QA1-7 to D-QA1-11 decided by Firoz on 2 Nov 2026 (were Q1–Q5). No open questions.
+**Status:** Draft (2 Nov 2026). Specs written for every QA1 task (see Lanes). Decisions D-QA1-1 to D-QA1-6 decided by the planning bot; D-QA1-7 to D-QA1-11 decided by Firoz on 2 Nov 2026 (were Q1–Q5); D-QA1-12 decided by Firoz on 3 Nov 2026 during the batch. No open questions.
 **Source:** Firoz's request of 2 Nov 2026 ("agents find bugs instead of Firoz testing by hand"), after two bugs reached his phone that no test caught: AB2 (every `Screen`-based screen crashed on Android on `accessibilityRole` `main`, fixed in #146) and the OTP code screen showing "code didn't work" after a 200 and resending a used code on double tap (QT9).
 **Naming:** batch files so far are `W0`–`W4` (beta waves). QA1 is the first QA batch, outside the W sequence, so later QA batches are `QA2`, … Task ids use the new prefix **QT** (QA task) so they never collide with the batch id or existing prefixes (AB, AU, BT, DC, I, LA, OB, WD, X).
 **Goal:** coding agents build the suites through the normal batch flow; after merge the FitBud UI bot runs them nightly against staging and reports to Firoz. Target: suites merged by Tue 10 Nov so the nightly run covers the BT5 dress rehearsal (Thu 12 Nov).
@@ -19,6 +19,7 @@
 - **D-QA1-9 No reviewer on `staging-qa` (was Q3).** Decided by Firoz, 2 Nov 2026: the default is accepted. Runs that write to staging need no reviewer approval; the token stays scoped to staging D1 only. Used by QT7.
 - **D-QA1-10 Maestro smoke stays advisory (was Q4).** Decided by Firoz, 2 Nov 2026: the Maestro smoke job is not made a required check on `main`. Used by QT7.
 - **D-QA1-11 OTP error copy approved (was Q5).** Decided by Firoz, 2 Nov 2026: the QT9 OTP error wording (D-QA1-4) is approved as written. Used by QT9.
+- **D-QA1-12 QT4 may widen the mobile vitest `include`.** Decided by Firoz, 3 Nov 2026, after QT4 stopped and reported. QT4's spec required its rule test to run in the mobile vitest run *without* editing `apps/mobile/vitest.config.ts`, and said to stop if that was impossible. It is impossible: `include` is `["src/**/*.test.ts", "app.config.test.ts"]`, the `test` script is a bare `vitest run`, and there is no root workspace config, so a `.test.mjs` under `eslint-rules/` would never run. `apps/mobile/vitest.config.ts` is therefore added to QT4's `files_owned` **for one purpose only**: adding `eslint-rules/**/*.test.mjs` to `include`. Nothing else in that file changes. No other QA1 or W4 lane owns it, so there is no competing claim. The rejected alternative was moving the test into `src/`, which separates the rule from its test for no gain. Used by QT4.
 
 ## Conflicts between the request, the code and CLAUDE.md (listed, not resolved)
 1. "Reuse the pattern of the existing test-mode push token": that token is tied to `AUTH_MODE=test`, which the runtime guard forbids on staging (`apps/api/src/middleware/runtime-guard.ts:37-39`). QT1 reuses the shape (named switch + guard), not `AUTH_MODE`.
@@ -33,7 +34,7 @@
 |---|---|---|---|---|
 | api-auth | QT1 | opus | `apps/api/src/auth/test-otp*.ts`, `apps/api/src/routes/auth-login.ts` (`/otp/start` branch), `apps/api/src/routes/auth-login.test-otp.test.ts`, `apps/api/src/middleware/runtime-guard*.ts`, `apps/api/.dev.vars.example` | QT1.md |
 | qa-seed | QT2 | opus | `apps/api/scripts/qa-seed*.ts`, `apps/api/scripts/qa-reset.ts`, `apps/api/src/seed/qa/**`, `.gitignore` | QT2.md |
-| mobile-guard | QT4 | sonnet | `apps/mobile/eslint-rules/**`, `apps/mobile/eslint.config.mjs`, `apps/mobile/.maestro/common/assert-no-crash.yaml` | QT4.md |
+| mobile-guard | QT4 | sonnet | `apps/mobile/eslint-rules/**`, `apps/mobile/eslint.config.mjs`, `apps/mobile/.maestro/common/assert-no-crash.yaml`, `apps/mobile/vitest.config.ts` (`include` array only, D-QA1-12) | QT4.md |
 | mobile-auth | QT9 | sonnet | `apps/mobile/src/screens/AuthScreen.tsx`, `apps/mobile/src/screens/auth/verifyCodeError*.ts`, `apps/mobile/src/screens/auth/authFlow.test.ts` | QT9.md |
 | mobile-maestro | QT3 | sonnet | `apps/mobile/.maestro/config.yaml`, `apps/mobile/.maestro/flows/**`, `apps/mobile/.maestro/common/sign-in-*.yaml`, `apps/mobile/.maestro/README.md` | QT3.md |
 | web-staging | QT5 | sonnet | `apps/trainer-web/playwright.staging.config.ts`, `apps/trainer-web/e2e-staging/**` | QT5.md |
