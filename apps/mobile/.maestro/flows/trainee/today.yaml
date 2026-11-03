@@ -1,0 +1,56 @@
+appId: com.thefitbud.mobile.staging
+name: Trainee Today
+tags:
+  - trainee
+  - smoke
+  - full
+---
+# Today for the on-track trainee (QA Aarav).
+#
+# Env from the runner: QA_ONTRACK_EMAIL, QA_PASSWORD.
+# Optional env, from the run's own apps/api/.qa-seed/expectations.json (these
+# are dated, so they change every night and must never be written in this file):
+#   QA_TODAY_WORKOUT_NAME  accounts[ontrack].today.workoutName; unset or empty on
+#                          a rest day (the QA plan trains four days a week)
+#   QA_TODAY_MEAL_NAME     accounts[ontrack].today.mealNames[0]
+# Without them the flow checks the structure only.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- assertVisible: "Today's workout"
+- assertNotVisible: ".*is preparing your plan.*"
+- takeScreenshot: trainee-today__loaded
+- runFlow: ../../common/assert-no-crash.yaml
+
+# A workout card with an exercise count, or the rest-day card. Both are valid.
+- assertVisible: 'Rest day\. Recovery is part of the plan\.|[0-9]+ exercises?.*'
+- runFlow:
+    when:
+      true: ${typeof QA_TODAY_WORKOUT_NAME !== 'undefined' && QA_TODAY_WORKOUT_NAME !== ''}
+    commands:
+      - assertVisible: ".*${QA_TODAY_WORKOUT_NAME}.*"
+
+# Nutrition and the planned meals sit below the workout card.
+- scrollUntilVisible:
+    element: "Nutrition"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Meals"
+    timeout: 20000
+- assertNotVisible: "No meals planned today\\."
+- runFlow:
+    when:
+      true: ${typeof QA_TODAY_MEAL_NAME !== 'undefined' && QA_TODAY_MEAL_NAME !== ''}
+    commands:
+      - scrollUntilVisible:
+          element: ".*${QA_TODAY_MEAL_NAME}.*"
+          timeout: 20000
+- runFlow: ../../common/assert-no-crash.yaml

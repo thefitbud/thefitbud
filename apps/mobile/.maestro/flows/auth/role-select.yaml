@@ -1,0 +1,46 @@
+appId: com.thefitbud.mobile.staging
+name: Role select is skipped for single-role accounts
+tags:
+  - auth
+  - trainer
+  - trainee
+  - full
+---
+# The QA seed has no account with both roles (D-QA1-3: qa+trainer is a trainer,
+# qa+ontrack and qa+slipping are trainees), so the role-select screen cannot be
+# reached. This flow asserts the single-role skip for both roles instead.
+# TODO(QT3b): once a dual-role QA account is seeded, drive "Choose mode" here
+# ("Trainer quick-use" / "Trainee daily execution", frame
+# 59-trainer-mobile-role-select-ios.png).
+#
+# Env from the runner: QA_TRAINER_EMAIL, QA_ONTRACK_EMAIL, QA_PASSWORD.
+
+# Trainer: straight to the attention inbox.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- assertVisible: "Needs you"
+- assertNotVisible: "Choose mode"
+- assertNotVisible: "Roles on this account"
+- takeScreenshot: auth-role-select__trainer-skip
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Trainee: straight to Today.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- assertVisible: "Today's workout"
+- assertNotVisible: "Choose mode"
+- assertNotVisible: "Roles on this account"
+- takeScreenshot: auth-role-select__trainee-skip
+- runFlow: ../../common/assert-no-crash.yaml

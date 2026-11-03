@@ -1,0 +1,23 @@
+# Maestro workspace config (QT3). Run from the workspace directory:
+#
+#   maestro test --format junit --test-output-dir qa-results/mobile apps/mobile/.maestro
+#
+# `flows` limits the run to the suite under flows/. The subflows in common/ are
+# called by the flows and are never run on their own; session-persists.yaml (AB3)
+# stays a manual flow.
+#
+# Tag filters (pass on the command line; a workspace config cannot hold two named sets):
+#
+#   smoke  auth + Today + trainer Clients, under 5 minutes. PR runs use this.
+#            --include-tags smoke
+#   full   every flow. The nightly run uses this (or no filter at all).
+#            --include-tags full
+#
+# Other tags: auth, trainee, trainer (select one role, e.g. --include-tags trainer).
+# Every flow carries `full`; the smoke flows also carry `smoke`.
+#
+# Flows run in path order: auth, then trainee, then trainer. That order matters:
+# trainee/workout-log.yaml must run before trainer/attention.yaml resolves
+# exceptions, which can close workout logging for the same client.
+flows:
+  - "flows/**"

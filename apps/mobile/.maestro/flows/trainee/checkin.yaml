@@ -1,0 +1,86 @@
+appId: com.thefitbud.mobile.staging
+name: Trainee sends a check-in
+tags:
+  - trainee
+  - full
+---
+# Open the weekly check-in from Today, fill it in, review, send, see the sent
+# state. Runs as the slipping trainee (QA Rohan, sign-in by code).
+#
+# Env from the runner: QA_SLIPPING_EMAIL, QA_OTP_CODE.
+#
+# SEED GAP (reported in the QT3 PR): the QA seed guarantees a check-in that is
+# already SUBMITTED and waiting for the trainer (guarantees.pendingCheckinsSlipping,
+# for trainer/checkin-review.yaml). It does not guarantee a due or overdue one,
+# which is the only kind the trainee can start. So the fill-and-send path below
+# runs when Today offers "Start check-in" / "Start"; otherwise the flow asserts
+# the sent state the trainee sees for the waiting check-in and says so.
+# TODO(QT2b): guarantee one startable check-in for a trainee, then make the
+# conditional unconditional.
+#
+# The form has three steps (Measurements, How was your week, Reflection). Only
+# "One line: how was the week?" is required; the flow fills that one and leaves
+# the optional measurements and photos alone (photos need the camera).
+# Writes a submitted check-in; the nightly reset restores it (D-QA1-7).
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-code.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+
+# The check-in card sits low on Today.
+- extendedWaitUntil:
+    notVisible: ".*Checking for a due check-in.*"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Start check-in|Start|See check-in|Check-in sent|Next check-in.*|No check-in is due right now\\."
+    timeout: 30000
+- takeScreenshot: trainee-checkin__card
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Nothing to start: assert what the trainee sees instead of a form.
+- runFlow:
+    when:
+      notVisible: "Start check-in|Start"
+    commands:
+      - assertVisible: ".*(Check-in sent|Waiting for .* to review|reviewed your check-in|Next check-in|No check-in is due right now).*"
+
+- runFlow:
+    when:
+      visible: "Start check-in|Start"
+    commands:
+      - tapOn: "Start check-in|Start"
+      - extendedWaitUntil:
+          visible: "Weekly check-in"
+          timeout: 20000
+      - assertVisible: ".*step 1 of 3.*"
+      - takeScreenshot: trainee-checkin__form
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Continue"
+      - assertVisible: ".*step 2 of 3.*"
+      - tapOn: "Continue"
+      - assertVisible: ".*step 3 of 3.*"
+      - tapOn: "One line: how was the week\\?"
+      - inputText: "Solid week, one session missed."
+      - hideKeyboard
+      - tapOn: "Continue"
+      # Review step, then send.
+      - extendedWaitUntil:
+          visible: "Send to .*"
+          timeout: 10000
+      - takeScreenshot: trainee-checkin__review
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Send to .*"
+      - extendedWaitUntil:
+          visible: "Sent\\. .* will review this\\."
+          timeout: 30000
+      - assertVisible: "Nothing else is required for this check-in\\."
+      - takeScreenshot: trainee-checkin__sent
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Back to Today"

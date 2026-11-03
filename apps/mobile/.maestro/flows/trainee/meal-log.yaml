@@ -1,0 +1,72 @@
+appId: com.thefitbud.mobile.staging
+name: Trainee logs meals
+tags:
+  - trainee
+  - full
+---
+# Diet tab: log a different meal through "Something different" and the food
+# library ("dal"), then confirm a planned meal as eaten as planned. Runs as the
+# on-track trainee (QA Aarav): no open exceptions, so meal logging is not locked.
+#
+# Env from the runner: QA_ONTRACK_EMAIL, QA_PASSWORD.
+#
+# Writes meal logs; the nightly reset restores them (D-QA1-7).
+# The "Eaten as planned" step is conditional: the meal windows are relative to
+# the clock, and a meal that is already logged or closed shows no action.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "Something different"
+    timeout: 30000
+- takeScreenshot: trainee-meal-log__diet
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Something different -> Log it myself -> search the library.
+- tapOn: "Something different"
+- extendedWaitUntil:
+    visible: "Log it myself"
+    timeout: 10000
+- takeScreenshot: trainee-meal-log__something-different
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Log it myself"
+- extendedWaitUntil:
+    visible: "Search foods"
+    timeout: 10000
+- tapOn: "Search foods"
+- inputText: "dal"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "Add .*"
+    timeout: 20000
+- assertNotVisible: "No matches\\. Try another spelling\\."
+- takeScreenshot: trainee-meal-log__food-search
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Add .*"
+- tapOn: "Save"
+
+# Back on Diet with the meal marked as changed (or, if it is still the focus
+# meal, its saved prompt).
+- extendedWaitUntil:
+    visible: ".*(Changed|Logged|Your log is saved).*"
+    timeout: 20000
+- takeScreenshot: trainee-meal-log__logged
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Confirm the next planned meal as eaten as planned, when one is offered.
+- runFlow:
+    when:
+      visible: "Eaten as planned"
+    commands:
+      - tapOn: "Eaten as planned"
+      - extendedWaitUntil:
+          visible: ".*Your log is saved.*"
+          timeout: 20000
+      - runFlow: ../../common/assert-no-crash.yaml

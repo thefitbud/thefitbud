@@ -1,0 +1,94 @@
+appId: com.thefitbud.mobile.staging
+name: Trainer Attention and exception
+tags:
+  - trainer
+  - full
+env:
+  QA_SLIPPING_NAME: QA Rohan
+---
+# Attention inbox shows several open items for QA Rohan; open the review sheet;
+# then open one exception from the client's status, acknowledge it, resolve it
+# as the trainer, and see QA Rohan's open count drop in the inbox.
+#
+# Env from the runner: QA_TRAINER_EMAIL, QA_PASSWORD.
+#
+# Writes (acknowledges and resolves one exception). Allowed on the QA accounts
+# only (D-QA1-7); the nightly reset restores it. Product rule: only the trainer
+# resolves an exception, and this is the trainer doing it by hand.
+# Mobile resolves from the exception screen: the review sheet's "Resolve…" is not
+# wired in Attention yet, and "Mark reviewed" only moves the client to Reviewed.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+
+- extendedWaitUntil:
+    visible: ${QA_SLIPPING_NAME}
+    timeout: 30000
+# Several open items for QA Rohan: the row carries an "N open" chip for N >= 2.
+- assertVisible: "([2-9]|[1-9][0-9]+) open"
+- takeScreenshot: trainer-attention__inbox
+- runFlow: ../../common/assert-no-crash.yaml
+- copyTextFrom: "[0-9]+ open"
+
+# The row opens the review sheet. Wait on "Resolve…", which only the sheet has:
+# "Mark reviewed" is also the swipe action rendered behind every row.
+- tapOn: ${QA_SLIPPING_NAME}
+- extendedWaitUntil:
+    visible: "Resolve.*"
+    timeout: 20000
+- takeScreenshot: trainer-attention__review-sheet
+- runFlow: ../../common/assert-no-crash.yaml
+- pressKey: back
+
+# Open one exception from the client's status.
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ${QA_SLIPPING_NAME}
+    timeout: 30000
+- tapOn: ${QA_SLIPPING_NAME}
+- extendedWaitUntil:
+    visible: "Review"
+    timeout: 30000
+- tapOn: "Review"
+- extendedWaitUntil:
+    visible: "Review the signal, then acknowledge or resolve.*"
+    timeout: 20000
+- extendedWaitUntil:
+    notVisible: "Loading exception…"
+    timeout: 20000
+- takeScreenshot: trainer-exception__review
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Acknowledge first when it is not acknowledged yet; Resolve only follows that.
+- runFlow:
+    when:
+      visible: "Acknowledge"
+    commands:
+      - tapOn: "Acknowledge"
+      - extendedWaitUntil:
+          visible: "Acknowledged\\. Source signals were not changed\\."
+          timeout: 20000
+- extendedWaitUntil:
+    visible: "Resolve"
+    timeout: 20000
+- tapOn: "Resolve"
+- extendedWaitUntil:
+    visible: "Resolved\\. Source signals were not changed\\."
+    timeout: 20000
+- takeScreenshot: trainer-exception__resolved
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Back to the inbox: one fewer open item for QA Rohan.
+- tapOn: "Back to attention"
+- tapOn: "Attention"
+- extendedWaitUntil:
+    visible: ${QA_SLIPPING_NAME}
+    timeout: 30000
+- assertNotVisible: ${maestro.copiedText}
+- takeScreenshot: trainer-attention__after-resolve
+- runFlow: ../../common/assert-no-crash.yaml

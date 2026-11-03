@@ -1,0 +1,49 @@
+appId: com.thefitbud.mobile.staging
+name: Trainer reviews a check-in
+tags:
+  - trainer
+  - full
+---
+# Check-ins tab: open a submitted check-in waiting for review (QA Rohan's, see
+# guarantees.pendingCheckinsSlipping), review it, save, and return to the inbox.
+#
+# Env from the runner: QA_TRAINER_EMAIL, QA_PASSWORD.
+#
+# Writes a check-in review; the nightly reset restores it (D-QA1-7).
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+
+- tapOn: "Check-ins"
+- extendedWaitUntil:
+    visible: "Review check-in due .*"
+    timeout: 30000
+- takeScreenshot: trainer-checkin-review__inbox
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Take a SUBMITTED one: the inbox also lists due and overdue check-ins, which
+# nobody has submitted yet.
+- tapOn: "Submitted · Client"
+- extendedWaitUntil:
+    visible: "Save review"
+    timeout: 30000
+- assertVisible: "Acknowledged"
+- takeScreenshot: trainer-checkin-review__review
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "Acknowledged"
+- tapOn: "Save review"
+
+# Back on the Check-ins tab. Not asserted empty: other clients' due or overdue
+# check-ins stay listed.
+- extendedWaitUntil:
+    visible: "Due, overdue, and submitted check-ins across your clients\\."
+    timeout: 30000
+- assertNotVisible: "Save review"
+- takeScreenshot: trainer-checkin-review__saved
+- runFlow: ../../common/assert-no-crash.yaml
