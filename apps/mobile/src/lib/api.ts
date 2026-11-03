@@ -174,8 +174,10 @@ export type TokenSessionDeps = {
    *   `fitbud.refreshToken`. In test mode only (no refresh token) the short
    *   test token goes to `fitbud.testToken`. The ~1 KB Firebase ID token is
    *   never stored; it is re-minted from the refresh token. A value over 2000
-   *   bytes is not stored.
-   * - Web: `localStorage` (access token, refresh token and expiry).
+   *   bytes is not stored. The userId, token kind and selected role live
+   *   separately in `fitbud.session`, written by `persistSession`, not here.
+   * - Web: `localStorage` (access token, refresh token, expiry and the
+   *   selected role under `fitbud.selectedRole`).
    * Not a no-op on native: do not remove it.
    */
   persist: (state: TokenState) => void;
