@@ -16,8 +16,35 @@ const REFRESH = "refresh-secret-value-0123456789abcdef";
 const EMAIL = "someone.private@example.test";
 const PASSWORD = "sunshine";
 
+/**
+ * A bearer token too short and too plain for any catch-all rule to notice: 8
+ * characters, under `LONG_OPAQUE`'s 24, no 6-digit run, not dot-segmented.
+ * Only `BEARER` and `SECRET_PAIR` can redact it, which is what makes those
+ * two rules testable at all — the long fixtures above are caught by
+ * `LONG_OPAQUE` whether those rules exist or not, so they pass for the wrong
+ * reason and give false assurance for exactly the short-token case.
+ */
+const SHORT_BEARER = "aB3xZ9qL";
+
+/**
+ * A compact JWT, 23 characters, likewise under `LONG_OPAQUE`'s threshold, so
+ * only the `eyJ`-anchored `JWT` rule can redact it.
+ */
+const SHORT_JWT = "eyJhbGciOi.eyJzdWIi.Xq9";
+
 /** Every secret a test puts into an error. Nothing here may ever come out. */
-const SECRETS = [TOKEN, JWT, REFRESH, EMAIL, PASSWORD, "hunter2", "123456", "not-a-uuid"];
+const SECRETS = [
+  TOKEN,
+  JWT,
+  REFRESH,
+  EMAIL,
+  PASSWORD,
+  SHORT_BEARER,
+  SHORT_JWT,
+  "hunter2",
+  "123456",
+  "not-a-uuid",
+];
 
 function expectNoSecrets(text: string): void {
   for (const secret of SECRETS) expect(text).not.toContain(secret);
@@ -64,10 +91,71 @@ describe("scrub", () => {
     expect(scrub(`authorization: bearer ${REFRESH}`)).not.toContain(REFRESH);
   });
 
+  it("redacts a short, non-opaque bearer token under an Authorization header", () => {
+    // Every row here leaked before the BEARER rule was moved ahead of
+    // SECRET_PAIR: the pair rule consumed the literal word `Bearer` as the
+    // value and destroyed the anchor BEARER needs.
+    for (const header of [
+      `Authorization: Bearer ${SHORT_BEARER}`,
+      `authorization: bearer ${SHORT_BEARER}`,
+      `Authorization=Bearer ${SHORT_BEARER}`,
+      `cookie: Bearer ${SHORT_BEARER}`,
+      `Proxy-Authorization: Bearer ${SHORT_BEARER}`,
+      `Bearer ${SHORT_BEARER}`,
+      `Bearer "${SHORT_BEARER}"`,
+    ]) {
+      expect(scrub(header)).not.toContain(SHORT_BEARER);
+    }
+    expect(scrub(`Authorization: Bearer ${SHORT_BEARER}`)).toBe(
+      "Authorization: [redacted] [redacted]",
+    );
+    expect(scrub(`Bearer ${SHORT_BEARER}`)).toBe("Bearer [redacted]");
+  });
+
+  it("redacts a compact JWT that is too short for the long-run rule", () => {
+    expect(SHORT_JWT.length).toBeLessThan(24);
+    expect(scrub(SHORT_JWT)).toBe("[redacted]");
+    expect(scrub(`token is ${SHORT_JWT}.`)).not.toContain("eyJ");
+    // …without eating a dotted identifier, which a generic three-segment
+    // base64url rule would have destroyed.
+    expect(scrub("index.android.bundle")).toBe("index.android.bundle");
+  });
+
   it("redacts a named secret whose value is an ordinary word", () => {
     expect(scrub(`password=${PASSWORD}`)).toBe("password=[redacted]");
     expect(scrub(`{"new_password":"${PASSWORD}"}`)).not.toContain(PASSWORD);
     expect(scrub("otpCode: 4242")).toBe("otpCode: [redacted]");
+  });
+
+  it("covers prefixed spellings of the secret field names", () => {
+    for (const pair of [
+      `authToken=${SHORT_BEARER}`,
+      `userPassword=${PASSWORD}`,
+      `user_password=${PASSWORD}`,
+      `passwd=${PASSWORD}`,
+      `passphrase=${PASSWORD}`,
+      `credential=${PASSWORD}`,
+      `credentials=${PASSWORD}`,
+      `accessToken=${SHORT_BEARER}`,
+      `refresh_token=${SHORT_BEARER}`,
+      `sessionToken=${SHORT_BEARER}`,
+      `Proxy-Authorization=${SHORT_BEARER}`,
+    ]) {
+      expect(scrub(pair)).not.toContain(SHORT_BEARER);
+      expect(scrub(pair)).not.toContain(PASSWORD);
+    }
+  });
+
+  it("pins the two limits that are knowingly left open", () => {
+    // 1. An unquoted multi-word value is redacted only as far as its first
+    // word: free text has no closing delimiter, and consuming to end-of-line
+    // would swallow the rest of a sentence. A quoted value is redacted whole.
+    expect(scrub("password: my secret phrase")).toBe("password: [redacted] secret phrase");
+    expect(scrub('password: "my secret phrase"')).toBe("password: [redacted]");
+    // 2. A short opaque zod path segment survives, because a path segment is
+    // a schema field name by construction and a value-shaped one cannot be
+    // told from a legitimate field name without entropy guesswork.
+    expect(scrub(["body", "482913", SHORT_BEARER].join("."))).toBe(`body.[code].${SHORT_BEARER}`);
   });
 
   it("redacts a 6-digit code even when it sits next to other digits", () => {
@@ -99,6 +187,15 @@ describe("the reporter never sees a secret", () => {
   it("strips secrets from a message", () => {
     const safe = captureRelease(
       new Error(`Failed for ${EMAIL} with code 123456, ${TOKEN} and password=${PASSWORD}`),
+    );
+    expectNoSecrets(JSON.stringify(safe));
+  });
+
+  it("strips a short bearer token and a compact JWT reported through an error", () => {
+    const safe = captureRelease(
+      new Error(`Authorization: Bearer ${SHORT_BEARER} (authToken=${SHORT_BEARER})`, {
+        cause: new Error(`upstream rejected ${SHORT_JWT}`),
+      }),
     );
     expectNoSecrets(JSON.stringify(safe));
   });

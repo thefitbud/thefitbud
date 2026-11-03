@@ -14,14 +14,31 @@
  *
  * ## Reporter contract (for BT2b, W4)
  *
- * The signature is unchanged — `ErrorReporter = (where: string, err: unknown)
- * => void` — so a Sentry adapter installs with `setErrorReporter` exactly as
- * before. What changed is the *value* of the second argument: it is now
- * always a plain, JSON-serialisable `SanitisedError`, never the caught error.
- * An adapter should narrow with `isSanitisedError(err)` and map the fields it
- * wants onto its own payload rather than expecting an `Error` instance.
- * `SanitisedError.stack` is a scrubbed, line-capped stack string suitable for
+ * `ErrorReporter` is `(where: string, err: SanitisedError) => void`. The
+ * second parameter is typed as `SanitisedError` rather than `unknown` so the
+ * boundary is **compiler-enforced**: `reporter?.(where, err)` with a raw
+ * caught error no longer type-checks, instead of being caught only by a test.
+ *
+ * This stays compatible for BT2b. A parameter type is checked
+ * contravariantly, so an adapter declared `(where: string, err: unknown) =>
+ * void` — or one that ignores the second argument altogether — remains
+ * assignable to `ErrorReporter` and installs with `setErrorReporter`
+ * unchanged. What an adapter must not assume is that it receives an `Error`
+ * instance: the value is always a plain, JSON-serialisable `SanitisedError`,
+ * so map its fields onto the reporter's own payload (`isSanitisedError` is
+ * exported for an adapter that takes `unknown` and wants to narrow).
+ * `SanitisedError.stack` is a scrubbed, line-capped stack suitable for
  * grouping; `cause` is the sanitised cause chain.
+ *
+ * **Symbolication will not survive this, and that is the accepted trade.** A
+ * Hermes release stack is made of exactly what `DIGIT_RUN` and `LONG_OPAQUE`
+ * redact: `at verifyCode (index.android.bundle:1:983241)` arrives as
+ * `...:1:[code]`, and an APK-path frame as `at p ([redacted]![redacted]:1:45231)`.
+ * Grouping on `name`, `message` and frame function names should still work,
+ * but BT2b cannot expect a source-mapped line and column, because a bundle
+ * offset is a long digit run and is indistinguishable from an OTP code to any
+ * rule that does not parse the frame. If BT2b needs symbolication it needs a
+ * frame-aware stack formatter, which is a decision, not a tweak here.
  *
  * Why the boundary builds a new object instead of scrubbing an `Error` in
  * place:
@@ -35,10 +52,12 @@
  */
 
 /**
- * The reporter is given a `SanitisedError`, not the caught error. The type
- * stays `(where, err: unknown)` so BT2b's adapter plugs in unchanged.
+ * The reporter is given a `SanitisedError`, never the caught error — and the
+ * parameter type says so, so handing it a raw error is a compile error. A
+ * BT2b adapter declared with `unknown` stays assignable (see the contract
+ * block above).
  */
-export type ErrorReporter = (where: string, err: unknown) => void;
+export type ErrorReporter = (where: string, err: SanitisedError) => void;
 
 let reporter: ErrorReporter | null = null;
 
@@ -115,15 +134,46 @@ export function isSanitisedError(value: unknown): value is SanitisedError {
  * its issues and an API message can quote a field, so this is the main
  * surface — and it is the only rule that catches a short, innocuous-looking
  * secret such as a one-word password.
+ *
+ * The `[a-z0-9]*[-_]?` prefixes make the list cover the prefixed spellings as
+ * a family (`authToken`, `userPassword`, `Proxy-Authorization`, `accessToken`,
+ * `refresh_token`) instead of needing one entry each; `pass(?:word|wd|phrase)`
+ * covers `passwd` and `passphrase` the same way.
+ *
+ * The value group deliberately stops at whitespace, so an **unquoted,
+ * multi-word** value is only redacted as far as its first word
+ * (`password: my secret phrase` → `password: [redacted] secret phrase`). That
+ * is a knowing limit, not an oversight: free text has no closing delimiter, so
+ * consuming to end-of-line would swallow the rest of a sentence and make every
+ * report unreadable. A quoted multi-word value *is* redacted in full, which is
+ * the shape a serialised body or JSON dump actually produces.
  */
 const SECRET_PAIR =
-  /(["']?\b(?:access[-_]?token|api[-_]?key|authorization|code|cookie|current[-_]?password|id[-_]?token|new[-_]?password|otp(?:[-_]?code)?|pass[-_]?code|password|pin|proof|refresh[-_]?token|reset[-_]?proof|secret|session(?:[-_]?token)?|set[-_]?cookie|token[-_]?kind|token|verification[-_]?code)\b["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;}\])&]+)/gi;
+  /(["']?\b(?:[a-z0-9]*[-_]?authorization|[a-z0-9]*[-_]?token(?:[-_]?kind)?|[a-z0-9]*[-_]?pass(?:word|wd|phrase)|api[-_]?key|code|cookie|credentials?|otp(?:[-_]?code)?|pass[-_]?code|pin|proof|reset[-_]?proof|secret|session|set[-_]?cookie|verification[-_]?code)\b["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;}\])&]+)/gi;
 
-/** `Bearer <anything>`, quoted or bare. */
+/**
+ * `Bearer <anything>`, quoted or bare.
+ *
+ * This must run **before** `SECRET_PAIR`. On `Authorization: Bearer <token>`
+ * the pair rule otherwise consumes the literal word `Bearer` as the value —
+ * its value group stops at whitespace — which replaces the very anchor this
+ * rule needs and leaves a short non-JWT token in the clear.
+ */
 const BEARER = /\bbearer\s+("[^"]*"|'[^']*'|[^\s,;}\])&]+)/gi;
 
-/** Three base64url segments: a JWT, with or without the `Bearer ` prefix. */
-const JWT = /\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
+/**
+ * A JWT, anchored on the `eyJ` every JWT begins with: a JWT header is JSON, so
+ * it always starts `{"`, which base64url-encodes to `eyJ`.
+ *
+ * The anchor is what makes this rule earn its place. A generic
+ * three-segment-base64url rule is dead code — anything it can match is 26
+ * characters or more, which `LONG_OPAQUE` already catches — and lowering the
+ * per-segment minimum instead would eat dotted identifiers, since
+ * `index.android.bundle` is three base64url segments, and destroy every stack
+ * frame. Anchoring catches a compact JWT below `LONG_OPAQUE`'s threshold
+ * without touching module paths.
+ */
+const JWT = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]*)?/g;
 
 const EMAIL = /[^\s@"'<>,;]+@[^\s@"'<>,;]+\.[^\s@"'<>,;]+/g;
 
@@ -138,14 +188,17 @@ const DIGIT_RUN = /\d{6,}/g;
 
 /**
  * Removes anything address-, token-, secret- or code-shaped from free text.
- * Order matters: named secrets first, because their values can be short and
- * otherwise unremarkable, then shapes, then long runs and digit runs.
+ *
+ * Order is load-bearing and the tests pin it. `BEARER` must precede
+ * `SECRET_PAIR` (see `BEARER`), then the named-secret rule — whose values can
+ * be short and otherwise unremarkable — then the remaining shapes, then the
+ * long-run and digit-run catch-alls.
  */
 export function scrub(text: string): string {
   return text
     .replace(EMAIL, "[email]")
-    .replace(SECRET_PAIR, "$1[redacted]")
     .replace(BEARER, "Bearer [redacted]")
+    .replace(SECRET_PAIR, "$1[redacted]")
     .replace(JWT, "[redacted]")
     .replace(LONG_OPAQUE, "[redacted]")
     .replace(DIGIT_RUN, "[code]");
