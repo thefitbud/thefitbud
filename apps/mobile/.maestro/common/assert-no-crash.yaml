@@ -1,0 +1,24 @@
+# Shared Maestro subflow: fail if the app has crashed or is showing an error.
+#
+# Usage (QT3 calls this after every screenshot step):
+#   - runFlow: ../common/assert-no-crash.yaml
+#
+# Inputs: none. It takes no screenshot and does not launch the app.
+# Asserts NOT visible (all substrings, case-insensitive regex):
+#   - Expo dev client / Metro:  "There was a problem loading the project",
+#     "Unable to load script"
+#   - React Native red box / Android view creation (the AB2 crash):
+#     "Invalid accessibility role value", "Render Error",
+#     "Error while updating property"
+#   - Expo dev-client error header: "Something went wrong"
+#   - FitBud's own error screen (apps/mobile/src/navigation/AppRouter.tsx):
+#     title "Something went wrong", subtitle "We could not load your coaching account."
+# A release-style (preview) build shows no red box, so the caller must also
+# assert a screen-specific anchor with assertVisible (QT3's job).
+- assertNotVisible: ".*There was a problem loading the project.*"
+- assertNotVisible: ".*Unable to load script.*"
+- assertNotVisible: ".*Invalid accessibility role value.*"
+- assertNotVisible: ".*Render Error.*"
+- assertNotVisible: ".*Error while updating property.*"
+- assertNotVisible: ".*Something went wrong.*"
+- assertNotVisible: ".*We could not load your coaching account.*"
