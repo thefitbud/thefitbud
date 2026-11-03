@@ -8,8 +8,25 @@ How to run FitBud locally and walk through every MVP workflow using the seeded d
 2. From the repo root: `pnpm install`, `pnpm setup:local`, `pnpm db:reset`.
 3. Terminal A: `pnpm api` (listens on **8787**, bound to `0.0.0.0` for LAN).
 4. Terminal B: `pnpm web` (trainer web on `http://127.0.0.1:5173` by default).
-5. Terminal C: `pnpm --filter @fitbud/mobile exec expo start` (Expo Go) or `pnpm mobile` (dev client).
+5. Terminal C: `pnpm mobile` (dev client; rebuilds the shared packages first). Do not start with `npx expo start`: it skips the package build (see "Stale shared packages").
 6. Sign in on web or mobile with any demo account below (password **`FitBud-demo-2026`**).
+
+### Stale shared packages (mobile)
+
+`@fitbud/contracts`, `@fitbud/api-client` and the other workspace packages are built into the gitignored `packages/*/dist`. `git pull` and `expo start -c` do not rebuild them. A `dist` older than the code on your branch makes the app disagree with the API without any server error.
+
+**The incident (3 Nov 2026):** on staging a correct sign-in code showed "That code didn't work". The API had answered `POST /auth/otp/verify` with **200** and the app never called `GET /me`. A local `packages/contracts/dist` from before AU1b only allowed `tokenKind` `test_id_token` and `firebase_custom_token`; staging sends `firebase_id_token`, so the client's schema parse threw and a catch blamed the code. It cost hours of looking at the server, rate limits and Firebase.
+
+**Fix:** from the repo root run `pnpm -w run build:packages`, then `npx expo start --dev-client -c` in `apps/mobile`.
+
+**Going forward, start with `pnpm mobile` (or `pnpm dev` in `apps/mobile`, or `pnpm start` there).** All three run the package build first. `npx expo start` bypasses npm scripts and does not.
+
+What guards you now:
+
+- The Metro dev server bundles `contracts`, `api-client` and `core` from `src`, so those can no longer be stale. Release (EAS) bundles still use `dist`.
+- For the packages still read from `dist` (`tokens`, `ui-mobile`), Metro prints `[fitbud] packages/<name>/dist is missing or older than its src` in the terminal at start-up. If you see it, run `pnpm -w run build:packages`.
+- A dev build shows `JS <short commit>` at the bottom-left of the sign-in screen, so you can check which commit the running bundle came from.
+- Auth failures show a short code, for example `(AUTH-PARSE)` for a response the app could not read. In a dev build the Metro/console line `[auth] <where> ZodError ...` lists the failing field paths, never values. Codes: `AUTH-NET` network or timeout, `AUTH-RATE` 429, `AUTH-SRV` 5xx, `AUTH-PARSE` client and server disagree on a response (rebuild packages first), `AUTH-SESSION` sign-in succeeded but the session could not be started, `AUTH-UNK` anything else.
 
 Pending invite for accept-flow testing:
 
