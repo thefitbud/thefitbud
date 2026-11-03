@@ -50,7 +50,6 @@ export function AuthScreen() {
   // The controller outlives renders; it reads the latest closures through this ref.
   const latest = useRef({ identifier, s1, finishAuth });
   latest.current = { identifier, s1, finishAuth };
-  const keptFor = useRef<string | null>(null);
   const verifier = useRef(
     createCodeVerifier({
       verify: (code: string) =>
@@ -107,14 +106,10 @@ export function AuthScreen() {
     }
     // Synchronous guard first: a second tap in the same frame must do nothing.
     if (verifier.current.busy) return;
-    const id = identifier.trim();
-    // A kept verify result belongs to the identifier it was verified for.
-    if (keptFor.current !== id) verifier.current.discardKept();
-    keptFor.current = id;
     setLoading(true);
     setLocalError(null);
     try {
-      const outcome = await verifier.current.submit(code);
+      const outcome = await verifier.current.submit(code, identifier.trim());
       if (outcome.kind === "error") setLocalError(outcome.message);
     } finally {
       setLoading(false);

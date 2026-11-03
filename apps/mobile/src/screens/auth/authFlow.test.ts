@@ -69,7 +69,7 @@ describe("verify code controller", () => {
     const verify = vi.fn(async () => ok);
     const finish = vi.fn(async () => {});
     const v = createCodeVerifier<R>({ verify, finish });
-    const [a, b] = await Promise.all([v.submit("123456"), v.submit("123456")]);
+    const [a, b] = await Promise.all([v.submit("123456", "aarav.ontrack@demo.fitbud.test"), v.submit("123456", "aarav.ontrack@demo.fitbud.test")]);
     expect(verify).toHaveBeenCalledTimes(1);
     expect(finish).toHaveBeenCalledTimes(1);
     expect([a.kind, b.kind].sort()).toEqual(["ignored", "signed-in"]);
@@ -85,11 +85,11 @@ describe("verify code controller", () => {
       )
       .mockResolvedValueOnce(ok);
     const v = createCodeVerifier<R>({ verify, finish: async () => {} });
-    expect(await v.submit("111111")).toEqual({
+    expect(await v.submit("111111", "aarav.ontrack@demo.fitbud.test")).toEqual({
       kind: "error",
       message: "That code didn't work. Check the latest message or tap Resend.",
     });
-    expect((await v.submit("222222")).kind).toBe("signed-in");
+    expect((await v.submit("222222", "aarav.ontrack@demo.fitbud.test")).kind).toBe("signed-in");
     expect(verify).toHaveBeenCalledTimes(2);
   });
 
@@ -101,25 +101,30 @@ describe("verify code controller", () => {
       .mockRejectedValueOnce(new Error("me failed"))
       .mockResolvedValueOnce(undefined);
     const v = createCodeVerifier<R>({ verify, finish });
-    expect(await v.submit("123456")).toEqual({
+    expect(await v.submit("123456", "aarav.ontrack@demo.fitbud.test")).toEqual({
       kind: "error",
       message: "Your code worked, but we couldn't finish signing you in. Try again.",
     });
-    expect((await v.submit("123456")).kind).toBe("signed-in");
+    expect((await v.submit("123456", "aarav.ontrack@demo.fitbud.test")).kind).toBe("signed-in");
     expect(verify).toHaveBeenCalledTimes(1);
     expect(finish).toHaveBeenCalledTimes(2);
     expect(finish).toHaveBeenLastCalledWith(ok);
   });
 
-  it("a discarded kept result means the next submit verifies a new code", async () => {
+  it("a kept result is not used after the identifier changes", async () => {
     const { createCodeVerifier } = await import("./verifyCodeErrorFlow");
-    const verify = vi.fn(async () => ok);
+    const verify = vi
+      .fn()
+      .mockResolvedValueOnce({ purpose: "login", token: "session-for-A" })
+      .mockResolvedValueOnce({ purpose: "login", token: "session-for-B" });
     const finish = vi.fn().mockRejectedValueOnce(new Error("x")).mockResolvedValue(undefined);
     const v = createCodeVerifier<R>({ verify, finish });
-    await v.submit("123456");
-    v.discardKept();
-    await v.submit("654321");
+    await v.submit("123456", "a@example.com");
+    // Field changed to B: A's kept session must not sign B in.
+    expect((await v.submit("654321", "b@example.com")).kind).toBe("signed-in");
     expect(verify).toHaveBeenCalledTimes(2);
+    expect(finish).toHaveBeenLastCalledWith({ purpose: "login", token: "session-for-B" });
+    expect(finish).toHaveBeenCalledTimes(2);
   });
 
   it("a non-login verify result shows the invalid-code copy and is not finished", async () => {
@@ -129,7 +134,7 @@ describe("verify code controller", () => {
       verify: async () => ({ purpose: "reset", token: "t" }),
       finish,
     });
-    expect((await v.submit("123456")).kind).toBe("error");
+    expect((await v.submit("123456", "aarav.ontrack@demo.fitbud.test")).kind).toBe("error");
     expect(finish).not.toHaveBeenCalled();
   });
 });
