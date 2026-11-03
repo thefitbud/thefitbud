@@ -8,6 +8,12 @@ import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
+import {
+  resetSendError,
+  resetSetError,
+  resetVerifyError,
+  resetVerifyMismatchCopy,
+} from "./passwordResetErrors";
 
 type Props = {
   onBack: () => void;
@@ -35,8 +41,8 @@ export function PasswordScreen({ onBack }: Props) {
     try {
       await s1.startOtp({ identifier: identifier.trim(), purpose: "reset" });
       setStep("verify");
-    } catch {
-      setError("If an account exists, we've sent a code.");
+    } catch (err) {
+      setError(resetSendError(err));
     } finally {
       setLoading(false);
     }
@@ -52,13 +58,13 @@ export function PasswordScreen({ onBack }: Props) {
         code,
       });
       if (result.purpose !== "reset") {
-        setError("That code didn't work.");
+        setError(resetVerifyMismatchCopy());
         return;
       }
       setOtpProof(result.resetProof);
       setStep("set");
-    } catch {
-      setError("That code didn't work.");
+    } catch (err) {
+      setError(resetVerifyError(err));
     } finally {
       setLoading(false);
     }
@@ -75,8 +81,8 @@ export function PasswordScreen({ onBack }: Props) {
     try {
       await s1.resetPassword({ resetProof: otpProof, newPassword: password });
       setDone(true);
-    } catch {
-      setError("Could not update password.");
+    } catch (err) {
+      setError(resetSetError(err));
     } finally {
       setLoading(false);
     }
