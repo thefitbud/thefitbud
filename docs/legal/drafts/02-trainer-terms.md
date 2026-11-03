@@ -36,7 +36,7 @@ By using FitBud as a trainer you confirm, each time you use it, that:
 
 **2.6** Everything you put into FitBud is yours to put there and infringes nobody's rights.
 
-> **COUNSEL:** the owner has decided not to require any qualification declaration during the beta and not to verify trainers. §2.2 is therefore the only mechanism allocating coaching competence to the trainer. Please confirm it is worded strongly enough to be relied on, and whether a one-line affirmative tick at registration ("I confirm I hold the qualifications and insurance my coaching requires") should be captured in the product. We recommend capturing it; it is a small build.
+> **COUNSEL:** the owner has decided not to require any qualification declaration during the beta and not to verify trainers. §2.2 is therefore the only mechanism allocating coaching competence to the trainer. Please confirm it is worded strongly enough to be relied on, and whether a one-line affirmative tick at registration ("I confirm I hold the qualifications and insurance my coaching requires") should be captured in the product. Decided 3 Nov 2026: captured as its own tick box at trainer registration (draft 12 §2.1). No qualification is checked.
 
 ## 3. Your coaching is yours
 
@@ -72,7 +72,7 @@ This section is the heart of this agreement. Read it.
 
 We may remove a question or a form that breaks this clause, and may suspend your account for it.
 
-**4.5 Photographs.** A client's progress photographs are sensitive. You may look at them to coach that client. You must not download, copy, forward, publish, post or show them to anyone — including in marketing, on social media, in a testimonial or in a case study — unless that client has given you specific written permission for that specific use. Permission to be coached is not permission to publish.
+**4.5 Photographs.** A client's photographs — progress, meal and check-in photos alike — are sensitive. Require a photo only where it genuinely helps you coach that client, and if a client tells you they would rather not send photos, respect that and switch the requirement off. You may look at a client's photographs to coach that client. You must not download, copy, forward, publish, post or show them to anyone — including in marketing, on social media, in a testimonial or in a case study — unless that client has given you specific written permission for that specific use. Permission to be coached is not permission to publish.
 
 **4.6 Data you keep yourself.** If you copy a client's information into your own notes, spreadsheets, phone or WhatsApp, that copy is yours and you are responsible for it: for keeping it secure, for using it only for coaching, for deleting it when it is no longer needed, and for answering that client if they ask you about it. Our deletion of data from FitBud does not delete your copies, and we cannot do it for you.
 
@@ -112,9 +112,9 @@ We may remove a question or a form that breaks this clause, and may suspend your
 
 ## 8. Indemnity
 
-You will indemnify us against any claim, loss, liability, cost or expense (including reasonable legal costs) arising from: your coaching or anything you prescribe; any injury, illness or loss suffered by a client of yours; your breach of §4; any claim by a client about their personal data where the cause was your act or omission; or your breach of this agreement.
+You will indemnify us against any claim, loss, liability, cost or expense (including reasonable legal costs) arising from: your coaching or anything you prescribe; any injury, illness or loss suffered by a client of yours as a result of your coaching; your breach of §4; any claim by a client about their personal data where the cause was your act or omission; or your breach of this agreement.
 
-> **COUNSEL:** see Q9 in the brief. We have included this knowing it may be of limited practical value against an individual, because it allocates responsibility clearly even if recovery is unlikely.
+> **COUNSEL:** see draft 13 P9. Aligned with Terms of Service §13, which limits the indemnity to risks the trainer controls. We have included this knowing it may be of limited practical value against an individual, because it allocates responsibility clearly even if recovery is unlikely.
 
 ## 9. Suspension
 

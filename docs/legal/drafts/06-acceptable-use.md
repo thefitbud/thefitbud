@@ -49,7 +49,7 @@ Do not use a free-text question to get around this. We may remove a question or 
 
 **3.3 Use client information only to coach that client.** Not for marketing, not for a mailing list, not for research, not for a case study, not to build a product, and not for anything else. Do not share it with another trainer, a gym, a supplement seller or anyone else.
 
-**3.4 Progress photographs.** You may view a client's photographs to coach them. You may not download, copy, forward, publish, post, print or show them to anyone without that client's specific written permission for that specific use. Permission to coach is not permission to publish. This applies to social media, advertising, testimonials, "before and after" posts and WhatsApp groups.
+**3.4 Photographs.** This covers progress, meal and check-in photos alike. Require a photo only where it helps you coach, and switch the requirement off if a client asks. You may view a client's photographs to coach them. You may not download, copy, forward, publish, post, print or show them to anyone without that client's specific written permission for that specific use. Permission to coach is not permission to publish. This applies to social media, advertising, testimonials, "before and after" posts and WhatsApp groups.
 
 **3.5 Keep it confidential.** Do not discuss a client's health, body, measurements, eating or coaching with anyone else without their permission, unless the law requires it. That includes other clients and other trainers.
 
@@ -67,7 +67,7 @@ Do not use a free-text question to get around this. We may remove a question or 
 
 **4.2 Your account is yours.** Do not share it, and do not let your trainer log in as you.
 
-**4.3 Do not upload other people's information.** A photograph should be of you. Do not upload documents about anyone else.
+**4.3 Do not upload other people's information.** A photograph should be of you, or of your own meals. Do not upload documents about anyone else.
 
 ## 5. How we enforce this
 
@@ -90,5 +90,5 @@ If someone is in immediate danger, call **112** before you email us.
 ### Document notes (delete before publication)
 
 - §3.2 is the contractual counterpart to a technical gap: onboarding and check-in forms are trainer-configurable (`intake_definitions.schema_json`, `checkin_form_templates`, `onboarding_form_templates`), so a trainer can compose any question they like. A server-side restriction on field names and types would make this enforceable rather than only promised. Recommended as a product task.
-- §3.4 has no technical enforcement either: a trainer viewing a photograph can screenshot it. The rule is worth stating regardless, and the Privacy Policy tells clients to report a trainer who breaks it.
+- §3.4 has no technical enforcement either: a trainer viewing a photograph can screenshot it. The rule is worth stating regardless, and the Privacy Policy (§4.2, Photographs) tells clients to report a trainer who breaks it.
 - §6's commitment not to identify a reporting client to their trainer needs an operational procedure behind it (draft 10).

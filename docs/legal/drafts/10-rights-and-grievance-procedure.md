@@ -1,7 +1,7 @@
 # 10 · Internal procedure: data principal requests, grievances and breaches
 
 > **DRAFT for founder review.** Prepared 2 Nov 2026. Internal — not published.
-> A privacy policy that promises rights without a procedure behind it is a liability. This is the procedure. It is written for a one-person operation, because that is what FitBud is today.
+> A privacy policy that promises rights without a procedure behind it is a liability. This is the procedure. It is written for a two-partner operation, because that is what Oryvate is today.
 
 ---
 
@@ -9,8 +9,8 @@
 
 | Role | Who | Responsibility |
 |---|---|---|
-| Data Protection / Grievance contact | [[PARTNER 1 — NAME]] | Receives, decides and answers everything in this document. Named publicly in the Privacy Policy |
-| Deputy, for absence | [[PARTNER 2 — NAME]] | Acts when the contact is unreachable for more than two working days |
+| Data Protection / Grievance contact | [[GRIEVANCE OFFICER NAME — one of the two partners]] | Receives, decides and answers everything in this document. Named publicly in the Privacy Policy |
+| Deputy, for absence | [[the other partner]] | Acts when the contact is unreachable for more than two working days |
 
 **1.1** Two partners means the deputy slot can be filled properly, which removes the worst operational risk here: a statutory clock runs whether or not anyone is reading email. Both partners have access to `tech@thefitbud.com`, it is checked every working day, and anything in this document is flagged the day it arrives rather than the week it arrives. Agree between you which partner holds this and write it into the partnership deed, so it is not renegotiated during an incident.
 
@@ -42,11 +42,12 @@ Every request, grievance and incident gets a row. One file, kept outside the pro
 | Erasure / account deletion | Within 3 working days | [[CONFIRM]], and in any event within 30 days |
 | Consent withdrawal | Same working day where possible | Effective immediately; confirm in writing |
 | Nomination | Within 3 working days | [[CONFIRM]] |
-| Grievance | Within 3 working days | [[CONFIRM]] |
-| Breach notification to the Data Protection Board | — | [[CONFIRM: statutory timing]] |
-| Breach notification to affected people | — | [[CONFIRM]] |
+| Grievance | **Within 24 hours** | Within one month (SPDI r.5(9)); within 15 days if FitBud is an intermediary (draft 13 P4). From 13 May 2027 the DPDP ceiling is 90 days — keep one month anyway |
+| Cyber incident report to **CERT-In** | — | **Within 6 hours** of noticing it, for the incident types in the CERT-In Directions' Annexure I (draft 13 P13) |
+| Breach notification to the Data Protection Board | — | From 13 May 2027: first intimation **without delay**, detailed report **within 72 hours** (DPDP Rules r.7) |
+| Breach notification to affected people | — | **Without delay** (DPDP Rules r.7); do the same before May 2027 |
 
-> **COUNSEL:** please fill every `[[CONFIRM]]` from the DPDP Rules as notified. The internal acknowledgement targets are our own, set tighter than any statutory period on purpose.
+> **COUNSEL:** grievance, CERT-In and DPDP breach timelines are now filled from the instruments (draft 13 P6). Please fill the remaining `[[CONFIRM]]` rows — access, correction, erasure and nomination — for which neither regime sets a fixed number of days for a fiduciary of FitBud's class. The internal acknowledgement targets are our own, set tighter than any statutory period on purpose.
 
 ## 4. Handling each request type
 
@@ -97,9 +98,9 @@ Record the nominee's name and contact against the account. [[There is no field f
 
 ## 5. Grievances
 
-1. Acknowledge within 3 working days, by email, with a reference.
+1. Acknowledge within 24 hours, by email, with a reference.
 2. Investigate: what happened, what the records show, what the product actually does.
-3. Answer in writing: the finding, the reason, what you will do, and the person's right to complain to the **Data Protection Board of India** if they are not satisfied.
+3. Answer in writing: the finding, the reason, what you will do, and the person's right to complain to the **Data Protection Board of India** if they are not satisfied (from 13 May 2027; before then, mention their other remedies only if counsel advises).
 4. Log it, and log what you changed as a result.
 
 **If a grievance is about a trainer** — a trainer published a client's photograph, or asked for an Aadhaar number, or shared information:
@@ -122,8 +123,9 @@ Record the nominee's name and contact against the account. [[There is no field f
 
 **6.3 Notify**
 
-- **Data Protection Board of India:** [[CONFIRM: timing and content]]. Do not wait for a complete picture if the clock is short — report what is known and supplement it.
-- **The people affected:** [[CONFIRM: timing]]. Plain language: what happened, what data, what it means for them, what we have done, what they should do.
+- **CERT-In, within 6 hours** of noticing an incident of a type listed in the Directions' Annexure I (unauthorised access, data breach or leak, compromise of a server or application, and others). Report what is known in the prescribed format and supplement it. The CERT-In point of contact is [[GRIEVANCE OFFICER NAME — one of the two partners]].
+- **Data Protection Board of India** (from 13 May 2027): an intimation **without delay**, then a detailed report **within 72 hours** covering the facts, cause, likely impact, mitigation, and the notices sent to affected people. Do not wait for a complete picture — report what is known and supplement it.
+- **The people affected:** **without delay**. Plain language: what happened, what data, what it means for them, what we have done, what they should do.
 - **A processor's breach** is still ours to report to the people affected.
 - Tell the affected **trainers** where their clients are involved, so they are not blindsided by their own clients.
 
@@ -153,7 +155,7 @@ Record the nominee's name and contact against the account. [[There is no field f
 
 > Thank you for your message of [[DATE]]. We have recorded your request as [[REFERENCE]].
 >
-> We treat this as a request to [[access / correct / delete / withdraw consent]] under the Digital Personal Data Protection Act, 2023. To confirm it came from you, please [[reply from the email address on your FitBud account / use the link we have sent to your registered email]].
+> We treat this as a request to [[access / correct / delete / withdraw consent]] under our Privacy Policy [[and, from 13 May 2027, the Digital Personal Data Protection Act, 2023]]. To confirm it came from you, please [[reply from the email address on your FitBud account / use the link we have sent to your registered email]].
 >
 > We expect to complete this by [[DATE]]. If it will take longer, we will tell you before then and explain why.
 >
@@ -179,7 +181,7 @@ Record the nominee's name and contact against the account. [[There is no field f
 > **What we have done:** [[containment and fix, with dates]]
 > **What we suggest you do:** [[concrete steps, or "nothing you need to do"]]
 >
-> We have reported this to the Data Protection Board of India. If you have questions, write to tech@thefitbud.com. We are sorry.
+> We have reported this to [[CERT-In / the Data Protection Board of India — whichever applies on the date]]. If you have questions, write to tech@thefitbud.com. We are sorry.
 >
 > [[NAME]], FitBud
 

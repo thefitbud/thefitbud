@@ -18,7 +18,7 @@ FitBud is in closed beta. These terms add to, and where they conflict override, 
 
 ## 1A. Who operates the beta
 
-FitBud is operated during the beta by **M/s FitBud**, a partnership firm, as identified in the Terms of Service §1. The partners intend to incorporate a company to carry on the business; if they do, the Terms of Service §18.3 transfers these agreements to it and we will tell you by email. Nothing about your use of FitBud changes because of it.
+FitBud is operated during the beta by **M/s Oryvate**, a partnership firm, as identified in the Terms of Service §1. The partners intend to incorporate a company to carry on the business; if they do, the Terms of Service §18.3 transfers these agreements to it and we will tell you by email. Nothing about your use of FitBud changes because of it.
 
 ## 2. Free of charge
 
@@ -76,9 +76,7 @@ Support is by email to tech@thefitbud.com. We aim to reply within one working da
 
 ## 8. Store rules
 
-The beta reaches you through Apple or Google, and their own terms apply to the distribution — TestFlight's terms, or Google Play's. Neither Apple nor Google is a party to your agreement with us, neither provides FitBud, and neither is responsible for it or for any coaching that happens in it. Any problem with FitBud is ours, not theirs.
-
-> **COUNSEL:** Apple's Schedule to the Developer Program Licence Agreement requires certain acknowledgements in end-user terms (Apple as a third-party beneficiary, no Apple warranty, Apple not responsible for claims, and so on). Please confirm which of those must appear, and whether they belong here or in the Terms of Service.
+The beta reaches you through Apple TestFlight or Google Play closed testing, and their own terms apply to the distribution. The terms that Apple requires us to include, and which apply to Google Play too, are in the Terms of Service §19.
 
 ---
 

@@ -24,13 +24,15 @@ Each row below is a product task as well as a legal one. **A policy published wi
 
 ### 2.1 Trainer registration
 
-Above the primary action:
+Three tick boxes above the primary action, none pre-ticked; the action stays disabled until all three are ticked:
 
-> By creating an account you agree to FitBud's **Terms of Service**, the **Trainer Terms** and the **Acceptable Use Policy**, and you confirm you have read the **Privacy Policy**.
+> ☐ I am 18 or over, and I hold the qualifications, registrations and insurance my coaching requires. I understand FitBud does not check these.
+> ☐ I agree to the **Terms of Service**, the **Trainer Terms**, the **Beta Terms** and the **Acceptable Use Policy**.
+> ☐ I consent to FitBud handling my personal information as the **Privacy Policy** describes, so that I can use FitBud to coach my clients.
 >
-> You confirm you are 18 or over, and that you hold the qualifications, registrations and insurance your coaching requires. FitBud does not verify these.
+> **[ Create account ]**
 
-Each document name is a link. The second paragraph is the warranty in Trainer Terms §2.2 and should be a separate checkbox, not bundled into the first.
+Each document name is a link that opens without signing in. The first box is the warranty in Trainer Terms §2.2. The third box is the trainer's own consent: trainers are data principals too, and the Privacy Policy (§6.1) relies on consent for their data, so "I have read the Privacy Policy" is not enough. Remove "the **Beta Terms**" from the second box when the beta ends.
 
 ### 2.2 Client invitation acceptance
 
@@ -38,15 +40,17 @@ This is the one that matters: it is where a person consents to a trainer seeing 
 
 > **[[Trainer name]] has invited you to be coached on FitBud.**
 >
-> If you accept, [[Trainer name]] will be able to see what you record here: your workouts and meals, your check-in answers, your measurements, and any photos you choose to add. No other trainer can see any of it.
+> If you accept, [[Trainer name]] will be able to see **everything you enter in FitBud** — including your health information, your measurements, your workout and meal records, your check-ins and every photo you add. There's no private section. No other trainer can see any of it.
 >
 > [[Trainer name]] coaches you. FitBud does not — every plan and instruction you see here is written by your coach, not by us. **Please read the Health and Fitness notice before you start.**
 >
 > ☐ I am 18 or over.
-> ☐ I have read the **Health and Fitness notice**, and I understand I should get medical clearance before starting.
-> ☐ I agree to the **Terms** and I consent to FitBud handling my information, including health information, as the **Privacy Policy** describes.
+> ☐ I agree to the **Terms of Service**, the **Trainee Terms**, the **Beta Terms** and the **Acceptable Use Policy**.
+> ☐ I consent to FitBud handling my personal information — **including my health information and photos** — as the **Privacy Policy** describes, and to [[Trainer name]] seeing everything I enter, so that [[Trainer name]] can coach me.
 >
 > **[ Accept invitation ]**
+
+The Health and Fitness notice is acknowledged on its own screen straight after acceptance (§4), not as a fourth box here. Agreeing to the Terms and consenting to data processing are **separate boxes on purpose**: the DPDP Act requires consent that is free, specific and unconditional, and the SPDI Rules require consent in writing before sensitive data (health information) is collected. A consent folded into "I agree to the Terms" meets neither. The data-processing consent is still required to accept — FitBud cannot coach-enable an account without processing coaching data — so the Privacy Policy (§6.2) must say plainly what withdrawing it means.
 
 Hinglish, indicative: "[[Coach name]] ne aapko FitBud par coaching ke liye invite kiya hai." · "Aapka coach aapko coach karta hai, FitBud nahi."
 
@@ -57,7 +61,7 @@ For every acceptance, in a new table ([[product task]]):
 | Field | Why |
 |---|---|
 | `user_id` | Who consented |
-| `document_key` | `terms`, `privacy`, `trainer_terms`, `health_disclaimer`, `aup` |
+| `document_key` | `terms`, `trainer_terms`, `trainee_terms`, `beta_terms`, `aup`, `privacy_consent`, `health_disclaimer` — one row per document per acceptance |
 | `document_version` | **The version, not a boolean.** A consent to v1.0 is not a consent to v1.1 |
 | `accepted_at` | UTC |
 | `surface` | `mobile_ios`, `mobile_android`, `web` |
@@ -66,7 +70,21 @@ For every acceptance, in a new table ([[product task]]):
 
 This mirrors what the product already does well for the WhatsApp opt-in (TR-05: timestamp, source, text version) and for the invitation's pinned form version. Apply the same discipline here.
 
-> **COUNSEL:** please confirm (a) that three separate tick boxes is the right granularity rather than one combined box, and (b) whether consent to health-data processing must be separated from consent to the Terms. The DPDP requirement that consent be "specific" and "unconditional" suggests it might.
+### 2.4 When a document changes
+
+A material change to any document in §2.3 needs a fresh acceptance, not "continued use" (Terms of Service §16). On the user's next sign-in after the change takes effect, show a single screen before anything else:
+
+> **We've updated our [[document name]]**
+>
+> [[One or two sentences, in plain words, on what changed and why.]] [ Read the updated [[document name]] ]
+>
+> ☐ I agree to the updated [[document name]].   *(for a privacy change: "I consent to FitBud handling my information as the updated Privacy Policy describes.")*
+>
+> **[ Continue ]**   [ Not now — sign out ]
+
+Record it as a new row with the new `document_version`. A non-material change (a typo, a new contact address) needs no acceptance; under Terms §16 it takes effect when published. Who decides "material" is a founder decision, recorded in the document's change note.
+
+> **COUNSEL:** the drafts now take positions on both earlier questions: separate tick boxes for the Terms and for data-processing consent, and fresh acceptance on material change. Please confirm or overrule (counsel positions, draft 13, P7).
 
 ## 3. The 18+ gate at invitation
 
@@ -114,15 +132,17 @@ TR-20 already specifies a Privacy row in the trainee's More tab. Its content:
 
 > **What [[Trainer name]] can see**
 >
-> While they are coaching you:
+> **Everything you enter in FitBud.** There's no private section. While they are coaching you, that includes:
+> - your health information — injuries, conditions, medications, allergies and dietary restrictions
+> - your measurements, including height and weight
 > - the workouts and meals you logged, and when you logged them — including when you logged something late
-> - your check-in answers, in your own words
-> - your measurements, and any photos you've added
+> - your check-in answers and what you told them when you joined, in your own words
+> - every photo you add — progress, meal and check-in photos, and your profile picture
 > - your date of birth, gender and units
-> - what you told them when you joined
 > - your meal times, reminder settings and quiet hours
 > - whether you've been responding to reminders
-> - notes they write about you — they can choose to show you a note, or keep it to themselves
+>
+> They can also write notes about you, and choose to show you a note or keep it to themselves.
 >
 > **What nobody else can see:** all of the above. No other coach on FitBud can see anything about you. We don't advertise, we don't sell your information, and we don't read your WhatsApp messages.
 >
@@ -136,9 +156,9 @@ The line about private notes is uncomfortable and must stay: it is true (D20), a
 
 ## 7. Photograph upload
 
-First time a client adds a photograph, inline, above the picker:
+First time a client adds any photograph (progress, meal, check-in or profile), inline, above the picker:
 
-> Photos are optional — FitBud never requires one. [[Trainer name]] will be able to see any photo you add, to coach you. They are not allowed to download, post or show it to anyone else without asking you. If that happens, tell us at tech@thefitbud.com.
+> [[Trainer name]] will see every photo you add, to coach you. If [[Trainer name]] has made meal photos required, you'll be asked for one before you can log that meal as eaten — if you'd rather not, tell them and they can switch it off. They are not allowed to download, post or show it to anyone else without asking you. If that happens, tell us at tech@thefitbud.com.
 >
 > ☐ Don't show this again
 
@@ -166,7 +186,9 @@ In Settings, a real row rather than a hidden email address:
 >
 > Your coach will lose the record of your coaching. If they've copied anything into their own notes, those copies are theirs — ask them directly.
 >
-> **[ Email us to delete my account ]** *(opens a prefilled mail)*
+> **[ Email us to delete my account ]** *(opens a prefilled mail to tech@thefitbud.com, subject "Delete my FitBud account")*
+>
+> [ What gets deleted ] *(opens `https://app.thefitbud.com/privacy#delete-account`)*
 
 > **FOUNDER:** a hidden deletion path is a compliance risk and a store risk (draft 11 §3.3). A visible row with a prefilled email is a few hours of work and closes most of the gap until BP1 ships.
 

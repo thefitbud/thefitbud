@@ -2,9 +2,9 @@
 
 **Status:** DRAFT for review · prepared 2 Nov 2026 · not legal advice
 **Prepared by:** Claude Code, from the FitBud repository at `1578371` and the owner's product decisions of 14 Oct – 2 Nov 2026
-**Instructing party:** M/s FitBud (partners: [[PARTNER 1 — LEGAL NAME]], [[PARTNER 2 — LEGAL NAME]]), tech@thefitbud.com
+**Instructing party:** M/s Oryvate, operator of FitBud (partners: [[PARTNER 1 — LEGAL NAME]], [[PARTNER 2 — LEGAL NAME]]), tech@thefitbud.com
 
-Read this document before the others. It states what FitBud is, what it actually does with personal data, every assumption the drafts rest on, and the questions only you can answer.
+Read this document before the others, then **draft 13**, which answers each open question below with the position the drafts now take — updated 3 Nov 2026 with the founders' answers. It states what FitBud is, what it actually does with personal data, every assumption the drafts rest on, and the questions only you can answer.
 
 ---
 
@@ -41,9 +41,11 @@ No company or LLP has been incorporated. **Two individuals operate the business 
 
 The drafts therefore name the firm as the contracting party:
 
-> **M/s FitBud**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]. Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]].
+> **M/s Oryvate**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]. Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]]. FitBud is a product of Oryvate.
 
-The partners are named **once**, here, and once more in the Privacy Policy's grievance block. Everywhere else the party is "FitBud". This is a deliberate choice by the founders, who do not want individual names recurring through user-facing documents. Clause 01 §18.3 carries an assignment-on-incorporation clause so the agreements transfer to a company without re-signature, and provides that a change in the firm's constitution does not disturb them.
+The partners are named in Terms §1 and Privacy Policy §2, and one of them as Grievance Officer in Privacy Policy §14. Everywhere else the party is "FitBud". This is a deliberate choice by the founders, who do not want individual names recurring through user-facing documents. Clause 01 §18.3 carries an assignment-on-incorporation clause so the agreements transfer to a company without re-signature, and provides that a change in the firm's constitution does not disturb them.
+
+**Updated 3 Nov 2026 (draft 13 §A).** The firm is named **Oryvate**, not FitBud: the founders intend the same firm to own and operate further products under separate brands, and FitBud is the first. **Both founders are currently employed as software developers** and build Oryvate's products alongside that employment. **Nothing is yet documented between them** — no deed, no founders' agreement, no IP assignment, and no agreed allocation of liability or ownership. Draft 13 P11 and P12 treat this as the first thing to resolve.
 
 The consequences we have assumed, and ask you to confirm:
 
@@ -59,7 +61,7 @@ The consequences we have assumed, and ask you to confirm:
 
 This is the one structural judgment in the set with real consequences.
 
-**What the drafts assume:** FitBud (the proprietor) is the **sole Data Fiduciary** for all personal data in the platform, including the coaching data trainers create about their clients. Trainers are **authorised users** who access that data under the Trainer Terms, bound to purpose limitation, confidentiality and the Acceptable Use rules. Trainers are **independently responsible** for their own coaching conduct, their professional obligations, and any personal data they take out of FitBud into their own records or WhatsApp.
+**What the drafts assume:** Oryvate, the firm operating FitBud, is the **sole Data Fiduciary** for all personal data in the platform, including the coaching data trainers create about their clients. Trainers are **authorised users** who access that data under the Trainer Terms, bound to purpose limitation, confidentiality and the Acceptable Use rules. Trainers are **independently responsible** for their own coaching conduct, their professional obligations, and any personal data they take out of FitBud into their own records or WhatsApp.
 
 **Why we chose it:**
 
@@ -117,7 +119,7 @@ Following the format of the compliance-check workflow, applied to the closed bet
 | 3 | Consent captured and recorded at the right moment | **Partly met** — WhatsApp opt-in is specified (TR-05) and recorded; there is no recorded consent to the privacy notice itself | Draft 12 §2 specifies it; needs a product task |
 | 4 | Data principal rights channel | **Partly met** — support email exists; no documented procedure, no timelines | Draft 10 |
 | 5 | Erasure on request | **Partly met** — manual email request in the beta (D-B1); in-app deletion is post-beta (BP1) | Draft 10 §4; the manual route must be stated in the notice |
-| 6 | Grievance officer / DPO named publicly | **Not met** | Draft 04 §12 placeholder; the founder must name a person |
+| 6 | Grievance officer / DPO named publicly | **Not met** | Draft 04 §14 placeholder; the founders must name a person |
 | 7 | Retention schedule | **Not met** — explicitly open (`TW-30`: "the open retention policy") | Draft 09 §5 proposes one; needs sign-off, then code |
 | 8 | Processor terms with each vendor | **Unknown** | Draft 09 §4 lists them; someone must check each vendor's DPA and the India transfer position |
 | 9 | Security measures documented | **Partly met** — implemented but undocumented | Draft 09 §6 |
@@ -130,6 +132,9 @@ Following the format of the compliance-check workflow, applied to the closed bet
 
 | Risk | Severity | Mitigation |
 |---|---|---|
+| **A founder's employment agreement assigns FitBud IP to their employer**, or restricts outside work; nothing between the founders vests IP in the firm | **High** | Draft 13 P11: read both agreements, obtain a no-objection where needed, sign a deed with a present IP assignment to the firm, before the beta opens |
+| CERT-In Directions require 180-day log retention and 6-hour incident reporting; the earlier proposal was 30 days, and Workers keeps logs for less | **Medium** | Draft 13 P13: export request logs for 180 days; name a CERT-In contact; add CERT-In to draft 10 §6 |
+| A trainer requires meal photos, so a client cannot log those meals as eaten without one | **Low-medium** | Disclosed in 03, 04, 12; trainer must switch off on request (02 §4.5); product fallback in draft 13 P10 |
 | Unregistered firm: both partners personally liable without limit, no shield, and the firm cannot sue on a contract while unregistered | **High** | Partnership deed now, firm registration when convenient, novation clause in place; incorporate before the public launch or the first rupee of revenue. Consider professional indemnity and cyber cover, which responds to the claim rather than only shielding assets |
 | A trainee is injured following a trainer's plan and sues FitBud as well as the trainer | **High** | Drafts 01 §12, 02 §3, 05 in full: no coaching by FitBud, trainer warranties, medical clearance acknowledgement, assumption of risk, liability cap |
 | DPDP allocation challenged — trainers held to be fiduciaries | **Medium-high** | §4 above; counsel to rule before trainers sign up |
@@ -171,6 +176,8 @@ Every factual statement about what the system does was read out of the repositor
 
 ## 8. Open questions for counsel
 
+**Each question below now has a drafted position in draft 13 (P1–P10), and draft 13 adds six more (P11–P16).** The provisional positions in this table are superseded where draft 13 differs.
+
 | # | Question | Why it matters | Our provisional position |
 |---|---|---|---|
 | Q1 | Partnership firm now with novation, or incorporate first? | Blocks the identity block in every document | Firm now, registered with the Registrar of Firms; incorporate before the public launch, expected in about four months |
@@ -186,4 +193,4 @@ Every factual statement about what the system does was read out of the repositor
 
 ## 9. What these drafts are not
 
-They are not legal advice. They were written by an AI agent that read the codebase, not by a lawyer. They contain no legal opinion, and where the law prescribes a number we have left a marker rather than guessed. Nothing here is fit to publish until you have reviewed it.
+They are not legal advice. They were written by an AI agent that read the codebase, not by a lawyer. They contain no legal opinion. Statutory numbers are stated only where taken from the instrument (draft 13 P6); elsewhere we have left a marker rather than guessed. Nothing here is fit to publish until you have reviewed it.

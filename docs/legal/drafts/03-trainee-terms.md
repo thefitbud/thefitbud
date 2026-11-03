@@ -39,22 +39,26 @@ You must be **18 or over**. FitBud is not for anyone younger, in any role. If yo
 
 **4.1 What we ask of you.** FitBud is built so that the normal day takes very little input: confirming you ate what was planned, marking a set done, filling a check-in that is pre-filled from last time. Detail is asked for only where the coaching needs it.
 
-**4.2 Your trainer sees your coaching.** For as long as [[your trainer]] is coaching you, they can see everything you record about it:
+**4.2 Your trainer sees everything you enter.** There is no private section in FitBud. For as long as your trainer is coaching you, they can see **everything** you put into FitBud, including:
 
+- your health information: injuries, medical conditions, medications, allergies and dietary restrictions, and anything else you tell them about your health;
+- your body measurements, including height, weight and any other measurement you or they record;
 - the workouts and meals you logged, when you logged them, and when you logged one late;
-- your answers to check-ins, including anything you write in your own words;
-- your body measurements, and any progress photographs you upload;
+- your answers to check-ins and onboarding questions, including anything you write in your own words;
+- every photograph you upload: progress photos, meal photos, check-in photos and your profile picture;
 - your date of birth, gender and the units you prefer;
-- the information you gave when you joined, in the form your trainer put together;
 - your meal times, your reminder settings and your quiet hours;
-- whether you have been responding to reminders;
-- notes your trainer writes about you — some of which they may choose to show you, and some of which they keep to themselves.
+- whether you have been responding to reminders.
+
+If you do not want your trainer to see something, do not enter it in FitBud.
+
+Your trainer can also write notes about you. They can choose to show you a note or keep it to themselves, so you may not see everything your trainer has written about you.
 
 **4.3 Nobody else sees it.** No other trainer on FitBud can see anything about you. We do not sell your information, we do not advertise to you, we do not use it to train any model, and we do not give it to anyone except the service providers listed in the Privacy Policy, who process it for us so that FitBud works.
 
 **4.4 Health information.** Some of what your trainer asks you for will be about your body and your health. You decide what to share. If you are not comfortable giving something, say so to your trainer — but understand that they may not be able to coach you safely without it.
 
-**4.5 Photographs.** Uploading a progress photograph is your choice and never required by FitBud. Your trainer can see any photograph you upload. Your trainer is not allowed to download, publish, post or show it to anyone else without your specific permission, and permission to coach you is not permission to publish your photograph. If a trainer does that, tell us at tech@thefitbud.com.
+**4.5 Photographs.** Your trainer can ask for photographs as part of your coaching, such as progress photos. They can also make a photo **required** for some or all of your meals: if they do, FitBud asks you for a photo before you can log that meal as eaten (you can still mark it skipped without one). You can always tell your trainer you would rather not send photos, and they can switch the requirement off. Your trainer can see every photograph you upload. Your trainer is not allowed to download, publish, post or show it to anyone else without your specific permission, and permission to coach you is not permission to publish your photograph. If a trainer does that, tell us at tech@thefitbud.com.
 
 **4.6 Be honest, for your own sake.** The point of logging is that your trainer sees what really happened. Nothing in FitBud scores or grades you, there are no percentages and no streaks, and a missed session is recorded as missed, not as a failure. A late log is marked logged late, never quietly closed.
 
@@ -112,7 +116,7 @@ You can, at any time:
 - **correct** it;
 - **withdraw** a consent you gave, including the WhatsApp opt-in;
 - **ask us to delete** your account and your data — during the beta, by emailing **tech@thefitbud.com**; we are building this into the app;
-- **complain** to us, and then to the Data Protection Board of India.
+- **complain** to us, and, from 13 May 2027, to the Data Protection Board of India.
 
 The Privacy Policy explains all of this, including how long we keep things and what happens to your coaching record when you ask us to delete your account.
 

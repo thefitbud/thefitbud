@@ -12,7 +12,7 @@ Everything below was read from the source: the Drizzle schema and migrations in 
 Two things worth stating up front, because they are unusual and they are to FitBud's advantage:
 
 1. **There is no analytics, attribution or advertising code in the product at all.** No Google Analytics, Firebase Analytics, Meta SDK, PostHog, Mixpanel, Amplitude or any equivalent. No advertising identifier is read. No location, no contacts, no device fingerprinting. Firebase is used for identity only.
-2. **Raw IP addresses are never stored.** The only IP-derived value is a SHA-256 hash used to rate-limit sign-in attempts (`apps/api/src/routes/auth-login.ts:196`).
+2. **Raw IP addresses are never stored.** The only IP-derived value is a SHA-256 hash used to rate-limit password sign-in and session refresh (`apps/api/src/routes/auth-login.ts` ~l.197, ~l.675) — see §2.1 on why it is still personal data.
 
 ## 2. What the system holds about people
 
@@ -29,8 +29,8 @@ Two things worth stating up front, because they are unusual and they are to FitB
 | Time zone | `users.timezone` | **Read automatically from the device**, editable afterwards | `apps/trainer-web/src/lib/auth-flow.ts:84`; `apps/mobile/src/screens/AcceptInviteScreen.tsx:247` |
 | Account state, role | `users.account_state`, `user_roles` | Generated | |
 | Session records | `web_sessions` | Generated per sign-in | Token hash, expiry, revocation, rolling `last_seen_at` |
-| One-time passcodes | `auth_otps` | Generated | Code is hashed; identifier is hashed; includes `ip_hash` |
-| IP address hash | `auth_otps.ip_hash`, `auth_rate_limits.bucket_key` | **Automatic**, from `CF-Connecting-IP` | SHA-256 only; the address itself is discarded |
+| One-time passcodes | `auth_otps` | Generated | Code is hashed; identifier is hashed. The `ip_hash` column exists but is written as `null` (`auth-login.ts` ~l.305) |
+| IP address hash | `auth_rate_limits.bucket_key` (`auth:ip:<hash>` on password sign-in, `auth:refresh:ip:<hash>` on session refresh) | **Automatic**, from `CF-Connecting-IP` (`auth-login.ts` ~l.197, ~l.675) | Plain unsalted SHA-256; the address itself is discarded. **An unsalted hash of an IPv4 address can be reversed by brute force**, so treat it as personal data, not as anonymous. Product task: switch to a keyed hash (HMAC with a Worker secret) so the stored value cannot be reversed |
 
 ### 2.2 Health and fitness information — treat as sensitive throughout
 
@@ -38,7 +38,7 @@ Two things worth stating up front, because they are unusual and they are to FitB
 |---|---|---|
 | Date of birth, gender | `trainee_profiles` (via `PUT /me/trainee-profile`) | |
 | Body measurements (weight and other types, with units and observation time) | `measurements` | Carries a `source` field |
-| Progress photographs and other media | `media_assets` metadata in D1; the object itself in Cloudflare R2 | Includes original filename, size, content type, uploader |
+| Photographs: progress, meal, check-in and profile (avatar) | `media_assets` (`media_type` ∈ `progress_photo`, `meal_photo`, `checkin_photo`, `avatar`) metadata in D1; the object itself in Cloudflare R2 | Includes original filename, size, content type, uploader. **A trainer can require meal photos**: `photo_requirement` (`none` / `selected_meals` / `all_meals`) on the nutrition configuration and `photo_required` on meal assignments. A required meal cannot be logged `confirmed` or `modified` without a ready `meal_photo` asset (`PHOTO_INTENT_REQUIRED`, `apps/api/src/routes/meals.ts` ~l.842; rule in `packages/core/src/meal.ts`); a `skipped` meal needs none. `tracking_requirements.require_progress_photos` is stored and returned by the configuration routes but **not enforced** anywhere today; there is no check-in photo requirement. If either is enforced later, update 03 §4.5, 04 §4.2 and 12 §7. Earlier drafts said FitBud never requires a photo; that was wrong and is corrected in 03, 04 and 12 |
 | Progress entries (title, free text, observation time) | `progress_entries` | |
 | Onboarding intake answers | `intake_submissions.answers_json` against a trainer- or FitBud-defined `intake_definitions.schema_json` | **Trainer-composed questions** — may contain injury, condition and dietary information |
 | Check-in answers, including free text | `checkins.answers_json`, `checkin_reviews` | Against a pinned form version |
@@ -72,6 +72,10 @@ Two things worth stating up front, because they are unusual and they are to FitB
 | WhatsApp send ledger | `whatsapp_messages` (hashed recipient, template key, provider id, status), `whatsapp_opt_outs`, `whatsapp_ledger` | Generated — **dormant**, both flags off | Recipient number is hashed, not stored in clear |
 | Access logs | Cloudflare Workers logs, via `apps/api/src/middleware/request-log.ts` | **Automatic**, one line per request | Request id, method, redacted path, status, latency, acting user id, surface, auth method. **No** bodies, cookies, tokens or signed URLs |
 | Sync and idempotency records | `change_log`, `sync_mutations`, `idempotency_records` | Generated | **These store full response payloads** — see §5.3 |
+
+### 2.5 Trainer visibility — owner decision, 3 Nov 2026
+
+There is **no trainee-private category** of data. Everything a trainee enters into the coaching workflow — health records, injuries, conditions, medications, dietary restrictions, measurements, workout and nutrition records, check-ins, progress, meal and check-in photos — is visible to the trainee's active trainer. The only asymmetric data is the trainer's own private notes (D20). The Privacy Policy (04 §4.2), Trainee Terms (03 §4.2) and the in-app screens (12 §2.2, §6) must say so plainly.
 
 ## 3. What the system does *not* collect
 
@@ -120,7 +124,7 @@ The retention policy is currently **open** in the product documentation (`docs/s
 | Notification and delivery records | [[90]] days | Operational diagnostics |
 | Reminder responsiveness counters | While the relationship is active | Trainer-visible (D12) |
 | WhatsApp send ledger (hashed recipients) | [[12]] months | Cost accounting and Meta policy evidence |
-| Access logs | [[30]] days, then deleted by Cloudflare's retention | Must be confirmed against the Workers logging configuration actually used |
+| Access logs | **180 days, rolling** | The CERT-In Directions (2022) require ICT system logs for a rolling 180 days — a floor, not a cap (draft 13 P13). Workers' built-in log retention is shorter, so request logs must be exported (e.g. Logpush to R2) to meet it. The logs carry no coaching data, so the longer period is low-risk |
 | Sync and idempotency records | **See §5.3 — currently unbounded** | |
 | Backups (D1 Time Travel) | [[CONFIRM: the Time Travel window on the plan FitBud is on]] | A deletion is not complete until it has aged out of backups; the notice must say so honestly |
 

@@ -24,7 +24,7 @@ Every answer below is traced to draft 09, which is traced to the code. Where the
 | Personal info | Other info (date of birth, gender) | Yes | No | Required | App functionality |
 | Health and fitness | Health info | **Yes** | No | Required | App functionality |
 | Health and fitness | Fitness info | **Yes** | No | Required | App functionality |
-| Photos and videos | Photos | Yes | No | **Optional** | App functionality |
+| Photos and videos | Photos | Yes | No | **Optional** | App functionality — progress, meal, check-in and profile photos. Note: a trainer can require meal photos for their client (draft 13 F5). We still answer *Optional*, because the app is usable without photos and the client can ask the trainer to switch the requirement off; revisit if Play review disagrees |
 | App activity | Other user-generated content (logs, check-in answers, notes) | Yes | No | Required | App functionality |
 | App info and performance | Crash logs | **No — until BT2 ships** | No | — | — |
 | App info and performance | Diagnostics | No | No | — | — |
@@ -52,7 +52,7 @@ Notes on the judgment calls:
 | Question | Answer |
 |---|---|
 | Is data encrypted in transit? | **Yes** — HTTPS/TLS throughout |
-| Can users request data deletion? | **Yes** — by email to tech@thefitbud.com during the beta. [[Play's deletion-request requirement is being tightened over time; confirm whether a web deletion-request form is now mandatory rather than an email route. If it is, that is a small build and must happen before BT1.]] |
+| Can users request data deletion? | **Yes.** Account deletion URL for the Play Console field: `https://app.thefitbud.com/privacy#delete-account` (Privacy Policy, "Deleting your FitBud account"). Resolved 3 Nov 2026: Play requires apps that allow account creation to give a **web link** where users can request account and data deletion; the request route may be an email address or a form, and an existing privacy policy qualifies if the deletion section is prominent (an anchor link) and names the app. Play's Data safety form appears to apply to closed testing tracks as well; treat the URL as required and live before BT1. No new build needed — only the anchored section in draft 04 §12, published by BT3 |
 | Committed to the Play Families policy? | Not applicable — 18+ |
 | Independent security review? | **No.** Do not claim one |
 

@@ -11,11 +11,11 @@ These Terms apply to everyone who uses FitBud. Two supplements add to them: the 
 
 ## 1. Who you are contracting with
 
-FitBud is operated by **M/s FitBud**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]] ("**FitBud**", "**we**", "**us**"). Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]].
+FitBud is operated by **M/s Oryvate**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]] ("**we**", "**us**", "**our**"). Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]]. FitBud is a product of Oryvate. Where these Terms or any document they refer to speak of "FitBud" doing, promising or being responsible for something, they mean M/s Oryvate; elsewhere "FitBud" means the FitBud app, website and service.
 
 You can reach us at **tech@thefitbud.com** for any matter, including legal notices and privacy requests.
 
-> **COUNSEL:** this is the only place in the user-facing documents where the partners are named, which is deliberate — the firm is the contracting party throughout. Please confirm this is sufficient identification of the counterparty for a consumer contract, and whether the firm's registration status (see the brief §3) must be disclosed. "FitBud" is used as an unregistered trade mark; a registration application is pending and no ® symbol is used anywhere. If the partners incorporate a company, this clause and §18.3 both change.
+> **COUNSEL:** the firm is named Oryvate, not FitBud, because the founders intend the same firm to own and operate further products under separate brand names (brief §3). The partners are named here and in the Privacy Policy (§2, and one of them as Grievance Officer in §14), and nowhere else. Please confirm (a) this is sufficient identification of the counterparty for a consumer contract, (b) whether the firm's unregistered status must be disclosed, and (c) that the "FitBud means Oryvate where it acts" sentence is a sound way to keep the rest of the documents readable. Neither "FitBud" nor "Oryvate" is a registered trade mark; no ® symbol is used anywhere. If the partners incorporate a company, this clause and §18.3 both change.
 
 ## 2. What FitBud is, and what it is not
 
@@ -91,7 +91,7 @@ The **Acceptable Use Policy** forms part of these Terms. In short: do not use Fi
 
 ## 9. Privacy
 
-How we handle personal data is set out in the **Privacy Policy**, which forms part of these Terms. It explains what we collect, why, who processes it on our behalf, how long we keep it, and the rights you have under the Digital Personal Data Protection Act, 2023.
+How we handle personal data is explained in the **Privacy Policy**. It is a notice, not part of this contract: it explains what we collect, why, who can see it, who processes it on our behalf, how long we keep it, and your rights under Indian data-protection law. You give your consent to that processing separately, when you create your account or accept an invitation, and you can withdraw it as the Privacy Policy explains. Agreeing to these Terms is not itself consent to processing.
 
 ## 10. Availability, changes and support
 
@@ -123,19 +123,21 @@ How we handle personal data is set out in the **Privacy Policy**, which forms pa
 - (g) anything you choose to send through WhatsApp, or anything that happens in a conversation outside FitBud;
 - (h) a notification or reminder that does not arrive, arrives late, or arrives when it should not have.
 
-**12.3 Cap.** To the fullest extent the law allows, our total liability to you for all claims connected with FitBud is limited to [[CAP — see COUNSEL note]].
+**12.3 Cap.** To the fullest extent the law allows, our total liability to you for all claims connected with FitBud is limited to the greater of (a) the fees you paid us in the twelve months before the claim arose and (b) ₹[[5,000]].
 
 **12.4 Excluded losses.** We are not liable for loss of profit, revenue, business, goodwill, anticipated savings or data, or for indirect or consequential loss.
 
 **12.5 What we never exclude.** Nothing in these Terms excludes or limits liability that cannot lawfully be excluded or limited, including for death or personal injury caused by our negligence, or for fraud or fraudulent misrepresentation.
 
-> **COUNSEL:** FitBud charges nothing during the beta, so there is no fee to anchor a cap to. Options: (a) nil liability for a free service, (b) a nominal cap such as ₹5,000, (c) a cap at the fees paid in the preceding twelve months, which is nil during the beta but works automatically once fees begin. We ask you to choose, and to confirm what §12.5 must preserve under Indian law — including whether the Consumer Protection Act 2019 limits what §12.3 and §12.4 can achieve against a consumer.
+> **COUNSEL:** we have chosen a hybrid of the earlier options: a nominal floor that keeps the cap from looking illusory during the free beta, and a fee-based cap that starts working automatically once trainers pay. A nil cap for a free service is more likely to be read as an unfair contract term under the Consumer Protection Act 2019. Please confirm the figure and what §12.5 must preserve (draft 13, P8).
 
 ## 13. Indemnity
 
-You will indemnify us against any claim, loss, liability, cost or expense (including reasonable legal costs) arising from your breach of these Terms, your content, your use of FitBud, or — if you are a trainer — the coaching services you provide and any claim brought by a client of yours.
+**This clause applies to trainers only.** If you use FitBud as a trainer, you will indemnify us against any claim, loss, liability, cost or expense (including reasonable legal costs) arising from the coaching services you provide, any claim brought by a client of yours about that coaching, your breach of these Terms or the Trainer Terms, or your misuse of a client's personal data.
 
-> **COUNSEL:** please confirm an indemnity of this kind is enforceable against an individual consumer trainer in India, and whether it should be limited to trainers only.
+Clients give no indemnity under these Terms.
+
+> **COUNSEL:** narrowed to trainers, who use FitBud in the course of their own business, and to the risks they control. An indemnity from a client, who is a consumer, is likely an unfair contract term and is worth little against an individual anyway (draft 13, P9).
 
 ## 14. Suspension and termination
 
@@ -143,7 +145,7 @@ You will indemnify us against any claim, loss, liability, cost or expense (inclu
 
 **14.2 By us.** We can suspend or close your account if you break these Terms, the Acceptable Use Policy or the law; if your use puts another user, their data or the service at risk; if we are required to; or if we stop offering FitBud. Except where it would be unlawful or unsafe to do so, we will tell you why and, where the breach can be fixed, give you a chance to fix it.
 
-**14.3 Effect.** When an account closes, access ends. A coaching relationship record may be retained read-only for the other party as §5.3 describes and as the Privacy Policy sets out, so that a trainer keeps the history of coaching they delivered and a client keeps their own history. Clauses 6.2 (to the extent necessary), 7, 12, 13, 16 and 17 survive.
+**14.3 Effect.** When an account closes, access ends. If a **client's** account is closed or deleted, their coaching records are deleted as the Privacy Policy describes, and their trainer loses access to them; anything the trainer copied outside FitBud is the trainer's responsibility (Trainer Terms §4.6). If a **trainer's** account is closed, the trainer's plans, templates and notes are deleted and the trainer loses access, but each client keeps their own coaching history. Clauses 6.2 (to the extent necessary), 7, 12, 13, 16, 17 and 19 survive.
 
 **14.4 Ending the beta.** We may end the closed beta or stop offering FitBud entirely. If we do, we will give you reasonable notice by email and tell you how to get a copy of your data before it is deleted.
 
@@ -155,9 +157,9 @@ You will indemnify us against any claim, loss, liability, cost or expense (inclu
 
 ## 16. Changes to these Terms
 
-We may change these Terms. If a change is material, we will tell you by email and in the app before it takes effect, and give you at least [[NOTICE PERIOD]]' notice. If you keep using FitBud after a change takes effect, the new Terms apply to you. If you do not accept them, stop using FitBud and ask us to close your account.
+We may change these Terms. If a change is material, we will tell you by email at least [[30]] days before it takes effect, and **ask you to accept the new Terms in the app** before you continue using FitBud. If you do not accept them, you can stop using FitBud and ask us to close your account; until you decide, the previous Terms continue to apply to you. Changes that are not material — corrections, clarifications, a new contact address — take effect when we publish them, and the version and date at the top tell you which Terms are in force.
 
-> **COUNSEL:** please confirm whether continued use is a sufficient basis for accepting changed terms in India, or whether we must capture an affirmative acceptance in the app for material changes. The latter is buildable.
+> **COUNSEL:** we have chosen affirmative re-acceptance for material changes over "continued use", because the product already records versioned acceptances (draft 12 §2.3–2.4) and it removes the argument. Please confirm (draft 13, P7).
 
 ## 17. Governing law and disputes
 
@@ -173,7 +175,7 @@ We may change these Terms. If a change is material, we will tell you by email an
 
 ## 18. General
 
-**18.1 Whole agreement.** These Terms, together with the applicable supplements (Trainer Terms, Trainee Terms, Beta Terms), the Acceptable Use Policy, the Health and Fitness Disclaimer and the Privacy Policy, are the whole agreement between us about FitBud.
+**18.1 Whole agreement.** These Terms, together with the applicable supplements (Trainer Terms, Trainee Terms, Beta Terms), the Acceptable Use Policy and the Health and Fitness Disclaimer, are the whole agreement between us about FitBud. The Privacy Policy is a notice about how we handle personal data and is not part of this agreement (§9).
 
 **18.2 Order of precedence.** If they conflict: the Beta Terms first, then the role supplement that applies to you, then these Terms, then the other documents.
 
@@ -188,6 +190,30 @@ We may change these Terms. If a change is material, we will tell you by email an
 **18.7 Force majeure.** Neither of us is liable for a failure caused by something genuinely outside our control.
 
 **18.8 Language.** These Terms are in English. Any translation is for convenience, and the English version prevails.
+
+## 19. If you got FitBud from an app store
+
+**19.1** These Terms are between you and us only. Apple Inc. and Google LLC are not parties to them, and they are not responsible for FitBud or its content. We, not Apple or Google, are solely responsible for FitBud.
+
+**19.2** Your licence to use the FitBud app is limited to using it on Apple- or Android-branded devices that you own or control, as the store's usage rules permit.
+
+**19.3** Apple and Google have no obligation to provide maintenance or support for FitBud. Support is ours (§10.3).
+
+**19.4** If FitBud fails to conform to any warranty that applies under the law, you may notify Apple, and Apple will refund the purchase price of the app to you, if any. To the maximum extent the law allows, Apple has no other warranty obligation for FitBud. Any other claim, loss, liability or expense caused by such a failure is our responsibility, to the extent these Terms make it ours.
+
+**19.5** We, not Apple or Google, are responsible for addressing any claim by you or a third party relating to FitBud or your possession and use of it, including product-liability claims, any claim that FitBud fails to conform to a legal or regulatory requirement, and claims under consumer-protection, privacy or similar law.
+
+**19.6** If a third party claims that FitBud or your possession and use of it infringes their intellectual property rights, we, not Apple or Google, are responsible for the investigation, defence, settlement and discharge of that claim.
+
+**19.7** You confirm that you are not located in a country subject to a U.S. Government embargo or designated a "terrorist supporting" country, and that you are not on any U.S. Government list of prohibited or restricted parties.
+
+**19.8** You must comply with any third-party terms that apply when you use FitBud, such as your mobile network's terms.
+
+**19.9** Apple and its subsidiaries are third-party beneficiaries of these Terms, and once you accept them Apple will have the right to enforce them against you as a third-party beneficiary.
+
+**19.10** Our name and address for questions, complaints or claims about the app are in §1.
+
+> **COUNSEL:** these are the minimum end-user terms Apple's Developer Program License Agreement (Schedule / "Instructions for Minimum Terms of Developer's End-User License Agreement") requires where a developer uses its own terms instead of Apple's standard EULA. Moved here from Beta Terms §8 because they outlast the beta. §19.7 is Apple's wording and reads oddly in an India-only service; please confirm it must stay. Google Play imposes no equivalent clause set.
 
 ---
 
