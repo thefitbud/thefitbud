@@ -32,7 +32,7 @@
 ## Conflicts between the request, the code and CLAUDE.md (listed, not resolved)
 1. "Reuse the pattern of the existing test-mode push token": that token is tied to `AUTH_MODE=test`, which the runtime guard forbids on staging (`apps/api/src/middleware/runtime-guard.ts:37-39`). QT1 reuses the shape (named switch + guard), not `AUTH_MODE`.
 2. CLAUDE.md "never run remote commands" applies to implementer agents. The nightly `seed-reset` job runs `wrangler d1 execute --remote` against staging; that is the workflow acting under Firoz's secret, not an agent, and is limited to the QA ids.
-3. W4's BT2 (not started) owns `apps/api/src/types.ts`, `apps/api/wrangler.toml` and `apps/api/package.json`. QA1 avoids all three: QT1 types its two env fields locally, QT2 and QT6 are invoked without new package scripts.
+3. W4's BT2 (not started) owns `apps/api/src/types.ts`, `apps/api/wrangler.toml` and `apps/api/package.json`. QA1 avoids all three: QT1 types its two env fields locally, QT2 and QT6 are invoked without new package scripts. **Debt folded into BT2 on 3 Nov 2026 (D-W4-10, W4.md):** BT2 moves the two QA fields onto `Env` and adds the QT2 package scripts.
 4. The request lists "Playwright E2E for trainer web on staging"; a local Playwright suite already gates PRs (`ci.yml` job `e2e`). QT5 adds a staging config beside it rather than changing it.
 5. Item 9 (OTP error) was checked against AB2 and open PRs on 2 Nov: not covered (AB2 changed `Screen.tsx` only; open PRs #138, #57, #50 do not touch `AuthScreen.tsx`). QT9 owns it.
 
