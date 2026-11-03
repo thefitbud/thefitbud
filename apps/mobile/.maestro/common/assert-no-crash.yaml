@@ -15,6 +15,25 @@
 #     title "Something went wrong", subtitle "We could not load your coaching account."
 # A release-style (preview) build shows no red box, so the caller must also
 # assert a screen-specific anchor with assertVisible (QT3's job).
+# Maestro parses every file reached by `runFlow:` as a flow in its own right
+# (YamlCommandReader.readCommands -> MaestroFlowParser.parseFlow), so a subflow
+# needs a config section and the `---` separator even though it never runs on its
+# own. Without them the whole Android suite failed before a single flow started:
+# "Config Section Required at .../common/assert-no-crash.yaml:18:1" (CU18, run
+# 41643989194). `appId` is not optional in that config section and is not
+# inherited from the caller: MaestroFlowParser's YamlConfig rejects a config with
+# neither `appId` nor `url` ("missing_app_target"), and it throws while parsing,
+# before any caller is known. The value is inert here all the same -- Orchestra's
+# runSubFlow executes a subflow's commands under the CALLING flow's config, and
+# the subflow's own configuration command is a no-op -- so this names the one
+# application id the whole suite uses (every file in flows/ and
+# session-persists.yaml name the same one).
+# No `tags:` here, deliberately: a tagged file can be collected as a top-level
+# flow by `maestro test --include-tags`, which would run these bare assertions
+# with no app launched. config.yaml already limits collection to `flows/**`, and
+# an untagged file is filtered out of a tagged run regardless.
+appId: com.thefitbud.mobile.staging
+---
 - assertNotVisible: ".*There was a problem loading the project.*"
 - assertNotVisible: ".*Unable to load script.*"
 - assertNotVisible: ".*Invalid accessibility role value.*"
