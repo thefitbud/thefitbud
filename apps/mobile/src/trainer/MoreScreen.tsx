@@ -81,7 +81,7 @@ export function TrainerMoreScreen({
     me?.trainerProfile?.displayName?.trim() || email || "Your profile";
 
   return (
-    <Screen title="More">
+    <Screen title="More" chrome="app">
       <View style={styles.stack}>
         <M2Card>
           <Pressable
@@ -258,6 +258,8 @@ export function TrainerMoreScreen({
 const styles = StyleSheet.create({
   stack: {
     gap: spacing.lg,
+    // Screen pads 24pt; frames and the trainee More use 16pt (m2Gutter).
+    marginHorizontal: -(spacing.xl - spacing.lg),
   },
   permissionCard: {
     backgroundColor: colors.paleLavender,
