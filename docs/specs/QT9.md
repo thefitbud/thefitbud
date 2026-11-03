@@ -9,8 +9,7 @@ files_owned:
   - apps/mobile/src/screens/auth/verifyCodeError.ts  # new: error → copy mapping
   - apps/mobile/src/screens/auth/verifyCodeError.test.ts  # new
   - apps/mobile/src/screens/auth/authFlow.test.ts
-frames: 
-  - { frame: "103-trainee-signin-error-ios.png", viewport: "393x852" }
+frames: []  # D-QA1-13: no locked frame covers the code-entry error state
 model: sonnet
 size: S
 ---
@@ -23,7 +22,7 @@ On the "Use code instead" screen, a trainee or trainer who enters the right code
 - **Cause:** `verifyCode` in `apps/mobile/src/screens/AuthScreen.tsx:84-108` wraps both `s1.verifyOtp(...)` and `finishAuth(result)` (`:40`) in one `try` with a bare `catch {}`, so any error — network, 429, 5xx, a token-exchange or `/me` failure inside `finishAuth` — becomes the "code didn't work" copy. `loading` is React state, so two taps in the same frame both pass the `code.length` check before the re-render; `PrimaryButton` gets `loading` (`apps/mobile/src/screens/auth/CodeSignInScreen.tsx:106-112`) but the second press is already queued.
 - **Errors are typed:** `ApiClientError` carries `status` and `code` (`packages/api-client/src/index.ts:320-335`).
 - **Is it already covered?** Checked 2 Nov 2026: AB2 (#146) changed only `Screen.tsx` and its test; no open PR touches `AuthScreen.tsx` (open PRs: #138 BT4 docs, #57 AC1b API, #50 AC1a API). W3's BT3b (#144, merged) owned `AuthScreen.tsx` for legal links and is done. **Not covered; this task owns it.**
-- **Copy (decided, D-QA1-4; approved by Firoz, D-QA1-11)**, matching frame `103-trainee-signin-error-ios.png` placement (the inline error under the field):
+- **Copy (decided, D-QA1-4; approved by Firoz, D-QA1-11)**, shown in the shared `ErrorBanner` as every auth screen already does (D-QA1-13 struck the frame-103 reference and the "inline error under the field" wording; 103 is the password screen and no locked frame covers this one):
   - `401 OTP_INVALID` → keep "That code didn't work. Check the latest message or tap Resend."
   - `429` → "Too many tries. Wait a minute, then tap Resend."
   - network / timeout (no status) → "Couldn't reach FitBud. Check your connection and try again."
@@ -56,7 +55,8 @@ On the "Use code instead" screen, a trainee or trainer who enters the right code
 - Checks to run: `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 
 ## Visual check
-- Frame `103-trainee-signin-error-ios.png` at 393x852 for the error placement (copy differs by design). Capture the Expo web render of each message to `docs/qa/QT9/` and attach to the PR.
+- **No frame comparison (D-QA1-13).** There is no locked frame for the code-entry error state, so the visual check is the D-QA1-4 copy rendered in the standard `ErrorBanner`, not a match against frame 103.
+- Capture the Expo web render of each message at 393x852 to `docs/qa/QT9/`, attach them to the PR, and state in `docs/qa/QT9/README.md` how each shot was produced — a stubbed response must be labelled as one.
 
 ## Stop conditions
 - `PrimaryButton` cannot be disabled without changing `packages/ui-mobile/**`.

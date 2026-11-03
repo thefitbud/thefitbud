@@ -24,6 +24,7 @@ A Maestro suite drives the Android staging-variant app (`com.thefitbud.mobile.st
 - **Selectors:** the app has almost no `testID`s (two files). Use visible text and accessibility labels. If a journey cannot be driven without a new `testID`, list it in the PR as a follow-up (QT3b) and skip that step with a `# TODO(QT3b)` comment; do not edit app code.
 - **Flows** (one file each under `flows/`, tagged `trainee`, `trainer`, `auth`, `smoke`):
   1. `auth/sign-in-code.yaml`: Use code instead → send → enter `QA_OTP_CODE` → lands on role select or Today. Also double-tap check: tap verify twice, expect one sign-in and no error (QT9).
+     **Take no screenshot between entering the code and submitting it (D-QA1-14).** Screenshots go into the `qa-report` artifact byte for byte, unredacted, and the repository is public, so a shot of the filled code field would publish `QA_TEST_OTP_CODE`. Screenshot the step before the code is typed and the step after sign-in. The error states are still fair game: by then the code is wrong or already spent.
   2. `auth/sign-in-password.yaml`: trainer password sign-in.
   3. `auth/role-select.yaml`: for an account with both roles if seeded, else assert the single-role skip.
   4. `trainee/today.yaml` (on-track): Today renders with today's workout and meals from expectations.
@@ -47,6 +48,7 @@ A Maestro suite drives the Android staging-variant app (`com.thefitbud.mobile.st
 - [ ] All flows pass `maestro check-syntax` (or a YAML parse test if the CLI is unavailable in the session).
 - [ ] Each journey in the list above has a flow; each flow takes ≥1 screenshot and calls `assert-no-crash.yaml` after every screenshot.
 - [ ] No secret, OTP code, password or real email appears in any flow file.
+- [ ] No screenshot shows a filled OTP code field (D-QA1-14). Check the captured PNGs, not just the flow YAML — the code reaches the screen through an env var, so the flow file can be clean while the image is not.
 - [ ] `config.yaml` sets `flows: flows/**` and the tag filters `smoke` (auth + today + trainer clients, < 5 min) and `full`.
 - [ ] `README.md` documents: install Maestro, run an emulator, install the APK, the env vars, `maestro test --format junit --test-output-dir …`, and the screenshot→frame table.
 - [ ] **Run evidence:** the implementer has no emulator in a cloud session, so the first real run is QT7's workflow (or Firoz locally). Not claimed by the implementer.
