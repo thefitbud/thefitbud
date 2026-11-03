@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../index.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
-import { resetRuntimeGuardLogForTests } from "./runtime-guard.js";
+import { resetRuntimeGuardLogForTests, runtimeMisconfigurations } from "./runtime-guard.js";
 
 function dummyD1(): D1Database {
   return {
@@ -124,6 +124,68 @@ describe("runtime guard", () => {
       expect(guardLogLines()).toHaveLength(0);
     });
   }
+
+  // QT1 / D-QA1-1: the staging-only QA OTP secrets must make production refuse.
+  describe("QA test-mode OTP secrets", () => {
+    const QA_SECRET_CASES: Array<[string, Record<string, string>, string[]]> = [
+      ["QA_TEST_OTP_ENABLED set", { QA_TEST_OTP_ENABLED: "on" }, ["QA_TEST_OTP_ENABLED=set"]],
+      ["QA_TEST_OTP_CODE set", { QA_TEST_OTP_CODE: "135790" }, ["QA_TEST_OTP_CODE=set"]],
+      [
+        "both set",
+        { QA_TEST_OTP_ENABLED: "on", QA_TEST_OTP_CODE: "135790" },
+        ["QA_TEST_OTP_ENABLED=set", "QA_TEST_OTP_CODE=set"],
+      ],
+      // Even an off switch or a malformed code on production is a misconfiguration.
+      ["QA_TEST_OTP_ENABLED=off", { QA_TEST_OTP_ENABLED: "off" }, ["QA_TEST_OTP_ENABLED=set"]],
+      ["a short QA_TEST_OTP_CODE", { QA_TEST_OTP_CODE: "12345" }, ["QA_TEST_OTP_CODE=set"]],
+    ];
+
+    it.each(QA_SECRET_CASES)(
+      "production with %s refuses every request",
+      async (_label, overrides, named) => {
+        const env = deployedEnv({ ENVIRONMENT: "production", ...(overrides as Partial<Env>) });
+        expect(runtimeMisconfigurations(env)).toEqual(named);
+        for (const [path, init] of [
+          ["/health", {}],
+          ["/auth/otp/start", { method: "POST", body: "{}" }],
+        ] as const) {
+          const response = await app.request(path, init, env);
+          expect(response.status).toBe(500);
+          expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+            "RUNTIME_MISCONFIGURED",
+          );
+        }
+        const [line] = guardLogLines();
+        expect(line).toMatchObject({ level: "error", environment: "production", misconfigured: named });
+        // The secret's value is named, never printed.
+        const raw = errorLog.mock.calls.map((call) => String(call[0])).join("\n");
+        expect(raw).not.toContain("135790");
+        expect(raw).not.toContain("12345");
+      },
+    );
+
+    it.each(QA_SECRET_CASES)("staging with %s serves normally", async (_label, overrides) => {
+      const env = deployedEnv({ ENVIRONMENT: "staging", ...(overrides as Partial<Env>) });
+      expect(runtimeMisconfigurations(env)).toEqual([]);
+      expect((await app.request("/health", {}, env)).status).toBe(200);
+      expect(guardLogLines()).toHaveLength(0);
+    });
+
+    it("production without the QA secrets serves normally", async () => {
+      const env = deployedEnv({ ENVIRONMENT: "production" });
+      expect(runtimeMisconfigurations(env)).toEqual([]);
+      expect((await app.request("/health", {}, env)).status).toBe(200);
+    });
+
+    it.each(["", "   "])("production ignores a blank QA secret (%s)", async (blank) => {
+      const env = deployedEnv({
+        ENVIRONMENT: "production",
+        ...({ QA_TEST_OTP_ENABLED: blank, QA_TEST_OTP_CODE: blank } as Partial<Env>),
+      });
+      expect(runtimeMisconfigurations(env)).toEqual([]);
+      expect((await app.request("/health", {}, env)).status).toBe(200);
+    });
+  });
 
   it("names every offending setting and never logs secret values", async () => {
     await app.request(
