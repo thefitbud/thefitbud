@@ -55,11 +55,11 @@
 | ci | QT7 | opus | `.github/workflows/qa.yml`, `scripts/qa/build-android-apk.sh`, `scripts/qa/run-maestro.sh` | QT7.md |
 | human | staging secrets, GitHub secrets and environment, first workflow run, Q1–Q5 answered 2 Nov 2026 (D-QA1-7 to D-QA1-11) | — | — | — |
 
-Two lanes never own the same file. Checked against W3 (AB1 owns `.npmrc`; AB2 owns `apps/mobile/src/components/Screen.tsx` and `accessibilityRole.test.ts`; both merged) and W4 (BT2, BT2b, BT1, BT5 not started): **no overlap**. QT4 reads AB2's test but does not edit it. QT9 owns `AuthScreen.tsx`, which W3's BT3b owned and merged in #144, so there is no live claim. Run at most **3 implementer sessions at once** on one Max seat. No new dependencies (Maestro and actionlint are installed on the runner, not in `package.json`); `pnpm-lock.yaml` must not change. Migrations: none.
+Two lanes never own the same file. Checked against W3 (AB1 owns `.npmrc`; AB2 owns `apps/mobile/src/components/Screen.tsx` and `accessibilityRole.test.ts`; both merged) and W4 (BT2, BT2b, BT1, BT5 not started): **no overlap**. QT4 reads AB2's test but does not edit it. QT9 owns `AuthScreen.tsx`, which W3's BT3b owned and merged in #144, so there is no live claim. Run as many implementer sessions at once as the work supports — there is no cap (Firoz, 3 Nov 2026; see CLAUDE.md "No agent cap"). The limits that remain are real ones: two lanes never own the same file, and anything touching the local D1 or booting the API must be serialised. No new dependencies (Maestro and actionlint are installed on the runner, not in `package.json`); `pnpm-lock.yaml` must not change. Migrations: none.
 
-## Order (3 implementer slots, one Max seat)
+## Order
 1. **Start:** slot 1 **QT1**; slot 2 **QT9**; slot 3 **QT4**.
-2. **When a slot frees, take the next ready task in this order:** **QT2**, **QT8**, **QT6** (after QT1, QT2), **QT5** (after QT1, QT2), **QT3** (after QT1, QT2, QT4, QT9), **QT7** (after QT3, QT5, QT6, QT8). Never more than 3 at once.
+2. **When a slot frees, take the next ready task in this order:** **QT2**, **QT8**, **QT6** (after QT1, QT2), **QT5** (after QT1, QT2), **QT3** (after QT1, QT2, QT4, QT9), **QT7** (after QT3, QT5, QT6, QT8). Start each as soon as its dependencies are met.
 3. **Merge** each PR when it is ready: `ci` green, review PASS, merge commits.
 4. **Firoz:** the P0 manual steps below, then trigger `qa.yml` once by hand; from then on the nightly runs on its own.
 
