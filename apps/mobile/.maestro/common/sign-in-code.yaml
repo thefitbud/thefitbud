@@ -13,6 +13,14 @@
 # assertion at the end can fail and trigger that screenshot.
 #
 # Ends on the signed-in home: trainee Today, trainer "Needs you", or role select.
+# Maestro parses every file reached by `runFlow:` as a flow in its own right, so
+# this subflow needs a config section and the `---` separator even though it only
+# ever runs from a caller, and `appId` in that section is required rather than
+# inherited (CU18; the full reasoning is in common/assert-no-crash.yaml). The
+# value is inert for a subflow -- the calling flow's config governs -- and no
+# `tags:` are set, so this file is never collected as a top-level flow.
+appId: com.thefitbud.mobile.staging
+---
 - runFlow: sign-in-code-request.yaml
 # The field has no label wired to it (the label is a separate Text), so tap the
 # element directly under the label. TODO(QT3b): accessibilityLabel on Field's

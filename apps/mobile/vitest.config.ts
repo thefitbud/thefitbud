@@ -1,9 +1,49 @@
 /// <reference types="vitest/config" />
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
 import { defineConfig } from "vitest/config";
+
+/**
+ * Two projects, so the render harness cannot slow down or re-resolve the
+ * existing logic suites:
+ *
+ * - `node` keeps every `.test.ts` exactly where it was: `environment: "node"`,
+ *   no aliases, no setup file.
+ * - `render` runs `.test.tsx` in a DOM with `react-native` aliased to
+ *   `react-native-web`, which is already a runtime dependency of this app (the
+ *   Expo web target uses it). That is what lets a React Native component tree
+ *   render under vitest at all — see `src/test/render.tsx` for why
+ *   `@testing-library/react-native` is not used.
+ */
+// Resolved to an absolute path on purpose: a bare "react-native-web"
+// replacement is re-resolved from each importer, and the workspace packages
+// that import "react-native" (for example @fitbud/ui-mobile) do not have
+// react-native-web in their own node_modules.
+const reactNativeWeb = dirname(
+  createRequire(import.meta.url).resolve("react-native-web/package.json"),
+);
+
+const renderAlias = [{ find: /^react-native$/, replacement: reactNativeWeb }];
 
 export default defineConfig({
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts", "app.config.test.ts", "eslint-rules/**/*.test.mjs"],
+    projects: [
+      {
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.test.ts", "app.config.test.ts", "eslint-rules/**/*.test.mjs"],
+        },
+      },
+      {
+        resolve: { alias: renderAlias },
+        test: {
+          name: "render",
+          environment: "happy-dom",
+          include: ["src/**/*.test.tsx"],
+          setupFiles: ["src/test/render.tsx"],
+        },
+      },
+    ],
   },
 });

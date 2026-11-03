@@ -4,9 +4,9 @@
  * This single declaration drives both directions of the QA world (D-QA1-3):
  *
  * - the seed reads the QA-owned rows out of a scratch demo world (strict scope:
- *   a row is taken only when every user column it carries is one of the three),
+ *   a row is taken only when every user column it carries is a QA id),
  * - the reset deletes them again from staging (reset scope: the strict scope plus
- *   any row whose own user column is one of the three, so rows the nightly run
+ *   any row whose own user column is a QA id, so rows the nightly run
  *   created on a QA account are cleaned up too — D-QA1-7).
  *
  * Every predicate is derived from the literal id list and from subqueries on
