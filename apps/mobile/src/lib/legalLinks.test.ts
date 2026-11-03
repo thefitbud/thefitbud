@@ -273,7 +273,7 @@ describe("trainer More legal rows", () => {
   it("leaves the in-app trainer destinations announced as themselves", () => {
     // Guards against blanket-applying the browser wording: Help navigates
     // inside the app and must not claim otherwise.
-    const help = find(trainerMore(), byLabelProp("Help"));
+    const help = find(trainerMore(), byLabelProp("Email FitBud support"));
     expect(help).toBeTruthy();
     expect(help!.props.accessibilityLabel).toBeUndefined();
   });
