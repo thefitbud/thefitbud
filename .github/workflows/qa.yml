@@ -19,6 +19,14 @@
 # used (D-QA1-8). The only remote write is `seed-reset`, which runs on `schedule` or
 # `workflow_dispatch` from `main` only, inside the `staging-qa` environment (D-QA1-9).
 #
+# One staging writer at a time (D-QA1-7) is enforced per job, not per workflow: the
+# jobs that touch the shared staging QA accounts (`seed-reset`, `api-smoke`,
+# `web-staging`, `android`) each hold the `qa-staging` concurrency group and are chained
+# so only one of them runs at a time, while `changes`, `qa-scripts` and `report` stay
+# outside it. `qa-scripts` is a required check on main (D-W3b-1) and a job inside a
+# concurrency group can be left Pending, or cancelled when a newer run queues, so a
+# required check must never sit in one.
+#
 # Artifacts never carry qa-results/web/test-output/**: Playwright writes error-context.md
 # there on every failure, holding a full aria snapshot of the page including a typed
 # password. Each suite job copies a named allowlist of files into qa-upload/ and uploads
@@ -46,12 +54,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  # One group for the whole workflow, never cancelling: two runs must not write the
-  # shared staging QA accounts at the same time (D-QA1-7).
-  group: qa-staging
-  cancel-in-progress: false
 
 jobs:
   # Decides what this run does. Pull requests are classified by changed paths, the same
@@ -175,6 +177,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging-qa
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
@@ -347,6 +353,10 @@ jobs:
           && needs.seed-reset.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
@@ -427,13 +437,20 @@ jobs:
 
   web-staging:
     name: web-staging
-    needs: [changes, seed-reset]
+    # `api-smoke` is a dependency for ordering only: the `if:` below is unchanged and
+    # still starts with always(), so this job runs whatever api-smoke concluded. The
+    # edge exists so the two never hold the staging accounts at the same moment.
+    needs: [changes, seed-reset, api-smoke]
     if: >-
       ${{ always() && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web')
           && needs.seed-reset.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
@@ -522,7 +539,10 @@ jobs:
 
   android:
     name: android
-    needs: [changes, seed-reset]
+    # `api-smoke` and `web-staging` are dependencies for ordering only: the `if:` below
+    # is unchanged and still starts with always(), so this job runs whatever they
+    # concluded (on a pull request both are skipped, as before).
+    needs: [changes, seed-reset, api-smoke, web-staging]
     if: >-
       ${{ always()
           && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
@@ -531,6 +551,10 @@ jobs:
               || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
       QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
