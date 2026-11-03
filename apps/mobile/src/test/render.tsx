@@ -55,6 +55,12 @@
  * });
  * ```
  *
+ * That factory replaces the module's **whole** export surface: a component
+ * that also imports `AuthProvider` or `messageFromError` from
+ * `../auth/AuthProvider` gets `undefined` for them and fails at render with no
+ * obvious cause. Re-export whatever else the tree under test imports, or mock
+ * only `useAuth` with `vi.importActual`.
+ *
  * Reach for `mockAuth` only for the fields the screen under test reads; it is
  * a stub for a context value, not a second implementation of the real
  * provider's behaviour. Anything that depends on how the provider *derives*
@@ -63,6 +69,7 @@
  */
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import type { AppRoute } from "../navigation/resolveRoute";
 
 /*
  * Native modules. These have no JS implementation off-device: their
@@ -141,14 +148,23 @@ afterEach(() => {
  * passed; everything else is an inert default so a render does not crash on an
  * unexpected read. The return type is deliberately loose — `AuthProvider` does
  * not export its context type, and CU6 may not change that file.
+ *
+ * `route` is typed against the real `AppRoute` union rather than left to the
+ * loose return type, because `route` is the one default a screen test cannot
+ * safely ignore. `AppRoute` is an object union, so a plausible-looking string
+ * default (`"signin"`) would give `route.name === undefined`: fed to the real
+ * `AppRouter`, `routerView` would then return the global error view for any
+ * stub that also sets `errorMessage`, and a test for a route-`auth` screen
+ * that shows its own errors would assert against the wrong screen and pass.
  */
 export function mockAuth(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const route: AppRoute = { name: "auth" };
   return {
     accessToken: null,
     selectedRole: null,
     me: null,
     relationships: [],
-    route: "signin",
+    route,
     errorMessage: null,
     api: {},
     pendingNotificationLink: null,

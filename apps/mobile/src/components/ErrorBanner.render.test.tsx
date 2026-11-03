@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import * as SecureStore from "expo-secure-store";
-import { MOCK_SECURE_STORE_VALUE, render, screen } from "../test/render";
+import { MOCK_SECURE_STORE_VALUE, mockAuth, render, screen } from "../test/render";
 import { ErrorBanner } from "./ErrorBanner";
 
 describe("ErrorBanner render", () => {
@@ -26,6 +26,14 @@ describe("ErrorBanner render", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toBeTruthy();
     expect(alert.textContent).toBe("That code has expired.");
+
+    // `alert` takes its name from the author, not from its content, so an
+    // `accessibilityLabel` on the banner would reach react-native-web as
+    // `aria-label` and a screen reader would announce that instead of the
+    // message — while `textContent` above stayed green. Pin its absence, so
+    // the announcement is the message.
+    expect(alert.getAttribute("aria-label")).toBeNull();
+    expect(alert.getAttribute("aria-labelledby")).toBeNull();
   });
 
   it("renders a different message without leaking the previous one", () => {
@@ -33,6 +41,17 @@ describe("ErrorBanner render", () => {
 
     expect(screen.getByRole("alert").textContent).toBe("Enter the 6-digit code.");
     expect(screen.queryByText("That code has expired.")).toBeNull();
+  });
+
+  it("stubs the auth context on the route a screen test starts from", () => {
+    // Nothing else here renders a screen yet, so this is the only guard on
+    // `mockAuth`'s defaults. `route` is the one that can silently send a later
+    // screen test to the wrong view: `AppRoute` is an object union, so the
+    // default has to be the sign-in route object, not a bare string.
+    expect(mockAuth().route).toEqual({ name: "auth" });
+    expect(mockAuth({ errorMessage: "Could not reach FitBud." }).errorMessage).toBe(
+      "Could not reach FitBud.",
+    );
   });
 
   it("has the native-module mocks from the harness in place", async () => {
