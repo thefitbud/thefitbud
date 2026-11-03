@@ -268,3 +268,16 @@ test("CLI takes run metadata from the GitHub Actions environment", () => {
   assert.equal(s.gitSha, "7bd0f3a1c2");
   assert.deepEqual(validate(s, schema), []);
 });
+
+test("truncation is caught even when no tests attribute exists to cross-check", () => {
+  const cut = '<testsuites><testsuite name="mobile"><testcase name="a" time="1"/><testcase name="b" time="1">';
+  assert.throws(() => parseJUnit(cut), /truncated/);
+  assert.throws(() => parseJUnit('<testsuite name="x"><testcase name="a" time="1"/>'), /truncated/);
+});
+
+test("credential-looking env vars and key shapes are redacted, QA addresses stay", () => {
+  const redact = makeRedactor({ CLOUDFLARE_API_TOKEN: "cfut_abcdef0123456789", SOME_SECRET: "s3cr3t-value", HOME: "/root" });
+  const out = redact("auth cfut_abcdef0123456789 and s3cr3t-value; CF_THING=abcdefghij0123456789xyz key sk_live_abcdef123456 for qa+trainer@thefitbud.com in /root");
+  assert.ok(!/cfut_|s3cr3t|abcdefghij|sk_live/.test(out), out);
+  assert.match(out, /qa\+trainer@thefitbud\.com in \/root/);
+});

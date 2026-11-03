@@ -30,8 +30,10 @@ export class MalformedInput extends Error {}
 // ---------- redaction ----------
 
 export function makeRedactor(env = process.env) {
-  const secrets = ["QA_TEST_OTP_CODE", "FITBUD_QA_PASSWORD", "EXPO_TOKEN"]
-    .map((k) => env[k])
+  // The three named in the spec, plus any env var that looks like a credential
+  // (CLOUDFLARE_API_TOKEN, a future *_SECRET, ...).
+  const names = Object.keys(env).filter((k) => k === "QA_TEST_OTP_CODE" || /(TOKEN|SECRET|PASSWORD|KEY)$/.test(k));
+  const secrets = [...new Set(names.map((k) => env[k]))]
     .filter((v) => typeof v === "string" && v.length >= 3)
     .sort((a, b) => b.length - a.length);
   return (text) => {
@@ -41,6 +43,9 @@ export function makeRedactor(env = process.env) {
     out = out.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, (m) =>
       /^qa\+[a-z0-9-]{1,32}@thefitbud\.com$/.test(m) ? m : "[redacted]",
     );
+    // NAME=<20+ token-like chars> (wrangler / shell output), and well-known key shapes.
+    out = out.replace(/\b([A-Z][A-Z0-9_]{2,})=[A-Za-z0-9_\-./+=]{20,}/g, "$1=[redacted]");
+    out = out.replace(/\b(?:[sr]k|pk)_(?:live|test)_[A-Za-z0-9]{8,}|\bgh[pousr]_[A-Za-z0-9]{20,}/g, "[redacted]");
     out = out.replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [redacted]");
     out = out.replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*/g, "[redacted]");
     // A 6-digit code written next to the words otp/code, even when the env var is not set.
