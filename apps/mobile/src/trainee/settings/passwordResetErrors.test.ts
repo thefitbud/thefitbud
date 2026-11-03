@@ -11,7 +11,6 @@ import {
 } from "../../lib/authErrors";
 import { setErrorReporter } from "../../lib/reportError";
 import {
-  RESET_SENT_COPY,
   resetSendError,
   resetSetError,
   resetVerifyError,
@@ -39,9 +38,11 @@ beforeEach(() => {
 afterEach(() => setErrorReporter(null));
 
 describe("resetSendError (startOtp, purpose reset)", () => {
-  it("a not-found answer keeps the non-enumeration copy and is not reported", () => {
-    expect(resetSendError(apiError(404, "NOT_FOUND"))).toBe(RESET_SENT_COPY);
-    expect(reported).toEqual([]);
+  it("a 404 (wrong base URL, gateway, renamed route) never claims a code was sent", () => {
+    const copy = resetSendError(apiError(404, "NOT_FOUND", "Not found."));
+    expect(copy).toBe(UNK_COPY);
+    expect(copy).not.toContain("sent a code");
+    expect(reported).toHaveLength(1);
   });
 
   it("a network failure is AUTH-NET, never the sent copy, and is reported", () => {
@@ -143,10 +144,19 @@ describe("resetSetError (resetPassword)", () => {
     expect(resetSetError(apiError(500, "INTERNAL"))).toBe(SRV_COPY);
   });
 
-  it("an unknown 400 (for example a weak password) is a short code, never 'Could not update password.'", () => {
-    const copy = resetSetError(apiError(400, "PASSWORD_TOO_SHORT", "Too short."));
+  it.each([
+    ["PASSWORD_LENGTH", "Use a password between 8 and 64 characters."],
+    ["PASSWORD_BREACHED", "This password is too common."],
+  ])("%s shows the API's own requirement text so the user can fix it", (code, message) => {
+    expect(resetSetError(apiError(400, code, message))).toBe(message);
+    expect(reported).toEqual([]);
+  });
+
+  it("an unknown 400 shows a short code, never the server message or the old generic text", () => {
+    const copy = resetSetError(apiError(400, "INVALID_REQUEST", "Invalid request."));
     expect(copy).toBe(UNK_COPY);
     expect(copy).not.toBe("Could not update password.");
+    expect(reported).toHaveLength(1);
   });
 });
 

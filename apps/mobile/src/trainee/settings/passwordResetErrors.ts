@@ -15,9 +15,6 @@ import { reportError } from "../../lib/reportError";
  * non-enumeration case and the reporting rule.
  */
 
-/** Deliberate non-enumeration copy; true only for a 2xx or a not-found answer. */
-export const RESET_SENT_COPY = "If an account exists, we've sent a code.";
-
 function failureCopy(err: unknown, context: AuthErrorContext, where: string): string {
   const failure = classifyAuthError(err, context);
   // A null code is a failure the API proved (wrong code, expired reset): the
@@ -28,9 +25,8 @@ function failureCopy(err: unknown, context: AuthErrorContext, where: string): st
 
 /** `startOtp` (purpose reset) failed. */
 export function resetSendError(err: unknown): string {
-  // The API's own not-found-style answer keeps the non-enumeration copy.
-  // A network error, 5xx or ZodError must not: that would be a second lie.
-  if (err instanceof ApiClientError && err.status === 404) return RESET_SENT_COPY;
+  // The API answers 202 for every identifier (non-enumeration), so any failure
+  // here is a real one: never claim a code was sent.
   return failureCopy(err, "reset-send", "passwordReset.send");
 }
 
@@ -46,5 +42,13 @@ export function resetVerifyMismatchCopy(): string {
 
 /** `resetPassword` failed. */
 export function resetSetError(err: unknown): string {
+  // The API's own password-requirement text: curated, actionable, non-sensitive
+  // and proved by its code. Without it a weak password would loop on AUTH-UNK.
+  if (
+    err instanceof ApiClientError &&
+    (err.code === "PASSWORD_LENGTH" || err.code === "PASSWORD_BREACHED")
+  ) {
+    return err.message;
+  }
   return failureCopy(err, "reset-set", "passwordReset.set");
 }
