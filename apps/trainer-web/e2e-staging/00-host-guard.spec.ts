@@ -9,7 +9,8 @@ import {
   assertAllowedNavigation,
   resolveStagingBaseUrl,
 } from "./support/host-guard";
-import { missingSecrets, missingSecretsMessage } from "./support/env";
+import { loadExpectations, missingSecrets, missingSecretsMessage } from "./support/env";
+import { TEST_OTP_IDENTIFIER_RE } from "../../api/src/auth/test-otp.js";
 import { SHOT_NAME_RE, isScreenshotSafe, shot } from "./support/screenshots";
 
 // Proof that the suite cannot be pointed at anything but staging, and that it cannot
@@ -110,6 +111,8 @@ test.describe("host guard: the real config", () => {
           !k.startsWith("PW_") &&
           !k.startsWith("PLAYWRIGHT") &&
           k !== "STAGING_WEB_URL" &&
+          // The child loads the same config and reporter; it must not write into (and truncate) this run's log and reports.
+          k !== "QA_RESULTS_DIR" &&
           k !== LOCAL_REHEARSAL_FLAG,
       ),
     ) as Record<string, string>;
@@ -192,5 +195,13 @@ test.describe("screenshots never carry a credential (D-QA1-14)", () => {
     expect(SHOT_NAME_RE.test("clients__list")).toBe(false);
     expect(SHOT_NAME_RE.test("web-clients_list")).toBe(false);
     expect(SHOT_NAME_RE.test("web-Clients__List")).toBe(false);
+  });
+});
+
+test.describe("QA accounts vs the QT1 allowlist", () => {
+  test("all three committed QA emails match TEST_OTP_IDENTIFIER_RE (catches QT1 or QT2 drift)", () => {
+    const emails = loadExpectations().accounts.map((a) => a.email);
+    expect(emails).toHaveLength(3);
+    for (const email of emails) expect(TEST_OTP_IDENTIFIER_RE.test(email), email).toBe(true);
   });
 });

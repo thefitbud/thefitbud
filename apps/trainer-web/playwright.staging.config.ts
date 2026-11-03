@@ -38,7 +38,7 @@ import path from "node:path";
  * with scripts/qa/summarize.mjs, which parses it: one line per screenshot, the shot name
  * (web-<journey>__<step>, no extension) then the locked frame in docs/design/mockups/png/.
  * Keep exactly one shot name and one frame per mapping line, and no other line may hold
- * a shot name. e2e-staging/frame-map.spec.ts checks every frame exists and every shot
+ * a shot name. e2e-staging/01-frame-map.spec.ts checks every frame exists and every shot
  * taken has a line.
  *
  *   web-signin__form                  -> 01-trainer-web-signin.png
@@ -92,7 +92,9 @@ export default defineConfig({
     actionTimeout: 15_000,
     navigationTimeout: 45_000,
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
+    // Off, not retain-on-failure: any test that signs in with the password (the fixture does,
+    // when spec 02 did not run first) would keep the typed password in the trace DOM snapshots.
+    trace: "off",
   },
   projects: [
     {

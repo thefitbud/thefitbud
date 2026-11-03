@@ -1,8 +1,9 @@
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// The single definition of D-QA1-2's allowlist (QT1). Its only import is a type, which
-// is erased, so nothing from the API runtime is loaded.
+// The single definition of D-QA1-2's allowlist (QT1), a runtime RegExp: this loads that
+// module (its only import is a type, so nothing else from the API is pulled in). Same pattern as
+// e2e/tw-b-flows.spec.ts importing hashPassword from the API.
 import { TEST_OTP_IDENTIFIER_RE } from "../../../api/src/auth/test-otp.js";
 
 /** Names only. Values come from the environment and are never logged or screenshotted. */

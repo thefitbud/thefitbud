@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { apiGet } from "./fixtures";
+import { apiGet } from "./fixtures.js";
 
 type AttentionGroup = {
   relationshipId: string;
