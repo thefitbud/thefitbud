@@ -2,7 +2,7 @@
 id: CU6
 title: Mobile component-render harness
 batch: W3b
-depends_on: [CU5]
+depends_on: [CU5, CU16]
 lane: mobile
 files_owned:
   - apps/mobile/package.json  # devDependencies only
@@ -22,7 +22,7 @@ Agents and CI can render a mobile component in a test and assert on its text and
 - Source: the W3 report's "Follow-ups raised on 3 Nov" (`docs/specs/batches/W3.md`, 3 Nov continuation) and QA1's "Follow-ups raised" (`docs/specs/batches/QA1.md`); W3b is approved by Firoz, 3 Nov 2026 (`docs/specs/batches/W3b.md`).
 - `apps/mobile` has no render harness: `vitest.config.ts` runs `environment: "node"` over `src/**/*.test.ts` only.
 - Expo SDK 52, `react-native` 0.76.9, React 18. Choose `@testing-library/react-native` (with its peer `react-test-renderer` at the React version pinned in the repo) unless it cannot run under vitest; then record the alternative in the PR. Pin versions with `npx expo install` where applicable.
-- **Lockfile:** this is the only W3b task that changes `pnpm-lock.yaml` and dependencies (approved with the batch, D-W3b-2). Dev dependencies only, no native module, no new EAS build.
+- **Lockfile:** CU6 and CU16 are the only W3b tasks that change `pnpm-lock.yaml` and `apps/mobile/package.json`; CU16 (declares `metro-resolver`) merges first and CU6 merges `main` in before building (D-W3b-2). Approved with the batch. Dev dependencies only, no native module, no new EAS build.
 
 ## Gap list
 - `apps/mobile/vitest.config.ts`: no `.test.tsx`, no RN transform, no render environment.
