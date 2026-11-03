@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thefitbud/qa-report/summary.schema.json",
+  "title": "FitBud QA run summary (schemaVersion 1)",
+  "description": "Contract between the suites (QT3 mobile, QT5 web, QT6 api, unit), the summary builder (scripts/qa/summarize.mjs) and the FitBud UI bot. Breaking changes bump schemaVersion. The status vocabulary is deliberate: a suite that did not run is never 'pass'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "runId", "runUrl", "gitSha", "branch", "trigger", "startedAt", "finishedAt",
+    "environment", "status", "expectedSuites", "suites", "screenshots", "crashes", "latency", "files", "warnings"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "runUrl": { "type": ["string", "null"], "description": "Link to the workflow run; null for a local run." },
+    "gitSha": { "type": "string", "pattern": "^([0-9a-f]{7,40}|unknown)$" },
+    "branch": { "type": "string", "minLength": 1 },
+    "trigger": { "enum": ["nightly", "pr", "manual"] },
+    "startedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$" },
+    "finishedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$" },
+    "environment": { "enum": ["staging", "local"] },
+    "status": {
+      "enum": ["pass", "fail", "partial"],
+      "description": "pass only if every expected suite is pass. fail if any expected suite is fail or error, or any crash exists. partial if nothing failed but an expected suite is not-run."
+    },
+    "expectedSuites": {
+      "type": "array",
+      "items": { "enum": ["mobile", "web", "api", "unit"] },
+      "description": "Suites this run was supposed to produce. A PR smoke run expects only mobile."
+    },
+    "suites": {
+      "type": "array",
+      "description": "Always one entry per suite name (mobile, web, api, unit), in that order.",
+      "items": { "$ref": "#/$defs/suite" }
+    },
+    "screenshots": { "type": "array", "items": { "$ref": "#/$defs/screenshot" } },
+    "crashes": {
+      "type": "array",
+      "description": "Report these first. Detected from Maestro assert-no-crash failures and from logcat (FATAL EXCEPTION / ANR) of the app process.",
+      "items": { "$ref": "#/$defs/crash" }
+    },
+    "latency": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["p50Ms", "p95Ms"],
+          "properties": {
+            "p50Ms": { "type": "integer", "minimum": 0 },
+            "p95Ms": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ],
+      "description": "Nearest-rank percentiles of the api suite's per-test durations; null when the api suite recorded no tests."
+    },
+    "files": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths, relative to the artifact root, of the raw reports and logs copied into it (redacted)."
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Things the builder noticed that are not test results (unmapped screenshots, missing frame files, unparseable inputs)."
+    }
+  },
+  "$defs": {
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "reason", "total", "passed", "failed", "skipped", "durationMs", "failures"],
+      "properties": {
+        "name": { "enum": ["mobile", "web", "api", "unit"] },
+        "status": {
+          "enum": ["pass", "fail", "error", "not-run", "not-requested"],
+          "description": "pass: results parsed, at least one test, none failed, no crash. fail: a test failed or the suite crashed. error: results exist but are unusable (truncated or malformed report, zero tests, or only screenshots/logs with no report). not-run: expected but no results at all. not-requested: not expected in this run and no results."
+        },
+        "reason": { "type": ["string", "null"], "description": "Why the status is error, not-run or not-requested; null otherwise." },
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "failures": { "type": "array", "items": { "$ref": "#/$defs/failure" } }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["test", "message"],
+      "properties": {
+        "test": { "type": "string", "description": "Maestro flow name, or Playwright/Vitest test title." },
+        "message": { "type": "string", "maxLength": 500, "description": "First 500 characters, secrets redacted." },
+        "screenshot": { "type": "string", "description": "Artifact-relative path of a screenshot taken for this test." },
+        "log": { "type": "string", "description": "Artifact-relative path of the log to read next." }
+      }
+    },
+    "screenshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite", "name", "path", "frame"],
+      "properties": {
+        "suite": { "enum": ["mobile", "web", "api", "unit"] },
+        "name": { "type": "string", "minLength": 1, "description": "File name without .png, for example trainee-today__loaded." },
+        "path": { "type": "string", "pattern": "^screenshots/", "description": "Artifact-relative: screenshots/<suite>/<name>.png." },
+        "frame": {
+          "type": ["string", "null"],
+          "description": "File name of the locked frame in docs/design/mockups/png, from the README mapping tables; null when the screenshot has no mapping."
+        }
+      }
+    },
+    "crash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite", "flow", "kind", "evidence"],
+      "properties": {
+        "suite": { "enum": ["mobile", "web", "api", "unit"] },
+        "flow": { "type": "string", "description": "Flow that crashed, or 'unknown' when found only in logcat." },
+        "kind": { "enum": ["redbox", "load-error", "anr", "fatal"] },
+        "evidence": { "type": "string", "maxLength": 500, "description": "Redacted failure text or log excerpt." }
+      }
+    }
+  }
+}
