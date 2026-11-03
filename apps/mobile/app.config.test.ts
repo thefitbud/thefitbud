@@ -105,6 +105,44 @@ describe("app.config.js variants", () => {
     );
   });
 
+  it.each([
+    ["production", "production", "com.thefitbud.mobile"],
+    ["staging", "development", "com.thefitbud.mobile.staging"],
+    ["development", "development", "com.thefitbud.mobile.staging"],
+    [undefined, "development", "com.thefitbud.mobile.staging"],
+  ])(
+    "%s: iOS signing, push and widget id (APNs %s)",
+    (variant, aps, hostId) => {
+      const config = configFor(variant);
+      expect(config.ios.appleTeamId).toBe("26257QDTHP");
+      expect(config.ios.supportsTablet).toBe(true);
+      expect(config.ios.config.usesNonExemptEncryption).toBe(false);
+      expect(config.ios.entitlements["aps-environment"]).toBe(aps);
+      expect(config.ios.entitlements[APP_GROUPS]).toHaveLength(1);
+
+      const entry = config.plugins.find(
+        (p: unknown) => Array.isArray(p) && p[0] === "expo-notifications",
+      );
+      expect(entry).toBeDefined();
+      // Same value as the entitlement, and nothing that changes Android.
+      expect(entry).toEqual(["expo-notifications", { mode: aps }]);
+
+      const names = config.plugins.map((p: unknown) => (Array.isArray(p) ? p[0] : p));
+      expect(names.slice(0, 2)).toEqual(["expo-dev-client", "expo-secure-store"]);
+      expect(names.indexOf("expo-notifications")).toBeLessThan(
+        names.indexOf("@bacons/apple-targets"),
+      );
+      expect(names[names.length - 1]).toBe("@bacons/apple-targets");
+
+      // A leading "." is appended to the host app's id by @bacons/apple-targets.
+      const target = liveActivityTarget(config);
+      expect(target.bundleIdentifier.startsWith(".")).toBe(true);
+      expect(`${config.ios.bundleIdentifier}${target.bundleIdentifier}`).toBe(
+        `${hostId}.widget`,
+      );
+    },
+  );
+
   it("treats an unset APP_VARIANT as development", () => {
     expect(configFor(undefined).ios.bundleIdentifier).toBe("com.thefitbud.mobile.staging");
   });

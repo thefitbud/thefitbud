@@ -12,16 +12,22 @@ const VARIANTS = {
     name: "FitBud",
     bundleIdentifier: "com.thefitbud.mobile",
     appGroup: "group.com.thefitbud.mobile",
+    // Store builds use the production APNs environment.
+    apsEnvironment: "production",
   },
   staging: {
     name: "FitBud Staging",
     bundleIdentifier: "com.thefitbud.mobile.staging",
     appGroup: "group.com.thefitbud.mobile.staging",
+    // EAS internal / ad hoc builds use the development APNs environment.
+    apsEnvironment: "development",
   },
   development: {
     name: "FitBud Staging",
     bundleIdentifier: "com.thefitbud.mobile.staging",
     appGroup: "group.com.thefitbud.mobile.staging",
+    // EAS internal / ad hoc builds use the development APNs environment.
+    apsEnvironment: "development",
   },
 };
 
@@ -68,15 +74,27 @@ module.exports = ({ config }) => {
       ios: {
         ...config.ios,
         bundleIdentifier: variant.bundleIdentifier,
+        // One value feeds both this entitlement and the expo-notifications
+        // `mode` below, so they cannot disagree. The plugin only writes
+        // aps-environment when it is not already set.
+        entitlements: {
+          ...config.ios?.entitlements,
+          "aps-environment": variant.apsEnvironment,
+        },
       },
       android: {
         ...config.android,
         package: variant.bundleIdentifier,
         ...(googleServicesFile ? { googleServicesFile } : {}),
       },
+      // No icon, color or sounds: Android notifications stay exactly as they were.
       // After ./plugins/withLiveActivity (applied around this config):
       // @bacons/apple-targets adds targets/FitBudLiveActivity to the iOS build (LA1).
-      plugins: [...(config.plugins ?? []), "@bacons/apple-targets"],
+      plugins: [
+        ...(config.plugins ?? []),
+        ["expo-notifications", { mode: variant.apsEnvironment }],
+        "@bacons/apple-targets",
+      ],
     },
     { appGroup: variant.appGroup },
   );

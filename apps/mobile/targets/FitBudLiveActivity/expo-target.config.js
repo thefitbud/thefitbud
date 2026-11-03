@@ -13,6 +13,9 @@ module.exports = (config) => {
   return {
     type: "widget",
     name: "FitBudLiveActivity",
+    // Starts with "." so @bacons/apple-targets appends it to the host app's id:
+    // com.thefitbud.mobile.widget / com.thefitbud.mobile.staging.widget.
+    bundleIdentifier: ".widget",
     displayName: "FitBud",
     deploymentTarget: "17.0",
     frameworks: ["ActivityKit", "AppIntents", "SwiftUI", "WidgetKit"],
