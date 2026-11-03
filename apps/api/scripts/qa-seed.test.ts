@@ -1,6 +1,6 @@
 /**
  * QT2: the QA seed is deterministic and idempotent, and the QA reset cannot reach
- * past the three QA accounts.
+ * past the QA accounts.
  *
  * The reset is a data-destruction boundary, so the tests here do not trust the
  * predicates by reading them: they build the staging-like world (the demo personas
@@ -25,14 +25,22 @@ import {
 } from "../src/test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../src/test-support/seeded-db.js";
 import type { Env } from "../src/types.js";
-import { QA_ACCOUNTS, QA_EMAIL_PATTERN, qaUserId } from "../src/seed/qa/accounts.js";
+import {
+  QA_ACCOUNTS,
+  QA_EMAIL_PATTERN,
+  qaAccount,
+  qaUserId,
+} from "../src/seed/qa/accounts.js";
+import { canSubmitCheckin, deriveCheckinStatus } from "@fitbud/core";
 import {
   buildQaSeed,
+  QA_GUARANTEES,
   qaReferenceInstant,
   stableExpectations,
   type QaExpectations,
   type QaSeedResult,
 } from "../src/seed/qa/build.js";
+import { localDayStartIso } from "../src/seed/demo/ids.js";
 import { qaScopeIdentity } from "../src/seed/qa/identity.js";
 import { QA_TABLE_PLAN } from "../src/seed/qa/ownership.js";
 import { qaPasswordHash } from "../src/seed/qa/password.js";
@@ -228,6 +236,45 @@ function rowsReferencingRelationships(
   return found;
 }
 
+/**
+ * Rows still reachable from one QA trainer: their own user rows, their relationships
+ * and anything pointing at those relationships. Read from the schema's columns, not
+ * from the reset predicates, so the count is independent of what the reset believes.
+ */
+function rowsOwnedByTrainer(sqlite: Sqlite, trainerUserId: string): number {
+  const relationshipIds = (
+    sqlite.exec(
+      `SELECT id FROM coaching_relationships WHERE trainer_user_id = '${trainerUserId}'`,
+    )[0]?.values ?? []
+  ).map((row) => `'${String(row[0])}'`);
+  let total = 0;
+  for (const plan of QA_TABLE_PLAN) {
+    const columns = (
+      sqlite.exec(`SELECT name FROM pragma_table_info('${plan.table}')`)[0]?.values ?? []
+    ).map((row) => String(row[0]));
+    const clauses: string[] = [];
+    for (const column of plan.userColumns ?? []) {
+      clauses.push(`${column} = '${trainerUserId}'`);
+    }
+    if (relationshipIds.length > 0) {
+      for (const column of ["coaching_relationship_id", "relationship_id"]) {
+        if (columns.includes(column)) {
+          clauses.push(`${column} IN (${relationshipIds.join(", ")})`);
+        }
+      }
+    }
+    if (clauses.length === 0) {
+      continue;
+    }
+    total += Number(
+      sqlite.exec(
+        `SELECT count(*) FROM ${plan.table} WHERE ${clauses.join(" OR ")}`,
+      )[0]?.values[0]?.[0] ?? 0,
+    );
+  }
+  return total;
+}
+
 async function login(email: string, password: string): Promise<string> {
   const response = await app.request(
     "/auth/login",
@@ -333,6 +380,25 @@ describe("QA seed (QT2)", () => {
     expect(restDays).toBeGreaterThan(0);
   }, 600_000);
 
+  it("seeds two trainers, each with their own clients", () => {
+    const trainers = built.expectations.accounts.filter((a) => a.role === "trainer");
+    expect(trainers.map((a) => a.key)).toEqual(["trainer", "trainer2"]);
+    const relationships = built.expectations.accounts
+      .filter((a) => a.role === "trainee")
+      .map((a) => ({ key: a.key, relationshipId: a.relationshipId }));
+    // Four accounts beside the main trainer: two of his clients, a second trainer
+    // and that trainer's one client. Every trainee has their own relationship.
+    expect(relationships.map((r) => r.key)).toEqual(["ontrack", "slipping", "client2"]);
+    expect(new Set(relationships.map((r) => r.relationshipId)).size).toBe(3);
+    expect(built.expectations.guarantees.clientsFirstTrainer).toBe(2);
+    expect(built.expectations.guarantees.clientsSecondTrainer).toBe(1);
+    // The second trainer signs in the same way as the first: no new secret.
+    expect(qaAccount("trainer2").hasPassword).toBe(true);
+    expect(built.expectations.accounts.find((a) => a.key === "trainer2")!.signIn).toBe(
+      "password_or_otp",
+    );
+  });
+
   it("uses only allowlisted QA addresses and no real person's identity", () => {
     for (const account of QA_ACCOUNTS) {
       expect(account.email).toMatch(QA_EMAIL_PATTERN);
@@ -349,6 +415,8 @@ describe("QA seed (QT2)", () => {
     expect(built.sql).not.toContain("Rahul Verma");
     expect(built.sql).not.toContain("Aarav Shah");
     expect(built.sql).not.toContain("Rohan Mehta");
+    expect(built.sql).not.toContain("Priya Malhotra");
+    expect(built.sql).not.toContain("Lakshmi Iyer");
     // The hash is stored, never the plaintext, and the production verifier reads it.
     expect(built.sql).toContain("pbkdf2$100000$");
   });
@@ -374,10 +442,15 @@ describe("QA seed (QT2)", () => {
     expect(slipping.signIn).toBe("otp_only");
     expect(slipping.today?.pendingCheckinId).toBeTruthy();
     expect(slipping.today?.openExceptionCount).toBeGreaterThanOrEqual(2);
+    expect(slipping.today?.startableCheckinId).toBeTruthy();
+    expect(slipping.today?.startableCheckinId).not.toBe(slipping.today?.pendingCheckinId);
     const onTrack = built.expectations.accounts.find((a) => a.key === "ontrack")!;
     expect(onTrack.today?.mealNames.length).toBeGreaterThanOrEqual(3);
     expect(onTrack.today?.loggedMealCount).toBeGreaterThanOrEqual(1);
     expect(onTrack.today?.workoutName).toBeTruthy();
+    const client2 = built.expectations.accounts.find((a) => a.key === "client2")!;
+    expect(client2.signIn).toBe("otp_only");
+    expect(client2.relationshipId).toBeTruthy();
   });
 
   it("applies twice to a fresh database and changes nothing the second time", async () => {
@@ -398,6 +471,171 @@ describe("QA seed (QT2)", () => {
       handle.close();
     }
   }, 120_000);
+
+  it("leaves the slipping client a check-in they can start at every hour of the day", async () => {
+    const slipping = built.expectations.accounts.find((a) => a.key === "slipping")!;
+    const startableId = slipping.today!.startableCheckinId!;
+    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    try {
+      handle.sqlite.exec(built.sql);
+      await yieldToEventLoop();
+      const row = handle.sqlite.exec(
+        `SELECT local_date, record_status, submitted_at, window_starts_at, window_ends_at, checkin_form_version_id
+         FROM checkins WHERE id = '${startableId}'`,
+      )[0]?.values[0];
+      expect(row, "the startable check-in is in the emitted SQL").toBeTruthy();
+      const [localDate, recordStatus, submittedAt, windowStartsAt, windowEndsAt, formVersionId] =
+        row!.map((value) => (value === null ? null : String(value)));
+      expect(localDate).toBe(REFERENCE_DATE);
+      expect(recordStatus).toBe("draft");
+      expect(submittedAt).toBeNull();
+      // It is pinned to a real form version, so the fill-and-send flow has a form.
+      expect(formVersionId).toBeTruthy();
+      expect(
+        Number(
+          handle.sqlite.exec(
+            `SELECT count(*) FROM checkin_form_versions WHERE id = '${formVersionId}'`,
+          )[0]?.values[0]?.[0] ?? 0,
+        ),
+      ).toBe(1);
+
+      const timezone = String(
+        handle.sqlite.exec(
+          `SELECT timezone FROM users WHERE id = '${slipping.userId}'`,
+        )[0]?.values[0]?.[0] ?? "",
+      );
+      expect(timezone.length).toBeGreaterThan(0);
+      // The nightly job starts at 02:00 IST and the suites run after it, so "due
+      // today" has to hold at every hour of the trainee's own civil day, not only at
+      // the reference instant. The product's own rule function decides, not the test.
+      for (let hour = 0; hour < 24; hour += 1) {
+        const nowIso = localDayStartIso(REFERENCE_DATE, `${String(hour).padStart(2, "0")}:00`, timezone);
+        const status = deriveCheckinStatus({
+          nowIso,
+          windowStartsAt: windowStartsAt!,
+          windowEndsAt: windowEndsAt!,
+          recordStatus: "draft",
+          hasReview: false,
+        });
+        expect(status, `${nowIso} (${timezone})`).toBe("due");
+        expect(
+          canSubmitCheckin({ recordStatus: "draft", nowIso, windowStartsAt: windowStartsAt! }),
+          nowIso,
+        ).toBe(true);
+      }
+
+      // Exactly one, so Today cannot show a different card than the flow expects.
+      const dueCount = Number(
+        handle.sqlite.exec(
+          `SELECT count(*) FROM checkins
+           WHERE coaching_relationship_id = '${slipping.relationshipId}'
+             AND record_status = 'draft' AND submitted_at IS NULL
+             AND local_date = '${REFERENCE_DATE}'`,
+        )[0]?.values[0]?.[0] ?? 0,
+      );
+      expect(dueCount).toBe(QA_GUARANTEES.startableCheckinsSlipping);
+
+      // The submitted check-in waiting for the trainer is still there and separate.
+      const pending = handle.sqlite.exec(
+        `SELECT record_status FROM checkins WHERE id = '${slipping.today!.pendingCheckinId}'`,
+      )[0]?.values[0]?.[0];
+      expect(String(pending)).toBe("submitted");
+
+      // No exception points at the row that was moved: a signal would now disagree
+      // with the date underneath it.
+      expect(
+        Number(
+          handle.sqlite.exec(
+            `SELECT count(*) FROM exceptions WHERE source_entity_type = 'checkin' AND source_entity_id = '${startableId}'`,
+          )[0]?.values[0]?.[0] ?? 0,
+        ),
+      ).toBe(0);
+    } finally {
+      handle.close();
+    }
+  }, 120_000);
+
+  it("refuses each trainer the other trainer's client, and clears both on reset", async () => {
+    const trainer = built.expectations.accounts.find((a) => a.key === "trainer")!;
+    const trainer2 = built.expectations.accounts.find((a) => a.key === "trainer2")!;
+    const ownedByTrainer = (["ontrack", "slipping"] as const).map(
+      (key) => built.expectations.accounts.find((a) => a.key === key)!.relationshipId!,
+    );
+    const ownedByTrainer2 = built.expectations.accounts.find((a) => a.key === "client2")!
+      .relationshipId!;
+    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    try {
+      handle.sqlite.exec(built.sql);
+      await yieldToEventLoop();
+      setTestDbOverride(handle.db);
+
+      const headersFor = async (email: string) => ({
+        Authorization: `Bearer ${await login(email, TEST_QA_PASSWORD)}`,
+        "x-fitbud-role": "trainer",
+      });
+      const headers = await headersFor(trainer.email);
+      const headers2 = await headersFor(trainer2.email);
+      const workspace = (relationshipId: string, as: Record<string, string>) =>
+        app.request(`/workspaces/relationships/${relationshipId}`, { headers: as }, testEnv());
+      const codeOf = async (response: Response) =>
+        ({
+          status: response.status,
+          code: (JSON.parse(await response.text()) as { error?: { code?: string } }).error?.code,
+        });
+
+      // Each trainer reads their own client, so a refusal below cannot be a dead token.
+      expect((await workspace(ownedByTrainer[0]!, headers)).status).toBe(200);
+      expect((await workspace(ownedByTrainer2, headers2)).status).toBe(200);
+
+      // Both directions, with the other trainer's real relationship ids.
+      expect(await codeOf(await workspace(ownedByTrainer2, headers))).toEqual({
+        status: 404,
+        code: "RELATIONSHIP_NOT_FOUND",
+      });
+      for (const relationshipId of ownedByTrainer) {
+        expect(await codeOf(await workspace(relationshipId, headers2))).toEqual({
+          status: 404,
+          code: "RELATIONSHIP_NOT_FOUND",
+        });
+      }
+      // Same status and same code as an id that exists for nobody: the API never
+      // confirms that another trainer's relationship exists.
+      expect(await codeOf(await workspace("00000000-0000-4000-8000-000000000000", headers))).toEqual(
+        { status: 404, code: "RELATIONSHIP_NOT_FOUND" },
+      );
+      // The client directory stays inside each trainer's own world.
+      const directory = async (as: Record<string, string>) =>
+        (
+          JSON.parse(
+            await (await app.request("/clients", { headers: as }, testEnv())).text(),
+          ) as { data: { items: Array<{ relationshipId: string }> } }
+        ).data.items.map((item) => item.relationshipId);
+      expect((await directory(headers)).sort()).toEqual([...ownedByTrainer].sort());
+      expect(await directory(headers2)).toEqual([ownedByTrainer2]);
+
+      setTestDbOverride(null);
+
+      // The reset clears both trainers' worlds, counted from the schema's columns
+      // rather than from the reset's own predicates.
+      const beforeReset = [trainer, trainer2].map((account) =>
+        rowsOwnedByTrainer(handle.sqlite, account.userId),
+      );
+      expect(beforeReset[0]).toBeGreaterThan(0);
+      expect(beforeReset[1]).toBeGreaterThan(0);
+      handle.sqlite.exec(resetSql);
+      await yieldToEventLoop();
+      expect([
+        rowsOwnedByTrainer(handle.sqlite, trainer.userId),
+        rowsOwnedByTrainer(handle.sqlite, trainer2.userId),
+      ]).toEqual([0, 0]);
+      expect(
+        rowsReferencingRelationships(handle.sqlite, [...ownedByTrainer, ownedByTrainer2]),
+      ).toEqual([]);
+    } finally {
+      setTestDbOverride(null);
+      handle.close();
+    }
+  }, 180_000);
 
   it("produces a world the product API accepts, and restores it after real mutations", async () => {
     const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
@@ -561,7 +799,7 @@ describe("QA reset (QT2)", () => {
   const identity = qaScopeIdentity();
   const resetSql = buildQaResetSql(identity);
 
-  it("mentions no identity other than the three QA ids", () => {
+  it("mentions no identity other than the QA ids", () => {
     const uuids = new Set(
       resetSql.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) ?? [],
     );

@@ -8,7 +8,7 @@ export function identifierHashSync(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-/** The QA world on staging: the three fixed ids and the hashes of their emails. */
+/** The QA world on staging: every fixed QA id and the hashes of their emails. */
 export function qaScopeIdentity(): QaScopeIdentity {
   return {
     userIds: QA_ACCOUNTS.map(qaUserId),
@@ -18,7 +18,7 @@ export function qaScopeIdentity(): QaScopeIdentity {
   };
 }
 
-/** The same three personas inside the scratch demo world the seed is read from. */
+/** The same personas inside the scratch demo world the seed is read from. */
 export function demoScopeIdentity(): QaScopeIdentity {
   return {
     userIds: QA_ACCOUNTS.map((account) => demoUuid("user", account.demoEmail)),
