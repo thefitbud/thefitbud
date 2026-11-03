@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/index.js";
+import { TEST_OTP_IDENTIFIER_RE } from "../src/auth/test-otp.js";
 import { verifyPassword } from "../src/auth/password.js";
 import { setTestDbOverride } from "../src/db/client.js";
 import { createMemoryR2Bucket } from "../src/lib/memory-r2.js";
@@ -201,6 +202,10 @@ describe("QA seed (QT2)", () => {
   it("uses only allowlisted QA addresses and no real person's identity", () => {
     for (const account of QA_ACCOUNTS) {
       expect(account.email).toMatch(QA_EMAIL_PATTERN);
+      // The nightly run signs in through the staging test-mode OTP (QT1), which
+      // allowlists exactly these addresses.
+      expect(account.email).toMatch(TEST_OTP_IDENTIFIER_RE);
+      expect(account.email.toLowerCase()).toBe(account.email);
       expect(account.displayName.startsWith("QA ")).toBe(true);
     }
     expect(built.sql).not.toContain(TEST_QA_PASSWORD);

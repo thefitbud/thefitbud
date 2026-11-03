@@ -7,9 +7,14 @@
  * to those accounts, and the QA reset only ever touches the three ids below.
  */
 import { demoUuid } from "../demo/ids.js";
+import { TEST_OTP_IDENTIFIER_RE } from "../../auth/test-otp.js";
 
-/** Allowlisted QA login addresses (D-QA1-2). Login purpose only. */
-export const QA_EMAIL_PATTERN = /^qa\+[a-z0-9-]{1,32}@thefitbud\.com$/;
+/**
+ * Allowlisted QA login addresses (D-QA1-2), login purpose only. The same constant
+ * the staging test-mode OTP allowlists (QT1), not a second copy of the decision: an
+ * account these three emails did not match would be unable to sign in unattended.
+ */
+export const QA_EMAIL_PATTERN = TEST_OTP_IDENTIFIER_RE;
 
 export type QaAccountKey = "trainer" | "ontrack" | "slipping";
 
