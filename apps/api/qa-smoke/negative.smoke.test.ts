@@ -4,14 +4,10 @@
  */
 import { apiErrorBodySchema } from "@fitbud/contracts";
 import { describe, expect, it } from "vitest";
-import {
-  ACCOUNT_KEYS,
-  errorOf,
-  newIdempotencyKey,
-  relationshipIdOf,
-  send,
-  stable,
-} from "./helpers.js";
+// `ALL_ACCOUNT_KEYS` comes straight from `expectations.ts`: `helpers.js` re-exports
+// only `ACCOUNT_KEYS` (the three signed-in keys) and is outside this task's files.
+import { ALL_ACCOUNT_KEYS } from "./expectations.js";
+import { errorOf, newIdempotencyKey, relationshipIdOf, send, stable } from "./helpers.js";
 import type { RawResponse } from "./http.js";
 import { requireConfigured, requireOtp, sessionFor, smokeHttp } from "./run-context.js";
 import { startOtp, verifyOtp } from "./signin.js";
@@ -145,17 +141,22 @@ const ROLE_REFUSAL = { status: 403, code: "FORBIDDEN_ROLE" } as const;
 /**
  * Values that only a trainer-facing body would carry. A 403 whose body leaked any of
  * them would still be a leak, so the status alone is not enough.
+ *
+ * This walks `ALL_ACCOUNT_KEYS`, not `ACCOUNT_KEYS`: since CU11 the seed holds a
+ * second trainer and their client, which `ACCOUNT_KEYS` deliberately leaves out
+ * (`run-context.ts` derives the role header from the key). Scanning only the three
+ * signed-in keys would miss `client2`'s relationship id and trainer 2's own
+ * identifiers, so a body that leaked another trainer's client would pass.
  */
 function trainerOnlyValues(): string[] {
-  const values = [
-    stable.accounts.trainer.userId,
-    stable.accounts.trainer.firebaseUid,
-    stable.accounts.trainer.displayName,
-    stable.accounts.trainer.email,
-  ];
-  for (const key of ACCOUNT_KEYS) {
-    const relationshipId = stable.accounts[key].relationshipId;
-    if (relationshipId) values.push(relationshipId);
+  const values: string[] = [];
+  for (const key of ALL_ACCOUNT_KEYS) {
+    const account = stable.accounts[key];
+    if (account.role === "trainer") {
+      values.push(account.userId, account.firebaseUid, account.displayName, account.email);
+    }
+    // Trainer keys have no relationship of their own; trainee keys do.
+    if (account.relationshipId) values.push(account.relationshipId);
   }
   return values;
 }
