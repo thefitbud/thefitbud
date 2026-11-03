@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="unit" tests="2" failures="0" time="0.000">
+<testsuite name="unit" tests="2" failures="0" skipped="2" timestamp="2026-11-03T20:30:12" time="0.000">
+  <testcase name="core adherence rules" classname="unit" time="0.000"><skipped/></testcase>
+  <testcase name="contracts parse" classname="unit" time="0.000"><skipped/></testcase>
+</testsuite>
+</testsuites>
