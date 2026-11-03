@@ -8,9 +8,9 @@
  * which proves only that the API 404s for an id belonging to nobody: that assertion
  * would have passed with every one of another trainer's clients on the response. It
  * now reads the *real* ids of each trainer's clients as the other trainer, in both
- * directions, and also checks that the refusal is indistinguishable from the refusal
- * for an id that exists for nobody — which is the property that keeps the API from
- * confirming that another trainer's record exists.
+ * directions, and also checks that the refusal carries the same status and code as the
+ * refusal for an id that exists for nobody — which is the property that keeps the API
+ * from confirming that another trainer's record exists.
  */
 import {
   activityFeedResponseSchema,
@@ -22,6 +22,7 @@ import {
   trainerCheckinInboxResponseSchema,
 } from "@fitbud/contracts";
 import { beforeAll, describe, expect, it, type TestContext } from "vitest";
+import { readSmokeEnv } from "./env.js";
 import type { AnyAccountKey } from "./expectations.js";
 import { errorOf, getData, relationshipIdOf, send, stable } from "./helpers.js";
 import { runContext, sessionFor, smokeHttp, type LiveSession } from "./run-context.js";
@@ -47,41 +48,78 @@ function relationshipOf(key: AnyAccountKey): string {
  * `run-context.ts` derives the role header from the account key (`key === "trainer"`),
  * so a second *trainer* key in `ACCOUNT_KEYS` would be sent as a trainee and refused
  * by `requireRole`. That file is outside this task's `files_owned`, so trainer 2 signs
- * in here, through the same endpoints (`signin.ts`) and with the same secrets, read by
- * name only and never logged.
+ * in here, through the same endpoints (`signin.ts`) and the same environment contract
+ * (`env.ts`, which is the one place that validates the OTP's shape and from which no
+ * secret is ever logged).
+ *
+ * The outcome is *recorded*, never thrown from the hook: a hook that throws fails every
+ * test in the file, and the five trainer-1 cases above have nothing to do with trainer 2.
+ * On a staging database where this seed has not been applied yet, `qa+trainer2@` does
+ * not exist, and the run must still report honestly on trainer 1's endpoints. This is
+ * the same shape as `global-setup.ts`'s `signInAccount`: a sign-in that was attempted
+ * and failed is an error on the tests that need the account, and nothing else.
  */
-let secondTrainerSession: LiveSession | null = null;
-let secondTrainerSkip = "Trainer 2 was not signed in on this target.";
+type SecondTrainerOutcome =
+  | { status: "ok"; session: LiveSession }
+  /** Not configured on this target (no secret for it). */
+  | { status: "skip"; reason: string }
+  /** Configured but sign-in failed. A failure of trainer 2's own tests, never a skip. */
+  | { status: "error"; message: string };
+
+let secondTrainerOutcome: SecondTrainerOutcome = {
+  status: "skip",
+  reason: "Trainer 2 was not signed in on this target.",
+};
 
 beforeAll(async () => {
   const ctx = runContext();
   const account = stable.accounts.trainer2;
-  const code = process.env.QA_TEST_OTP_CODE?.trim();
-  const password = process.env.FITBUD_QA_PASSWORD?.trim();
   try {
-    if (ctx.otp && code) {
-      const session = await otpSignIn(http, account.email, code);
-      secondTrainerSession = { token: session.token, userId: session.userId, role: "trainer" };
+    // Values come from the environment contract, not from `process.env` here, so the
+    // six-digit OTP check applies to this sign-in too. Reading it inside the `try`
+    // keeps even a malformed variable from failing trainer 1's tests; `global-setup.ts`
+    // reads the same contract first, so the whole run would already have stopped.
+    const env = readSmokeEnv(process.env);
+    if (ctx.otp && env.otpCode !== undefined) {
+      const session = await otpSignIn(http, account.email, env.otpCode);
+      secondTrainerOutcome = {
+        status: "ok",
+        session: { token: session.token, userId: session.userId, role: "trainer" },
+      };
       return;
     }
-    if (ctx.password && password) {
-      const session = await passwordSignIn(http, account.email, password);
-      secondTrainerSession = { token: session.token, userId: session.userId, role: "trainer" };
+    if (ctx.password && env.password !== undefined) {
+      const session = await passwordSignIn(http, account.email, env.password);
+      secondTrainerOutcome = {
+        status: "ok",
+        session: { token: session.token, userId: session.userId, role: "trainer" },
+      };
       return;
     }
-    secondTrainerSkip = "No sign-in secret is set for this target.";
+    secondTrainerOutcome = {
+      status: "skip",
+      reason: "No sign-in secret for trainer 2 on this target.",
+    };
   } catch (error) {
     // SignInError messages carry the step, status and code only, never a secret.
-    throw new Error(
-      `trainer2: ${error instanceof Error ? error.message : "Sign-in failed."}`,
-    );
+    secondTrainerOutcome = {
+      status: "error",
+      message: error instanceof Error ? error.message : "Sign-in failed.",
+    };
   }
 });
 
-/** Trainer 2's session, or skips the calling test with a reason. A failed sign-in threw. */
+/**
+ * Trainer 2's session. Skips the calling test when no secret configured it, and throws
+ * on a sign-in that was attempted and failed — so that shows up as a failure, here and
+ * nowhere else in the file.
+ */
 function secondTrainer(t: TestContext): LiveSession {
-  if (!secondTrainerSession) t.skip(secondTrainerSkip);
-  return secondTrainerSession!;
+  if (secondTrainerOutcome.status === "skip") t.skip(secondTrainerOutcome.reason);
+  if (secondTrainerOutcome.status === "error") {
+    throw new Error(`trainer2: ${secondTrainerOutcome.message}`);
+  }
+  return secondTrainerOutcome.session;
 }
 
 describe("trainer endpoints", () => {
@@ -199,7 +237,10 @@ describe("one trainer cannot reach another trainer's client", () => {
     expect(workspace.history.relationshipId).toBe(relationshipOf("client2"));
   });
 
-  it("the refusal is the same as for an id that exists for nobody", async (t) => {
+  // `errorOf` (`http.ts`, outside this task's files_owned) reads the status and the
+  // code and not the message, so this pins status and code. That is the pair a client
+  // branches on; the messages are equal today too, but this test does not guard it.
+  it("the refusal carries the same status and code as for an id that exists for nobody", async (t) => {
     const trainer = sessionFor(t, "trainer");
     const nobodys = await send(
       http,
@@ -214,7 +255,8 @@ describe("one trainer cannot reach another trainer's client", () => {
       `/workspaces/relationships/${relationshipOf("client2")}`,
     );
     // Same status and same code: the API never confirms that a relationship it will
-    // not show exists. A distinct "forbidden" here would leak exactly that.
+    // not show exists. A distinct "forbidden" here would leak exactly that — which is
+    // what this case is here to catch.
     expect(errorOf(nobodys)).toEqual(NOT_OWNED);
     expect(errorOf(anothers)).toEqual(errorOf(nobodys));
   });
@@ -227,7 +269,7 @@ describe("one trainer cannot reach another trainer's client", () => {
       "GET",
       `/exceptions/relationships/${relationshipIdOf("slipping")}?status=active`,
     );
-    expect(errorOf(response).status).toBe(404);
+    expect(errorOf(response)).toEqual(NOT_OWNED);
   });
 
   it("trainer 2's attention feed and inbox hold only their own client", async (t) => {

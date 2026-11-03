@@ -598,8 +598,8 @@ describe("QA seed (QT2)", () => {
           code: "RELATIONSHIP_NOT_FOUND",
         });
       }
-      // Indistinguishable from an id that exists for nobody: the API never confirms
-      // that another trainer's relationship exists.
+      // Same status and same code as an id that exists for nobody: the API never
+      // confirms that another trainer's relationship exists.
       expect(await codeOf(await workspace("00000000-0000-4000-8000-000000000000", headers))).toEqual(
         { status: 404, code: "RELATIONSHIP_NOT_FOUND" },
       );
