@@ -135,7 +135,13 @@ Read it in this order:
 
 Redaction: the builder replaces, with `[redacted]`, the value of `QA_TEST_OTP_CODE` and of any environment variable whose name ends in `TOKEN`, `SECRET`, `PASSWORD` or `KEY` (so `FITBUD_QA_PASSWORD`, `EXPO_TOKEN` and `CLOUDFLARE_API_TOKEN` are covered), `NAME=<20+ characters>` assignments, well-known key shapes (`sk_live_…`, `ghp_…`), bearer tokens, JWTs, a 6-digit code written next to "otp" or "code", and any email other than `qa+…@thefitbud.com`. It does this in messages and in every report and log it copies. Redaction is literal: a secret split across a newline survives as two halves in the raw log copy.
 
-**Screenshots are not redacted.** They are copied byte for byte, so a screenshot of the OTP screen can show the QA login code. The `qa-report` artifact of a public repository is publicly downloadable. Whether to blur, drop or restrict those screenshots is Firoz's decision; until then, assume anything visible on screen is public.
+**Screenshots are not redacted.** They are copied byte for byte, and the `qa-report` artifact of a public repository is publicly downloadable. Assume anything visible on screen is public.
+
+**The QA OTP code is treated as non-secret (D-QA1-14, Firoz, 3 Nov 2026).** It is not rotated on a schedule. It is safe to treat this way only because QT1 confines it: it works only when `ENVIRONMENT=staging`, only for `qa+…@thefitbud.com`, only for the `login` purpose, and production refuses every request if either QA secret is set. It reaches three accounts holding generated seed data that are wiped nightly — never production, and never Firoz's real-email accounts, which the allowlist excludes.
+
+Even so, QT3 takes no screenshot of a filled code field, so the code should not appear in an artifact at all. If you ever see one, it is not an emergency — but tell whoever owns QT3, because the flow has drifted from D-QA1-14.
+
+**Revisit D-QA1-14 before the next public run if** staging starts carrying real data, or the allowlist widens beyond the QA accounts. The reasoning above stops holding at that point.
 
 Exit codes of `summarize.mjs`: `0` always when it could read the inputs, even if tests failed (the workflow's own status comes from the suite steps); `2` when a report is malformed or the arguments are wrong. On `2` it still writes `summary.json` with that suite as `error`, so the upload step must run with `if: always()`.
 
