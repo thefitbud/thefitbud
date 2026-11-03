@@ -208,8 +208,8 @@ app, so expect platform chrome to differ.
 | trainee-meal-log__something-different | 08-trainee-something-different-ios.png | |
 | trainee-meal-log__food-search | 09-trainee-food-search-ios.png | |
 | trainee-meal-log__logged | 07-trainee-diet-ios.png | after a changed meal |
-| trainee-checkin__form | 14-trainee-check-in-v3-ios.png | only when a check-in is startable |
-| trainee-checkin__sent | 100-trainee-checkin-sent-ios.png | only when a check-in is startable |
+| trainee-checkin__form | 14-trainee-check-in-v3-ios.png | |
+| trainee-checkin__sent | 100-trainee-checkin-sent-ios.png | |
 | trainee-progress__loaded | 13-trainee-progress-ios.png | |
 | trainee-settings__more | 16-trainee-more-ios.png | |
 | trainee-settings__reminders | 79-trainee-reminder-settings-android.png | |
@@ -244,13 +244,39 @@ change. Known gaps, to be fixed in a follow-up (QT3b) that touches app code:
   `TextInput` would make that a plain tap. TODO(QT3b).
 - **Role select** cannot be reached: the QA seed has no account with both roles.
   The flow asserts the single-role skip instead. TODO(QT3b) with a dual-role account.
-- **Check-in fill-and-send** runs only when Today offers a due or overdue
-  check-in. The QA seed guarantees a *submitted* check-in waiting for the trainer
-  (`pendingCheckinsSlipping`), not a startable one. TODO(QT2b): guarantee one.
+- **Check-in fill-and-send** is unconditional (CU11). The QA seed guarantees
+  exactly one check-in the slipping trainee can start on the seed's reference date
+  (`guarantees.startableCheckinsSlipping`), with its window open for the whole
+  civil day in that trainee's own timezone, as well as the *submitted* one waiting
+  for the trainer (`guarantees.pendingCheckinsSlipping`, for
+  `trainer/checkin-review.yaml`).
 - **Resolve** happens on the exception screen, reached from the client status.
   The review sheet's "Resolve…" is not wired in the Attention tab, and "Mark
   reviewed" only moves a client to Reviewed.
 - **Rest timer** assertions use the visible countdown ("N s left"); the flow
   checks that the number changes, not how long a second takes.
-- None of these flows has run yet: this was written in a session with no
-  emulator and no Maestro. The first real run is QT7's workflow or a local run.
+- The flows first ran on 3 Nov 2026, in the `android` job of QA runs 41648846215
+  and 41651787474 (CU18, which fixed the `common/` subflows the suite could not
+  parse). **The suite runs. It is not green, nothing about why is settled, and the
+  two runs disagree** — on byte-identical flow files, with the APK built and
+  installed both times:
+  - 41648846215 collected and ran all four `smoke` flows.
+    `auth/sign-in-password.yaml` and `trainer/clients.yaml` passed.
+    `auth/sign-in-code.yaml` failed waiting for the `6-digit code` field after
+    "Send code"; `trainee/today.yaml` failed on
+    `assertNotVisible: ".*is preparing your plan.*"` *after* `Today's workout` was
+    already visible.
+  - 41651787474 failed all four, each on its first step: the 30-second wait for
+    "Sign in with a code instead" straight after `launchApp`. The app never
+    reached the auth screen, so that run says nothing about any later assertion.
+  Do **not** read the first run's two failures as stale QA data. A pull-request
+  run does not write staging (D-QA1-6), but the accounts had been reset and
+  seeded successfully at 13:24 UTC that day — the `seed-reset` job of run
+  41643846967, dispatched from `main` — that run's own `android` job was cancelled
+  13 seconds later without installing an APK or running a flow, and its
+  `api-smoke` and `web-staging` jobs were skipped. Nothing wrote the accounts
+  between that seed and 14:09, when the suite ran. Both failures are therefore
+  undiagnosed and may well be real defects; `trainee/today.yaml` in particular
+  points at a plan the seed creates that the app does not treat as live
+  (`TodayTab.tsx` gates that copy on `hasLivePlan`). A dispatch from `main` with
+  `suites=android` is the next run to learn anything from.
