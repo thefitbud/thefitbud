@@ -1,15 +1,19 @@
 /**
- * The QA reset: SQL that returns the three QA accounts to "not seeded yet".
+ * The QA reset: SQL that returns every QA account to "not seeded yet".
  *
  * The nightly run makes real changes on these accounts — resolving exceptions,
  * reviewing check-ins, logging workouts and meals, adding notes (D-QA1-7) — so the
  * reset has to remove everything they own, including rows the run created, and then
  * `qa-seed.sql` puts the known world back.
  *
- * Two independent things keep it inside the three accounts:
+ * Both QA trainers and both their client worlds are in scope: the predicates are
+ * anchored on {@link QA_ACCOUNTS}, so a second trainer is reset by the same
+ * statements, with no second code path to keep in step (CU11).
+ *
+ * Two independent things keep it inside the QA accounts:
  *
  * 1. **Structure.** Every `DELETE` predicate comes from {@link qaScopePredicate},
- *    which is anchored on the three literal ids (see `ownership.ts`). There is no
+ *    which is anchored on the literal QA ids (see `ownership.ts`). There is no
  *    unconditional delete, and no predicate mentions any other identity.
  * 2. **A guard.** The statements at the top abort the file (a malformed-JSON error,
  *    so `wrangler d1 execute` exits non-zero) if the database disagrees about which
@@ -59,7 +63,7 @@ export function qaResetGuardSql(): string {
       `${mismatched}`,
     ),
     guard(
-      "no QA email or QA firebase uid outside the three ids",
+      "no QA email or QA firebase uid outside the fixed ids",
       "users u LEFT JOIN user_identities i ON i.user_id = u.id",
       `u.id NOT IN (${list(ids)})\n  AND (u.firebase_uid IN (${list(QA_ACCOUNTS.map((a) => a.firebaseUid))})\n       OR i.email_norm IN (${list(QA_ACCOUNTS.map((a) => a.email))}))`,
     ),
@@ -72,7 +76,7 @@ export function qaResetGuardSql(): string {
 }
 
 /**
- * Deletes every row the three QA accounts own, in reverse ownership-plan order so
+ * Deletes every row the QA accounts own, in reverse ownership-plan order so
  * each table's parents are still there when its own rows go.
  */
 export function buildQaResetSql(identity: QaScopeIdentity): string {
