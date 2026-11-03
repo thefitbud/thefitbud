@@ -1,3 +1,4 @@
+const { execFileSync } = require("node:child_process");
 const withLiveActivity = require("./plugins/withLiveActivity");
 
 /**
@@ -35,6 +36,25 @@ function resolveVariant(value) {
   return variant;
 }
 
+/**
+ * Short commit the JS bundle was built from, shown by the dev-only
+ * BundleCommitBadge. Never fails the build: "unknown" without git.
+ */
+function resolveBundleCommit() {
+  try {
+    return (
+      execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 5000,
+      })
+        .toString()
+        .trim() || "unknown"
+    );
+  } catch {
+    return "unknown";
+  }
+}
+
 /** @param {{ config: import('@expo/config').ExpoConfig }} context */
 module.exports = ({ config }) => {
   const variant = resolveVariant(process.env.APP_VARIANT);
@@ -44,6 +64,7 @@ module.exports = ({ config }) => {
     {
       ...config,
       name: variant.name,
+      extra: { ...config.extra, bundleCommit: resolveBundleCommit() },
       ios: {
         ...config.ios,
         bundleIdentifier: variant.bundleIdentifier,

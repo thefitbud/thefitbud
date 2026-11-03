@@ -19,11 +19,11 @@ import type {
 } from "@fitbud/contracts";
 import { AppState, Platform } from "react-native";
 import { isTestIdToken } from "../lib/testToken";
+import { authErrorCopy } from "../lib/authErrors";
 import {
   createMobileApiClient,
   createTokenSession,
   isForegroundAppState,
-  resolveApiBaseUrl,
   type SessionRefresh,
   type TokenSession,
 } from "../lib/api";
@@ -78,16 +78,14 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * User-facing text for a failed call. Never a raw `error.message` (a ZodError's
+ * is a JSON dump): API errors keep the API's own message, known failure
+ * classes get a short code (`AUTH-NET`, `AUTH-PARSE`, ...), and a dev build
+ * logs the details (D-W3-12).
+ */
 function messageFromError(error: unknown): string {
-  if (error instanceof ApiClientError) {
-    return error.message;
-  }
-  const message =
-    error instanceof Error ? error.message : "Something went wrong.";
-  if (message === "Network request failed") {
-    return `Network request failed. Could not reach ${resolveApiBaseUrl()}.`;
-  }
-  return message;
+  return authErrorCopy(error, "general", "messageFromError");
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
