@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,14 +113,14 @@ test.describe("host guard: the real config", () => {
           !k.startsWith("PW_") &&
           !k.startsWith("PLAYWRIGHT") &&
           k !== "STAGING_WEB_URL" &&
-          // The child loads the same config and reporter; it must not write into (and truncate) this run's log and reports.
-          k !== "QA_RESULTS_DIR" &&
           k !== LOCAL_REHEARSAL_FLAG,
       ),
     ) as Record<string, string>;
     return spawnSync(process.execPath, [cli, "test", "-c", "playwright.staging.config.ts", "--list"], {
       cwd: trainerWebDir,
-      env: { ...clean, ...env },
+      // Own results dir: the child loads the same config and LogReporter, and must never write
+      // into (or truncate) this run's log and reports, whether QA_RESULTS_DIR is set or not.
+      env: { ...clean, QA_RESULTS_DIR: mkdtempSync(path.join(tmpdir(), "qt5-child-")), ...env },
       encoding: "utf8",
     });
   }
