@@ -1,0 +1,25 @@
+# Subflow (QT3): from a freshly launched app to the code-entry step of the
+# "Sign in with a code" screen, with the code field still EMPTY.
+#
+# Input (env, passed by the caller with runFlow.env):
+#   SIGN_IN_EMAIL  a qa+...@thefitbud.com address, from the runner
+#
+# Takes no screenshot. Callers that want one (auth/sign-in-code.yaml) take it
+# AFTER this subflow, while the code field is still empty (D-QA1-14).
+#
+# The email is typed on the password screen and carried over: AuthScreen holds
+# one `identifier` state for both modes, so the code screen opens pre-filled.
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 30000
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${SIGN_IN_EMAIL}
+- hideKeyboard
+- tapOn: "Sign in with a code instead"
+- extendedWaitUntil:
+    visible: "Send code"
+    timeout: 10000
+- tapOn: "Send code"
+- extendedWaitUntil:
+    visible: "6-digit code"
+    timeout: 20000

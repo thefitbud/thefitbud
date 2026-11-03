@@ -1,0 +1,102 @@
+appId: com.thefitbud.mobile.staging
+name: Trainee logs a workout
+tags:
+  - trainee
+  - full
+---
+# Open the workout, start it, log a set, see the rest timer count down, skip the
+# rest, log the remaining sets, finish, and land on the summary. Runs as the
+# slipping trainee (QA Rohan, sign-in by code): the on-track account's loggable
+# workout is usually dated weeks back, Rohan's is the current week's.
+#
+# Env from the runner: QA_SLIPPING_EMAIL, QA_OTP_CODE.
+#
+# Rest days are valid for the QA plan (it trains four days a week), so the
+# workout tab may show the NEXT workout, or a "Log it" row for a missed one,
+# instead of a today workout. The flow takes whichever of "Start workout" or
+# "Log it" is there. The loggable workout (accounts[slipping].loggableWorkout in
+# the run's expectations.json) is guaranteed to exist, but not to be today's.
+#
+# This flow writes (workout log, sets, completion). The nightly reset restores
+# it (D-QA1-7). It must run BEFORE trainer/attention.yaml resolves Rohan's
+# exceptions, which can close logging; the tag order and the alphabetical flow
+# order (trainee before trainer) give that.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-code.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+
+- tapOn: "Workout"
+- extendedWaitUntil:
+    visible: "Start workout|Continue workout|Log it"
+    timeout: 30000
+- takeScreenshot: trainee-workout-log__workout-tab
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "Start workout|Continue workout"
+    commands:
+      - tapOn: "Start workout|Continue workout"
+- runFlow:
+    when:
+      notVisible: "Start workout|Continue workout"
+    commands:
+      - tapOn: "Log it"
+
+# Active workout: the log bar names the current set, e.g. "Log set 1 · 60 kg × 8".
+- extendedWaitUntil:
+    visible: "Log set [0-9]+ ·.*"
+    timeout: 30000
+- takeScreenshot: trainee-workout-log__active
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Log the first set: the rest timer must appear and count down.
+- tapOn: "Log set [0-9]+ ·.*"
+- extendedWaitUntil:
+    visible: "REST"
+    timeout: 10000
+- assertVisible: "[0-9]+ s left"
+- takeScreenshot: trainee-workout-log__rest
+- runFlow: ../../common/assert-no-crash.yaml
+- copyTextFrom: "[0-9]+ s left"
+- extendedWaitUntil:
+    notVisible: ${maestro.copiedText}
+    timeout: 10000
+- tapOn: "Skip rest"
+- assertNotVisible: "REST"
+
+# Log the remaining sets. Bounded, not open-ended: a set that fails to log
+# fails the finish step instead of looping. Logging a set ends the rest it starts.
+- repeat:
+    times: 24
+    commands:
+      - runFlow:
+          when:
+            visible: "Log set [0-9]+ ·.*"
+          commands:
+            - tapOn: "Log set [0-9]+ ·.*"
+            - waitForAnimationToEnd:
+                timeout: 500
+
+# All sets logged: the footer becomes "Finish workout". Finish it; if the plan
+# asks for a session RPE the sheet opens, pick one and confirm.
+- assertNotVisible: "Log set [0-9]+ ·.*"
+- tapOn: "Finish workout"
+- runFlow:
+    when:
+      visible: "How hard was the session\\?"
+    commands:
+      - tapOn: "RPE 7.*"
+      - tapOn: "Finish workout"
+
+- extendedWaitUntil:
+    visible: "Workout done"
+    timeout: 30000
+- takeScreenshot: trainee-workout-log__summary
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Done"
