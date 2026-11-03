@@ -59,3 +59,77 @@ describe("auth flow helpers", () => {
     }
   });
 });
+
+describe("verify code controller", () => {
+  type R = { purpose: string; token: string };
+  const ok: R = { purpose: "login", token: "session" };
+
+  it("two taps in one tick send exactly one verify request", async () => {
+    const { createCodeVerifier } = await import("./verifyCodeErrorFlow");
+    const verify = vi.fn(async () => ok);
+    const finish = vi.fn(async () => {});
+    const v = createCodeVerifier<R>({ verify, finish });
+    const [a, b] = await Promise.all([v.submit("123456"), v.submit("123456")]);
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(finish).toHaveBeenCalledTimes(1);
+    expect([a.kind, b.kind].sort()).toEqual(["ignored", "signed-in"]);
+  });
+
+  it("allows a new attempt after a failed verify", async () => {
+    const { createCodeVerifier } = await import("./verifyCodeErrorFlow");
+    const { ApiClientError } = await import("@fitbud/api-client");
+    const verify = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiClientError({ status: 401, code: "OTP_INVALID", message: "x", requestId: "r" }),
+      )
+      .mockResolvedValueOnce(ok);
+    const v = createCodeVerifier<R>({ verify, finish: async () => {} });
+    expect(await v.submit("111111")).toEqual({
+      kind: "error",
+      message: "That code didn't work. Check the latest message or tap Resend.",
+    });
+    expect((await v.submit("222222")).kind).toBe("signed-in");
+    expect(verify).toHaveBeenCalledTimes(2);
+  });
+
+  it("finishAuth failure keeps the result and retry does not re-verify", async () => {
+    const { createCodeVerifier } = await import("./verifyCodeErrorFlow");
+    const verify = vi.fn(async () => ok);
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("me failed"))
+      .mockResolvedValueOnce(undefined);
+    const v = createCodeVerifier<R>({ verify, finish });
+    expect(await v.submit("123456")).toEqual({
+      kind: "error",
+      message: "Your code worked, but we couldn't finish signing you in. Try again.",
+    });
+    expect((await v.submit("123456")).kind).toBe("signed-in");
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(finish).toHaveBeenLastCalledWith(ok);
+  });
+
+  it("a discarded kept result means the next submit verifies a new code", async () => {
+    const { createCodeVerifier } = await import("./verifyCodeErrorFlow");
+    const verify = vi.fn(async () => ok);
+    const finish = vi.fn().mockRejectedValueOnce(new Error("x")).mockResolvedValue(undefined);
+    const v = createCodeVerifier<R>({ verify, finish });
+    await v.submit("123456");
+    v.discardKept();
+    await v.submit("654321");
+    expect(verify).toHaveBeenCalledTimes(2);
+  });
+
+  it("a non-login verify result shows the invalid-code copy and is not finished", async () => {
+    const { createCodeVerifier } = await import("./verifyCodeErrorFlow");
+    const finish = vi.fn();
+    const v = createCodeVerifier<R>({
+      verify: async () => ({ purpose: "reset", token: "t" }),
+      finish,
+    });
+    expect((await v.submit("123456")).kind).toBe("error");
+    expect(finish).not.toHaveBeenCalled();
+  });
+});
