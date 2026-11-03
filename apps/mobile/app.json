@@ -12,7 +12,11 @@
     "backgroundColor": "#FAF7F2"
   },
   "ios": {
-    "supportsTablet": true
+    "supportsTablet": true,
+    "appleTeamId": "26257QDTHP",
+    "config": {
+      "usesNonExemptEncryption": false
+    }
   },
   "web": {
     "bundler": "metro"
