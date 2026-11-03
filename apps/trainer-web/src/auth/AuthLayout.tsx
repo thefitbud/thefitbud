@@ -74,7 +74,13 @@ export function AuthLayout({
       </section>
 
       <section className="auth-formside">
-        {/* Column stack: card centred, then help line, then footer, all in normal flow (D-W3-15). */}
+        {/* Column stack: card centred, then help line, then footer, all in normal flow (D-W3-15).
+            The negative bottom margin cancels most of .auth-formside's 4.5rem
+            bottom padding, which the old `position: absolute; bottom: 32px`
+            help line bypassed and the in-flow stack is now subject to. Without
+            it the footer floats ~89px off the bottom; ds5-web-signin-footer.png
+            puts the legal row ~34px off it. Inline because .auth-formside's
+            rules are outside this task's styles.css scope (".auth-help only"). */}
         <div
           style={{
             alignSelf: "stretch",
@@ -82,6 +88,7 @@ export function AuthLayout({
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
+            marginBottom: "-55px",
           }}
         >
           <div
