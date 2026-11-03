@@ -22,7 +22,7 @@ A v2 of the global check-in form exists with standard question keys, past check-
 - D2 (locked 23 Oct, option A): v2 by a new migration; the insert-only trigger on form versions is kept; past check-ins stay on v1.
 - The global form fields were added in `apps/api/drizzle/0029_checkin_form_global_fields.sql`; the insert-only trigger was created in `apps/api/drizzle/0019_checkin_form_templates.sql`.
 - v2 content: weight (kg, key `weight`), measurements (keys `waist`, `hips`, `chest`, `arm`, `thigh`; the trainer picks a subset in W8), photos (`photo_front`, `photo_side`, `photo_back`), ratings 1–5 `energy`, `sleep_quality`, `stress`, `hunger`, and free text `notes`. ZB6 adds the validation.
-- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is Firoz's step at deploy time (manual list); the agent runs migrations locally only.
+- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is done after merge by the batch's coding agent or FitBud UI (manual list P2); the agent runs migrations locally only.
 
 ## Gap list
 - `apps/api/src/db/schema.ts:801`: `checkin_form_versions` has no standard key per question.

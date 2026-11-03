@@ -20,10 +20,15 @@ With permission, the app reads today's and recent days' step totals from Apple H
 
 ## Context
 - Covers master-list (v13) items T5a. Everything the implementer needs from those rows is pasted here.
-- Needs the dev build (not Expo Go). Libraries (Q-W9-1): `@kingstinct/react-native-healthkit` (iOS) and `react-native-health-connect` + `expo-health-connect` plugin (Android), versions compatible with Expo SDK 52 (`apps/mobile/package.json`).
-- Daily totals only (no samples stored); sync last 7 days on foreground and once per app start; `PUT /me/steps/days/:localDate` (ZB9).
-- iOS `NSHealthShareUsageDescription` and Android Health Connect permissions declared in `app.config.js`; the Play Health Connect declaration is Firoz's step.
-- Device check is Firoz's (manual list P2): run on the Android dev build.
+- D-W9-5 (Firoz, 3 Nov) allows the two health libraries; D-W9-6 fixes the versions and config for Expo SDK 52 (`expo ~52.0.46`, `react-native 0.76.9`, `expo-dev-client ~5.0.20` in `apps/mobile/package.json`). Add, with `pnpm --filter @fitbud/mobile add`:
+  - iOS: `@kingstinct/react-native-healthkit@~8.7.2` (the last line before Nitro; 12.x and later need React Native 0.79+, so they do not fit SDK 52). Config plugin entry `["@kingstinct/react-native-healthkit", { "NSHealthShareUsageDescription": "FitBud reads your daily step count so your coach can see it next to your plan.", "background": false }]`; no `NSHealthUpdateUsageDescription` (read only, nothing written). The plugin adds the HealthKit entitlement, which needs the HealthKit capability on the Apple App ID: that is on hold with the Apple account (D-W9-4), so iOS builds wait; the code ships behind a platform guard.
+  - Android: `react-native-health-connect@~3.5.3` with its Expo plugin `expo-health-connect@~0.1.1` (plugin entry `"expo-health-connect"`), and `expo-build-properties@~0.13.3` with `["expo-build-properties", { "android": { "minSdkVersion": 26 } }]` (Health Connect needs API 26; SDK 52 defaults to 24; keep SDK 52's compile and target SDK). Do not use `react-native-health-connect` 4.x on SDK 52: it bundles its own plugin, asks for compile SDK 36, and fails with a duplicate class if `expo-health-connect` is also installed. Upgrade to 4.x (and drop `expo-health-connect`) with the next Expo SDK upgrade.
+  - Android permission: `android.permission.health.READ_STEPS` in `android.permissions` in `app.config.js`; the plugin adds the Health Connect permissions-rationale activity. Link the rationale to the existing privacy page.
+  - Add the plugin entries in `app.config.js` next to the existing plugin chain (`./plugins/withLiveActivity`, `@bacons/apple-targets`) without reordering it.
+- **Native rebuild needed:** these are native modules, so the existing dev build cannot load them. After merge a new Android dev build is made (`eas build --profile development --platform android`, run by FitBud UI on the box, manual list P2). The agent never runs `eas build`. Expo Go and Expo web stay unaffected (platform guards and mocks).
+- Daily totals only (no samples stored); sync last 7 days on foreground and once per app start; `PUT /me/steps/days/:localDate` (ZB9). iOS reads `HKQuantityTypeIdentifierStepCount` with a daily statistics query; Android reads `Steps` with `aggregateGroupByPeriod` per local day.
+- Health Connect must be installed (built in from Android 14); on older Android, `getSdkStatus` tells ZE10 to show the install screen.
+- Device check (manual list P2): FitBud UI on the box first (Android 14 emulator, which has Health Connect built in, with steps added by the Health Connect Toolbox app); Firoz's Android phone only if the emulator cannot run. The Play Console Health Connect declaration is needed before a Play build with steps reaches testers, not for the dev build.
 
 ## Gap list
 - `apps/mobile/src/trainee/steps/StepsCard.tsx`: returns null ("Hidden until Health Connect / HealthKit is wired").
@@ -33,7 +38,8 @@ With permission, the app reads today's and recent days' step totals from Apple H
 ## Acceptance criteria
 - [ ] `useStepsSync()` requests permission once, reads 7 days, upserts, handles denial (chip shows "Set up steps").
 - [ ] Unit tests mock both libraries; web build unaffected (platform guards).
-- [ ] `app.config.js` declares the permissions; `eas build` is not run by the agent.
+- [ ] `app.config.js` has the three plugin entries and `READ_STEPS` as above; `npx expo config --type introspect` (local) shows the HealthKit entitlement, the usage string, `minSdkVersion` 26 and `READ_STEPS`; `eas build` is not run by the agent.
+- [ ] The PR description says a new Android dev build is needed after merge.
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass.
 
 ## Out of scope
@@ -49,7 +55,7 @@ With permission, the app reads today's and recent days' step totals from Apple H
 - Non-UI: no screenshot. The PR lists the test names that cover each criterion.
 
 ## Stop conditions
-- No Expo SDK 52 compatible library version exists; report options.
+- A pinned version in D-W9-6 fails to install, prebuild or typecheck on SDK 52; report the error and the nearest version that works (no other library).
 - A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** or listed as a question in `docs/specs/batches/W9.md`.
 - A file outside `files_owned` must change.
 - The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.

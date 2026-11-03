@@ -21,7 +21,7 @@ From the Needs attention count the trainer opens a full-screen list of every cli
 - Covers master-list (v13) items HV1, D13 (locked). Everything the implementer needs from those rows is pasted here.
 - D13: full views for Needs attention, Renewals due, Asked you on WhatsApp. Route `/home/attention`. Rows reuse the Home row component; click opens `/?client=<id>` panel (or the panel over this page, per DS1).
 - CSS in `home-views.css`, imported by the page.
-- Planned frame (not in the repo yet, Firoz designs it): DS1 Home full views (Needs attention, Renewals due, Asked you on WhatsApp; default and empty; web 1440x900, 6 frames). Until the PNG is in `docs/design/mockups/png/`, the parts that need it stop and report; the rest runs.
+- Planned frame (not in the repo yet; FitBud UI draws it, Firoz reviews it): DS1 Home full views (Needs attention, Renewals due, Asked you on WhatsApp; default and empty; web 1440x900, 6 frames). Until the PNG is in `docs/design/mockups/png/`, the parts that need it stop and report; the rest runs.
 - Design guide for every UI task: `docs/design/README.md` (v3 rules and the frame index), `docs/design/DESIGN-NOTES.md` (palette, type, spacing, components, data and time), `docs/design/DECISIONS-21OCT.md`, and the screen spec in `docs/spec/`. Dates read like "Wed 21 Oct" (never ISO), enums always go through `labelFor` (`packages/core/src/labels.ts`), touch targets are at least 44 pt / 44 px, counts and kcal use tabular numbers.
 - Design-review step (W5 ZA1): after capturing, run `node scripts/qa/visual/diff.mjs --task <ID>` on the captures and attach the generated `docs/qa/<ID>/design-review.md` to the PR. A frame difference the spec does not explain is fixed or listed in the PR as a follow-up, never silently left.
 

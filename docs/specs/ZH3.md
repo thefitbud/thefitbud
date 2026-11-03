@@ -1,0 +1,60 @@
+---
+id: ZH3
+title: Attendance API: roll-call statuses, late cancel and trainer override
+batch: W12
+depends_on: [ZH2]
+lane: api
+files_owned:
+  - apps/api/src/routes/attendance.ts
+  - apps/api/src/routes/attendance.test.ts
+  - apps/api/src/routes/attendance.authz.test.ts
+  - apps/api/src/domain/attendance.ts
+  - apps/api/src/domain/attendance.test.ts
+  - packages/contracts/src/attendance.ts
+  - packages/api-client/src/attendance-augment.ts
+  - apps/api/src/index.ts
+  - packages/contracts/src/index.ts
+  - packages/api-client/src/index.ts
+frames: []
+model: opus
+size: M
+---
+
+## Outcome
+A trainer can mark each client at a session as present, late or absent, and cancellations under 12 hours are flagged as late cancels, so roll-call (frame IP-11) has its data.
+
+## Context
+- Covers master-list (v13) items S1c. Everything the implementer needs from those rows is pasted here.
+- D-W12-2 in `docs/specs/batches/W12.md`: v13 S1c's package rules (a no-show or late cancel 'uses a session', carry-over, Waive) are **not built**, because payments are tracking only with no session counting (D-W6-5) and package screens were dropped (D5). Attendance is a record only.
+- Statuses: `expected` (default when the session is created), `present`, `late` (counts as attended in every read model), `absent` (no-show), `cancelled`, `late_cancel` (client cancelled less than 12 h before `starts_at`, computed by the server).
+- `PUT /sessions/:id/attendance` (batch body: relationship id → status) and `PATCH /sessions/:id/attendance/:relationshipId` (single change, trainer override of any status, with `marked_by`). Calls have no roll-call.
+- Ended relationships stay read-only.
+
+## Gap list
+- No attendance routes.
+- Written against `main` at 4d6d264. The implementer re-checks each item against the latest `main` before building (AGENTS.md).
+
+## Acceptance criteria
+- [ ] Batch and single updates, late-cancel computed at 12 h exactly (boundary tested), override recorded.
+- [ ] No count, credit or package field in any response.
+- [ ] Contract, client method, route and authz tests.
+- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass.
+
+## Out of scope
+- Package or session counting (D-W12-2).
+- Roll-call screen (ZH13).
+- Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
+- Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
+
+## Tests to add
+- `attendance.test.ts` (12 h boundary, override), `attendance.authz.test.ts`.
+- Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`.
+
+## Visual check
+- Non-UI: no screenshot. The PR lists the test names that cover each criterion.
+
+## Stop conditions
+- A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** or listed as a question in `docs/specs/batches/W12.md`.
+- A file outside `files_owned` must change.
+- The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.
+- The task would need a remote command (`wrangler deploy`, `wrangler d1 … --remote`, `seed --remote`, `eas build`, `eas submit`), a secret, production data or a deploy.

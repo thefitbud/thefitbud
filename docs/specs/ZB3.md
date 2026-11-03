@@ -22,7 +22,7 @@ Each client's subscription records amount, type, coaching mode, start and due da
 - Resolved 30 Oct (B3a): tracking only. Fields: amount (₹, integer paise), subscription type, coaching mode (`online`, `in_person`, `hybrid`), start and due dates, Paid/Unpaid, method `cash`/`upi`/`bank`. No collection, gateway, invoices or session counting (no sessions included/used/remaining).
 - Frames it feeds: 209, 211, 211b, 212, IP-08.
 - Design: add to `subscription_versions` (`apps/api/src/db/schema.ts:333-358`) the nullable columns `amount_paise`, `subscription_type` (CHECK in the four `payment_frequency` values plus `custom`), `coaching_mode`; new table `payment_records` (id, coaching_relationship_id, subscription_version_id, amount_paise, due_on, paid_on NULL, status `paid`/`unpaid`, method NULL, note, created_by, created_at, updated_at) with an index on (relationship, due_on).
-- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is Firoz's step at deploy time (manual list); the agent runs migrations locally only.
+- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is done after merge by the batch's coding agent or FitBud UI (manual list P2); the agent runs migrations locally only.
 
 ## Gap list
 - `apps/api/src/db/schema.ts:333-358`: subscription_versions has plan name, frequency, start and renew dates only.

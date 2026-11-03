@@ -15,7 +15,7 @@ size: S
 ---
 
 ## Outcome
-The trainer app's tab bar matches v3, with a Sessions tab that says it is coming until S5a.
+The trainer app's tab bar matches v3, with a Sessions tab that says it is coming until W12 ZH12 (S5a) fills it.
 
 ## Context
 - Covers master-list (v13) items F1g. Everything the implementer needs from those rows is pasted here.
@@ -34,7 +34,7 @@ The trainer app's tab bar matches v3, with a Sessions tab that says it is coming
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass.
 
 ## Out of scope
-- Sessions content (S5a, on hold).
+- Sessions content (W12 ZH12, S5a).
 - Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
 - Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
 

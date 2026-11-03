@@ -24,7 +24,7 @@ Every planned and logged set carries a numeric load in kg (or a kind such as bod
 - Today a set stores only text: `prescribed_load_label` and `actual_load_label` (`apps/api/src/db/schema.ts:653-656`). Frames 11/11c (trainee logging) and 160e (trainer workouts progress) need numbers.
 - Parser rules (v13 B1a): "40 kg", "60kg", "40" with a kg exercise default → 40; "90 lb" → 40.82 (2 decimals); "Bodyweight"/"BW" → kind `bodyweight`, kg null; "BW+10" → kind `bodyweight_plus`, kg 10; "RPE 7", "easy", anything else → kind `text`, kg null. Never guesses.
 - Columns: `prescribed_load_kg REAL NULL`, `actual_load_kg REAL NULL`, `load_kind TEXT NOT NULL DEFAULT 'text'` with CHECK in (`kg`,`bodyweight`,`bodyweight_plus`,`text`). Labels stay; they remain the display source.
-- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is Firoz's step at deploy time (manual list); the agent runs migrations locally only.
+- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is done after merge by the batch's coding agent or FitBud UI (manual list P2); the agent runs migrations locally only.
 
 ## Gap list
 - `apps/api/src/db/schema.ts:653-656`: set_executions has only `prescribed_load_label` and `actual_load_label` text.

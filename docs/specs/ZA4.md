@@ -30,7 +30,7 @@ The coaching configuration lifecycle is draft → active → superseded on `main
 - Covers master-list (v13) items AC1a (#50). Everything the implementer needs from those rows is pasted here.
 - D12 (locked): no `configured` status; edits open vN+1. PR #50 (branch `cursor/ac1a-remove-configured-status-8389`, last updated 31 Oct) implements it with `0033_remove_configured_status.sql`.
 - Main has since merged `apps/api/drizzle/0033_reminder_attempt_marker.sql`, so #50's number collides. D-W5-4: renumber to the next free number (0034 today), regenerate the snapshot and journal, and keep every other change.
-- Q-W5-3 asks whether to refresh #50 or re-implement; the default (refresh: merge `main` into the PR branch) is what this spec describes.
+- D-W5-11: refresh #50 by merging `main` into the PR branch (no rebase); this spec describes that.
 
 ## Gap list
 - `apps/api/src/db/schema.ts:303`: the status enum still includes `"configured"`.

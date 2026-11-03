@@ -18,7 +18,7 @@ A trainee can log a 150 ml cup or a 250 ml glass of tea, coffee or another drink
 ## Context
 - Covers master-list (v13) items DK1. Everything the implementer needs from those rows is pasted here.
 - Decided 23 Oct (DK1): add cup (150 ml) and glass (250 ml) servings to the 15 capped drinks through post-seed extras; locked release files and their sha256 stay unchanged; fix black tea's label in the same file. D18 set the pattern: corrections live in `08_post_seed.sql` (`apps/api/seed/library/sql/08_post_seed.sql`, 17 lines today, applied last by `scripts/library-seed.ts`).
-- Production and staging already hold the library (I6, I6b). Applying this on remote databases is Firoz's step (manual list P2); the agent only changes the file and tests.
+- Production and staging already hold the library (I6, I6b). Applying this on remote databases is done after merge by FitBud UI (manual list P2); the agent only changes the file and tests.
 
 ## Gap list
 - `apps/api/seed/library/sql/08_post_seed.sql` holds only the I2f Jain-tag fix.

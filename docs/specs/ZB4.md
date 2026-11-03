@@ -21,7 +21,7 @@ Steps have a home in the database: one row per trainee-local day, and a target p
 - Covers master-list (v13) items B4a. Everything the implementer needs from those rows is pasted here.
 - v13 B4a: `daily_steps` (relationship, trainee-local date, steps, source, synced_at), one row per day; steps target on the coaching configuration, default 8,000, editable per client.
 - Source values: `apple_health`, `health_connect`, `manual`. Unique (coaching_relationship_id, local_date). `steps_target INTEGER NOT NULL DEFAULT 8000` on `coaching_configurations` (`apps/api/src/db/schema.ts:295`).
-- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is Firoz's step at deploy time (manual list); the agent runs migrations locally only.
+- Migration number: the next free number when the task starts from `main` (expected order after ZA4's 0034: ZB1 0035, ZB2 0036, ZB3 0037, ZB4 0038). Remote application is done after merge by the batch's coding agent or FitBud UI (manual list P2); the agent runs migrations locally only.
 
 ## Gap list
 - No `daily_steps` table; `apps/api/src/routes/me-steps.ts:19-28` returns a disabled response.
