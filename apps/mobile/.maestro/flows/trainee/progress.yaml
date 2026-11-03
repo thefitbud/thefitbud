@@ -1,0 +1,34 @@
+appId: com.thefitbud.mobile.staging
+name: Trainee Progress
+tags:
+  - trainee
+  - full
+---
+# Progress tab for the on-track trainee (QA Aarav): weight, measurements and
+# the check-in history render. Read-only; logs nothing.
+#
+# Env from the runner: QA_ONTRACK_EMAIL, QA_PASSWORD.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+
+- tapOn: "Progress"
+- extendedWaitUntil:
+    notVisible: ".*Loading progress.*"
+    timeout: 30000
+- assertVisible: "Weight"
+- takeScreenshot: trainee-progress__loaded
+- runFlow: ../../common/assert-no-crash.yaml
+
+- scrollUntilVisible:
+    element: "Measurements"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Check-ins"
+    timeout: 20000
+- runFlow: ../../common/assert-no-crash.yaml

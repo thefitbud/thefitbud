@@ -1,0 +1,46 @@
+# Subflow (QT3): sign in with the staging test-mode login code (QT1).
+#
+# Inputs (env):
+#   SIGN_IN_EMAIL  a qa+...@thefitbud.com address, passed by the caller
+#   QA_OTP_CODE    the 6-digit code, from the runner (GitHub secret QA_TEST_OTP_CODE)
+#
+# D-QA1-14: the QA code is treated as public, but screenshots are published
+# unredacted, so NOTHING in this file takes a screenshot, and no caller may
+# between the code being typed and the sign-in settling. Maestro also takes an
+# automatic screenshot when a command FAILS. The code field does not clear on a
+# failed sign-in, so every command that can fail while the code is on screen is
+# optional here, and a failed sign-in wipes the field before the real
+# assertion at the end can fail and trigger that screenshot.
+#
+# Ends on the signed-in home: trainee Today, trainer "Needs you", or role select.
+- runFlow: sign-in-code-request.yaml
+# The field has no label wired to it (the label is a separate Text), so tap the
+# element directly under the label. TODO(QT3b): accessibilityLabel on Field's
+# TextInput would make this a plain tapOn.
+- tapOn:
+    below: "6-digit code"
+- inputText: ${QA_OTP_CODE}
+- hideKeyboard:
+    optional: true
+- tapOn:
+    text: "Verify and sign in"
+    optional: true
+- extendedWaitUntil:
+    visible: "Today's workout|Needs you|Choose mode"
+    timeout: 30000
+    optional: true
+- runFlow:
+    when:
+      visible: "6-digit code"
+    commands:
+      # Sign-in did not leave the code screen: clear the field before the final
+      # assertion fails and Maestro screenshots the failure.
+      - tapOn:
+          below: "6-digit code"
+          optional: true
+      - eraseText:
+          charactersToErase: 12
+          optional: true
+      - hideKeyboard:
+          optional: true
+- assertVisible: "Today's workout|Needs you|Choose mode"

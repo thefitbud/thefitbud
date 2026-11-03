@@ -1,3 +1,4 @@
+import { reportError } from "../../lib/reportError";
 import { OTP_FINISH_FAILED_COPY, OTP_INVALID_COPY, verifyCodeError } from "./verifyCodeError";
 
 type VerifyResult = { purpose: string };
@@ -45,7 +46,8 @@ export function createCodeVerifier<R extends VerifyResult>(deps: {
         }
         try {
           await deps.finish(result);
-        } catch {
+        } catch (err) {
+          reportError("verifyCode.finish", err);
           kept = { result, identifier };
           return { kind: "error", message: OTP_FINISH_FAILED_COPY };
         }

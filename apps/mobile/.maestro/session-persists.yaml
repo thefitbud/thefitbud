@@ -1,0 +1,51 @@
+# AB3 / QA1: the session survives kill, relaunch and Android back (D-W3-11).
+#
+# Run on an Android emulator or device against staging with the staging dev or
+# preview build installed (a build made AFTER expo-secure-store was added):
+#   maestro test \
+#     -e QA_EMAIL=qa+trainee@thefitbud.com -e QA_OTP_CODE=<from the GitHub secret> \
+#     -e HOME_TEXT="Today" \
+#     apps/mobile/.maestro/session-persists.yaml
+#
+# QA_EMAIL is a qa+ staging account (QT1 test-mode OTP). QA_OTP_CODE is passed in
+# by the runner and never written here. HOME_TEXT is text that only the
+# signed-in home screen shows. Take no screenshot between typing the code and
+# submitting it (D-QA1-14).
+#
+# Written without a device in the AB3 session; first run is Firoz's or QA1's.
+appId: com.thefitbud.mobile.staging
+---
+- clearState
+- launchApp
+
+# 1. Sign in with a code.
+- tapOn: "Sign in with a code instead"
+- tapOn: "Mobile number or email"
+- inputText: ${QA_EMAIL}
+- tapOn: "Send code"
+- tapOn: "6-digit code"
+- inputText: ${QA_OTP_CODE}
+- tapOn: "Verify and sign in"
+- extendedWaitUntil:
+    visible: ${HOME_TEXT}
+    timeout: 20000
+- runFlow: common/assert-no-crash.yaml
+
+# 2. Swipe away from recents, reopen (no clearState): still signed in.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: ${HOME_TEXT}
+    timeout: 10000
+- assertNotVisible: "Sign in with a code instead"
+- assertNotVisible: "You've been signed out.*"
+- runFlow: common/assert-no-crash.yaml
+
+# 3. Android back on the root screen leaves the app; reopening is still signed in.
+- pressKey: back
+- launchApp
+- extendedWaitUntil:
+    visible: ${HOME_TEXT}
+    timeout: 10000
+- assertNotVisible: "Sign in with a code instead"
+- runFlow: common/assert-no-crash.yaml

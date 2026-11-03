@@ -1,0 +1,67 @@
+appId: com.thefitbud.mobile.staging
+name: Trainer note and More
+tags:
+  - trainer
+  - full
+env:
+  QA_SLIPPING_NAME: QA Rohan
+---
+# Add a coach note on QA Rohan, then the More screen.
+#
+# Env from the runner: QA_TRAINER_EMAIL, QA_PASSWORD.
+#
+# Writes a trainer note; the nightly reset restores it (D-QA1-7). The note is a
+# fixed QA string, never client data.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ${QA_SLIPPING_NAME}
+    timeout: 30000
+- tapOn: ${QA_SLIPPING_NAME}
+- extendedWaitUntil:
+    visible: "This week"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Add note"
+    timeout: 20000
+- tapOn: "Add note"
+- extendedWaitUntil:
+    visible: "Save note"
+    timeout: 10000
+- tapOn: "Note"
+- inputText: "QA nightly note. Safe to delete."
+- hideKeyboard
+- takeScreenshot: trainer-notes__composer
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Save note"
+- extendedWaitUntil:
+    visible: "Note saved"
+    timeout: 20000
+- assertVisible: "QA nightly note\\. Safe to delete\\."
+- runFlow: ../../common/assert-no-crash.yaml
+
+# More. Navigating away from the client status first: its overlay hides the tabs.
+- scrollUntilVisible:
+    element: "‹ Clients"
+    direction: UP
+    timeout: 20000
+- tapOn: "‹ Clients"
+- tapOn: "More"
+# Wait on an exact M2Row label, not the "Settings" group header: that header is
+# a Text node styled textTransform: uppercase (MoreScreen.tsx groupLabel), so
+# whether Maestro matches "Settings" or "SETTINGS" cannot be checked without
+# the CLI. "Notifications" is a plain label on the same screen either way.
+- extendedWaitUntil:
+    visible: "Notifications"
+    timeout: 20000
+- assertVisible: "Sign out"
+- takeScreenshot: trainer-more__loaded
+- runFlow: ../../common/assert-no-crash.yaml
