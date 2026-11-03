@@ -281,3 +281,68 @@ test("credential-looking env vars and key shapes are redacted, QA addresses stay
   assert.ok(!/cfut_|s3cr3t|abcdefghij|sk_live/.test(out), out);
   assert.match(out, /qa\+trainer@thefitbud\.com in \/root/);
 });
+
+test("short credential values are redacted on token boundaries only; long ones anywhere", () => {
+  const redact = makeRedactor({
+    SOME_SECRET: "s3cr3t", // 6 characters: boundary rule
+    QA_TEST_OTP_CODE: "482913",
+    FITBUD_QA_PASSWORD: "dummy-not-a-real-password", // 8+: everywhere
+  });
+  // A short value inside a longer word is left alone, so failure messages stay readable.
+  assert.equal(redact("unders3cr3tive wording"), "unders3cr3tive wording");
+  assert.equal(redact("s3cr3ts3cr3t"), "s3cr3ts3cr3t");
+  // The same value standing on its own, or bounded by punctuation, is redacted.
+  assert.equal(redact("value s3cr3t here"), "value [redacted] here");
+  assert.equal(redact('{"password":"s3cr3t"}'), '{"password":"[redacted]"}');
+  assert.equal(redact("https://x.test/?t=s3cr3t&u=1"), "https://x.test/?t=[redacted]&u=1");
+  assert.equal(redact("header token:s3cr3t"), "header token:[redacted]");
+  // An 8+ value is replaced even in the middle of a word.
+  assert.equal(redact("saw dummy-not-a-real-passwordish once"), "saw [redacted]ish once");
+  // The 6-digit OTP stays redacted wherever it is a standalone number: a digit edge is
+  // only continued by another digit, never by a letter, quote, `=`, `:`, `_` or `/`.
+  for (const [input, want] of [
+    ["482913", "[redacted]"],
+    ["sms 482913 arrived", "sms [redacted] arrived"],
+    ['"482913"', '"[redacted]"'],
+    ["id=482913", "id=[redacted]"],
+    ["OTP_482913", "OTP_[redacted]"],
+    ["ref/482913.json", "ref/[redacted].json"],
+    ["x482913y", "x[redacted]y"],
+  ]) {
+    assert.equal(redact(input), want, input);
+  }
+  // Inside a longer number it is not a standalone number, so it is left alone.
+  assert.equal(redact("1482913"), "1482913");
+});
+
+test("a short value with BOTH edges non-alphanumeric is redacted everywhere", () => {
+  // `\b` would anchor on the value's own edges and miss these; the boundary test looks at
+  // the surrounding text instead, and the scan is indexOf, so nothing needs escaping.
+  const redact = makeRedactor({ FLAG_TOKEN: "-ab-", META_SECRET: "*a.c*", PAD_KEY: "=b64==" });
+  assert.equal(redact("q-ab-r"), "q[redacted]r");
+  assert.equal(redact("x*a.c*y"), "x[redacted]y");
+  assert.equal(redact("v=b64==y"), "v[redacted]y");
+  // A metacharacter value must not be interpreted as a pattern: this text does not hold it.
+  assert.equal(redact("abc and axc"), "abc and axc");
+});
+
+test("a short value with punctuation on ONE edge only is still left alone inside a token", () => {
+  // The two edge tests are ORed, so one-sided punctuation does NOT make a short value
+  // redacted everywhere: the alphanumeric edge can still be continued. This is CU9's
+  // specced limit (a short value is "replaced only on token boundaries"), pinned here so
+  // the real boundary is documented by a test rather than by prose, and so nobody widens
+  // it by accident without a decision.
+  for (const [secret, text] of [
+    ["-ab", "x-abz"],
+    ["ab-", "xab-z"],
+    ["ab=", "xab=y"],
+    ["_ab", "x_aby"],
+    ["b64==", "xb64==y"],
+    ["a.c*", "xa.c*y"],
+    ["eyJ-_a", "xeyJ-_ay"], // JWT-shaped but 6 characters; a real JWT is 8+ and replaced anywhere
+  ]) {
+    assert.equal(makeRedactor({ A_SECRET: secret })(text), text, `${secret} in ${text}`);
+    // ...while the same value on a boundary is redacted, so this is a token rule, not a miss.
+    assert.equal(makeRedactor({ A_SECRET: secret })(`saw ${secret} here`), "saw [redacted] here", secret);
+  }
+});

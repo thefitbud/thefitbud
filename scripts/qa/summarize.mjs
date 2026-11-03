@@ -29,6 +29,72 @@ export class MalformedInput extends Error {}
 
 // ---------- redaction ----------
 
+// A credential value this long is replaced wherever it appears: no ordinary word runs
+// that long by accident, so there is nothing to protect it from.
+const REDACT_ANYWHERE_MIN = 8;
+
+const DIGIT = /[0-9]/;
+const ALPHA = /[A-Za-z]/;
+const ALNUM = /[A-Za-z0-9]/;
+
+/**
+ * Does the character next to an occurrence continue the kind of token the secret's own
+ * edge character belongs to?
+ *
+ * The test reads the characters actually present in the text and never uses `\b`, because
+ * `\b` anchors on the *secret's* edges: a value that starts or ends with `-`, `_`, `=`,
+ * `+`, `/` or `.` (base64 padding, a JWT segment, a flag-shaped value) would anchor in
+ * the opposite place from the one intended. For the same reason the scan below is a plain
+ * `indexOf`, so a value made of regex metacharacters needs no escaping.
+ *
+ * - a digit edge is continued only by a digit, so a 6-digit OTP stays redacted next to
+ *   letters, quotes, `=`, `:`, `_` or `/` and is left alone only inside a longer number;
+ * - a letter edge is continued by any letter or digit, which is what stops a short value
+ *   from garbling an ordinary word;
+ * - a non-alphanumeric edge is never continued, so that edge is always a boundary.
+ *
+ * Be exact about what that last point does and does not buy, because `replaceOnBoundaries`
+ * ORs the two edge tests: a short value is redacted *everywhere* only when **both** its
+ * first and its last character are non-alphanumeric. With punctuation on one side only the
+ * alphanumeric side can still be continued, and the occurrence is then left alone: `-ab`
+ * inside `x-abz`, `ab=` inside `xab=y`, `b64==` inside `xb64==y` and `a.c*` inside `xa.c*y`
+ * all stay intact. That is the behaviour CU9 specifies (a short value is replaced on token
+ * boundaries, never inside a longer word) and `summarize.test.mjs` pins it — but do not
+ * read this rule as "punctuation makes a short secret safe anywhere". The unconditional
+ * guarantees are exactly two: 8+ characters, or both edges non-alphanumeric.
+ */
+function extendsToken(edge, neighbour) {
+  if (neighbour === "") return false;
+  if (DIGIT.test(edge)) return DIGIT.test(neighbour);
+  if (ALPHA.test(edge)) return ALNUM.test(neighbour);
+  return false;
+}
+
+/**
+ * Replaces the token-boundary occurrences of `secret`; leaves the ones inside a longer
+ * token. An occurrence counts as inside a longer token when *either* edge is continued
+ * (see `extendsToken` for what one-sided punctuation does and does not guarantee).
+ *
+ * The scan does not overlap: after an occurrence is kept, it resumes past the whole match,
+ * so a boundary-clean occurrence starting inside a kept one is skipped. That is reachable
+ * only for a self-overlapping secret (one whose own prefix is also its suffix) and carries
+ * no practical exposure, but it is a deliberate simplification rather than an oversight.
+ */
+function replaceOnBoundaries(text, secret) {
+  const first = secret[0];
+  const last = secret[secret.length - 1];
+  let out = "";
+  let from = 0;
+  for (let i = text.indexOf(secret, from); i !== -1; i = text.indexOf(secret, from)) {
+    const end = i + secret.length;
+    const inWord =
+      extendsToken(first, i > 0 ? text[i - 1] : "") || extendsToken(last, end < text.length ? text[end] : "");
+    out += inWord ? text.slice(from, end) : `${text.slice(from, i)}[redacted]`;
+    from = end;
+  }
+  return out + text.slice(from);
+}
+
 export function makeRedactor(env = process.env) {
   // The three named in the spec, plus any env var that looks like a credential
   // (CLOUDFLARE_API_TOKEN, a future *_SECRET, ...).
@@ -38,7 +104,11 @@ export function makeRedactor(env = process.env) {
     .sort((a, b) => b.length - a.length);
   return (text) => {
     let out = String(text);
-    for (const s of secrets) out = out.split(s).join("[redacted]");
+    // Long values anywhere; short ones only on token boundaries, so a 3-7 character test
+    // value cannot garble an ordinary word in a failure message (QT8 review follow-up).
+    for (const s of secrets) {
+      out = s.length >= REDACT_ANYWHERE_MIN ? out.split(s).join("[redacted]") : replaceOnBoundaries(out, s);
+    }
     // Any email except the QA accounts.
     out = out.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, (m) =>
       /^qa\+[a-z0-9-]{1,32}@thefitbud\.com$/.test(m) ? m : "[redacted]",
