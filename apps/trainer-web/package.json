@@ -31,11 +31,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@cloudflare/workers-types": "^4.20250416.0",
     "@fitbud/config": "workspace:*",
     "@playwright/test": "^1.51.0",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "catalog:",
     "@types/qrcode": "^1.5.6",
     "@types/react": "~18.3.20",
     "@types/react-dom": "~18.3.1",

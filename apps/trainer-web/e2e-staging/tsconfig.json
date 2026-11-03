@@ -6,11 +6,12 @@
     // `node:child_process` and `process.env` on one side, `page.evaluate` bodies that
     // touch `document` and `sessionStorage` on the other.
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    // `node` for the above. `@cloudflare/workers-types` because 00-host-guard.spec.ts
-    // imports TEST_OTP_IDENTIFIER_RE from apps/api/src/auth/test-otp.ts (deliberately, to
-    // catch QT1/QT2 drift), which pulls apps/api/src/types.ts and its D1Database, R2Bucket,
-    // Queue and DurableObjectNamespace globals into this program.
-    "types": ["node", "@cloudflare/workers-types"],
+    // `types` is deliberately NOT set. apps/trainer-web does not declare `@types/node`,
+    // so listing "node" here fails with TS2688; leaving `types` unset keeps TypeScript's
+    // default auto-discovery, which finds `@types/node` because `@types/qrcode` declares
+    // it (`/// <reference types="node" />`). That is an incidental path, not a contract —
+    // if `@types/qrcode` ever goes, this project needs `@types/node` declared in
+    // apps/trainer-web/package.json. See the PR for why that is not done here.
     "noEmit": true
   },
   "include": ["."]
