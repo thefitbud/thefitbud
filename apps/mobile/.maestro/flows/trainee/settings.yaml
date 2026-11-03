@@ -1,0 +1,76 @@
+appId: com.thefitbud.mobile.staging
+name: Trainee settings and sign out
+tags:
+  - trainee
+  - full
+---
+# More tab for the on-track trainee (QA Aarav): profile, reminders, privacy,
+# then sign out. Changes nothing but the session.
+#
+# Env from the runner: QA_ONTRACK_EMAIL, QA_PASSWORD.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+
+- tapOn: "More"
+- extendedWaitUntil:
+    notVisible: "Loading…"
+    timeout: 30000
+- assertVisible: "Reminders"
+- takeScreenshot: trainee-settings__more
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Profile.
+- tapOn: "Profile"
+- extendedWaitUntil:
+    visible: "Your account details\\."
+    timeout: 10000
+- takeScreenshot: trainee-settings__profile
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+
+# Reminders (notifications).
+- extendedWaitUntil:
+    visible: "Reminders"
+    timeout: 10000
+- tapOn: "Reminders"
+- extendedWaitUntil:
+    visible: "You choose when FitBud reminds you\\."
+    timeout: 10000
+- takeScreenshot: trainee-settings__reminders
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+
+# Privacy.
+- scrollUntilVisible:
+    element: "Privacy"
+    timeout: 20000
+- tapOn: "Privacy"
+- extendedWaitUntil:
+    visible: "How FitBud handles your data\\."
+    timeout: 10000
+- takeScreenshot: trainee-settings__privacy
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+
+# Sign out. A confirmation sheet only appears when logs have not been sent.
+- scrollUntilVisible:
+    element: "Sign out"
+    timeout: 20000
+- tapOn: "Sign out"
+- runFlow:
+    when:
+      visible: "Sign out anyway\\?"
+    commands:
+      - tapOn: "Sign out anyway"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 20000
+- assertNotVisible: "Today's workout"
+- takeScreenshot: trainee-settings__signed-out
+- runFlow: ../../common/assert-no-crash.yaml
