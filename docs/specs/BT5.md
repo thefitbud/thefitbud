@@ -17,14 +17,16 @@ size: S
 ## Context
 - v14 BT5 steps 1-8 on **staging** with the staging app variant on 1 iOS and 1 Android phone (EAS internal distribution) and `app-staging.thefitbud.com`. Any failure becomes a beta-blocker task; once it passes Firoz runs I6b.
 - The QA agent writes the document; Firoz runs it (Thu 12 Nov).
+- **D-W4-11** (decided by Firoz, 3 Nov 2026): the trainer is the existing seeded staging trainer on Firoz's own Gmail address (kept out of this public repo; the address is in the FitBud UI bot's rehearsal notes) (Rahul Verma, 2 clients with Jun–Nov history), signing in with password or email code. The fallback is QT2's `qa+trainer@thefitbud.com`. The seed is maintained by the FitBud UI bot on its own computer (not in the repo) and is not reset by QT2. Never write a password or code in the checklist. This closes the gap in PR #138's rehearsal log ("no staging trainer account yet").
 
 ## Gap list
 - `docs/qa/` has only `README.md`; no BT5 checklist.
 
 ## Acceptance criteria
-- [ ] Preconditions: I6 done, W3 merged and deployed, both phones on the latest staging build, test trainer and trainee emails (placeholders, no real data).
+- [ ] Preconditions: I6 done, W3 merged and deployed, both phones on the latest staging build, the trainer account per D-W4-11 (email named, no password; fallback `qa+trainer@thefitbud.com`) and trainee accounts (placeholders, no real data).
 - [ ] The eight v14 steps, each with exact actions, expected result, where to look (app, web, ZeptoMail report, Sentry, `wrangler tail`), pass/fail, evidence link.
 - [ ] Step 8 (Live Activity / Android notification) is marked "only if LA made the cut-line".
+- [ ] Step 1 includes the signed-in smoke check #138 skipped: the D-W4-11 trainer signs in on `app-staging.thefitbud.com` and sees both clients.
 - [ ] A blocker table (step, symptom, new task ID) and a sign-off line for Firoz.
 
 ## Out of scope

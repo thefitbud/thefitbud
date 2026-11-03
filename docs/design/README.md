@@ -102,6 +102,7 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 27 | Live Activity | collapsed (state 1 of 2) | iOS | [27-trainee-lock-live-activity-ios.png](mockups/png/27-trainee-lock-live-activity-ios.png) | — | Approved |
 | 27b | Live Activity | expanded, touch and hold (state 2 of 2) | iOS | [27b-trainee-live-activity-expanded-ios.png](mockups/png/27b-trainee-live-activity-expanded-ios.png) | — | Approved |
 | 27c | Live Activity | collapsed, resting | iOS | [27c-trainee-lock-live-rest-ios.png](mockups/png/27c-trainee-lock-live-rest-ios.png) | — | Approved |
+| 27 rest | Workout ongoing notification (Android) | resting · countdown only, no bar (D-W3-13) | Android | [27-android-rest.png](mockups/png/27-android-rest.png) | [html](mockups/html/27-android-rest.html) | Approved · updated 3 Nov 2026 (bar removed) |
 | 28 | Lock · meal reminder | Open + Snooze | iOS | [28-trainee-lock-meal-push-ios.png](mockups/png/28-trainee-lock-meal-push-ios.png) | [html](mockups/html/28-trainee-lock-meal-push-ios.html) | Approved |
 | 29 | In-app banner | meal over v3 Today | iOS | [29-trainee-inapp-meal-v3-ios.png](mockups/png/29-trainee-inapp-meal-v3-ios.png) | [html](mockups/html/29-trainee-inapp-meal-v3-ios.html) | Locked (22 Oct round, locked 28 Oct) · on v3 Today |
 | 29b | In-app banner | coach note over v3 Today | iOS | [29b-trainee-inapp-note-v3-ios.png](mockups/png/29b-trainee-inapp-note-v3-ios.png) | [html](mockups/html/29b-trainee-inapp-note-v3-ios.html) | Locked (22 Oct round, locked 28 Oct) · on v3 Today |
@@ -133,6 +134,16 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 54 | Android 13 permission prompt | Default | Android | [54-trainer-mobile-permission-prompt-android.png](mockups/png/54-trainer-mobile-permission-prompt-android.png) | — | Approved |
 | 55 | Profile | Default | iOS | [55-trainer-mobile-profile-ios.png](mockups/png/55-trainer-mobile-profile-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 56 | Help | no mail app sheet | iOS | [56-trainer-mobile-help-sheet-ios.png](mockups/png/56-trainer-mobile-help-sheet-ios.png) | — | Approved · old tab bar: use v3 tabs |
+| DS5 | Sign in | legal footer below help | iOS | [ds5-ios-signin-footer.png](mockups/png/ds5-ios-signin-footer.png) | [html](mockups/html/ds5-ios-signin-footer.html) | Approved (DS5) |
+| DS5 | Sign in | legal footer below help | Web | [ds5-web-signin-footer.png](mockups/png/ds5-web-signin-footer.png) | [html](mockups/html/ds5-web-signin-footer.html) | Approved (DS5) |
+| DS5 | More (trainee) | Legal group | iOS | [ds5-ios-more-legal.png](mockups/png/ds5-ios-more-legal.png) | [html](mockups/html/ds5-ios-more-legal.html) | Approved (DS5) |
+| DS5 | Privacy policy | in-app browser | iOS | [ds5-ios-privacy.png](mockups/png/ds5-ios-privacy.png) | [html](mockups/html/ds5-ios-privacy.html) | Approved (DS5) |
+| DS5 | Terms of use | in-app browser | iOS | [ds5-ios-terms.png](mockups/png/ds5-ios-terms.png) | [html](mockups/html/ds5-ios-terms.html) | Approved (DS5) |
+| DS5 | Credits and licences | in-app browser | iOS | [ds5-ios-credits.png](mockups/png/ds5-ios-credits.png) | [html](mockups/html/ds5-ios-credits.html) | Approved (DS5) |
+| DS5 | Privacy policy | public page | Web | [ds5-web-privacy.png](mockups/png/ds5-web-privacy.png) | [html](mockups/html/ds5-web-privacy.html) | Approved (DS5) |
+| DS5 | Terms of use | public page | Web | [ds5-web-terms.png](mockups/png/ds5-web-terms.png) | [html](mockups/html/ds5-web-terms.html) | Approved (DS5) |
+| DS5 | Credits and licences | public page | Web | [ds5-web-credits.png](mockups/png/ds5-web-credits.png) | [html](mockups/html/ds5-web-credits.html) | Approved (DS5) |
+| DS5 | More (trainer) | frame 51 layout + Legal group (D-W3-14) | iOS | [ds5-ios-trainer-more-legal.png](mockups/png/ds5-ios-trainer-more-legal.png) | [html](mockups/html/ds5-ios-trainer-more-legal.html) | Approved 3 Nov 2026 · replaces 51 for BT3d |
 | 57 | Sign out confirm | Default | iOS | [57-trainer-mobile-signout-confirm-ios.png](mockups/png/57-trainer-mobile-signout-confirm-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 58 | Notification settings | offline, save failed snackbar | iOS | [58-trainer-mobile-more-offline-ios.png](mockups/png/58-trainer-mobile-more-offline-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 59 | Role select | Default | iOS | [59-trainer-mobile-role-select-ios.png](mockups/png/59-trainer-mobile-role-select-ios.png) | — | Approved · old tab bar: use v3 tabs |

@@ -2,14 +2,17 @@
 id: BT2
 title: Worker crash reporting with Sentry
 batch: W4
-depends_on: [OB2]
+depends_on: [OB2, QT2]
 lane: api-ops
 files_owned:
   - apps/api/package.json
   - apps/api/src/lib/sentry.ts
   - apps/api/src/lib/sentry.test.ts
   - apps/api/src/index.ts  # export wrapper only
-  - apps/api/src/types.ts  # SENTRY_DSN, SENTRY_ENVIRONMENT only
+  - apps/api/src/types.ts  # SENTRY_DSN, SENTRY_ENVIRONMENT, QA_TEST_OTP_* only
+  - apps/api/src/auth/test-otp.ts  # drop TestOtpEnv only (D-W4-10)
+  - apps/api/src/middleware/runtime-guard.ts  # TestOtpEnv -> Env only
+  - apps/api/src/routes/auth-login.test-otp.test.ts  # TestOtpEnv -> Env only
   - apps/api/wrangler.toml  # SENTRY_ENVIRONMENT var per env only
   - pnpm-lock.yaml  # shared with BT2b under the W4.md lockfile rule
 frames: []
@@ -26,10 +29,13 @@ On staging and production, unhandled errors in the API Worker's fetch, scheduled
 - DSN storage: D-W4-5 (decided by Firoz, 1 Nov 2026): Worker secret `SENTRY_DSN` per env (as in v14 CF2 step 8), not a toml var. With no DSN set (local, tests) Sentry is off.
 - Tracing: D-W4-6 (decided by Firoz, 1 Nov 2026): errors only (`tracesSampleRate: 0`).
 - After OB2 (W2), which owns logging in `index.ts`.
+- **D-W4-10** (decided by Firoz, 3 Nov 2026): BT2 also pays two QA1 debts in the files it owns. QT1 typed its env fields locally because BT2 owned `types.ts` (QT1.md, D-QA1-1). QT2 is invoked without a package script because BT2 owns `package.json` (QT2.md). Depends on QT2 (PR #157) for the script paths.
 
 ## Gap list
 - No Sentry package or init in `apps/api` (`apps/api/package.json`, `apps/api/src/index.ts:278-322`).
 - `apps/api/src/types.ts`: no `SENTRY_DSN` / `SENTRY_ENVIRONMENT` in `Env`.
+- `apps/api/src/auth/test-otp.ts:29` declares `TestOtpEnv = Env & { QA_TEST_OTP_ENABLED?; QA_TEST_OTP_CODE? }`, cast in `middleware/runtime-guard.ts:53` and `routes/auth-login.test-otp.test.ts:22,71,88`.
+- `apps/api/package.json` has no script for QT2's `scripts/qa-seed.ts` / `scripts/qa-reset.ts`.
 
 ## Acceptance criteria
 - [ ] `withSentry` wraps fetch, scheduled and queue; enabled only when `SENTRY_DSN` is set and `SENTRY_ENVIRONMENT` is `staging` or `production`.
@@ -37,6 +43,8 @@ On staging and production, unhandled errors in the API Worker's fetch, scheduled
 - [ ] `release` = the deploy's git SHA passed by the deploy script var if present, else unset; `environment` from `SENTRY_ENVIRONMENT`.
 - [ ] Handled errors (4xx, `fail()` responses) are not reported.
 - [ ] Local and tests never call Sentry.
+- [ ] `Env` has `QA_TEST_OTP_ENABLED?: string` and `QA_TEST_OTP_CODE?: string`. `TestOtpEnv` no longer exists (`rg TestOtpEnv apps/api` is empty), and QT1's tests pass unchanged in behaviour.
+- [ ] `pnpm --filter @fitbud/api qa:seed -- --reference-date 2026-11-02` and `qa:reset` run QT2's scripts locally (`node --experimental-strip-types`), write only to `apps/api/.qa-seed/`, and run no remote command.
 
 ## Out of scope
 - Mobile (BT2b). Source-map upload for the Worker (post-beta). Alerts and dashboards (Firoz, manual).

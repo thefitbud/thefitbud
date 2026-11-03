@@ -22,4 +22,6 @@ apps/mobile/targets/*/generated.entitlements
 apps/mobile/.kotlin
 apps/trainer-web/dist
 apps/api/.wrangler
+# Generated QA seed and reset SQL (apps/api/scripts/qa-seed.ts, qa-reset.ts)
+apps/api/.qa-seed/
 .captures/
