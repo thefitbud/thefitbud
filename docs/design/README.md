@@ -305,3 +305,6 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | IP-13 | Single-client logging | during session | iOS | [IP-13-trainer-mobile-single-log-v3-ios.png](mockups/png/IP-13-trainer-mobile-single-log-v3-ios.png) | [html](mockups/html/IP-13-trainer-mobile-single-log-v3-ios.html) | **Locked** (v3, 21 Oct) |
 | IP-14 | After-session quick log | sheet | iOS | [IP-14-trainer-mobile-after-quick-log-v3-ios.png](mockups/png/IP-14-trainer-mobile-after-quick-log-v3-ios.png) | [html](mockups/html/IP-14-trainer-mobile-after-quick-log-v3-ios.html) | **Locked** (v3, 21 Oct) |
 | IP-16 | Suggest a change (trainee) | coach-logged set | iOS | [IP-16-trainee-suggest-change-v3-ios.png](mockups/png/IP-16-trainee-suggest-change-v3-ios.png) | [html](mockups/html/IP-16-trainee-suggest-change-v3-ios.html) | **Locked** (v3, 21 Oct) |
+
+## W5–W12 frames (DS1–DS4, DS6, DS7, BP1): approval
+Firoz approved these frames on 3 Nov 2026. They are the target, but the coding agent may refine layout and details for better UI/UX while building, as long as the spec's behaviour and copy are kept.
