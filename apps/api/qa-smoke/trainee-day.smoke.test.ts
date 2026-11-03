@@ -5,7 +5,7 @@
  * today" is a valid state and is never a failure. Dated values are read from the seed
  * run's own expectations and only when they describe today (see `expectations.ts`).
  */
-import { workoutAssignmentSchema } from "@fitbud/contracts";
+import { meDayResponseSchema, workoutAssignmentSchema } from "@fitbud/contracts";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { todaysExpectations } from "./expectations.js";
@@ -14,21 +14,9 @@ import { sessionFor, smokeHttp } from "./run-context.js";
 
 const http = smokeHttp();
 
-// `GET /me/day/:date` defines its response inline in the route and is not exported
-// from `packages/contracts`, so the suite states the same shape here. If the route's
-// shape changes, this fails and is the cue to move the schema into the contracts.
-const dayResponseSchema = z.object({
-  date: z.string(),
-  assignments: z.object({
-    workouts: z.array(z.object({ id: z.string(), name: z.string() })),
-    meals: z.array(z.object({ id: z.string(), slotKey: z.string() })),
-  }),
-  logs: z.object({ workouts: z.number().int(), meals: z.number().int() }),
-  totals: z.object({
-    kcalScaled: z.number().int(),
-    perMeal: z.array(z.object({ slotKey: z.string(), kcalScaled: z.number().int() })),
-  }),
-});
+// `/me/week` has no schema in `packages/contracts` (unlike `/me/day`, which uses
+// `meDayResponseSchema`), so the suite states its shape here. Move it to contracts
+// rather than widening this copy if the route changes.
 const weekResponseSchema = z.object({
   start: z.string(),
   days: z.array(z.object({ date: z.string(), state: z.string() })),
@@ -38,7 +26,7 @@ describe("GET /me/day/:date", () => {
   it.for(["ontrack", "slipping"] as const)("%s: today's day parses and matches the seed", async (key, t) => {
     const session = sessionFor(t, key);
     const today = await localToday(http, session);
-    const day = await getData(http, session, `/me/day/${today}`, dayResponseSchema);
+    const day = await getData(http, session, `/me/day/${today}`, meDayResponseSchema);
     expect(day.date).toBe(today);
     expect(day.assignments.workouts.length).toBeLessThanOrEqual(stable.guarantees.workoutAssignmentsTodayMax);
     expect(day.assignments.meals.length).toBeGreaterThanOrEqual(stable.guarantees.mealAssignmentsTodayMin);
@@ -55,7 +43,7 @@ describe("GET /me/day/:date", () => {
 
   it("a day with no assignments is an empty day, not an error", async (t) => {
     const session = sessionFor(t, "ontrack");
-    const day = await getData(http, session, "/me/day/2000-01-01", dayResponseSchema);
+    const day = await getData(http, session, "/me/day/2000-01-01", meDayResponseSchema);
     expect(day.assignments.workouts).toEqual([]);
     expect(day.assignments.meals).toEqual([]);
   });
