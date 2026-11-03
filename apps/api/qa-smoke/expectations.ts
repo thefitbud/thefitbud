@@ -26,11 +26,30 @@ const apiRoot = path.resolve(here, "..");
 export const COMMITTED_EXPECTATIONS = path.join(apiRoot, "src", "seed", "qa", "expectations.json");
 export const RUN_EXPECTATIONS = path.join(apiRoot, ".qa-seed", "expectations.json");
 
+/**
+ * The accounts `global-setup.ts` signs in once per run. `run-context.ts` derives the
+ * role it sends from the key, so a second *trainer* key cannot be added here without
+ * changing that file; `run-context.ts` is outside this task's `files_owned`, so the
+ * second trainer is listed separately below and signed in by the one suite that
+ * needs it (CU11; the PR reports the one-line follow-up).
+ */
 export const ACCOUNT_KEYS = ["trainer", "ontrack", "slipping"] as const;
 export type AccountKey = (typeof ACCOUNT_KEYS)[number];
 
+/**
+ * The second QA trainer and their single client (CU11). They are seeded and reset
+ * exactly like the others, and the staging smoke reads their real relationship and
+ * client ids to prove a trainer cannot reach another trainer's data.
+ */
+export const SECOND_TRAINER_KEYS = ["trainer2", "client2"] as const;
+export type SecondTrainerKey = (typeof SECOND_TRAINER_KEYS)[number];
+
+/** Every account the QA seed writes, in `expectations.json` order. */
+export const ALL_ACCOUNT_KEYS = [...ACCOUNT_KEYS, ...SECOND_TRAINER_KEYS] as const;
+export type AnyAccountKey = (typeof ALL_ACCOUNT_KEYS)[number];
+
 const stableAccountSchema = z.object({
-  key: z.enum(ACCOUNT_KEYS),
+  key: z.enum(ALL_ACCOUNT_KEYS),
   email: z.string().regex(TEST_OTP_IDENTIFIER_RE),
   role: z.enum(["trainer", "trainee"]),
   displayName: z.string().min(1),
@@ -46,26 +65,31 @@ const guaranteesSchema = z.object({
   loggedMealsTodayOnTrack: z.number().int().nonnegative(),
   openExceptionsSlippingMin: z.number().int().nonnegative(),
   pendingCheckinsSlipping: z.number().int().nonnegative(),
+  /** Check-ins the slipping client can start today, in their own timezone (QT2b). */
+  startableCheckinsSlipping: z.number().int().nonnegative(),
   loggableWorkoutsPerTrainee: z.number().int().nonnegative(),
   workoutAssignmentsTodayMax: z.number().int().nonnegative(),
+  /** Clients of each QA trainer; the ownership checks read both worlds (CU11). */
+  clientsFirstTrainer: z.number().int().nonnegative(),
+  clientsSecondTrainer: z.number().int().nonnegative(),
 });
 export type Guarantees = z.infer<typeof guaranteesSchema>;
 
 const stableSchema = z.object({
   guarantees: guaranteesSchema,
-  accounts: z.array(stableAccountSchema).length(ACCOUNT_KEYS.length),
+  accounts: z.array(stableAccountSchema).length(ALL_ACCOUNT_KEYS.length),
 });
 
 export type Stable = {
   guarantees: Guarantees;
-  accounts: Record<AccountKey, StableAccount>;
+  accounts: Record<AnyAccountKey, StableAccount>;
 };
 
 export function parseStable(json: unknown): Stable {
   const parsed = stableSchema.parse(json);
-  const accounts = {} as Record<AccountKey, StableAccount>;
+  const accounts = {} as Record<AnyAccountKey, StableAccount>;
   for (const account of parsed.accounts) accounts[account.key] = account;
-  for (const key of ACCOUNT_KEYS) {
+  for (const key of ALL_ACCOUNT_KEYS) {
     if (!accounts[key]) throw new Error(`The QA expectations have no "${key}" account.`);
   }
   return { guarantees: parsed.guarantees, accounts };
@@ -76,7 +100,7 @@ export function loadStable(file = COMMITTED_EXPECTATIONS): Stable {
 }
 
 const runAccountSchema = z.object({
-  key: z.enum(ACCOUNT_KEYS),
+  key: z.enum(ALL_ACCOUNT_KEYS),
   loggableWorkout: z
     .object({
       assignmentId: z.string().uuid(),
@@ -92,6 +116,11 @@ const runAccountSchema = z.object({
       loggedMealCount: z.number().int().nonnegative(),
       openExceptionCount: z.number().int().nonnegative(),
       pendingCheckinId: z.string().uuid().nullable(),
+      /**
+       * Optional so a hand-written fixture (and a run file written before CU11)
+       * still parses; the generator always writes it.
+       */
+      startableCheckinId: z.string().uuid().nullable().optional(),
     })
     .optional(),
 });
@@ -103,7 +132,7 @@ const runSchema = z.object({
 
 export type RunExpectations = {
   referenceDate: string;
-  accounts: Partial<Record<AccountKey, z.infer<typeof runAccountSchema>>>;
+  accounts: Partial<Record<AnyAccountKey, z.infer<typeof runAccountSchema>>>;
 };
 
 /** The seed run's own file, or `null` when this machine did not generate one. */
@@ -122,9 +151,9 @@ export function loadRun(file = RUN_EXPECTATIONS): RunExpectations | null {
  */
 export function todaysExpectations(
   run: RunExpectations | null,
-  key: AccountKey,
+  key: AnyAccountKey,
   localToday: string,
-): NonNullable<RunExpectations["accounts"][AccountKey]>["today"] | null {
+): NonNullable<RunExpectations["accounts"][AnyAccountKey]>["today"] | null {
   if (!run || run.referenceDate !== localToday) return null;
   return run.accounts[key]?.today ?? null;
 }
