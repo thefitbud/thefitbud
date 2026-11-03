@@ -17,6 +17,12 @@ SYSTEM_EMAIL_FROM=FitBud <noreply@example.test>
 SYSTEM_EMAIL_REPLY_TO=support@example.test
 ADMIN_ALERT_EMAILS=alerts@example.test
 
+# Test-mode email OTP for the qa+…@thefitbud.com QA accounts (QT1, D-QA1-1):
+# staging secrets only; never production. Inactive unless ENVIRONMENT=staging,
+# so leaving these blank locally is correct (local already has the dev mail sink).
+QA_TEST_OTP_ENABLED=
+QA_TEST_OTP_CODE=
+
 # Feature flag overrides (optional): 1/true or 0/false
 # FLAG_WA_OTP=0
 # FLAG_WA_AUTOMATION=0
