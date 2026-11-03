@@ -13,6 +13,7 @@ import { UnsupportedRoleScreen } from "../screens/UnsupportedRoleScreen";
 import { WaitingReviewScreen } from "../screens/WaitingReviewScreen";
 import { TrainerShell } from "../trainer/TrainerShell";
 import { TraineeShell } from "../trainee/TraineeShell";
+import { routerView } from "./routerView";
 
 function isSpecimensPath(): boolean {
   if (Platform.OS !== "web" || typeof window === "undefined") return false;
@@ -26,7 +27,9 @@ export function AppRouter() {
     return <SpecimensScreen />;
   }
 
-  if (route.name === "loading") {
+  const view = routerView(route, errorMessage);
+
+  if (view.view === "loading") {
     return (
       <View style={styles.loading} accessibilityLabel="Loading">
         <ActivityIndicator size="large" color={colors.indigo} />
@@ -34,13 +37,13 @@ export function AppRouter() {
     );
   }
 
-  if (errorMessage && route.name !== "auth") {
+  if (view.view === "error") {
     return (
       <Screen
         title="Something went wrong"
         subtitle="We could not load your coaching account."
       >
-        <ErrorBanner message={errorMessage} />
+        <ErrorBanner message={view.message} />
         <PrimaryButton
           label="Retry"
           onPress={() => {
@@ -53,7 +56,8 @@ export function AppRouter() {
     );
   }
 
-  switch (route.name) {
+  const current = view.route;
+  switch (current.name) {
     case "auth":
       return <AuthScreen />;
     case "unsupported_role":
@@ -63,15 +67,15 @@ export function AppRouter() {
     case "accept_invite":
       return <AcceptInviteScreen />;
     case "intake":
-      return <IntakeScreen relationshipId={route.relationshipId} />;
+      return <IntakeScreen relationshipId={current.relationshipId} />;
     case "waiting_review":
-      return <WaitingReviewScreen relationship={route.relationship} />;
+      return <WaitingReviewScreen relationship={current.relationship} />;
     case "trainee_shell":
-      return <TraineeShell relationship={route.relationship} />;
+      return <TraineeShell relationship={current.relationship} />;
     case "trainer_shell":
       return <TrainerShell />;
     default: {
-      const _exhaustive: never = route;
+      const _exhaustive: never = current;
       return _exhaustive;
     }
   }
