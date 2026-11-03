@@ -133,7 +133,20 @@ export function SignInPage() {
   }
 
   return (
-    <AuthLayout title="Welcome back, coach" screenTestId="screen-TW-01">
+    <AuthLayout
+      title="Welcome back, coach"
+      screenTestId="screen-TW-01"
+      footer={
+        <nav className="auth-legal-links" aria-label={LEGAL_FOOTER_LABEL}>
+          {LEGAL_FOOTER_LINKS.map((link, i) => (
+            <span key={link.path} className="auth-legal-item">
+              {i > 0 ? <span aria-hidden="true">·</span> : null}
+              <Link to={link.path}>{link.label}</Link>
+            </span>
+          ))}
+        </nav>
+      }
+    >
       {!online ? (
         <p className="offline-inline" role="status">
           You&apos;re offline. Connect to sign in.
@@ -251,14 +264,6 @@ export function SignInPage() {
         </details>
       ) : null}
       {!isWhatsAppOtpEnabled(config) ? null : null}
-      <nav className="auth-legal-links" aria-label={LEGAL_FOOTER_LABEL}>
-        {LEGAL_FOOTER_LINKS.map((link, i) => (
-          <span key={link.path} className="auth-legal-item">
-            {i > 0 ? <span aria-hidden="true">·</span> : null}
-            <Link to={link.path}>{link.label}</Link>
-          </span>
-        ))}
-      </nav>
     </AuthLayout>
   );
 }

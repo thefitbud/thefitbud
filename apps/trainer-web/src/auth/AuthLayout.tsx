@@ -9,12 +9,15 @@ export function AuthLayout({
   children,
   screenTestId,
   showGlimpse = true,
+  footer,
 }: {
   title: string;
   lead?: string;
   children: ReactNode;
   screenTestId?: string;
   showGlimpse?: boolean;
+  /** Links-only footer rendered below the help line (D-W3-15). */
+  footer?: ReactNode;
 }) {
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
@@ -71,23 +74,52 @@ export function AuthLayout({
       </section>
 
       <section className="auth-formside">
-        <div className="auth-fcard">
-          <div className="auth-mark-tile" aria-hidden="true">
-            <BrandMark size={30} />
-          </div>
-          <h1 className="auth-form-title">{title}</h1>
-          {lead ? <p className="auth-lead">{lead}</p> : null}
-          {children}
-        </div>
-        <p className="auth-help">
-          Trouble signing in?{" "}
-          <a
-            className="link"
-            href={`mailto:${supportEmail}?subject=${encodeURIComponent("FitBud support · Trainer web · TW-01")}`}
+        {/* Column stack: card centred, then help line, then footer, all in normal flow (D-W3-15).
+            The negative bottom margin cancels most of .auth-formside's 4.5rem
+            bottom padding, which the old `position: absolute; bottom: 32px`
+            help line bypassed and the in-flow stack is now subject to. Without
+            it the footer floats ~89px off the bottom; ds5-web-signin-footer.png
+            puts the legal row ~34px off it. Inline because .auth-formside's
+            rules are outside this task's styles.css scope (".auth-help only"). */}
+        <div
+          style={{
+            alignSelf: "stretch",
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            marginBottom: "-55px",
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            Need help?
-          </a>
-        </p>
+            <div className="auth-fcard">
+              <div className="auth-mark-tile" aria-hidden="true">
+                <BrandMark size={30} />
+              </div>
+              <h1 className="auth-form-title">{title}</h1>
+              {lead ? <p className="auth-lead">{lead}</p> : null}
+              {children}
+            </div>
+          </div>
+          <p className="auth-help">
+            Trouble signing in?{" "}
+            <a
+              className="link"
+              href={`mailto:${supportEmail}?subject=${encodeURIComponent("FitBud support · Trainer web · TW-01")}`}
+            >
+              Need help?
+            </a>
+          </p>
+          {footer}
+        </div>
       </section>
     </main>
   );
