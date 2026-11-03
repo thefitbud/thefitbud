@@ -174,6 +174,18 @@ describe("zonedDateTimeFormat", () => {
     }
   });
 
+  it("throws on a present but blank timeZone instead of answering from the device", () => {
+    // Finding 3a: a blank zone used to build an *unzoned* formatter, so
+    // formatLocalDate(d, "") silently returned the phone's date — exactly the
+    // plausible-wrong-value this task exists to remove. "" and "  " must agree.
+    for (const blank of ["", " ", "   "]) {
+      expect(
+        () => zonedDateTimeFormat("en-CA", { timeZone: blank }),
+        JSON.stringify(blank),
+      ).toThrow(UnsupportedTimeZoneError);
+    }
+  });
+
   it("leaves the engine's own zone alone when no timeZone is given", () => {
     const spy = vi.spyOn(Intl, "DateTimeFormat");
     try {

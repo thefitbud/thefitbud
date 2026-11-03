@@ -79,6 +79,21 @@ describe("formatLocalDate on Hermes/iOS", () => {
   });
 });
 
+describe("a blank zone is a caller bug, not the device zone", () => {
+  it("throws rather than returning the device's civil date", () => {
+    // Finding 3a: this used to return the engine-default date with no error.
+    for (const blank of ["", "   "]) {
+      expect(
+        () => formatLocalDate(new Date("2026-11-03T18:45:00Z"), blank),
+        JSON.stringify(blank),
+      ).toThrow(UnsupportedTimeZoneError);
+    }
+    expect(() => localDateTimeToUtcIso("2026-11-04", "", 0, 0, 0)).toThrow(
+      UnsupportedTimeZoneError,
+    );
+  });
+});
+
 describe("localDateTimeToUtcIso on Hermes/iOS", () => {
   it("round-trips a civil IST date and wall time through the alias", () => {
     const restore = stubHermesIos(["Asia/Kolkata"]);

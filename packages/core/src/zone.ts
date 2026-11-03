@@ -133,14 +133,20 @@ export function resolveIntlTimeZone(timeZone: string): string {
 /**
  * The one place in `packages/core` that builds a zoned `Intl.DateTimeFormat`.
  * Pass options exactly as you would to `Intl.DateTimeFormat`; the `timeZone`
- * is resolved first. Omitting `timeZone` keeps the engine's own default zone.
+ * is resolved first.
+ *
+ * **Omitting `timeZone` entirely** keeps the engine's own default zone, which
+ * is what a viewer-local formatter wants. **Passing a present but blank
+ * `timeZone`** is a caller bug — a zone was meant to be supplied and was lost
+ * — and throws, because answering from the device's zone would show a
+ * trainee in India the phone's date with no error at all.
  */
 export function zonedDateTimeFormat(
   locales: string | readonly string[],
   options: Intl.DateTimeFormatOptions = {},
 ): Intl.DateTimeFormat {
   const { timeZone, ...rest } = options;
-  if (timeZone === undefined || timeZone === "") {
+  if (timeZone === undefined) {
     return new Intl.DateTimeFormat(locales as string | string[], rest);
   }
   return new Intl.DateTimeFormat(locales as string | string[], {
