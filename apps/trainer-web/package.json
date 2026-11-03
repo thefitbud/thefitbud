@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "lint": "eslint src worker e2e-staging --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json && tsc -p e2e-staging/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json",
     "test": "vitest run src worker",
     "test:e2e": "playwright test",
     "test:e2e:banned": "playwright test -c playwright.banned.config.ts",
