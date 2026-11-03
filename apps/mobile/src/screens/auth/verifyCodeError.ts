@@ -1,4 +1,6 @@
 import { ApiClientError } from "@fitbud/api-client";
+import { PARSE_COPY } from "../../lib/authErrors";
+import { isZodError, reportError } from "../../lib/reportError";
 
 export const OTP_INVALID_COPY =
   "That code didn't work. Check the latest message or tap Resend.";
@@ -14,6 +16,12 @@ export const OTP_FINISH_FAILED_COPY =
  * shown; for other statuses only the HTTP status number is.
  */
 export function verifyCodeError(err: unknown): string {
+  // D-W3-18: a response the app cannot read is a client/server disagreement,
+  // not a connection problem and not a wrong code.
+  if (isZodError(err)) {
+    reportError("verifyCode", err);
+    return PARSE_COPY;
+  }
   if (err instanceof ApiClientError) {
     if (err.status === 401 && err.code === "OTP_INVALID") return OTP_INVALID_COPY;
     if (err.status === 429) return OTP_RATE_LIMITED_COPY;

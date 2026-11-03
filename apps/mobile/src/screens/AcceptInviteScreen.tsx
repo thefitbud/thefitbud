@@ -5,7 +5,9 @@ import { Lock } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import { colors, spacing } from "@fitbud/ui-mobile";
-import { useAuth, messageFromError } from "../auth/AuthProvider";
+import { useAuth } from "../auth/AuthProvider";
+import { authErrorCopy, mismatchedResponseCopy } from "../lib/authErrors";
+import { reportError } from "../lib/reportError";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Button } from "../components/Button";
 import {
@@ -41,8 +43,9 @@ function inviteParamsFromUrl(url: string | null): {
     if (iMatch?.[1]) {
       return { token: decodeURIComponent(iMatch[1]), email };
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    // An unparseable deep link just means no prefilled invite; nothing is shown.
+    reportError("inviteParamsFromUrl", err);
   }
   if (Platform.OS === "web" && typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
@@ -157,6 +160,9 @@ export function AcceptInviteScreen({
           );
         }
       } catch (error) {
+        // A failed preview only hides the coach name; it shows an error only
+        // when the API says the invite is gone.
+        reportError("invitePreview", error);
         if (error instanceof ApiClientError && (error.status === 410 || error.status === 409)) {
           setLocalError(
             "This invite link has expired. Ask your coach to send a new one.",
@@ -187,8 +193,8 @@ export function AcceptInviteScreen({
       setResendSeconds(60);
       setShowOtpEntry(true);
       setLocalError(null);
-    } catch {
-      setLocalError("Couldn't send a code. Check the email and try again.");
+    } catch (err) {
+      setLocalError(authErrorCopy(err, "invite-send", "sendInviteCode"));
     } finally {
       setOtpSending(false);
     }
@@ -210,13 +216,13 @@ export function AcceptInviteScreen({
         code: otpCode.trim(),
       });
       if (result.purpose !== "invite" || !("otpProof" in result) || !result.otpProof) {
-        setLocalError("That code didn't work. Check the latest email or resend.");
+        setLocalError(mismatchedResponseCopy("verifyInviteCode.purpose"));
         return;
       }
       setOtpProof(result.otpProof);
       setShowOtpEntry(false);
-    } catch {
-      setLocalError("That code didn't work. Check the latest email or resend.");
+    } catch (err) {
+      setLocalError(authErrorCopy(err, "invite-verify", "verifyInviteCode"));
     } finally {
       setLoading(false);
     }
@@ -248,17 +254,7 @@ export function AcceptInviteScreen({
         });
         await refreshSession();
       } catch (error) {
-        if (error instanceof ApiClientError && error.status === 409) {
-          setLocalError(
-            "You're already coaching with someone on FitBud. Sign in to continue.",
-          );
-        } else {
-          setLocalError(
-            error instanceof ApiClientError
-              ? error.message
-              : messageFromError(error),
-          );
-        }
+        setLocalError(authErrorCopy(error, "invite-accept", "acceptInvite.signedIn"));
       } finally {
         setLoading(false);
       }
@@ -297,17 +293,7 @@ export function AcceptInviteScreen({
         await refreshSession();
       }
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        if (error.status === 409) {
-          setLocalError(
-            "You're already coaching with someone on FitBud. Sign in to continue.",
-          );
-        } else {
-          setLocalError(error.message);
-        }
-      } else {
-        setLocalError(messageFromError(error));
-      }
+      setLocalError(authErrorCopy(error, "invite-accept", "acceptInvite"));
     } finally {
       setLoading(false);
     }
