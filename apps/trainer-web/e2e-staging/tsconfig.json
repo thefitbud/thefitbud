@@ -1,0 +1,13 @@
+{
+  "extends": "@fitbud/config/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  },
+  "include": ["."]
+  // `types` is intentionally unset (D-W3b-9). CU10 measured: `"types": ["node"]`
+  // fails with TS2688, `"types": []` yields 40 errors, and leaving `types` unset
+  // typechecks. Node types reach these files only incidentally, via
+  // `@types/qrcode`'s `/// <reference types="node" />` with `@types/node` beside
+  // it in pnpm's store. Do not add `@cloudflare/workers-types`.
+}

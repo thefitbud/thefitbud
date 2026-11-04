@@ -858,6 +858,48 @@ describe("read models", () => {
     expect(myDay.data.state).toBe("rest");
   });
 
+  /*
+    BT14 (D-W4-16, D-W4-19): the trainer week route passed `?start=` straight
+    into the week builder. `garbage` threw RangeError and answered 500. It
+    now uses the same helper as `GET /me/week`.
+  */
+  it("rejects a malformed trainer week ?start= with 400 INVALID_REQUEST", async () => {
+    const ctx = await reachCoachingReady("trainer-week-start");
+    for (const start of ["2026-11", "2026-02-30", "garbage", "-002026-11-02"]) {
+      const response = await app.request(
+        `/workspaces/relationships/${ctx.relationshipId}/week?start=${encodeURIComponent(start)}`,
+        { headers: { Cookie: ctx.trainerCookie, "x-fitbud-role": "trainer" } },
+        testEnv(),
+      );
+      expect(response.status, start).toBe(400);
+      const body = (await response.json()) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe("INVALID_REQUEST");
+      expect(body.error.message).toBe("Invalid start date.");
+      expect(body.error.message).not.toContain(start);
+    }
+  });
+
+  it("answers a well-formed trainer week ?start=", async () => {
+    const ctx = await reachCoachingReady("trainer-week-explicit");
+    const response = await app.request(
+      `/workspaces/relationships/${ctx.relationshipId}/week?start=2026-10-05`,
+      { headers: { Cookie: ctx.trainerCookie, "x-fitbud-role": "trainer" } },
+      testEnv(),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { start: string; days: { date: string }[] } };
+    expect(body.data.start).toBe("2026-10-05");
+    expect(body.data.days.map((d) => d.date)).toEqual([
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10",
+      "2026-10-11",
+    ]);
+  });
+
   it("rejects a malformed /me/day/:date with 400 instead of an empty day", async () => {
     const ctx = await reachCoachingReady("me-day-date");
     for (const date of ["2026-11", "2026-02-30", "garbage", "-002026-11-02"]) {
