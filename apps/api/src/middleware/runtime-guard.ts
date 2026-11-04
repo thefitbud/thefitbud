@@ -1,5 +1,4 @@
 import { createMiddleware } from "hono/factory";
-import type { TestOtpEnv } from "../auth/test-otp";
 import { fail } from "../lib/envelope";
 import { writeStructuredLog, type SafeLogFields } from "../lib/log";
 import type { Env, Variables } from "../types";
@@ -50,12 +49,11 @@ export function runtimeMisconfigurations(env: Env): string[] {
   // QT1 / D-QA1-1: the staging-only fixed QA OTP code must never exist on
   // production. If either secret is set there, refuse every request rather than
   // serve an API that might accept a known code. Names only, never values.
-  const qaEnv = env as TestOtpEnv;
   if (env.ENVIRONMENT === "production") {
-    if (qaEnv.QA_TEST_OTP_ENABLED?.trim()) {
+    if (env.QA_TEST_OTP_ENABLED?.trim()) {
       problems.push("QA_TEST_OTP_ENABLED=set");
     }
-    if (qaEnv.QA_TEST_OTP_CODE?.trim()) {
+    if (env.QA_TEST_OTP_CODE?.trim()) {
       problems.push("QA_TEST_OTP_CODE=set");
     }
   }

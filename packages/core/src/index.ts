@@ -341,4 +341,5 @@ export {
 } from "./notification-copy.js";
 export { routeForLinkKind, type LinkKind } from "./links.js";
 export { canLog, type LogDecision } from "./late-logging.js";
+export { TEST_OTP_IDENTIFIER_RE } from "./test-otp-identifier.js";
 export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";
