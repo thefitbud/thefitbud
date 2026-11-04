@@ -292,7 +292,9 @@ describe("TodayTab plan state", () => {
   it("announces a cache-write failure as its own error, not as a missing plan", async () => {
     renderToday(
       effectivePlanStateFor(livePlan),
-      "Your plan loaded, but saving it on this phone failed (SQLiteError). Your plan still shows while you're online — pull down to try saving it again.",
+      // The product copy, verbatim (D-W3b-30): static, with no storage class
+      // name in it.
+      "Couldn't save your plan on this phone. Try again.",
     );
     openDayLoad();
 
@@ -301,7 +303,9 @@ describe("TodayTab plan state", () => {
     });
     const alerts = screen.getAllByRole("alert").map((node) => node.textContent);
     expect(
-      alerts.some((text) => text?.includes("saving it on this phone failed")),
+      alerts.some((text) =>
+        text?.includes("Couldn't save your plan on this phone."),
+      ),
     ).toBe(true);
     // The plan is still shown: a failed cache write is not "no plan".
     expect(screen.queryAllByText(PREPARING)).toEqual([]);

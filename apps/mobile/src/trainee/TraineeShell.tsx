@@ -96,23 +96,22 @@ export type EffectivePlanLoadOutcome = {
 };
 
 /**
- * Bounded, product-worded message for a failed cache write.
+ * What the trainee is told when the plan loaded but could not be cached
+ * (CU22, D-W3b-30, decided by Firoz 4 Nov 2026).
  *
- * It names the operation that actually failed and the error's own type, and
- * nothing else: the raw message of a storage error can be an arbitrary
- * 64-plus characters of internals (table and column names among them), which
- * neither belongs on a trainee's screen nor stays inside the content rules.
- * Same shape as CU20's `safeZoneLabel` (D-W3b-19): identify the fault to the
- * person and the type to whoever reads the report, without pasting raw text
- * into the UI. The full sanitised error goes to `reportError`.
+ * Static text, deliberately. The trainee must not read a storage class name,
+ * so nothing derived from the error reaches the screen: the error's own name
+ * goes to `reportError` only (which sanitises, scrubs and caps it — CU5), and
+ * the screen gets this one string. Being static, it satisfies AGENTS.md's
+ * rule on error messages by construction (D-W3-12, D-W3b-7).
+ *
+ * "Try again." is actionable here and must stay so: this message is rendered
+ * by `TodayTab` inside the Today screen's scroll view, whose pull-to-refresh
+ * calls `onRefreshPlan` -> `loadEffectivePlan`, which retries the fetch and
+ * the cache write that failed.
  */
-export function planCacheWriteMessage(err: unknown): string {
-  const raw = err instanceof Error && err.name ? err.name : "";
-  const label = raw.replace(/[^A-Za-z0-9 ._-]/g, "").slice(0, 40).trim();
-  return `Your plan loaded, but saving it on this phone failed${
-    label ? ` (${label})` : ""
-  }. Your plan still shows while you're online — pull down to try saving it again.`;
-}
+export const PLAN_CACHE_WRITE_MESSAGE =
+  "Couldn't save your plan on this phone. Try again.";
 
 /**
  * Loads the effective plan into an explicit `loading | none | loaded` state.
@@ -162,8 +161,10 @@ export async function loadEffectivePlanState(deps: {
     try {
       await deps.cachePlan(fetched, version);
     } catch (writeErr) {
+      // The error itself goes to the reporter, which is where its name and
+      // the rest of its detail belong; the screen gets static copy.
       reportError("trainee.effectivePlan.cacheWrite", writeErr);
-      cacheError = planCacheWriteMessage(writeErr);
+      cacheError = PLAN_CACHE_WRITE_MESSAGE;
     }
   }
   // The plan is set from here, after the write, whatever the write did.

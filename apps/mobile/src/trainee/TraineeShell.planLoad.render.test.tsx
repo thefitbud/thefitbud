@@ -133,7 +133,7 @@ vi.mock("../realtime/useRealtimeHints", () => ({
   useRealtimeHints: () => undefined,
 }));
 
-const { loadEffectivePlanState, planCacheWriteMessage } = await import(
+const { loadEffectivePlanState, PLAN_CACHE_WRITE_MESSAGE } = await import(
   "./TraineeShell"
 );
 
@@ -215,10 +215,9 @@ describe("loadEffectivePlanState", () => {
     // write and the surrounding catch then reset it to null for the rest of
     // the session, which also read on screen as "no plan published".
     expect(outcome.state).toEqual({ status: "loaded", plan: livePlan });
-    // And the failure is surfaced, naming the operation and the error type.
-    expect(outcome.cacheError).toBe(
-      "Your plan loaded, but saving it on this phone failed (SQLiteError). Your plan still shows while you're online — pull down to try saving it again.",
-    );
+    // And the failure is surfaced rather than swallowed; what the trainee
+    // reads is pinned by the "cache-write message on screen" tests below.
+    expect(outcome.cacheError).toBe(PLAN_CACHE_WRITE_MESSAGE);
   });
 
   it("does not try to cache a relationship with no published plan", async () => {
@@ -277,37 +276,61 @@ describe("loadEffectivePlanState", () => {
   });
 });
 
-describe("planCacheWriteMessage", () => {
-  it("names the operation and the error type", () => {
-    expect(planCacheWriteMessage(new TypeError("x"))).toContain("(TypeError)");
-    expect(planCacheWriteMessage(new TypeError("x"))).toContain(
-      "saving it on this phone failed",
+describe("the cache-write message on screen", () => {
+  /** A storage failure with internals in both its message and its name. */
+  const sqliteFailure = Object.assign(
+    new Error(
+      "SQLITE_CONSTRAINT: UNIQUE constraint failed: sync_record.entity_type, sync_record.record_id",
+    ),
+    { name: "SQLiteError" },
+  );
+
+  it("is the static copy, whatever the storage threw", async () => {
+    const outcome = await loadEffectivePlanState(
+      deps({
+        cachePlan: vi.fn(async () => {
+          throw sqliteFailure;
+        }),
+      }),
     );
+
+    expect(outcome.cacheError).toBe(
+      "Couldn't save your plan on this phone. Try again.",
+    );
+    expect(outcome.cacheError).toBe(PLAN_CACHE_WRITE_MESSAGE);
   });
 
-  it("carries no raw error text, however long or internal it is", () => {
-    const err = Object.assign(
-      new Error(
-        "SQLITE_CONSTRAINT: UNIQUE constraint failed: sync_record.entity_type, sync_record.record_id",
-      ),
-      { name: "SQLiteError" },
+  it("carries no error text at all: not the message, and not the name", async () => {
+    const outcome = await loadEffectivePlanState(
+      deps({
+        cachePlan: vi.fn(async () => {
+          throw sqliteFailure;
+        }),
+      }),
     );
 
-    const message = planCacheWriteMessage(err);
+    const onScreen = outcome.cacheError ?? "";
 
-    // CU20's `safeZoneLabel` precedent (D-W3b-19): identify the fault without
-    // pasting storage internals onto a trainee's screen. A raw message would
-    // also put a raw enum-shaped string in the UI, which the content rules
-    // forbid.
-    expect(message).not.toContain("sync_record");
-    expect(message).not.toContain("SQLITE_CONSTRAINT");
-    expect(message).toContain("(SQLiteError)");
+    // Nothing derived from the error may reach a trainee (D-W3b-30). The
+    // message half was already true before; the NAME half is the new rule,
+    // and it is the one a regression would reintroduce, because a class name
+    // looks harmless next to a raw SQL string.
+    expect(onScreen).not.toContain("sync_record");
+    expect(onScreen).not.toContain("SQLITE_CONSTRAINT");
+    expect(onScreen).not.toContain("SQLiteError");
+    // No parenthesised label of any kind survived the change.
+    expect(onScreen).not.toMatch(/\(.*\)/);
+
+    // The error itself still reaches the reporter, which is where its name
+    // belongs; `reportError` sanitises, scrubs and caps it (CU5).
+    expect(onScreen).toBe(PLAN_CACHE_WRITE_MESSAGE);
   });
 
-  it("still says what failed when the value thrown is not an Error", () => {
-    expect(planCacheWriteMessage("nope")).toBe(
-      "Your plan loaded, but saving it on this phone failed. Your plan still shows while you're online — pull down to try saving it again.",
-    );
+  it("promises an action the screen offers", () => {
+    // "Try again." is only honest because `TodayTab` renders this banner
+    // inside the Today screen's scroll view, whose pull-to-refresh calls
+    // `onRefreshPlan` -> `loadEffectivePlan`, retrying the write that failed.
+    expect(PLAN_CACHE_WRITE_MESSAGE).toContain("Try again.");
   });
 });
 
