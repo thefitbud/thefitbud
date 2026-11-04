@@ -6,12 +6,12 @@ Rev 3 (Sat 31 Oct 2026, W2 specs): W1 specs merged (PRs #73, #78), so W1 tasks a
 
 Rev 4 (Sat 31 Oct 2026, Firoz's W2 answers): D-W2-6 to D-W2-15 decided (see `docs/specs/batches/W2.md`). Live Activity is in the beta (post-beta note fixed). Domains: `api.` / `app.` (+ `-staging`), `thefitbud.com` for landing and sign-in redirect. X4a moved W3 → W2 (lane `api`: I5 → X4a → OB2). New: X7 (mobile trainer-web link, S, son), LA1c (lock-screen rest timer, frame 27c, M). I5 declares `MEDIA_PREFIX` in `Env`. CLAUDE.md is the source of truth; Agents.md gets aligned.
 
-Rev 5 (Sun 1 Nov 2026, Firoz's W3/W4 answers): D-W3-1 to D-W3-5 and D-W4-5 to D-W4-9 decided (see `docs/specs/batches/W3.md`, `W4.md`). Trainer inbox events are pushed: new X4f, X4h, X4g. At-most-once push (D-W3-8): new X4i (M, opus). Agents-only code review. Android rest timer added: new LA3c, planned frame `docs/design/mockups/png/27-android-rest.png` (412x915). Rows added for the W3 splits X4e, BT3b, LA3b and DC1; LA3 is M. Expo tokens use provider `"expo"`. Sentry: errors only, DSN as Worker secret, source maps on production builds. EAS remote auto-increment. No W5–W11 until after the beta ships.
+Rev 5 (Sun 1 Nov 2026, Firoz's W3/W4 answers): D-W3-1 to D-W3-5 and D-W4-5 to D-W4-9 decided (see `docs/specs/batches/W3.md`, `W4.md`). Trainer inbox events are pushed: new X4f, X4h, X4g. At-most-once push (D-W3-8): new X4i (M, opus). Agents-only code review. Android rest timer added: new LA3c, planned frame `docs/design/mockups/png/27-android-rest.png` (412x915). Rows added for the W3 splits X4e, BT3b, LA3b and DC1; LA3 is M. Expo tokens use provider `"expo"`. Sentry: errors only, DSN as Worker secret, source maps on production builds. EAS remote auto-increment. ~~No W5–W11 until after the beta ships.~~ *Struck 4 Nov 2026 by Firoz's decision (PLAN-v2 D-P2-1/D-P2-5).*
 
 **What this file is.** This is the working list for the **closed beta only**: every task needed for beta, with enough detail for the bots to write self-contained specs. It replaces v13's Beta cut section and the beta tasks' details.
-**What it is not.** v13 stays the master list for everything post-beta: redesign phases, seed polish, gap buckets, Phase 10. Don't schedule those until the beta ships.
+~~**What it is not.** v13 stays the master list for everything post-beta: redesign phases, seed polish, gap buckets, Phase 10. Don't schedule those until the beta ships.~~ *Struck 4 Nov 2026 by Firoz's decision (PLAN-v2 D-P2-1/D-P2-5).* **Rev 6 (Wed 4 Nov 2026, Firoz):** the full v3 redesign, account deletion and step tracking are in the closed beta, planned as W5–W13 in `docs/specs/batches/PLAN-v2.md`. *"Without proper UI there's no proper beta opinion and without proper beta there's no product fit."* Phase 10 (in-person sessions) is not scheduled (W14 parked). This file stays the record for W1–W4; status for W5–W13 is in the batch files.
 
-**Beta target:** Sun 15 Nov 2026 (worst case Mon 30 Nov). Closed: TestFlight (internal + external testers) and a Google Play **closed** testing track only.
+**Beta target:** ~~Sun 15 Nov 2026 (worst case Mon 30 Nov).~~ After W12 (redesign) and W13 (launch); Firoz sets the date (PLAN-v2 D-P2-1). Closed: TestFlight (internal + external testers) and a Google Play **closed** testing track only.
 
 ---
 
@@ -48,7 +48,7 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 **Locked.** Each decision says who made it. Under C9, Firoz may still override any of them when he reviews a batch.
 | ID | Decision | Source |
 |---|---|---|
-| D-B1 | Beta is closed: TestFlight + Play closed testing only. Must-haves: push + reminders, transactional email, store builds, staging deploy, real sign-in, basic crash reporting, privacy + terms (account deletion by email request for beta), D1 Time Travel + a documented restore. Post-beta: in-app account deletion (BP1), automated backups (BP2). | Firoz, 30 Oct |
+| D-B1 | Beta is closed: TestFlight + Play closed testing only. Must-haves: push + reminders, transactional email, store builds, staging deploy, real sign-in, basic crash reporting, privacy + terms (account deletion by email request for beta), D1 Time Travel + a documented restore. ~~Post-beta: in-app account deletion (BP1), automated backups (BP2).~~ In-app account deletion is beta scope (Firoz, 4 Nov 2026; Z6-14, Z6-17, Z12-29, Z12-30); automated backups (Z6-13) are post-beta again (Firoz, 4 Nov 2026, PLAN-v2 D-P2-11). | Firoz, 30 Oct |
 | D-B2 | OTP channel for beta: **email only**. | Firoz, 30 Oct |
 | D-B3 | Email provider: **ZeptoMail** (India region API `api.zeptomail.in`). | Firoz, 30 Oct |
 | D-B4 | I9 dropped (fixed 18 Oct, b5e4278). Payments are tracking only (post-beta tasks; Agents.md updated by #69). | Firoz, 30 Oct |
@@ -124,8 +124,8 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 | BT5 | Beta dress rehearsal on staging with real phones (new) | W4 | human + QA agent | I6, X4c, X4d | S | F |
 | I6b | Production deploy + production library seed (owner F, new) | W4 | human | BT5 passed, CF2 prod secrets | S | F |
 
-Post-beta, before public release: **BP1** in-app account deletion, **BP2** automated D1 backups (v13 details unchanged).
-Post-beta: everything else in v13, including I2e (C1), WhatsApp OTP (C4), the open draft PRs #50 AC1a and #57 AC1b, and OB3/OB4.
+~~Post-beta, before public release: **BP1** in-app account deletion, **BP2** automated D1 backups (v13 details unchanged).~~ Now W6/W12 (PLAN-v2).
+Post-beta: I2e (C1), WhatsApp OTP (C4) and OB3/OB4. ~~the open draft PRs #50 AC1a and #57 AC1b~~ are now W5 (Z5-1, Z5-2); the redesign phases, seed polish and gap buckets are W5–W12 (PLAN-v2, 4 Nov 2026).
 
 ## 5. Task details (for spec writers)
 
@@ -370,7 +370,7 @@ These tasks need a **dev build on a real device**. Agents can't compile Swift or
 | **W1** | auth: AU1 → AU1b → AU2 · infra: I7 → I4a → I4b → I4c · mobile: X2 → X6 · library: I2b → I2f (→ I2c) · api-perf: I1b if a slot is free | CF2 steps 1–5; DS5; legal text (Q3) | merged by Wed 4 Nov |
 | **W2** | client-auth: AU1c → AU1d · auth-api: AU1e · api: I5 → X4a → OB2 · infra: WD1 → OB1 · mobile-native: LA1 → LA1b → LA1c (starts once X6 is merged) · mobile-links: X7 | X3 dev build; CF2 steps 6–8; **I6 first staging deploy** | staging up by Sat 7 Nov |
 | **W3** | reminders: X4b → X4c → X4i → X4f → X4h · push-mobile: X4e → X4d → X4g · web: BT3 · mobile-legal: BT3b · ops-docs: BT4 · docs: DC1 · mobile-native: LA2 → LA3 → LA3b → LA3c (LA cut-line Thu 12 Nov) | Time Travel rehearsal; push on devices | push on devices by Tue 10 Nov |
-| **W4** | mobile/api: BT2 · release: BT1 (agents prepare, Firoz submits) · QA: BT5 checklist | BT5 rehearsal on staging (Thu 12 Nov) → **I6b production deploy** → TestFlight external review (~1–2 days) + Play closed track | invites out Sun 15 Nov |
+| **W4** | mobile/api: BT2 · release: BT1 (agents prepare, Firoz submits) · QA: BT5 checklist | ~~BT5 rehearsal on staging (Thu 12 Nov) → **I6b production deploy** → TestFlight external review (~1–2 days) + Play closed track ~~ moved to W13 (PLAN-v2) | ~~invites out Sun 15 Nov~~ |
 
 **Status (rev 3, 31 Oct):** W1 specs ready, not built (PRs #73, #78 merged; specs in `docs/specs/`, batch file `docs/specs/batches/W1.md`). W2 specs written: `docs/specs/{AU1c,AU1d,AU1e,I5,X4a,WD1,OB1,OB2,LA1,LA1b,LA1c,X7}.md`, batch file `docs/specs/batches/W2.md` (Draft; all decisions made, rev 4).
 

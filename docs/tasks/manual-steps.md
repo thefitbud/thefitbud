@@ -1,8 +1,8 @@
-# FitBud beta: Firoz's manual steps (W1 to W11)
+# FitBud beta: Firoz's manual steps (W1 to W13)
 
-Written 31 Oct 2026 from `docs/specs/batches/W1.md` to `W4.md` and `docs/tasks/beta-tasklist-v14.md` (rev 5, §6 CF2). Updated 1 Nov 2026 with Firoz's W3/W4 answers; completed steps removed 1 Nov 2026 (queues and DLQs, Firebase projects, answered decisions). Updated 2 Nov 2026: progress on steps 1, 6, 7, 9, 15 and 17; removed step 14 (restore rehearsal done, #138) and step 5 (`27-android-rest.png` is on `main` and LA3c merged, #132). Updated 3 Nov 2026: the Apple hold is lifted (steps 1, 2, 7, 8). Step numbers are kept so references elsewhere stay valid. There are no W5–W11 batches: every v14 beta task is in W1–W4 (D-W4-9, decided by Firoz, 1 Nov 2026: no W5–W11 until after the beta ships), so no manual step belongs to W5–W11.
+Written 31 Oct 2026 from `docs/specs/batches/W1.md` to `W4.md` and `docs/tasks/beta-tasklist-v14.md` (rev 5, §6 CF2). Updated 1 Nov 2026 with Firoz's W3/W4 answers; completed steps removed 1 Nov 2026 (queues and DLQs, Firebase projects, answered decisions). Updated 2 Nov 2026: progress on steps 1, 6, 7, 9, 15 and 17; removed step 14 (restore rehearsal done, #138) and step 5 (`27-android-rest.png` is on `main` and LA3c merged, #132). Updated 3 Nov 2026: the Apple hold is lifted (steps 1, 2, 7, 8). Step numbers are kept so references elsewhere stay valid. ~~There are no W5–W11 batches: every v14 beta task is in W1–W4 (D-W4-9, decided by Firoz, 1 Nov 2026: no W5–W11 until after the beta ships), so no manual step belongs to W5–W11.~~ **Updated 4 Nov 2026 (Firoz, PLAN-v2 D-P2-1):** the full v3 redesign is in the beta, so W5–W13 now run before it and the launch steps (10, 11, 16, invites) move to **W13**; the 12 Nov rehearsal and 15 Nov invites are cancelled. The W5–W12 steps (from PR #148's `manual-steps-w5-w11.md`, renumbered) are in the section "W5–W13" below. Priorities P0/P1/P2 are kept.
 
-**Priority:** P0 = blocks a task from starting or merging. P1 = needed before the beta (invites Sun 15 Nov). P2 = can wait.
+**Priority:** P0 = blocks a task from starting or merging. P1 = needed before the beta (invites on the date Firoz sets after W12; ~~Sun 15 Nov~~ struck 4 Nov 2026). P2 = can wait.
 **Sorted** by priority, then by the earliest batch it blocks. **Secrets are named, never given.** Paste values only into `wrangler secret put`, EAS or the provider's dashboard.
 Step-by-step help for secrets, Apple and push: the W2 manual-steps guide (shared separately), sections 1–3.
 
@@ -16,14 +16,14 @@ Step-by-step help for secrets, Apple and push: the W2 manual-steps guide (shared
 | 7 | P0 | APNs key (FitBud UI creates it with EAS after AB5 merges); FCM V1 for production Android (staging done 2 Nov) | X4e, X4d device checks (W3); BT5 (W4) | before W3 |
 | 8 | P0 | App Store Connect record and TestFlight testers (hold lifted 3 Nov) | BT1 (W4) | before W4 |
 | 9 | P0 | Play Console: invite tech@ as Admin, 2-step verification for tech@, create the app and closed testing track | BT1 (W4) | before W4 |
-| 10 | P0 | Run the BT5 dress rehearsal on staging | I6b, store submission (W4) | Thu 12 Nov |
-| 11 | P0 | I6b production deploy (service-account key, production secrets, domains, migrations, seed) | store submission (W4) | after BT5 passes |
+| 10 | P0 | Run the BT5 dress rehearsal on staging | I6b, store submission (**W13**) | after W12 (~~Thu 12 Nov~~) |
+| 11 | P0 | I6b production deploy (service-account key, production secrets, domains, migrations incl. W5–W12, seed) | store submission (**W13**) | after BT5 passes |
 | 12 | P1 | Rotate the old shared credentials (CF2 step 9) | none (security) | before the beta |
-| 13 | P1 | Live Activity device checklists by the cut-line | LA1, LA1b, LA1c (W2); LA2, LA3, LA3b, LA3c (W3) | Thu 12 Nov |
+| 13 | P1 | Live Activity device checklists by the cut-line | LA1, LA1b, LA1c (W2); LA2, LA3, LA3b, LA3c (W3) | before the W13 rehearsal (~~Thu 12 Nov~~; see PLAN-v2 Q-P2-4) |
 | 15 | P1 | Sentry: copy DSNs, create `SENTRY_AUTH_TOKEN` (org and projects exist) | BT2/BT2b checks, BT5 step 7 (W4) | before W4 |
-| 16 | P1 | Store submission: `eas build`, `eas submit`, privacy forms, external review | the beta (W4) | Sat 14 Nov |
+| 16 | P1 | Store submission: `eas build`, `eas submit`, privacy forms (in-app deletion, Health Connect steps), external review | the beta (**W13**) | after I6b (~~Sat 14 Nov~~) |
 | 17 | P2 | Expo enhanced push security: `EXPO_ACCESS_TOKEN` on production (staging set 2 Nov), then enable | none | after the beta starts |
-| 18 | P2 | Plan post-beta batches from v13 (D-W4-9 decided: none until the beta ships) | none before the beta | after the beta ships |
+| 18 | ~~P2~~ | ~~Plan post-beta batches from v13 (D-W4-9 decided: none until the beta ships)~~ Done 4 Nov 2026: W5–W13 planned (PLAN-v2); D-W4-9 superseded | — | — |
 
 ## Details
 
@@ -43,18 +43,46 @@ Step-by-step help for secrets, Apple and push: the W2 manual-steps guide (shared
 
 **9. Play Console (P0, W4).** Done: the developer account "techfitbud" (personal) is verified. Left: invite `tech@thefitbud.com` as Admin (Users and permissions); turn on 2-step verification for `tech@`; then create the app `com.thefitbud.mobile` with a closed testing track and a testers list (emails stay in the console, never in the repo). New personal accounts need at least 12 testers opted in for 14 days before a production release (closed testing is unaffected). The Play service-account key for submit stays outside the repo.
 
-**10. BT5 rehearsal (P0, W4).** Run `docs/qa/QA-BT5.md` on staging with one iPhone and one Android phone on the staging variant; record pass/fail and evidence; any failure becomes a beta-blocker task.
+**10. BT5 rehearsal (P0, W13; was W4).** Run after W12 merges and the planner refreshes the checklist for the v3 screens (D-W13-3). Run `docs/qa/QA-BT5.md` on staging with one iPhone and one Android phone on the staging variant; record pass/fail and evidence; any failure becomes a beta-blocker task.
 
-**11. I6b production deploy (P0, W4).** Same as step 6 with `--env production`: generate the service-account key for `thefitbud-prod` the same way; production secrets `FIREBASE_SERVICE_ACCOUNT_JSON` (that key), `MEDIA_SIGNING_SECRET` (new value, never reused), `ZEPTOMAIL_TOKEN`, `SENTRY_DSN`, optional `EXPO_ACCESS_TOKEN`; migrations; production library seed; attach `api.thefitbud.com` and `app.thefitbud.com`.
+**11. I6b production deploy (P0, W13; was W4).** Include every W5–W12 migration. Same as step 6 with `--env production`: generate the service-account key for `thefitbud-prod` the same way; production secrets `FIREBASE_SERVICE_ACCOUNT_JSON` (that key), `MEDIA_SIGNING_SECRET` (new value, never reused), `ZEPTOMAIL_TOKEN`, `SENTRY_DSN`, optional `EXPO_ACCESS_TOKEN`; migrations; production library seed; attach `api.thefitbud.com` and `app.thefitbud.com`.
 
 **12. Rotate old credentials (P1).** Change every password or key that was kept on the old shared wiki credential pages, and remove them from there. Store new values only in your vault.
 
-**13. Live Activity checklists (P1, W2–W3).** Run the device checklist in each LA PR on your dev build; compare with frames 27, 27b, 27c, 27-android and 27-android-rest; attach photos. If LA1 doesn't work on your iPhone by Thu 12 Nov, the beta ships without it (D-B7); it never blocks BT1.
+**13. Live Activity checklists (P1, W2–W3).** Run the device checklist in each LA PR on your dev build; compare with frames 27, 27b, 27c, 27-android and 27-android-rest; attach photos. If LA1 doesn't work on your iPhone by the cut-line (~~Thu 12 Nov~~; now before the W13 rehearsal, pending Firoz, PLAN-v2 Q-P2-4), the beta ships without it (D-B7); it never blocks BT1.
 
 **15. Sentry (P1, W4).** Done 1 Nov: org `fitbud-zi` with projects `fitbud-api` (Cloudflare) and `fitbud-mobile` (React Native). Left (pending): copy each DSN and create an auth token. Secrets: `SENTRY_DSN` (Worker secret, per env), `SENTRY_AUTH_TOKEN` (EAS secret, `eas env:create` or the expo.dev dashboard). The mobile DSN is set as `EXPO_PUBLIC_SENTRY_DSN` per EAS profile.
 
-**16. Store submission (P1, W4).** Follow `docs/runbooks/store-release.md` (BT1): `eas build --profile production`, `eas submit` for iOS and Android; App Privacy answers and Play Data safety; privacy URL `https://app.thefitbud.com/privacy`; submit for TestFlight external review (~1–2 days); promote the Play build to closed testing; send invites Sun 15 Nov.
+**16. Store submission (P1, W13; was W4).** App Privacy / Data safety now say in-app deletion (archive 6 months, then purge) and declare Health Connect `READ_STEPS` (Play) / HealthKit (iOS). Follow `docs/runbooks/store-release.md` (BT1): `eas build --profile production`, `eas submit` for iOS and Android; App Privacy answers and Play Data safety; privacy URL `https://app.thefitbud.com/privacy`; submit for TestFlight external review (~1–2 days); promote the Play build to closed testing; send invites on the date Firoz sets (~~Sun 15 Nov~~, struck 4 Nov 2026).
 
 **17. Enhanced push security (P2).** Done 2 Nov: `EXPO_ACCESS_TOKEN` set on staging. Left: set it on production, then enable enhanced push security in the Expo project.
 
-**18. Post-beta batches (P2).** D-W4-9 is decided: plan W5 onwards from v13 after the beta ships.
+~~**18. Post-beta batches (P2).** D-W4-9 is decided: plan W5 onwards from v13 after the beta ships.~~ Done 4 Nov 2026 (PLAN-v2).
+
+## W5–W13 (added 4 Nov 2026, PLAN-v2)
+
+From PR #148's `manual-steps-w5-w11.md`, with task IDs renumbered (PLAN-v2 mapping). Owners: **Coding agent** (in the batch, never remote commands), **FitBud UI (my computer)** (remote D1, secrets via `wrangler`, deploys, EAS builds; secret values never written to a file), **Firoz (only he can)**.
+
+### P0 · blocks tasks
+- [x] **W11 · Coding agent.** QA1 is merged; Z11-1's visual diff runs after `qa.yml` (no step left).
+- [ ] **W7 · FitBud UI (my computer), Firoz reviews.** Draw DS1 (Home full views, 6 web frames), DS2 (bulk side panel, 4 web frames), DS4 (Home row and count card, web + iPad) and DS7 (read-only field style, web + iPad) for Z7-9/Z7-10, Z7-8, Z7-2 and Z7-13.
+- [ ] **W8 · FitBud UI (my computer), Firoz reviews.** Draw DS3 (Activate and Save as vN+1 dialogs, 2 web frames) for Z8-6.
+- [ ] **W12 · FitBud UI (my computer), Firoz reviews.** BP1 drawn in PR #153 (approved by Firoz 3 Nov); merge #153 so the PNGs reach `docs/design/mockups/png/`: `BP1-delete-account-ios.png`, `BP1-delete-account-web.png`, `BP1-reactivate-account-ios.png`, `BP1-reactivate-account-web.png` for Z12-29, with the D-W12-6 copy.
+- [ ] **W14 · FitBud UI (my computer), Firoz reviews.** Draw DS6: `DS6-session-log-after-web.png`, `DS6-session-log-after-ipad.png`, `DS6-session-log-live-ipad.png` for Z14-11.
+
+## P1 · decisions
+- None open. Answered or decided on 3 Nov: D-W5-11 (W5), D-W11-9..10 (W11), D-W6-7..9 (W6: account archive, reactivation, immediate deletion by email, backup token scope), D-W7-6..8 (W7 copy and frames), D-W9-5..6 (W9 health libraries), D-W12-4..6 (W12: Phase 10 to W14, BP1 frames and copy), D-W14-1..9 (W14).
+
+## P2 · after merge
+- [ ] **W11 · FitBud UI (my computer).** Re-seed production drinks (DK1) after Z11-6 merges: `wrangler d1 execute` of `08_post_seed.sql` on staging, check, then production.
+- [ ] **W6 · FitBud UI (my computer).** Apply the W6 migrations (Z6-1–Z6-4, Z6-16) to staging (`fitbud-staging`), run the smoke checks, deploy `fitbud-api-staging`, then production at the next deploy.
+- [ ] **W6 · FitBud UI (my computer).** Run the read-only EC1f count on staging and production (D-W6-6) and record the result in the W6 report.
+- [ ] ~~**W6**~~ **Post-beta (PLAN-v2 D-P2-11).** BP2 backups (Z6-13, D-W6-9): create R2 buckets `fitbud-backups-staging` and `fitbud-backups-production` with a 30-day lifecycle rule (`wrangler r2 bucket create`, `wrangler r2 bucket lifecycle add`); create one account-owned API token per env with only Account · D1 · Edit in the Cloudflare dashboard (Chrome, tech@); set it with `wrangler secret put CF_D1_EXPORT_TOKEN` for each env (value never in a file); deploy the backup Worker; check the first object; run the restore drill from `docs/runbooks/d1-backups.md`.
+- [ ] **W6 · FitBud UI (my computer), ongoing.** Account deletion requests sent to tech@thefitbud.com (Zoho in Chrome): verify the sender matches the account and run `docs/runbooks/account-deletion.md` (Z6-14); reply once the purge run reports it.
+- [ ] **W6/W12 · Firoz (only he can).** In the Play Console, add the account deletion URL (`/account/delete` on the production API, Z6-14) and update the data safety form (deletion: archived 6 months, then deleted; immediate deletion by email). Play Console is on Firoz's personal Gmail; if he invites tech@thefitbud.com as a Play Console user with app content permissions, FitBud UI can do it instead. The App Store side waits for the Apple account.
+- [ ] **W9 · FitBud UI (my computer).** New Android dev build after Z9-9 merges (`eas build --profile development --platform android` with the `EXPO_TOKEN` robot). **Can be done on my computer:** EAS builds run in Expo's cloud and only need the token. The rebuild is required because Z9-9 adds native modules and config plugins (D-W9-6).
+- [ ] **W9 · nobody (no step).** Health Connect needs no console or cloud setup: the `READ_STEPS` permission and the rationale screen ship in the app manifest through the config plugin, and the user grants access on the device.
+- [ ] **W9 · FitBud UI (my computer).** Steps device check (Z9-9, Z9-10) on an Android 14 emulator on the box (Health Connect is built in from Android 14; add test steps with Google's Health Connect Toolbox app), with the new dev build installed. **Can be done on my computer** if the emulator boots there: `/dev/kvm` exists on the box, but its access for the FitBud UI user is checked first. If the emulator cannot run, the check falls back to Firoz's Android phone (install the dev build link and open Steps).
+- [ ] **W9 · Firoz (only he can).** Play Console health apps declaration for Health Connect `READ_STEPS` (and the matching data safety entry), before any Play testing or production build with steps goes out; not needed for the dev build. **Cannot be done on my computer:** Play Console is owned by Firoz's personal account and tech@thefitbud.com has no access. If Firoz invites tech@thefitbud.com to the Play Console with app content permissions, FitBud UI can submit it. Google's review can take up to 7 days, then 5–7 business days for access to propagate.
+- [ ] **W9 · FitBud UI (my computer), after Z9-9 merges (Apple hold lifted 3 Nov; was "waits").** HealthKit capability on the App IDs `com.thefitbud.mobile` and `com.thefitbud.mobile.staging`, and the iOS dev build with HealthKit. EAS capability sync enables HealthKit on the App IDs through the linked App Store Connect API key during the iOS dev build. (Stale premise flagged 4 Nov 2026: PR #148 said Apple was on hold; the hold was lifted 3 Nov, steps 2, 7, 8.)
+- [ ] **W14 (parked, PLAN-v2 D-P2-8) · FitBud UI (my computer).** Only if Firoz schedules Phase 10: apply the W14 migrations (Z14-1, Z14-5, Z14-6) to staging, deploy, then production; check a 45-minute session reminder and a 15-minute call reminder on the Android dev build (emulator).

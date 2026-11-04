@@ -7,7 +7,7 @@ This folder is where planning (Firoz and the Grok/Cursor bots) hands work to the
 
 ## Flow
 
-0. **Input:** [docs/tasks/beta-tasklist-v14.md](../tasks/beta-tasklist-v14.md) for the beta. Task list v13 stays the master list for post-beta work.
+0. **Input:** [docs/tasks/beta-tasklist-v14.md](../tasks/beta-tasklist-v14.md) for the beta. ~~Task list v13 stays the master list for post-beta work.~~ From 4 Nov 2026 the closed beta also includes the full v3 redesign: batches W5–W13 in [batches/PLAN-v2.md](batches/PLAN-v2.md) are beta work (Firoz, PLAN-v2 D-P2-1). v13 remains the source for rows not yet in a batch.
 1. **Bots write specs** on one branch per batch, `grok/<batch>-specs`. They open its PR as a **draft on the first commit**, listing every spec in the batch and ticking each as it is written; if the bot stops (for example, Grok's weekly limit), a Claude Code session may read the PR and finish the unticked specs (specs only, no building). Firoz merges the planning PR. Each spec's gap list records the `main` SHA it was written against. Bots never trigger Claude: no `@claude` comments, no API calls on the subscription.
 2. **Planners write the decisions in.** The bots write each decision once, as a plain statement in the batch file (`D-Wn-x`, "decided by <who>, <date>"), taking the recommended option when nobody has said otherwise. Specs cite the ID; the task list tracks status only. There are no checkboxes, no Ready status and no sign-off step.
 3. **Firoz reads the batch file and specs, and launches one orchestrator cloud session** with something like "Run batch W1 per docs/specs/batches/W1.md". That message is the go: Firoz only launches a batch he is happy with. The orchestrator does not check a status or look for ticks. The orchestrator:
