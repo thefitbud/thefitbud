@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
+import { meWeekResponseSchema } from "@fitbud/contracts";
 import { createDb } from "../db/client.js";
 import {
   coachingRelationships,
@@ -159,7 +160,7 @@ meDayRoutes.get(
     summary: "Trainee week summary",
     description: "Seven-day day states for the trainee.",
     roles: ["trainee"],
-    response: z.object({ start: z.string(), days: z.array(z.object({ date: z.string(), state: z.string() })) }),
+    response: meWeekResponseSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
