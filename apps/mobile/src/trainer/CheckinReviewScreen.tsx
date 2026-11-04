@@ -3,7 +3,13 @@ import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CheckinReviewContext, CheckinReviewOutcome } from "@fitbud/contracts";
-import { formatCivilDate, formatClockTime, formatPersonName, labelFor } from "@fitbud/core";
+import {
+  deviceTimeZone,
+  formatCivilDate,
+  formatClockTime,
+  formatPersonName,
+  labelFor,
+} from "@fitbud/core";
 import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -148,7 +154,9 @@ export function CheckinReviewScreen({
   const submitted = context?.checkin.submittedAt;
   const subtitle = context
     ? `Weekly check-in · ${formatCivilDate(context.checkin.localDate)}${
-        submitted ? `, ${formatClockTime(submitted, "Asia/Kolkata")}` : ""
+        submitted
+          ? `, ${formatClockTime(submitted, deviceTimeZone())}`
+          : ""
       }`
     : "";
 

@@ -20,6 +20,7 @@ import {
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { Notification, NotificationType } from "@fitbud/contracts";
+import { zonedDateTimeFormat } from "@fitbud/core";
 import { colors, radii, semanticColors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -127,7 +128,7 @@ function timePrefix(
   const yesterday = addDays(today, -1);
   if (day === yesterday) return "Yesterday";
   const d = new Date(`${day}T12:00:00Z`);
-  const weekday = new Intl.DateTimeFormat("en-IN", {
+  const weekday = zonedDateTimeFormat("en-IN", {
     weekday: "short",
     timeZone: "UTC",
   }).format(d);
