@@ -107,6 +107,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # BT10 (D-W4-14, D-W3b-13, D-W3b-18). This job is the required `ci` check.
+      # Maestro is not installed on the runner, so the usual path is the node
+      # test: YAML parse plus a config section. `maestro check-syntax` runs
+      # instead when the CLI is on PATH.
+      - name: Parse Maestro flows
+        run: |
+          if command -v maestro >/dev/null 2>&1; then
+            maestro check-syntax apps/mobile/.maestro
+          else
+            node --test scripts/qa/maestro-parse.test.mjs
+          fi
+
       # setup:local (.dev.vars from .dev.vars.example) is not needed: the API tests
       # build their own in-memory D1 and never read .dev.vars.
 
