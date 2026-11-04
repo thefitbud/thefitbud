@@ -226,19 +226,21 @@ describe("an unresolvable stored timezone (CU20)", () => {
       "suppressed",
     );
 
-    // Contained is not silent: the line says which zone and what the engine said.
-    const caught = caughtLines("reminders.relationship_local_date");
+    // Contained is not silent: the line says which zone and what threw.
+    const caught = caughtLines("reminders.collect_relationship_local_date");
     expect(caught.length).toBeGreaterThan(0);
     expect(caught[0]).toMatchObject({
       level: "warn",
       message: "reminders.caught_error",
       errorName: "UnresolvableRecipientTimeZoneError",
       timeZone: BAD_ZONE,
+      causeName: "RangeError",
     });
-    // The zone and the engine's own error class, and nothing from the engine's
-    // message: a bare RangeError is not on the safe-message list.
-    expect(String(caught[0]!.errorDetail)).toContain(BAD_ZONE);
-    expect(String(caught[0]!.errorDetail)).toContain("RangeError");
+    // The two call sites are tellable apart, so one failing relationship does
+    // not read as two unrelated problems.
+    expect(caughtLines("reminders.run_context_local_date").length).toBeGreaterThan(0);
+    // No error message rides along, from any error type.
+    for (const line of caught) expect(line).not.toHaveProperty("errorDetail");
 
     const text = lines.join("\n");
     expect(text).not.toContain(BROKEN_EMAIL);
@@ -289,7 +291,6 @@ describe("an unresolvable stored timezone (CU20)", () => {
       errorName: "UnresolvableRecipientTimeZoneError",
       timeZone: BAD_ZONE,
     });
-    expect(String(caught[0]!.errorDetail)).toContain(BAD_ZONE);
     // The row is left deferred for a later run, never silently delivered.
     expect(one(handle, `select state from notifications where id = '${deferredId}'`)![0]).toBe(
       "deferred",
@@ -332,9 +333,45 @@ describe("an unresolvable stored timezone (CU20)", () => {
       message: "reminders.caught_error",
       errorName: "Error",
     });
-    // Not an allowlisted name, so its message stays out of the line.
+    // No message, for this or any other error type.
     expect(caught[0]).not.toHaveProperty("errorDetail");
     expect(lines.join("\n")).not.toContain("Queue is unavailable");
+  }, 180_000);
+
+  it("never prints a stored zone that is not an IANA-shaped name", async () => {
+    await prepareDemoSeededDb(SEED);
+    handle = await createDemoSeededDb(SEED);
+    setTestDbOverride(handle.db);
+    // `users.timezone` is 64 characters the user supplies, and until this task
+    // `POST /invitations/accept` wrote them unchecked, so rows like this exist
+    // on exactly the path that makes a zone unresolvable. The stored value must
+    // not reach the log line through any field, including an error message.
+    const brokenUserId = userIdFor(handle, BROKEN_EMAIL);
+    handle.sqlite.run(`update users set timezone = ? where id = ?`, [
+      BROKEN_EMAIL,
+      brokenUserId,
+    ]);
+
+    await expect(handleScheduledReminders(env, new Date(RUN_AT))).resolves.toBeUndefined();
+
+    const caught = caughtLines("reminders.collect_relationship_local_date");
+    expect(caught.length).toBeGreaterThan(0);
+    // Reported, and reported as unprintable rather than quietly dropped.
+    expect(caught[0]).toMatchObject({
+      errorName: "UnresolvableRecipientTimeZoneError",
+      timeZoneShape: "non_iana",
+      causeName: "RangeError",
+    });
+    expect(caught[0]).not.toHaveProperty("timeZone");
+    // The whole log output, not just the timeZone field.
+    const text = lines.join("\n");
+    expect(text).not.toContain(BROKEN_EMAIL);
+    expect(text).not.toContain("pooja");
+    expect(text).not.toContain("@demo.fitbud.test");
+    // ...and the run still finished.
+    expect(
+      countCreated(handle, RUN_AT, `recipient_user_id <> '${brokenUserId}'`),
+    ).toBeGreaterThan(20);
   }, 180_000);
 
   it("keeps every other error's message out of the log", async () => {
@@ -348,6 +385,8 @@ describe("an unresolvable stored timezone (CU20)", () => {
     expect(logged[0]).toMatchObject({ errorName: "D1Failure", errorCode: "SQLITE_BUSY" });
     expect(logged[0]).not.toHaveProperty("errorDetail");
     expect(logged[0]).not.toHaveProperty("timeZone");
+    expect(logged[0]).not.toHaveProperty("timeZoneShape");
+    expect(logged[0]).not.toHaveProperty("causeName");
     expect(lines.join("\n")).not.toContain(SECRET_MESSAGE);
   });
 });

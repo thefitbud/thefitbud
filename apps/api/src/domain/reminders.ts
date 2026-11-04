@@ -78,48 +78,56 @@ type Db = ReturnType<typeof createDb>;
 /** Name of the error thrown when a stored timezone cannot be resolved (CU20). */
 export const UNRESOLVABLE_TIMEZONE_ERROR_NAME = "UnresolvableRecipientTimeZoneError";
 
-/**
- * Error names whose `message` is known to be static text plus IANA zone names,
- * so logging it cannot carry user data (AGENTS.md, "no sensitive data in logs").
- *
- * Matched by **name**, not by class, so this module never imports the error type:
- * `UnsupportedTimeZoneError` lives in `packages/core` and is not on `main` yet
- * (CU17). Before CU17 lands no error carries that name and nothing changes; once
- * it lands its message — `Time zone "<zone>" is not supported on this device
- * (tried: ...). Engine said: ...` — reaches the log line unchanged.
- *
- * Nothing is added here without reading the thrower's message format first. The
- * default for every other error stays what it has always been: name and code only.
- */
-const SAFE_ERROR_MESSAGE_NAMES: ReadonlySet<string> = new Set([
-  "UnsupportedTimeZoneError",
-  UNRESOLVABLE_TIMEZONE_ERROR_NAME,
-]);
-
 /** An IANA-shaped zone name, e.g. `Asia/Kolkata`, `UTC`, `Etc/GMT+5`. */
 const IANA_ZONE_RE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/;
 
-/** `errorLogFields`' result: the two long-standing fields plus the zone detail. */
+/** A class-identifier-shaped error name, e.g. `RangeError`. */
+const ERROR_NAME_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
+/** Stand-in for a stored zone that is not even IANA-shaped, so is never printed. */
+const UNPRINTABLE_ZONE = "<non-IANA zone>";
+
+/**
+ * `errorLogFields`' result. Every field is either a name this codebase sets or a
+ * value that passed a shape filter: no error `message` and no stack, for any
+ * error type, so a stored or request-derived string cannot ride out through here.
+ */
 export type ErrorLogFields = Pick<SafeLogFields, "errorName" | "errorCode"> & {
-  /** The unusable zone, when the error exposes one. Never anything else. */
+  /** The unusable zone, only when it is an IANA-shaped name. */
   timeZone?: string;
-  /** The error's own message, only for `SAFE_ERROR_MESSAGE_NAMES`. */
-  errorDetail?: string;
+  /** `"non_iana"` when the error named a zone that failed that filter. */
+  timeZoneShape?: "non_iana";
+  /** The IANA-shaped aliases a zone resolver tried, comma-separated. */
+  timeZonesTried?: string;
+  /** The underlying error's class name, when it has one. */
+  causeName?: string;
 };
 
-/** A `timeZone` property only when it is an IANA-shaped name of its own. */
-function safeTimeZoneField(error: unknown): string | undefined {
-  const zone = (error as { timeZone?: unknown } | null)?.timeZone;
+/** The zone as given when it is IANA-shaped, else a stand-in. Never the raw value. */
+function safeZoneLabel(zone: string): string {
+  return zone.length <= 64 && IANA_ZONE_RE.test(zone) ? zone : UNPRINTABLE_ZONE;
+}
+
+/** Only an IANA-shaped zone name of at most 64 characters. */
+function ianaZoneOrUndefined(zone: unknown): string | undefined {
   return typeof zone === "string" && zone.length <= 64 && IANA_ZONE_RE.test(zone)
     ? zone
     : undefined;
 }
 
 /**
- * Safe fields for a caught error: its name, its `code` when that is a plain
- * constant (e.g. a D1 or domain code), the zone it names when it exposes one,
- * and its `message` **only** for the names listed in `SAFE_ERROR_MESSAGE_NAMES`.
- * Never the message of any other error, and never the stack.
+ * Safe fields for a caught error: its name; its `code` when that is a plain
+ * constant (e.g. a D1 or domain code); and, when the error exposes them, the
+ * zone it names, the zones it tried and its cause's class name — each of which
+ * must pass a shape filter to be emitted at all.
+ *
+ * **No error's `message` is ever logged, whatever its type.** That is the whole
+ * safety property of this function, and it is a filter rather than a convention:
+ * `apps/api/src/index.ts` uses it in the unhandled-error handler for every
+ * request, so anything that could ride out on a message would ride out from
+ * everywhere. A zone resolver's message interpolates the stored zone verbatim,
+ * and `users.timezone` is 64 characters the user chooses, so the zone travels in
+ * `timeZone` — past `IANA_ZONE_RE` — or it does not travel.
  */
 export function errorLogFields(error: unknown): ErrorLogFields {
   const name = error instanceof Error ? error.name : typeof error;
@@ -128,39 +136,48 @@ export function errorLogFields(error: unknown): ErrorLogFields {
     typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)
       ? { errorName: name, errorCode: code }
       : { errorName: name };
-  const timeZone = safeTimeZoneField(error);
-  if (timeZone !== undefined) fields.timeZone = timeZone;
-  if (error instanceof Error && SAFE_ERROR_MESSAGE_NAMES.has(name)) {
-    fields.errorDetail = error.message.slice(0, 300);
+
+  const named = (error as { timeZone?: unknown } | null)?.timeZone;
+  if (typeof named === "string") {
+    const zone = ianaZoneOrUndefined(named);
+    if (zone !== undefined) fields.timeZone = zone;
+    // The stored value is not printable, but that it was unprintable is itself
+    // the finding: it cannot have come from any validated write path.
+    else fields.timeZoneShape = "non_iana";
+  }
+
+  // CU17's `UnsupportedTimeZoneError` exposes the aliases it tried.
+  const tried = (error as { tried?: unknown } | null)?.tried;
+  if (Array.isArray(tried)) {
+    const zones = tried
+      .map(ianaZoneOrUndefined)
+      .filter((zone): zone is string => zone !== undefined)
+      .slice(0, 8);
+    if (zones.length > 0) fields.timeZonesTried = zones.join(",");
+  }
+
+  const cause = (error as { cause?: unknown } | null)?.cause;
+  if (cause instanceof Error && ERROR_NAME_RE.test(cause.name)) {
+    fields.causeName = cause.name;
   }
   return fields;
 }
 
 /**
- * What a zone failure's underlying error may contribute to a log line: its name
- * always, and its message only when that name is in `SAFE_ERROR_MESSAGE_NAMES`.
- * A bare `RangeError` out of `Intl` therefore contributes "RangeError" and no
- * more, while CU17's `UnsupportedTimeZoneError` contributes its full reason.
- */
-function safeCauseText(cause: unknown): string {
-  if (!(cause instanceof Error)) return typeof cause;
-  return SAFE_ERROR_MESSAGE_NAMES.has(cause.name)
-    ? `${cause.name}: ${cause.message}`
-    : cause.name;
-}
-
-/**
  * A stored timezone that no local time can be derived from. Thrown, or logged,
  * instead of the former `?? "12:00"`, which decided quiet hours from a
- * fabricated noon and left no trace anywhere. The message is static text, the
- * zone name and the cause's name — never anything taken from a request.
+ * fabricated noon and left no trace anywhere.
+ *
+ * The message is built from `safeZoneLabel`, not the raw zone, so that even if
+ * it is surfaced somewhere this module does not control (the local-dev handler
+ * in `index.ts` returns `err.message`) it cannot carry 64 stored characters.
+ * `timeZone` keeps the raw value for `errorLogFields` to filter.
  */
 class UnresolvableRecipientTimeZoneError extends Error {
   readonly timeZone: string;
   constructor(timeZone: string, cause?: unknown) {
     super(
-      `Stored time zone "${timeZone}" could not be resolved to a local time.` +
-        (cause === undefined ? "" : ` Cause: ${safeCauseText(cause)}`),
+      `Stored time zone ${safeZoneLabel(timeZone)} could not be resolved to a local time.`,
     );
     this.name = UNRESOLVABLE_TIMEZONE_ERROR_NAME;
     this.timeZone = timeZone;
@@ -186,24 +203,30 @@ function recipientLocalTimeHhMm(now: string, timezone: string): string {
  * zone the runtime has no data for, and it is the **first** thing every
  * relationship needs, so before this guard one such row ended the whole cron run
  * for every trainer in `loadReminderRunContext` or in `collectCandidates`, before
- * a single candidate existed. Contained per relationship: that relationship
- * contributes no candidates this run and is reported; the others are untouched.
+ * a single candidate existed. Contained per relationship: that relationship is
+ * left out of the context, contributes no candidates, and is reported from both
+ * places; the others are untouched.
  *
  * Only this one call is guarded, not the loop body around it. The other
  * zone-dependent calls there (the hard-stop check, the due-time calculations)
  * take the same zone and are reached only once it has resolved here, so they
  * cannot fail on it afterwards.
+ *
+ * Both call sites log, and each passes its own `operation`: the same relationship
+ * fails twice in a run (once loading the context, once collecting candidates)
+ * and the two lines have to be tellable apart.
  */
-function relationshipLocalDate(now: string, timeZone: string): string | null {
+function relationshipLocalDate(
+  now: string,
+  timeZone: string,
+  operation: string,
+): string | null {
   try {
     return formatLocalDate(new Date(now), timeZone);
   } catch (error) {
-    // Wrapped so the line names the zone: a bare `RangeError` out of `Intl`
-    // exposes it only inside a message this module does not log.
-    logCaught(
-      "reminders.relationship_local_date",
-      new UnresolvableRecipientTimeZoneError(timeZone, error),
-    );
+    // Wrapped so the line can name the zone at all: a bare `RangeError` out of
+    // `Intl` carries it only inside a message that is never logged.
+    logCaught(operation, new UnresolvableRecipientTimeZoneError(timeZone, error));
     return null;
   }
 }
@@ -697,6 +720,7 @@ async function loadReminderRunContext(
       const today = relationshipLocalDate(
         now,
         timezoneByUserId.get(r.traineeUserId) ?? "UTC",
+        "reminders.run_context_local_date",
       );
       return today === null ? [] : [[r.id, today] as const];
     }),
@@ -819,7 +843,11 @@ async function collectCandidates(
   for (const relationship of relationships) {
     const enabled = context.enabledByRelationship.get(relationship.id) ?? new Set();
     const timeZone = context.timezoneByUserId.get(relationship.traineeUserId) ?? "UTC";
-    const today = relationshipLocalDate(now, timeZone);
+    const today = relationshipLocalDate(
+      now,
+      timeZone,
+      "reminders.collect_relationship_local_date",
+    );
     if (today === null) continue;
     const tomorrow = addDaysToLocalDate(today, 1);
     const prefRow = context.preferencesByUserId.get(relationship.traineeUserId);
@@ -1755,8 +1783,8 @@ export async function evaluateAndEnqueueReminders(
       // trainer — and `retryDeferredReminders` below never ran at all. Contained
       // per candidate, one bad row costs exactly one reminder. This is not a
       // return to the old `?? "12:00"` silence: the failure is logged at warn
-      // with its operation, error name and the zone, and nothing is persisted,
-      // so the candidate is reported, not quietly treated as delivered.
+      // with its operation, error name and the zone (filtered), and nothing is
+      // persisted, so the candidate is reported, not treated as delivered.
       logCaught("reminders.persist_candidate", error);
       continue;
     }
