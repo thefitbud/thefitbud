@@ -17,19 +17,50 @@ import {
  */
 const HERMES_MESSAGE = "Incorrect timeZone information provided";
 
+/**
+ * The probe output from Firoz's iPhone (iOS dev build of staging, 4 Nov 2026).
+ * There will be **no iOS build from this branch** — CU17 merges on code
+ * evidence and the device check happens once from `main` — so this data is the
+ * closest thing we have to the device, and the stubs below model it exactly
+ * rather than a generic rejecting engine.
+ *
+ *   Asia/Kolkata   Incorrect timeZone information provided   <- REJECTED
+ *   Asia/Calcutta  ok
+ *   UTC            ok
+ *   Etc/UTC        Incorrect timeZone information provided   <- REJECTED
+ */
+const DEVICE_REJECTS = ["Asia/Kolkata", "Etc/UTC"] as const;
+const DEVICE_ACCEPTS = ["Asia/Calcutta", "UTC"] as const;
+
 type Stub = {
   restore: () => void;
   /** Every zone the stub was asked about, in order. */
   asked: string[];
 };
 
-function stubHermesIos(rejected: readonly string[]): Stub {
+/**
+ * @param rejected zone names this engine refuses, with Hermes's own message.
+ * @param deviceZone what `resolvedOptions().timeZone` reports. `undefined`
+ *   leaves the real engine's own zone; `null` models a device that reports no
+ *   usable zone at all.
+ */
+function stubHermesIos(
+  rejected: readonly string[],
+  deviceZone?: string | null,
+): Stub {
   const real = Intl.DateTimeFormat;
   const asked: string[] = [];
   const fake = function DateTimeFormat(
     locales?: string | string[],
     options?: Intl.DateTimeFormatOptions,
   ) {
+    if (
+      deviceZone !== undefined &&
+      locales === undefined &&
+      options === undefined
+    ) {
+      return { resolvedOptions: () => ({ timeZone: deviceZone }) };
+    }
     const zone = options?.timeZone;
     if (zone !== undefined) {
       asked.push(zone);
@@ -50,6 +81,11 @@ function stubHermesIos(rejected: readonly string[]): Stub {
       clearTimeZoneResolutionCache();
     },
   };
+}
+
+/** Firoz's iPhone: rejects what it rejected, accepts what it accepted. */
+function stubFirozIphone(deviceZone?: string | null): Stub {
+  return stubHermesIos(DEVICE_REJECTS, deviceZone);
 }
 
 afterEach(() => {
@@ -304,6 +340,119 @@ describe("deviceTimeZone (D-W3b-11 (b))", () => {
       expect(() => resolveIntlTimeZone(deviceTimeZone())).toThrow(/Not\/AZone/);
     } finally {
       restore();
+    }
+  });
+});
+
+describe("on an engine modelled exactly on Firoz's iPhone", () => {
+  it("returns a name this device accepts for every probed input", () => {
+    const stub = stubFirozIphone();
+    try {
+      // Each of the four probed names resolves to one the device said "ok" to.
+      expect(resolveIntlTimeZone("Asia/Kolkata")).toBe("Asia/Calcutta");
+      expect(resolveIntlTimeZone("Asia/Calcutta")).toBe("Asia/Calcutta");
+      expect(resolveIntlTimeZone("Etc/UTC")).toBe("UTC");
+      expect(resolveIntlTimeZone("UTC")).toBe("UTC");
+      for (const zone of ["Asia/Kolkata", "Asia/Calcutta", "Etc/UTC", "UTC"]) {
+        expect(DEVICE_ACCEPTS).toContain(resolveIntlTimeZone(zone));
+      }
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it("produces the right instants, not merely a zone that does not throw", () => {
+    const stub = stubFirozIphone();
+    try {
+      const evening = new Date("2026-11-03T18:45:00Z");
+      // IST is UTC+5:30, so 18:45Z is 00:15 on the 4th in India.
+      for (const ist of ["Asia/Kolkata", "Asia/Calcutta"]) {
+        expect(
+          zonedDateTimeFormat("en-GB", {
+            timeZone: ist,
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+          }).format(evening),
+          ist,
+        ).toBe("00:15");
+      }
+      // And the two UTC spellings agree with each other, at 18:45.
+      for (const utc of ["UTC", "Etc/UTC"]) {
+        expect(
+          zonedDateTimeFormat("en-GB", {
+            timeZone: utc,
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+          }).format(evening),
+          utc,
+        ).toBe("18:45");
+      }
+    } finally {
+      stub.restore();
+    }
+  });
+});
+
+describe("D-W3b-11 (b) on Firoz's iPhone", () => {
+  it("works when the device reports the iOS legacy name", () => {
+    // The common iOS case: resolvedOptions() says Asia/Calcutta.
+    const stub = stubFirozIphone("Asia/Calcutta");
+    try {
+      expect(deviceTimeZone()).toBe("Asia/Calcutta");
+      expect(resolveIntlTimeZone(deviceTimeZone())).toBe("Asia/Calcutta");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it("works when the device reports the canonical name the engine rejects", () => {
+    const stub = stubFirozIphone("Asia/Kolkata");
+    try {
+      expect(deviceTimeZone()).toBe("Asia/Kolkata");
+      expect(resolveIntlTimeZone(deviceTimeZone())).toBe("Asia/Calcutta");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it.each([
+    ["nothing", null],
+    ["a blank string", ""],
+  ])(
+    "falls back to Asia/Kolkata when the device reports %s — and that fallback itself resolves here",
+    (_label, reported) => {
+      const stub = stubFirozIphone(reported);
+      try {
+        expect(deviceTimeZone()).toBe(FALLBACK_DISPLAY_TIME_ZONE);
+        expect(deviceTimeZone()).not.toBe("UTC");
+        // The decided fallback is a name THIS device rejects outright, so the
+        // rule would be useless without the alias: assert the whole chain, not
+        // just the constant.
+        expect(resolveIntlTimeZone(deviceTimeZone())).toBe("Asia/Calcutta");
+        expect(DEVICE_ACCEPTS).toContain(resolveIntlTimeZone(deviceTimeZone()));
+      } finally {
+        stub.restore();
+      }
+    },
+  );
+
+  it("still names the zone when the device reports one it cannot resolve", () => {
+    // The distinction the decision turns on: unreadable -> fallback; present
+    // but unresolvable -> error. This path has no human check behind it now.
+    const stub = stubFirozIphone("Mars/Olympus_Mons");
+    try {
+      expect(deviceTimeZone()).toBe("Mars/Olympus_Mons");
+      expect(deviceTimeZone()).not.toBe(FALLBACK_DISPLAY_TIME_ZONE);
+      expect(() => resolveIntlTimeZone(deviceTimeZone())).toThrow(
+        UnsupportedTimeZoneError,
+      );
+      expect(() => resolveIntlTimeZone(deviceTimeZone())).toThrow(
+        /Mars\/Olympus_Mons/,
+      );
+    } finally {
+      stub.restore();
     }
   });
 });

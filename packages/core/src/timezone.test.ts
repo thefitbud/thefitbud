@@ -17,6 +17,13 @@ import {
  */
 const HERMES_MESSAGE = "Incorrect timeZone information provided";
 
+/**
+ * Firoz's iPhone, from the real probe (4 Nov 2026): it rejects these two names
+ * and accepts `Asia/Calcutta` and `UTC`. There is no iOS build from this
+ * branch, so this is the closest model of the device we have.
+ */
+const DEVICE_REJECTS = ["Asia/Kolkata", "Etc/UTC"] as const;
+
 function stubHermesIos(rejected: readonly string[]): () => void {
   const real = Intl.DateTimeFormat;
   const fake = function DateTimeFormat(
@@ -194,5 +201,93 @@ describe("localTimeHhMm", () => {
     expect(() => localTimeHhMm("2026-11-03T18:45:00Z", "Not/AZone")).toThrow(
       UnsupportedTimeZoneError,
     );
+  });
+});
+
+describe("the user-visible strings, on an engine modelled on Firoz's iPhone", () => {
+  /**
+   * The screens that red-boxed. Every string here is what a trainer or trainee
+   * actually reads, so each case asserts the **correct** value rather than the
+   * absence of a throw — a zone that resolves to the wrong place would pass a
+   * does-not-throw test and ship a wrong date.
+   */
+  const evening = new Date("2026-11-03T18:45:00Z"); // 00:15 on the 4th, IST
+
+  it("renders the Attention tab's date heading in real IST for both spellings", () => {
+    const restore = stubHermesIos(DEVICE_REJECTS);
+    try {
+      for (const ist of ["Asia/Kolkata", "Asia/Calcutta"]) {
+        expect(formatLocalDate(evening, ist), ist).toBe("2026-11-04");
+      }
+      // The device's own answer in UTC would have been the 3rd — the bug this
+      // task exists to prevent, kept visible in the assertion.
+      expect(formatLocalDate(evening, "UTC")).toBe("2026-11-03");
+    } finally {
+      restore();
+    }
+  });
+
+  it("renders the offline-since clock time in real IST", () => {
+    const restore = stubHermesIos(DEVICE_REJECTS);
+    try {
+      for (const ist of ["Asia/Kolkata", "Asia/Calcutta"]) {
+        expect(formatClockTime(evening.toISOString(), ist), ist).toBe("12:15 am");
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it("renders a due window on the right civil day", () => {
+    const restore = stubHermesIos(DEVICE_REJECTS);
+    try {
+      expect(
+        formatWindow("2026-11-03T18:30:00Z", "2026-11-04T18:29:00Z", "Asia/Kolkata"),
+      ).toContain("Wed 4 Nov");
+    } finally {
+      restore();
+    }
+  });
+
+  it("greets from the real local hour, and from the decided fallback when no zone is given", () => {
+    const restore = stubHermesIos(DEVICE_REJECTS);
+    try {
+      const morningIst = new Date("2026-11-03T02:00:00Z"); // 07:30 IST
+      expect(greetingFor("Rohan Mehta", "Asia/Kolkata", morningIst)).toBe(
+        "Good morning, Rohan",
+      );
+      // The D-W3b-11 fallback is a name this device rejects, so this also
+      // proves the fallback survives the alias step end to end.
+      expect(greetingFor("Rohan Mehta", "", morningIst)).toBe("Good morning, Rohan");
+    } finally {
+      restore();
+    }
+  });
+
+  it("round-trips both UTC spellings the device disagrees about", () => {
+    const restore = stubHermesIos(DEVICE_REJECTS);
+    try {
+      for (const utc of ["UTC", "Etc/UTC"]) {
+        expect(localDateTimeToUtcIso("2026-11-04", utc, 0, 0, 0), utc).toBe(
+          "2026-11-04T00:00:00.000Z",
+        );
+      }
+      expect(localDateTimeToUtcIso("2026-11-04", "Asia/Kolkata", 0, 0, 0)).toBe(
+        "2026-11-03T18:30:00.000Z",
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it("names the zone rather than rendering anything, when nothing resolves", () => {
+    const restore = stubHermesIos(["Asia/Kolkata", "Asia/Calcutta"]);
+    try {
+      expect(() => formatLocalDate(evening, "Asia/Kolkata")).toThrow(
+        /"Asia\/Kolkata".*Asia\/Calcutta.*Incorrect timeZone information provided/s,
+      );
+    } finally {
+      restore();
+    }
   });
 });
