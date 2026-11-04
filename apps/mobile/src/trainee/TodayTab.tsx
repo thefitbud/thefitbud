@@ -92,8 +92,52 @@ function exerciseCountLabel(count: number): string {
   return count === 1 ? "1 exercise" : `${count} exercises`;
 }
 
-function hasLivePlan(plan: EffectivePlanResponse | null): boolean {
-  return plan?.version != null;
+/**
+ * The trainee's effective plan as an explicit load state (CU22, D-W3b-24).
+ *
+ * `effectivePlan: EffectivePlanResponse | null` used to carry two different
+ * facts — "not loaded yet" and "no plan published" — and the shell's initial
+ * value was the same `null` a plan-less trainee ends on. The shell's plan
+ * load awaits a full sync pull first, so it always settles after `TodayTab`'s
+ * own day load; every trainee with a published plan therefore saw their real
+ * workout under "<Coach> is preparing your plan" on every cold start.
+ *
+ * This is a discriminated union, not a nullable plan and not a boolean: the
+ * plan is reachable only through the `loaded` member, so `loading` cannot be
+ * read as `none` (nor either of them as "ready") without narrowing on
+ * `status` first. Keep it that way — a `plan | null` prop anywhere on this
+ * path is the same defect again.
+ */
+export type EffectivePlanState =
+  | { readonly status: "loading" }
+  | { readonly status: "none" }
+  | { readonly status: "loaded"; readonly plan: EffectivePlanResponse };
+
+/** The state before the first load settles. Never means "no plan published". */
+export const EFFECTIVE_PLAN_LOADING: EffectivePlanState = { status: "loading" };
+
+/**
+ * Maps a settled plan response (or no response at all) onto the union. A
+ * response without a `version` is a relationship whose trainer has published
+ * nothing yet, which is `none`: the one place that judgement is made.
+ */
+export function effectivePlanStateFor(
+  plan: EffectivePlanResponse | null | undefined,
+): EffectivePlanState {
+  return plan?.version != null ? { status: "loaded", plan } : { status: "none" };
+}
+
+/**
+ * The plan for the consumers that still take `EffectivePlanResponse | null`
+ * (`WorkoutTab`, `TraineeOverlayHost`). Those files are outside CU22's
+ * `files_owned`, so the shell narrows for them here instead of leaving each
+ * one to re-derive readiness from a nullable. None of them renders the
+ * "preparing your plan" copy; moving them onto the union is a follow-up.
+ */
+export function planFromState(
+  state: EffectivePlanState,
+): EffectivePlanResponse | null {
+  return state.status === "loaded" ? state.plan : null;
 }
 
 function mealStatusChip(
@@ -125,7 +169,8 @@ type CoachNote = Awaited<
 
 export function TodayTab({
   relationship,
-  effectivePlan,
+  planState,
+  planCacheError,
   selectedDate,
   onSelectDate,
   onStartWorkout,
@@ -135,7 +180,10 @@ export function TodayTab({
   onOpenOverlay,
 }: {
   relationship: CoachingRelationship;
-  effectivePlan: EffectivePlanResponse | null;
+  /** Three-state, never a nullable plan: see `EffectivePlanState` above. */
+  planState: EffectivePlanState;
+  /** Set when the plan loaded but writing it to the device cache failed. */
+  planCacheError: string | null;
   selectedDate: string;
   onSelectDate: (localDate: string) => void;
   onStartWorkout: () => void;
@@ -288,10 +336,9 @@ export function TodayTab({
     }
   }
 
-  const planReady = hasLivePlan(effectivePlan);
   const allDone =
     isToday &&
-    planReady &&
+    planState.status === "loaded" &&
     meals.length > 0 &&
     meals.every((m) => isMealLoggedForCount(m.status)) &&
     (!workout ||
@@ -328,13 +375,25 @@ export function TodayTab({
                 ? "That's everything for today."
                 : greetingFor(displayName, timeZone || "Asia/Kolkata")}
             </Text>
-            <Text style={styles.greetSub}>
-              {allDone
-                ? "Nicely done."
-                : planReady
-                  ? "Here's your day."
-                  : `${coachName} is preparing your plan.`}
-            </Text>
+            {/*
+              Gated on the plan's OWN load state (CU22, D-W3b-24). It used to
+              be gated on nothing but `planReady`, which was false while the
+              plan was still loading, so this line claimed the coach had
+              published nothing whenever it rendered first — which it always
+              did, because the shell's plan load awaits a sync pull and
+              `TodayTab`'s day load does not. While the plan is loading this
+              says nothing at all; the day's own loading card below is the
+              honest signal.
+            */}
+            {planState.status === "loading" ? null : (
+              <Text style={styles.greetSub}>
+                {allDone
+                  ? "Nicely done."
+                  : planState.status === "loaded"
+                    ? "Here's your day."
+                    : `${coachName} is preparing your plan.`}
+              </Text>
+            )}
           </View>
         ) : null}
 
@@ -347,8 +406,14 @@ export function TodayTab({
           <Text style={styles.offlineHint}>Saved on phone · showing last sync</Text>
         ) : null}
         {error ? <ErrorBanner message={error} /> : null}
+        {/*
+          The plan was fetched but could not be cached on the device. That is
+          a real failure with its own cause, so it is shown rather than
+          swallowed or disguised as "no plan" (D-W3-12, D-W3-18).
+        */}
+        {planCacheError ? <ErrorBanner message={planCacheError} /> : null}
 
-        {!planReady && !loading ? (
+        {planState.status === "none" ? (
           <View
             style={styles.card}
             accessibilityLabel="Your coach is preparing your plan"
@@ -376,7 +441,7 @@ export function TodayTab({
           </View>
         ) : null}
 
-        {planReady && hero && !loading ? (
+        {planState.status === "loaded" && hero && !loading ? (
           <View style={styles.hero} accessibilityLabel={nextUpEyebrow(hero)}>
             <Text style={styles.heroEyebrow}>{nextUpEyebrow(hero)}</Text>
             {hero.kind === "meal" ? (
@@ -515,70 +580,82 @@ export function TodayTab({
           </View>
         ) : null}
 
-        <View style={styles.secHead}>
-          <Text style={styles.secTitle}>Today&apos;s workout</Text>
-          {workout ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="See workout"
-              onPress={() =>
-                onOpenOverlay({
-                  screen: "workout_overview",
-                  assignmentId: workout.id,
-                })
-              }
-              style={styles.secLink}
-            >
-              <Text style={styles.secLinkText}>See workout ›</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <View style={styles.card}>
-          {workout ? (
-            <>
-              <View style={styles.woTop}>
-                <StatusChip
-                  label={`${labelFor("workout_assignment_status", workout.status)} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
-                  tone={workoutTone(workout.status)}
-                />
-              </View>
-              <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
-              <Text style={styles.body}>
-                {exerciseCountLabel(workoutExercises.length)}
-                {workoutMins != null ? ` · about ${workoutMins} min` : ""}
-              </Text>
-              {workoutExercises.slice(0, 3).map((ex) => (
-                <Text key={ex.id} style={styles.exRow}>
-                  {ex.name}
-                </Text>
-              ))}
-              {workoutExercises.length > 3 ? (
-                <Text style={styles.body}>
-                  + {workoutExercises.length - 3} more exercises
-                </Text>
-              ) : null}
-              {isToday &&
-              workout.status !== "completed" &&
-              workout.status !== "skipped" ? (
-                <PrimaryButton
-                  label={
-                    workout.status === "in_progress" ||
-                    workout.status === "paused"
-                      ? "Continue workout"
-                      : "Start workout"
+        {/*
+          The workout section is gated on the plan too (CU22, D-W3b-24). It
+          used to render for every trainee, including one whose trainer has
+          published nothing — an empty "Today's workout" card beside "your
+          coach is preparing your plan" — and it is why the Maestro flow's
+          `assertVisible: "Today's workout"` could pass while the plan state
+          was wrong.
+        */}
+        {planState.status === "loaded" ? (
+          <>
+            <View style={styles.secHead}>
+              <Text style={styles.secTitle}>Today&apos;s workout</Text>
+              {workout ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="See workout"
+                  onPress={() =>
+                    onOpenOverlay({
+                      screen: "workout_overview",
+                      assignmentId: workout.id,
+                    })
                   }
-                  onPress={onStartWorkout}
-                />
+                  style={styles.secLink}
+                >
+                  <Text style={styles.secLinkText}>See workout ›</Text>
+                </Pressable>
               ) : null}
-            </>
-          ) : (
-            <Text style={styles.cardTitle}>
-              Rest day. Recovery is part of the plan.
-            </Text>
-          )}
-        </View>
+            </View>
+            <View style={styles.card}>
+              {workout ? (
+                <>
+                  <View style={styles.woTop}>
+                    <StatusChip
+                      label={`${labelFor("workout_assignment_status", workout.status)} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
+                      tone={workoutTone(workout.status)}
+                    />
+                  </View>
+                  <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
+                  <Text style={styles.body}>
+                    {exerciseCountLabel(workoutExercises.length)}
+                    {workoutMins != null ? ` · about ${workoutMins} min` : ""}
+                  </Text>
+                  {workoutExercises.slice(0, 3).map((ex) => (
+                    <Text key={ex.id} style={styles.exRow}>
+                      {ex.name}
+                    </Text>
+                  ))}
+                  {workoutExercises.length > 3 ? (
+                    <Text style={styles.body}>
+                      + {workoutExercises.length - 3} more exercises
+                    </Text>
+                  ) : null}
+                  {isToday &&
+                  workout.status !== "completed" &&
+                  workout.status !== "skipped" ? (
+                    <PrimaryButton
+                      label={
+                        workout.status === "in_progress" ||
+                        workout.status === "paused"
+                          ? "Continue workout"
+                          : "Start workout"
+                      }
+                      onPress={onStartWorkout}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <Text style={styles.cardTitle}>
+                  Rest day. Recovery is part of the plan.
+                </Text>
+              )}
+            </View>
+          </>
+        ) : null}
 
-        {planReady ? (
+        {planState.status === "loaded" ? (
           <>
             <View style={styles.secHead}>
               <Text style={styles.secTitle}>Nutrition</Text>
@@ -702,7 +779,7 @@ export function TodayTab({
           onOpen={onOpenCheckin}
         />
 
-        {effectivePlan?.version ? (
+        {planState.status === "loaded" ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="View meal plan"

@@ -40,7 +40,13 @@ import { CheckinScreen } from "./CheckinScreen";
 import { DietTab } from "./DietTab";
 import { MoreScreen } from "./MoreScreen";
 import { ProgressTab } from "./ProgressTab";
-import { TodayTab } from "./TodayTab";
+import {
+  EFFECTIVE_PLAN_LOADING,
+  TodayTab,
+  effectivePlanStateFor,
+  planFromState,
+  type EffectivePlanState,
+} from "./TodayTab";
 import { WorkoutTab } from "./WorkoutTab";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
@@ -55,6 +61,7 @@ import { invalidateRelationshipDayData } from "./dataCache";
 import { subscribeMealNotificationResponses } from "../notifications/nativeActions";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { ForegroundBanner } from "./notifications/ForegroundBanner";
+import { reportError } from "../lib/reportError";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
 
@@ -77,6 +84,92 @@ const TAB_TITLES: Record<TraineeTab, string> = {
   progress: "Progress",
   more: "More",
 };
+
+/**
+ * What the effective-plan load produced: a three-state plan, plus the
+ * cache-write failure if there was one. Never a nullable plan (CU22,
+ * D-W3b-24) and never a boolean.
+ */
+export type EffectivePlanLoadOutcome = {
+  readonly state: EffectivePlanState;
+  readonly cacheError: string | null;
+};
+
+/**
+ * What the trainee is told when the plan loaded but could not be cached
+ * (CU22, D-W3b-30, decided by Firoz 4 Nov 2026).
+ *
+ * Static text, deliberately. The trainee must not read a storage class name,
+ * so nothing derived from the error reaches the screen: the error's own name
+ * goes to `reportError` only (which sanitises, scrubs and caps it — CU5), and
+ * the screen gets this one string. Being static, it satisfies AGENTS.md's
+ * rule on error messages by construction (D-W3-12, D-W3b-7).
+ *
+ * "Try again." is actionable here and must stay so: this message is rendered
+ * by `TodayTab` inside the Today screen's scroll view, whose pull-to-refresh
+ * calls `onRefreshPlan` -> `loadEffectivePlan`, which retries the fetch and
+ * the cache write that failed.
+ */
+export const PLAN_CACHE_WRITE_MESSAGE =
+  "Couldn't save your plan on this phone. Try again.";
+
+/**
+ * Loads the effective plan into an explicit `loading | none | loaded` state.
+ *
+ * Two orderings matter here and both were wrong before CU22:
+ * - The plan is set **after** the cache write, and the write has its own
+ *   `try`, so a failed write can no longer discard a plan that was fetched
+ *   successfully. It used to set the plan first and then let the outer
+ *   `catch` reset it to `null` for the rest of the session, silently, which
+ *   also read on screen as "no plan published".
+ * - A cache-write failure is **returned**, not swallowed and not disguised as
+ *   "no plan": the caller shows it (D-W3-12, D-W3-18).
+ *
+ * A fetch failure still falls back to the newest cached plan, and only a
+ * fetch failure with nothing cached reads as `none`. That last case cannot
+ * tell "no plan published" from "could not ask"; a fourth `unavailable` state
+ * closes it and is **CU24** (D-W3b-27), built after this merges.
+ */
+export async function loadEffectivePlanState(deps: {
+  pull: () => Promise<unknown>;
+  fetchPlan: () => Promise<EffectivePlanResponse>;
+  /** Called only for a plan that has a version; the version is passed narrowed. */
+  cachePlan: (
+    plan: EffectivePlanResponse,
+    version: NonNullable<EffectivePlanResponse["version"]>,
+  ) => Promise<unknown>;
+  readCached: () => Promise<EffectivePlanResponse | null>;
+}): Promise<EffectivePlanLoadOutcome> {
+  let fetched: EffectivePlanResponse;
+  try {
+    await deps.pull();
+    fetched = await deps.fetchPlan();
+  } catch (fetchErr) {
+    reportError("trainee.effectivePlan.fetch", fetchErr);
+    let cached: EffectivePlanResponse | null = null;
+    try {
+      cached = await deps.readCached();
+    } catch (cacheReadErr) {
+      reportError("trainee.effectivePlan.cacheRead", cacheReadErr);
+    }
+    return { state: effectivePlanStateFor(cached), cacheError: null };
+  }
+
+  let cacheError: string | null = null;
+  const version = fetched.version;
+  if (version != null) {
+    try {
+      await deps.cachePlan(fetched, version);
+    } catch (writeErr) {
+      // The error itself goes to the reporter, which is where its name and
+      // the rest of its detail belong; the screen gets static copy.
+      reportError("trainee.effectivePlan.cacheWrite", writeErr);
+      cacheError = PLAN_CACHE_WRITE_MESSAGE;
+    }
+  }
+  // The plan is set from here, after the write, whatever the write did.
+  return { state: effectivePlanStateFor(fetched), cacheError };
+}
 
 export function TraineeShell({
   relationship,
@@ -107,8 +200,16 @@ export function TraineeShell({
   const [workoutImmersive, setWorkoutImmersive] = useState(false);
   const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
-  const [effectivePlan, setEffectivePlan] =
-    useState<EffectivePlanResponse | null>(null);
+  // Three-state (CU22, D-W3b-24): the initial value is `loading`, not a null
+  // plan, because "not loaded yet" and "no plan published" are different
+  // facts and this screen used to tell a trainee the second when the first
+  // was true. `planCacheError` is separate on purpose: a plan that loaded but
+  // could not be cached is still a loaded plan, so it must not be expressible
+  // as a fourth plan state.
+  const [planState, setPlanState] =
+    useState<EffectivePlanState>(EFFECTIVE_PLAN_LOADING);
+  const [planCacheError, setPlanCacheError] = useState<string | null>(null);
+  const effectivePlan = planFromState(planState);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [captureWorkout, setCaptureWorkout] =
     useState<WorkoutExecution | null>(null);
@@ -278,31 +379,32 @@ export function TraineeShell({
   );
 
   const loadEffectivePlan = useCallback(async () => {
-    try {
-      await sync.pullAndApply().catch(() => undefined);
-      const result = await api.getEffectivePlan(relationship.id);
-      setEffectivePlan(result);
-      if (result.version) {
-        await sync.store.upsertLocal({
+    const outcome = await loadEffectivePlanState({
+      // A pull failure is not a plan failure: the plan is fetched from the
+      // API next either way. Unchanged from before CU22.
+      pull: () => sync.pullAndApply().catch(() => undefined),
+      fetchPlan: () => api.getEffectivePlan(relationship.id),
+      cachePlan: (plan, version) =>
+        sync.store.upsertLocal({
           entityType: "effective_plan",
-          recordId: result.version.id,
-          serverVersion: result.version.recordVersion,
-          payloadJson: JSON.stringify(result),
+          recordId: version.id,
+          serverVersion: version.recordVersion,
+          payloadJson: JSON.stringify(plan),
           tombstone: false,
           updatedAt: new Date().toISOString(),
-        });
-      }
-    } catch {
-      const cached = await sync.store.listLocal("effective_plan");
-      const newest = cached
-        .filter((row) => !row.tombstone && row.payloadJson)
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-      if (newest?.payloadJson) {
-        setEffectivePlan(JSON.parse(newest.payloadJson) as EffectivePlanResponse);
-      } else {
-        setEffectivePlan(null);
-      }
-    }
+        }),
+      readCached: async () => {
+        const cached = await sync.store.listLocal("effective_plan");
+        const newest = cached
+          .filter((row) => !row.tombstone && row.payloadJson)
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+        return newest?.payloadJson
+          ? (JSON.parse(newest.payloadJson) as EffectivePlanResponse)
+          : null;
+      },
+    });
+    setPlanCacheError(outcome.cacheError);
+    setPlanState(outcome.state);
   }, [api, relationship.id, sync]);
 
   const refreshUnread = useCallback(async () => {
@@ -814,7 +916,8 @@ export function TraineeShell({
         {tab === "today" ? (
           <TodayTab
             relationship={relationship}
-            effectivePlan={effectivePlan}
+            planState={planState}
+            planCacheError={planCacheError}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onStartWorkout={() => {
