@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Platform, StyleSheet } from "react-native";
 import { Text } from "../components/Text";
 import type { WeekDayState, WeekReadModel } from "@fitbud/contracts";
@@ -17,7 +17,6 @@ import {
   weekdayShort,
 } from "../lib/dates";
 import { reportError } from "../lib/reportError";
-import { stage1Api } from "../lib/stage1Api";
 import { WebDateHeading } from "./web/WebTraineeChrome";
 
 /**
@@ -132,15 +131,35 @@ type Props = {
   selectedDate: string;
   onSelectDate: (localDate: string) => void;
   showPreviewBanner?: boolean;
+  /**
+   * The week, loaded and owned by the host screen (CU23 review fix).
+   *
+   * This component used to fetch `GET /me/week` itself, which was wrong in
+   * two ways at once. Its `loadWeek` depended only on the api client and the
+   * selected week, neither of which changes on a pull-to-refresh, and the
+   * host renders it without a `key`, so it never remounted and never
+   * re-fetched: the strip could keep saying it could not load the week while
+   * the host's own "This week" card, on the same screen, showed the real
+   * rollup — and no pull-down ever cleared it. It also meant two `GET
+   * /me/week` calls per host load, for the same `weekStart`, each a real
+   * database round trip now that the route is implemented.
+   *
+   * The week is therefore the host's single source of truth and arrives as a
+   * prop. This component derives nothing and fetches nothing, so the strip
+   * and the host can no longer disagree, and the host's refresh is the one
+   * retry. CU24's standard in `TodayTab.tsx` — "Neither screen promises a
+   * retry it cannot perform" (D-W3b-32) — is what this restores.
+   */
+  weekState: WeekModelState;
 };
 
 export function TraineeDateNavigator({
   selectedDate,
   onSelectDate,
   showPreviewBanner = true,
+  weekState,
 }: Props) {
-  const { api, me } = useAuth();
-  const s1 = stage1Api(api);
+  const { me } = useAuth();
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
   const isToday = selectedDate === today;
@@ -150,24 +169,6 @@ export function TraineeDateNavigator({
     () => startOfWeekMonday(selectedDate),
     [selectedDate],
   );
-
-  const [weekState, setWeekState] = useState<WeekModelState>({
-    status: "loading",
-  });
-
-  const loadWeek = useCallback(async () => {
-    setWeekState(
-      await loadWeekModel(
-        (start) => s1.getMeWeek(start),
-        weekStart,
-        "TraineeDateNavigator.getMeWeek",
-      ),
-    );
-  }, [s1, weekStart]);
-
-  useEffect(() => {
-    void loadWeek();
-  }, [loadWeek]);
 
   const navigatorDays = useMemo(
     (): DateNavigatorDay[] =>
@@ -191,9 +192,13 @@ export function TraineeDateNavigator({
               : `Viewing ${formatHeadingDate(timeZone, selectedDate)} · read-only except late logging`}
           </Text>
         ) : null}
-        {weekState.status === "unavailable" ? (
-          <Text style={styles.weekUnavailable}>{WEEK_UNAVAILABLE_MESSAGE}</Text>
-        ) : null}
+        {/*
+          No "couldn't load the week" line here: the host owns the week and
+          renders that message itself, with the retry control that actually
+          performs the retry. Two copies of it on one screen, one of them
+          beside a button and one not, is the duplication the CU23 review
+          flagged.
+        */}
         <WebDateHeading
           timeZone={timeZone}
           selectedDate={selectedDate}
@@ -214,9 +219,6 @@ export function TraineeDateNavigator({
             : `Viewing ${formatHeadingDate(timeZone, selectedDate)} · read-only except late logging`}
           </Text>
         ) : null}
-      {weekState.status === "unavailable" ? (
-        <Text style={styles.weekUnavailable}>{WEEK_UNAVAILABLE_MESSAGE}</Text>
-      ) : null}
       <DateNavigator
         days={navigatorDays}
         selectedDate={selectedDate}
@@ -234,10 +236,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginBottom: 8,
-  },
-  weekUnavailable: {
-    color: colors.darkGrey,
-    fontSize: 13,
-    marginBottom: 4,
   },
 });

@@ -12,13 +12,39 @@
  */
 import type { WeekReadModel } from "@fitbud/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { mockAuth, render, screen } from "../test/render";
 import {
+  TraineeDateNavigator,
+  WEEK_UNAVAILABLE_MESSAGE,
   loadWeekModel,
   navigatorDaysFor,
   type WeekModelState,
 } from "./TraineeDateNavigator";
 
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
+
+const auth = mockAuth({
+  me: { timezone: "Asia/Kolkata" },
+  // Any call through the api client is a failure in these tests: the strip
+  // must read the week it is handed and fetch nothing of its own.
+  api: new Proxy(
+    {},
+    {
+      get(_target, key) {
+        if (key === "then") return undefined;
+        return () => {
+          throw new Error(`the date strip must not call api.${String(key)}`);
+        };
+      },
+    },
+  ),
+});
+vi.mock("../auth/AuthProvider", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>(
+    "../auth/AuthProvider",
+  );
+  return { ...actual, useAuth: () => auth };
+});
 
 const { reportError } = await import("../lib/reportError");
 
@@ -145,5 +171,108 @@ describe("navigatorDaysFor", () => {
     // Not `open`, which is what the old `?? (date > today ? ... : "missed")`
     // produced for every day the response did not carry.
     expect(days.slice(1).map((d) => d.state)).not.toContain("open");
+  });
+});
+
+/**
+ * The retry the screen promises has to work (CU23 review fix).
+ *
+ * `TraineeDateNavigator` used to fetch `GET /me/week` itself, in a
+ * `useCallback` keyed on the api client and the selected week — neither of
+ * which changes on a pull-to-refresh — behind an effect that depended only on
+ * that callback, in a component the host renders without a `key`. So it
+ * mounted once and never re-fetched. When the API was briefly unreachable the
+ * strip showed seven no-information dots and told the trainee to pull down;
+ * they pulled down, the host's own week load succeeded and rendered the real
+ * "This week" rollup, and the strip above it still said the week could not be
+ * loaded. Nothing short of changing week or leaving the screen cleared it:
+ * two components on one screen asserting opposite things about the same week,
+ * with an on-screen remedy that could not work (D-W3b-32; CU24's "Neither
+ * screen promises a retry it cannot perform", `TodayTab.tsx`).
+ *
+ * The fix makes the host's week the single source of truth and this component
+ * presentational. These tests fail if it ever reads its own copy again: the
+ * mocked api client throws on any call, and the strip must follow a new
+ * `weekState` prop without being remounted.
+ */
+describe("the date strip follows the host's week", () => {
+  const props = {
+    selectedDate: "2026-10-15",
+    onSelectDate: () => {},
+    showPreviewBanner: false,
+  };
+
+  function dotCount(container: HTMLElement): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const node of container.querySelectorAll("div")) {
+      const bg = (node as HTMLElement).style.backgroundColor;
+      if (!bg) continue;
+      counts[bg] = (counts[bg] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  it("fetches nothing of its own", () => {
+    // The api client throws on every call, so a render that completes is
+    // proof the strip made none.
+    const view = render(
+      <TraineeDateNavigator
+        {...props}
+        weekState={{ status: "unavailable" }}
+      />,
+    );
+    expect(screen.getAllByRole("button").length).toBeGreaterThan(0);
+    view.unmount();
+  });
+
+  it("clears a stale unavailable strip when the host reloads the week, without remounting", () => {
+    const view = render(
+      <TraineeDateNavigator
+        {...props}
+        weekState={{ status: "unavailable" }}
+      />,
+    );
+    // Seven days, all carrying the same no-information dot.
+    const unavailableDots = dotCount(view.container);
+    expect(Object.keys(unavailableDots)).toHaveLength(1);
+
+    // The same element tree, re-rendered with the week the host's retry
+    // loaded. No `key` change and no unmount: this is exactly what a
+    // pull-to-refresh does to this component.
+    view.rerender(
+      <TraineeDateNavigator
+        {...props}
+        weekState={{
+          status: "loaded",
+          week: week([
+            { date: "2026-10-12", state: "done" },
+            { date: "2026-10-13", state: "done" },
+            { date: "2026-10-14", state: "missed" },
+            { date: "2026-10-15", state: "rest" },
+          ]),
+        }}
+      />,
+    );
+    const loadedDots = dotCount(view.container);
+    // The strip now shows the real week: more than one distinct dot, and not
+    // the single no-information colour it was stuck on.
+    expect(Object.keys(loadedDots).length).toBeGreaterThan(1);
+    expect(loadedDots).not.toEqual(unavailableDots);
+    view.unmount();
+  });
+
+  it("says nothing about a failed week itself, leaving that to the host's card and its retry", () => {
+    const view = render(
+      <TraineeDateNavigator
+        {...props}
+        weekState={{ status: "unavailable" }}
+      />,
+    );
+    // The host carries the one copy of this sentence, next to the control
+    // that performs the retry. A second copy here, with no control, is the
+    // duplication the review flagged.
+    expect(screen.queryByText(WEEK_UNAVAILABLE_MESSAGE)).toBeNull();
+    expect(view.container.textContent).not.toContain("Pull down to try again");
+    view.unmount();
   });
 });

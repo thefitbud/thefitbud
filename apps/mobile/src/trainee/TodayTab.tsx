@@ -457,9 +457,17 @@ export function TodayTab({
           </View>
         ) : null}
 
+        {/*
+          The strip renders this screen's own week state (CU23 review fix).
+          It used to fetch `GET /me/week` a second time for the same week and
+          could never re-fetch, so it kept telling the trainee to pull down —
+          which did nothing for it — while the "This week" card below showed
+          the real rollup. One load, one state, one retry.
+        */}
         <TraineeDateNavigator
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
+          weekState={weekState}
         />
 
         {offlineHint ? (
