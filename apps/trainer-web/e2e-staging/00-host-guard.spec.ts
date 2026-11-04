@@ -12,7 +12,7 @@ import {
   resolveStagingBaseUrl,
 } from "./support/host-guard";
 import { loadExpectations, missingSecrets, missingSecretsMessage } from "./support/env";
-import { TEST_OTP_IDENTIFIER_RE } from "../../api/src/auth/test-otp.js";
+import { TEST_OTP_IDENTIFIER_RE } from "@fitbud/core";
 import { SHOT_NAME_RE, isScreenshotSafe, shot } from "./support/screenshots";
 
 // Proof that the suite cannot be pointed at anything but staging, and that it cannot

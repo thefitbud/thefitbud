@@ -814,6 +814,10 @@ export function TraineeShell({
         overlay={{ screen: "ended" }}
         relationship={relationship}
         effectivePlan={effectivePlan}
+        planState={planState}
+        onRetryPlan={() => {
+          void loadEffectivePlan();
+        }}
         onClose={() => setOverlay({ screen: "past_coaching" })}
         onOpen={openOverlay}
         onSignOut={signOut}
@@ -891,6 +895,10 @@ export function TraineeShell({
         overlay={overlay}
         relationship={relationship}
         effectivePlan={effectivePlan}
+        planState={planState}
+        onRetryPlan={() => {
+          void loadEffectivePlan();
+        }}
         onClose={() => setOverlay(null)}
         onOpen={openOverlay}
         onSignOut={signOut}
@@ -998,6 +1006,10 @@ export function TraineeShell({
           overlay={overlay!}
           relationship={relationship}
           effectivePlan={effectivePlan}
+          planState={planState}
+          onRetryPlan={() => {
+            void loadEffectivePlan();
+          }}
           presentation="sheet"
           onClose={() => {
             invalidateRelationshipDayData(relationship.id);
@@ -1036,6 +1048,10 @@ export function TraineeShell({
             overlay={overlay!}
             relationship={relationship}
             effectivePlan={effectivePlan}
+            planState={planState}
+            onRetryPlan={() => {
+              void loadEffectivePlan();
+            }}
             onClose={() => {
               invalidateRelationshipDayData(relationship.id);
               setOverlay(null);

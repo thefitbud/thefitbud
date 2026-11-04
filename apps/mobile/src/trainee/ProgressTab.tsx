@@ -398,6 +398,10 @@ export function ProgressTab({
 
   useEffect(() => {
     return subscribe(cacheKey, () => {
+      // Adopt what another writer stored. `load` itself calls `setCached`,
+      // and `setCached` notifies this key, so calling `load` here made every
+      // successful fetch start the next one (the loop CU24 removed on the
+      // workout tab; BT15, D-W4-16).
       const next = getCached<ProgressSummary>(cacheKey);
       if (next) setSummary(next);
     });

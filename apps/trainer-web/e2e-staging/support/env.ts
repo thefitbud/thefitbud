@@ -1,10 +1,10 @@
+import { TEST_OTP_IDENTIFIER_RE } from "@fitbud/core";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// The single definition of D-QA1-2's allowlist (QT1), a runtime RegExp: this loads that
-// module (its only import is a type, so nothing else from the API is pulled in). Same pattern as
-// e2e/tw-b-flows.spec.ts importing hashPassword from the API.
-import { TEST_OTP_IDENTIFIER_RE } from "../../../api/src/auth/test-otp.js";
+// D-QA1-2's allowlist lives in @fitbud/core so this suite does not import API
+// source (D-W3b-9). Importing test-otp.ts would pull Workers globals into the
+// trainer-web typecheck.
 
 /** Names only. Values come from the environment and are never logged or screenshotted. */
 export const ENV_OTP_CODE = "QA_TEST_OTP_CODE";
