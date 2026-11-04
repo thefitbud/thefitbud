@@ -1,7 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
-import { meWeekResponseSchema } from "@fitbud/contracts";
+import { localDateSchema, weekReadModelSchema } from "@fitbud/contracts";
+import {
+  addDaysToLocalDate,
+  formatLocalDate,
+  weekdayFromLocalDate,
+} from "@fitbud/core";
 import { createDb } from "../db/client.js";
 import {
   coachingRelationships,
@@ -10,6 +15,9 @@ import {
   workoutAssignments,
   workoutExecutions,
 } from "../db/schema.js";
+import { loadTraineeTimezone } from "../domain/assignment-schedule.js";
+import { buildWeekReadModel } from "../domain/week-read-model.js";
+import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
 import { operation } from "../openapi/document.js";
 import {
@@ -153,25 +161,85 @@ meDayRoutes.get(
   },
 );
 
+/**
+ * `GET /me/week` — the trainee's own week read model (CU23, D-W3b-25).
+ *
+ * This route used to touch no database at all: it answered seven consecutive
+ * dates all in `state: "future"`, derived today in UTC, and echoed `?start=`
+ * back unvalidated. The client parses the response with
+ * `weekReadModelSchema`, so every call threw and the three mobile call sites
+ * fell back to deriving day states from the date alone — every past day read
+ * as `missed` whether or not it was. That is the defect CU23 removes.
+ *
+ * It is not a new read model. `buildWeekReadModel` already serves the trainer
+ * at `GET /workspaces/relationships/:rid/week`
+ * (`apps/api/src/routes/workspaces.ts`), and that handler is this one's
+ * template: the only substitution is the relationship lookup, which resolves
+ * the trainee's own active relationship from `actor.userId` (never from the
+ * request) exactly as `GET /me/day/:date` above does. Trainer and trainee
+ * therefore read the same coaching state from the same builder.
+ *
+ * D-W3b-25's "Weekly view isn't available yet" dress-rehearsal fallback is
+ * retired by D-W3b-37 (the 12 Nov rehearsal is cancelled), so this is the
+ * real endpoint and no fallback shape exists.
+ */
 meDayRoutes.get(
   "/week",
   operation({
     tag: "MeDay",
-    summary: "Trainee week summary",
-    description: "Seven-day day states for the trainee.",
+    summary: "Trainee week read model",
+    description:
+      "Seven-day assignment and logging summary for the authenticated trainee.",
     roles: ["trainee"],
-    response: meWeekResponseSchema,
+    response: weekReadModelSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole("trainee"),
   async (c) => {
-    const start = c.req.query("start") ?? new Date().toISOString().slice(0, 10);
-    const days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(`${start}T12:00:00.000Z`);
-      d.setUTCDate(d.getUTCDate() + i);
-      return { date: d.toISOString().slice(0, 10), state: "future" };
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    // `?start=` was unvalidated: `2026-11` answered 200 with nonsense dates,
+    // `2026-02-30` rolled into March, and `garbage` was an unhandled
+    // RangeError 500. The regex alone accepts 2026-02-30, so the round trip
+    // through addDaysToLocalDate is what rejects a date that is not a real
+    // calendar day. The message is static text (D-W3-12, D-W3b-7) and the
+    // code is the one the API already uses for a malformed query date
+    // (apps/api/src/routes/workouts.ts fromDate/toDate).
+    const startQuery = c.req.query("start")?.trim();
+    if (startQuery) {
+      const parsed = localDateSchema.safeParse(startQuery);
+      if (!parsed.success || addDaysToLocalDate(parsed.data, 0) !== parsed.data) {
+        return fail(c, 400, "INVALID_REQUEST", "Invalid start date.");
+      }
+    }
+    const db = createDb(c.env.DB);
+    const [rel] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(
+        and(
+          eq(coachingRelationships.traineeUserId, actor.userId),
+          eq(coachingRelationships.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (!rel) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "No active relationship.");
+    }
+    const timeZone = await loadTraineeTimezone(db, rel.traineeUserId);
+    const today = formatLocalDate(new Date(nowIso()), timeZone);
+    const weekday = weekdayFromLocalDate(today); // 0 Sun … 6 Sat
+    const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+    const start = startQuery || addDaysToLocalDate(today, mondayOffset);
+    const model = await buildWeekReadModel(db, {
+      relationshipId: rel.id,
+      start,
+      timeZone,
+      nowIso: nowIso(),
     });
-    return ok(c, { start, days });
+    return ok(c, weekReadModelSchema.parse(model));
   },
 );
