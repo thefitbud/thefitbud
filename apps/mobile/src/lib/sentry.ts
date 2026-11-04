@@ -19,6 +19,19 @@ const REPORTING_VARIANTS = new Set(["staging", "production"]);
  * Field names that must not leave the device. Compared after lowercasing and
  * stripping non-alphanumerics, so `Authorization`, `body_fat` and `set-cookie`
  * match. `name` is included: a device name is often a person's name.
+ *
+ * Measurement types are the contract enum in `packages/contracts/src/progress.ts`
+ * (`body_weight_kg`, `waist_cm`, `hip_cm`, `chest_cm`, `other`). Normalized
+ * matching also catches camelCase (`bodyWeightKg`).
+ *
+ * A key that contains `name` is treated as a person's name (`clientName`,
+ * `traineeName`, `displayName`). Technical keys stay: `filename`, `errorName`,
+ * `routeName`, `screenName`, plus `name` on an exception and on a breadcrumb
+ * (its category label).
+ *
+ * Free-text names cannot be detected reliably. Callers must not put a person's
+ * name in an error message or exception value. Emails, Bearer tokens and URL
+ * queries inside those strings are still removed.
  */
 const SENSITIVE_KEYS = new Set([
   "authorization",
@@ -63,43 +76,88 @@ const SENSITIVE_KEYS = new Set([
   "chest",
   "hips",
   "bloodpressure",
+  "bodyweightkg",
+  "waistcm",
+  "hipcm",
+  "chestcm",
+  "other",
 ]);
+
+/** Keys that contain "name" but are not a person's name. */
+const TECHNICAL_NAME_KEYS = new Set(["filename", "errorname", "routename", "screenname"]);
+
+/** Request and breadcrumb fields whose value is a URL, absolute or relative. */
+const URL_FIELDS = new Set(["url", "to", "from"]);
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const BEARER = /Bearer\s+\S+/gi;
+const HTTP_URL = /https?:\/\/[^\s]+/gi;
+
+type ScrubContext = {
+  /** Key of this value on its parent, when it has one. */
+  key?: string;
+  /** `request` or `headers` when this value sits under that field. */
+  parentKey?: string;
+  /** Inside `exception` / `exceptions`, so an error's own `name` is kept. */
+  inException: boolean;
+  /** The breadcrumb object itself, so its category `name` is kept. */
+  atBreadcrumbRoot: boolean;
+};
 
 function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function isSensitiveKey(key: string): boolean {
-  return SENSITIVE_KEYS.has(normalizeKey(key));
+function isSensitiveKey(key: string, context: ScrubContext): boolean {
+  const normalized = normalizeKey(key);
+  if (TECHNICAL_NAME_KEYS.has(normalized)) return false;
+  if (normalized === "name" && (context.inException || context.atBreadcrumbRoot)) return false;
+  if (SENSITIVE_KEYS.has(normalized)) return true;
+  return normalized.includes("name");
 }
 
-function scrubString(value: string): string {
-  return value.replace(EMAIL, "[email]").replace(BEARER, "Bearer [redacted]");
+/** Drop `?query` and `#fragment`, including when the fragment comes first. */
+function stripQueryAndFragment(value: string): string {
+  const query = value.indexOf("?");
+  const hash = value.indexOf("#");
+  let end = value.length;
+  if (query !== -1) end = Math.min(end, query);
+  if (hash !== -1) end = Math.min(end, hash);
+  return value.slice(0, end);
 }
 
-function scrubValue(value: unknown, parentKey: string | undefined, seen: WeakSet<object>): unknown {
-  if (typeof value === "string") return scrubString(value);
+function scrubString(value: string, key: string | undefined): string {
+  const withoutSecrets = value.replace(EMAIL, "[email]").replace(BEARER, "Bearer [redacted]");
+  if (key && URL_FIELDS.has(key.toLowerCase())) return stripQueryAndFragment(withoutSecrets);
+  return withoutSecrets.replace(HTTP_URL, (match) => stripQueryAndFragment(match));
+}
+
+function scrubValue(value: unknown, context: ScrubContext, seen: WeakSet<object>): unknown {
+  if (typeof value === "string") return scrubString(value, context.key);
   if (value === null || typeof value !== "object") return value;
   if (seen.has(value)) return undefined;
   seen.add(value);
   if (Array.isArray(value)) {
     const entries =
-      parentKey === "headers"
+      context.parentKey === "headers"
         ? value.filter(
             (entry) =>
-              !(Array.isArray(entry) && typeof entry[0] === "string" && isSensitiveKey(entry[0])),
+              !(
+                Array.isArray(entry) &&
+                typeof entry[0] === "string" &&
+                isSensitiveKey(entry[0], context)
+              ),
           )
         : value;
-    return entries.map((entry) => scrubValue(entry, undefined, seen));
+    return entries.map((entry) =>
+      scrubValue(entry, { ...context, key: undefined, atBreadcrumbRoot: false }, seen),
+    );
   }
   const out: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
-    if (isSensitiveKey(key)) continue;
+    if (isSensitiveKey(key, context)) continue;
     if (
-      parentKey === "request" &&
+      context.parentKey === "request" &&
       (key === "data" || key === "cookies" || key === "query_string")
     ) {
       continue;
@@ -107,19 +165,28 @@ function scrubValue(value: unknown, parentKey: string | undefined, seen: WeakSet
     const normalized = normalizeKey(key);
     const nextParent =
       normalized === "request" || normalized === "headers" ? normalized : undefined;
-    out[key] = scrubValue(child, nextParent, seen);
+    out[key] = scrubValue(
+      child,
+      {
+        key,
+        parentKey: nextParent,
+        inException: context.inException || normalized === "exception" || normalized === "exceptions",
+        atBreadcrumbRoot: false,
+      },
+      seen,
+    );
   }
   return out;
 }
 
 /** `beforeSend`: drop bodies, credentials, names, notes and health fields. */
 export function scrubSentryEvent<T>(event: T): T {
-  return scrubValue(event, undefined, new WeakSet()) as T;
+  return scrubValue(event, { inException: false, atBreadcrumbRoot: false }, new WeakSet()) as T;
 }
 
 /** `beforeBreadcrumb`: the same rules, one breadcrumb at a time. */
 export function scrubSentryBreadcrumb<T>(breadcrumb: T): T {
-  return scrubValue(breadcrumb, undefined, new WeakSet()) as T;
+  return scrubValue(breadcrumb, { inException: false, atBreadcrumbRoot: true }, new WeakSet()) as T;
 }
 
 /**

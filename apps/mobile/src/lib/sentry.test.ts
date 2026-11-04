@@ -311,6 +311,134 @@ describe("scrubSentryBreadcrumb", () => {
   });
 });
 
+describe("scrubSentryEvent query strings, measurements and names", () => {
+  it("strips the query and fragment from a measurement POST", () => {
+    const scrubbed = scrubSentryEvent({
+      request: {
+        method: "POST",
+        url: "/measurements?token=refresh-secret&email=ada@example.com&body_weight_kg=82.4#waist",
+      },
+    });
+    expect(scrubbed.request?.url).toBe("/measurements");
+    expect(JSON.stringify(scrubbed)).not.toContain("refresh-secret");
+    expect(JSON.stringify(scrubbed)).not.toContain("ada@example.com");
+    expect(JSON.stringify(scrubbed)).not.toContain("82.4");
+    expect(JSON.stringify(scrubbed)).not.toContain("waist");
+  });
+
+  it("drops contract measurement keys in either casing", () => {
+    const scrubbed = scrubSentryEvent({
+      extra: {
+        body_weight_kg: 82.4,
+        bodyWeightKg: 81,
+        waist_cm: 86,
+        hip_cm: 90,
+        chest_cm: 96,
+        other: "progress photo note",
+        screen: "check-in",
+      },
+    });
+    expect(scrubbed.extra).toEqual({ screen: "check-in" });
+    expect(JSON.stringify(scrubbed)).not.toContain("82.4");
+    expect(JSON.stringify(scrubbed)).not.toContain("progress photo note");
+  });
+
+  it("drops person-name keys and keeps technical name keys and exception names", () => {
+    const scrubbed = scrubSentryEvent({
+      extra: {
+        clientName: "Priya Shah",
+        traineeName: "Rahul Verma",
+        displayName: "Priya",
+        firstName: "Priya",
+        fullName: "Priya Shah",
+        filename: "check-in.jpg",
+        errorName: "TypeError",
+        routeName: "Today",
+        screenName: "CheckIn",
+      },
+      exception: {
+        values: [{ type: "Error", value: "save failed", name: "TypeError" }],
+      },
+    });
+    expect(scrubbed.extra).toEqual({
+      filename: "check-in.jpg",
+      errorName: "TypeError",
+      routeName: "Today",
+      screenName: "CheckIn",
+    });
+    expect(scrubbed.exception?.values?.[0]).toEqual({
+      type: "Error",
+      value: "save failed",
+      name: "TypeError",
+    });
+    expect(JSON.stringify(scrubbed)).not.toContain("Priya");
+    expect(JSON.stringify(scrubbed)).not.toContain("Rahul");
+  });
+
+  it("scrubs email, Bearer and URL queries in message and exception text, and leaves person names in that text", () => {
+    // A person's name in free text cannot be detected reliably. App code must
+    // not put names in errors; this test records that the scrubber leaves them.
+    const scrubbed = scrubSentryEvent({
+      message:
+        "save measurement failed for Rahul Verma ada@example.com Bearer msg-token https://api.thefitbud.com/measurements?token=refresh-secret&email=priya@example.com&body_weight_kg=82.4#waist",
+      exception: {
+        values: [
+          {
+            type: "Error",
+            value:
+              "refresh failed for Rahul Verma Bearer exc-token https://api.thefitbud.com/auth/refresh?refresh_token=super-secret",
+          },
+        ],
+      },
+    });
+    expect(scrubbed.message).toBe(
+      "save measurement failed for Rahul Verma [email] Bearer [redacted] https://api.thefitbud.com/measurements",
+    );
+    expect(scrubbed.exception?.values?.[0]?.value).toBe(
+      "refresh failed for Rahul Verma Bearer [redacted] https://api.thefitbud.com/auth/refresh",
+    );
+    expect(JSON.stringify(scrubbed)).not.toContain("refresh-secret");
+    expect(JSON.stringify(scrubbed)).not.toContain("super-secret");
+    expect(JSON.stringify(scrubbed)).not.toContain("msg-token");
+    expect(JSON.stringify(scrubbed)).not.toContain("exc-token");
+    expect(JSON.stringify(scrubbed)).not.toContain("priya@example.com");
+  });
+});
+
+describe("scrubSentryBreadcrumb urls and names", () => {
+  it("strips query and fragment from url, to, from and any http URL", () => {
+    const scrubbed = scrubSentryBreadcrumb({
+      category: "http",
+      data: {
+        url: "https://api.thefitbud.com/auth/refresh?refresh_token=super-secret#session",
+        to: "/today?email=ada@example.com#top",
+        from: "/auth/refresh?refresh_token=super-secret",
+        redirect: "https://api.thefitbud.com/measurements?token=refresh-secret&body_weight_kg=82.4",
+      },
+    });
+    expect(scrubbed.data).toEqual({
+      url: "https://api.thefitbud.com/auth/refresh",
+      to: "/today",
+      from: "/auth/refresh",
+      redirect: "https://api.thefitbud.com/measurements",
+    });
+    expect(JSON.stringify(scrubbed)).not.toContain("super-secret");
+    expect(JSON.stringify(scrubbed)).not.toContain("refresh-secret");
+    expect(JSON.stringify(scrubbed)).not.toContain("82.4");
+  });
+
+  it("keeps the breadcrumb category name and drops a person name in data", () => {
+    const scrubbed = scrubSentryBreadcrumb({
+      category: "navigation",
+      name: "navigation",
+      data: { clientName: "Priya Shah", screenName: "Today" },
+    });
+    expect(scrubbed.category).toBe("navigation");
+    expect(scrubbed.name).toBe("navigation");
+    expect(scrubbed.data).toEqual({ screenName: "Today" });
+  });
+});
+
 describe("wrapWithSentry", () => {
   it("passes the root component to Sentry.wrap", () => {
     const component = () => null;
