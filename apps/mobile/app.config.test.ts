@@ -132,7 +132,8 @@ describe("app.config.js variants", () => {
       expect(names.indexOf("expo-notifications")).toBeLessThan(
         names.indexOf("@bacons/apple-targets"),
       );
-      expect(names[names.length - 1]).toBe("@bacons/apple-targets");
+      expect(names[names.length - 1]).toBe("@sentry/react-native/expo");
+      expect(names[names.length - 2]).toBe("@bacons/apple-targets");
 
       // A leading "." is appended to the host app's id by @bacons/apple-targets.
       const target = liveActivityTarget(config);
