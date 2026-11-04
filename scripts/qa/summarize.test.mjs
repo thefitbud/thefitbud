@@ -6,12 +6,17 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { buildSummary, classifyCrash, main, makeRedactor, parseFrameMap, parseJUnit, MalformedInput, SUITES } from "./summarize.mjs";
+import { buildSummary, classifyCrash, main, makeRedactor, parseFrameMap, parseJUnit, scanIosLog, MalformedInput, SUITES } from "./summarize.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, "fixtures");
 const schema = JSON.parse(fs.readFileSync(path.join(here, "report.schema.json"), "utf8"));
 const FAKE_ENV = { QA_TEST_OTP_CODE: "482913", FITBUD_QA_PASSWORD: "dummy-not-a-real-password", EXPO_TOKEN: "expo-dummy-token" };
+// The scenarios written before the ios suite existed (CU19) hold no ios/ directory,
+// so they expect the four original suites. Leaving them on the default would make
+// every one of them `partial` for a suite they were never about, and the ios
+// behaviour is covered by its own fixtures under fixtures/ios/ instead.
+const LEGACY_SUITES = SUITES.filter((n) => n !== "ios");
 const META = { runId: "9876543210", gitSha: "7bd0f3a", branch: "main", trigger: "nightly", startedAt: "2026-11-03T20:30:00Z", finishedAt: "2026-11-03T21:10:00Z" };
 
 // ---- a small hand-written JSON Schema validator (no dependency) ----
@@ -54,6 +59,7 @@ function run(scenario, extra = {}) {
     inDir: path.join(fixtures, scenario),
     outDir: out,
     frameMap: frames,
+    expect: LEGACY_SUITES,
     meta: META,
     redact: makeRedactor(FAKE_ENV),
     ...extra,
@@ -73,12 +79,14 @@ test("the validator itself rejects bad documents", () => {
   assert.notDeepEqual(validate(noRun, schema), []);
 });
 
-test("all pass: pass, four suites in order, screenshots copied with frames", () => {
+test("all pass: pass, every suite in order, screenshots copied with frames", () => {
   const { summary, out } = run("all-pass");
   assert.equal(summary.schemaVersion, 1);
   assert.equal(summary.status, "pass");
   assert.deepEqual(summary.suites.map((s) => s.name), SUITES);
-  assert.ok(summary.suites.every((s) => s.status === "pass" && s.failed === 0 && s.reason === null));
+  const expected = summary.suites.filter((s) => LEGACY_SUITES.includes(s.name));
+  assert.ok(expected.every((s) => s.status === "pass" && s.failed === 0 && s.reason === null));
+  assert.equal(suite(summary, "ios").status, "not-requested");
   assert.equal(suite(summary, "mobile").total, 4);
   assert.equal(suite(summary, "mobile").durationMs, 157600);
   assert.deepEqual(summary.crashes, []);
@@ -94,7 +102,7 @@ test("all pass: pass, four suites in order, screenshots copied with frames", () 
 test("one failure per suite: fail, each failure carries test, message, log", () => {
   const { summary } = run("one-failure-per-suite");
   assert.equal(summary.status, "fail");
-  for (const n of SUITES) {
+  for (const n of LEGACY_SUITES) {
     const s = suite(summary, n);
     assert.equal(s.status, "fail", n);
     assert.equal(s.failed, 1, n);
@@ -156,11 +164,11 @@ test("a failing suite plus a missing suite is fail, not partial", () => {
   assert.equal(summary.status, "fail");
 });
 
-test("nothing at all is partial with four not-run suites, never pass", () => {
+test("nothing at all is partial with every suite not-run, never pass", () => {
   const inDir = fs.mkdtempSync(path.join(os.tmpdir(), "qa-empty-"));
   const { summary } = buildSummary({ inDir, outDir: fs.mkdtempSync(path.join(os.tmpdir(), "qa-report-")), meta: META, redact: makeRedactor({}) });
   assert.equal(summary.status, "partial");
-  assert.deepEqual(summary.suites.map((s) => s.status), ["not-run", "not-run", "not-run", "not-run"]);
+  assert.deepEqual(summary.suites.map((s) => s.status), SUITES.map(() => "not-run"));
   assert.deepEqual(validate(summary, schema), []);
 });
 
@@ -246,7 +254,9 @@ test("CLI: exit 0 with failures, 2 for malformed input and bad usage", () => {
   };
   const failing = go("one-failure-per-suite");
   assert.equal(failing.status, 0, failing.stderr);
-  assert.match(failing.stdout, /^summarize: fail \(mobile=fail web=fail api=fail unit=fail\)/);
+  // The default --expect covers every suite including ios, so a run that did not
+  // produce ios results says so instead of quietly leaving it out (CU19).
+  assert.match(failing.stdout, /^summarize: fail \(mobile=fail ios=not-run web=fail api=fail unit=fail\)/);
   const bad = go("truncated-junit");
   assert.equal(bad.status, 2);
   assert.ok(fs.existsSync(path.join(bad.out, "summary.json")), "summary.json is still written when exiting 2");
@@ -345,4 +355,122 @@ test("a short value with punctuation on ONE edge only is still left alone inside
     // ...while the same value on a boundary is redacted, so this is a token rule, not a miss.
     assert.equal(makeRedactor({ A_SECRET: secret })(`saw ${secret} here`), "saw [redacted] here", secret);
   }
+});
+
+// ---- the ios suite (CU19) ----
+//
+// The ios job runs the same Maestro flows as `android` on an iOS simulator, so the
+// four cases that matter are the ones the acceptance criteria name: a pass, a fail,
+// a run that did not happen at all, and a crash in the simulator log while every
+// flow passed. The last is the CU17 class of bug: a Hermes Intl rejection red-boxes
+// a screen without necessarily failing an assertion.
+
+const iosFixture = (scenario) => path.join(fixtures, "ios", scenario);
+
+function runIos(scenario, extra = {}) {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "qa-report-ios-"));
+  const res = buildSummary({
+    inDir: iosFixture(scenario),
+    outDir: out,
+    expect: ["ios"],
+    meta: META,
+    redact: makeRedactor(FAKE_ENV),
+    ...extra,
+  });
+  const onDisk = JSON.parse(fs.readFileSync(path.join(out, "summary.json"), "utf8"));
+  assert.deepEqual(validate(onDisk, schema), [], `ios/${scenario}: summary.json must validate`);
+  return { ...res, out, summary: onDisk };
+}
+
+test("ios pass: the suite reports its own status and the simulator log is copied", () => {
+  const { summary } = runIos("pass");
+  assert.equal(summary.status, "pass");
+  const s = suite(summary, "ios");
+  assert.equal(s.status, "pass");
+  assert.equal(s.total, 4);
+  assert.equal(s.passed, 4);
+  assert.equal(s.durationMs, 188400);
+  assert.deepEqual(summary.crashes, []);
+  assert.deepEqual(summary.expectedSuites, ["ios"]);
+  assert.ok(summary.files.includes("logs/ios-sim.log"));
+  assert.ok(summary.files.includes("raw/ios/junit.xml"));
+  // The Android suite is a separate suite, not a shared one.
+  assert.equal(suite(summary, "mobile").status, "not-requested");
+});
+
+test("ios fail: a failed flow fails the ios suite and carries the simulator log", () => {
+  const { summary } = runIos("fail");
+  assert.equal(summary.status, "fail");
+  const s = suite(summary, "ios");
+  assert.equal(s.status, "fail");
+  assert.equal(s.failed, 1);
+  assert.equal(s.passed, 3);
+  // A Maestro flow name is used as-is, like the mobile suite's, not "classname > name".
+  assert.equal(s.failures[0].test, "trainer-attention");
+  assert.equal(s.failures[0].log, "logs/ios-sim.log");
+  assert.deepEqual(summary.crashes, [], "an ordinary assertion failure is not a crash");
+});
+
+test("ios not-run: an expected ios suite with no results is partial, never a silent pass", () => {
+  // The whole point of adding ios to --expect: a run that asked for it and produced
+  // nothing must not report pass.
+  const { summary } = buildSummary({
+    inDir: path.join(fixtures, "all-pass"),
+    outDir: fs.mkdtempSync(path.join(os.tmpdir(), "qa-report-ios-")),
+    expect: SUITES,
+    meta: META,
+    redact: makeRedactor(FAKE_ENV),
+  });
+  assert.equal(suite(summary, "ios").status, "not-run");
+  assert.match(suite(summary, "ios").reason, /no results found in ios\//);
+  assert.equal(summary.status, "partial");
+  // ...and a run that did not ask for it reports not-requested and can still pass.
+  const { summary: legacy } = buildSummary({
+    inDir: path.join(fixtures, "all-pass"),
+    outDir: fs.mkdtempSync(path.join(os.tmpdir(), "qa-report-ios-")),
+    expect: LEGACY_SUITES,
+    meta: META,
+    redact: makeRedactor(FAKE_ENV),
+  });
+  assert.equal(suite(legacy, "ios").status, "not-requested");
+  assert.equal(legacy.status, "pass");
+});
+
+test("a Hermes RangeError in the simulator log fails ios even when every flow passed", () => {
+  const { summary } = runIos("crash-in-log");
+  assert.equal(suite(summary, "ios").failed, 0, "every flow passed");
+  assert.equal(suite(summary, "ios").status, "fail");
+  assert.match(suite(summary, "ios").reason, /crashed/);
+  assert.equal(summary.status, "fail");
+  assert.equal(summary.crashes.length, 1);
+  assert.equal(summary.crashes[0].suite, "ios");
+  assert.equal(summary.crashes[0].flow, "unknown");
+  assert.equal(summary.crashes[0].kind, "fatal");
+  assert.match(summary.crashes[0].evidence, /Incorrect timeZone information provided/);
+});
+
+test("the ios log scan reads red boxes and load errors, and ignores ordinary lines", () => {
+  const redact = makeRedactor({});
+  assert.deepEqual(scanIosLog('Df FitBudStaging: today loaded\nDf FitBudStaging: 3 cards', redact), []);
+  assert.equal(scanIosLog("Er FitBudStaging: Render Error: Text strings must be rendered", redact)[0].kind, "redbox");
+  assert.equal(scanIosLog("Er FitBudStaging: Unable to load script", redact)[0].kind, "load-error");
+  assert.equal(scanIosLog("Er FitBudStaging: RangeError: bad zone", redact)[0].kind, "fatal");
+});
+
+test("an Android crash is never attributed to the ios suite, or the other way round", () => {
+  const inDir = fs.mkdtempSync(path.join(os.tmpdir(), "qa-in-both-"));
+  fs.cpSync(path.join(fixtures, "logcat-crash", "mobile"), path.join(inDir, "mobile"), { recursive: true });
+  fs.cpSync(path.join(fixtures, "logcat-crash", "logs"), path.join(inDir, "logs"), { recursive: true });
+  fs.cpSync(path.join(iosFixture("pass"), "ios"), path.join(inDir, "ios"), { recursive: true });
+  fs.cpSync(path.join(iosFixture("pass"), "logs"), path.join(inDir, "logs"), { recursive: true });
+  const { summary } = buildSummary({
+    inDir,
+    outDir: fs.mkdtempSync(path.join(os.tmpdir(), "qa-report-ios-")),
+    expect: ["mobile", "ios"],
+    meta: META,
+    redact: makeRedactor(FAKE_ENV),
+  });
+  assert.equal(suite(summary, "mobile").status, "fail", "the Android crash fails Android");
+  assert.equal(suite(summary, "ios").status, "pass", "and leaves iOS alone");
+  assert.deepEqual(summary.crashes.map((c) => c.suite), ["mobile"]);
 });

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="ios" tests="4" failures="1" time="141.200">
+<testsuite name="ios" tests="4" failures="1" skipped="0" timestamp="2026-11-04T20:30:12" time="141.200">
+  <testcase name="trainee-today" classname="ios" time="52.300"/>
+  <testcase name="trainer-attention" classname="ios" time="24.700"><failure message="attention.yaml: Assertion is false: &quot;([2-9]|[1-9][0-9]+) open&quot; is visible">attention.yaml: Assertion is false: &quot;([2-9]|[1-9][0-9]+) open&quot; is visible</failure></testcase>
+  <testcase name="trainer-home" classname="ios" time="28.900"/>
+  <testcase name="trainer-client-status" classname="ios" time="35.300"/>
+</testsuite>
+</testsuites>

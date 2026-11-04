@@ -6,13 +6,15 @@
 // written before exiting 2, so the artifact upload still has something to carry.
 //
 // Input layout (QT7 arranges it):
-//   <in>/<suite>/junit.xml          suite = mobile | web | api | unit
+//   <in>/<suite>/junit.xml          suite = mobile | ios | web | api | unit
 //   <in>/<suite>/**/*.png           screenshots (Maestro output dir, Playwright)
 //   <in>/<suite>/results.json       optional raw JSON report (copied)
-//   <in>/logs/*.log                 logs; logs/logcat.log is scanned for app crashes
+//   <in>/logs/*.log                 logs; logs/logcat.log (Android) and
+//                                   logs/ios-sim.log (iOS simulator) are scanned
+//                                   for app crashes
 //
 // Usage: node scripts/qa/summarize.mjs --in qa-results --out qa-report
-//   [--expect mobile,web,api,unit] [--frames <file.md|file.json|file.ts>]...
+//   [--expect mobile,ios,web,api,unit] [--frames <file.md|file.json|file.ts>]...
 //   [--frame-dir docs/design/mockups/png] [--environment staging|local]
 //   [--trigger nightly|pr|manual] [--run-id ..] [--run-url ..] [--sha ..] [--branch ..]
 //   [--started-at ISO] [--finished-at ISO]
@@ -21,7 +23,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const SUITES = ["mobile", "web", "api", "unit"];
+// `mobile` is the Android Maestro suite and `ios` the iOS simulator one (CU19).
+// They run the same flows on different platforms, so they are separate suites
+// rather than one: a flow that passes on Android and fails on iOS is the whole
+// point of the ios job, and merging them would hide it.
+export const SUITES = ["mobile", "ios", "web", "api", "unit"];
+
+/** The Maestro suites, which carry device logs, screenshots and crash detection. */
+const FLOW_SUITES = new Set(["mobile", "ios"]);
+
+/** Which device log belongs to which Maestro suite. */
+const DEVICE_LOGS = { mobile: "logcat.log", ios: "ios-sim.log" };
 const MAX_MESSAGE = 500;
 const APP_PACKAGE = "com.thefitbud.mobile";
 
@@ -232,6 +244,37 @@ export function scanLogcat(text, redact) {
   return found.map((f) => ({ kind: f.kind, evidence: redact(f.evidence).slice(0, MAX_MESSAGE) }));
 }
 
+// The iOS simulator's unified log, filtered to the app process by
+// scripts/qa/run-maestro-ios.sh, so every line already belongs to the app and
+// there is no package name to match on (the Android scan needs one because logcat
+// is system-wide).
+//
+// `RangeError` earns its own pattern and is the reason this scan exists: the CU17
+// class of bug is a Hermes Intl rejection ("Incorrect timeZone information
+// provided", D-W3b-11a) that surfaces as a RangeError and a red box. A flow can
+// still pass over it — the screen renders an error state and a later assertion may
+// be satisfied — so a crash in the log fails the suite on its own.
+const IOS_LOG_PATTERNS = [
+  ["redbox", /Invalid accessibility role value|Render Error|Error while updating property|Unhandled JS Exception|Invariant Violation|LogBox|RCTRedBox/],
+  ["fatal", /\bRangeError\b|Incorrect timeZone information provided|Unhandled JS Exception|facebook::hermes|Fatal error|SIGABRT|EXC_BAD_ACCESS|Terminating app due to uncaught exception/],
+  ["load-error", /There was a problem loading the project|Unable to load script|Could not connect to development server/],
+];
+
+/** Finds crashes of the app process in an iOS simulator log stream. */
+export function scanIosLog(text, redact) {
+  const out = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    for (const [kind, re] of IOS_LOG_PATTERNS) {
+      if (!re.test(lines[i])) continue;
+      const window = lines.slice(i, i + 4).join("\n");
+      out.push({ kind, evidence: redact(window).slice(0, MAX_MESSAGE) });
+      break;
+    }
+  }
+  return out;
+}
+
 // ---------- frames mapping ----------
 
 /**
@@ -368,7 +411,9 @@ export function buildSummary(opts) {
     }
     if (parsed.firstTimestamp) timestamps.push(parsed.firstTimestamp);
     const suiteLog = logFiles.some((l) => path.basename(l) === `${name}.log`) ? `logs/${name}.log` : null;
-    const logcat = name === "mobile" && logFiles.some((l) => path.basename(l) === "logcat.log") ? "logs/logcat.log" : null;
+    const deviceLogName = DEVICE_LOGS[name];
+    const deviceLog =
+      deviceLogName && logFiles.some((l) => path.basename(l) === deviceLogName) ? `logs/${deviceLogName}` : null;
 
     for (const c of parsed.cases) {
       suite.total++;
@@ -378,16 +423,16 @@ export function buildSummary(opts) {
       else if (c.status === "skipped") suite.skipped++;
       else {
         suite.failed++;
-        const test = name !== "mobile" && c.classname ? `${c.classname} > ${c.name}` : c.name;
+        const test = !FLOW_SUITES.has(name) && c.classname ? `${c.classname} > ${c.name}` : c.name;
         const message = redact(c.message).slice(0, MAX_MESSAGE);
         const failure = { test, message };
         const key = c.name.toLowerCase();
         const shot = suiteShots.find((s) => s.name.toLowerCase().includes(key) || s.name.toLowerCase().startsWith(`${key}__`));
         if (shot) failure.screenshot = shot.path;
-        const log = logcat ?? suiteLog;
+        const log = deviceLog ?? suiteLog;
         if (log) failure.log = log;
         suite.failures.push(failure);
-        if (name === "mobile") {
+        if (FLOW_SUITES.has(name)) {
           const kind = classifyCrash(c.message);
           if (kind) crashes.push({ suite: name, flow: c.name, kind, evidence: message });
         }
@@ -408,17 +453,24 @@ export function buildSummary(opts) {
     return suite;
   });
 
-  // App crashes in logcat count against the mobile suite even when every flow passed.
-  const logcatFile = logFiles.find((l) => path.basename(l) === "logcat.log");
-  if (logcatFile) {
-    for (const c of scanLogcat(fs.readFileSync(logcatFile, "utf8"), redact)) {
-      crashes.push({ suite: "mobile", flow: "unknown", kind: c.kind, evidence: c.evidence });
+  // App crashes in the device log count against their own Maestro suite even when
+  // every flow passed. Each suite is scanned from its own log and attributed to
+  // itself: an Android crash must not fail the ios suite, or the one difference the
+  // ios job exists to surface would be unreadable.
+  const scanners = { mobile: scanLogcat, ios: scanIosLog };
+  for (const name of FLOW_SUITES) {
+    const file = logFiles.find((l) => path.basename(l) === DEVICE_LOGS[name]);
+    if (!file) continue;
+    for (const c of scanners[name](fs.readFileSync(file, "utf8"), redact)) {
+      crashes.push({ suite: name, flow: "unknown", kind: c.kind, evidence: c.evidence });
     }
   }
-  const mobile = suites.find((s) => s.name === "mobile");
-  if (crashes.length && mobile.status === "pass") {
-    mobile.status = "fail";
-    mobile.reason = "the app crashed during the run (see crashes)";
+  for (const name of FLOW_SUITES) {
+    const s = suites.find((x) => x.name === name);
+    if (s.status === "pass" && crashes.some((c) => c.suite === name)) {
+      s.status = "fail";
+      s.reason = "the app crashed during the run (see crashes)";
+    }
   }
 
   const hasBad = crashes.length > 0 || suites.some((s) => s.status === "fail" || s.status === "error");
@@ -428,7 +480,7 @@ export function buildSummary(opts) {
   const sortedApi = [...apiDurations].sort((a, b) => a - b);
   const latency = sortedApi.length ? { p50Ms: percentile(sortedApi, 50), p95Ms: percentile(sortedApi, 95) } : null;
 
-  for (const s of screenshots.filter((x) => x.suite === "mobile" || x.suite === "web")) {
+  for (const s of screenshots.filter((x) => FLOW_SUITES.has(x.suite) || x.suite === "web")) {
     if (!s.frame && /__/.test(s.name)) warnings.push(`${s.suite}/${s.name}: no frame mapping`);
   }
 

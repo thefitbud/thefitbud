@@ -42,10 +42,20 @@ appId: com.thefitbud.mobile.staging
 - runFlow: common/assert-no-crash.yaml
 
 # 3. Android back on the root screen leaves the app; reopening is still signed in.
-- pressKey: back
-- launchApp
-- extendedWaitUntil:
-    visible: ${HOME_TEXT}
-    timeout: 10000
-- assertNotVisible: "Sign in with a code instead"
-- runFlow: common/assert-no-crash.yaml
+#
+# Android only, and skipped on iOS with a reason rather than quietly dropped
+# (CU19): iOS has no hardware back key and no equivalent gesture on a root screen,
+# so there is no iOS behaviour to assert here. Step 2 above already covers the part
+# that is platform-independent — the session surviving the app being killed and
+# relaunched — and it runs on both platforms.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - pressKey: back
+      - launchApp
+      - extendedWaitUntil:
+          visible: ${HOME_TEXT}
+          timeout: 10000
+      - assertNotVisible: "Sign in with a code instead"
+      - runFlow: common/assert-no-crash.yaml
