@@ -25,7 +25,7 @@ On the trainer More screen the "More" heading lines up with the card column as i
 - Written against `main` at dadaa13. The implementer re-checks each item against the latest `main` before building (AGENTS.md).
 
 ## Acceptance criteria
-- [ ] The heading's left edge matches the cards' left edge and frame 51 within 1pt at 393x852.
+- [ ] **Corrected 4 Nov 2026 (D-W3b-21, Firoz): frame-faithful wins.** The heading's left edge matches **frame 51** within 1pt at 393x852 — a **20pt** text box, which is 4pt in from the 16pt card column, matching the group labels that already carry `marginLeft: 4` inside that column. The original wording asked for the heading to match *both* the cards' left edge *and* frame 51, which frame 51 cannot satisfy: measured off the locked PNG they are 16.00pt and 20pt, 4pt apart. The spec's own Context corroborates 20pt — "~4pt right of frame 51 **and** 8pt out of line with the cards" only holds if the frame is 20 and the cards are 16.
 - [ ] No other trainer tab's heading moves (do not change `Screen.tsx`).
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass.
 
