@@ -10,6 +10,11 @@
 // config.yaml is the workspace file, not a flow: it has no `---` and no
 // appId. Every other YAML file must have a mapping header with appId or url,
 // then `---`, then a command list.
+//
+// The required `qa-scripts` job runs `node --test "scripts/qa/**/*.test.mjs"`
+// with Node only (no `pnpm install`). js-yaml is not a direct dependency; it
+// is reached through eslint. When that chain is absent the test skips. The
+// `ci` job installs the lockfile and runs the same file with assertions on.
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -21,15 +26,26 @@ import { fileURLToPath } from "node:url";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const maestroRoot = join(repoRoot, "apps/mobile/.maestro");
 
+const JS_YAML_SKIP =
+  "js-yaml is not installed (resolved via eslint and @eslint/eslintrc from packages/config). " +
+  "The qa-scripts job does not install dependencies; the ci job runs this test after pnpm install.";
+
 function loadJsYaml() {
   // eslint depends on @eslint/eslintrc, which depends on js-yaml 4. Resolve
   // from those packages so a version bump does not hardcode a pnpm path.
-  const require = createRequire(join(repoRoot, "packages/config/package.json"));
-  const eslintDir = dirname(require.resolve("eslint/package.json"));
-  const eslintrcDir = dirname(
-    require.resolve("@eslint/eslintrc/package.json", { paths: [eslintDir] }),
-  );
-  return require(require.resolve("js-yaml", { paths: [eslintrcDir] }));
+  // MODULE_NOT_FOUND means the chain is not installed. Any other error is a
+  // real failure and must not become a skip.
+  try {
+    const require = createRequire(join(repoRoot, "packages/config/package.json"));
+    const eslintDir = dirname(require.resolve("eslint/package.json"));
+    const eslintrcDir = dirname(
+      require.resolve("@eslint/eslintrc/package.json", { paths: [eslintDir] }),
+    );
+    return require(require.resolve("js-yaml", { paths: [eslintrcDir] }));
+  } catch (error) {
+    if (error && error.code === "MODULE_NOT_FOUND") return null;
+    throw error;
+  }
 }
 
 const yaml = loadJsYaml();
@@ -99,7 +115,10 @@ function checkFile(path) {
   checkFlow(text);
 }
 
-test("every apps/mobile/.maestro YAML file parses and flows have a config section", () => {
+test(
+  "every apps/mobile/.maestro YAML file parses and flows have a config section",
+  { skip: yaml ? false : JS_YAML_SKIP },
+  () => {
   const files = yamlFiles(maestroRoot);
   assert.ok(files.length > 0, "no Maestro YAML files found");
   const problems = [];
