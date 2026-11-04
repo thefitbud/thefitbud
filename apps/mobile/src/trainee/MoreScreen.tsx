@@ -31,6 +31,7 @@ import {
   formatLocalDate,
   formatPersonName,
   whatsappHref,
+  zonedDateTimeFormat,
 } from "@fitbud/core";
 import { brand, ink, semantic, surface } from "@fitbud/tokens";
 import {
@@ -88,7 +89,7 @@ function zoneName(zone: string | null | undefined): string {
   }
   if (zone === "Asia/Dubai") return "Gulf Standard Time";
   try {
-    const name = new Intl.DateTimeFormat("en-IN", {
+    const name = zonedDateTimeFormat("en-IN", {
       timeZone: zone,
       timeZoneName: "long",
     })
