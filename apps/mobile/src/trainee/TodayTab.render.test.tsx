@@ -173,15 +173,20 @@ vi.mock("../providers/ConfigProvider", async () => {
   };
 });
 
-const { TodayTab, EFFECTIVE_PLAN_LOADING, effectivePlanStateFor } = await import(
-  "./TodayTab"
-);
+const {
+  TodayTab,
+  EFFECTIVE_PLAN_LOADING,
+  EFFECTIVE_PLAN_UNAVAILABLE,
+  PLAN_UNAVAILABLE_MESSAGE,
+  effectivePlanStateFor,
+} = await import("./TodayTab");
 
 const PREPARING = /is preparing your plan/;
 
 function renderToday(
   planState = EFFECTIVE_PLAN_LOADING,
   planCacheError: string | null = null,
+  onRefreshPlan: () => void = () => undefined,
 ) {
   return render(
     <TodayTab
@@ -193,7 +198,7 @@ function renderToday(
       onStartWorkout={() => undefined}
       onOpenDiet={() => undefined}
       onOpenCheckin={() => undefined}
-      onRefreshPlan={() => undefined}
+      onRefreshPlan={onRefreshPlan}
       onOpenOverlay={() => undefined}
     />,
   );
@@ -310,5 +315,81 @@ describe("TodayTab plan state", () => {
     // The plan is still shown: a failed cache write is not "no plan".
     expect(screen.queryAllByText(PREPARING)).toEqual([]);
     expect(screen.getByText("Today's workout")).toBeTruthy();
+  });
+});
+
+/**
+ * The fourth state (CU24, D-W3b-27).
+ *
+ * `unavailable` is "the app could not ask and has nothing cached". The thing
+ * it must never do is read as `none`, because `none` tells the trainee their
+ * coach is preparing a plan — a claim about the coach, made on no evidence.
+ */
+describe("TodayTab plan unavailable", () => {
+  it("says the plan could not be loaded, and nothing about the coach", async () => {
+    renderToday(EFFECTIVE_PLAN_UNAVAILABLE);
+    openDayLoad();
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading your day…")).toBeNull();
+    });
+
+    // The decided copy, verbatim.
+    expect(screen.getByText(PLAN_UNAVAILABLE_MESSAGE)).toBeTruthy();
+    expect(
+      screen.getByText("Couldn't load your plan. Check your connection and try again"),
+    ).toBeTruthy();
+
+    // Neither "preparing" site may render: not the greeting subtitle and not
+    // the card (whose accessibilityLabel is what Maestro reads as
+    // content-desc, so it counts as visible text for the flow). This is the
+    // assertion that goes red if `unavailable` ever collapses into `none`.
+    expect(screen.queryAllByText(PREPARING)).toEqual([]);
+    expect(
+      screen.queryByLabelText("Your coach is preparing your plan"),
+    ).toBeNull();
+
+    // And nothing may claim the day is ready either.
+    expect(screen.queryByText("Here's your day.")).toBeNull();
+    expect(screen.queryByText("Today's workout")).toBeNull();
+  });
+
+  it("offers a retry that re-attempts the plan fetch", async () => {
+    const onRefreshPlan = vi.fn();
+    renderToday(EFFECTIVE_PLAN_UNAVAILABLE, null, onRefreshPlan);
+    openDayLoad();
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading your day…")).toBeNull();
+    });
+
+    // "try again" in the copy is only honest because this control exists and
+    // runs the same handler as the screen's pull-to-refresh, which calls
+    // `onRefreshPlan` -> the shell's `loadEffectivePlan`.
+    const retry = screen.getByLabelText("Try again");
+    retry.click();
+
+    await waitFor(() => {
+      expect(onRefreshPlan).toHaveBeenCalled();
+    });
+  });
+
+  it("shows no unavailable card in the other three states", async () => {
+    for (const planState of [
+      EFFECTIVE_PLAN_LOADING,
+      effectivePlanStateFor(noPlan),
+      effectivePlanStateFor(livePlan),
+    ]) {
+      resetDayLoad();
+      const view = renderToday(planState);
+      openDayLoad();
+      await waitFor(() => {
+        expect(screen.queryByText("Loading your day…")).toBeNull();
+      });
+
+      expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
+      expect(screen.queryByLabelText("Try again")).toBeNull();
+      view.unmount();
+    }
   });
 });
