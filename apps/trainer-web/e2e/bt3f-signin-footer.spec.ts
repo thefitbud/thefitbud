@@ -61,3 +61,52 @@ test("sign-in tab order reaches help then the legal links last", async ({
   }
   expect(order).toEqual(["Privacy", "Terms", "Credits and licences"]);
 });
+
+/**
+ * CU8: the legal nav's distance from the bottom is the padding-derived
+ * remainder (--auth-legal-bottom = 17/72 of the 4.5rem bottom padding),
+ * at 16, 20 and 24px root sizes. A fixed px pull-up only matches at 16px.
+ */
+for (const rootPx of [16, 20, 24]) {
+  test(`sign-in legal offset tracks root font size ${rootPx}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    await expect(page.getByTestId("screen-TW-01")).toBeVisible();
+    // Set after load. An init script ran before the document and did not stick.
+    await page.evaluate((size) => {
+      document.documentElement.style.setProperty("font-size", `${size}px`);
+    }, rootPx);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
+        ),
+      )
+      .toBe(rootPx);
+
+    const measured = await page.evaluate(() => {
+      const side = document.querySelector(".auth-formside");
+      const stack = document.querySelector(".auth-form-stack");
+      const nav = document.querySelector("nav.auth-legal-links");
+      if (!(side instanceof HTMLElement) || !(stack instanceof HTMLElement) || !(nav instanceof HTMLElement)) {
+        return null;
+      }
+      const sideStyle = getComputedStyle(side);
+      const padTop = Number.parseFloat(sideStyle.paddingTop);
+      const padBottom = Number.parseFloat(sideStyle.paddingBottom);
+      const stackHeight = stack.getBoundingClientRect().height;
+      const contentHeight = side.clientHeight - padTop - padBottom;
+      // The pull-up that shares the padding's source: 17/72 of it remains.
+      const marginFromPadding = padBottom * (17 / 72 - 1);
+      const expectedGap =
+        padBottom + (contentHeight - stackHeight + marginFromPadding) / 2;
+      const gap = window.innerHeight - nav.getBoundingClientRect().bottom;
+      return { gap, expectedGap, padBottom };
+    });
+    expect(measured).not.toBeNull();
+    expect(measured!.padBottom).toBeCloseTo(4.5 * rootPx, 0);
+    expect(measured!.gap).toBeCloseTo(measured!.expectedGap, 0);
+  });
+}
