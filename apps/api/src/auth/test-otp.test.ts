@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { normalizeIdentifier } from "./identifiers.js";
+import type { Env } from "../types.js";
 import {
   isTestOtpActive,
   testOtpCode,
   TEST_OTP_IDENTIFIER_RE,
-  type TestOtpEnv,
 } from "./test-otp.js";
 
 /** Only the fields the helper reads; the rest of `Env` is irrelevant here. */
-function env(overrides: Partial<TestOtpEnv> = {}): TestOtpEnv {
+function env(overrides: Partial<Env> = {}): Env {
   return {
     ENVIRONMENT: "staging",
     QA_TEST_OTP_ENABLED: "on",
     QA_TEST_OTP_CODE: "135790",
     ...overrides,
-  } as TestOtpEnv;
+  } as Env;
 }
 
 const ALLOWED = "qa+trainer@thefitbud.com";
