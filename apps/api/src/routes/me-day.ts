@@ -1,7 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
-import { localDateSchema, weekReadModelSchema } from "@fitbud/contracts";
+import {
+  localDateSchema,
+  weekDayStateSchema,
+  weekReadModelSchema,
+} from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
   formatLocalDate,
@@ -16,7 +20,10 @@ import {
   workoutExecutions,
 } from "../db/schema.js";
 import { loadTraineeTimezone } from "../domain/assignment-schedule.js";
-import { buildWeekReadModel } from "../domain/week-read-model.js";
+import {
+  buildWeekReadModel,
+  deriveWeekDayFromWorkouts,
+} from "../domain/week-read-model.js";
 import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
 import { operation } from "../openapi/document.js";
@@ -29,6 +36,11 @@ import type { Env, Variables } from "../types.js";
 
 const dayResponseSchema = z.object({
   date: z.string(),
+  /**
+   * The same day state `GET /me/week` reports for this date
+   * (`deriveWeekDayFromWorkouts`). Never a state invented for this route.
+   */
+  state: weekDayStateSchema,
   assignments: z.object({
     workouts: z.array(z.object({ id: z.string(), name: z.string() })),
     meals: z.array(z.object({ id: z.string(), slotKey: z.string() })),
@@ -50,7 +62,8 @@ meDayRoutes.get(
   operation({
     tag: "MeDay",
     summary: "Trainee day read model",
-    description: "Assignments, logs, and totals for one local day.",
+    description:
+      "Assignments, logs, totals, and the derived day state for one local day.",
     roles: ["trainee"],
     response: dayResponseSchema,
   }),
@@ -62,7 +75,19 @@ meDayRoutes.get(
     if (!actor) {
       return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
     }
-    const date = c.req.param("date");
+    // Same check as `?start=` on `GET /me/week`: the regex accepts
+    // 2026-02-30, and the round trip through addDaysToLocalDate rejects a
+    // date that is not a real calendar day. Static text, existing code
+    // (D-W3-12, D-W3b-7, CU23).
+    const dateParam = c.req.param("date");
+    const parsedDate = localDateSchema.safeParse(dateParam);
+    if (
+      !parsedDate.success ||
+      addDaysToLocalDate(parsedDate.data, 0) !== parsedDate.data
+    ) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid date.");
+    }
+    const date = parsedDate.data;
     const db = createDb(c.env.DB);
     const [rel] = await db
       .select()
@@ -143,10 +168,30 @@ meDayRoutes.get(
       slotKey: row.assignment.mealPrescriptionId,
       kcalScaled: row.compliance.kcalScaled ?? 0,
     }));
+    // Same civil "today" as `GET /me/week`: the trainee's zone, not UTC.
+    // The state is derived from the scheduled workouts this handler already
+    // loaded for the relationship, so it cannot describe another trainee.
+    const timeZone = await loadTraineeTimezone(db, rel.traineeUserId);
+    const now = nowIso();
+    const today = formatLocalDate(new Date(now), timeZone);
+    const executionByAssignment = new Map(
+      workoutLogs.map((row) => [row.assignment.id, row.execution.status]),
+    );
+    const { state } = deriveWeekDayFromWorkouts({
+      date,
+      today,
+      nowIso: now,
+      workouts: workouts.map((workout) => ({
+        windowEndsAt: workout.windowEndsAt,
+        workoutDayName: workout.workoutDayName,
+        executionStatus: executionByAssignment.get(workout.id) ?? null,
+      })),
+    });
     return ok(
       c,
       dayResponseSchema.parse({
         date,
+        state,
         assignments: {
           workouts: workouts.map((w) => ({ id: w.id, name: w.workoutDayName })),
           meals: meals.map((m) => ({ id: m.id, slotKey: m.mealPrescriptionId })),

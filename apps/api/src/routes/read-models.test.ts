@@ -258,6 +258,16 @@ type WeekBody = {
   };
 };
 
+type DayBody = {
+  data: {
+    date: string;
+    state: string;
+    assignments: {
+      workouts: Array<{ id: string; name: string }>;
+    };
+  };
+};
+
 const FROZEN_REFERENCE_INSTANT = "2026-10-17T14:30:00.000Z";
 
 describe("read models", () => {
@@ -698,6 +708,172 @@ describe("read models", () => {
       };
       expect(body.data.todayNutrition.date).toBe("2026-10-18");
       expect(body.data.todayNutrition.date).toBe(expected);
+    }
+  });
+
+  /*
+    BT9 (D-W4-14, D-W4-16): `GET /me/day/:date` returned assignments and logs
+    and no day state, so it could not agree with `/me/week`. The state now
+    comes from `deriveWeekDayFromWorkouts`, which `buildWeekReadModel` also
+    calls. The frozen clock is the same 2026-10-17T14:30Z the week tests use,
+    Sat 17 Oct in both UTC and Asia/Kolkata, week Mon 12 Oct … Sun 18 Oct.
+  */
+  it("returns the same derived day state /me/week reports for that date", async () => {
+    const ctx = await reachCoachingReady("me-day");
+    const plan = await seedEffectivePlan(db, ctx.relationshipId);
+    await seedWorkoutDay(db, plan, ctx.relationshipId, ctx.traineeUserId, {
+      localDate: "2026-10-12",
+      windowStartsAt: "2026-10-12T01:00:00.000Z",
+      windowEndsAt: "2026-10-12T13:00:00.000Z",
+      dayName: "Push A",
+      completed: true,
+    });
+    await seedWorkoutDay(db, plan, ctx.relationshipId, ctx.traineeUserId, {
+      localDate: "2026-10-13",
+      windowStartsAt: "2026-10-13T01:00:00.000Z",
+      windowEndsAt: "2026-10-13T13:00:00.000Z",
+      dayName: "Pull A",
+    });
+    await seedWorkoutDay(db, plan, ctx.relationshipId, ctx.traineeUserId, {
+      localDate: "2026-10-18",
+      windowStartsAt: "2026-10-18T01:00:00.000Z",
+      windowEndsAt: "2026-10-18T13:00:00.000Z",
+      dayName: "Legs A",
+    });
+
+    const weekResponse = await app.request(
+      "/me/week",
+      { headers: ctx.traineeHeaders },
+      testEnv(),
+    );
+    expect(weekResponse.status).toBe(200);
+    const week = (await weekResponse.json()) as WeekBody;
+    const weekState = new Map(week.data.days.map((day) => [day.date, day.state]));
+
+    async function stateFor(date: string): Promise<string> {
+      const response = await app.request(
+        `/me/day/${date}`,
+        { headers: ctx.traineeHeaders },
+        testEnv(),
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as DayBody;
+      expect(body.data.date).toBe(date);
+      // The day route and the week route are one derivation.
+      expect(body.data.state).toBe(weekState.get(date));
+      return body.data.state;
+    }
+
+    // A past day with a completed execution.
+    expect(await stateFor("2026-10-12")).toBe("done");
+    // A past day that was assigned and never executed.
+    expect(await stateFor("2026-10-13")).toBe("missed");
+    // A past day with no assignment at all.
+    expect(await stateFor("2026-10-14")).toBe("rest");
+    // A day after today, which is the only place `future` is legitimate.
+    expect(await stateFor("2026-10-18")).toBe("future");
+
+    for (const day of week.data.days) {
+      expect(await stateFor(day.date)).toBe(day.state);
+    }
+  });
+
+  it("derives /me/day in the trainee timezone across the UTC date line", async () => {
+    const ctx = await reachCoachingReady("me-day-ist");
+    await db
+      .update(schema.users)
+      .set({ timezone: "Asia/Kolkata" })
+      .where(eq(schema.users.id, ctx.traineeUserId));
+    // 23:30Z is still 17 Oct in UTC and already 18 Oct in Asia/Kolkata.
+    // 18 Oct has no assignment, so a trainee-zone "today" is `rest`. UTC
+    // would still call it `future`.
+    vi.setSystemTime(new Date("2026-10-17T23:30:00.000Z"));
+
+    const weekResponse = await app.request(
+      "/me/week",
+      { headers: ctx.traineeHeaders },
+      testEnv(),
+    );
+    expect(weekResponse.status).toBe(200);
+    const week = (await weekResponse.json()) as WeekBody;
+    const weekDay = week.data.days.find((day) => day.date === "2026-10-18");
+    expect(weekDay?.state).toBe("rest");
+
+    const dayResponse = await app.request(
+      "/me/day/2026-10-18",
+      { headers: ctx.traineeHeaders },
+      testEnv(),
+    );
+    expect(dayResponse.status).toBe(200);
+    const day = (await dayResponse.json()) as DayBody;
+    expect(day.data.state).toBe(weekDay?.state);
+    expect(day.data.state).toBe("rest");
+  });
+
+  it("never serves one trainee another trainee's day", async () => {
+    const mine = await reachCoachingReady("me-day-mine");
+    const theirs = await reachCoachingReady("me-day-theirs");
+    const theirPlan = await seedEffectivePlan(db, theirs.relationshipId);
+    // Only the other trainee has a workout, and its name is the identifying
+    // value. A count of workouts would stay 0 for me if the state query
+    // leaked their completion while the assignment list did not — so the
+    // name and the resulting `done` state are both asserted on the owner,
+    // and both must be absent from mine.
+    await seedWorkoutDay(
+      db,
+      theirPlan,
+      theirs.relationshipId,
+      theirs.traineeUserId,
+      {
+        localDate: "2026-10-12",
+        windowStartsAt: "2026-10-12T01:00:00.000Z",
+        windowEndsAt: "2026-10-12T13:00:00.000Z",
+        dayName: "Their Secret Session",
+        completed: true,
+      },
+    );
+
+    const theirResponse = await app.request(
+      "/me/day/2026-10-12",
+      { headers: theirs.traineeHeaders },
+      testEnv(),
+    );
+    expect(theirResponse.status).toBe(200);
+    const theirDay = (await theirResponse.json()) as DayBody;
+    expect(theirDay.data.assignments.workouts.map((workout) => workout.name)).toContain(
+      "Their Secret Session",
+    );
+    expect(theirDay.data.state).toBe("done");
+
+    const myResponse = await app.request(
+      "/me/day/2026-10-12",
+      { headers: mine.traineeHeaders },
+      testEnv(),
+    );
+    expect(myResponse.status).toBe(200);
+    const myDay = (await myResponse.json()) as DayBody;
+    expect(myDay.data.assignments.workouts.map((workout) => workout.name)).not.toContain(
+      "Their Secret Session",
+    );
+    expect(myDay.data.state).toBe("rest");
+  });
+
+  it("rejects a malformed /me/day/:date with 400 instead of an empty day", async () => {
+    const ctx = await reachCoachingReady("me-day-date");
+    for (const date of ["2026-11", "2026-02-30", "garbage", "-002026-11-02"]) {
+      const response = await app.request(
+        `/me/day/${encodeURIComponent(date)}`,
+        { headers: ctx.traineeHeaders },
+        testEnv(),
+      );
+      expect(response.status, date).toBe(400);
+      const body = (await response.json()) as {
+        error: { code: string; message: string };
+      };
+      expect(body.error.code).toBe("INVALID_REQUEST");
+      // Static text: nothing from the request is echoed back (D-W3-12, D-W3b-7).
+      expect(body.error.message).toBe("Invalid date.");
+      expect(body.error.message).not.toContain(date);
     }
   });
 });
