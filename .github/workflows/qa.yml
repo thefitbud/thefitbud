@@ -29,12 +29,42 @@
 # same QA accounts, and the group alone would not keep them apart if they could start
 # together.
 #
-# Known gap, recorded rather than hidden (D-W3b-6): `cancel-in-progress: false` keeps
-# only ONE pending entry per group, so a third arrival evicts the older pending one.
-# Adding `ios` adds no new group and no new writer that can run concurrently, but it
-# does lengthen the chain one job further, so a nightly run now has a longer window in
-# which an arriving mobile PR can evict it. The proper fix is still a separate task
-# (its own group for the advisory PR smoke, or per-suite QA personas).
+# Queue eviction: SURFACED, NOT PREVENTED (D-W3b-26, the task D-W3b-6 asked for).
+#
+# `cancel-in-progress: false` keeps only ONE pending entry per concurrency group, so a
+# third arrival cancels the older pending one. Observed, not theoretical: `android` was
+# cancelled while pending on run 41783371236, and `ios` — the last link, so the most
+# exposed (D-W3b-34) — on run 41784737040.
+#
+# Each link of the chain claims `qa-staging` separately, so one run re-queues up to five
+# times and every re-queue is a fresh chance to be evicted by another run. The three
+# obvious ways to shorten that chain were examined and all three are worse:
+#
+#   * Moving the group to the workflow level does not reduce arrivals (a run still
+#     claims once at a time, because `needs:` already serialises the claims within a
+#     run), and it drags `changes`, `unit`, `report` and the REQUIRED `qa-scripts`
+#     check into the queue — forbidden by D-W3b-1 and by the paragraph below.
+#   * A single gate job holding the group with the writers chained behind it by
+#     `needs:` releases the group when the gate job ENDS, which is before any writer
+#     starts. Two runs' gates would then complete in turn and their writers would
+#     overlap on the shared seed. That breaks D-QA1-7, the invariant the group exists
+#     for, so it is not an option at any price.
+#   * Refusing to start when another staging run is in flight converts an eviction
+#     into an immediate hard failure, needs the Actions API and a token this workflow
+#     deliberately does not have (`permissions: contents: read`), and still races.
+#
+# One pending entry per group is a documented platform property with no workflow-level
+# knob, so nothing expressible in this file can make the group hold two. What this file
+# does instead is make an eviction READ as an eviction: `report` is outside the group
+# and `if: always()`, so it still runs, and its "Evicted, not failed" step annotates
+# any staging job whose result is `cancelled`. The run's conclusion is untouched — the
+# evicted suite produces no results, summarize.mjs reports it `not-run` and the run
+# `partial`, which is never a pass. Re-dispatch stays deliberate and by hand.
+#
+# Still open, and not this file's to decide: per-suite QA personas would remove the
+# shared-seed contention outright and with it the group, and running one platform
+# rather than two on the advisory PR smoke would halve PR arrivals — but D-QA1-10 asks
+# for both platforms, so that is the owner's call.
 #
 # `qa-scripts` is a required check on main (D-W3b-1) and a job inside a concurrency
 # group can be left Pending, or cancelled when a newer run queues, so a required
@@ -1056,6 +1086,58 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Evicted, not failed (D-W3b-26). A staging job cancelled while PENDING was
+      # evicted from the `qa-staging` queue by newer arrivals, not broken by this
+      # commit: GitHub keeps one pending entry per group and a third arrival cancels
+      # the older one. Without this step the only signal is a grey `cancelled` next to
+      # four greens, which reads as a failure of the run and has repeatedly been
+      # chased as one.
+      #
+      # This step is advisory only and must stay so. It deliberately does NOT fail the
+      # job, does not touch the inputs summarize.mjs reads, and does not let the run
+      # read as a pass: the evicted suite produced no results, so summarize.mjs still
+      # reports it `not-run` and the whole run `partial`. `::warning` is used rather
+      # than `::error` precisely because an eviction is not a defect.
+      #
+      # It runs first and needs no checkout — only the `needs` results — so it still
+      # annotates the run when a later step in this job fails. It cannot report a
+      # run-level cancellation (the whole run cancelled by hand), because then this
+      # job does not run at all.
+      - name: Evicted, not failed
+        if: always()
+        env:
+          RESULTS: >-
+            seed-reset=${{ needs.seed-reset.result }}
+            api-smoke=${{ needs.api-smoke.result }}
+            web-staging=${{ needs.web-staging.result }}
+            android=${{ needs.android.result }}
+            ios=${{ needs.ios.result }}
+        run: |
+          evicted=""
+          for pair in $RESULTS; do
+            job=${pair%%=*}
+            result=${pair#*=}
+            if [ "$result" = "cancelled" ]; then evicted="$evicted $job"; fi
+          done
+          if [ -z "$evicted" ]; then
+            echo "No staging job was cancelled; nothing was evicted from the qa-staging queue."
+            exit 0
+          fi
+          echo "::warning title=Evicted from the qa-staging queue::These staging jobs were cancelled, not failed:$evicted. GitHub keeps one pending entry per concurrency group (D-W3b-26), so newer runs displaced them. Their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
+          {
+            echo "## Evicted, not failed"
+            echo
+            echo "Cancelled while queued on \`qa-staging\`:$evicted"
+            echo
+            echo "These jobs were **displaced from the queue, not broken by this commit**."
+            echo "\`cancel-in-progress: false\` keeps only one pending entry per concurrency"
+            echo "group, so a third arrival cancels the older pending one (D-W3b-26)."
+            echo
+            echo "Their suites carry no results, so they report as \`not-run\` and this run"
+            echo "as \`partial\`. That is **not a pass**. Re-dispatch this workflow from"
+            echo "\`main\` once no other staging run is in flight."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
