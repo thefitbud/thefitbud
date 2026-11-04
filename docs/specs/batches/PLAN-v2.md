@@ -22,7 +22,7 @@
   - **Risks:** trainee and trainer editing the same execution (`record_version` conflicts, needs a rule such as "trainer-started executions are read-only to the trainee"); Z6-11 log-time bounds would reject late form entries unless trainers are exempt; adherence, streaks and exceptions must not mis-attribute or double-fire for coach-logged workouts; parallel logging keeps several executions in local state on one phone (offline queue was built for one); the trainee screen refactor risks regressions in the shipped workout flow; new trainer mobile screens have no approved frames (FitBud UI would need to draw them, Firoz reviews) — the largest schedule risk.
   - ~~Firoz decides~~ Approved 4 Nov 2026 (D-P2-15).
 - **D-P2-14 Phase 10 (W14) stays parked; task list for Firoz (4 Nov 2026).** Firoz asked what Phase 10 contains; the 20 tasks are listed in plain words in the W14 rows (Z14-1–Z14-20) of the mapping table below. Source for all of them: master list v13 Phase 10 rows S1a–S7 (`docs/tasks/fitbud-tasklist-v13.md`, branch `claude/nifty-curie-ralrce`, commit c5271ae), carried in `docs/specs/batches/W14.md` and specs `docs/specs/Z14-1.md`–`Z14-20.md`. With D-P2-10 (no sessions in the MVP), W14 does not run before the beta; Z14-12 no longer has a Z10-3 stub to replace.
-- **D-P2-15 In-person coaching is in the beta (Firoz, 4 Nov 2026; resolves Q-P2-6 as approved).** Eight new tasks from the D-P2-13 estimate: **Z6-18**, **Z6-19** (W6), **Z8-15** (W8), **Z9-11** (W9), **Z10-15**–**Z10-18** (W10). A trainer starts a workout for a client in Live mode (one client, or two or more in parallel) or fills a Log-workout form afterwards.
+- **D-P2-15 In-person coaching is in the beta** *(live-logging part replaced by D-P2-21, 4 Nov 2026; read D-P2-21 for the current task set)* **— (Firoz, 4 Nov 2026; resolves Q-P2-6 as approved).** Eight new tasks from the D-P2-13 estimate: **Z6-18**, **Z6-19** (W6), **Z8-15** (W8), **Z9-11** (W9), **Z10-15**–**Z10-18** (W10). A trainer starts a workout for a client in Live mode (one client, or two or more in parallel) or fills a Log-workout form afterwards.
   - **Phase 10 split:** Z14-5, Z14-14, Z14-15 and Z14-20 are **absorbed** into these tasks (trimmed: no sessions, presence or suggest-a-change) and are not run. All other Phase 10 tasks (scheduling, calendar, attendance and roll call, reminders, Sessions tab, agenda: Z14-1–Z14-4, Z14-6–Z14-13, Z14-16–Z14-19) stay **on hold, post-beta**.
   - **Design prerequisite (DS8):** FitBud UI draws the trainer mobile in-person frames (mode choice, single-client live log, multi-client parallel log, log-workout form) and Firoz reviews them **before Z10-16–Z10-18 start**. Z10-15 (refactor) does not wait for DS8.
   - **Default rules (recommended by the planner, Firoz can override):** **R1** a trainer-started workout is read-only to the trainee, who sees "Logged by your coach"; **R2** trainers are exempt from Z6-11 log-time limits for the log-workout form, with a backdate cap of 7 days; **R3** a coach-logged workout counts once toward the client's adherence and streaks, keyed by the workout execution id so it is never double-counted.
@@ -30,7 +30,11 @@
 - **D-P2-17 W3b follow-ups added to W4 (planner, 4 Nov 2026), from PR #216's "Known gaps left on main".** New W4 tasks BT13–BT16 (briefs in W4 D-W4-16): BT13 `DateNavigator` state by colour only (a11y) plus an `unknown` day state; BT14 trainer week route `?start=` validation (500 on bad input) via a shared helper with CU23's check; BT15 the two possible unbounded refetch loops (`ProgressTab.tsx`, `NotificationsScreen.tsx`) and `AssignedMealPlanScreen.tsx`'s null-means-loading conflation; BT16 QA `report` concludes green on `partial`. BT9 (`/me/day` derives no state) now reuses CU23's `domain/week-read-model.ts`; it no longer waits on CU23 (merged). W4 is now 18 agent tasks.
 - **D-P2-18 Changed premises after W3b (planner, 4 Nov 2026).** (a) Trainee Today/Workout now load a **four-state** effective plan (loading, none, ready, `unavailable`; CU22 + CU24): W9 Z9-1–Z9-4 and Z9-6 build v3 on top of these states and never back to a two-state load. (b) `GET /me/week` is real (CU23): Z9-6's wait on CU23 is met; past days are no longer all `missed`, so W9 and W11 Z11-2 gap lists that assumed that are re-checked. (c) The mobile render harness (CU6) renders only the web branch, so a mutation check on mobile proves the web branch only; UI specs touching native-only code (Z9-9/Z9-10 steps, Z10-15–Z10-18 in-person) need a device or Maestro check, not only the harness. (d) Maestro is not green until CU25/CU21 land in W4; W5–W12 UI specs must not rely on a green nightly Maestro run before that.
 - **D-P2-19 Orchestration rules from W3b's report (adopted for W4–W13, 4 Nov 2026).** (1) Implementers never wait on CI: push, hand back; the orchestrator watches runs with a shell loop. (2) One decision PR per batch round, not one per decision (strict up-to-date checks invalidate every open PR on each push). (3) Never brief an implementer on a decision until it is on `main`. (4) The batch file's lane rows and the spec's `files_owned` are checked against each other at spec time. (5) Verify a file citation before a stop condition rests on it. (6) Mutation-check every new assertion.
-- **D-P2-20 Planning PRs (4 Nov 2026).** PR #148 (W5–W11 post-beta specs) is superseded by #212: every old spec ZA1–ZH20 is carried here renumbered (each has a `formerly:` line) and `manual-steps-w5-w11.md` is folded into `docs/tasks/manual-steps.md`; closed with a pointer to #212 (Firoz authorised). PR #153 (design frames DS1–DS4, DS6, DS7, BP1) was approved by Firoz on 3 Nov and stays open until merged: its title still says "[DO NOT START]" and its batch references use the old numbering (W11/W12 → now W12 for BP1, W14 for DS6); DS6 is for parked Phase 10 except where the in-person tasks reuse its patterns. Owed by Firoz (W3b): add `qa-scripts` to `main`'s required checks (ruleset 26041364; commands in W3b.md Report).
+- **D-P2-20 Planning PRs (4 Nov 2026).** PR #148 (W5–W11 post-beta specs) is superseded by #212: every old spec ZA1–ZH20 is carried here renumbered (each has a `formerly:` line) and `manual-steps-w5-w11.md` is folded into `docs/tasks/manual-steps.md`; closed with a pointer to #212 (Firoz authorised). PR #153 (design frames DS1–DS4, DS6, DS7, BP1, plus DS8) was approved by Firoz on 3 Nov (DS8 on 4 Nov) and **merged 4 Nov 2026** (41ca6e8); before merge its title lost "[DO NOT START]" and its batch references were updated (BP1 → W12; DS6 superseded by DS8 for in-person, the rest parked with W14). Owed by Firoz (W3b): add `qa-scripts` to `main`'s required checks (ruleset 26041364; commands in W3b.md Report).
+- **D-P2-21 Trainer log and edit replaces live logging in the beta (Firoz, 4 Nov 2026; rewrites D-P2-15).** Live logging by the trainer during in-person coaching (one client, or several in parallel) is too much for the MVP: it is **on hold and moves to Phase 10 (W14)** as Z14-5 (live API), Z14-14 (multi-client, now carrying the dropped Z10-17) and Z14-15 (single-client, now carrying the live part of the old Z10-16), parked with the rest of W14. DS8 is approved (PR #153 merged 4 Nov); its live frames b1–b3 and c1–c4 stay in the mockups, approved and parked for W14.
+  - **In the beta instead:** a trainer can create or edit a client's log entry on trainer mobile and web. In scope (client-side logs on `main`): **workouts**, **meals** (`meal_compliance`), **body measurements** (`measurements`, incl. weight). Not in scope: check-ins (the client's own answers the trainer reviews), steps (no steps log on `main`; device totals from Z9-9 are not editable), progress photos. Firoz can add any of these later.
+  - **Rules (recommended defaults, Firoz can override):** R1 a coach-created entry is read-only to the trainee, labelled "Logged by your coach"; a trainee entry the coach edited stays the trainee's, labelled "Edited by your coach". R2 trainers skip the Z6-11 log-time limits but dates stay within the last 7 days, never future; edits only on entries dated within 7 days. R3 counts once toward adherence, keyed by the entry id. R4 every trainer create or edit writes one audit row (who, what, when, before and after; `log_edit_events`) and one activity-feed event. R5 the client gets a push only if "Coach updates to my logs" is on (**default on**, a planner choice Firoz can flip to opt-in; respects push off and quiet hours; edits to one entry within 10 minutes merge into one push). Ended clients are read-only.
+  - **Tasks (10, all standard S/M):** W6 Z6-18 (S, migration), Z6-19 (M, workouts API + audit + activity event + push), Z6-20 (S, meals and measurements API, new); W8 Z8-15 (M, web workout log/edit), Z8-16 (S, web meal/measurement, new); W9 Z9-11 (S, trainee workout labels), Z9-12 (S, trainee meal/measurement labels + setting, new); W10 Z10-15 (S, shared row and keypad: still needed because the DS8 d form reuses them; rest timer no longer moves), Z10-16 (M, trainer mobile workout log/edit, DS8 a1/a2 without the Live option and d1–d5; absorbs Z10-18), Z10-19 (S, trainer mobile meal/measurement, new). Dropped from W10: Z10-17 (→ W14 Z14-14), Z10-18 (merged into Z10-16). Net +2: W5–W12 is now **119** agent tasks; W14 is 19 on hold + 1 absorbed.
 
 ## Sequence
 
@@ -39,17 +43,17 @@
 | W3b | Cleanup | **closed** 4 Nov (23 merged; D-P2-16) | — | D-W3b-36 |
 | W4 | Release engineering + QA debts | 18: BT1, BT2, BT2b, BT5 (doc), BT6, BT7–BT16, CU25, CU21, CU8 (BT13–16: D-P2-17) | W3b | W4 + W3b hand-over |
 | W5 | Activation | 4 | W4 | old W5 (ZA4, ZA5, ZA6, ZA11) |
-| W6 | Backend | 18 (Z6-13 post-beta, D-P2-11; +Z6-18, Z6-19, D-P2-15) | W5 (Z5-1, Z5-4) | old W6 (+1 split) |
+| W6 | Backend | 19 (Z6-13 post-beta, D-P2-11; +Z6-18, Z6-19, D-P2-15; +Z6-20, D-P2-21) | W5 (Z5-1, Z5-4) | old W6 (+1 split) |
 | W7 | Trainer web Home and side panel | 15 | W5; Z7-8 needs Z6-10 | old W7 |
-| W8 | Trainer web client workspace | 15 (+Z8-15, D-P2-15) | W6, W7 | old W8 |
-| W9 | Trainee mobile (Today v3, steps) | 11 (+Z9-11, D-P2-15) | W6, W8; Z9-6 needs CU23 | old W9 |
-| W10 | Trainer mobile | 17 (Z10-3 dropped, D-P2-10; +Z10-15–Z10-18, D-P2-15; Z10-16–18 need DS8) | W9 | old W10 |
+| W8 | Trainer web client workspace | 16 (+Z8-15, D-P2-15; +Z8-16, D-P2-21) | W6, W7 | old W8 |
+| W9 | Trainee mobile (Today v3, steps) | 12 (+Z9-11, D-P2-15; +Z9-12, D-P2-21) | W6, W8; Z9-6 needs CU23 | old W9 |
+| W10 | Trainer mobile | 16 (Z10-3 dropped, D-P2-10; +Z10-15, Z10-16, Z10-19; Z10-17 to W14 and Z10-18 merged into Z10-16, D-P2-21) | W9 | old W10 |
 | W11 | Polish and QA tooling | 7 | W10 | old W5 (ZA1–3, ZA7–10) |
 | W12 | Gap buckets + account deletion UI | 30 | W11 (Z11-2), W6 (Z6-14) | old W11 (+1 split) |
 | W13 | Launch | 1 docs task + human steps | W12 | W4 human items |
-| W14 | Phase 10 (post-beta) | 16 on hold + 4 absorbed (Z14-5, Z14-14, Z14-15, Z14-20 → D-P2-15) | not scheduled | old W12 |
+| W14 | Phase 10 (post-beta) | 19 on hold (Z14-5, Z14-14, Z14-15 back on hold with live logging, D-P2-21) + 1 absorbed (Z14-20 → Z9-11) | not scheduled | old W12 |
 
-W5–W12: **117 agent tasks** (111 less Z10-3 and Z6-13, plus 8 in-person tasks, D-P2-15), plus W13's checklist refresh.
+W5–W12: **119 agent tasks** (111 less Z10-3 and Z6-13, plus 10 trainer log-and-edit tasks: Z6-18–Z6-20, Z8-15, Z8-16, Z9-11, Z9-12, Z10-15, Z10-16, Z10-19; D-P2-15 as rewritten by D-P2-21), plus W13's checklist refresh. Was 117 before D-P2-21.
 
 **W5 Activation.** AC1a (Z5-1, PR #50) removes the `configured` status with the next free migration; AC1b (Z5-2, PR #57) adds atomic Activate from draft, immediate schedule and discard; Z5-3 removes raw enum labels on web and mobile; Z5-4 mounts the contract, API-client and API stubs for every W6 module once so the W6 lanes never touch a shared index. One serial lane. It goes first because W6 needs the migration slot and stubs, and W8's coaching setup builds on Activate / Save as vN+1.
 
@@ -211,7 +215,7 @@ W5–W12: **117 agent tasks** (111 less Z10-3 and Z6-13, plus 8 in-person tasks,
 | ZH2 | Z14-2 | W14 | Sessions and check-in calls API: create, list by range, edit, cancel |
 | ZH3 | Z14-3 | W14 | Attendance API: roll-call statuses, late cancel and trainer override |
 | ZH4 | Z14-4 | W14 | Session and call reminders: push 45 min before sessions and 15 min before calls |
-| ZH5 | Z14-5 | W14 (absorbed, D-P2-15) | Migration and API: coach-logged sets for one or many present clients, with Undo |
+| ZH5 | Z14-5 | W14 (on hold again, D-P2-21) | Migration and API: coach-logged sets for one or many present clients, with Undo |
 | ZH6 | Z14-6 | W14 | Trainee suggest-a-change API for coach-logged sets |
 | ZH7 | Z14-7 | W14 | Trainer web Sessions: week calendar (6 am–9 pm, calls dashed) |
 | ZH8 | Z14-8 | W14 | Trainer web Sessions for an online-only coach: calls only |
@@ -220,21 +224,25 @@ W5–W12: **117 agent tasks** (111 less Z10-3 and Z6-13, plus 8 in-person tasks,
 | ZH11 | Z14-11 | W14 | Log during or after a session on web and iPad (DS6 frames) |
 | ZH12 | Z14-12 | W14 | Trainer mobile Sessions tab: today's sessions and calls |
 | ZH13 | Z14-13 | W14 | Trainer mobile batch roll-call: expected → present, late or absent |
-| ZH14 | Z14-14 | W14 (absorbed, D-P2-15) | Trainer mobile group logging: same exercise for present clients, with Undo |
-| ZH15 | Z14-15 | W14 (absorbed, D-P2-15) | Trainer mobile single-client log during a session and after-session quick log |
+| ZH14 | Z14-14 | W14 (on hold again, D-P2-21) | Trainer mobile group logging: same exercise for present clients, with Undo |
+| ZH15 | Z14-15 | W14 (on hold again, D-P2-21) | Trainer mobile single-client log during a session and after-session quick log |
 | ZH16 | Z14-16 | W14 | Trainer mobile day agenda |
 | ZH17 | Z14-17 | W14 | Trainer mobile add session and add call |
 | ZH18 | Z14-18 | W14 | Trainer mobile Sessions tab for an online-only coach, with empty state |
 | ZH19 | Z14-19 | W14 | Session and call reminder notification on the trainer phone: copy and deep link |
 | ZH20 | Z14-20 | W14 (absorbed, D-P2-15) | Trainee: coach-logged workout read-only, with suggest a change |
-| (new, D-P2-15) | Z6-18 | W6 | Migration: who logged a workout (logged_by on workout executions) |
-| (new, D-P2-15; from Z14-5) | Z6-19 | W6 | Workouts API: trainer starts, logs and completes a workout for a client, and logs a past workout |
-| (new, D-P2-15) | Z8-15 | W8 | Trainer web: log a client's workout with a form |
-| (new, D-P2-15; from Z14-20) | Z9-11 | W9 | Trainee: coach-logged workout is read-only with "Logged by your coach" |
-| (new, D-P2-15) | Z10-15 | W10 | Mobile: shared set-entry row and kg keypad (refactor) |
-| (new, D-P2-15; from Z14-15) | Z10-16 | W10 | Trainer mobile: start a workout for a client (mode choice) and live-log one client |
-| (new, D-P2-15; from Z14-14) | Z10-17 | W10 | Trainer mobile: live-log two or more clients in parallel |
-| (new, D-P2-15) | Z10-18 | W10 | Trainer mobile: log-workout form |
+| (new, D-P2-15; rescoped D-P2-21) | Z6-18 | W6 | Migration: who logged or edited a log entry, `log_edit_events` audit, coach-updates setting |
+| (new, D-P2-15; rescoped D-P2-21) | Z6-19 | W6 | Workouts API: trainer creates or edits a workout log, with audit, activity event and push |
+| (new, D-P2-21) | Z6-20 | W6 | Meals and measurements API: trainer creates or edits an entry, with audit and push |
+| (new, D-P2-15; rescoped D-P2-21) | Z8-15 | W8 | Trainer web: log or edit a client's workout entry |
+| (new, D-P2-21) | Z8-16 | W8 | Trainer web: log or edit a meal entry or body measurement |
+| (new, D-P2-15; from Z14-20; rescoped D-P2-21) | Z9-11 | W9 | Trainee: "Logged by your coach" (read-only) / "Edited by your coach" on workouts |
+| (new, D-P2-21) | Z9-12 | W9 | Trainee: coach labels on meals and measurements, "Coach updates to my logs" setting |
+| (new, D-P2-15; S since D-P2-21) | Z10-15 | W10 | Mobile: shared set-entry row and kg keypad (refactor) |
+| (new, D-P2-15; rescoped D-P2-21) | Z10-16 | W10 | Trainer mobile: log or edit a client's workout entry (DS8 a, d) |
+| (new, D-P2-21) | Z10-19 | W10 | Trainer mobile: log or edit a meal entry or body measurement |
+| (new, D-P2-15; **dropped** D-P2-21 → W14 Z14-14) | ~~Z10-17~~ | — | Trainer mobile: live-log two or more clients in parallel |
+| (new, D-P2-15; **merged into Z10-16** D-P2-21) | ~~Z10-18~~ | — | Trainer mobile: log-workout form |
 | (split from ZB14) | Z6-17 | W6 | Account purge job after 6 months and the immediate-deletion runbook |
 | (split from ZG29) | Z12-30 | W12 | Account deletion and reactivation screens, trainer web |
 
