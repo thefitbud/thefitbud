@@ -5,10 +5,10 @@
  * today" is a valid state and is never a failure. Dated values are read from the seed
  * run's own expectations and only when they describe today (see `expectations.ts`).
  */
-import { meDayResponseSchema, meWeekResponseSchema, workoutAssignmentSchema } from "@fitbud/contracts";
+import { meDayResponseSchema, weekReadModelSchema, workoutAssignmentSchema } from "@fitbud/contracts";
 import { describe, expect, it } from "vitest";
 import { todaysExpectations } from "./expectations.js";
-import { getData, localToday, run, stable } from "./helpers.js";
+import { getData, localToday, run, send, stable } from "./helpers.js";
 import { sessionFor, smokeHttp } from "./run-context.js";
 
 const http = smokeHttp();
@@ -41,12 +41,45 @@ describe("GET /me/day/:date", () => {
 });
 
 describe("GET /me/week", () => {
-  it("returns seven days that include today", async (t) => {
+  /**
+   * Parses the real read model (CU23, D-W3b-25). Before CU23 the route
+   * answered seven hardcoded `state: "future"` days in a shape this schema
+   * rejects, so both halves of this test are new ground: that the response
+   * satisfies `weekReadModelSchema` at all, and that a day in the past has a
+   * state derived from what the trainee was assigned and did.
+   *
+   * The assertion is "no past day is `future`" rather than naming one
+   * completed day, because the week response alone cannot identify which past
+   * day carries a completed execution — and `future` behind today is exactly
+   * what the hardcoded handler returned for all seven days, so this is the
+   * invariant that fails if the route ever regresses to it.
+   */
+  it("returns seven days that include today, with no past day left in future", async (t) => {
     const session = sessionFor(t, "ontrack");
     const today = await localToday(http, session);
-    const week = await getData(http, session, "/me/week", meWeekResponseSchema);
+    const week = await getData(http, session, "/me/week", weekReadModelSchema);
     expect(week.days.length).toBe(7);
     expect(week.days.map((d) => d.date)).toContain(today);
+    const pastDays = week.days.filter((d) => d.date < today);
+    for (const day of pastDays) {
+      expect(day.state).not.toBe("future");
+    }
+    // Today is the trainee's own civil date, not UTC's: the old handler
+    // derived it with `new Date().toISOString().slice(0, 10)`.
+    expect(week.todayNutrition.date).toBe(today);
+    // The week's planned meal slots include today's, which the seed
+    // guarantees — so the counts come from rows, not from a constant.
+    expect(week.meals.assigned).toBeGreaterThanOrEqual(
+      stable.guarantees.mealAssignmentsTodayMin,
+    );
+  });
+
+  it("rejects a malformed ?start= rather than answering nonsense dates", async (t) => {
+    const session = sessionFor(t, "ontrack");
+    for (const start of ["2026-11", "2026-02-30", "garbage"]) {
+      const response = await send(http, session, "GET", `/me/week?start=${start}`);
+      expect(response.status, start).toBe(400);
+    }
   });
 });
 

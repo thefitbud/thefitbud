@@ -38,7 +38,12 @@ import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { TodayCheckinCard } from "./CheckinScreen";
-import { TraineeDateNavigator } from "./TraineeDateNavigator";
+import {
+  TraineeDateNavigator,
+  WEEK_UNAVAILABLE_MESSAGE,
+  loadWeekModel,
+  type WeekModelState,
+} from "./TraineeDateNavigator";
 import { confirmMealAssignment, MealSyncError } from "./mealActions";
 import {
   canShowMealLogActions,
@@ -249,9 +254,14 @@ export function TodayTab({
   const [error, setError] = useState<string | null>(null);
   const [offlineHint, setOfflineHint] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [weekModel, setWeekModel] = useState<Awaited<
-    ReturnType<typeof s1.getMeWeek>
-  > | null>(null);
+  // Four-state, never a nullable model: see `WeekModelState` (CU23,
+  // D-W3b-25). `getMeWeek(...).catch(() => null)` used to make a failed
+  // `GET /me/week` indistinguishable from "not loaded yet", so the "This
+  // week" rollup silently vanished and the date strip filled its day states
+  // in from the date alone.
+  const [weekState, setWeekState] = useState<WeekModelState>({
+    status: "loading",
+  });
   const [dayTotals, setDayTotals] = useState<Awaited<
     ReturnType<typeof s1.getMeDay>
   > | null>(null);
@@ -280,12 +290,16 @@ export function TodayTab({
             fromDate: selectedDate,
             toDate: selectedDate,
           }),
-          s1.getMeWeek(weekStart).catch(() => null),
+          loadWeekModel(
+            (start) => s1.getMeWeek(start),
+            weekStart,
+            "TodayTab.getMeWeek",
+          ),
           s1.getMeDay(selectedDate).catch(() => null),
           s1.listMeCoachNotes().catch(() => ({ items: [] as CoachNote[] })),
           api.listCheckins(relationship.id).catch(() => ({ items: [] as Checkin[] })),
         ]);
-      setWeekModel(week);
+      setWeekState(week);
       setDayTotals(day);
       setCoachNotes(notes.items.slice(0, 2));
       setWorkout(
@@ -303,6 +317,11 @@ export function TodayTab({
       setWorkout(null);
       setMeals([]);
       setLockStateKnown(false);
+      // The whole day load failed, so there is no week to show either. It
+      // settles on `unavailable` rather than staying `loading` for ever:
+      // "This week" disappearing with no explanation is the same silent
+      // degradation CU23 removes.
+      setWeekState({ status: "unavailable" });
     } finally {
       setLoading(false);
     }
@@ -798,24 +817,58 @@ export function TodayTab({
 
         <StepsCard />
 
-        {weekModel ? (
+        {/*
+          "This week" renders only from a loaded week read model. On failure
+          the trainee gets the honest unavailable card below with a retry
+          (CU23, D-W3b-25) — never counts or day states invented locally.
+          D-W3b-25's "Weekly view isn't available yet" rehearsal fallback is
+          retired by D-W3b-37; this is the real endpoint's failure state.
+        */}
+        {weekState.status === "loaded" ? (
           <>
             <View style={styles.secHead}>
               <Text style={styles.secTitle}>This week</Text>
             </View>
             <View style={styles.card}>
               <WeeklyConsistency
-                workoutCompleted={weekModel.workouts.completed}
-                workoutAssigned={weekModel.workouts.assigned}
-                mealsLogged={weekModel.meals.logged}
-                mealsAssigned={weekModel.meals.assigned}
-                days={weekModel.days}
+                workoutCompleted={weekState.week.workouts.completed}
+                workoutAssigned={weekState.week.workouts.assigned}
+                mealsLogged={weekState.week.meals.logged}
+                mealsAssigned={weekState.week.meals.assigned}
+                days={weekState.week.days}
                 encouragement={
                   isToday
                     ? "Yesterday got away from you? Today's a fresh start."
                     : null
                 }
               />
+            </View>
+          </>
+        ) : null}
+
+        {weekState.status === "unavailable" ? (
+          <>
+            <View style={styles.secHead}>
+              <Text style={styles.secTitle}>This week</Text>
+            </View>
+            <View style={styles.card} accessibilityLabel={WEEK_UNAVAILABLE_MESSAGE}>
+              <Text style={styles.body}>{WEEK_UNAVAILABLE_MESSAGE}</Text>
+              {/*
+                Distinct from the plan card's "Try again" label so each
+                control names what it reloads: this screen can show both
+                cards at once (CU24's plan state and CU23's week state are
+                independent loads).
+              */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Reload this week"
+                style={styles.retry}
+                onPress={() => {
+                  void onRefresh();
+                }}
+              >
+                <Text style={styles.retryLabel}>Try again</Text>
+              </Pressable>
             </View>
           </>
         ) : null}
