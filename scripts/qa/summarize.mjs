@@ -260,6 +260,20 @@ const IOS_LOG_PATTERNS = [
   ["load-error", /There was a problem loading the project|Unable to load script|Could not connect to development server/],
 ];
 
+// Proof that the capture actually worked. The iOS log is a backgrounded
+// `simctl spawn ... log stream` whose `--predicate` can silently match no process
+// (the running process name need not equal CFBundleExecutable), and `log stream`
+// can exit at once, leaving the file empty or holding only its own error. A scan
+// over that finds no crashes -- indistinguishable from "no crash". React Native
+// logs `Running "main"` as it starts the bundle, so that line is the sentinel: it
+// can only be there if the predicate matched the app and the stream was captured.
+const IOS_LOG_SENTINEL = /Running "main"/;
+
+/** Does this iOS log prove the app's own output was captured? */
+export function iosLogProvesCapture(text) {
+  return IOS_LOG_SENTINEL.test(String(text));
+}
+
 /** Finds crashes of the app process in an iOS simulator log stream. */
 export function scanIosLog(text, redact) {
   const out = [];
@@ -470,6 +484,21 @@ export function buildSummary(opts) {
     if (s.status === "pass" && crashes.some((c) => c.suite === name)) {
       s.status = "fail";
       s.reason = "the app crashed during the run (see crashes)";
+    }
+  }
+
+  // An ios `pass` is only worth anything if the crash scan had something to scan.
+  // Without the sentinel the detector proved nothing, so the suite is `error` --
+  // results exist but are unusable -- and never a silent pass. This cannot mask a
+  // real crash: a crash populates `crashes`, which already forced `fail` above and
+  // forces the run to `fail` regardless.
+  const iosSuite = suites.find((s) => s.name === "ios");
+  if (iosSuite.status === "pass") {
+    const file = logFiles.find((l) => path.basename(l) === DEVICE_LOGS.ios);
+    if (!file || !iosLogProvesCapture(fs.readFileSync(file, "utf8"))) {
+      iosSuite.status = "error";
+      iosSuite.reason = `every flow passed but logs/${DEVICE_LOGS.ios} ${file ? "holds none of the app's own output" : "is missing"}, so the iOS crash scan proved nothing`;
+      warnings.push(`ios: logs/${DEVICE_LOGS.ios} ${file ? "shows no app output" : "is missing"}; the simulator log capture did not work, so a pass could not be trusted`);
     }
   }
 

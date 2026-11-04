@@ -158,5 +158,16 @@ if [ ! -f "$IOS_RESULTS/junit.xml" ]; then
   fi
 fi
 
+# Say so when the capture produced nothing. summarize.mjs is the gate -- it turns
+# an ios `pass` with an unusable log into `error` -- but a silent empty file is
+# worth naming in the job log too, because the cause is here, not there. React
+# Native logs `Running "main"` as it starts the bundle, so its absence means the
+# --predicate matched no process or the stream died. The exit code is deliberately
+# left alone: it belongs to Maestro.
+if ! grep -qF 'Running "main"' "$SIM_LOG" 2>/dev/null; then
+  echo "::warning title=Simulator log capture produced nothing::$SIM_LOG holds none of the app's own output ($(wc -l <"$SIM_LOG" 2>/dev/null || echo 0) lines), so the iOS crash scan had nothing to scan. The log stream --predicate probably did not match the app process (CFBundleExecutable is \"$APP_EXECUTABLE\")."
+  echo "run-maestro-ios: WARNING $SIM_LOG shows no app output; the crash scan proved nothing" >&2
+fi
+
 echo "run-maestro-ios: maestro exited $maestro_status"
 exit "$maestro_status"

@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { buildSummary, classifyCrash, main, makeRedactor, parseFrameMap, parseJUnit, scanIosLog, MalformedInput, SUITES } from "./summarize.mjs";
+import { buildSummary, classifyCrash, iosLogProvesCapture, main, makeRedactor, parseFrameMap, parseJUnit, scanIosLog, MalformedInput, SUITES } from "./summarize.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, "fixtures");
@@ -473,4 +473,55 @@ test("an Android crash is never attributed to the ios suite, or the other way ro
   assert.equal(suite(summary, "mobile").status, "fail", "the Android crash fails Android");
   assert.equal(suite(summary, "ios").status, "pass", "and leaves iOS alone");
   assert.deepEqual(summary.crashes.map((c) => c.suite), ["mobile"]);
+});
+
+// The crash scan is only worth anything if it had something to scan. The iOS log
+// is a backgrounded `log stream` whose --predicate can silently match no process,
+// and a scan over an empty file finds no crashes -- which is indistinguishable
+// from "no crash". That is precisely the CU17 bug class this job exists to catch,
+// so an ios `pass` with an uncaptured log must not be a pass.
+
+test("ios pass with an uncaptured simulator log is error, never a silent pass", () => {
+  const { summary } = runIos("log-not-captured");
+  const s = suite(summary, "ios");
+  assert.equal(s.failed, 0, "every flow passed");
+  assert.notEqual(s.status, "pass", "a pass here would ship the bug the scan exists to catch");
+  assert.equal(s.status, "error");
+  assert.match(s.reason, /holds none of the app's own output/);
+  assert.match(s.reason, /proved nothing/);
+  assert.equal(summary.status, "fail");
+  assert.ok(
+    summary.warnings.some((w) => w.includes("ios-sim.log") && w.includes("no app output")),
+    `expected a warning naming the log, got ${JSON.stringify(summary.warnings)}`,
+  );
+});
+
+test("ios pass with no simulator log at all is error too", () => {
+  const inDir = fs.mkdtempSync(path.join(os.tmpdir(), "qa-in-nolog-"));
+  fs.cpSync(path.join(iosFixture("pass"), "ios"), path.join(inDir, "ios"), { recursive: true });
+  const { summary } = buildSummary({
+    inDir,
+    outDir: fs.mkdtempSync(path.join(os.tmpdir(), "qa-report-ios-")),
+    expect: ["ios"],
+    meta: META,
+    redact: makeRedactor(FAKE_ENV),
+  });
+  assert.equal(suite(summary, "ios").status, "error");
+  assert.match(suite(summary, "ios").reason, /is missing/);
+  assert.equal(summary.status, "fail");
+});
+
+test("the capture check cannot mask a real crash, and passes a captured log", () => {
+  // crash-in-log holds the sentinel AND a RangeError: still fail, with the crash.
+  const { summary } = runIos("crash-in-log");
+  assert.equal(suite(summary, "ios").status, "fail");
+  assert.equal(summary.crashes.length, 1);
+  assert.match(summary.crashes[0].evidence, /Incorrect timeZone information provided/);
+  // ...and a genuinely captured log still lets a clean run pass.
+  assert.equal(suite(runIos("pass").summary, "ios").status, "pass");
+  // The sentinel itself: RN's bundle-start line is the proof of capture.
+  assert.equal(iosLogProvesCapture(''), false);
+  assert.equal(iosLogProvesCapture('log: Invalid predicate: process == "X"'), false);
+  assert.equal(iosLogProvesCapture('Df FitBudStaging: today loaded'), false);
+  assert.equal(iosLogProvesCapture('Df FitBudStaging: Running "main"'), true);
 });
