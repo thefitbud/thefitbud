@@ -12,6 +12,16 @@
 - **D-P2-7 Design-review interim rule (planner, pending Q-P2-2).** Z11-1 (the `diff.mjs` design-review tool) now runs after W7–W10. Every UI spec that ran it now says: until Z11-1 is on `main`, the reviewer compares captures with frames side by side and the PR says "design-review tool not on main yet".
 - **D-P2-8 Old W12 (Phase 10: sessions, attendance, calls, coach-logged sets) is parked as W14**, not in the beta sequence: Firoz's 4 Nov sequence lists W5–W13 only, and the in-person phase is on hold. Specs kept, renumbered Z14-1–Z14-20. Firoz decides (Q-P2-3).
 - **D-P2-9 W3b scope** (Firoz, recorded as D-W3b-36/D-W3b-37 in PR #211): W3b finishes only CU19 (#208, merged), #211, CU24, CU23 and the `qa-staging` starvation fix. CU25, CU21, the `QA_GUARANTEES` invariant and CU8 move to W4. D-W3b-31's v3 frame visual pass on trainee Today is absorbed by W9 (Z9-1–Z9-4). Tasks an agent should **ignore** in W3b: CU25, CU21, QA_GUARANTEES, CU8 (and anything else not in the finish list).
+- **D-P2-10 Z10-3 dropped (Firoz, 4 Nov 2026).** No sessions in the MVP, so no Sessions tab stub in trainer mobile. Payments are tracking only: payment dates, subscription due dates, plan type, reminders and user confirmations. Z10-8 and Z10-12 no longer depend on Z10-3; the current `TrainerShell.tsx` tab bar stays (any v3 restyle of the four remaining tabs goes to W12 gap work). Answers the Z10-3 part of Q-P2-3. W10 is now 13 tasks.
+- **D-P2-11 Z6-13 (automated D1 backups, BP2) moves to post-beta (Firoz, 4 Nov 2026).** The beta keeps D1 Time Travel + the documented restore (v14 D-B1). The spec stays in `docs/specs/` for after the beta; the W6 `ops` lane and the manual BP2 step are not run. W6 is now 16 tasks.
+- **D-P2-12 Payment tasks kept as tracking only (Firoz, 4 Nov 2026).** Z6-3, Z6-8, Z8-3, Z8-4 and Z7-10 stay. They are date and confirmation based tracking only: payment dates, subscription due dates, plan type, reminders and the trainer's or client's confirmation that a payment was made. No collection, no gateway, no invoices, no session counts.
+- **D-P2-13 Z8-7 in-person coaching: NOT final, pending Firoz.** Z8-7 as specced (coaching mode field: online / in-person / hybrid, tracking only) stays in W8. Firoz will add trainer-logged in-person workouts only if they are small. Desired scope: a trainer starts a workout on behalf of a client in one of two modes: (a) **live logging**, where two or more clients' workouts are logged in parallel in one in-person session, or (b) a **log-workout form**, where the trainer fills in the values afterwards. Planner estimate (checked against `main` at c398f67, 4 Nov 2026):
+  - **Reusable:** the workout data model (`workout_assignments`, `workout_executions`, `exercise_executions`, `set_executions`, migration 0004) and the execution flow in `apps/api/src/routes/workouts.ts` (start, pause, resume, set complete/skip, complete, read); the routes already authorise trainers for reads via `canAccessRelationship`. Trainee `ActiveWorkoutScreen.tsx` (~1,450 lines), `workoutSession.ts`, `workoutDisplay.ts`, the kg keypad (Z9-7) and numeric `load_kg` (Z6-1, Z6-15) give the set-entry UI. Trainer web `WorkoutPanel.tsx` already shows a logged workout. W14 Z14-5 / Z14-14 / Z14-15 / Z14-20 specs already describe coach-logged sets, group logging and the trainee read-only view and can be cut down rather than rewritten.
+  - **Not reusable as is:** start, set complete and complete are `requireRole("trainee")` and check `relationship.traineeUserId === actor.userId`; there is no "logged by" field; the trainee screen is tied to one execution, its offline queue and the Live Activity; trainer mobile has no workout screens at all.
+  - **Estimate: about 8 tasks of the standard size (S/M, one PR, D-P2-6)** — W6: (1) migration `logged_by_user_id` + `logged_by_role` on workout executions; (2) API: trainer may start / log sets / complete for own clients, plus a one-call "log a past workout" endpoint. W9: (3) trainee read-only "logged by your coach" view. W10: (4) extract the set-entry row and keypad into a shared mobile component (no behaviour change for the trainee); (5) trainer mobile "Start workout for client" with mode choice and single-client live logging; (6) parallel live logging, switching between 2+ clients in one session; (7) log-workout form (fill values after). W8: (8) trainer web log-workout form in the client workspace. No sessions, attendance, calendar or reminders (those stay in parked W14).
+  - **Risks:** trainee and trainer editing the same execution (`record_version` conflicts, needs a rule such as "trainer-started executions are read-only to the trainee"); Z6-11 log-time bounds would reject late form entries unless trainers are exempt; adherence, streaks and exceptions must not mis-attribute or double-fire for coach-logged workouts; parallel logging keeps several executions in local state on one phone (offline queue was built for one); the trainee screen refactor risks regressions in the shipped workout flow; new trainer mobile screens have no approved frames (FitBud UI would need to draw them, Firoz reviews) — the largest schedule risk.
+  - Firoz decides: add these ~8 tasks to the beta (W6/W8/W9/W10), or keep in-person logging post-beta. Until then nothing is added.
+- **D-P2-14 Phase 10 (W14) stays parked; task list for Firoz (4 Nov 2026).** Firoz asked what Phase 10 contains; the 20 tasks are listed in plain words in the W14 section of the mapping below and in the reply on PR #212. Source for all of them: master list v13 Phase 10 rows S1a–S7 (`docs/tasks/fitbud-tasklist-v13.md`, branch `claude/nifty-curie-ralrce`, commit c5271ae), carried in `docs/specs/batches/W14.md` and specs `docs/specs/Z14-1.md`–`Z14-20.md`. With D-P2-10 (no sessions in the MVP), W14 does not run before the beta; Z14-12 no longer has a Z10-3 stub to replace.
 
 ## Sequence
 
@@ -20,21 +30,21 @@
 | W3b | Cleanup (closing) | 4 left: #211 spec PR, CU24, CU23, starvation fix | — | D-W3b-36 |
 | W4 | Release engineering + QA debts | 14: BT1, BT2, BT2b, BT5 (doc), BT6, BT7–BT12, CU25, CU21, CU8 | W3b | W4 + W3b hand-over |
 | W5 | Activation | 4 | W4 | old W5 (ZA4, ZA5, ZA6, ZA11) |
-| W6 | Backend | 17 | W5 (Z5-1, Z5-4) | old W6 (+1 split) |
+| W6 | Backend | 16 (Z6-13 post-beta, D-P2-11) | W5 (Z5-1, Z5-4) | old W6 (+1 split) |
 | W7 | Trainer web Home and side panel | 15 | W5; Z7-8 needs Z6-10 | old W7 |
 | W8 | Trainer web client workspace | 14 | W6, W7 | old W8 |
 | W9 | Trainee mobile (Today v3, steps) | 10 | W6, W8; Z9-6 needs CU23 | old W9 |
-| W10 | Trainer mobile | 14 | W9 | old W10 |
+| W10 | Trainer mobile | 13 (Z10-3 dropped, D-P2-10) | W9 | old W10 |
 | W11 | Polish and QA tooling | 7 | W10 | old W5 (ZA1–3, ZA7–10) |
 | W12 | Gap buckets + account deletion UI | 30 | W11 (Z11-2), W6 (Z6-14) | old W11 (+1 split) |
 | W13 | Launch | 1 docs task + human steps | W12 | W4 human items |
 | W14 | Phase 10 (parked) | 20 | not scheduled | old W12 |
 
-W5–W12: **111 agent tasks**, plus W13's checklist refresh.
+W5–W12: **109 agent tasks** (111 less Z10-3 and Z6-13; plus ~8 if Firoz adds Z8-7 in-person logging, D-P2-13), plus W13's checklist refresh.
 
 **W5 Activation.** AC1a (Z5-1, PR #50) removes the `configured` status with the next free migration; AC1b (Z5-2, PR #57) adds atomic Activate from draft, immediate schedule and discard; Z5-3 removes raw enum labels on web and mobile; Z5-4 mounts the contract, API-client and API stubs for every W6 module once so the W6 lanes never touch a shared index. One serial lane. It goes first because W6 needs the migration slot and stubs, and W8's coaching setup builds on Activate / Save as vN+1.
 
-**W6 Backend.** One serial migration lane (load_kg, check-in form v2, subscription tracking fields, daily steps + target, archived account state), then parallel module lanes: strength read model, progress metrics by question key, client settings and payment records (tracking only), steps API (Z6-9), bulk resolve, log-time bounds, reactivation rules, automated D1 backups, numeric load on set save, and account deletion (Z6-14 archive/reactivate, Z6-17 purge + runbook).
+**W6 Backend.** One serial migration lane (load_kg, check-in form v2, subscription tracking fields, daily steps + target, archived account state), then parallel module lanes: strength read model, progress metrics by question key, client settings and payment records (tracking only), steps API (Z6-9), bulk resolve, log-time bounds, reactivation rules, ~~automated D1 backups~~ (post-beta, D-P2-11), numeric load on set save, and account deletion (Z6-14 archive/reactivate, Z6-17 purge + runbook).
 
 **W7 Trainer web Home and panel.** Targeted Home refresh, row targets and count cards (DS4), all-clear and iPad Home, the v3 side panel (per-client list, resolve form, read-only states, multi-select bulk actions on Z6-10), the full views (Needs attention, Renewals due, Asked you on WhatsApp), and ended-client read-only presentation (DS7).
 
@@ -63,17 +73,18 @@ W5–W12: **111 agent tasks**, plus W13's checklist refresh.
 | Task | What it does | Conflicts with |
 |---|---|---|
 | Z14-1–Z14-20 (W14, parked) | Phase 10: sessions and check-in calls tables and API, attendance roll-call incl. late cancel, session/call reminders, coach-logged sets, web/iPad/trainer-mobile Sessions screens, trainee coach-logged view | In-person phase on hold (Firoz). PR #148 recorded "Firoz took Phase 10 off hold, 3 Nov" — contradictory; Q-P2-3. D-W14-2 already drops package/session-count rules (AGENTS.md: "no session counting"). |
-| Z10-3 (W10) | v3 trainer tab bar with a **Sessions** tab stub ("coming") | Surfaces the on-hold Phase 10 in the beta UI. |
-| Z8-7 (W8) | Coaching mode section: online / in-person / hybrid | Tracking field only (AGENTS.md lists coaching mode as a tracked field), but it is the in-person phase's entry point; no session fields. Likely fine; flagged. |
-| Z6-3, Z6-8, Z8-3, Z8-4, Z7-10 | Subscription and payment **tracking** (amount, type, dates, paid/unpaid, method; Renewals due view) | Compliant: schema forbids session counts and gateway refs (Z6-3 AC), no collect/invoice endpoints (Z6-8). Listed for completeness. |
-| Z6-13 (W6) | Automated D1 backups to R2 (BP2) | Not out of MVP, but v14 D-B1 had it post-beta; now in the beta sequence by D-P2-1. |
+| Z10-3 (W10) | v3 trainer tab bar with a **Sessions** tab stub ("coming") | **Dropped** (D-P2-10): no sessions in the MVP. |
+| Z8-7 (W8) | Coaching mode section: online / in-person / hybrid | Tracking field stays. Trainer-logged in-person workouts estimated at ~8 tasks, **pending Firoz** (D-P2-13). |
+| Z6-3, Z6-8, Z8-3, Z8-4, Z7-10 | Subscription and payment **tracking** (dates, due dates, plan type, paid/unpaid confirmation, method; Renewals due view) | **Kept** (D-P2-12): date and confirmation based tracking only, no collection. |
+| Z6-13 (W6) | Automated D1 backups to R2 (BP2) | **Post-beta** (Firoz, 4 Nov 2026, D-P2-11). |
 
 ## Questions for Firoz
 - **Q-P2-1 Move account deletion UI earlier?** Recommend yes: move Z12-29 + Z12-30 into W10 (or right after W6) so deletion is complete end to end early. Z6-14/Z6-17 land in W6, the BP1 frames are approved (PR #153), and stores require in-app deletion, so leaving the UI to W12 leaves a backend-only feature for four batches. Cost: Z12-29 depends on Z12-27 (trainee settings) — moving it needs that dependency rewritten to the current settings screen. Not decided.
 - **Q-P2-2 Run Z11-1 (design-review tool) and Z11-3 (trainee kcal/dates) earlier?** Recommend running both inside W5 as extra lanes (no file overlap with the activation lane): Z11-1 is a step every W7–W10 UI spec was written to use, and Z11-3 was a W9 prerequisite that W9's Diet task (Z9-5) assumes. Under the current order they run after the screens they were meant to guard. Not decided.
-- **Q-P2-3 Phase 10 (W14):** on hold (as in the 4 Nov brief) or off hold (as PR #148 recorded for 3 Nov)? If on hold, should Z10-3 drop the Sessions tab stub?
+- ~~**Q-P2-3**~~ Answered 4 Nov 2026: no sessions in the MVP, Z10-3 dropped (D-P2-10); W14 stays parked (D-P2-14). Was: **Phase 10 (W14):** on hold (as in the 4 Nov brief) or off hold (as PR #148 recorded for 3 Nov)? If on hold, should Z10-3 drop the Sessions tab stub?
 - **Q-P2-4 Live Activity cut-line:** v14 D-B7 ties it to Thu 12 Nov. Recommend "before the W13 rehearsal"; "LA never blocks BT1" unchanged.
 - **Q-P2-5 New beta date** (after W12).
+- **Q-P2-6 Z8-7 in-person logging:** add the ~8 tasks in D-P2-13 to the beta, or post-beta?
 
 ## Mapping old → new
 | Old (PR #148) | New | Batch | Title |

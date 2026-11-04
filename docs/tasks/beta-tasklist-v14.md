@@ -48,7 +48,7 @@ A dependency is *real* when task B needs code or data that task A creates. It is
 **Locked.** Each decision says who made it. Under C9, Firoz may still override any of them when he reviews a batch.
 | ID | Decision | Source |
 |---|---|---|
-| D-B1 | Beta is closed: TestFlight + Play closed testing only. Must-haves: push + reminders, transactional email, store builds, staging deploy, real sign-in, basic crash reporting, privacy + terms (account deletion by email request for beta), D1 Time Travel + a documented restore. ~~Post-beta: in-app account deletion (BP1), automated backups (BP2).~~ In-app account deletion is beta scope (Firoz, 4 Nov 2026; Z6-14, Z6-17, Z12-29, Z12-30); automated backups are scheduled in W6 (Z6-13). | Firoz, 30 Oct |
+| D-B1 | Beta is closed: TestFlight + Play closed testing only. Must-haves: push + reminders, transactional email, store builds, staging deploy, real sign-in, basic crash reporting, privacy + terms (account deletion by email request for beta), D1 Time Travel + a documented restore. ~~Post-beta: in-app account deletion (BP1), automated backups (BP2).~~ In-app account deletion is beta scope (Firoz, 4 Nov 2026; Z6-14, Z6-17, Z12-29, Z12-30); automated backups (Z6-13) are post-beta again (Firoz, 4 Nov 2026, PLAN-v2 D-P2-11). | Firoz, 30 Oct |
 | D-B2 | OTP channel for beta: **email only**. | Firoz, 30 Oct |
 | D-B3 | Email provider: **ZeptoMail** (India region API `api.zeptomail.in`). | Firoz, 30 Oct |
 | D-B4 | I9 dropped (fixed 18 Oct, b5e4278). Payments are tracking only (post-beta tasks; Agents.md updated by #69). | Firoz, 30 Oct |
