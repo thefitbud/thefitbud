@@ -791,6 +791,9 @@ jobs:
       # India-first product: every QA expectation is written in this zone, and the
       # CU17 bug only appears when the app resolves it (D-W3b-11, D-W3b-11a).
       QA_IOS_TIME_ZONE: Asia/Kolkata
+      # Apple's zone table carries the old link name, not Asia/Kolkata (D-W3b-11a,
+      # and see the host-zone step). Same zone, different spelling.
+      QA_IOS_TIME_ZONE_FALLBACK: Asia/Calcutta
       QA_IOS_TIME_ZONE_ABBREVIATION: IST
       QA_IOS_LOCALE: en_IN
     steps:
@@ -866,8 +869,31 @@ jobs:
             exit 1
           fi
 
-          sudo systemsetup -settimezone "$QA_IOS_TIME_ZONE"
+          # macOS's own zone table is Apple's, not the full IANA one, and it does
+          # NOT contain Asia/Kolkata: `systemsetup -settimezone Asia/Kolkata` fails
+          # with "Asia/Kolkata is not a valid timezone" (run 41783371236). That is
+          # the very naming gap D-W3b-11a found on the device, showing up here at
+          # the OS level — Apple ships the old link name Asia/Calcutta instead.
+          # Both names are the same zone, so the alternatives are tried in order
+          # and the one that worked is printed. The real gate is the IST read-back
+          # below, which is what every date assertion in the suite depends on.
+          host_zone=""
+          for candidate in "$QA_IOS_TIME_ZONE" "$QA_IOS_TIME_ZONE_FALLBACK"; do
+            if sudo systemsetup -settimezone "$candidate" >/dev/null 2>&1; then
+              host_zone="$candidate"
+              break
+            fi
+            echo "host rejected the zone name \"$candidate\""
+          done
+          if [ -z "$host_zone" ]; then
+            echo "::error title=Host time zone could not be set::macOS accepted neither $QA_IOS_TIME_ZONE nor $QA_IOS_TIME_ZONE_FALLBACK. Names this host accepts:"
+            sudo systemsetup -listtimezones | tr ' ' '\n' | grep -i 'asia/' || true
+            exit 1
+          fi
+          echo "::notice title=Host zone::set with the name \"$host_zone\"; macOS accepted it."
           sudo systemsetup -gettimezone
+          # TZ for the rest of the job uses the IANA name, which Node accepts even
+          # where the OS tool does not.
           echo "TZ=$QA_IOS_TIME_ZONE" >> "$GITHUB_ENV"
 
           udid="$(xcrun simctl create "$QA_IOS_SIM_NAME" "$QA_IOS_DEVICE_TYPE" "$QA_IOS_RUNTIME")"
