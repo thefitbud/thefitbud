@@ -1,5 +1,6 @@
 /**
- * The effective-plan load (CU22, D-W3b-24).
+ * The effective-plan load (CU22, D-W3b-24; the `unavailable` state is CU24,
+ * D-W3b-27).
  *
  * `loadEffectivePlanState` is the shell's plan load with its four effects as
  * injected dependencies, so the orderings that were wrong can be tested
@@ -250,15 +251,20 @@ describe("loadEffectivePlanState", () => {
       }),
     });
 
-    // The caller swallows a pull failure before handing `pull` over, which is
-    // unchanged behaviour; this pins that a throwing pull does not cost the
-    // trainee their plan if that call site ever changes.
+    // The caller swallows a pull failure before handing `pull` over, so this
+    // pins that a throwing pull does not cost the trainee their plan if that
+    // call site ever changes. It did not pin it before CU24: the pull shared
+    // the fetch's `try`, so a throwing pull skipped `fetchPlan` altogether
+    // and the assertion passed on `none` under a name that says "still
+    // fetches". With a fourth state that same path would have read as
+    // "Couldn't load your plan" without the plan ever being asked for.
     const outcome = await loadEffectivePlanState(d);
 
-    expect(outcome.state.status === "loaded" || outcome.state.status === "none").toBe(true);
+    expect(d.fetchPlan).toHaveBeenCalled();
+    expect(outcome.state).toEqual({ status: "loaded", plan: livePlan });
   });
 
-  it("reads as no plan only when the fetch fails with nothing cached", async () => {
+  it("is unavailable, never 'no plan', when the fetch fails with nothing cached", async () => {
     const d = deps({
       fetchPlan: vi.fn(async () => {
         throw new Error("Request failed");
@@ -267,12 +273,85 @@ describe("loadEffectivePlanState", () => {
 
     const outcome = await loadEffectivePlanState(d);
 
-    // An offline first run cannot tell "no plan published" from "could not
-    // ask", so it reads as `none`. That is now **CU24** (D-W3b-27): a fourth
-    // `unavailable` state, approved by Firoz and built after CU22 merges.
-    // Pinned here so the change is deliberate when CU24 lands, rather than
-    // this line quietly becoming wrong.
+    // This is the offline first run. It used to read as `none`, so the
+    // trainee was told their coach was preparing a plan when the truth was
+    // that the app could not ask; CU24 (D-W3b-27) closed it with a fourth
+    // state. Asserting the whole state, not just `!== "none"`, is what keeps
+    // a collapse back into `none` red.
+    expect(outcome.state).toEqual({ status: "unavailable" });
+    expect(outcome.cacheError).toBeNull();
+  });
+
+  it("is unavailable when the cache read throws too", async () => {
+    // "Nothing cached" includes a cache that could not be read at all: the
+    // inner catch leaves `cached` null, and that must not resolve to `none`
+    // either.
+    const d = deps({
+      fetchPlan: vi.fn(async () => {
+        throw new Error("Request failed");
+      }),
+      readCached: vi.fn(async () => {
+        throw Object.assign(new Error("database disk image is malformed"), {
+          name: "SQLiteError",
+        });
+      }),
+    });
+
+    const outcome = await loadEffectivePlanState(d);
+
+    expect(outcome.state).toEqual({ status: "unavailable" });
+  });
+
+  it("keeps showing a cached plan when the fetch fails: that is not unavailable", async () => {
+    // D-W3b-27 draws the line here. `unavailable` is "could not ask and have
+    // nothing", not "could not refresh": with a cached plan the trainee keeps
+    // seeing it, so a reviewer mutating the fallback to `unavailable` would
+    // hide a plan the app holds.
+    const d = deps({
+      fetchPlan: vi.fn(async () => {
+        throw new Error("Request failed");
+      }),
+      readCached: vi.fn(async () => livePlan),
+    });
+
+    const outcome = await loadEffectivePlanState(d);
+
+    expect(outcome.state).toEqual({ status: "loaded", plan: livePlan });
+  });
+
+  it("still reads a server answer of 'no plan published' as none", async () => {
+    // The fourth state must not swallow the third: `none` is still reached,
+    // and only ever from an answer the server actually gave.
+    const outcome = await loadEffectivePlanState(
+      deps({ fetchPlan: vi.fn(async () => noPlan) }),
+    );
+
     expect(outcome.state).toEqual({ status: "none" });
+  });
+});
+
+/**
+ * The plan-unavailable copy (CU24, D-W3b-27).
+ *
+ * The decision fixes the string, so it is asserted verbatim here rather than
+ * described: a reword would be a product change, not a refactor.
+ */
+describe("the plan-unavailable message", () => {
+  it("is the decided copy, verbatim", async () => {
+    const { PLAN_UNAVAILABLE_MESSAGE } = await import("./TodayTab");
+
+    expect(PLAN_UNAVAILABLE_MESSAGE).toBe(
+      "Couldn't load your plan. Check your connection and try again",
+    );
+  });
+
+  it("is static text with nothing derived in it", async () => {
+    const { PLAN_UNAVAILABLE_MESSAGE } = await import("./TodayTab");
+
+    // AGENTS.md's rule (D-W3-12, D-W3b-7) and D-W3b-30's precedent: no error
+    // name, no message, no identifier, no parenthesised label.
+    expect(PLAN_UNAVAILABLE_MESSAGE).not.toMatch(/\(.*\)/);
+    expect(PLAN_UNAVAILABLE_MESSAGE).not.toContain("Error");
   });
 });
 

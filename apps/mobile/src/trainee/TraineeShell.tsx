@@ -42,6 +42,7 @@ import { MoreScreen } from "./MoreScreen";
 import { ProgressTab } from "./ProgressTab";
 import {
   EFFECTIVE_PLAN_LOADING,
+  EFFECTIVE_PLAN_UNAVAILABLE,
   TodayTab,
   effectivePlanStateFor,
   planFromState,
@@ -86,9 +87,9 @@ const TAB_TITLES: Record<TraineeTab, string> = {
 };
 
 /**
- * What the effective-plan load produced: a three-state plan, plus the
+ * What the effective-plan load produced: a four-state plan, plus the
  * cache-write failure if there was one. Never a nullable plan (CU22,
- * D-W3b-24) and never a boolean.
+ * D-W3b-24; the fourth state is CU24, D-W3b-27) and never a boolean.
  */
 export type EffectivePlanLoadOutcome = {
   readonly state: EffectivePlanState;
@@ -125,10 +126,11 @@ export const PLAN_CACHE_WRITE_MESSAGE =
  * - A cache-write failure is **returned**, not swallowed and not disguised as
  *   "no plan": the caller shows it (D-W3-12, D-W3-18).
  *
- * A fetch failure still falls back to the newest cached plan, and only a
- * fetch failure with nothing cached reads as `none`. That last case cannot
- * tell "no plan published" from "could not ask"; a fourth `unavailable` state
- * closes it and is **CU24** (D-W3b-27), built after this merges.
+ * A fetch failure still falls back to the newest cached plan. A fetch failure
+ * with **nothing** cached is `unavailable` (CU24, D-W3b-27), not `none`: it
+ * cannot tell "no plan published" from "could not ask", so it says neither
+ * and offers a retry. `none` is now only ever a judgement made on an answer
+ * the server actually gave.
  */
 export async function loadEffectivePlanState(deps: {
   pull: () => Promise<unknown>;
@@ -140,9 +142,20 @@ export async function loadEffectivePlanState(deps: {
   ) => Promise<unknown>;
   readCached: () => Promise<EffectivePlanResponse | null>;
 }): Promise<EffectivePlanLoadOutcome> {
-  let fetched: EffectivePlanResponse;
+  // The pull has its own `try` (CU24): a pull failure is not a plan failure,
+  // and the one real call site already swallows it before handing `pull`
+  // over. Inside the fetch's `try` a throwing pull skipped the fetch
+  // entirely, so the plan state was decided without the plan ever being
+  // asked for — which now reads as `unavailable`, a claim about the network
+  // that nothing checked (D-W3-12, D-W3-18).
   try {
     await deps.pull();
+  } catch (pullErr) {
+    reportError("trainee.effectivePlan.pull", pullErr);
+  }
+
+  let fetched: EffectivePlanResponse;
+  try {
     fetched = await deps.fetchPlan();
   } catch (fetchErr) {
     reportError("trainee.effectivePlan.fetch", fetchErr);
@@ -152,7 +165,13 @@ export async function loadEffectivePlanState(deps: {
     } catch (cacheReadErr) {
       reportError("trainee.effectivePlan.cacheRead", cacheReadErr);
     }
-    return { state: effectivePlanStateFor(cached), cacheError: null };
+    // Nothing cached means the app has no evidence either way, so it must
+    // not resolve to `none` (CU24, D-W3b-27). With a cached plan this stays
+    // `loaded`: "could not refresh" keeps showing the cached plan.
+    return {
+      state: cached ? effectivePlanStateFor(cached) : EFFECTIVE_PLAN_UNAVAILABLE,
+      cacheError: null,
+    };
   }
 
   let cacheError: string | null = null;
@@ -200,12 +219,13 @@ export function TraineeShell({
   const [workoutImmersive, setWorkoutImmersive] = useState(false);
   const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
-  // Three-state (CU22, D-W3b-24): the initial value is `loading`, not a null
-  // plan, because "not loaded yet" and "no plan published" are different
-  // facts and this screen used to tell a trainee the second when the first
-  // was true. `planCacheError` is separate on purpose: a plan that loaded but
-  // could not be cached is still a loaded plan, so it must not be expressible
-  // as a fourth plan state.
+  // Four-state (CU22, D-W3b-24; `unavailable` is CU24, D-W3b-27): the initial
+  // value is `loading`, not a null plan, because "not loaded yet", "no plan
+  // published" and "could not ask" are three different facts and this screen
+  // used to tell a trainee the second when either of the others was true.
+  // `planCacheError` is separate on purpose: a plan that loaded but could not
+  // be cached is still a loaded plan, so it must not be expressible as a plan
+  // state.
   const [planState, setPlanState] =
     useState<EffectivePlanState>(EFFECTIVE_PLAN_LOADING);
   const [planCacheError, setPlanCacheError] = useState<string | null>(null);
@@ -937,7 +957,7 @@ export function TraineeShell({
         {tab === "workout" ? (
           <WorkoutTab
             relationship={relationship}
-            effectivePlan={effectivePlan}
+            planState={planState}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
