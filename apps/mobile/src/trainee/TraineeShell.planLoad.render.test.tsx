@@ -75,12 +75,14 @@ function deps(overrides: Partial<Parameters<typeof loadEffectivePlanState>[0]> =
   return {
     pull: vi.fn(async () => undefined),
     fetchPlan: vi.fn(async () => livePlan),
-    cachePlan: vi.fn(
-      async (
-        _plan: EffectivePlanResponse,
-        _version: NonNullable<EffectivePlanResponse["version"]>,
-      ) => undefined,
-    ),
+    // Typed through `vi.fn`'s signature rather than named parameters, so the
+    // two arguments are pinned without declaring anything unused.
+    cachePlan: vi.fn<
+      (
+        plan: EffectivePlanResponse,
+        version: NonNullable<EffectivePlanResponse["version"]>,
+      ) => Promise<undefined>
+    >(async () => undefined),
     readCached: vi.fn(async () => null),
     ...overrides,
   };
