@@ -14,6 +14,12 @@ export type WeekDayState = z.infer<typeof weekDayStateSchema>;
 
 export const meDayResponseSchema = z.object({
   date: z.string(),
+  /**
+   * The same day state `GET /me/week` reports for this date. Zod object
+   * parse strips unknown keys, so omitting `state` here drops it from
+   * `getMeDay` (D-W4-18).
+   */
+  state: weekDayStateSchema,
   assignments: z.object({
     workouts: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
     meals: z.array(z.object({ id: z.string().uuid(), slotKey: z.string() })),
