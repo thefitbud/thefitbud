@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  FALLBACK_DISPLAY_TIME_ZONE,
   UnsupportedTimeZoneError,
+  deviceTimeZone,
   clearTimeZoneResolutionCache,
   resolveIntlTimeZone,
   timeZoneCandidates,
@@ -98,10 +100,29 @@ describe("resolveIntlTimeZone on Hermes/iOS", () => {
     }
   });
 
-  it("falls through to UTC when Etc/UTC is rejected", () => {
-    const stub = stubHermesIos(["Etc/UTC"]);
+  /**
+   * Driven by the real probe output from Firoz's iPhone, 4 Nov 2026:
+   *
+   *   Asia/Kolkata   Incorrect timeZone information provided   <- REJECTED
+   *   Asia/Calcutta  ok
+   *   UTC            ok
+   *   Etc/UTC        Incorrect timeZone information provided   <- REJECTED
+   *
+   * So the device rejects **two** of the four names, not just Asia/Kolkata.
+   * This stub rejects exactly that pair and asserts both still resolve, which
+   * also pins the candidate ordering: the requested name is tried first and
+   * the group supplies the accepted sibling.
+   */
+  it("resolves both names the real device rejected (Asia/Kolkata and Etc/UTC)", () => {
+    const stub = stubHermesIos(["Asia/Kolkata", "Etc/UTC"]);
     try {
+      expect(resolveIntlTimeZone("Asia/Kolkata")).toBe("Asia/Calcutta");
       expect(resolveIntlTimeZone("Etc/UTC")).toBe("UTC");
+      // The names the device accepted are returned untouched, not aliased away.
+      expect(resolveIntlTimeZone("Asia/Calcutta")).toBe("Asia/Calcutta");
+      expect(resolveIntlTimeZone("UTC")).toBe("UTC");
+      // Requested name first in both cases.
+      expect(stub.asked[0]).toBe("Asia/Kolkata");
     } finally {
       stub.restore();
     }
@@ -193,6 +214,96 @@ describe("zonedDateTimeFormat", () => {
       expect(spy.mock.calls[0]?.[1]).not.toHaveProperty("timeZone");
     } finally {
       spy.mockRestore();
+    }
+  });
+});
+
+/**
+ * D-W3b-11 (b): the device zone, with Asia/Kolkata only when it cannot be read
+ * at all — never UTC. The two cases below are the whole substance of the
+ * decision and must stay separate: an *unreadable* device zone falls back; a
+ * zone that is *present but unresolvable* still throws.
+ */
+describe("deviceTimeZone (D-W3b-11 (b))", () => {
+  function stubDeviceZone(resolved: unknown, shouldThrow = false) {
+    const real = Intl.DateTimeFormat;
+    const fake = function DateTimeFormat(
+      locales?: string | string[],
+      options?: Intl.DateTimeFormatOptions,
+    ) {
+      if (locales === undefined && options === undefined) {
+        if (shouldThrow) throw new RangeError("no zone data on this device");
+        return { resolvedOptions: () => ({ timeZone: resolved }) };
+      }
+      return new real(locales, options);
+    } as unknown as typeof Intl.DateTimeFormat;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Intl as any).DateTimeFormat = fake;
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (Intl as any).DateTimeFormat = real;
+    };
+  }
+
+  it("returns the device's own zone when it reads back", () => {
+    const restore = stubDeviceZone("Europe/Lisbon");
+    try {
+      expect(deviceTimeZone()).toBe("Europe/Lisbon");
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns the iOS legacy name as reported, which the alias table handles", () => {
+    const restore = stubDeviceZone("Asia/Calcutta");
+    try {
+      expect(deviceTimeZone()).toBe("Asia/Calcutta");
+      expect(resolveIntlTimeZone(deviceTimeZone())).toBe("Asia/Calcutta");
+    } finally {
+      restore();
+    }
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["missing (null)", null],
+    ["blank", ""],
+    ["whitespace", "   "],
+    ["not a string", 42],
+  ])("falls back to Asia/Kolkata, never UTC, when the zone reads %s", (_label, value) => {
+    const restore = stubDeviceZone(value);
+    try {
+      expect(deviceTimeZone()).toBe("Asia/Kolkata");
+      expect(deviceTimeZone()).toBe(FALLBACK_DISPLAY_TIME_ZONE);
+      expect(deviceTimeZone()).not.toBe("UTC");
+    } finally {
+      restore();
+    }
+  });
+
+  it("falls back when the read itself throws", () => {
+    const restore = stubDeviceZone(undefined, true);
+    try {
+      expect(deviceTimeZone()).toBe("Asia/Kolkata");
+    } finally {
+      restore();
+    }
+  });
+
+  it("does NOT swallow a present-but-unresolvable zone into the fallback", () => {
+    // The fallback covers an unreadable device zone only. A device that names
+    // a zone the engine cannot use must still produce the named error, or
+    // D-W3b-11's "an invalid or unsupported zone still shows an error that
+    // names the zone" is lost and a trainer sees Indian dates instead.
+    const restore = stubDeviceZone("Not/AZone");
+    try {
+      expect(deviceTimeZone()).toBe("Not/AZone");
+      expect(() => resolveIntlTimeZone(deviceTimeZone())).toThrow(
+        UnsupportedTimeZoneError,
+      );
+      expect(() => resolveIntlTimeZone(deviceTimeZone())).toThrow(/Not\/AZone/);
+    } finally {
+      restore();
     }
   });
 });

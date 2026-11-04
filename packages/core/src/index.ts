@@ -96,8 +96,10 @@ export {
 } from "./timezone.js";
 
 export {
+  FALLBACK_DISPLAY_TIME_ZONE,
   UnsupportedTimeZoneError,
   clearTimeZoneResolutionCache,
+  deviceTimeZone,
   resolveIntlTimeZone,
   timeZoneCandidates,
   zonedDateTimeFormat,

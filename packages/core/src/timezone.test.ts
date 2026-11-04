@@ -3,7 +3,11 @@ import { formatLocalDate, localDateTimeToUtcIso } from "./timezone.js";
 import { greetingFor } from "./greeting.js";
 import { formatClockTime, formatWindow } from "./format.js";
 import { localTimeHhMm } from "./reminder.js";
-import { UnsupportedTimeZoneError, clearTimeZoneResolutionCache } from "./zone.js";
+import {
+  FALLBACK_DISPLAY_TIME_ZONE,
+  UnsupportedTimeZoneError,
+  clearTimeZoneResolutionCache,
+} from "./zone.js";
 
 /**
  * CU17: the core helpers are what crashed on Hermes/iOS. Node accepts
@@ -158,6 +162,20 @@ describe("greetingFor", () => {
     expect(() =>
       greetingFor("Rohan Mehta", "Not/AZone", new Date("2026-11-03T02:00:00Z")),
     ).toThrow(UnsupportedTimeZoneError);
+  });
+
+  it("falls back to Asia/Kolkata only when no zone is given (D-W3b-11 (b))", () => {
+    // An absent zone is the sanctioned India-first fallback; a present but
+    // unresolvable one is the error case above. The two must not blur.
+    const morningIst = new Date("2026-11-03T02:00:00Z");
+    expect(greetingFor("Rohan Mehta", "", morningIst)).toBe("Good morning, Rohan");
+    expect(greetingFor("Rohan Mehta", "   ", morningIst)).toBe("Good morning, Rohan");
+    expect(greetingFor("Rohan Mehta", undefined, morningIst)).toBe(
+      "Good morning, Rohan",
+    );
+    expect(greetingFor("Rohan Mehta", FALLBACK_DISPLAY_TIME_ZONE, morningIst)).toBe(
+      "Good morning, Rohan",
+    );
   });
 });
 

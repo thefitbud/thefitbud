@@ -48,6 +48,55 @@ const ALIAS_GROUPS: readonly (readonly string[])[] = [
   ["Europe/Kyiv", "Europe/Kiev"],
 ];
 
+/**
+ * The zone to display when the **device's own zone cannot be read at all**.
+ *
+ * **D-W3b-11, option (b), decided by Firoz, 4 Nov 2026:** "Trainer screens use
+ * the device timezone. If the device zone can't be read, fall back to
+ * `Asia/Kolkata` (our users are in India). Never show UTC. This fallback is an
+ * explicit rule. An invalid or unsupported zone still shows an error that
+ * names the zone."
+ *
+ * So this is a *chosen* rule, not a default anyone fell into, which is why it
+ * is a named constant with this comment rather than an inline `||`. It is
+ * India-first by decision: a trainer whose device zone is unreadable sees
+ * Indian dates, which may be wrong for them.
+ *
+ * It applies to **one** case only — an unreadable device zone. A zone that is
+ * present but cannot be resolved still throws `UnsupportedTimeZoneError`
+ * naming the zone (D-W3-12, D-W3-18); this constant must never be used to
+ * swallow that.
+ */
+export const FALLBACK_DISPLAY_TIME_ZONE = "Asia/Kolkata";
+
+/**
+ * The device's own IANA zone, for screens that display in the viewer's zone
+ * (D-W3b-11 (b)).
+ *
+ * Returns `FALLBACK_DISPLAY_TIME_ZONE` only when the engine reports no usable
+ * zone name — missing, blank, or the read itself throwing. The returned name
+ * is **not** resolved here: callers format through the resolver as usual, so a
+ * device that reports a name the engine cannot use still produces a named
+ * error rather than a quietly substituted zone. On iOS the device zone often
+ * reads back as the legacy `Asia/Calcutta`, which the alias table handles.
+ */
+export function deviceTimeZone(): string {
+  let reported: unknown;
+  try {
+    // Narrow by construction: this catch covers the single act of *reading*
+    // the device zone, which is the only trigger D-W3b-11 sanctions. No
+    // resolution or formatting happens inside it, so it cannot hide an
+    // unsupported-zone error.
+    reported = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return FALLBACK_DISPLAY_TIME_ZONE;
+  }
+  if (typeof reported !== "string" || reported.trim() === "") {
+    return FALLBACK_DISPLAY_TIME_ZONE;
+  }
+  return reported.trim();
+}
+
 /** Thrown when no candidate name for a zone is accepted by this engine. */
 export class UnsupportedTimeZoneError extends RangeError {
   readonly timeZone: string;

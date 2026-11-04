@@ -243,28 +243,59 @@ describe("Intl timeZone bypass guard (D-W3b-12)", () => {
 });
 
 /**
- * CU17 also moved the trainer screens off a hardcoded `Asia/Kolkata` onto the
- * trainer's own stored zone. CU6's render harness has not merged, so this is a
- * source assertion rather than a render test: it pins the regression that
- * actually shipped (a constant nobody noticed) without pretending to exercise
- * the component.
+ * CU17 also moved the trainer screens off a hardcoded `Asia/Kolkata`.
+ * **D-W3b-11 (b)** then decided they display in the *device* zone, with
+ * `Asia/Kolkata` only when that cannot be read and **never UTC**. These are
+ * source assertions rather than render tests — CU6's harness landed after this
+ * was written — and they pin both halves: no literal zone in the screens, and
+ * no reintroduced `?? "UTC"`.
  */
-describe("trainer screens take their zone from the profile (D-W3b-11 (a))", () => {
+describe("trainer screens take their zone from the device (D-W3b-11 (b))", () => {
   const TRAINER_SCREENS = [
     "apps/mobile/src/trainer/AttentionTab.tsx",
     "apps/mobile/src/trainer/ClientsTab.tsx",
     "apps/mobile/src/trainer/CheckinReviewScreen.tsx",
   ];
 
+  /**
+   * Comments are stripped first, so a comment may *explain* the D-W3b-11 rule
+   * while the code may not name a zone. Stripping is not a loophole: what
+   * remains is checked for the bare name, not merely a quoted literal, so an
+   * identifier or a concatenation would fail too.
+   */
+  function codeWithoutComments(rel: string): string {
+    return readFileSync(join(REPO_ROOT, rel), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+  }
+
   it.each(TRAINER_SCREENS)("%s hardcodes no time zone", (rel) => {
-    const text = readFileSync(join(REPO_ROOT, rel), "utf8");
-    expect(text).not.toContain("Asia/Kolkata");
-    expect(text).not.toContain("Asia/Calcutta");
-    expect(text).not.toContain("TRAINER_ZONE");
+    const code = codeWithoutComments(rel);
+    expect(code).not.toContain("Asia/Kolkata");
+    expect(code).not.toContain("Asia/Calcutta");
+    expect(code).not.toContain("TRAINER_ZONE");
   });
 
-  it.each(TRAINER_SCREENS)("%s reads me.timezone", (rel) => {
+  it("the comment-stripper does not hide a real literal", () => {
+    // Guards the guard: if stripping ever swallowed code, these would pass.
+    const stripped = (text: string) =>
+      text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+    expect(stripped('const z = "Asia/Kolkata"; // the rule')).toContain(
+      "Asia/Kolkata",
+    );
+    expect(stripped('// explains Asia/Kolkata\nconst z = deviceTimeZone();')).not.toContain(
+      "Asia/Kolkata",
+    );
+    expect(stripped('const u = "https://x/y"; // keep urls intact')).toContain(
+      "https://x/y",
+    );
+  });
+
+  it.each(TRAINER_SCREENS)("%s reads the device zone via the resolver", (rel) => {
     const text = readFileSync(join(REPO_ROOT, rel), "utf8");
-    expect(text).toMatch(/me\?\.timezone\s*\?\?\s*"UTC"/);
+    expect(text).toContain("deviceTimeZone()");
+    // Never UTC, and never the stored profile zone, which option (a) used.
+    expect(text).not.toMatch(/\?\?\s*"UTC"/);
+    expect(text).not.toMatch(/me\?\.timezone/);
   });
 });

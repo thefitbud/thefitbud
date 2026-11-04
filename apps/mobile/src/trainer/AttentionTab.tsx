@@ -9,6 +9,7 @@ import type {
   TrainerCheckinInboxItem,
 } from "@fitbud/contracts";
 import {
+  deviceTimeZone,
   formatCivilDate,
   formatClockTime,
   formatPersonName,
@@ -124,10 +125,11 @@ export function AttentionTab({
   onReviewException,
   onReviewCheckin,
 }: Props) {
-  const { api, me, relationships, refreshSession } = useAuth();
-  // The trainer's own stored zone (`users.timezone`, default "UTC"); the
-  // stored value wins, per D-W3b-11 option (a).
-  const trainerZone = me?.timezone ?? "UTC";
+  const { api, relationships, refreshSession } = useAuth();
+  // The trainer's device zone, falling back to Asia/Kolkata when it cannot be
+  // read at all — never UTC (D-W3b-11 (b)). A zone that is present but
+  // unresolvable still surfaces a named error from the resolver.
+  const trainerZone = deviceTimeZone();
   const s1 = stage1Api(api);
   const [segment, setSegment] = useState<Segment>("needs_you");
   const [lists, setLists] = useState<AttentionLists>(EMPTY_LISTS);
