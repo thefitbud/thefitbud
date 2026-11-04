@@ -13,6 +13,7 @@ import { BottomSheet } from "../components/BottomSheet";
 import { addDays, localDateInTimezone } from "../lib/dates";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { AssignedMealPlanScreen } from "../trainee/AssignedMealPlanScreen";
+import type { EffectivePlanState } from "../trainee/TodayTab";
 import { AskCoachSheet } from "../trainee/ask/AskCoachSheet";
 import { DeepLinkUnavailableScreen } from "../trainee/DeepLinkUnavailableScreen";
 import { EndedCoachingScreen } from "../trainee/EndedCoachingScreen";
@@ -76,6 +77,9 @@ type Props = {
   overlay: TraineeOverlay;
   relationship: CoachingRelationship;
   effectivePlan: EffectivePlanResponse | null;
+  /** The un-narrowed plan. The meal plan screen must not read `unavailable` as loading. */
+  planState: EffectivePlanState;
+  onRetryPlan?: () => void;
   presentation?: "fullscreen" | "sheet";
   onClose: () => void;
   onOpen: TraineeOverlayOpener;
@@ -91,6 +95,8 @@ export function TraineeOverlayHost({
   overlay,
   relationship,
   effectivePlan,
+  planState,
+  onRetryPlan,
   presentation = "fullscreen",
   onClose,
   onOpen,
@@ -266,7 +272,8 @@ export function TraineeOverlayHost({
     case "meal_plan":
       return (
         <AssignedMealPlanScreen
-          effectivePlan={effectivePlan}
+          planState={planState}
+          onRetryPlan={onRetryPlan}
           coachName={coachName}
           insetTabBar
           onBack={onClose}

@@ -293,6 +293,9 @@ export function NotificationsScreen({
 
   useEffect(() => {
     return subscribe(CACHE_KEY, () => {
+      // Adopt the inbox another writer stored. `load` calls `setCached` on
+      // this key, so refetching from the subscriber looped (BT15, D-W4-16;
+      // same shape CU24 fixed on the workout tab).
       const next = getCached<Notification[]>(CACHE_KEY);
       if (next) setItems(next.filter((item) => withinRetention(item.createdAt)));
     });
