@@ -25,22 +25,38 @@ tags:
 - extendedWaitUntil:
     notVisible: ".*Loading your day.*"
     timeout: 30000
-# Plan-gated assertions (CU22, D-W3b-25). The only positive assertion here
-# used to be `assertVisible: "Today's workout"`, which proved nothing: that
-# header rendered for every trainee, including one whose trainer has published
-# nothing, so the flow could pass it and then fail on the contradiction below.
+# Plan-gated wait, then the pair (CU22, D-W3b-24).
 #
-# "Here's your day." is the direct counterpart of the "is preparing your plan"
-# copy: both come from the one greeting subtitle, which renders exactly one of
-# them and neither while the plan is still loading. Asserting it next to the
-# assertNotVisible pins the pair, so neither a plan state stuck on "loading"
-# nor one wrongly read as "no plan" can pass. (It is not shown when everything
-# for the day is already logged, which the QA on-track seed guarantees is not
-# the case: four meals today, one logged.)
-- assertVisible: "Here's your day\\."
-# Now gated on the plan as well: the workout section no longer renders before
-# the effective plan has resolved to a live version.
-- assertVisible: "Today's workout"
+# Two separate loads feed this screen and only one of them is covered by the
+# wait above. `Loading your day...` clearing means the DAY load settled (six
+# parallel requests). The plan load is a different path: it awaits a full sync
+# pull, up to 50 serial SQLite writes, before it fetches the plan. So on a
+# cold emulator (`clearState: true`) the day can be on screen while the plan
+# is still loading, and `assertVisible` only retries for Maestro's short
+# default.
+#
+# The workout section is now gated on the plan, so it is both the thing worth
+# asserting and the right thing to WAIT on: a generous wait here is strictly
+# stronger than an assertion, because it still fails if the plan resolves to
+# "no plan published" rather than to a live version.
+#
+# Why this element and not "Here's your day." or "Nutrition":
+# - "Here's your day." is the greeting subtitle, which switches to
+#   "Nicely done." when every item for the day is already logged. The QA seed
+#   does NOT rule that out: `loggedMealsTodayOnTrack` is a minimum of one, and
+#   logged rows exist only for meals whose time has passed, so a hand-dispatched
+#   seed-reset late in the IST day on a rest day of the generated plan would
+#   make it read "Nicely done." on a correct build.
+# - "Nutrition" is plan-gated and not affected by that, but it sits below the
+#   fold (this flow scrolls to it further down), so waiting on it would risk
+#   failing a correct build for a reason that has nothing to do with the plan.
+# - "Today's workout" is plan-gated, unaffected by what is logged, and is on
+#   screen without scrolling (run 41787562558 asserted it directly).
+- extendedWaitUntil:
+    visible: "Today's workout"
+    timeout: 60000
+# The pair: exactly one of these two states renders, and "loaded" and
+# "none" are mutually exclusive, so the two lines together pin the plan state.
 - assertNotVisible: ".*is preparing your plan.*"
 - takeScreenshot: trainee-today__loaded
 - runFlow: ../../common/assert-no-crash.yaml

@@ -1,5 +1,5 @@
 /**
- * Today's plan-state gating (CU22, D-W3b-25).
+ * Today's plan-state gating (CU22, D-W3b-24).
  *
  * The defect these tests pin: `effectivePlan === null` meant both "not loaded
  * yet" and "no plan published", and the shell's plan load always settles after

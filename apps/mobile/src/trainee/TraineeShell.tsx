@@ -88,7 +88,7 @@ const TAB_TITLES: Record<TraineeTab, string> = {
 /**
  * What the effective-plan load produced: a three-state plan, plus the
  * cache-write failure if there was one. Never a nullable plan (CU22,
- * D-W3b-25) and never a boolean.
+ * D-W3b-24) and never a boolean.
  */
 export type EffectivePlanLoadOutcome = {
   readonly state: EffectivePlanState;
@@ -127,8 +127,9 @@ export function planCacheWriteMessage(err: unknown): string {
  *   "no plan": the caller shows it (D-W3-12, D-W3-18).
  *
  * A fetch failure still falls back to the newest cached plan, and only a
- * fetch failure with nothing cached reads as `none` — see the PR for the
- * residual that leaves.
+ * fetch failure with nothing cached reads as `none`. That last case cannot
+ * tell "no plan published" from "could not ask"; a fourth `unavailable` state
+ * closes it and is **CU24** (D-W3b-27), built after this merges.
  */
 export async function loadEffectivePlanState(deps: {
   pull: () => Promise<unknown>;
@@ -198,7 +199,7 @@ export function TraineeShell({
   const [workoutImmersive, setWorkoutImmersive] = useState(false);
   const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
-  // Three-state (CU22, D-W3b-25): the initial value is `loading`, not a null
+  // Three-state (CU22, D-W3b-24): the initial value is `loading`, not a null
   // plan, because "not loaded yet" and "no plan published" are different
   // facts and this screen used to tell a trainee the second when the first
   // was true. `planCacheError` is separate on purpose: a plan that loaded but

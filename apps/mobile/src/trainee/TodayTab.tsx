@@ -93,7 +93,7 @@ function exerciseCountLabel(count: number): string {
 }
 
 /**
- * The trainee's effective plan as an explicit load state (CU22, D-W3b-25).
+ * The trainee's effective plan as an explicit load state (CU22, D-W3b-24).
  *
  * `effectivePlan: EffectivePlanResponse | null` used to carry two different
  * facts — "not loaded yet" and "no plan published" — and the shell's initial
@@ -376,7 +376,7 @@ export function TodayTab({
                 : greetingFor(displayName, timeZone || "Asia/Kolkata")}
             </Text>
             {/*
-              Gated on the plan's OWN load state (CU22, D-W3b-25). It used to
+              Gated on the plan's OWN load state (CU22, D-W3b-24). It used to
               be gated on nothing but `planReady`, which was false while the
               plan was still loading, so this line claimed the coach had
               published nothing whenever it rendered first — which it always
@@ -581,7 +581,7 @@ export function TodayTab({
         ) : null}
 
         {/*
-          The workout section is gated on the plan too (CU22, D-W3b-25). It
+          The workout section is gated on the plan too (CU22, D-W3b-24). It
           used to render for every trainee, including one whose trainer has
           published nothing — an empty "Today's workout" card beside "your
           coach is preparing your plan" — and it is why the Maestro flow's

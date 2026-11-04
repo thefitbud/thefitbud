@@ -1,5 +1,5 @@
 /**
- * The effective-plan load (CU22, D-W3b-25).
+ * The effective-plan load (CU22, D-W3b-24).
  *
  * `loadEffectivePlanState` is the shell's plan load with its four effects as
  * injected dependencies, so the orderings that were wrong can be tested
@@ -9,11 +9,14 @@
  *
  * It lives in a `.test.tsx` rather than a `.test.ts` because `TraineeShell`
  * imports `react-native`, which only resolves in vitest's `render` project
- * (aliased to `react-native-web`, CU6). Nothing here renders a component.
+ * (aliased to `react-native-web`, CU6). The last describe block renders the
+ * real shell; everything above it is the loader on its own.
  */
 import { describe, expect, it, vi } from "vitest";
 import {
+  coachingRelationshipSchema,
   effectivePlanResponseSchema,
+  type CoachingRelationship,
   type EffectivePlanResponse,
 } from "@fitbud/contracts";
 /*
@@ -30,6 +33,104 @@ vi.mock("expo-modules-core", () => ({
   requireNativeModule: () => null,
   NativeModulesProxy: {},
   EventEmitter: class {},
+}));
+
+/*
+ * The relationship the rendered shell is given, parsed by the same contract
+ * the API answers with so the fixture cannot drift from a real response.
+ */
+const shellRelationship: CoachingRelationship = coachingRelationshipSchema.parse({
+  id: "1b65e3ad-84cf-4fe1-a546-0d62656c2c79",
+  trainerUserId: "a00ed048-8bac-4010-b641-dd888c8a8730",
+  traineeUserId: "a0a69e20-297d-4101-a5e2-ecce9b8491cb",
+  status: "active",
+  onboardingStatus: "coaching_ready",
+  invitationId: null,
+  startedAt: "2026-09-01T06:30:00.000Z",
+  endedAt: null,
+  createdAt: "2026-09-01T06:30:00.000Z",
+  updatedAt: "2026-11-01T06:30:00.000Z",
+  trainerDisplayName: "Rahul Verma",
+});
+
+/**
+ * A promise that never settles: the plan fetch the rendered shell is given,
+ * so the screen stays in whatever state the shell initialised the plan to.
+ * This is the cold start the defect lived in.
+ */
+const neverSettles = new Promise<never>(() => undefined);
+
+const shellApi = new Proxy(
+  {},
+  {
+    get(_target, key: string) {
+      if (key === "getEffectivePlan") return () => neverSettles;
+      // `getMeWeek` / `getMeDay` answer with a whole read model or nothing;
+      // an empty list would be a shape the API never returns.
+      if (key === "getMeWeek" || key === "getMeDay") return async () => null;
+      if (key === "listMeCoachNotes") return async () => ({ items: [] });
+      if (key === "then") return undefined;
+      return async () => ({ items: [], nextCursor: null });
+    },
+  },
+);
+
+vi.mock("../auth/AuthProvider", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>(
+    "../auth/AuthProvider",
+  );
+  const { mockAuth } = await import("../test/render");
+  const auth = mockAuth({
+    api: shellApi,
+    me: {
+      id: "a0a69e20-297d-4101-a5e2-ecce9b8491cb",
+      email: "aarav.ontrack@demo.fitbud.test",
+      timezone: "Asia/Kolkata",
+    },
+  });
+  return { ...actual, useAuth: () => auth };
+});
+
+vi.mock("../sync/SyncProvider", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>(
+    "../sync/SyncProvider",
+  );
+  return {
+    ...actual,
+    useSyncEngine: () => ({
+      // The shell awaits this before it fetches the plan; on a device it is a
+      // page pull plus up to 50 serial SQLite writes, which is why the plan
+      // always settles after the day does.
+      pullAndApply: async () => undefined,
+      store: {
+        upsertLocal: async () => undefined,
+        listLocal: async () => [],
+        // Read by `SyncIndicator`, which the shell's chrome renders.
+        listOutbox: async () => [],
+        // `SyncMeta`, the real shape: nothing synced yet on a cold start.
+        getMeta: async () => ({ cursor: null, lastSyncedAt: null }),
+      },
+      enqueue: async () => undefined,
+    }),
+  };
+});
+
+vi.mock("../providers/ConfigProvider", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>(
+    "../providers/ConfigProvider",
+  );
+  return {
+    ...actual,
+    useConfig: () => ({
+      config: null,
+      loading: false,
+      refresh: async () => undefined,
+    }),
+  };
+});
+
+vi.mock("../realtime/useRealtimeHints", () => ({
+  useRealtimeHints: () => undefined,
 }));
 
 const { loadEffectivePlanState, planCacheWriteMessage } = await import(
@@ -167,9 +268,11 @@ describe("loadEffectivePlanState", () => {
 
     const outcome = await loadEffectivePlanState(d);
 
-    // Recorded as the residual it is: an offline first run cannot tell "no
-    // plan published" from "could not ask". The PR says so; closing it needs
-    // a fourth state, which is beyond what was approved here.
+    // An offline first run cannot tell "no plan published" from "could not
+    // ask", so it reads as `none`. That is now **CU24** (D-W3b-27): a fourth
+    // `unavailable` state, approved by Firoz and built after CU22 merges.
+    // Pinned here so the change is deliberate when CU24 lands, rather than
+    // this line quietly becoming wrong.
     expect(outcome.state).toEqual({ status: "none" });
   });
 });
@@ -205,5 +308,39 @@ describe("planCacheWriteMessage", () => {
     expect(planCacheWriteMessage("nope")).toBe(
       "Your plan loaded, but saving it on this phone failed. Your plan still shows while you're online — pull down to try saving it again.",
     );
+  });
+});
+
+/**
+ * The shell's initial plan state (CU22, D-W3b-24).
+ *
+ * This renders the real `TraineeShell` with a plan fetch that never settles,
+ * which is the cold start the defect lived in. It exists because the reviewer
+ * mutated `useState<EffectivePlanState>(EFFECTIVE_PLAN_LOADING)` to
+ * `{ status: "none" }` and every other test still passed — and that one line
+ * is what makes the three-state real. Reverted, every trainee with a
+ * published plan is told their coach is preparing one on every cold start,
+ * which is the whole defect back.
+ */
+describe("TraineeShell initial plan state", () => {
+  it("says nothing about a plan before the plan load settles", async () => {
+    const { render, screen, waitFor } = await import("../test/render");
+    const { TraineeShell } = await import("./TraineeShell");
+
+    render(<TraineeShell relationship={shellRelationship} />);
+
+    // The shell has mounted and its effects have run; the plan fetch is still
+    // pending on purpose (`neverSettles` below), so the plan state is whatever
+    // the shell initialised it to.
+    // "Today" is both the tab and the screen title, so this only asserts the
+    // shell is mounted and past its first effects.
+    await waitFor(() => {
+      expect(screen.getAllByText("Today").length).toBeGreaterThan(0);
+    });
+
+    expect(screen.queryAllByText(/is preparing your plan/)).toEqual([]);
+    expect(
+      screen.queryByLabelText("Your coach is preparing your plan"),
+    ).toBeNull();
   });
 });
