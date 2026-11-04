@@ -5,22 +5,13 @@
  * today" is a valid state and is never a failure. Dated values are read from the seed
  * run's own expectations and only when they describe today (see `expectations.ts`).
  */
-import { meDayResponseSchema, workoutAssignmentSchema } from "@fitbud/contracts";
+import { meDayResponseSchema, meWeekResponseSchema, workoutAssignmentSchema } from "@fitbud/contracts";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import { todaysExpectations } from "./expectations.js";
 import { getData, localToday, run, stable } from "./helpers.js";
 import { sessionFor, smokeHttp } from "./run-context.js";
 
 const http = smokeHttp();
-
-// `/me/week` has no schema in `packages/contracts` (unlike `/me/day`, which uses
-// `meDayResponseSchema`), so the suite states its shape here. Move it to contracts
-// rather than widening this copy if the route changes.
-const weekResponseSchema = z.object({
-  start: z.string(),
-  days: z.array(z.object({ date: z.string(), state: z.string() })),
-});
 
 describe("GET /me/day/:date", () => {
   it.for(["ontrack", "slipping"] as const)("%s: today's day parses and matches the seed", async (key, t) => {
@@ -53,7 +44,7 @@ describe("GET /me/week", () => {
   it("returns seven days that include today", async (t) => {
     const session = sessionFor(t, "ontrack");
     const today = await localToday(http, session);
-    const week = await getData(http, session, "/me/week", weekResponseSchema);
+    const week = await getData(http, session, "/me/week", meWeekResponseSchema);
     expect(week.days.length).toBe(7);
     expect(week.days.map((d) => d.date)).toContain(today);
   });
