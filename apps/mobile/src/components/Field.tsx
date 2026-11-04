@@ -24,6 +24,13 @@ export function Field({ label, hint, ...inputProps }: Props) {
           styles.input,
           inputProps.multiline ? styles.multiline : undefined,
         ]}
+        // The label is a sibling `Text`, not wired to this input, so without
+        // this the input has no accessible name and VoiceOver/TalkBack
+        // announce nothing (CU15). `...inputProps` spreads after it, so a
+        // caller's explicit `accessibilityLabel` still wins. The label is the
+        // accessible name only while it is unique on the screen; a screen with
+        // two same-labelled fields passes its own label or a `testID`.
+        accessibilityLabel={label}
         {...inputProps}
       />
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}

@@ -22,11 +22,9 @@
 appId: com.thefitbud.mobile.staging
 ---
 - runFlow: sign-in-code-request.yaml
-# The field has no label wired to it (the label is a separate Text), so tap the
-# element directly under the label. TODO(QT3b): accessibilityLabel on Field's
-# TextInput would make this a plain tapOn.
-- tapOn:
-    below: "6-digit code"
+# `Field` names its TextInput with its label (CU15), so the code field is
+# tapped by that name rather than by its position under the label.
+- tapOn: "6-digit code"
 - inputText: ${QA_OTP_CODE}
 - hideKeyboard:
     optional: true
@@ -44,7 +42,7 @@ appId: com.thefitbud.mobile.staging
       # Sign-in did not leave the code screen: clear the field before the final
       # assertion fails and Maestro screenshots the failure.
       - tapOn:
-          below: "6-digit code"
+          text: "6-digit code"
           optional: true
       - eraseText:
           charactersToErase: 12
