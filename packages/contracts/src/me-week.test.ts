@@ -37,16 +37,16 @@ describe("meWeekResponseSchema", () => {
     expect(meWeekResponseSchema.parse(body).days.at(-1)?.date).toBe("2027-01-03");
   });
 
-  it("rejects dates that are not YYYY-MM-DD", () => {
-    expect(() =>
-      meWeekResponseSchema.parse({ start: "2 Nov 2026", days: [] }),
-    ).toThrow();
-    expect(() =>
-      meWeekResponseSchema.parse({
-        start: "2026-11-02",
-        days: [{ date: "2026-11-02T00:00:00.000Z", state: "future" }],
-      }),
-    ).toThrow();
+  it("accepts the odd `start` values the route answers 200 with, as it does today", () => {
+    // The handler echoes the raw `?start=` query and validates nothing, so these are
+    // real 200 bodies. The schema stays as loose as the route (CU13 is a move).
+    expect(meWeekResponseSchema.parse({ start: "2026-11", days: [] }).start).toBe("2026-11");
+    expect(meWeekResponseSchema.parse(routeResponse("2026-02-30")).days[0]?.date).toBe(
+      "2026-03-02",
+    );
+    expect(meWeekResponseSchema.parse(routeResponse("-002026-11-02")).start).toBe(
+      "-002026-11-02",
+    );
   });
 
   it("rejects a missing or mistyped field", () => {
@@ -61,11 +61,15 @@ describe("meWeekResponseSchema", () => {
     expect(() =>
       meWeekResponseSchema.parse({ start: "2026-11-02", days: {} }),
     ).toThrow();
+    expect(() =>
+      meWeekResponseSchema.parse({ start: 20261102, days: [] }),
+    ).toThrow();
   });
 
-  it("rejects the richer week read model, which this route does not serve", () => {
-    // `weekReadModelSchema` adds workouts / meals / todayNutrition. Those extra keys
-    // are stripped rather than accepted as data, and a body that omits start fails.
+  it("strips the richer week read model's extra keys instead of carrying them", () => {
+    // `weekReadModelSchema` adds workouts / meals / todayNutrition. A body carrying
+    // them parses, but those keys do not survive as data, so nothing can read them
+    // off a `MeWeekResponse` by accident.
     const parsed = meWeekResponseSchema.parse({
       start: "2026-11-02",
       days: [],
