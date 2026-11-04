@@ -546,8 +546,23 @@ describe("FitBudApiClient", () => {
         }
       }
       const refresh = vi.fn(async () => "fresh");
-      const onError = vi.fn();
-      const onClose = vi.fn();
+      let handshakeSettled!: () => void;
+      const handshakeDone = new Promise<void>((resolve) => {
+        handshakeSettled = resolve;
+      });
+      let errorCount = 0;
+      let closeCount = 0;
+      const settleHandshake = () => {
+        if (errorCount >= 1 && closeCount >= 1) handshakeSettled();
+      };
+      const onError = vi.fn(() => {
+        errorCount += 1;
+        settleHandshake();
+      });
+      const onClose = vi.fn(() => {
+        closeCount += 1;
+        settleHandshake();
+      });
       const client = new FitBudApiClient({
         baseUrl: "https://example.test",
         getAccessToken: () => "stale",
@@ -560,7 +575,7 @@ describe("FitBudApiClient", () => {
         onClose,
         WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
       });
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await handshakeDone;
       // No refresh, no reconnect: one socket attempt, reported and done.
       expect(refresh).not.toHaveBeenCalled();
       expect(urls).toHaveLength(1);
