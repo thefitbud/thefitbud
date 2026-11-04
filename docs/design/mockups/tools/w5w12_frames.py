@@ -1,4 +1,5 @@
 """W5-W12 planned frames (drawn 3 Nov 2026 by FitBud UI for Firoz's review): DS1, DS2, DS3, DS4, DS6, DS7, BP1.
+Batch refs (PLAN-v2, 4 Nov 2026): DS1/DS2/DS4/DS7 W7, DS3 W8, BP1 W12; DS6 superseded by DS8 (tools/ds8_frames.py) for in-person logging, rest parked with W14.
 Run from docs/design/mockups/: python3 tools/w5w12_frames.py   (writes html/<name>.html)
 Render: PW_DIR=<folder with playwright-core> node tools/ds5_render.mjs $(python3 tools/w5w12_frames.py --list)"""
 import sys

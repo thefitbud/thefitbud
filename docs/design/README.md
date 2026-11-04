@@ -318,4 +318,26 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | IP-16 | Suggest a change (trainee) | coach-logged set | iOS | [IP-16-trainee-suggest-change-v3-ios.png](mockups/png/IP-16-trainee-suggest-change-v3-ios.png) | [html](mockups/html/IP-16-trainee-suggest-change-v3-ios.html) | **Locked** (v3, 21 Oct) |
 
 ## W5–W12 frames (DS1–DS4, DS6, DS7, BP1): approval
+Batch refs updated 4 Nov 2026 to PLAN-v2 numbering: DS1, DS2, DS4, DS7 → W7; DS3 → W8; BP1 → **W12** (Z12-29, Z12-30); DS6 → **superseded by DS8** for in-person logging (PLAN-v2 D-P2-15), the rest parked with Phase 10 (W14).
 Firoz approved these frames on 3 Nov 2026. They are the target, but the coding agent may refine layout and details for better UI/UX while building, as long as the spec's behaviour and copy are kept.
+
+## DS8: trainer mobile in-person workout logging (W10 Z10-16–Z10-18, W9 Z9-11)
+Drawn 4 Nov 2026 by FitBud UI with `mockups/tools/ds8_frames.py` (same tokens and the trainee set-entry row and kg keypad from frames 11/11b/11c). iOS 390×844 @3x. **Awaiting Firoz's review** (PLAN-v2 D-P2-15: Z10-16–Z10-18 start after this review). Supersedes DS6 for in-person logging; the rest of DS6 stays parked with Phase 10 (W14).
+
+| ID | Screen | State | Platform | Frame | HTML | Status |
+|---|---|---|---|---|---|---|
+| DS8 | Start workout | pick clients + mode (live / past) | iOS | [DS8-a1-start-pick-mode-ios.png](mockups/png/DS8-a1-start-pick-mode-ios.png) | [html](mockups/html/DS8-a1-start-pick-mode-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Start workout | empty: no workouts today | iOS | [DS8-a2-start-empty-ios.png](mockups/png/DS8-a2-start-empty-ios.png) | [html](mockups/html/DS8-a2-start-empty-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Live log, one client | set entry + kg keypad | iOS | [DS8-b1-live-single-keypad-ios.png](mockups/png/DS8-b1-live-single-keypad-ios.png) | [html](mockups/html/DS8-b1-live-single-keypad-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Live log, one client | rest timer | iOS | [DS8-b2-live-single-rest-ios.png](mockups/png/DS8-b2-live-single-rest-ios.png) | [html](mockups/html/DS8-b2-live-single-rest-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Live log, one client | finish confirmation | iOS | [DS8-b3-live-finish-confirm-ios.png](mockups/png/DS8-b3-live-finish-confirm-ios.png) | [html](mockups/html/DS8-b3-live-finish-confirm-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Live log, parallel | client chips + keypad | iOS | [DS8-c1-live-multi-ios.png](mockups/png/DS8-c1-live-multi-ios.png) | [html](mockups/html/DS8-c1-live-multi-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Live log, parallel | switched client, other resting | iOS | [DS8-c2-live-multi-switched-ios.png](mockups/png/DS8-c2-live-multi-switched-ios.png) | [html](mockups/html/DS8-c2-live-multi-switched-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Live log, parallel | finish all confirmation | iOS | [DS8-c3-live-multi-finish-all-ios.png](mockups/png/DS8-c3-live-multi-finish-all-ios.png) | [html](mockups/html/DS8-c3-live-multi-finish-all-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Live log, parallel | offline, sets queued | iOS | [DS8-c4-live-offline-ios.png](mockups/png/DS8-c4-live-offline-ios.png) | [html](mockups/html/DS8-c4-live-offline-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Log past workout | prefilled form | iOS | [DS8-d1-log-form-ios.png](mockups/png/DS8-d1-log-form-ios.png) | [html](mockups/html/DS8-d1-log-form-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Log past workout | 7-day limit, nothing planned | iOS | [DS8-d2-log-form-date-limit-ios.png](mockups/png/DS8-d2-log-form-date-limit-ios.png) | [html](mockups/html/DS8-d2-log-form-date-limit-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Log past workout | saving | iOS | [DS8-d3-log-form-saving-ios.png](mockups/png/DS8-d3-log-form-saving-ios.png) | [html](mockups/html/DS8-d3-log-form-saving-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Log past workout | not saved (offline/unavailable) | iOS | [DS8-d4-log-form-not-saved-ios.png](mockups/png/DS8-d4-log-form-not-saved-ios.png) | [html](mockups/html/DS8-d4-log-form-not-saved-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Log past workout | ended client, read-only | iOS | [DS8-d5-log-form-ended-ios.png](mockups/png/DS8-d5-log-form-ended-ios.png) | [html](mockups/html/DS8-d5-log-form-ended-ios.html) | Awaiting Firoz (4 Nov) |
+| DS8 | Trainee workout (W9 Z9-11) | Logged by your coach, read-only | iOS | [DS8-w9-trainee-coach-logged-ios.png](mockups/png/DS8-w9-trainee-coach-logged-ios.png) | [html](mockups/html/DS8-w9-trainee-coach-logged-ios.html) | Awaiting Firoz (4 Nov) |
