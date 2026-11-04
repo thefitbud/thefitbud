@@ -157,7 +157,15 @@ export async function pushTrainerInboxEvent(
       .from(users)
       .where(eq(users.id, notification.recipientUserId))
       .limit(1);
-    const localTime = localTimeHhMm(now, user?.timezone ?? "UTC") ?? "12:00";
+    // No `?? "12:00"` here any more (CU17): `localTimeHhMm` now throws for a
+    // zone it cannot resolve instead of returning `null`, so the fallback was
+    // dead for that case — and while it lived it decided a push from a
+    // fabricated noon. The throw is contained by `pushTrainerInboxEvent`'s
+    // documented never-throws boundary and reported by `logPushError`, so the
+    // outcome is "no inbox push, one warn line naming the zone" rather than a
+    // push sent on a wrong local time.
+    const localTime = localTimeHhMm(now, user?.timezone ?? "UTC");
+    if (localTime === null) return;
     if (
       isWithinQuietHours({
         localTimeHhMm: localTime,

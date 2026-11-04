@@ -4,7 +4,7 @@ import { ChevronRight, Search } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { AttentionGroupsResponse, ClientDirectoryItem } from "@fitbud/contracts";
-import { formatClockTime, formatPersonName, labelFor } from "@fitbud/core";
+import { deviceTimeZone, formatClockTime, formatPersonName, labelFor } from "@fitbud/core";
 import { colors, fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { stage1Api } from "../lib/stage1Api";
@@ -93,6 +93,8 @@ function isOfflineError(err: unknown): boolean {
 
 export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) {
   const { api } = useAuth();
+  // Device zone, Asia/Kolkata only if it cannot be read (D-W3b-11 (b)).
+  const trainerZone = deviceTimeZone();
   const [segment, setSegment] = useState<Segment>(initialSegment);
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<ClientListFilter>("all");
@@ -225,7 +227,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
       {offlineAt ? (
         <Text style={styles.offline}>
           You're offline. Showing the last update from{" "}
-          {formatClockTime(offlineAt, "Asia/Kolkata")}.
+          {formatClockTime(offlineAt, trainerZone)}.
         </Text>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
