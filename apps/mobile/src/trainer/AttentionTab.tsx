@@ -9,6 +9,7 @@ import type {
   TrainerCheckinInboxItem,
 } from "@fitbud/contracts";
 import {
+  deviceTimeZone,
   formatCivilDate,
   formatClockTime,
   formatPersonName,
@@ -68,8 +69,6 @@ type ReviewSheetState = {
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
 type Segment = "needs_you" | "asked" | "checkins";
 
-const TRAINER_ZONE = "Asia/Kolkata";
-
 type Props = {
   onReviewException: (exceptionId: string) => void;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
@@ -127,6 +126,10 @@ export function AttentionTab({
   onReviewCheckin,
 }: Props) {
   const { api, relationships, refreshSession } = useAuth();
+  // The trainer's device zone, falling back to Asia/Kolkata when it cannot be
+  // read at all — never UTC (D-W3b-11 (b)). A zone that is present but
+  // unresolvable still surfaces a named error from the resolver.
+  const trainerZone = deviceTimeZone();
   const s1 = stage1Api(api);
   const [segment, setSegment] = useState<Segment>("needs_you");
   const [lists, setLists] = useState<AttentionLists>(EMPTY_LISTS);
@@ -214,7 +217,7 @@ export function AttentionTab({
   );
 
   const offline = offlineAt != null;
-  const todayLabel = formatCivilDate(localDateInTimezone(TRAINER_ZONE));
+  const todayLabel = formatCivilDate(localDateInTimezone(trainerZone));
   const sections = attentionSectionModel({
     dateLabel: todayLabel,
     needsYouCount: needsYouCards.length,
@@ -502,7 +505,7 @@ export function AttentionTab({
         <View style={styles.offline}>
           <Text style={styles.offlineText}>
             You're offline. Showing the last update from{" "}
-            {formatClockTime(offlineAt!, TRAINER_ZONE)}.
+            {formatClockTime(offlineAt!, trainerZone)}.
           </Text>
         </View>
       ) : null}
@@ -609,7 +612,7 @@ export function AttentionTab({
               const row = reviewedRowModel({
                 items,
                 issue: attentionIssueLine(projected?.items ?? items),
-                timeZone: TRAINER_ZONE,
+                timeZone: trainerZone,
               });
               return (
                 <View key={card.relationshipId}>

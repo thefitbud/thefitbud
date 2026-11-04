@@ -10,7 +10,7 @@ Build the smallest coherent MVP that connects trainer expectations with low-fric
 |---|---|---|
 | **Planning agents** (Grok bots in Cursor) | Turn `docs/tasks/` rows into task specs and batch files, check `main` for gaps, write decisions in. | Build product code, trigger Claude (no `@claude` comments, no API calls on the subscription). |
 | **Coding agents** (Claude Code cloud sessions) | Run a whole batch: build, review, merge, write the batch report. | Run remote or deploy commands, handle secrets. |
-| **Firoz** (owner, tech@thefitbud.com) | Launches a batch, answers open decisions, does the manual steps (DNS, secrets, deploys, store consoles, device checks). | Review code line by line (see "No human code review"). |
+| **Firoz** (owner, tech@thefitbud.com) | Launches a batch, answers open decisions, does the manual steps (DNS, secrets, deploys, store consoles, device checks). | Review code line by line (see "No human code review"); review planning PRs (D-W3b-16). |
 
 **One batch runs in one tool.** Planning hands over through merged specs and batch files only. The flow is in `docs/specs/README.md`.
 
@@ -136,7 +136,7 @@ Update this map when the structure changes.
 ## Git, PRs and merging
 
 - **Coding: one task, one branch, one PR, off the latest `main`**, branch `claude/<ID>-<slug>`. **Planning: one branch and PR per batch**, `grok/<batch>-specs`. PR title `<ID>: <summary>`; fill in `.github/pull_request_template.md`. Don't stack unless the spec says to. A slice may span the API, contracts, api-client and both apps; don't split one feature by directory, and keep no long-lived workstream branches or parallel backend and frontend copies of one feature.
-- **Planning PRs are the save point.** A planning agent opens its batch's PR as a draft on the first commit, and the description lists every spec in the batch with a tick as each is written. If the planner stops (for example, Grok's weekly limit), a Claude Code session may read that PR and finish the unticked specs; it writes specs only, and building still waits for Firoz's launch. **Firoz merges planning PRs**; reading and merging them is his check on the specs.
+- **Planning PRs are the save point.** A planning agent opens its batch's PR as a draft on the first commit, and the description lists every spec in the batch with a tick as each is written. If the planner stops (for example, Grok's weekly limit), a Claude Code session may read that PR and finish the unticked specs; it writes specs only, and building still waits for Firoz's launch. **Agents review and merge planning PRs; Firoz does not review them** (owner, 4 Nov 2026, D-W3b-16). A planning PR gets a fresh reviewer the same way a code PR does — given the batch file, the task rows it came from and the diff, never the writer's summary — and a coding agent merges it once that review passes. Building still waits for Firoz's launch.
 - Update a branch by merging `main` into it. Never rebase, force-push, amend a pushed commit or skip hooks. Never hop branches silently. Never delete or rewrite unrelated work, yours or anyone else's.
 - **Keep PRs pure.** Backend/migration PRs are separate from UI PRs. One migration at a time: take the next free number from `apps/api/drizzle/meta/_journal.json` when the PR opens, renumber your own unmerged migration at merge time if another landed first. Never edit a migration that is merged or applied. Commit only the task's slice, never unrelated changes or secrets. Session plans are temporary; add a plan file only when a task requires a multi-session plan.
 - **Merging** (coding PRs, by coding agents, when the batch file or the standing authorization below allows it): merge commits only, bottom-up, when `ci` is green and review passed. Never squash, never `--admin`. Never touch PRs labelled `do-not-merge`. Never close PRs, change labels or delete branches.
@@ -144,7 +144,7 @@ Update this map when the structure changes.
 
 ## No human code review (owner, 31 Oct 2026)
 
-No person reads code line by line. Agents write, review and merge code at every level, including auth, security, data, migrations and infrastructure config. This overrides any spec, batch file or template text that asks Firoz to review or approve code (such as older "What Firoz reviews" lines); treat it as superseded and update it when you touch that file.
+No person reads code line by line. Agents write, review and merge code at every level, including auth, security, data, migrations and infrastructure config. **Since 4 Nov 2026 (D-W3b-16) this covers planning PRs too**: agents review and merge the specs, and Firoz does not review them. This overrides any spec, batch file or template text that asks Firoz to review or approve code (such as older "What Firoz reviews" lines); treat it as superseded and update it when you touch that file.
 
 Agents compensate with care:
 - Every code PR gets a **fresh reviewer** that sees only the spec, its batch file's decisions, the diff and, for UI, the named frames and the QA screenshots; never the builder's conclusions.
