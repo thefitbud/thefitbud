@@ -59,6 +59,20 @@ export type Env = {
   WA_HARD_CAP_INR?: string;
   /** Optional ISO instant for local demo captures. Unset in production. */
   NOW?: string;
+  /**
+   * Sentry DSN (Worker secret, one per env). Unset locally and in tests, which
+   * keeps crash reporting off. Never commit a value (D-W4-5).
+   */
+  SENTRY_DSN?: string;
+  /**
+   * Sentry environment tag. Reporting runs only when this is `staging` or
+   * `production` (D-W4-1, D-W4-6). A wrangler var, not a secret.
+   */
+  SENTRY_ENVIRONMENT?: string;
+  /** `"on"` on staging only. Any other value, or unset, keeps the normal OTP path. */
+  QA_TEST_OTP_ENABLED?: string;
+  /** The 6-digit fixed QA code. Never logged, never written to the repo. */
+  QA_TEST_OTP_CODE?: string;
 };
 export type Variables = {
   requestId: string;

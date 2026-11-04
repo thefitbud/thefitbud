@@ -1,4 +1,7 @@
+import { TEST_OTP_IDENTIFIER_RE } from "@fitbud/core";
 import type { Env } from "../types.js";
+
+export { TEST_OTP_IDENTIFIER_RE };
 
 /**
  * Staging-only test-mode email OTP for the automated QA accounts (QT1, D-QA1-1).
@@ -23,23 +26,10 @@ import type { Env } from "../types.js";
  */
 
 /**
- * `Env` plus the two optional QA secrets. Declared here rather than in
- * `apps/api/src/types.ts`, which W4's BT2 owns (D-QA1-3 note in the batch file).
+ * Allowlist (D-QA1-2) lives in `@fitbud/core` (`TEST_OTP_IDENTIFIER_RE`) so
+ * trainer-web does not import this module (D-W3b-9). Re-exported above for
+ * API callers that already import it from here.
  */
-export type TestOtpEnv = Env & {
-  /** `"on"` on staging only. Any other value, or unset, keeps the normal path. */
-  QA_TEST_OTP_ENABLED?: string;
-  /** The 6-digit fixed code. Never logged, never written to the repo. */
-  QA_TEST_OTP_CODE?: string;
-};
-
-/**
- * Allowlist (D-QA1-2): the identifier, after `normalizeIdentifier`, must be
- * exactly a `qa+<tag>@thefitbud.com` address. Mobile numbers never match, no
- * other domain matches, and plain `qa@thefitbud.com` does not match. Firoz's
- * real-email staging accounts are therefore never allowlisted.
- */
-export const TEST_OTP_IDENTIFIER_RE = /^qa\+[a-z0-9-]{1,32}@thefitbud\.com$/;
 
 /** The fixed code must be exactly six digits, or the switch stays inactive. */
 const TEST_OTP_CODE_RE = /^\d{6}$/;
@@ -51,7 +41,7 @@ type OtpPurpose = "login" | "reset" | "invite";
  * The configured fixed code, or `null` when it is absent or not six digits.
  * Does not look at the environment or the identifier — see `isTestOtpActive`.
  */
-export function testOtpCode(env: TestOtpEnv): string | null {
+export function testOtpCode(env: Env): string | null {
   const code = env.QA_TEST_OTP_CODE;
   return code && TEST_OTP_CODE_RE.test(code) ? code : null;
 }
@@ -63,7 +53,7 @@ export function testOtpCode(env: TestOtpEnv): string | null {
  * `value` of `normalizeIdentifier`); a raw or upper-case string fails closed.
  */
 export function isTestOtpActive(
-  env: TestOtpEnv,
+  env: Env,
   identifier: string,
   purpose: OtpPurpose,
 ): boolean {
