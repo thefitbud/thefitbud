@@ -234,8 +234,17 @@ describe("an unresolvable stored timezone (CU20)", () => {
       message: "reminders.caught_error",
       errorName: "UnresolvableRecipientTimeZoneError",
       timeZone: BAD_ZONE,
-      causeName: "RangeError",
+      // CU17 routes every zoned `Intl` call through its resolver, so the cause
+      // is now its typed `UnsupportedTimeZoneError` rather than a bare
+      // `RangeError` out of `Intl`. Strictly better for an operator: the name
+      // says the zone could not be resolved, where `RangeError` could have been
+      // any out-of-range argument. `UnsupportedTimeZoneError` extends
+      // `RangeError`, so nothing that catches on type changes.
+      causeName: "UnsupportedTimeZoneError",
     });
+    // And the cause's candidate list now reaches the line, which is the field
+    // CU20 added for this error.
+    expect(caught[0]).toMatchObject({ timeZonesTried: BAD_ZONE });
     // The two call sites are tellable apart, so one failing relationship does
     // not read as two unrelated problems.
     expect(caughtLines("reminders.run_context_local_date").length).toBeGreaterThan(0);
@@ -360,7 +369,8 @@ describe("an unresolvable stored timezone (CU20)", () => {
     expect(caught[0]).toMatchObject({
       errorName: "UnresolvableRecipientTimeZoneError",
       timeZoneShape: "non_iana",
-      causeName: "RangeError",
+      // Same retarget as above: CU17's typed error is the cause now.
+      causeName: "UnsupportedTimeZoneError",
     });
     expect(caught[0]).not.toHaveProperty("timeZone");
     // The whole log output, not just the timeZone field.

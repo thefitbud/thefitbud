@@ -26,6 +26,12 @@ const REPO_ROOT = resolve(HERE, "../../..");
  * still left 161 and passed silently — blinding the guard to the very package
  * the resolver lives in.
  */
+/*
+ * NOTE: the floor checks below are generated from this list by `it.each`, so
+ * **deleting an entry deletes its own floor check** — the guard would simply
+ * stop looking at that tree and still pass. The list is therefore pinned by
+ * name in its own test, so removing an entry fails.
+ */
 const TREES: readonly { tree: string; minFiles: number }[] = [
   { tree: "packages/core/src", minFiles: 25 },
   { tree: "apps/mobile/src", minFiles: 100 },
@@ -124,16 +130,33 @@ function argumentsAt(text: string, open: number): string | null {
   return null;
 }
 
-/** An options object passed by name: `const opts = { … timeZone … }`. */
+/**
+ * An options object reached by name rather than written inline:
+ *
+ *   const opts = { hour: "2-digit", timeZone };   // passed as `opts`
+ *   new Intl.DateTimeFormat("en-GB", { ...opts }) // or spread into a literal
+ *   new Intl.DateTimeFormat("en-GB", mk())        // or returned by a factory
+ *
+ * Each identifier in the arguments — bare, spread, or called as a
+ * zero-argument factory — is followed to its `const`/`let`/`var`/`function`
+ * declaration and that object literal is checked. One hop only: this is a
+ * guard, not a type checker, and a second hop would be a reason to reach for
+ * the compiler instead.
+ */
 function namedOptionsCarryZone(text: string, args: string): boolean {
-  const byName = args.split(",").map((part) => part.trim());
-  return byName.some((part) => {
-    if (!/^[A-Za-z_$][\w$]*$/.test(part)) return false;
+  const identifiers = [
+    // `opts`, `{ ...opts }`, `mk()`, `{ ...mk() }`
+    ...args.matchAll(/(?:\.\.\.\s*)?\b([A-Za-z_$][\w$]*)\s*(?:\(\s*\))?/g),
+  ].map((m) => m[1]);
+
+  return identifiers.some((name) => {
+    if (name === undefined) return false;
     const declaration = new RegExp(
-      `\\b(?:const|let|var)\\s+${part}\\s*(?::[^=]*)?=\\s*\\{`,
+      `\\b(?:const|let|var)\\s+${name}\\s*(?::[^=]*)?=|\\bfunction\\s+${name}\\s*\\(`,
     ).exec(text);
     if (!declaration) return false;
     const brace = text.indexOf("{", declaration.index);
+    if (brace === -1) return false;
     const body = argumentsAt(text, brace);
     // argumentsAt strips the closing brace, so restore it: a trailing
     // shorthand (`{ hour: "2-digit", timeZone }`) needs it to match.
@@ -156,6 +179,15 @@ function bypasses(text: string): boolean {
 
 describe("Intl timeZone bypass guard (D-W3b-12)", () => {
   const files = TREES.flatMap(({ tree }) => sourceFiles(tree));
+
+  it("scans both trees — this fails if a TREES entry is deleted", () => {
+    // The per-tree floors cannot catch their own deletion (see the note on
+    // TREES), so the list is pinned here by name.
+    expect(TREES.map(({ tree }) => tree)).toEqual([
+      "packages/core/src",
+      "apps/mobile/src",
+    ]);
+  });
 
   it.each(TREES)(
     "still scans $tree (at least $minFiles files)",
@@ -204,6 +236,18 @@ describe("Intl timeZone bypass guard (D-W3b-12)", () => {
     [
       "options object built separately",
       'const opts = { hour: "2-digit", timeZone };\nnew Intl.DateTimeFormat("en-GB", opts)',
+    ],
+    [
+      "a named options object spread into a literal",
+      'const opts = { timeZone: zone };\nnew Intl.DateTimeFormat("en-GB", { ...opts })',
+    ],
+    [
+      "a factory returning the options",
+      'function mk() {\n  return { timeZone: zone };\n}\nnew Intl.DateTimeFormat("en-GB", mk())',
+    ],
+    [
+      "an arrow factory spread into a literal",
+      'const mk = () => ({ timeZone: zone });\nnew Intl.DateTimeFormat("en-GB", { ...mk() })',
     ],
     [
       "key far beyond any fixed window",

@@ -137,6 +137,8 @@ export function errorLogFields(error: unknown): ErrorLogFields {
       ? { errorName: name, errorCode: code }
       : { errorName: name };
 
+  const cause = (error as { cause?: unknown } | null)?.cause;
+
   const named = (error as { timeZone?: unknown } | null)?.timeZone;
   if (typeof named === "string") {
     const zone = ianaZoneOrUndefined(named);
@@ -146,8 +148,13 @@ export function errorLogFields(error: unknown): ErrorLogFields {
     else fields.timeZoneShape = "non_iana";
   }
 
-  // CU17's `UnsupportedTimeZoneError` exposes the aliases it tried.
-  const tried = (error as { tried?: unknown } | null)?.tried;
+  // CU17's `UnsupportedTimeZoneError` exposes the aliases it tried. It now
+  // always arrives wrapped (see `recipientLocalTimeHhMm`), so the cause is
+  // checked too, or this field — added here for exactly this error — could
+  // never populate. Same shape filter either way; still no message.
+  const triedSource = (error as { tried?: unknown } | null)?.tried;
+  const tried =
+    triedSource ?? (cause as { tried?: unknown } | null)?.tried;
   if (Array.isArray(tried)) {
     const zones = tried
       .map(ianaZoneOrUndefined)
@@ -156,7 +163,6 @@ export function errorLogFields(error: unknown): ErrorLogFields {
     if (zones.length > 0) fields.timeZonesTried = zones.join(",");
   }
 
-  const cause = (error as { cause?: unknown } | null)?.cause;
   if (cause instanceof Error && ERROR_NAME_RE.test(cause.name)) {
     fields.causeName = cause.name;
   }
@@ -188,9 +194,28 @@ class UnresolvableRecipientTimeZoneError extends Error {
 /**
  * Local HH:MM for a recipient's stored zone, or a throw naming the zone.
  * Every reminder decision below is computed from a real local time or from none.
+ *
+ * CU17 made `localTimeHhMm` **throw** `UnsupportedTimeZoneError` for a zone it
+ * cannot resolve, where it used to return `null`. That error names the zone and
+ * every alias it tried, which is an improvement over the former silence — but it
+ * is not this module's error, so letting it escape would lose both halves of
+ * CU20's containment: the operator-facing `UNRESOLVABLE_TIMEZONE_ERROR_NAME`
+ * that the warn line is grepped for, and the `safeZoneLabel`-bounded message
+ * that keeps 64 stored characters out of anything this module does not control.
+ * So it is caught and wrapped, exactly as `relationshipLocalDate` wraps the
+ * `RangeError` from `formatLocalDate`, with the original kept as `cause` (which
+ * `errorLogFields` surfaces as `causeName`, so no diagnosis is lost).
+ *
+ * The `null` branch still stands and is not dead: `localTimeHhMm` returns `null`
+ * for an **unparseable instant**, a different fault from an unusable zone.
  */
 function recipientLocalTimeHhMm(now: string, timezone: string): string {
-  const local = localTimeHhMm(now, timezone);
+  let local: string | null;
+  try {
+    local = localTimeHhMm(now, timezone);
+  } catch (error) {
+    throw new UnresolvableRecipientTimeZoneError(timezone, error);
+  }
   if (local === null) throw new UnresolvableRecipientTimeZoneError(timezone);
   return local;
 }
