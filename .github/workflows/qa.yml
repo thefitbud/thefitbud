@@ -24,8 +24,8 @@
 # One staging writer at a time (D-QA1-7) is enforced per job, not per workflow: the
 # jobs that touch the shared staging QA accounts (`seed-reset`, `api-smoke`,
 # `web-staging`, `android`, `ios`) each hold the `qa-staging` concurrency group and are
-# chained so only one of them runs at a time, while `changes`, `qa-scripts` and `report`
-# stay outside it. `ios` is sequenced after `android` for that reason: both drive the
+# chained so only one of them runs at a time, while `changes`, `qa-scripts`, `unit` and
+# `report` stay outside it. `ios` is sequenced after `android` for that reason: both drive the
 # same QA accounts, and the group alone would not keep them apart if they could start
 # together.
 #
@@ -1103,39 +1103,65 @@ jobs:
       # annotates the run when a later step in this job fails. It cannot report a
       # run-level cancellation (the whole run cancelled by hand), because then this
       # job does not run at all.
+      #
+      # It reports a CANCELLATION and names eviction as the likely cause; it does not
+      # assert eviction, because nothing available here can tell an evicted job from
+      # one someone cancelled by hand through the API. Blaming a cause the code did
+      # not check is the mistake D-W3-12 and D-W3-18 forbid clients; the same honesty
+      # is nearly free here, so the wording hedges and stays a `::warning`.
       - name: Evicted, not failed
         if: always()
         env:
-          RESULTS: >-
-            seed-reset=${{ needs.seed-reset.result }}
-            api-smoke=${{ needs.api-smoke.result }}
-            web-staging=${{ needs.web-staging.result }}
-            android=${{ needs.android.result }}
-            ios=${{ needs.ios.result }}
+          # Derived from this job's own `needs:` rather than from a second hardcoded
+          # list of job names, so a sixth staging writer added to the group and to
+          # `needs:` is covered here with no further edit. Only the jobs OUTSIDE
+          # `qa-staging` are named, and that list fails in the safe direction: a new
+          # non-group job nobody adds to it produces one spurious warning, which is
+          # visible, where a stale list of writers would have produced silence.
+          NEEDS: ${{ toJSON(needs) }}
+          NOT_IN_GROUP: changes qa-scripts unit
         run: |
-          evicted=""
-          for pair in $RESULTS; do
-            job=${pair%%=*}
-            result=${pair#*=}
-            if [ "$result" = "cancelled" ]; then evicted="$evicted $job"; fi
+          cancelled=""
+          stale=""
+          for job in $(printf '%s' "$NEEDS" | jq -r 'keys[]'); do
+            case " $NOT_IN_GROUP " in *" $job "*) continue ;; esac
+            result=$(printf '%s' "$NEEDS" | jq -r --arg j "$job" '.[$j].result // ""')
+            # An absent result matches no comparison below, so without this guard the
+            # check would simply stop speaking for that job, and do it in silence.
+            if [ -z "$result" ] || [ "$result" = "null" ]; then
+              echo "::warning title=qa.yml: stale eviction check::No result for the \"$job\" job, so the \"Evicted, not failed\" step cannot say whether it was cancelled. Fix the step in .github/workflows/qa.yml (D-W3b-26)."
+              stale="$stale $job"
+              continue
+            fi
+            if [ "$result" = "cancelled" ]; then cancelled="$cancelled $job"; fi
           done
-          if [ -z "$evicted" ]; then
-            echo "No staging job was cancelled; nothing was evicted from the qa-staging queue."
+          # Never report a clean queue without saying which jobs this step could not
+          # read: "nothing was cancelled" must not stand in for "I did not look".
+          if [ -z "$cancelled" ]; then
+            if [ -n "$stale" ]; then
+              echo "No cancellation among the staging jobs this step could read, but it could not read:$stale"
+            else
+              echo "No staging job was cancelled."
+            fi
             exit 0
           fi
-          echo "::warning title=Evicted from the qa-staging queue::These staging jobs were cancelled, not failed:$evicted. GitHub keeps one pending entry per concurrency group (D-W3b-26), so newer runs displaced them. Their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
+          echo "::warning title=Staging job cancelled, not failed::Cancelled rather than failed:$cancelled. On the qa-staging group that is almost always queue eviction: GitHub keeps one pending entry per concurrency group (D-W3b-26), so a newer run displaces the older pending one. A cancellation requested by hand looks the same from here. Either way their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
           {
-            echo "## Evicted, not failed"
+            echo "## Cancelled, not failed"
             echo
-            echo "Cancelled while queued on \`qa-staging\`:$evicted"
+            echo "Cancelled on \`qa-staging\`:$cancelled"
             echo
-            echo "These jobs were **displaced from the queue, not broken by this commit**."
-            echo "\`cancel-in-progress: false\` keeps only one pending entry per concurrency"
-            echo "group, so a third arrival cancels the older pending one (D-W3b-26)."
+            echo "These jobs were **not broken by this commit**. On this group a"
+            echo "cancellation is almost always queue eviction:"
+            echo "\`cancel-in-progress: false\` keeps only one pending entry per"
+            echo "concurrency group, so a newer run displaces the older pending one"
+            echo "(D-W3b-26). A cancellation requested by hand is indistinguishable"
+            echo "from here, so read the run's timeline before concluding."
             echo
-            echo "Their suites carry no results, so they report as \`not-run\` and this run"
-            echo "as \`partial\`. That is **not a pass**. Re-dispatch this workflow from"
-            echo "\`main\` once no other staging run is in flight."
+            echo "Either way their suites carry no results, so they report as"
+            echo "\`not-run\` and this run as \`partial\`. That is **not a pass**."
+            echo "Re-dispatch this workflow from \`main\` once no other staging run"
+            echo "is in flight."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout
