@@ -14,6 +14,10 @@
     "scripts/local-traces.ts",
     "scripts/deploy-env.ts",
     "scripts/deploy-env.test.ts",
-    "scripts/lib/**/*.ts"
+    "scripts/lib/**/*.ts",
+    "scripts/qa-seed.ts",
+    "scripts/qa-reset.ts",
+    "scripts/qa-seed.test.ts",
+    "qa-smoke"
   ]
 }

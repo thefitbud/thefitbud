@@ -12,7 +12,11 @@
     "backgroundColor": "#FAF7F2"
   },
   "ios": {
-    "supportsTablet": true
+    "supportsTablet": true,
+    "appleTeamId": "26257QDTHP",
+    "config": {
+      "usesNonExemptEncryption": false
+    }
   },
   "web": {
     "bundler": "metro"
@@ -24,7 +28,8 @@
     }
   },
   "plugins": [
-    "expo-dev-client"
+    "expo-dev-client",
+    "expo-secure-store"
   ],
   "updates": {
     "url": "https://u.expo.dev/ae19f5e7-c839-48a3-8e62-ae9ba2fc86d7"

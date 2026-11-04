@@ -435,3 +435,112 @@ describe("invitations accept (password + otp)", () => {
     expect(body.error.code).toBe("INVITATION_REVOKED");
   });
 });
+
+describe("invitations accept: stored timezone (CU20)", () => {
+  let db: Db;
+  let close: () => void;
+
+  beforeEach(async () => {
+    const handle = await createMemoryDb();
+    db = handle.db;
+    close = handle.close;
+    setTestDbOverride(db);
+  });
+
+  afterEach(() => {
+    setTestDbOverride(null);
+    close();
+  });
+
+  async function accept(token: string, timezone: string) {
+    return app.request(
+      "/invitations/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          password: "Str0ng-enough",
+          otpProof: await inviteOtpProof(RECIPIENTS.get(token)!),
+          displayName: "Invite Trainee",
+          timezone,
+        }),
+      },
+      testEnv(),
+    );
+  }
+
+  const RECIPIENTS = new Map<string, string>();
+
+  async function invite(slug: string): Promise<string> {
+    const trainer = await createTrainerSession(`tz-${slug}-coach@example.com`);
+    const recipientEmail = `tz-${slug}-trainee@example.com`;
+    const created = await createInvitation(trainer.cookie, recipientEmail);
+    RECIPIENTS.set(created.data.token, recipientEmail);
+    return created.data.token;
+  }
+
+  it("rejects a timezone that is not a resolvable IANA zone, and writes nothing", async () => {
+    const token = await invite("bad");
+    const response = await accept(token, "lol");
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      error: { code: string; message: string };
+    };
+    expect(body.error.code).toBe("INVALID_TIMEZONE");
+    // Static text, so a client can show it as-is (D-W3b-7): it repeats nothing
+    // from the request.
+    expect(body.error.message).toBe("Timezone is not a valid IANA zone.");
+    expect(body.error.message).not.toContain("lol");
+
+    // The invitation is untouched and no user carries the rejected value.
+    const invitations = await db
+      .select()
+      .from(schema.clientInvitations)
+      .where(eq(schema.clientInvitations.tokenHash, await sha256Hex(token)));
+    expect(invitations[0]?.status).toBe("pending");
+    const users = await db.select().from(schema.users);
+    expect(users.map((user) => user.timezone)).not.toContain("lol");
+  });
+
+  it("accepts a valid IANA zone and stores it", async () => {
+    const token = await invite("good");
+    const response = await accept(token, "Asia/Kolkata");
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { userId: string } };
+    const stored = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, body.data.userId));
+    expect(stored[0]?.timezone).toBe("Asia/Kolkata");
+  });
+
+  it("accepts a request with no timezone at all", async () => {
+    const trainer = await createTrainerSession("tz-none-coach@example.com");
+    const recipientEmail = "tz-none-trainee@example.com";
+    const created = await createInvitation(trainer.cookie, recipientEmail);
+    const response = await app.request(
+      "/invitations/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: created.data.token,
+          password: "Str0ng-enough",
+          otpProof: await inviteOtpProof(recipientEmail),
+          displayName: "Invite Trainee",
+        }),
+      },
+      testEnv(),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { userId: string } };
+    const stored = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, body.data.userId));
+    expect(stored[0]?.timezone).toBe("UTC");
+  });
+});

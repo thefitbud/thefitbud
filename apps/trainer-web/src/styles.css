@@ -1800,13 +1800,18 @@ body.is-offline .button-destructive {
 }
 
 .auth-help {
-  position: absolute;
-  bottom: 32px;
-  left: 0;
-  right: 0;
+  /* Normal flow so the legal footer below it never overlaps (D-W3-15). */
+  margin: 0;
   text-align: center;
   font-size: 13px;
   color: var(--ink-500, #5b616b);
+}
+
+/* 44px touch target for the help link (product rule), without moving the line. */
+.auth-help a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 .auth-alt-links {

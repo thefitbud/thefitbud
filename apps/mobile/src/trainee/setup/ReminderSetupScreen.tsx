@@ -3,6 +3,7 @@ import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../../components/Text";
 import * as Notifications from "expo-notifications";
 import { ChevronRight, Clock, Info } from "lucide-react-native";
+import { zonedDateTimeFormat } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
 import { useConfig } from "../../providers/ConfigProvider";
@@ -43,7 +44,7 @@ export function ReminderSetupScreen({ onDone, onOpenQuietHours }: Props) {
   const timeZoneLabel = useMemo(() => {
     const tz = me?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     try {
-      const parts = new Intl.DateTimeFormat("en-IN", {
+      const parts = zonedDateTimeFormat("en-IN", {
         timeZone: tz,
         timeZoneName: "longGeneric",
       }).formatToParts(new Date());

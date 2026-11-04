@@ -1,0 +1,73 @@
+appId: com.thefitbud.mobile.staging
+name: Trainee sends a check-in
+tags:
+  - trainee
+  - full
+---
+# Open the weekly check-in from Today, fill it in, review, send, see the sent
+# state. Runs as the slipping trainee (QA Rohan, sign-in by code).
+#
+# Env from the runner: QA_SLIPPING_EMAIL, QA_OTP_CODE.
+#
+# The QA seed guarantees exactly one check-in the trainee can start on the seed's
+# reference date (guarantees.startableCheckinsSlipping, CU11), as well as the
+# submitted one waiting for the trainer (guarantees.pendingCheckinsSlipping, for
+# trainer/checkin-review.yaml). Its window is open for the whole civil day in the
+# trainee's own timezone, so "Start check-in" / "Start" is there whatever hour the
+# nightly run begins at, and fill-and-send below is unconditional.
+#
+# The form has three steps (Measurements, How was your week, Reflection). Only
+# "One line: how was the week?" is required; the flow fills that one and leaves
+# the optional measurements and photos alone (photos need the camera).
+# Writes a submitted check-in; the nightly reset restores it (D-QA1-7).
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-code.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+
+# The check-in card sits low on Today.
+- extendedWaitUntil:
+    notVisible: ".*Checking for a due check-in.*"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Start check-in|Start"
+    timeout: 30000
+- takeScreenshot: trainee-checkin__card
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "Start check-in|Start"
+- extendedWaitUntil:
+    visible: "Weekly check-in"
+    timeout: 20000
+- assertVisible: ".*step 1 of 3.*"
+- takeScreenshot: trainee-checkin__form
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Continue"
+- assertVisible: ".*step 2 of 3.*"
+- tapOn: "Continue"
+- assertVisible: ".*step 3 of 3.*"
+- tapOn: "One line: how was the week\\?"
+- inputText: "Solid week, one session missed."
+- hideKeyboard
+- tapOn: "Continue"
+# Review step, then send.
+- extendedWaitUntil:
+    visible: "Send to .*"
+    timeout: 10000
+- takeScreenshot: trainee-checkin__review
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Send to .*"
+- extendedWaitUntil:
+    visible: "Sent\\. .* will review this\\."
+    timeout: 30000
+- assertVisible: "Nothing else is required for this check-in\\."
+- takeScreenshot: trainee-checkin__sent
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back to Today"

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CoachingRelationship, MealAssignment, Notification } from "@fitbud/contracts";
-import { MEAL_REMINDER_AFTER_MINUTES } from "@fitbud/core";
+import { MEAL_REMINDER_AFTER_MINUTES, zonedDateTimeFormat } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { localDateInTimezone } from "../../lib/dates";
 import { isMealSnoozed } from "../../notifications/actions";
@@ -15,7 +15,7 @@ type Props = {
 };
 
 function localMinutes(timeZone: string, instant = new Date()): number {
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  const parts = zonedDateTimeFormat("en-GB", {
     timeZone,
     hour: "2-digit",
     minute: "2-digit",

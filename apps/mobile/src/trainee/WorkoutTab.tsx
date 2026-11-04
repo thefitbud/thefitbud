@@ -12,7 +12,6 @@ import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CoachingRelationship,
-  EffectivePlanResponse,
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
@@ -44,6 +43,11 @@ import {
   subscribeAll,
 } from "./dataCache";
 import { scheduledAssignments } from "./scheduledAssignments";
+import {
+  EFFECTIVE_PLAN_LOADING,
+  PLAN_UNAVAILABLE_MESSAGE,
+  type EffectivePlanState,
+} from "./TodayTab";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
 import { estimateDurationMinutesFromDay } from "./workoutDuration";
 import {
@@ -61,6 +65,60 @@ import {
   weekPlanEyebrow,
   weekStripStatus,
 } from "./workoutDisplay";
+
+/**
+ * The week's workout assignments as an explicit load state (CU24, D-W3b-29).
+ *
+ * The same defect CU22 removed from Today lived here: "No plan yet /
+ * Workouts appear here when <Coach> publishes your plan" was gated on
+ * `assignments.length === 0`, which is equally true before the first load
+ * settles and after a load that failed. A trainee offline on a first run was
+ * told their coach had published nothing.
+ *
+ * It is the four states of D-W3b-27, not a second ad-hoc boolean: the
+ * assignments are reachable only through `loaded`, so no call site can read
+ * "nothing to show" as "nothing published" without narrowing on `status`.
+ * `none` is a judgement made only on an answer the server actually gave —
+ * an empty week, which is what "No plan yet" means. `unavailable` is "could
+ * not ask and have nothing cached"; a failed refresh with something cached
+ * stays `loaded`, exactly as the plan's own state does.
+ */
+export type WorkoutWeekState =
+  | { readonly status: "loading" }
+  | { readonly status: "none" }
+  | {
+      readonly status: "loaded";
+      // Mutable element type, not `readonly WorkoutAssignment[]`:
+      // `WorkoutSummaryScreen` takes a mutable `weekAssignments` and is
+      // outside CU24's `files_owned`. The member itself is `readonly`, so the
+      // state cannot be reassigned in place.
+      readonly assignments: WorkoutAssignment[];
+    }
+  | { readonly status: "unavailable" };
+
+/** The state before the first load settles. Never means "no plan published". */
+export const WORKOUT_WEEK_LOADING: WorkoutWeekState = { status: "loading" };
+
+/** The app could not ask and has nothing cached (CU24, D-W3b-29). */
+export const WORKOUT_WEEK_UNAVAILABLE: WorkoutWeekState = {
+  status: "unavailable",
+};
+
+/**
+ * Maps a settled list of assignments onto the union. An empty list from a
+ * successful read is a week with nothing published, which is `none`: the one
+ * place that judgement is made.
+ */
+export function workoutWeekStateFor(
+  assignments: WorkoutAssignment[],
+): WorkoutWeekState {
+  return assignments.length === 0
+    ? { status: "none" }
+    : { status: "loaded", assignments };
+}
+
+/** No assignments to derive from, shared so each render does not allocate. */
+const NO_ASSIGNMENTS: WorkoutAssignment[] = [];
 
 const TARGET = 44;
 const SKIP_REASONS = [
@@ -94,7 +152,7 @@ function continueCaption(
 
 export function WorkoutTab({
   relationship,
-  effectivePlan = null,
+  planState = EFFECTIVE_PLAN_LOADING,
   selectedDate,
   onSelectDate,
   onOpenOverlay,
@@ -106,7 +164,13 @@ export function WorkoutTab({
   coachName: coachNameProp,
 }: {
   relationship: CoachingRelationship;
-  effectivePlan?: EffectivePlanResponse | null;
+  /**
+   * The trainee's effective plan as a load state, not a nullable plan
+   * (CU24, D-W3b-29). Only the `loaded` member can feed the week eyebrow,
+   * so a plan that is still loading or could not be loaded cannot be read
+   * as a plan with no phase or week number.
+   */
+  planState?: EffectivePlanState;
   selectedDate?: string;
   onSelectDate?: (localDate: string) => void;
   onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
@@ -121,8 +185,14 @@ export function WorkoutTab({
 }) {
   const { api, me, refreshSession } = useAuth();
   const sync = useSyncEngine();
-  const [assignments, setAssignments] = useState<WorkoutAssignment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [weekState, setWeekState] =
+    useState<WorkoutWeekState>(WORKOUT_WEEK_LOADING);
+  // Derived, never state of its own: the one way to reach the assignments is
+  // through the `loaded` member, so a screen cannot treat "not loaded" or
+  // "could not load" as an empty week (CU24, D-W3b-29).
+  const assignments =
+    weekState.status === "loaded" ? weekState.assignments : NO_ASSIGNMENTS;
+  const loading = weekState.status === "loading";
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
@@ -185,36 +255,50 @@ export function WorkoutTab({
       const next = scheduledAssignments(
         listed.items as WorkoutAssignment[],
       );
-      setAssignments(next);
+      setWeekState(workoutWeekStateFor(next));
       setCached(workoutsCacheKey, next);
       setOffline(false);
     } catch (err) {
       setOffline(true);
+      // A failed read with something cached keeps showing the cached week;
+      // with nothing cached it is `unavailable`, never `none` (CU24,
+      // D-W3b-29). The branch is on the cache, not on the error, so it
+      // claims no cause it did not check (D-W3-12, D-W3-18).
       const cached = getCached<WorkoutAssignment[]>(workoutsCacheKey);
-      if (cached) setAssignments(cached);
+      setWeekState(
+        cached ? workoutWeekStateFor(cached) : WORKOUT_WEEK_UNAVAILABLE,
+      );
       setError(
         err instanceof ApiClientError
           ? err.message
           : "Couldn't refresh workouts. Pull to try again.",
       );
-    } finally {
-      setLoading(false);
     }
   }, [api, relationship.id, weekStart, rangeEnd, workoutsCacheKey]);
 
   useEffect(() => {
     const cached = getCached<WorkoutAssignment[]>(workoutsCacheKey);
-    if (cached) {
-      setAssignments(cached);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
+    // A week with no cache starts at `loading`, not at an empty list: the
+    // week key changes as the trainee navigates, so this runs again and must
+    // not leave the previous week's assignments reading as this week's.
+    setWeekState(cached ? workoutWeekStateFor(cached) : WORKOUT_WEEK_LOADING);
     void load();
   }, [load, workoutsCacheKey]);
 
   useEffect(() => {
     return subscribe(workoutsCacheKey, () => {
+      // Adopt the week another screen wrote, rather than refetching it.
+      // `setCached` notifies this key's subscribers, and `load` itself writes
+      // the cache, so refetching here made every successful load trigger the
+      // next one — an unbounded refetch loop on this tab, on device and in
+      // any test whose fetch resolves immediately. A *cleared* key (an
+      // `invalidate`) has nothing to adopt and does refetch, which is what
+      // the subscription is for.
+      const cached = getCached<WorkoutAssignment[]>(workoutsCacheKey);
+      if (cached) {
+        setWeekState(workoutWeekStateFor(cached));
+        return;
+      }
       void load();
     });
   }, [workoutsCacheKey, load]);
@@ -542,7 +626,10 @@ export function WorkoutTab({
       : null;
 
   const startLabel = pausedCaption ? "Continue workout" : "Start workout";
-  const planEyebrow = weekPlanEyebrow(effectivePlan, weekStart);
+  const planEyebrow = weekPlanEyebrow(
+    planState.status === "loaded" ? planState.plan : null,
+    weekStart,
+  );
   const trainerInitials = coachInitials(
     relationship.trainerDisplayName ?? coachName,
   );
@@ -665,7 +752,7 @@ export function WorkoutTab({
         })}
       </View>
 
-      {loading && assignments.length === 0 ? (
+      {weekState.status === "loading" ? (
         <Text style={styles.muted}>Loading workouts…</Text>
       ) : focusAssignment ? (
         <Pressable
@@ -772,7 +859,32 @@ export function WorkoutTab({
             ) : null}
           </View>
         </Pressable>
-      ) : assignments.length === 0 ? (
+      ) : weekState.status === "unavailable" ? (
+        /*
+          The week could not be loaded and nothing was cached (CU24,
+          D-W3b-29). This used to fall into "No plan yet" below, telling the
+          trainee their coach had published nothing when the truth was that
+          the app could not ask. The copy is static and shared with Today's
+          own unavailable state (D-W3b-27); the retry is the same action as
+          this screen's pull-to-refresh.
+        */
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle} accessibilityRole="header">
+            Couldn&apos;t load your plan
+          </Text>
+          <Text style={styles.emptyBody}>{PLAN_UNAVAILABLE_MESSAGE}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Try again"
+            style={styles.emptyRetry}
+            onPress={() => {
+              void onRefresh();
+            }}
+          >
+            <Text style={styles.emptyRetryText}>Try again</Text>
+          </Pressable>
+        </View>
+      ) : weekState.status === "none" ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle} accessibilityRole="header">
             No plan yet
@@ -1234,6 +1346,21 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 15,
     lineHeight: 22,
+  },
+  emptyRetry: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: colors.indigo,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: TARGET,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyRetryText: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
   },
   sh: {
     marginBottom: 10,

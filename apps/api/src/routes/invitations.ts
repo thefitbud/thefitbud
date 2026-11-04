@@ -81,6 +81,21 @@ import type { Env, Variables } from "../types";
 const INVITE_CREATE_OPERATION = "invitation.create";
 const DEFAULT_INVITE_DAYS = 14;
 
+/**
+ * Byte-identical to the checks in `routes/auth.ts` and `routes/notifications.ts`,
+ * which are the other two paths that write `users.timezone`. Kept local because
+ * neither of those files exports it and neither is this task's to change; the
+ * right home is one shared helper (see this PR's follow-up note).
+ */
+function isValidIanaTimezone(zone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const invitationRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
@@ -637,6 +652,19 @@ invitationRoutes.post("/accept",
     return fail(c, 400, "INVALID_REQUEST", "Invalid accept invitation request.", {
       issues: parsed.error.issues,
     });
+  }
+
+  // `users.timezone` is `NOT NULL DEFAULT 'UTC'` and every reminder decision is
+  // derived in it, so an unresolvable zone makes a trainee's reminders
+  // undecidable. The two other write paths (`PUT /me/trainer-profile`,
+  // `PUT /notifications/preferences`) already check this; this one wrote the
+  // request value straight through, and `timezone` is only `z.string().min(1)
+  // .max(64)` in the contract. Checked here, before all four reads of it below.
+  if (
+    parsed.data.timezone !== undefined &&
+    !isValidIanaTimezone(parsed.data.timezone)
+  ) {
+    return fail(c, 400, "INVALID_TIMEZONE", "Timezone is not a valid IANA zone.");
   }
 
   const db = createDb(c.env.DB);

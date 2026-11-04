@@ -25,6 +25,7 @@ import {
   normalizeIdentifier,
 } from "../auth/identifiers.js";
 import { issuePurposeProof, verifyPurposeProof } from "../auth/proof.js";
+import { isTestOtpActive, testOtpCode } from "../auth/test-otp.js";
 import {
   hashPassword,
   passwordRequirementMessage,
@@ -277,7 +278,16 @@ authLoginRoutes.post(
     if (identifier?.kind === "email") {
       const identity = await findIdentityByIdentifier(db, identifier);
       if (identity || parsed.data.purpose === "invite") {
-        const code = String(crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000).padStart(6, "0");
+        // QT1: on staging only, an allowlisted qa+… address gets the fixed QA code
+        // and no email, so the nightly suites can sign in unattended. Impossible
+        // in production (see apps/api/src/auth/test-otp.ts). Everything below —
+        // invalidation, expiry, attempts, single use on verify — is unchanged.
+        const fixedCode = isTestOtpActive(c.env, identifier.value, parsed.data.purpose)
+          ? testOtpCode(c.env)
+          : null;
+        const code =
+          fixedCode ??
+          String(crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000).padStart(6, "0");
         const idHash = await identifierHash(identifier.value);
         await db
           .update(authOtps)
@@ -304,18 +314,30 @@ authLoginRoutes.post(
           createdAt: nowIso(),
           ipHash: null,
         });
-        try {
-          await sendSystemEmail(c.env, db, {
-            to: identifier.value,
-            template: "otp",
-            subject: otpEmailSubject(code),
-            text: otpEmailBody(code),
+        if (fixedCode) {
+          // Identifier hash only: never the code, the address or the secret.
+          writeStructuredLog({
+            level: "info",
+            message: "auth.otp.test_mode",
+            requestId: c.get("requestId"),
+            operation: "auth.otp.start",
+            entityType: "auth_otp",
+            entityId: idHash,
           });
-        } catch (err) {
-          // Keep the generic 202 an unknown identifier gets: an error here would
-          // tell a caller the account exists. The user asks for a new code.
-          if (!isEmailDeliveryFailure(err)) throw err;
-          logEmailFailure(c, "auth.otp.start", err);
+        } else {
+          try {
+            await sendSystemEmail(c.env, db, {
+              to: identifier.value,
+              template: "otp",
+              subject: otpEmailSubject(code),
+              text: otpEmailBody(code),
+            });
+          } catch (err) {
+            // Keep the generic 202 an unknown identifier gets: an error here would
+            // tell a caller the account exists. The user asks for a new code.
+            if (!isEmailDeliveryFailure(err)) throw err;
+            logEmailFailure(c, "auth.otp.start", err);
+          }
         }
         channels.push("email");
       }

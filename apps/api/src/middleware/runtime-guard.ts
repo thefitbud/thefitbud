@@ -1,4 +1,5 @@
 import { createMiddleware } from "hono/factory";
+import type { TestOtpEnv } from "../auth/test-otp";
 import { fail } from "../lib/envelope";
 import { writeStructuredLog, type SafeLogFields } from "../lib/log";
 import type { Env, Variables } from "../types";
@@ -45,6 +46,18 @@ export function runtimeMisconfigurations(env: Env): string[] {
   } else if (env.EMAIL_PROVIDER === "zeptomail" && !env.ZEPTOMAIL_TOKEN?.trim()) {
     // Without the secret every OTP email fails. Name only, never the value.
     problems.push("ZEPTOMAIL_TOKEN=unset");
+  }
+  // QT1 / D-QA1-1: the staging-only fixed QA OTP code must never exist on
+  // production. If either secret is set there, refuse every request rather than
+  // serve an API that might accept a known code. Names only, never values.
+  const qaEnv = env as TestOtpEnv;
+  if (env.ENVIRONMENT === "production") {
+    if (qaEnv.QA_TEST_OTP_ENABLED?.trim()) {
+      problems.push("QA_TEST_OTP_ENABLED=set");
+    }
+    if (qaEnv.QA_TEST_OTP_CODE?.trim()) {
+      problems.push("QA_TEST_OTP_CODE=set");
+    }
   }
   return problems;
 }

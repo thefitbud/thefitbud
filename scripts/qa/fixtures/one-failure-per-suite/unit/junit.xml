@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="unit" tests="2" failures="1" time="0.050">
+<testsuite name="unit" tests="2" failures="1" skipped="0" timestamp="2026-11-03T20:30:12" time="0.050">
+  <testcase name="core adherence rules" classname="unit" time="0.020"/>
+  <testcase name="contracts parse" classname="unit" time="0.030"><failure message="ZodError: invalid_type at plan.version">ZodError: invalid_type at plan.version</failure></testcase>
+</testsuite>
+</testsuites>

@@ -1,0 +1,1240 @@
+# Automated end-to-end QA against staging (batch QA1 · QT7).
+#
+# `ci.yml` stays the PR gate and is not touched (D-QA1-6): lint, typecheck, unit tests,
+# local Playwright and banned strings. This workflow adds, on top of it:
+#
+#   nightly 02:00 IST (30 20 * * * UTC) and on demand   reset + seed the QA accounts,
+#       then the staging API smoke (QT6), the staging Playwright suite (QT5), the
+#       Maestro Android suite (QT3), the same Maestro flows on an iOS simulator
+#       (CU19) and the repo's unit run as JUnit
+#   pull requests touching apps/mobile/** or packages/ui-mobile/**   the Maestro `smoke`
+#       tag only, on both platforms, advisory: deliberately not required checks
+#       (D-QA1-10). `ios` is not a required check either (D-W3b-14).
+#   pull requests touching scripts/qa/**   the report builder's own tests, which no
+#       other check can see (see the `qa-scripts` job)
+#
+# Every run, pass or fail, uploads one `qa-report` artifact built by scripts/qa/summarize.mjs
+# (QT8). How to read it: docs/runbooks/qa-nightly.md.
+#
+# Secrets are referenced by name only and never echoed: QA_TEST_OTP_CODE,
+# FITBUD_QA_PASSWORD, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID. EXPO_TOKEN is not
+# used (D-QA1-8). The only remote write is `seed-reset`, which runs on `schedule` or
+# `workflow_dispatch` from `main` only, inside the `staging-qa` environment (D-QA1-9).
+#
+# One staging writer at a time (D-QA1-7) is enforced per job, not per workflow: the
+# jobs that touch the shared staging QA accounts (`seed-reset`, `api-smoke`,
+# `web-staging`, `android`, `ios`) each hold the `qa-staging` concurrency group and are
+# chained so only one of them runs at a time, while `changes`, `qa-scripts`, `unit` and
+# `report` stay outside it. `ios` is sequenced after `android` for that reason: both drive the
+# same QA accounts, and the group alone would not keep them apart if they could start
+# together.
+#
+# Queue eviction: SURFACED, NOT PREVENTED (D-W3b-26, the task D-W3b-6 asked for).
+#
+# `cancel-in-progress: false` keeps only ONE pending entry per concurrency group, so a
+# third arrival cancels the older pending one. Observed, not theoretical: `android` was
+# cancelled while pending on run 41783371236, and `ios` — the last link, so the most
+# exposed (D-W3b-34) — on run 41784737040.
+#
+# Each link of the chain claims `qa-staging` separately, so one run re-queues up to five
+# times and every re-queue is a fresh chance to be evicted by another run. The three
+# obvious ways to shorten that chain were examined and all three are worse:
+#
+#   * Moving the group to the workflow level does not reduce arrivals (a run still
+#     claims once at a time, because `needs:` already serialises the claims within a
+#     run), and it drags `changes`, `unit`, `report` and the REQUIRED `qa-scripts`
+#     check into the queue — forbidden by D-W3b-1 and by the paragraph below.
+#   * A single gate job holding the group with the writers chained behind it by
+#     `needs:` releases the group when the gate job ENDS, which is before any writer
+#     starts. Two runs' gates would then complete in turn and their writers would
+#     overlap on the shared seed. That breaks D-QA1-7, the invariant the group exists
+#     for, so it is not an option at any price.
+#   * Refusing to start when another staging run is in flight converts an eviction
+#     into an immediate hard failure, needs the Actions API and a token this workflow
+#     deliberately does not have (`permissions: contents: read`), and still races.
+#
+# One pending entry per group is a documented platform property with no workflow-level
+# knob, so nothing expressible in this file can make the group hold two. What this file
+# does instead is make an eviction READ as an eviction: `report` is outside the group
+# and `if: always()`, so it still runs, and its "Evicted, not failed" step annotates
+# any staging job whose result is `cancelled`. The run's conclusion is untouched — the
+# evicted suite produces no results, summarize.mjs reports it `not-run` and the run
+# `partial`, which is never a pass. Re-dispatch stays deliberate and by hand.
+#
+# Still open, and not this file's to decide: per-suite QA personas would remove the
+# shared-seed contention outright and with it the group, and running one platform
+# rather than two on the advisory PR smoke would halve PR arrivals — but D-QA1-10 asks
+# for both platforms, so that is the owner's call.
+#
+# `qa-scripts` is a required check on main (D-W3b-1) and a job inside a concurrency
+# group can be left Pending, or cancelled when a newer run queues, so a required
+# check must never sit in one.
+#
+# Artifacts never carry qa-results/web/test-output/**: Playwright writes error-context.md
+# there on every failure, holding a full aria snapshot of the page including a typed
+# password. Each suite job copies a named allowlist of files into qa-upload/ and uploads
+# that directory, so nothing can arrive in the public artifact by accident.
+name: QA
+
+on:
+  schedule:
+    # 20:30 UTC = 02:00 IST.
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: Which suites to run
+        type: choice
+        default: all
+        options: [all, api, web, android, ios]
+      tag:
+        description: Maestro tag filter
+        type: choice
+        default: full
+        options: [smoke, full]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Decides what this run does. Pull requests are classified by changed paths, the same
+  # way ci.yml does it; schedule and workflow_dispatch always run everything they are
+  # asked for.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mobile: ${{ steps.filter.outputs.mobile }}
+      qa_scripts: ${{ steps.filter.outputs.qa_scripts }}
+      staging: ${{ steps.plan.outputs.staging }}
+      suites: ${{ steps.plan.outputs.suites }}
+      tag: ${{ steps.plan.outputs.tag }}
+      expect: ${{ steps.plan.outputs.expect }}
+      trigger: ${{ steps.plan.outputs.trigger }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Classify changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+            echo "qa_scripts=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$BASE...$HEAD")
+          echo "$files"
+          mobile=$(echo "$files" | grep -Ec '^(apps/mobile/|packages/ui-mobile/)' || true)
+          # scripts/qa/** is invisible to pnpm lint, pnpm typecheck and pnpm test
+          # (pnpm-workspace.yaml covers apps/* and packages/* only), so this workflow
+          # is the only place its tests can run. See the qa-scripts job.
+          qa_scripts=$(echo "$files" | grep -Ec '^(scripts/qa/|\.github/workflows/qa\.yml)' || true)
+          echo "mobile=$([ "$mobile" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "qa_scripts=$([ "$qa_scripts" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Plan the run
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          IN_SUITES: ${{ inputs.suites }}
+          IN_TAG: ${{ inputs.tag }}
+        run: |
+          case "$EVENT" in
+            schedule)
+              suites=all; tag=full; trigger="nightly"; staging=true ;;
+            workflow_dispatch)
+              suites="${IN_SUITES:-all}"; tag="${IN_TAG:-full}"; trigger="manual"; staging=true
+              if [ "$GIT_REF" != "refs/heads/main" ]; then
+                echo "::error title=Wrong ref::qa.yml writes the shared staging QA accounts, so it may only be dispatched from main (D-QA1-6). Got $GIT_REF."
+                exit 1
+              fi ;;
+            *)
+              # Pull requests: the Maestro smoke tag only, on both platforms, and they
+              # never write staging. The suites value stays `android` so the android
+              # job's own gate is untouched; `expect` below names both platforms,
+              # because both jobs run on a mobile pull request.
+              suites=android; tag=smoke; trigger="pr"; staging=false; pr=true ;;
+          esac
+          case "$suites" in
+            all) expect="mobile,ios,web,api,unit" ;;
+            api) expect=api ;;
+            web) expect=web ;;
+            # A dispatched `android` run asks for the Android suite alone; a pull
+            # request runs both Maestro jobs, so it expects both reports and a
+            # missing one shows up as not-run rather than being left out.
+            android)
+              if [ "${pr:-false}" = "true" ]; then expect="mobile,ios"; else expect=mobile; fi ;;
+            ios) expect=ios ;;
+            *) echo "::error::unknown suites value \"$suites\""; exit 1 ;;
+          esac
+          {
+            echo "suites=$suites"
+            echo "tag=$tag"
+            echo "trigger=$trigger"
+            echo "staging=$staging"
+            echo "expect=$expect"
+          } >> "$GITHUB_OUTPUT"
+          echo "suites=$suites tag=$tag trigger=$trigger staging=$staging expect=$expect"
+
+  # The report builder's own tests. scripts/qa is outside the pnpm workspace, has no
+  # ESLint config above it and declares no turbo task, so `pnpm lint`, `pnpm typecheck`
+  # and `pnpm test` all walk straight past it. QT8 merged with three failing tests and a
+  # fixture that reported `pass` where it should have failed, because nothing ran them.
+  # This job is that signal, and it runs on any PR that touches scripts/qa/** even though
+  # the rest of this workflow is nightly and mobile-scoped.
+  qa-scripts:
+    name: qa-scripts
+    needs: changes
+    if: ${{ always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.qa_scripts == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      # Node 22 needs the quoted glob; a bare directory is rejected. No dependencies:
+      # summarize.mjs and its tests use Node built-ins only.
+      - name: Report builder tests
+        run: node --test "scripts/qa/**/*.test.mjs"
+
+  # The only remote write in this repository's CI. Applies QT2's reset then its seed to
+  # fitbud-staging, in that order, scoped to the three QA user ids (D-QA1-3).
+  seed-reset:
+    name: seed-reset
+    needs: changes
+    # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.changes.outputs.staging == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-qa
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Require the seed secrets
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these in the staging-qa environment (QA1 manual steps 3 and 4):$missing"
+            exit 1
+          fi
+          echo "Both seed secrets and the Cloudflare credentials are present."
+
+      # QT2's scripts only write files; they refuse --remote themselves. tsx, not
+      # node --experimental-strip-types: the scripts import .js specifiers that bare
+      # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
+      - name: Generate the reset and seed SQL
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts
+
+      # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
+      # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
+      - name: Apply the reset, then the seed, to fitbud-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file .qa-seed/qa-reset.sql
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file .qa-seed/qa-seed.sql
+
+  # The repository's own unit run, as the `unit` suite of the QA report
+  # (docs/runbooks/qa-nightly.md). `pnpm test` is turbo-driven and writes no JUnit, so
+  # each package is run with vitest's junit reporter into its own file and the parts are
+  # merged into the single qa-results/unit/junit.xml that QT8 reads.
+  unit:
+    name: unit
+    needs: changes
+    if: ${{ needs.changes.outputs.staging == 'true' && needs.changes.outputs.suites == 'all' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Unit tests as JUnit
+        run: |
+          parts="$RUNNER_TEMP/unit-parts"
+          mkdir -p "$parts"
+          status=0
+          for pkg in contracts core api-client tokens brand ui-mobile api trainer-web mobile; do
+            echo "--- @fitbud/$pkg"
+            # Every package's failure is recorded and re-raised after the loop, so one
+            # failing package never hides the rest and never reports success either.
+            if ! pnpm --filter "@fitbud/$pkg" run test --reporter=junit --outputFile="$parts/$pkg.xml"; then
+              status=1
+            fi
+          done
+          # shellcheck disable=SC2016  # the node program is deliberately unexpanded
+          node -e '
+            const fs = require("node:fs"), path = require("node:path");
+            const [dir, out] = process.argv.slice(1);
+            const bodies = [];
+            for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".xml")).sort()) {
+              const m = fs.readFileSync(path.join(dir, f), "utf8").match(/<testsuite\b[\s\S]*<\/testsuite>/);
+              if (m) bodies.push(m[0]);
+            }
+            if (!bodies.length) { console.error("no JUnit parts in " + dir); process.exit(1); }
+            fs.mkdirSync(path.dirname(out), { recursive: true });
+            fs.writeFileSync(out, `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="unit">\n${bodies.join("\n")}\n</testsuites>\n`);
+            console.log(`merged ${bodies.length} JUnit parts into ${out}`);
+          ' "$parts" "$GITHUB_WORKSPACE/qa-results/unit/junit.xml"
+          exit "$status"
+
+      - name: Collect the unit results
+        if: always()
+        run: |
+          mkdir -p qa-upload/unit
+          if [ -f qa-results/unit/junit.xml ]; then cp qa-results/unit/junit.xml qa-upload/unit/junit.xml; fi
+
+      - name: Upload the unit results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: qa-raw-unit
+          path: qa-upload
+          retention-days: 14
+
+  api-smoke:
+    name: api-smoke
+    needs: [changes, seed-reset]
+    if: >-
+      ${{ always() && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'api')
+          && needs.seed-reset.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      # QT8's "all skipped -> error" fallback cannot catch a missing secret here: the
+      # suite's offline tests always run, so the suite would look like a pass with zero
+      # staging coverage. CI=true also makes QT6 throw MissingSecretsError, but that is
+      # not the only guard we rely on.
+      - name: Require the QA secrets
+        id: guard
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "${QA_TEST_OTP_CODE:-}" ] || missing="$missing QA_TEST_OTP_CODE"
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these repository secrets (QA1 manual step 3):$missing"
+            exit 1
+          fi
+          echo "Both QA secrets are present."
+
+      - name: Staging API smoke
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: pnpm --filter @fitbud/api exec vitest run -c vitest.staging.config.ts
+
+      - name: Collect the api results
+        if: always()
+        run: |
+          mkdir -p qa-upload/api qa-upload/logs
+          for f in junit.xml results.json; do
+            if [ -f "qa-results/api/$f" ]; then cp "qa-results/api/$f" "qa-upload/api/$f"; fi
+          done
+          if [ -d qa-results/logs ]; then cp -R qa-results/logs/. qa-upload/logs/; fi
+
+      - name: Upload the api results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: qa-raw-api
+          path: qa-upload
+          retention-days: 14
+
+  web-staging:
+    name: web-staging
+    # `api-smoke` is a dependency for ordering only: the `if:` below is unchanged and
+    # still starts with always(), so this job runs whatever api-smoke concluded. The
+    # edge exists so the two never hold the staging accounts at the same moment.
+    needs: [changes, seed-reset, api-smoke]
+    if: >-
+      ${{ always() && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web')
+          && needs.seed-reset.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Install Playwright browser
+        run: pnpm --filter @fitbud/trainer-web exec playwright install --with-deps chromium
+
+      # As in api-smoke: the web suite's offline specs run with or without secrets, so
+      # an unset secret would read as a pass with no staging coverage.
+      - name: Require the QA secrets
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "${QA_TEST_OTP_CODE:-}" ] || missing="$missing QA_TEST_OTP_CODE"
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these repository secrets (QA1 manual step 3):$missing"
+            exit 1
+          fi
+          echo "Both QA secrets are present."
+
+      - name: Trainer web on staging
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: pnpm --filter @fitbud/trainer-web exec playwright test -c playwright.staging.config.ts
+
+      # Only these files leave the runner. qa-results/web/test-output/** is Playwright's
+      # own failure output: it contains error-context.md with a full aria snapshot of the
+      # page, which includes the typed value of FITBUD_QA_PASSWORD. Playwright has no
+      # `use` option to turn that file off, screenshots cannot be redacted, and this
+      # repository is public, so the directory is deleted and never uploaded.
+      - name: Collect the web results
+        if: always()
+        run: |
+          rm -rf qa-results/web/test-output
+          mkdir -p qa-upload/web/screenshots qa-upload/logs
+          for f in junit.xml results.json; do
+            if [ -f "qa-results/web/$f" ]; then cp "qa-results/web/$f" "qa-upload/web/$f"; fi
+          done
+          if [ -d qa-results/web/screenshots ]; then cp -R qa-results/web/screenshots/. qa-upload/web/screenshots/; fi
+          if [ -d qa-results/logs ]; then cp -R qa-results/logs/. qa-upload/logs/; fi
+          find qa-upload -type f | sort
+
+      - name: Upload the web results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: qa-raw-web
+          path: qa-upload
+          retention-days: 14
+
+  android:
+    name: android
+    # `api-smoke` and `web-staging` are dependencies for ordering only: the `if:` below
+    # is unchanged and still starts with always(), so this job runs whatever they
+    # concluded (on a pull request both are skipped, as before).
+    needs: [changes, seed-reset, api-smoke, web-staging]
+    if: >-
+      ${{ always()
+          && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
+          && ((needs.changes.outputs.staging == 'true'
+               && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android'))
+              || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/package.json') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      # Fork pull requests get no secrets. The Maestro flows cannot sign in without
+      # them, so the suite is skipped with a notice instead of failing: QT8 then reports
+      # the mobile suite as `not-run` and the run as `partial`, which the runbook says is
+      # never a pass. A same-repo run with an unset secret is a configuration error and
+      # fails loudly.
+      - name: Require the QA secrets
+        id: guard
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          missing=""
+          [ -n "${QA_TEST_OTP_CODE:-}" ] || missing="$missing QA_TEST_OTP_CODE"
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          if [ -z "$missing" ]; then
+            echo "secrets=true" >> "$GITHUB_OUTPUT"
+            echo "Both QA secrets are present."
+            exit 0
+          fi
+          echo "secrets=false" >> "$GITHUB_OUTPUT"
+          if [ "$IS_FORK" = "true" ]; then
+            echo "::notice title=QA secrets unavailable::A pull request from a fork gets no secrets, so the Maestro suite is skipped. Missing:$missing"
+            exit 0
+          fi
+          echo "::error title=QA secrets missing::Set these repository secrets (QA1 manual step 3):$missing"
+          exit 1
+
+      - name: Build the staging APK
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: scripts/qa/build-android-apk.sh
+
+      - name: Install the Maestro CLI
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Report the Maestro version
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: maestro --version
+
+      - name: Enable KVM
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Cache the AVD
+        uses: actions/cache@v6
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-${{ runner.os }}
+
+      - name: Create the AVD snapshot
+        if: ${{ steps.guard.outputs.secrets == 'true' && steps.avd-cache.outputs.cache-hit != 'true' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "AVD created"
+
+      # Emulator flakiness on hosted runners is accepted (D-QA1-8): there is no EAS or
+      # Maestro Cloud fallback. A failure here is a real failure of the run.
+      - name: Maestro suite
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: scripts/qa/run-maestro.sh
+
+      # JUnit report, screenshots and the device log only. Maestro's own debug output can
+      # contain the resolved value of an -e variable, so it is left on the runner.
+      - name: Collect the mobile results
+        if: ${{ always() && steps.guard.outputs.secrets == 'true' }}
+        run: |
+          mkdir -p qa-upload/mobile qa-upload/logs
+          if [ -f qa-results/mobile/junit.xml ]; then cp qa-results/mobile/junit.xml qa-upload/mobile/junit.xml; fi
+          if [ -d qa-results/mobile ]; then
+            (cd qa-results/mobile && find . -name '*.png' -type f -exec cp --parents '{}' "$GITHUB_WORKSPACE/qa-upload/mobile/" ';')
+          fi
+          if [ -d qa-results/logs ]; then cp -R qa-results/logs/. qa-upload/logs/; fi
+          find qa-upload -type f | sort
+
+      - name: Upload the mobile results
+        if: ${{ always() && steps.guard.outputs.secrets == 'true' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: qa-raw-mobile
+          path: qa-upload
+          retention-days: 14
+
+
+  # The same Maestro flows as `android`, on an iOS simulator (CU19, D-W3b-14). Its
+  # purpose is to catch the CU17 class of bug — an iOS-only Hermes failure, such as
+  # `Intl` rejecting a time zone name (D-W3b-11a) — in a job instead of on Firoz's
+  # phone. Not a required check, exactly like `android`.
+  #
+  # Runner: `macos-15`, a STANDARD GitHub-hosted runner, which is free for public
+  # repositories; larger runners are billed even for public repositories, so no
+  # `-large`/`-xlarge` label is used here and none may be added.
+  #
+  # Why not `macos-latest`: it now maps to the macOS 26 arm64 image, whose only
+  # Xcodes are 26.x. This app is Expo SDK 52 / React Native 0.76.9, which that
+  # toolchain does not support, and the image ships no iOS runtime older than 26.2.
+  # `macos-15` is the same class of standard runner and ships Xcode 16.4 with iOS
+  # 18.x runtimes. CU19's spec named `macos-latest` and an iPhone 15 on iOS 17.5;
+  # neither exists on the current images, so the pins below are the nearest thing
+  # the images actually ship. Every pin is explicit so that an image change fails
+  # loudly here instead of quietly testing something else.
+  ios:
+    name: ios
+    # `android` is a dependency for ordering, not for its result: both jobs drive the
+    # same staging QA accounts, and the `qa-staging` group alone would not keep them
+    # apart if they could start at the same time. The `if:` below starts with always()
+    # so this job runs whatever `android` concluded.
+    needs: [changes, seed-reset, api-smoke, web-staging, android]
+    if: >-
+      ${{ always()
+          && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
+          && ((needs.changes.outputs.staging == 'true'
+               && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios'))
+              || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
+      # Pinned Xcode, simulator device type and runtime. All three are on the
+      # macos-15 arm64 image; the steps below print what the image has and fail with
+      # a message naming the missing one rather than an opaque simctl error.
+      QA_IOS_XCODE: /Applications/Xcode_16.4.app
+      QA_IOS_DEVICE_TYPE: com.apple.CoreSimulator.SimDeviceType.iPhone-16
+      QA_IOS_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-18-6
+      QA_IOS_SIM_NAME: qa-iphone
+      # India-first product: every QA expectation is written in this zone, and the
+      # CU17 bug only appears when the app resolves it (D-W3b-11, D-W3b-11a).
+      QA_IOS_TIME_ZONE: Asia/Kolkata
+      # Apple's zone table carries the old link name, not Asia/Kolkata (D-W3b-11a,
+      # and see the host-zone step). Same zone, different spelling.
+      QA_IOS_TIME_ZONE_FALLBACK: Asia/Calcutta
+      QA_IOS_TIME_ZONE_ABBREVIATION: IST
+      QA_IOS_LOCALE: en_IN
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Select the pinned Xcode
+        run: |
+          if [ ! -d "$QA_IOS_XCODE" ]; then
+            echo "::error title=Xcode missing::$QA_IOS_XCODE is not on this runner image. Installed:"
+            ls -1 /Applications | grep -i '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$QA_IOS_XCODE/Contents/Developer"
+          xcodebuild -version
+          sw_vers
+
+      # Fork pull requests get no secrets. The Maestro flows cannot sign in without
+      # them, so the suite is skipped with a notice instead of failing: the report
+      # then shows the ios suite as `not-run` and the run as `partial`, which the
+      # runbook says is never a pass. A same-repo run with an unset secret is a
+      # configuration error and fails loudly. Identical to the android guard, and it
+      # adds no new secret.
+      - name: Require the QA secrets
+        id: guard
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          missing=""
+          [ -n "${QA_TEST_OTP_CODE:-}" ] || missing="$missing QA_TEST_OTP_CODE"
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          if [ -z "$missing" ]; then
+            echo "secrets=true" >> "$GITHUB_OUTPUT"
+            echo "Both QA secrets are present."
+            exit 0
+          fi
+          echo "secrets=false" >> "$GITHUB_OUTPUT"
+          if [ "$IS_FORK" = "true" ]; then
+            echo "::notice title=QA secrets unavailable::A pull request from a fork gets no secrets, so the Maestro suite is skipped. Missing:$missing"
+            exit 0
+          fi
+          echo "::error title=QA secrets missing::Set these repository secrets (QA1 manual step 3):$missing"
+          exit 1
+
+      # Before the long build, so a wrong image or an unsettable zone fails in two
+      # minutes rather than forty.
+      #
+      # The simulator takes its time zone from the host, which is why the host is set
+      # first. CU19's spec called that inheritance unverified and said to verify it or
+      # stop; this step is that verification, and it is an assertion, not a hope: the
+      # zone is read back from inside the simulator and the job fails if it is not
+      # IST. A simulator quietly running in UTC would make every date assertion in the
+      # suite meaningless while still going green.
+      - name: Boot the pinned simulator at Asia/Kolkata
+        id: sim
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          echo "--- runtimes on this image ---"
+          xcrun simctl list runtimes
+          echo "--- iPhone device types on this image ---"
+          xcrun simctl list devicetypes | grep -i iphone || true
+
+          if ! xcrun simctl list runtimes | grep -q "$QA_IOS_RUNTIME"; then
+            echo "::error title=iOS runtime missing::$QA_IOS_RUNTIME is not installed on this runner image (see the list above). Pin a runtime the image ships."
+            exit 1
+          fi
+          if ! xcrun simctl list devicetypes | grep -q "$QA_IOS_DEVICE_TYPE"; then
+            echo "::error title=Simulator device type missing::$QA_IOS_DEVICE_TYPE is not available on this runner image (see the list above)."
+            exit 1
+          fi
+
+          # macOS's own zone table is Apple's, not the full IANA one, and it does
+          # NOT contain Asia/Kolkata: `systemsetup -settimezone Asia/Kolkata` fails
+          # with "Asia/Kolkata is not a valid timezone" (run 41783371236). That is
+          # the very naming gap D-W3b-11a found on the device, showing up here at
+          # the OS level — Apple ships the old link name Asia/Calcutta instead.
+          # Both names are the same zone, so the alternatives are tried in order
+          # and the one that worked is printed. The real gate is the IST read-back
+          # below, which is what every date assertion in the suite depends on.
+          host_zone=""
+          for candidate in "$QA_IOS_TIME_ZONE" "$QA_IOS_TIME_ZONE_FALLBACK"; do
+            if sudo systemsetup -settimezone "$candidate" >/dev/null 2>&1; then
+              host_zone="$candidate"
+              break
+            fi
+            echo "host rejected the zone name \"$candidate\""
+          done
+          if [ -z "$host_zone" ]; then
+            echo "::error title=Host time zone could not be set::macOS accepted neither $QA_IOS_TIME_ZONE nor $QA_IOS_TIME_ZONE_FALLBACK. Names this host accepts:"
+            sudo systemsetup -listtimezones | tr ' ' '\n' | grep -i 'asia/' || true
+            exit 1
+          fi
+          echo "::notice title=Host zone::set with the name \"$host_zone\"; macOS accepted it."
+          sudo systemsetup -gettimezone
+          # TZ for the rest of the job uses the IANA name, which Node accepts even
+          # where the OS tool does not.
+          echo "TZ=$QA_IOS_TIME_ZONE" >> "$GITHUB_ENV"
+
+          udid="$(xcrun simctl create "$QA_IOS_SIM_NAME" "$QA_IOS_DEVICE_TYPE" "$QA_IOS_RUNTIME")"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+          # India locale, then a restart so both the locale and the host zone are
+          # picked up by a freshly launched SpringBoard.
+          xcrun simctl spawn "$udid" defaults write -g AppleLocale -string "$QA_IOS_LOCALE"
+          xcrun simctl spawn "$udid" defaults write -g AppleLanguages -array "en-IN"
+          xcrun simctl shutdown "$udid"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+          echo "--- the simulator's own clock ---"
+          xcrun simctl spawn "$udid" /bin/date
+          zone="$(xcrun simctl spawn "$udid" /bin/date +%Z | tr -d '[:space:]')"
+          echo "simulator time zone abbreviation: $zone"
+          if [ "$zone" != "$QA_IOS_TIME_ZONE_ABBREVIATION" ]; then
+            echo "::error title=Simulator time zone is not $QA_IOS_TIME_ZONE::The simulator reports \"$zone\", not $QA_IOS_TIME_ZONE_ABBREVIATION. The host zone was set to $QA_IOS_TIME_ZONE, so host-zone inheritance did not hold on this image and every date assertion in the suite would be measured in the wrong zone."
+            exit 1
+          fi
+          echo "::notice title=Simulator zone::$QA_IOS_TIME_ZONE confirmed as $zone inside the simulator."
+
+      # Evidence, not a gate: which time-zone names the simulator's Foundation
+      # accepts. Hermes's iOS `Intl` validates a zone against Foundation's known
+      # time-zone names, which is why `Asia/Kolkata` is rejected on a device while
+      # `Asia/Calcutta` is accepted (D-W3b-11a). Printing the same table from the
+      # simulator says plainly how faithful a proxy for the device this job is. It
+      # never fails the job: the real proof is the suite, and D-W3b-20 lists what
+      # remains unproven either way.
+      - name: Probe the simulator's time-zone names
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        continue-on-error: true
+        run: |
+          cat > "$RUNNER_TEMP/zone-probe.swift" <<'SWIFT'
+          import Foundation
+          let known = Set(TimeZone.knownTimeZoneIdentifiers)
+          for zone in ["Asia/Kolkata", "Asia/Calcutta", "UTC", "Etc/UTC", "Etc/GMT", "GMT"] {
+            let listed = known.contains(zone)
+            let usable = TimeZone(identifier: zone) != nil
+            print("\(zone)\tknownTimeZoneIdentifiers=\(listed)\tTimeZone(identifier:)=\(usable)")
+          }
+          print("TimeZone.current=\(TimeZone.current.identifier)")
+          SWIFT
+          xcrun --sdk iphonesimulator swiftc \
+            -target arm64-apple-ios18.0-simulator \
+            "$RUNNER_TEMP/zone-probe.swift" -o "$RUNNER_TEMP/zone-probe"
+          xcrun simctl spawn "${{ steps.sim.outputs.udid }}" "$RUNNER_TEMP/zone-probe"
+
+      - name: Set up Node (.nvmrc)
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      # Only the CocoaPods download cache is worth keeping. apps/mobile/ios/Pods is
+      # deliberately NOT cached: `expo prebuild --clean` deletes apps/mobile/ios
+      # before pod install runs, so a restored Pods directory would be thrown away
+      # every time and the cache would report hits it never used.
+      - name: Cache CocoaPods downloads
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pods-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      # Metro resolves the workspace packages from their dist/ output, so this must
+      # precede any bundle (CU16, D-W3b-5).
+      - name: Build packages
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: pnpm build:packages
+
+      - name: Build the staging simulator app
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: scripts/qa/build-ios-sim.sh
+
+      - name: Install the Maestro CLI
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Report the Maestro version
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: maestro --version
+
+      # Simulator flakiness on hosted runners is accepted (D-QA1-8, D-W3b-14): there
+      # is no EAS or Maestro Cloud fallback. A failure here is a real failure of the
+      # run.
+      - name: Maestro suite
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          QA_IOS_UDID: ${{ steps.sim.outputs.udid }}
+        run: scripts/qa/run-maestro-ios.sh
+
+      # JUnit report, screenshots and the simulator log only, copied by name into
+      # qa-upload/. Maestro's own debug output can contain the resolved value of an
+      # -e variable, so it is left on the runner and never uploaded.
+      - name: Collect the ios results
+        if: ${{ always() && steps.guard.outputs.secrets == 'true' }}
+        run: |
+          mkdir -p qa-upload/ios qa-upload/logs
+          if [ -f qa-results/ios/junit.xml ]; then cp qa-results/ios/junit.xml qa-upload/ios/junit.xml; fi
+          if [ -d qa-results/ios ]; then
+            (cd qa-results/ios && find . -name '*.png' -type f | while read -r png; do
+              mkdir -p "$GITHUB_WORKSPACE/qa-upload/ios/$(dirname "$png")"
+              cp "$png" "$GITHUB_WORKSPACE/qa-upload/ios/$png"
+            done)
+          fi
+          if [ -f qa-results/logs/ios-sim.log ]; then cp qa-results/logs/ios-sim.log qa-upload/logs/ios-sim.log; fi
+          find qa-upload -type f | sort
+
+      - name: Upload the ios results
+        if: ${{ always() && steps.guard.outputs.secrets == 'true' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: qa-raw-ios
+          path: qa-upload
+          retention-days: 14
+
+  # Always runs, so a run that failed or died halfway still publishes a report. The one
+  # exception is a pull request that asked for no suite at all (it did not touch
+  # apps/mobile or packages/ui-mobile): there is nothing to report, and a `partial`
+  # report on an unrelated PR would be noise rather than a signal. `android` and
+  # `ios` share that gate, so either one having run is enough.
+  report:
+    name: report
+    needs: [changes, qa-scripts, seed-reset, unit, api-smoke, web-staging, android, ios]
+    if: ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped' || needs.ios.result != 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Evicted, not failed (D-W3b-26). A staging job cancelled while PENDING was
+      # evicted from the `qa-staging` queue by newer arrivals, not broken by this
+      # commit: GitHub keeps one pending entry per group and a third arrival cancels
+      # the older one. Without this step the only signal is a grey `cancelled` next to
+      # four greens, which reads as a failure of the run and has repeatedly been
+      # chased as one.
+      #
+      # This step is advisory only and must stay so. It deliberately does NOT fail the
+      # job, does not touch the inputs summarize.mjs reads, and does not let the run
+      # read as a pass: the evicted suite produced no results, so summarize.mjs still
+      # reports it `not-run` and the whole run `partial`. `::warning` is used rather
+      # than `::error` precisely because an eviction is not a defect.
+      #
+      # It runs first and needs no checkout — only the `needs` results — so it still
+      # annotates the run when a later step in this job fails. It cannot report a
+      # run-level cancellation (the whole run cancelled by hand), because then this
+      # job does not run at all.
+      #
+      # It reports a CANCELLATION and names eviction as the likely cause; it does not
+      # assert eviction, because nothing available here can tell an evicted job from
+      # one someone cancelled by hand through the API. Blaming a cause the code did
+      # not check is the mistake D-W3-12 and D-W3-18 forbid clients; the same honesty
+      # is nearly free here, so the wording hedges and stays a `::warning`.
+      - name: Evicted, not failed
+        if: always()
+        env:
+          # Derived from this job's own `needs:` rather than from a second hardcoded
+          # list of job names, so a sixth staging writer added to the group and to
+          # `needs:` is covered here with no further edit. Only the jobs OUTSIDE
+          # `qa-staging` are named, and that list fails in the safe direction: a new
+          # non-group job nobody adds to it produces one spurious warning, which is
+          # visible, where a stale list of writers would have produced silence.
+          NEEDS: ${{ toJSON(needs) }}
+          NOT_IN_GROUP: changes qa-scripts unit
+        run: |
+          cancelled=""
+          stale=""
+          for job in $(printf '%s' "$NEEDS" | jq -r 'keys[]'); do
+            case " $NOT_IN_GROUP " in *" $job "*) continue ;; esac
+            result=$(printf '%s' "$NEEDS" | jq -r --arg j "$job" '.[$j].result // ""')
+            # An absent result matches no comparison below, so without this guard the
+            # check would simply stop speaking for that job, and do it in silence.
+            if [ -z "$result" ] || [ "$result" = "null" ]; then
+              echo "::warning title=qa.yml: stale eviction check::No result for the \"$job\" job, so the \"Evicted, not failed\" step cannot say whether it was cancelled. Fix the step in .github/workflows/qa.yml (D-W3b-26)."
+              stale="$stale $job"
+              continue
+            fi
+            if [ "$result" = "cancelled" ]; then cancelled="$cancelled $job"; fi
+          done
+          # Never report a clean queue without saying which jobs this step could not
+          # read: "nothing was cancelled" must not stand in for "I did not look".
+          if [ -z "$cancelled" ]; then
+            if [ -n "$stale" ]; then
+              echo "No cancellation among the staging jobs this step could read, but it could not read:$stale"
+            else
+              echo "No staging job was cancelled."
+            fi
+            exit 0
+          fi
+          echo "::warning title=Staging job cancelled, not failed::Cancelled rather than failed:$cancelled. On the qa-staging group that is almost always queue eviction: GitHub keeps one pending entry per concurrency group (D-W3b-26), so a newer run displaces the older pending one. A cancellation requested by hand looks the same from here. Either way their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
+          {
+            echo "## Cancelled, not failed"
+            echo
+            echo "Cancelled on \`qa-staging\`:$cancelled"
+            echo
+            echo "These jobs were **not broken by this commit**. On this group a"
+            echo "cancellation is almost always queue eviction:"
+            echo "\`cancel-in-progress: false\` keeps only one pending entry per"
+            echo "concurrency group, so a newer run displaces the older pending one"
+            echo "(D-W3b-26). A cancellation requested by hand is indistinguishable"
+            echo "from here, so read the run's timeline before concluding."
+            echo
+            echo "Either way their suites carry no results, so they report as"
+            echo "\`not-run\` and this run as \`partial\`. That is **not a pass**."
+            echo "Re-dispatch this workflow from \`main\` once no other staging run"
+            echo "is in flight."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Download the suite results
+        uses: actions/download-artifact@v5
+        with:
+          path: qa-results
+          pattern: qa-raw-*
+          merge-multiple: true
+
+      # The secrets are in this step's environment on purpose: summarize.mjs redacts by
+      # value, replacing QA_TEST_OTP_CODE and every variable whose name ends in TOKEN,
+      # SECRET, PASSWORD or KEY wherever it appears in a report or a log it copies. Any
+      # new QA secret must be named the same way or the redaction will not see it.
+      - name: Build the QA report
+        id: summary
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # The fallback names every suite, ios included: a run that produced no ios
+          # results then reports the suite as `not-run` and the whole run as
+          # `partial`, which is never a pass (CU19).
+          EXPECT: ${{ needs.changes.outputs.expect || 'mobile,ios,web,api,unit' }}
+          TRIGGER: ${{ needs.changes.outputs.trigger || 'manual' }}
+        run: |
+          node scripts/qa/summarize.mjs \
+            --in qa-results --out qa-report \
+            --expect "$EXPECT" \
+            --trigger "$TRIGGER" \
+            --environment staging \
+            --frames apps/mobile/.maestro/README.md \
+            --frames apps/trainer-web/playwright.staging.config.ts \
+            --frame-dir docs/design/mockups/png
+
+      # Must be if: always() — summarize.mjs exits 2 on a malformed input report, and it
+      # writes summary.json before doing so.
+      - name: Upload the QA report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: qa-report
+          path: qa-report
+          retention-days: 14
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ ! -f qa-report/summary.json ]; then
+            echo "No summary.json was produced; read the suite job logs." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## QA report"
+            echo
+            echo "**status:** $(jq -r .status qa-report/summary.json) · **trigger:** $(jq -r .trigger qa-report/summary.json)"
+            echo
+            echo "| suite | status | total | passed | failed | skipped |"
+            echo "|---|---|---|---|---|---|"
+            jq -r '.suites[] | "| \(.name) | \(.status) | \(.total) | \(.passed) | \(.failed) | \(.skipped) |"' qa-report/summary.json
+            echo
+            crashes=$(jq -r '.crashes | length' qa-report/summary.json)
+            echo "**crashes:** $crashes · **screenshots:** $(jq -r '.screenshots | length' qa-report/summary.json)"
+            echo
+            echo "Reading the artifact: \`docs/runbooks/qa-nightly.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"

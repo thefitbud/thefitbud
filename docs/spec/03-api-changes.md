@@ -86,7 +86,7 @@ Many items marked API-NEW in the guide were built in Stage 1. **Before wiring, c
 ### TW-09 · Client overview  (`trainer-web/TW-09-client-overview.md`)
 
 - **Header API:** the workspace read (overview: plan, renewal, one open exception, next check-in, ≤5 recent activity, progress summary)
-- - Weekly consistency needs API-NEW `GET /workspaces/relationships/:rid/week?start=YYYY-MM-DD` returning `{workouts:{assigned,completed}, meals:{assigned,logged}, days:[{date, state}]}`, or derive it from the activity pages. A server read model is preferred so trainee and trainer always agree.
+- - Weekly consistency uses the week read model, served to the trainer at `GET /workspaces/relationships/:rid/week?start=YYYY-MM-DD` and to the trainee at `GET /me/week?start=YYYY-MM-DD` (CU23, D-W3b-25). Both return `weekReadModelSchema` from the same builder: `{start, workouts:{assigned,completed}, meals:{assigned,logged}, days:[{date, state, workoutLabel, mealsLogged, mealsAssigned, mealSlots}], todayNutrition}`, so trainee and trainer always agree.
 
 ### TW-10 · Onboarding review  (`trainer-web/TW-10-onboarding-review.md`)
 
