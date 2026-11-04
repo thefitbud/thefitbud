@@ -29,8 +29,12 @@ vi.mock("@fitbud/tokens", () => ({
 }));
 vi.mock("../trainee/settings/m2", () => ({ M2Card: "M2Card", M2Group: "M2Group", M2Row: "M2Row" }));
 vi.mock("expo-notifications", () => ({ getPermissionsAsync: vi.fn() }));
-vi.mock("@fitbud/ui-mobile", () => ({
-  colors: {}, spacing: {}, fontFamilyBold: "", fontFamilySemiBold: "",
+// Real spacing scale: the CU7 inset assertions below must measure the values
+// the screen actually ships, not numbers restated in this file.
+vi.mock("@fitbud/ui-mobile", async () => ({
+  colors: {},
+  spacing: (await vi.importActual<typeof import("@fitbud/tokens")>("@fitbud/tokens")).spacing,
+  fontFamilyBold: "", fontFamilySemiBold: "",
 }));
 vi.mock("../components/Text", () => ({ Text: "Text" }));
 vi.mock("../components/PrimaryButton", () => ({ PrimaryButton: "PrimaryButton" }));
@@ -44,8 +48,15 @@ const auth = vi.hoisted(() => ({
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth }));
 vi.mock("../lib/support", () => ({ openSupportEmail: vi.fn(), DEFAULT_SUPPORT_EMAIL: "" }));
 
+import { spacing } from "@fitbud/ui-mobile";
 import { openSupportEmail } from "../lib/support";
-import { DEFAULT_TRAINER_WEB_URL, TrainerMoreScreen, trainerWebUrl } from "./MoreScreen";
+import {
+  DEFAULT_TRAINER_WEB_URL,
+  TrainerMoreScreen,
+  moreGutter,
+  moreHeadingNudge,
+  trainerWebUrl,
+} from "./MoreScreen";
 
 type Element = { type: unknown; props: Record<string, unknown> & { children?: unknown } };
 
@@ -184,5 +195,68 @@ describe("trainer More grouped layout (BT3d, D-W3-14)", () => {
       expect.objectContaining({ screenId: "TM-07", role: "trainer" }),
     );
     expect(findByLabel(tree, "Sign out")!.props.onPress).toBe(auth.signOut);
+  });
+});
+
+/**
+ * CU7: the heading and the card column share one gutter.
+ *
+ * `Screen` pads `spacing.xl` and exposes no inset prop, so both the heading and
+ * the stack carry a negative margin off that padding. Every number below is read
+ * back off the rendered tree and compared against the other, never restated: if
+ * someone changes the gutter, both insets move and the suite stays green; if
+ * someone moves one of them alone, it goes red.
+ */
+describe("trainer More heading alignment (CU7, frame 51)", () => {
+  afterEach(() => {
+    auth.me = null;
+  });
+
+  /** Horizontal inset a style contributes, relative to Screen's own padding. */
+  function offsetOf(style: unknown): number {
+    const s = style as { marginLeft?: number; marginHorizontal?: number };
+    const value = s.marginLeft ?? s.marginHorizontal;
+    expect(typeof value).toBe("number");
+    return value as number;
+  }
+
+  function parts() {
+    const elements = flatten(render());
+    const heading = elements.find((el) => el.props.accessibilityRole === "header");
+    const stack = elements.find(
+      (el) =>
+        (el.props.style as { marginHorizontal?: number } | undefined)
+          ?.marginHorizontal !== undefined,
+    );
+    expect(heading).toBeDefined();
+    expect(stack).toBeDefined();
+    return { heading: heading!, stack: stack! };
+  }
+
+  it("renders its own 'More' heading, because Screen's title block is off", () => {
+    const { heading } = parts();
+    // Screen.tsx is not CU7's to change: its 24pt title inset is shared with
+    // every other trainer tab.
+    const screen = flatten(render()).find((el) => el.props.showHeader === false);
+    expect(screen).toBeDefined();
+    expect(heading.props.children).toBe("More");
+    expect(heading.props.accessibilityLabel).toBe("More");
+  });
+
+  it("insets the card stack to the gutter the frames use", () => {
+    const { stack } = parts();
+    // stack inset = Screen padding + offset = moreGutter, whatever the tokens are.
+    expect(spacing.xl + offsetOf(stack.props.style)).toBe(moreGutter);
+  });
+
+  it("keeps the heading exactly one optical nudge in from the cards", () => {
+    const { heading, stack } = parts();
+    const headingInset = spacing.xl + offsetOf(heading.props.style);
+    const stackInset = spacing.xl + offsetOf(stack.props.style);
+    // Screen's padding cancels, so this holds whatever Screen pads.
+    expect(headingInset - stackInset).toBe(moreHeadingNudge);
+    // Frame 51 at 393x852: card box 16.0pt, heading text box 20pt (ink 22.3pt).
+    expect(stackInset).toBe(16);
+    expect(headingInset).toBe(20);
   });
 });

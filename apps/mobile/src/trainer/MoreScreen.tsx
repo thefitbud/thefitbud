@@ -55,6 +55,22 @@ function initials(name: string): string {
 }
 
 /**
+ * Frame 51 geometry (CU7). Measured on `51-trainer-mobile-more-ios.png` at
+ * 393x852 (the PNG is 1179x2556, i.e. 3x): the card box's left edge is at
+ * 16.0pt and the heading's "M" ink starts at 22.3pt, which is a 20pt text box
+ * plus the "M" side bearing — the same 16pt gutter + 4pt optical nudge the
+ * trainee More ships (`trainee/MoreScreen.tsx` `h1`, frame 16, identical ink at
+ * 22.3pt) and the same nudge `groupLabel` below already uses.
+ *
+ * `Screen` pads `spacing.xl` horizontally and owns no inset prop, so both the
+ * heading and the card stack are pulled back off that padding here. They are
+ * derived from one gutter so the two can never drift apart:
+ * stack inset = gutter, heading inset = gutter + nudge.
+ */
+export const moreGutter = spacing.lg;
+export const moreHeadingNudge = spacing.xs;
+
+/**
  * Trainer More (BT3d, D-W3-14): frame 51's grouped layout plus the same LEGAL
  * group as the trainee DS5 More, governed by `ds5-ios-trainer-more-legal.png`.
  * Rows come from the shared M2 components so the visuals match the trainee screen.
@@ -81,7 +97,14 @@ export function TrainerMoreScreen({
     me?.trainerProfile?.displayName?.trim() || email || "Your profile";
 
   return (
-    <Screen title="More" chrome="app">
+    <Screen title="More" chrome="app" showHeader={false}>
+      <Text
+        style={styles.heading}
+        accessibilityRole="header"
+        accessibilityLabel="More"
+      >
+        More
+      </Text>
       <View style={styles.stack}>
         <M2Card>
           <Pressable
@@ -256,10 +279,23 @@ export function TrainerMoreScreen({
 }
 
 const styles = StyleSheet.create({
+  heading: {
+    // Screen's own title block is off (showHeader={false}) because Screen pads
+    // spacing.xl and exposes no inset prop; CU7 may not change Screen.tsx, which
+    // would move every other trainer tab's heading. Type matches Screen's
+    // `title` + `titleApp` exactly — CU7 changes the inset only.
+    color: colors.deepNavy,
+    fontFamily: fontFamilyBold,
+    fontSize: 30,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+    marginBottom: spacing.xs,
+    marginLeft: -(spacing.xl - moreGutter - moreHeadingNudge),
+  },
   stack: {
     gap: spacing.lg,
-    // Screen pads 24pt; frames and the trainee More use 16pt (m2Gutter).
-    marginHorizontal: -(spacing.xl - spacing.lg),
+    // Screen pads spacing.xl; frames and the trainee More use moreGutter.
+    marginHorizontal: -(spacing.xl - moreGutter),
   },
   permissionCard: {
     backgroundColor: colors.paleLavender,
