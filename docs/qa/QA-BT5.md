@@ -33,7 +33,7 @@ v14 step 1 is a trainer email-code sign-up (ZeptoMail arrives). PR #138 left the
 | | |
 |---|---|
 | **Action** | **1a.** On `https://app-staging.thefitbud.com`, sign in as the D-W4-11 trainer (password or email code). Open the client list. **1b.** With a placeholder trainer address you choose at run time (do not write it here if it is a real personal mailbox; a plus-address on a mailbox you control is enough), request an email code and complete sign-up. |
-| **Expected** | **1a.** Sign-in succeeds. Home or the client list shows both seeded clients (Rahul Verma, Jun–Nov history). **1b.** The code email arrives and the new account reaches the signed-in trainer shell. The code itself is never copied into this file. |
+| **Expected** | **1a.** Sign-in succeeds. The signed-in trainer's display name is Rahul Verma. Home or the client list shows both seeded clients, the two that hold the Jun–Nov history. **1b.** The code email arrives and the new account reaches the signed-in trainer shell. The code itself is never copied into this file. |
 | **Where to look** | Web. ZeptoMail report for 1b (delivery, not the code). `wrangler tail` on the staging Worker for the sign-in request (no tokens, codes, or addresses in what you paste back). |
 | **Pass/fail** | |
 | **Evidence** | |
@@ -100,7 +100,7 @@ v14 step 1 is a trainer email-code sign-up (ZeptoMail arrives). PR #138 left the
 
 ### 8. Live Activity / Android ongoing notification
 
-**Only if Live Activity made the cut-line.** D-B7: if LA1 does not work on Firoz's iPhone by the cut-line, the beta ships without Live Activity and this step is `n/a`, not a beta blocker. The cut-line date Thu 12 Nov is struck. PLAN-v2 Q-P2-4 still recommends "before the W13 rehearsal" and is pending Firoz. LA never blocks the store-build task (BT1). If the cut-line was missed, write `n/a` and the cut-line note in Evidence, and leave it off the blocker list.
+**Only if Live Activity made the cut-line.** D-B7, restated by D-W13-2: the Live Activity cut-line is "by the dress rehearsal", not Thu 12 Nov. If LA1 does not work on Firoz's iPhone by that cut-line, the beta ships without Live Activity and this step is `n/a`, not a beta blocker. The rule "LA never blocks BT1" stands. If the cut-line was missed, write `n/a` and the cut-line note in Evidence, and leave it off the blocker list.
 
 | | |
 |---|---|
