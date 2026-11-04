@@ -25,6 +25,21 @@ tags:
 - extendedWaitUntil:
     notVisible: ".*Loading your day.*"
     timeout: 30000
+# Plan-gated assertions (CU22, D-W3b-25). The only positive assertion here
+# used to be `assertVisible: "Today's workout"`, which proved nothing: that
+# header rendered for every trainee, including one whose trainer has published
+# nothing, so the flow could pass it and then fail on the contradiction below.
+#
+# "Here's your day." is the direct counterpart of the "is preparing your plan"
+# copy: both come from the one greeting subtitle, which renders exactly one of
+# them and neither while the plan is still loading. Asserting it next to the
+# assertNotVisible pins the pair, so neither a plan state stuck on "loading"
+# nor one wrongly read as "no plan" can pass. (It is not shown when everything
+# for the day is already logged, which the QA on-track seed guarantees is not
+# the case: four meals today, one logged.)
+- assertVisible: "Here's your day\\."
+# Now gated on the plan as well: the workout section no longer renders before
+# the effective plan has resolved to a live version.
 - assertVisible: "Today's workout"
 - assertNotVisible: ".*is preparing your plan.*"
 - takeScreenshot: trainee-today__loaded
