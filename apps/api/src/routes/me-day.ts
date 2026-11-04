@@ -1,9 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { z } from "zod";
 import {
   localDateSchema,
-  weekDayStateSchema,
+  meDayResponseSchema,
   weekReadModelSchema,
 } from "@fitbud/contracts";
 import {
@@ -35,27 +34,6 @@ import {
 } from "../middleware/auth.js";
 import type { Env, Variables } from "../types.js";
 
-const dayResponseSchema = z.object({
-  date: z.string(),
-  /**
-   * The same day state `GET /me/week` reports for this date
-   * (`deriveWeekDayFromWorkouts`). Never a state invented for this route.
-   */
-  state: weekDayStateSchema,
-  assignments: z.object({
-    workouts: z.array(z.object({ id: z.string(), name: z.string() })),
-    meals: z.array(z.object({ id: z.string(), slotKey: z.string() })),
-  }),
-  logs: z.object({
-    workouts: z.number().int(),
-    meals: z.number().int(),
-  }),
-  totals: z.object({
-    kcalScaled: z.number().int(),
-    perMeal: z.array(z.object({ slotKey: z.string(), kcalScaled: z.number().int() })),
-  }),
-});
-
 export const meDayRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 meDayRoutes.get(
@@ -66,7 +44,7 @@ meDayRoutes.get(
     description:
       "Assignments, logs, totals, and the derived day state for one local day.",
     roles: ["trainee"],
-    response: dayResponseSchema,
+    response: meDayResponseSchema,
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -190,7 +168,7 @@ meDayRoutes.get(
     });
     return ok(
       c,
-      dayResponseSchema.parse({
+      meDayResponseSchema.parse({
         date,
         state,
         assignments: {

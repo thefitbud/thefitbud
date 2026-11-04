@@ -13,6 +13,7 @@ import { handleScheduledReplenishment } from "./jobs/replenishment";
 import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
 import { fail, ok } from "./lib/envelope";
+import { wrapWithSentry } from "./lib/sentry";
 import { EmailNotConfiguredError, EmailSendError } from "./lib/email";
 import { writeStructuredLog, type SafeLogFields } from "./lib/log";
 import { errorLogFields } from "./domain/reminders";
@@ -275,6 +276,12 @@ async function runScheduledJobs(jobs: Array<[operation: string, run: () => Promi
   if (failed) throw firstFailure;
 }
 
+// Hono catches route errors inside fetch, so the SDK's Hono integration only
+// runs when this app (it owns errorHandler) is wrapped. 4xx HTTPExceptions and
+// fail() responses are not reported. Scheduled and queue throws are captured
+// on the exported handler below.
+wrapWithSentry(app);
+
 const worker = {
   fetch: app.fetch,
   async scheduled(
@@ -319,7 +326,7 @@ const worker = {
   },
 };
 
-export default worker;
+export default wrapWithSentry(worker);
 export { app };
 /** Wrangler Durable Object binding export — relationship-scoped WS fan-out. */
 export { RelationshipRealtimeRoom } from "./realtime/relationship-room";
