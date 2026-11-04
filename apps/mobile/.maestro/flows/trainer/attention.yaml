@@ -43,7 +43,31 @@ env:
     timeout: 20000
 - takeScreenshot: trainer-attention__review-sheet
 - runFlow: ../../common/assert-no-crash.yaml
-- pressKey: back
+
+# Dismiss the review sheet. iOS has no hardware back key, so this step branches on
+# the platform instead of the flow being forked into two files (CU19).
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      # The sheet is a react-native Modal, and back reaches its onRequestClose
+      # (apps/mobile/src/components/BottomSheet.tsx).
+      - pressKey: back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      # The same Modal is presented as a pageSheet on iOS, so the sheet's own
+      # affordance is used: the scrim behind it carries accessibilityLabel
+      # "Dismiss sheet". "Back to Needs you" is NOT a substitute -- ReviewSheet
+      # renders that button only once every item is resolved, which is not the
+      # state here.
+      - tapOn: "Dismiss sheet"
+# Either way the sheet must actually be gone before the flow moves on: "Resolve…"
+# exists only inside it.
+- extendedWaitUntil:
+    notVisible: "Resolve.*"
+    timeout: 10000
 
 # Open one exception from the client's status.
 - tapOn: "Clients"
