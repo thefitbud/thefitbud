@@ -108,16 +108,23 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # BT10 (D-W4-14, D-W3b-13, D-W3b-18). This job is the required `ci` check.
-      # Maestro is not installed on the runner, so the usual path is the node
-      # test: YAML parse plus a config section. `maestro check-syntax` runs
-      # instead when the CLI is on PATH.
+      # Always run the node test (YAML parse plus a config section).
+      # `maestro check-syntax` takes one flow file or stdin, not a directory.
+      # When the CLI is on PATH, also check each YAML flow under
+      # apps/mobile/.maestro. config.yaml is the workspace file, not a flow.
       - name: Parse Maestro flows
         run: |
-          if command -v maestro >/dev/null 2>&1; then
-            maestro check-syntax apps/mobile/.maestro
-          else
-            node --test scripts/qa/maestro-parse.test.mjs
+          set -euo pipefail
+          node --test scripts/qa/maestro-parse.test.mjs
+          if ! command -v maestro >/dev/null 2>&1; then
+            exit 0
           fi
+          while IFS= read -r -d '' file; do
+            if [ "$(basename "$file")" = "config.yaml" ]; then
+              continue
+            fi
+            maestro check-syntax "$file"
+          done < <(find apps/mobile/.maestro -type f \( -name '*.yaml' -o -name '*.yml' \) -print0)
 
       # setup:local (.dev.vars from .dev.vars.example) is not needed: the API tests
       # build their own in-memory D1 and never read .dev.vars.

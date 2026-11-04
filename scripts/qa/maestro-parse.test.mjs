@@ -5,7 +5,7 @@
 // rejects one that has no config section before `---` (the assert-no-crash
 // failure: "Config Section Required"). This test is the stand-in for
 // `maestro check-syntax` when the CLI is not installed. It uses js-yaml 4,
-// already in the lockfile (node_modules/.pnpm); it does not add a dependency.
+// already in the lockfile via @eslint/eslintrc; it does not add a dependency.
 //
 // config.yaml is the workspace file, not a flow: it has no `---` and no
 // appId. Every other YAML file must have a mapping header with appId or url,
@@ -22,15 +22,14 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const maestroRoot = join(repoRoot, "apps/mobile/.maestro");
 
 function loadJsYaml() {
-  const bundled = join(repoRoot, "node_modules/.pnpm");
-  const versions = readdirSync(bundled)
-    .filter((name) => name.startsWith("js-yaml@4."))
-    .sort();
-  if (versions.length === 0) {
-    throw new Error("js-yaml 4 is not in node_modules/.pnpm; run pnpm install");
-  }
-  const require = createRequire(import.meta.url);
-  return require(join(bundled, versions[0], "node_modules/js-yaml/index.js"));
+  // eslint depends on @eslint/eslintrc, which depends on js-yaml 4. Resolve
+  // from those packages so a version bump does not hardcode a pnpm path.
+  const require = createRequire(join(repoRoot, "packages/config/package.json"));
+  const eslintDir = dirname(require.resolve("eslint/package.json"));
+  const eslintrcDir = dirname(
+    require.resolve("@eslint/eslintrc/package.json", { paths: [eslintDir] }),
+  );
+  return require(require.resolve("js-yaml", { paths: [eslintrcDir] }));
 }
 
 const yaml = loadJsYaml();
