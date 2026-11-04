@@ -254,6 +254,24 @@ describe("WorkoutTab week state", () => {
     });
   });
 
+  it("does not re-trigger its own load when it writes the week to the cache", async () => {
+    answerWith([assignment]);
+    renderWorkout();
+
+    await waitFor(() => {
+      expect(screen.getByText("Lower body B")).toBeTruthy();
+    });
+    const callsAfterFirstLoad = listCalls;
+
+    // `load` writes the cache and `setCached` notifies that key's
+    // subscribers, so refetching on that notification made every successful
+    // load trigger the next one. On a device that is an unbounded refetch
+    // loop; here it exhausted the runner's heap, which is how it was found.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(listCalls).toBe(callsAfterFirstLoad);
+  });
+
   it("keeps showing a cached week when the read fails: that is not unavailable", async () => {
     answerWith([assignment]);
     const first = renderWorkout();
