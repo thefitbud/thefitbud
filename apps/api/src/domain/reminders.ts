@@ -75,16 +75,137 @@ import {
 
 type Db = ReturnType<typeof createDb>;
 
+/** Name of the error thrown when a stored timezone cannot be resolved (CU20). */
+export const UNRESOLVABLE_TIMEZONE_ERROR_NAME = "UnresolvableRecipientTimeZoneError";
+
 /**
- * Safe fields for a caught error: its name, and its `code` when that is a plain
- * constant (e.g. a D1 or domain code). Never `message` or the stack.
+ * Error names whose `message` is known to be static text plus IANA zone names,
+ * so logging it cannot carry user data (AGENTS.md, "no sensitive data in logs").
+ *
+ * Matched by **name**, not by class, so this module never imports the error type:
+ * `UnsupportedTimeZoneError` lives in `packages/core` and is not on `main` yet
+ * (CU17). Before CU17 lands no error carries that name and nothing changes; once
+ * it lands its message — `Time zone "<zone>" is not supported on this device
+ * (tried: ...). Engine said: ...` — reaches the log line unchanged.
+ *
+ * Nothing is added here without reading the thrower's message format first. The
+ * default for every other error stays what it has always been: name and code only.
  */
-export function errorLogFields(error: unknown): Pick<SafeLogFields, "errorName" | "errorCode"> {
+const SAFE_ERROR_MESSAGE_NAMES: ReadonlySet<string> = new Set([
+  "UnsupportedTimeZoneError",
+  UNRESOLVABLE_TIMEZONE_ERROR_NAME,
+]);
+
+/** An IANA-shaped zone name, e.g. `Asia/Kolkata`, `UTC`, `Etc/GMT+5`. */
+const IANA_ZONE_RE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){0,2}$/;
+
+/** `errorLogFields`' result: the two long-standing fields plus the zone detail. */
+export type ErrorLogFields = Pick<SafeLogFields, "errorName" | "errorCode"> & {
+  /** The unusable zone, when the error exposes one. Never anything else. */
+  timeZone?: string;
+  /** The error's own message, only for `SAFE_ERROR_MESSAGE_NAMES`. */
+  errorDetail?: string;
+};
+
+/** A `timeZone` property only when it is an IANA-shaped name of its own. */
+function safeTimeZoneField(error: unknown): string | undefined {
+  const zone = (error as { timeZone?: unknown } | null)?.timeZone;
+  return typeof zone === "string" && zone.length <= 64 && IANA_ZONE_RE.test(zone)
+    ? zone
+    : undefined;
+}
+
+/**
+ * Safe fields for a caught error: its name, its `code` when that is a plain
+ * constant (e.g. a D1 or domain code), the zone it names when it exposes one,
+ * and its `message` **only** for the names listed in `SAFE_ERROR_MESSAGE_NAMES`.
+ * Never the message of any other error, and never the stack.
+ */
+export function errorLogFields(error: unknown): ErrorLogFields {
   const name = error instanceof Error ? error.name : typeof error;
   const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)
-    ? { errorName: name, errorCode: code }
-    : { errorName: name };
+  const fields: ErrorLogFields =
+    typeof code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)
+      ? { errorName: name, errorCode: code }
+      : { errorName: name };
+  const timeZone = safeTimeZoneField(error);
+  if (timeZone !== undefined) fields.timeZone = timeZone;
+  if (error instanceof Error && SAFE_ERROR_MESSAGE_NAMES.has(name)) {
+    fields.errorDetail = error.message.slice(0, 300);
+  }
+  return fields;
+}
+
+/**
+ * What a zone failure's underlying error may contribute to a log line: its name
+ * always, and its message only when that name is in `SAFE_ERROR_MESSAGE_NAMES`.
+ * A bare `RangeError` out of `Intl` therefore contributes "RangeError" and no
+ * more, while CU17's `UnsupportedTimeZoneError` contributes its full reason.
+ */
+function safeCauseText(cause: unknown): string {
+  if (!(cause instanceof Error)) return typeof cause;
+  return SAFE_ERROR_MESSAGE_NAMES.has(cause.name)
+    ? `${cause.name}: ${cause.message}`
+    : cause.name;
+}
+
+/**
+ * A stored timezone that no local time can be derived from. Thrown, or logged,
+ * instead of the former `?? "12:00"`, which decided quiet hours from a
+ * fabricated noon and left no trace anywhere. The message is static text, the
+ * zone name and the cause's name — never anything taken from a request.
+ */
+class UnresolvableRecipientTimeZoneError extends Error {
+  readonly timeZone: string;
+  constructor(timeZone: string, cause?: unknown) {
+    super(
+      `Stored time zone "${timeZone}" could not be resolved to a local time.` +
+        (cause === undefined ? "" : ` Cause: ${safeCauseText(cause)}`),
+    );
+    this.name = UNRESOLVABLE_TIMEZONE_ERROR_NAME;
+    this.timeZone = timeZone;
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+/**
+ * Local HH:MM for a recipient's stored zone, or a throw naming the zone.
+ * Every reminder decision below is computed from a real local time or from none.
+ */
+function recipientLocalTimeHhMm(now: string, timezone: string): string {
+  const local = localTimeHhMm(now, timezone);
+  if (local === null) throw new UnresolvableRecipientTimeZoneError(timezone);
+  return local;
+}
+
+/**
+ * A relationship's own "today" in the trainee's stored zone, or `null` and one
+ * warn line naming the zone.
+ *
+ * `formatLocalDate` throws a `RangeError` straight out of `Intl` for a stored
+ * zone the runtime has no data for, and it is the **first** thing every
+ * relationship needs, so before this guard one such row ended the whole cron run
+ * for every trainer in `loadReminderRunContext` or in `collectCandidates`, before
+ * a single candidate existed. Contained per relationship: that relationship
+ * contributes no candidates this run and is reported; the others are untouched.
+ *
+ * Only this one call is guarded, not the loop body around it. The other
+ * zone-dependent calls there (the hard-stop check, the due-time calculations)
+ * take the same zone and are reached only once it has resolved here, so they
+ * cannot fail on it afterwards.
+ */
+function relationshipLocalDate(now: string, timeZone: string): string | null {
+  try {
+    return formatLocalDate(new Date(now), timeZone);
+  } catch (error) {
+    // Wrapped so the line names the zone: a bare `RangeError` out of `Intl`
+    // exposes it only inside a message this module does not log.
+    logCaught(
+      "reminders.relationship_local_date",
+      new UnresolvableRecipientTimeZoneError(timeZone, error),
+    );
+    return null;
+  }
 }
 
 /** One warn line for a caught error in reminder code; control flow is the caller's. */
@@ -569,11 +690,16 @@ async function loadReminderRunContext(
   );
 
   // Each relationship has its own "today" (trainee timezone); read every day any of them needs.
+  // A relationship whose zone will not resolve is left out here and skipped, with
+  // its warn line, when `collectCandidates` reaches the same guard below.
   const todayByRelationship = new Map(
-    relationships.map((r) => [
-      r.id,
-      formatLocalDate(new Date(now), timezoneByUserId.get(r.traineeUserId) ?? "UTC"),
-    ]),
+    relationships.flatMap((r) => {
+      const today = relationshipLocalDate(
+        now,
+        timezoneByUserId.get(r.traineeUserId) ?? "UTC",
+      );
+      return today === null ? [] : [[r.id, today] as const];
+    }),
   );
   const todays = [...new Set(todayByRelationship.values())];
   const mealDays = [...new Set(todays.flatMap((day) => [day, addDaysToLocalDate(day, 1)]))];
@@ -693,7 +819,8 @@ async function collectCandidates(
   for (const relationship of relationships) {
     const enabled = context.enabledByRelationship.get(relationship.id) ?? new Set();
     const timeZone = context.timezoneByUserId.get(relationship.traineeUserId) ?? "UTC";
-    const today = formatLocalDate(new Date(now), timeZone);
+    const today = relationshipLocalDate(now, timeZone);
+    if (today === null) continue;
     const tomorrow = addDaysToLocalDate(today, 1);
     const prefRow = context.preferencesByUserId.get(relationship.traineeUserId);
     const reminderState = context.reminderStateByUserId.get(relationship.traineeUserId);
@@ -1073,7 +1200,7 @@ async function persistReminder(
 
   const prefs = await recipientPreferences(db, candidate.recipientUserId, cache);
   const timezone = await recipientTimezone(db, candidate.recipientUserId, cache);
-  const localTime = localTimeHhMm(now, timezone) ?? "12:00";
+  const localTime = recipientLocalTimeHhMm(now, timezone);
   const categoryOk =
     candidate.categoryAllowed !== null
       ? candidate.categoryAllowed
@@ -1558,7 +1685,14 @@ async function retryDeferredReminders(
       counters.suppressed += 1;
       continue;
     }
-    await persistReminder(db, rebuilt, now, options, counters);
+    try {
+      await persistReminder(db, rebuilt, now, options, counters);
+    } catch (error) {
+      // Contained for the same reason as the candidate loop below: one unusable
+      // deferred row must not end the sweep over the rest of them.
+      logCaught("reminders.retry_deferred_candidate", error);
+      continue;
+    }
   }
 }
 
@@ -1612,7 +1746,20 @@ export async function evaluateAndEnqueueReminders(
       }
     }
     const beforeDeliveries = counters.deliveriesEnqueued;
-    await persistReminder(db, candidate, now, delivery, counters, cache);
+    try {
+      await persistReminder(db, candidate, now, delivery, counters, cache);
+    } catch (error) {
+      // Narrowest scope that keeps the run going: one candidate. A throw here
+      // used to abort the whole loop, so a single trainee with an unusable
+      // stored timezone skipped every remaining candidate in the run — for every
+      // trainer — and `retryDeferredReminders` below never ran at all. Contained
+      // per candidate, one bad row costs exactly one reminder. This is not a
+      // return to the old `?? "12:00"` silence: the failure is logged at warn
+      // with its operation, error name and the zone, and nothing is persisted,
+      // so the candidate is reported, not quietly treated as delivered.
+      logCaught("reminders.persist_candidate", error);
+      continue;
+    }
     if (
       PUSH_REMINDER_TYPES.has(candidate.type) &&
       counters.deliveriesEnqueued > beforeDeliveries
@@ -1970,7 +2117,7 @@ export async function deliverReminderMessage(
     .where(eq(users.id, notification.recipientUserId))
     .limit(1);
   const timezone = userRows[0]?.timezone ?? "UTC";
-  const localTime = localTimeHhMm(now, timezone) ?? "12:00";
+  const localTime = recipientLocalTimeHhMm(now, timezone);
   if (
     !notification.dedupeKey.startsWith("deferred:") &&
     isWithinQuietHours({
