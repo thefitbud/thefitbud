@@ -26,6 +26,7 @@ import {
 } from "../domain/week-read-model.js";
 import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
+import { parseWeekStartQuery } from "../lib/week-start.js";
 import { operation } from "../openapi/document.js";
 import {
   optionalAuthMiddleware,
@@ -246,19 +247,10 @@ meDayRoutes.get(
     if (!actor) {
       return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
     }
-    // `?start=` was unvalidated: `2026-11` answered 200 with nonsense dates,
-    // `2026-02-30` rolled into March, and `garbage` was an unhandled
-    // RangeError 500. The regex alone accepts 2026-02-30, so the round trip
-    // through addDaysToLocalDate is what rejects a date that is not a real
-    // calendar day. The message is static text (D-W3-12, D-W3b-7) and the
-    // code is the one the API already uses for a malformed query date
-    // (apps/api/src/routes/workouts.ts fromDate/toDate).
-    const startQuery = c.req.query("start")?.trim();
-    if (startQuery) {
-      const parsed = localDateSchema.safeParse(startQuery);
-      if (!parsed.success || addDaysToLocalDate(parsed.data, 0) !== parsed.data) {
-        return fail(c, 400, "INVALID_REQUEST", "Invalid start date.");
-      }
+    // Shared with the trainer week route (BT14, D-W4-19). See week-start.ts.
+    const parsedStart = parseWeekStartQuery(c.req.query("start"));
+    if (!parsedStart.ok) {
+      return fail(c, parsedStart.status, parsedStart.code, parsedStart.message);
     }
     const db = createDb(c.env.DB);
     const [rel] = await db
@@ -278,7 +270,7 @@ meDayRoutes.get(
     const today = formatLocalDate(new Date(nowIso()), timeZone);
     const weekday = weekdayFromLocalDate(today); // 0 Sun … 6 Sat
     const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
-    const start = startQuery || addDaysToLocalDate(today, mondayOffset);
+    const start = parsedStart.start || addDaysToLocalDate(today, mondayOffset);
     const model = await buildWeekReadModel(db, {
       relationshipId: rel.id,
       start,
