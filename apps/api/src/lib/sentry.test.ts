@@ -175,4 +175,100 @@ describe("scrubSentryEvent", () => {
     expect(sent.request?.data).toBeUndefined();
     expect(sent.extra?.email).toBeUndefined();
   });
+
+  it("drops every key that contains email, including plurals and inner matches", () => {
+    const scrubbed = scrubSentryEvent({
+      extra: {
+        requestId: "req-9",
+        emails: ["ada@example.com", "coach@example.com"],
+        emailAddress: "ada@example.com",
+        userEmail: "ada@example.com",
+        primary_email: "ada@example.com",
+        filename: "plan.json",
+      },
+    });
+    expect(scrubbed.extra).toEqual({ requestId: "req-9", filename: "plan.json" });
+  });
+
+  it("drops progress-entry body text and check-in wellbeing and field answers", () => {
+    const scrubbed = scrubSentryEvent({
+      extra: {
+        progressEntry: {
+          id: "pe-1",
+          entryType: "note",
+          title: "Week 4",
+          body: "Knee still swollen after Tuesday's session",
+        },
+        checkin: {
+          id: "ci-1",
+          status: "submitted",
+          wellbeing: "Slept badly and felt dizzy on waking",
+          fieldAnswers: {
+            energy: "low",
+            pain: "left knee on the stairs",
+          },
+        },
+      },
+    });
+    expect(scrubbed.extra?.progressEntry).toEqual({
+      id: "pe-1",
+      entryType: "note",
+      title: "Week 4",
+    });
+    expect(scrubbed.extra?.checkin).toEqual({ id: "ci-1", status: "submitted" });
+  });
+
+  it("keeps only an opaque id on event.user", () => {
+    const scrubbed = scrubSentryEvent({
+      user: {
+        id: "user-1",
+        email: "ada@example.com",
+        username: "ada",
+        ip_address: "203.0.113.8",
+      },
+    });
+    expect(scrubbed.user).toEqual({ id: "user-1" });
+  });
+
+  it("strips breadcrumb URLs and sensitive breadcrumb data", () => {
+    const scrubbed = scrubSentryEvent({
+      breadcrumbs: [
+        {
+          category: "fetch",
+          data: {
+            url: "https://api-staging.thefitbud.com/checkins?email=ada@example.com&token=secret#notes",
+            method: "POST",
+            status_code: 500,
+            email: "ada@example.com",
+            wellbeing: "Slept badly",
+            fieldAnswers: { pain: "left knee" },
+          },
+        },
+      ],
+    });
+    expect(scrubbed.breadcrumbs).toEqual([
+      {
+        category: "fetch",
+        data: {
+          url: "https://api-staging.thefitbud.com/checkins",
+          method: "POST",
+          status_code: 500,
+        },
+      },
+    ]);
+
+    const options = sentryOptions(env({ SENTRY_DSN: FAKE_DSN, SENTRY_ENVIRONMENT: "production" }));
+    const crumb = {
+      category: "navigation",
+      data: {
+        url: "https://trainer.thefitbud.com/clients/user-1?email=ada@example.com#progress",
+        emails: ["ada@example.com"],
+        body: "Knee still swollen",
+      },
+    };
+    const sent = options.beforeBreadcrumb!(crumb, {});
+    expect(sent?.data).toEqual({
+      url: "https://trainer.thefitbud.com/clients/user-1",
+    });
+  });
 });

@@ -75,6 +75,17 @@ const NAME_KEY_DENY = new Set([
   "servicename",
 ]);
 
+/**
+ * Free-text and check-in answer keys. `body` is the progress-entry note,
+ * `wellbeing` and `fieldAnswers` are the check-in health answers
+ * (`packages/contracts` progress and check-in schemas).
+ */
+const FREE_TEXT_KEYS = new Set(["body", "wellbeing", "fieldanswers"]);
+
+type SentryBreadcrumb = {
+  data?: { [key: string]: unknown } | null;
+};
+
 export type SentryScrubTarget = {
   request?: {
     url?: string;
@@ -85,6 +96,8 @@ export type SentryScrubTarget = {
   };
   extra?: Record<string, unknown> | null;
   contexts?: Record<string, unknown> | null;
+  user?: Record<string, unknown> | null;
+  breadcrumbs?: SentryBreadcrumb[] | { values?: SentryBreadcrumb[] | null } | null;
 };
 
 /** True when this Worker env should send events to Sentry. */
@@ -115,9 +128,9 @@ export function sentryFieldKey(key: string): string {
 /** Emails, person names, notes, and health measurements. */
 export function isSensitiveSentryKey(key: string): boolean {
   const norm = sentryFieldKey(key);
-  if (norm === "email" || norm.endsWith("email")) return true;
+  if (norm.includes("email")) return true;
   if (norm === "note" || norm === "notes" || norm.endsWith("note") || norm.endsWith("notes")) return true;
-  if (HEALTH_KEYS.has(norm)) return true;
+  if (HEALTH_KEYS.has(norm) || FREE_TEXT_KEYS.has(norm)) return true;
   if (!NAME_KEY_DENY.has(norm) && (norm === "name" || norm.endsWith("name"))) return true;
   return false;
 }
@@ -139,6 +152,54 @@ function scrubRecord(value: unknown, depth: number): unknown {
     out[key] = scrubRecord(child, depth + 1);
   }
   return out;
+}
+
+function isUrlKey(key: string): boolean {
+  const norm = sentryFieldKey(key);
+  return norm === "url" || norm.endsWith("url");
+}
+
+/** Drop query strings and fragments from URL-shaped breadcrumb values. */
+function stripUrls(value: unknown, depth: number): unknown {
+  if (depth > 8 || value == null) return value;
+  if (typeof value === "string" && value.includes("://")) return stripQuery(value);
+  if (Array.isArray(value)) return value.map((item) => stripUrls(item, depth + 1));
+  if (typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof child === "string" && isUrlKey(key)) out[key] = stripQuery(child);
+    else out[key] = stripUrls(child, depth + 1);
+  }
+  return out;
+}
+
+function scrubBreadcrumb<B extends { data?: { [key: string]: unknown } | null }>(breadcrumb: B): B {
+  if (breadcrumb.data && typeof breadcrumb.data === "object") {
+    const scrubbed = scrubRecord(breadcrumb.data, 0);
+    breadcrumb.data = stripUrls(scrubbed, 0) as B["data"];
+  }
+  return breadcrumb;
+}
+
+function scrubBreadcrumbs(breadcrumbs: SentryScrubTarget["breadcrumbs"]): void {
+  if (Array.isArray(breadcrumbs)) {
+    for (const crumb of breadcrumbs) {
+      if (crumb && typeof crumb === "object") scrubBreadcrumb(crumb);
+    }
+    return;
+  }
+  if (breadcrumbs && typeof breadcrumbs === "object" && Array.isArray(breadcrumbs.values)) {
+    for (const crumb of breadcrumbs.values) {
+      if (crumb && typeof crumb === "object") scrubBreadcrumb(crumb);
+    }
+  }
+}
+
+/** Keep an opaque id. Email, username, ip and any other user fields are dropped. */
+function scrubUser(user: Record<string, unknown>): Record<string, unknown> {
+  const id = user.id;
+  if (typeof id === "string" || typeof id === "number") return { id };
+  return {};
 }
 
 /**
@@ -165,6 +226,10 @@ export function scrubSentryEvent<T extends SentryScrubTarget>(event: T): T {
   if (event.contexts && typeof event.contexts === "object") {
     event.contexts = scrubRecord(event.contexts, 0) as Record<string, unknown>;
   }
+  if (event.user && typeof event.user === "object") {
+    event.user = scrubUser(event.user);
+  }
+  if (event.breadcrumbs) scrubBreadcrumbs(event.breadcrumbs);
   return event;
 }
 
@@ -186,6 +251,9 @@ export function sentryOptions(env: Env): CloudflareOptions {
     sendDefaultPii: false,
     beforeSend(event: ErrorEvent) {
       return scrubSentryEvent(event as SentryScrubTarget) as ErrorEvent;
+    },
+    beforeBreadcrumb(breadcrumb) {
+      return scrubBreadcrumb(breadcrumb);
     },
   };
 }
