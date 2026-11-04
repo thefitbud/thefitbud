@@ -1,5 +1,91 @@
 const { execFileSync } = require("node:child_process");
+const { withAppBuildGradle, withXcodeProject } = require("expo/config-plugins");
 const withLiveActivity = require("./plugins/withLiveActivity");
+
+/**
+ * Sentry org and project Firoz created (manual-steps step 15, 1 Nov 2026).
+ * The auth token is the EAS secret SENTRY_AUTH_TOKEN. It is never written here.
+ */
+const SENTRY_ORG = "fitbud-zi";
+const SENTRY_PROJECT = "fitbud-mobile";
+
+/** Baked into non-production Gradle so sentry.gradle skips the upload. */
+const SENTRY_GRADLE_UPLOAD_OFF =
+  "project.ext.shouldSentryAutoUploadGeneral = { -> false }";
+
+/**
+ * @sentry/react-native 6.10 has no plugin flag for this. The Gradle script
+ * uploads unless `shouldSentryAutoUploadGeneral` returns false, and it defines
+ * that closure itself, so the override has to follow the `apply from` line.
+ * @param {string} contents
+ */
+function disableSentryGradleUpload(contents) {
+  if (contents.includes(SENTRY_GRADLE_UPLOAD_OFF)) return contents;
+  const pattern = /apply from: new File\([\s\S]*?sentry\.gradle"\)\r?\n/;
+  if (!pattern.test(contents)) return contents;
+  return contents.replace(pattern, (match) => `${match}\n${SENTRY_GRADLE_UPLOAD_OFF}\n`);
+}
+
+/**
+ * The Xcode phases store `shellScript` as a JSON string (the Sentry plugin
+ * reads it with JSON.parse). Prepend the disable export so `sentry-xcode.sh`
+ * skips the upload. Scripts that do not call Sentry are left alone.
+ * @param {string} shellScript
+ */
+function disableSentryXcodeShellScript(shellScript) {
+  if (typeof shellScript !== "string" || !shellScript.includes("sentry-xcode")) {
+    return shellScript;
+  }
+  let source;
+  try {
+    const parsed = JSON.parse(shellScript);
+    if (typeof parsed !== "string") return shellScript;
+    source = parsed;
+  } catch {
+    return shellScript;
+  }
+  if (source.includes("SENTRY_DISABLE_AUTO_UPLOAD")) return shellScript;
+  return JSON.stringify(`export SENTRY_DISABLE_AUTO_UPLOAD=true\n${source}`);
+}
+
+/**
+ * D-W4-7: upload source maps on production builds only. Non-production
+ * prebuilds bake the disable into the native projects, because the upload
+ * scripts read the environment at Xcode/Gradle time and an `app.config.js`
+ * `process.env` write does not reach those processes. The Sentry plugin is
+ * registered after this one: Expo runs the later plugin's file mod first, so
+ * this mod sees the `sentry.gradle` line and the Sentry Xcode phases.
+ * @param {import('@expo/config').ExpoConfig} config
+ */
+function withSentryUploadDisabled(config) {
+  config = withAppBuildGradle(config, (cfg) => {
+    if (cfg.modResults.language === "groovy" && typeof cfg.modResults.contents === "string") {
+      cfg.modResults.contents = disableSentryGradleUpload(cfg.modResults.contents);
+    }
+    return cfg;
+  });
+  config = withXcodeProject(config, (cfg) => {
+    const phases = cfg.modResults?.hash?.project?.objects?.PBXShellScriptBuildPhase;
+    if (!phases) return cfg;
+    for (const phase of Object.values(phases)) {
+      if (!phase || typeof phase !== "object" || typeof phase.shellScript !== "string") continue;
+      phase.shellScript = disableSentryXcodeShellScript(phase.shellScript);
+    }
+    return cfg;
+  });
+  return config;
+}
+
+function sentryPluginEntry() {
+  return [
+    "@sentry/react-native/expo",
+    {
+      url: "https://sentry.io/",
+      organization: SENTRY_ORG,
+      project: SENTRY_PROJECT,
+    },
+  ];
+}
 
 /**
  * App variants (D-B12). `APP_VARIANT` comes from the EAS build profile
@@ -62,15 +148,22 @@ function resolveBundleCommit() {
 }
 
 /** @param {{ config: import('@expo/config').ExpoConfig }} context */
-module.exports = ({ config }) => {
-  const variant = resolveVariant(process.env.APP_VARIANT);
+function createExpoConfig({ config }) {
+  const variantKey = process.env.APP_VARIANT || "development";
+  const variant = resolveVariant(variantKey);
   // EAS file environment variable; the file itself is never committed.
   const googleServicesFile = process.env.GOOGLE_SERVICES_JSON;
-  return withLiveActivity(
+  // APP_VARIANT is not EXPO_PUBLIC_, so Metro will not inline it. The JS
+  // bundle reads this extra to decide whether crash reporting is on.
+  let next = withLiveActivity(
     {
       ...config,
       name: variant.name,
-      extra: { ...config.extra, bundleCommit: resolveBundleCommit() },
+      extra: {
+        ...config.extra,
+        bundleCommit: resolveBundleCommit(),
+        appVariant: variantKey,
+      },
       ios: {
         ...config.ios,
         bundleIdentifier: variant.bundleIdentifier,
@@ -94,8 +187,16 @@ module.exports = ({ config }) => {
         ...(config.plugins ?? []),
         ["expo-notifications", { mode: variant.apsEnvironment }],
         "@bacons/apple-targets",
+        sentryPluginEntry(),
       ],
     },
     { appGroup: variant.appGroup },
   );
-};
+  // Production keeps the Sentry upload. Every other variant bakes it off.
+  if (variantKey !== "production") next = withSentryUploadDisabled(next);
+  return next;
+}
+
+module.exports = createExpoConfig;
+module.exports.disableSentryGradleUpload = disableSentryGradleUpload;
+module.exports.disableSentryXcodeShellScript = disableSentryXcodeShellScript;
