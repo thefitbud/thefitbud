@@ -19,8 +19,12 @@
 # server and run different code. The build is asserted to contain main.jsbundle
 # for that reason.
 #
-# Signing is disabled (CODE_SIGNING_ALLOWED=NO): a simulator build needs none, and
-# agents never hold a signing credential.
+# xcodebuild itself does not sign (CODE_SIGNING_ALLOWED=NO). The runner has no
+# development certificate, and the app's push and App Group entitlements would
+# make a normal signature demand one. The .app is ad-hoc signed afterwards
+# (sign-ios-simulator-app.sh). An unsigned simulator build has no keychain
+# identity: SecureStore fails with -34018 and the auth screen never appears
+# (CU25). Ad-hoc signing needs no certificate and no secret.
 #
 # Environment (all optional):
 #   QA_IOS_APP_DIR     where the finished .app is copied
@@ -150,6 +154,10 @@ echo "build-ios-sim: bundle identifier verified as $BUILT_ID"
 if [ "$CONFIGURATION" = "Release" ] && [ ! -f "$APP_OUT/main.jsbundle" ]; then
   die "the Release app has no main.jsbundle; the JS bundle was not embedded, so this build cannot exercise Hermes."
 fi
+
+# shellcheck source=sign-ios-simulator-app.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sign-ios-simulator-app.sh"
+sign_ios_simulator_app "$APP_OUT" "$BUILT_ID" || die "ad-hoc signing failed; an unsigned app cannot read the keychain and never reaches the auth screen."
 
 echo "build-ios-sim: wrote $APP_OUT"
 if [ -n "${GITHUB_OUTPUT:-}" ]; then

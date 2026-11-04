@@ -322,8 +322,25 @@ change. Known gaps, to be fixed in a follow-up (QT3b) that touches app code:
   41643846967, dispatched from `main` — that run's own `android` job was cancelled
   13 seconds later without installing an APK or running a flow, and its
   `api-smoke` and `web-staging` jobs were skipped. Nothing wrote the accounts
-  between that seed and 14:09, when the suite ran. Both failures are therefore
-  undiagnosed and may well be real defects; `trainee/today.yaml` in particular
-  points at a plan the seed creates that the app does not treat as live
-  (`TodayTab.tsx` gates that copy on `hasLivePlan`). A dispatch from `main` with
-  `suites=android` is the next run to learn anything from.
+  between that seed and 14:09, when the suite ran. The Today failure
+  (`.*is preparing your plan.*` while `Today's workout` was already visible)
+  was a real client defect and is CU22. The code-screen failure
+  (`6-digit code` never appears after "Send code") is CU21, and it is not the
+  launch failure: CU22's android run 41787562558 reached the auth screen,
+  signed in, and passed password, Clients and Today, and still failed that one
+  assertion.
+- **CU25, the launch failure.** Run 41784737040 failed the same first step on
+  both platforms. The screenshots show two different causes, both in the suite:
+  - Android (`qa-raw-mobile`): the sign-in form is on screen, including
+    "Sign in with a code instead", with a "Pixel Launcher isn't responding"
+    dialog on top of it. Maestro only reads the top window, so the text is
+    reported not visible. `run-maestro.sh` sets `hide_error_dialogs` to 1
+    before the flows. A crash is still caught from logcat.
+  - iOS (`qa-raw-ios`): the screen is "Something went wrong / We could not
+    load your coaching account / Can't reach FitBud", and `logs/ios-sim.log`
+    shows errSecMissingEntitlement (-34018, no application-identifier and no
+    keychain-access-groups) on every launch. The simulator app was unsigned
+    (`CODE_SIGNING_ALLOWED=NO`). SecureStore's throw is treated as offline, so
+    sign-in is never shown. `build-ios-sim.sh` ad-hoc signs the app afterwards.
+    That needs no certificate. The app itself is unchanged: a signed build
+    with nothing stored still opens on sign-in.

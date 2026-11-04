@@ -97,6 +97,18 @@ APP="$(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d | sort | head -n 1)"
 APP_EXECUTABLE="$(plutil -extract CFBundleExecutable raw "$APP/Info.plist")"
 [ -n "$APP_EXECUTABLE" ] || die "$APP/Info.plist has no CFBundleExecutable."
 
+# An unsigned app reaches the simulator and then fails every flow on the first
+# step: SecureStore throws -34018 and the offline screen replaces sign-in
+# (CU25). Refuse to install that app. codesign writes the entitlements to
+# stdout and a note to stderr; a missing signature is a non-zero status.
+IOS_ENTITLEMENTS="$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)"
+# Here-strings, not a pipe into `grep -q`: under pipefail a pipe can die with
+# SIGPIPE even when the key is present.
+grep -q -F '<key>keychain-access-groups</key>' <<<"$IOS_ENTITLEMENTS" \
+  || die "the simulator app has no keychain-access-groups entitlement, so SecureStore fails with -34018 and the auth screen never appears. build-ios-sim.sh must ad-hoc sign it."
+grep -q -F '<key>application-identifier</key>' <<<"$IOS_ENTITLEMENTS" \
+  || die "the simulator app has no application-identifier entitlement, so the keychain refuses every read. build-ios-sim.sh must ad-hoc sign it."
+
 xcrun simctl bootstatus "$UDID" -b
 
 if [ "${QA_MAESTRO_SKIP_INSTALL:-0}" != "1" ]; then
