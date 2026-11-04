@@ -17,6 +17,7 @@ import {
 } from "../domain/workspace";
 import { decodeCursor } from "../lib/cursor";
 import { fail, ok } from "../lib/envelope";
+import { parseWeekStartQuery } from "../lib/week-start";
 import { nowIso } from "../lib/crypto";
 import {
   optionalAuthMiddleware,
@@ -113,6 +114,12 @@ workspaceRoutes.get(
     if (!actor) {
       return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
     }
+    // Same `?start=` check as `GET /me/week` (BT14, D-W4-19). A bad value used
+    // to throw RangeError inside the week builder and return 500.
+    const parsedStart = parseWeekStartQuery(c.req.query("start"));
+    if (!parsedStart.ok) {
+      return fail(c, parsedStart.status, parsedStart.code, parsedStart.message);
+    }
     const db = createDb(c.env.DB);
     const relationship = await loadTrainerRelationship(
       db,
@@ -126,8 +133,7 @@ workspaceRoutes.get(
     const today = formatLocalDate(new Date(nowIso()), timeZone);
     const weekday = weekdayFromLocalDate(today); // 0 Sun … 6 Sat
     const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
-    const start =
-      c.req.query("start")?.trim() || addDaysToLocalDate(today, mondayOffset);
+    const start = parsedStart.start || addDaysToLocalDate(today, mondayOffset);
     const model = await buildWeekReadModel(db, {
       relationshipId: relationship.id,
       start,
