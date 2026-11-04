@@ -172,6 +172,29 @@ describe("navigatorDaysFor", () => {
     // produced for every day the response did not carry.
     expect(days.slice(1).map((d) => d.state)).not.toContain("open");
   });
+
+  it("maps a day the server did not describe to unknown, not rest", () => {
+    const days = navigatorDaysFor({
+      weekState: { status: "unavailable" },
+      dates: DATES,
+      ...labels,
+    });
+    expect(days.every((d) => d.state === "unknown")).toBe(true);
+    expect(days.map((d) => d.state)).not.toContain("rest");
+  });
+
+  it("maps a day omitted from a loaded week to unknown, not rest", () => {
+    const days = navigatorDaysFor({
+      weekState: {
+        status: "loaded",
+        week: week([{ date: DATES[0], state: "rest" }]),
+      },
+      dates: DATES,
+      ...labels,
+    });
+    expect(days[0]?.state).toBe("rest");
+    expect(days.slice(1).every((d) => d.state === "unknown")).toBe(true);
+  });
 });
 
 /**

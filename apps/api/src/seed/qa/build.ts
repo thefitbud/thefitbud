@@ -111,6 +111,12 @@ export type QaExpectations = {
   guarantees: {
     mealAssignmentsTodayMin: number;
     loggedMealsTodayOnTrack: number;
+    /**
+     * Assigned meals and workouts on each trainee's today with no compliance or
+     * execution yet. At least one, so a suite that asserts a not-everything-done
+     * state is reading the seed (D-W4-14, D-W3b-36).
+     */
+    unloggedItemsTodayMin: number;
     openExceptionsSlippingMin: number;
     pendingCheckinsSlipping: number;
     /** Check-ins the slipping client can start on the reference date (QT2b). */
@@ -181,6 +187,7 @@ const BYTES_PER_STATEMENT = 64_000;
 export const QA_GUARANTEES: QaExpectations["guarantees"] = {
   mealAssignmentsTodayMin: 3,
   loggedMealsTodayOnTrack: 1,
+  unloggedItemsTodayMin: 1,
   openExceptionsSlippingMin: 2,
   pendingCheckinsSlipping: 1,
   startableCheckinsSlipping: 1,
@@ -868,6 +875,20 @@ function buildExpectations(input: {
     if (account.key === "ontrack" && loggedMealCount < QA_GUARANTEES.loggedMealsTodayOnTrack) {
       throw new Error(
         `QA seed: ${account.email} logged ${loggedMealCount} meals on ${localDate}, expected at least ${QA_GUARANTEES.loggedMealsTodayOnTrack}`,
+      );
+    }
+    const loggedMealIds = new Set(
+      (owned.get("meal_compliance") ?? []).map((row) => String(row.assignment_id)),
+    );
+    const executedWorkoutIds = new Set(
+      (owned.get("workout_executions") ?? []).map((row) => String(row.assignment_id)),
+    );
+    const unloggedItemCount =
+      meals.filter((row) => !loggedMealIds.has(String(row.id))).length +
+      workouts.filter((row) => !executedWorkoutIds.has(String(row.id))).length;
+    if (unloggedItemCount < QA_GUARANTEES.unloggedItemsTodayMin) {
+      throw new Error(
+        `QA seed: ${account.email} has ${unloggedItemCount} items still unlogged on ${localDate}, expected at least ${QA_GUARANTEES.unloggedItemsTodayMin}`,
       );
     }
     if (account.key === "slipping") {
