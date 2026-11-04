@@ -5,9 +5,11 @@
 #
 #   nightly 02:00 IST (30 20 * * * UTC) and on demand   reset + seed the QA accounts,
 #       then the staging API smoke (QT6), the staging Playwright suite (QT5), the
-#       Maestro Android suite (QT3) and the repo's unit run as JUnit
+#       Maestro Android suite (QT3), the same Maestro flows on an iOS simulator
+#       (CU19) and the repo's unit run as JUnit
 #   pull requests touching apps/mobile/** or packages/ui-mobile/**   the Maestro `smoke`
-#       tag only, advisory: it is deliberately not a required check (D-QA1-10)
+#       tag only, on both platforms, advisory: deliberately not required checks
+#       (D-QA1-10). `ios` is not a required check either (D-W3b-14).
 #   pull requests touching scripts/qa/**   the report builder's own tests, which no
 #       other check can see (see the `qa-scripts` job)
 #
@@ -21,11 +23,22 @@
 #
 # One staging writer at a time (D-QA1-7) is enforced per job, not per workflow: the
 # jobs that touch the shared staging QA accounts (`seed-reset`, `api-smoke`,
-# `web-staging`, `android`) each hold the `qa-staging` concurrency group and are chained
-# so only one of them runs at a time, while `changes`, `qa-scripts` and `report` stay
-# outside it. `qa-scripts` is a required check on main (D-W3b-1) and a job inside a
-# concurrency group can be left Pending, or cancelled when a newer run queues, so a
-# required check must never sit in one.
+# `web-staging`, `android`, `ios`) each hold the `qa-staging` concurrency group and are
+# chained so only one of them runs at a time, while `changes`, `qa-scripts` and `report`
+# stay outside it. `ios` is sequenced after `android` for that reason: both drive the
+# same QA accounts, and the group alone would not keep them apart if they could start
+# together.
+#
+# Known gap, recorded rather than hidden (D-W3b-6): `cancel-in-progress: false` keeps
+# only ONE pending entry per group, so a third arrival evicts the older pending one.
+# Adding `ios` adds no new group and no new writer that can run concurrently, but it
+# does lengthen the chain one job further, so a nightly run now has a longer window in
+# which an arriving mobile PR can evict it. The proper fix is still a separate task
+# (its own group for the advisory PR smoke, or per-suite QA personas).
+#
+# `qa-scripts` is a required check on main (D-W3b-1) and a job inside a concurrency
+# group can be left Pending, or cancelled when a newer run queues, so a required
+# check must never sit in one.
 #
 # Artifacts never carry qa-results/web/test-output/**: Playwright writes error-context.md
 # there on every failure, holding a full aria snapshot of the page including a typed
@@ -43,7 +56,7 @@ on:
         description: Which suites to run
         type: choice
         default: all
-        options: [all, api, web, android]
+        options: [all, api, web, android, ios]
       tag:
         description: Maestro tag filter
         type: choice
@@ -119,14 +132,22 @@ jobs:
                 exit 1
               fi ;;
             *)
-              # Pull requests: the Maestro smoke tag only, and they never write staging.
-              suites=android; tag=smoke; trigger="pr"; staging=false ;;
+              # Pull requests: the Maestro smoke tag only, on both platforms, and they
+              # never write staging. The suites value stays `android` so the android
+              # job's own gate is untouched; `expect` below names both platforms,
+              # because both jobs run on a mobile pull request.
+              suites=android; tag=smoke; trigger="pr"; staging=false; pr=true ;;
           esac
           case "$suites" in
-            all) expect="mobile,web,api,unit" ;;
+            all) expect="mobile,ios,web,api,unit" ;;
             api) expect=api ;;
             web) expect=web ;;
-            android) expect=mobile ;;
+            # A dispatched `android` run asks for the Android suite alone; a pull
+            # request runs both Maestro jobs, so it expects both reports and a
+            # missing one shows up as not-run rather than being left out.
+            android)
+              if [ "${pr:-false}" = "true" ]; then expect="mobile,ios"; else expect=mobile; fi ;;
+            ios) expect=ios ;;
             *) echo "::error::unknown suites value \"$suites\""; exit 1 ;;
           esac
           {
@@ -720,14 +741,318 @@ jobs:
           path: qa-upload
           retention-days: 14
 
+
+  # The same Maestro flows as `android`, on an iOS simulator (CU19, D-W3b-14). Its
+  # purpose is to catch the CU17 class of bug — an iOS-only Hermes failure, such as
+  # `Intl` rejecting a time zone name (D-W3b-11a) — in a job instead of on Firoz's
+  # phone. Not a required check, exactly like `android`.
+  #
+  # Runner: `macos-15`, a STANDARD GitHub-hosted runner, which is free for public
+  # repositories; larger runners are billed even for public repositories, so no
+  # `-large`/`-xlarge` label is used here and none may be added.
+  #
+  # Why not `macos-latest`: it now maps to the macOS 26 arm64 image, whose only
+  # Xcodes are 26.x. This app is Expo SDK 52 / React Native 0.76.9, which that
+  # toolchain does not support, and the image ships no iOS runtime older than 26.2.
+  # `macos-15` is the same class of standard runner and ships Xcode 16.4 with iOS
+  # 18.x runtimes. CU19's spec named `macos-latest` and an iPhone 15 on iOS 17.5;
+  # neither exists on the current images, so the pins below are the nearest thing
+  # the images actually ship. Every pin is explicit so that an image change fails
+  # loudly here instead of quietly testing something else.
+  ios:
+    name: ios
+    # `android` is a dependency for ordering, not for its result: both jobs drive the
+    # same staging QA accounts, and the `qa-staging` group alone would not keep them
+    # apart if they could start at the same time. The `if:` below starts with always()
+    # so this job runs whatever `android` concluded.
+    needs: [changes, seed-reset, api-smoke, web-staging, android]
+    if: >-
+      ${{ always()
+          && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
+          && ((needs.changes.outputs.staging == 'true'
+               && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios'))
+              || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    concurrency:
+      group: qa-staging
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
+      # Pinned Xcode, simulator device type and runtime. All three are on the
+      # macos-15 arm64 image; the steps below print what the image has and fail with
+      # a message naming the missing one rather than an opaque simctl error.
+      QA_IOS_XCODE: /Applications/Xcode_16.4.app
+      QA_IOS_DEVICE_TYPE: com.apple.CoreSimulator.SimDeviceType.iPhone-16
+      QA_IOS_RUNTIME: com.apple.CoreSimulator.SimRuntime.iOS-18-6
+      QA_IOS_SIM_NAME: qa-iphone
+      # India-first product: every QA expectation is written in this zone, and the
+      # CU17 bug only appears when the app resolves it (D-W3b-11, D-W3b-11a).
+      QA_IOS_TIME_ZONE: Asia/Kolkata
+      # Apple's zone table carries the old link name, not Asia/Kolkata (D-W3b-11a,
+      # and see the host-zone step). Same zone, different spelling.
+      QA_IOS_TIME_ZONE_FALLBACK: Asia/Calcutta
+      QA_IOS_TIME_ZONE_ABBREVIATION: IST
+      QA_IOS_LOCALE: en_IN
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Select the pinned Xcode
+        run: |
+          if [ ! -d "$QA_IOS_XCODE" ]; then
+            echo "::error title=Xcode missing::$QA_IOS_XCODE is not on this runner image. Installed:"
+            ls -1 /Applications | grep -i '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$QA_IOS_XCODE/Contents/Developer"
+          xcodebuild -version
+          sw_vers
+
+      # Fork pull requests get no secrets. The Maestro flows cannot sign in without
+      # them, so the suite is skipped with a notice instead of failing: the report
+      # then shows the ios suite as `not-run` and the run as `partial`, which the
+      # runbook says is never a pass. A same-repo run with an unset secret is a
+      # configuration error and fails loudly. Identical to the android guard, and it
+      # adds no new secret.
+      - name: Require the QA secrets
+        id: guard
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          missing=""
+          [ -n "${QA_TEST_OTP_CODE:-}" ] || missing="$missing QA_TEST_OTP_CODE"
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          if [ -z "$missing" ]; then
+            echo "secrets=true" >> "$GITHUB_OUTPUT"
+            echo "Both QA secrets are present."
+            exit 0
+          fi
+          echo "secrets=false" >> "$GITHUB_OUTPUT"
+          if [ "$IS_FORK" = "true" ]; then
+            echo "::notice title=QA secrets unavailable::A pull request from a fork gets no secrets, so the Maestro suite is skipped. Missing:$missing"
+            exit 0
+          fi
+          echo "::error title=QA secrets missing::Set these repository secrets (QA1 manual step 3):$missing"
+          exit 1
+
+      # Before the long build, so a wrong image or an unsettable zone fails in two
+      # minutes rather than forty.
+      #
+      # The simulator takes its time zone from the host, which is why the host is set
+      # first. CU19's spec called that inheritance unverified and said to verify it or
+      # stop; this step is that verification, and it is an assertion, not a hope: the
+      # zone is read back from inside the simulator and the job fails if it is not
+      # IST. A simulator quietly running in UTC would make every date assertion in the
+      # suite meaningless while still going green.
+      - name: Boot the pinned simulator at Asia/Kolkata
+        id: sim
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          echo "--- runtimes on this image ---"
+          xcrun simctl list runtimes
+          echo "--- iPhone device types on this image ---"
+          xcrun simctl list devicetypes | grep -i iphone || true
+
+          if ! xcrun simctl list runtimes | grep -q "$QA_IOS_RUNTIME"; then
+            echo "::error title=iOS runtime missing::$QA_IOS_RUNTIME is not installed on this runner image (see the list above). Pin a runtime the image ships."
+            exit 1
+          fi
+          if ! xcrun simctl list devicetypes | grep -q "$QA_IOS_DEVICE_TYPE"; then
+            echo "::error title=Simulator device type missing::$QA_IOS_DEVICE_TYPE is not available on this runner image (see the list above)."
+            exit 1
+          fi
+
+          # macOS's own zone table is Apple's, not the full IANA one, and it does
+          # NOT contain Asia/Kolkata: `systemsetup -settimezone Asia/Kolkata` fails
+          # with "Asia/Kolkata is not a valid timezone" (run 41783371236). That is
+          # the very naming gap D-W3b-11a found on the device, showing up here at
+          # the OS level — Apple ships the old link name Asia/Calcutta instead.
+          # Both names are the same zone, so the alternatives are tried in order
+          # and the one that worked is printed. The real gate is the IST read-back
+          # below, which is what every date assertion in the suite depends on.
+          host_zone=""
+          for candidate in "$QA_IOS_TIME_ZONE" "$QA_IOS_TIME_ZONE_FALLBACK"; do
+            if sudo systemsetup -settimezone "$candidate" >/dev/null 2>&1; then
+              host_zone="$candidate"
+              break
+            fi
+            echo "host rejected the zone name \"$candidate\""
+          done
+          if [ -z "$host_zone" ]; then
+            echo "::error title=Host time zone could not be set::macOS accepted neither $QA_IOS_TIME_ZONE nor $QA_IOS_TIME_ZONE_FALLBACK. Names this host accepts:"
+            sudo systemsetup -listtimezones | tr ' ' '\n' | grep -i 'asia/' || true
+            exit 1
+          fi
+          echo "::notice title=Host zone::set with the name \"$host_zone\"; macOS accepted it."
+          sudo systemsetup -gettimezone
+          # TZ for the rest of the job uses the IANA name, which Node accepts even
+          # where the OS tool does not.
+          echo "TZ=$QA_IOS_TIME_ZONE" >> "$GITHUB_ENV"
+
+          udid="$(xcrun simctl create "$QA_IOS_SIM_NAME" "$QA_IOS_DEVICE_TYPE" "$QA_IOS_RUNTIME")"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+          # India locale, then a restart so both the locale and the host zone are
+          # picked up by a freshly launched SpringBoard.
+          xcrun simctl spawn "$udid" defaults write -g AppleLocale -string "$QA_IOS_LOCALE"
+          xcrun simctl spawn "$udid" defaults write -g AppleLanguages -array "en-IN"
+          xcrun simctl shutdown "$udid"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+
+          echo "--- the simulator's own clock ---"
+          xcrun simctl spawn "$udid" /bin/date
+          zone="$(xcrun simctl spawn "$udid" /bin/date +%Z | tr -d '[:space:]')"
+          echo "simulator time zone abbreviation: $zone"
+          if [ "$zone" != "$QA_IOS_TIME_ZONE_ABBREVIATION" ]; then
+            echo "::error title=Simulator time zone is not $QA_IOS_TIME_ZONE::The simulator reports \"$zone\", not $QA_IOS_TIME_ZONE_ABBREVIATION. The host zone was set to $QA_IOS_TIME_ZONE, so host-zone inheritance did not hold on this image and every date assertion in the suite would be measured in the wrong zone."
+            exit 1
+          fi
+          echo "::notice title=Simulator zone::$QA_IOS_TIME_ZONE confirmed as $zone inside the simulator."
+
+      # Evidence, not a gate: which time-zone names the simulator's Foundation
+      # accepts. Hermes's iOS `Intl` validates a zone against Foundation's known
+      # time-zone names, which is why `Asia/Kolkata` is rejected on a device while
+      # `Asia/Calcutta` is accepted (D-W3b-11a). Printing the same table from the
+      # simulator says plainly how faithful a proxy for the device this job is. It
+      # never fails the job: the real proof is the suite, and D-W3b-20 lists what
+      # remains unproven either way.
+      - name: Probe the simulator's time-zone names
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        continue-on-error: true
+        run: |
+          cat > "$RUNNER_TEMP/zone-probe.swift" <<'SWIFT'
+          import Foundation
+          let known = Set(TimeZone.knownTimeZoneIdentifiers)
+          for zone in ["Asia/Kolkata", "Asia/Calcutta", "UTC", "Etc/UTC", "Etc/GMT", "GMT"] {
+            let listed = known.contains(zone)
+            let usable = TimeZone(identifier: zone) != nil
+            print("\(zone)\tknownTimeZoneIdentifiers=\(listed)\tTimeZone(identifier:)=\(usable)")
+          }
+          print("TimeZone.current=\(TimeZone.current.identifier)")
+          SWIFT
+          xcrun --sdk iphonesimulator swiftc \
+            -target arm64-apple-ios18.0-simulator \
+            "$RUNNER_TEMP/zone-probe.swift" -o "$RUNNER_TEMP/zone-probe"
+          xcrun simctl spawn "${{ steps.sim.outputs.udid }}" "$RUNNER_TEMP/zone-probe"
+
+      - name: Set up Node (.nvmrc)
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      # Only the CocoaPods download cache is worth keeping. apps/mobile/ios/Pods is
+      # deliberately NOT cached: `expo prebuild --clean` deletes apps/mobile/ios
+      # before pod install runs, so a restored Pods directory would be thrown away
+      # every time and the cache would report hits it never used.
+      - name: Cache CocoaPods downloads
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pods-${{ runner.os }}-
+
+      - name: Install dependencies
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      # Metro resolves the workspace packages from their dist/ output, so this must
+      # precede any bundle (CU16, D-W3b-5).
+      - name: Build packages
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: pnpm build:packages
+
+      - name: Build the staging simulator app
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: scripts/qa/build-ios-sim.sh
+
+      - name: Install the Maestro CLI
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Report the Maestro version
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: maestro --version
+
+      # Simulator flakiness on hosted runners is accepted (D-QA1-8, D-W3b-14): there
+      # is no EAS or Maestro Cloud fallback. A failure here is a real failure of the
+      # run.
+      - name: Maestro suite
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        env:
+          QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          QA_IOS_UDID: ${{ steps.sim.outputs.udid }}
+        run: scripts/qa/run-maestro-ios.sh
+
+      # JUnit report, screenshots and the simulator log only, copied by name into
+      # qa-upload/. Maestro's own debug output can contain the resolved value of an
+      # -e variable, so it is left on the runner and never uploaded.
+      - name: Collect the ios results
+        if: ${{ always() && steps.guard.outputs.secrets == 'true' }}
+        run: |
+          mkdir -p qa-upload/ios qa-upload/logs
+          if [ -f qa-results/ios/junit.xml ]; then cp qa-results/ios/junit.xml qa-upload/ios/junit.xml; fi
+          if [ -d qa-results/ios ]; then
+            (cd qa-results/ios && find . -name '*.png' -type f | while read -r png; do
+              mkdir -p "$GITHUB_WORKSPACE/qa-upload/ios/$(dirname "$png")"
+              cp "$png" "$GITHUB_WORKSPACE/qa-upload/ios/$png"
+            done)
+          fi
+          if [ -f qa-results/logs/ios-sim.log ]; then cp qa-results/logs/ios-sim.log qa-upload/logs/ios-sim.log; fi
+          find qa-upload -type f | sort
+
+      - name: Upload the ios results
+        if: ${{ always() && steps.guard.outputs.secrets == 'true' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: qa-raw-ios
+          path: qa-upload
+          retention-days: 14
+
   # Always runs, so a run that failed or died halfway still publishes a report. The one
   # exception is a pull request that asked for no suite at all (it did not touch
   # apps/mobile or packages/ui-mobile): there is nothing to report, and a `partial`
-  # report on an unrelated PR would be noise rather than a signal.
+  # report on an unrelated PR would be noise rather than a signal. `android` and
+  # `ios` share that gate, so either one having run is enough.
   report:
     name: report
-    needs: [changes, qa-scripts, seed-reset, unit, api-smoke, web-staging, android]
-    if: ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped') }}
+    needs: [changes, qa-scripts, seed-reset, unit, api-smoke, web-staging, android, ios]
+    if: ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped' || needs.ios.result != 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -759,7 +1084,10 @@ jobs:
           QA_TEST_OTP_CODE: ${{ secrets.QA_TEST_OTP_CODE }}
           FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          EXPECT: ${{ needs.changes.outputs.expect || 'mobile,web,api,unit' }}
+          # The fallback names every suite, ios included: a run that produced no ios
+          # results then reports the suite as `not-run` and the whole run as
+          # `partial`, which is never a pass (CU19).
+          EXPECT: ${{ needs.changes.outputs.expect || 'mobile,ios,web,api,unit' }}
           TRIGGER: ${{ needs.changes.outputs.trigger || 'manual' }}
         run: |
           node scripts/qa/summarize.mjs \

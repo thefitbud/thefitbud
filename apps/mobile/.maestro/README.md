@@ -1,15 +1,34 @@
-# Maestro flows for the Android app (QA1 · QT3)
+# Maestro flows for the mobile app (QA1 · QT3, CU19)
 
-End-to-end flows that drive the Android staging-variant app
-(`com.thefitbud.mobile.staging`) on an emulator against `api-staging.thefitbud.com`
-through the main trainee and trainer journeys. Each flow takes screenshots at its
-key screens and fails on a red box or on FitBud's own error screen
-(`common/assert-no-crash.yaml`, QT4). The nightly job and the PR smoke job run
-this suite (QT7); `scripts/qa/summarize.mjs` (QT8) turns the results into the
-`qa-report` artifact. How to read that artifact: `docs/runbooks/qa-nightly.md`.
+End-to-end flows that drive the staging-variant app (`com.thefitbud.mobile.staging`)
+against `api-staging.thefitbud.com` through the main trainee and trainer journeys.
+Each flow takes screenshots at its key screens and fails on a red box or on
+FitBud's own error screen (`common/assert-no-crash.yaml`, QT4). The nightly job and
+the PR smoke job run this suite (QT7); `scripts/qa/summarize.mjs` (QT8) turns the
+results into the `qa-report` artifact. How to read that artifact:
+`docs/runbooks/qa-nightly.md`.
 
-iOS is not covered (iOS builds are on hold). Push and Live Activity notifications
-stay on the manual device checklists.
+**One suite, two platforms.** `qa.yml`'s `android` job runs these flows on an
+Android emulator and its `ios` job runs the **same files** on an iOS simulator
+pinned to `Asia/Kolkata` (CU19, D-W3b-14). The iOS staging bundle identifier is the
+same as the Android applicationId (`apps/mobile/app.config.js`), so no flow needs a
+per-platform `appId`. The two report as separate suites, `mobile` (Android) and
+`ios`: a flow that passes on one and fails on the other is the difference the `ios`
+job exists to surface, and merging them would hide it.
+
+Push and Live Activity notifications stay on the manual device checklists.
+
+## Platform branches
+
+Where a step genuinely differs, branch inside the flow with
+`runFlow: { when: { platform: Android|iOS } }`. **Never fork a flow file per
+platform**, and never drop a step on one platform without saying why in a comment
+next to it. The branches that exist today:
+
+| Where | Why |
+|---|---|
+| `flows/trainer/attention.yaml` | dismissing the review sheet: `pressKey: back` on Android, the sheet's own "Dismiss sheet" scrim on iOS, which has no hardware back key |
+| `session-persists.yaml` step 3 | "back on the root screen leaves the app" is Android-only behaviour; iOS has no equivalent, so the step is skipped there and step 2 (kill and relaunch) carries the platform-independent half |
 
 ## Layout
 
@@ -58,11 +77,17 @@ the number of code requests per run low.
    curl -Ls "https://get.maestro.mobile.dev" | bash
    maestro --version
    ```
-2. **An Android emulator**, API 34, `x86_64`, Google APIs image (the CI runner uses
-   the same). Start it before the run and wait until `adb devices` lists it:
+2. **A device.** For Android, an emulator on API 34, `x86_64`, Google APIs image
+   (the CI runner uses the same). Start it before the run and wait until
+   `adb devices` lists it:
    ```bash
    adb devices
    ```
+   For iOS, a simulator **set to `Asia/Kolkata`** — the dates every flow asserts
+   are written in that zone. The simulator takes its zone from the host, which is
+   what `qa.yml`'s `ios` job sets and then reads back from inside the simulator
+   before it runs anything. The CI pins are in that job: Xcode 16.4, device type
+   `iPhone-16`, runtime `iOS-18-6`.
 3. **The staging-variant APK.**
    - **`preview` profile (use this).** A release-style bundle with the staging API
      baked in (`apps/mobile/eas.json`, `APP_VARIANT=staging`). QT7 builds it on the
@@ -72,6 +97,11 @@ the number of code requests per run low.
      adb install -r path/to/app-preview.apk
      adb shell pm list packages | grep com.thefitbud.mobile.staging
      ```
+   - **The iOS simulator app.** `scripts/qa/build-ios-sim.sh` builds it locally on
+     macOS (`expo prebuild` + `pod install` + `xcodebuild`, Release so the JS
+     bundle is embedded and compiled to Hermes bytecode, as on a device), then
+     `scripts/qa/run-maestro-ios.sh` installs and drives it. No EAS and no new
+     secret (D-QA1-8, D-W3b-14).
    - **`development` profile.** Also works, but the dev client opens a launcher
      first. Start Metro (`pnpm --filter @fitbud/mobile start`), open the dev client
      once and point it at the bundle so it opens straight into the app on
@@ -130,6 +160,9 @@ maestro test \
   apps/mobile/.maestro
 ```
 
+On an iOS simulator, add `--device <udid>` and write to `qa-results/ios` instead;
+`scripts/qa/run-maestro-ios.sh` does exactly that.
+
 - `--include-tags smoke` runs the smoke set (auth, Today, trainer Clients).
   `--include-tags full`, or no filter, runs everything.
 - A single flow: replace the last argument with the flow file, for example
@@ -150,6 +183,19 @@ The QT8 contract:
 | JUnit report | `qa-results/mobile/junit.xml` |
 | Screenshots | `qa-results/mobile/**/<flow>__<step>.png` (Maestro writes them into `--test-output-dir`) |
 | App log | `qa-results/logs/logcat.log` (the runner captures it: `adb logcat -d > qa-results/logs/logcat.log`) |
+
+And the iOS equivalents (CU19):
+
+| File | Where |
+|---|---|
+| JUnit report | `qa-results/ios/junit.xml` |
+| Screenshots | `qa-results/ios/**/<flow>__<step>.png` |
+| App log | `qa-results/logs/ios-sim.log` (`scripts/qa/run-maestro-ios.sh` streams the simulator's unified log for the app process) |
+
+`summarize.mjs` scans each device log for a crash and fails that suite on one even
+when every flow passed, which is how an iOS-only Hermes `RangeError` (the CU17
+class of bug, D-W3b-11a) is caught: it red-boxes a screen without necessarily
+failing an assertion.
 
 A suite that emits no `junit.xml`, zero tests, or only skipped tests is reported as
 `error`. Then `node scripts/qa/summarize.mjs ...` as in `docs/runbooks/qa-nightly.md`.
@@ -187,8 +233,9 @@ staging, only for the `qa+...@thefitbud.com` allowlist and only for login.
 `scripts/qa/summarize.mjs` (`parseFrameMap`) reads this table, and the UI bot uses
 it to compare the captured screens with the locked frames in
 `docs/design/mockups/png/`. One screenshot name and one frame per row. Android
-frames are used where one exists, iOS frames otherwise; the build is an Android
-app, so expect platform chrome to differ.
+frames are used where one exists, iOS frames otherwise. The same names are
+captured on both platforms, so expect platform chrome to differ from whichever
+frame a row names.
 
 | Screenshot | Frame | Note |
 |---|---|---|

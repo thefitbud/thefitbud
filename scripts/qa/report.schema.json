@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/thefitbud/qa-report/summary.schema.json",
   "title": "FitBud QA run summary (schemaVersion 1)",
-  "description": "Contract between the suites (QT3 mobile, QT5 web, QT6 api, unit), the summary builder (scripts/qa/summarize.mjs) and the FitBud UI bot. Breaking changes bump schemaVersion. The status vocabulary is deliberate: a suite that did not run is never 'pass'.",
+  "description": "Contract between the suites (QT3 mobile = Android, CU19 ios = iOS simulator, QT5 web, QT6 api, unit), the summary builder (scripts/qa/summarize.mjs) and the FitBud UI bot. Breaking changes bump schemaVersion. The status vocabulary is deliberate: a suite that did not run is never 'pass'.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,12 +25,12 @@
     },
     "expectedSuites": {
       "type": "array",
-      "items": { "enum": ["mobile", "web", "api", "unit"] },
-      "description": "Suites this run was supposed to produce. A PR smoke run expects only mobile."
+      "items": { "enum": ["mobile", "ios", "web", "api", "unit"] },
+      "description": "Suites this run was supposed to produce. A PR smoke run expects only the Maestro suites."
     },
     "suites": {
       "type": "array",
-      "description": "Always one entry per suite name (mobile, web, api, unit), in that order.",
+      "description": "Always one entry per suite name (mobile, ios, web, api, unit), in that order.",
       "items": { "$ref": "#/$defs/suite" }
     },
     "screenshots": { "type": "array", "items": { "$ref": "#/$defs/screenshot" } },
@@ -71,7 +71,7 @@
       "additionalProperties": false,
       "required": ["name", "status", "reason", "total", "passed", "failed", "skipped", "durationMs", "failures"],
       "properties": {
-        "name": { "enum": ["mobile", "web", "api", "unit"] },
+        "name": { "enum": ["mobile", "ios", "web", "api", "unit"] },
         "status": {
           "enum": ["pass", "fail", "error", "not-run", "not-requested"],
           "description": "pass: results parsed, at least one test, none failed, no crash. fail: a test failed or the suite crashed. error: results exist but are unusable (truncated or malformed report, zero tests, or only screenshots/logs with no report). not-run: expected but no results at all. not-requested: not expected in this run and no results."
@@ -101,7 +101,7 @@
       "additionalProperties": false,
       "required": ["suite", "name", "path", "frame"],
       "properties": {
-        "suite": { "enum": ["mobile", "web", "api", "unit"] },
+        "suite": { "enum": ["mobile", "ios", "web", "api", "unit"] },
         "name": { "type": "string", "minLength": 1, "description": "File name without .png, for example trainee-today__loaded." },
         "path": { "type": "string", "pattern": "^screenshots/", "description": "Artifact-relative: screenshots/<suite>/<name>.png." },
         "frame": {
@@ -115,7 +115,7 @@
       "additionalProperties": false,
       "required": ["suite", "flow", "kind", "evidence"],
       "properties": {
-        "suite": { "enum": ["mobile", "web", "api", "unit"] },
+        "suite": { "enum": ["mobile", "ios", "web", "api", "unit"] },
         "flow": { "type": "string", "description": "Flow that crashed, or 'unknown' when found only in logcat." },
         "kind": { "enum": ["redbox", "load-error", "anr", "fatal"] },
         "evidence": { "type": "string", "maxLength": 500, "description": "Redacted failure text or log excerpt." }
