@@ -240,3 +240,75 @@ Two tasks never own the same file; that is why the `qa-staging` starvation fix w
 - CU17's device probe output and the on-device run; D-W3b-11. CU1's copy table, CU4's protection before/after, CU7/CU8 screenshots, CU13's reported api-client mismatch (a decision for later).
 
 ## Report (filled in by the orchestrator at the end)
+**Closed 4 Nov 2026** by the orchestrator, per **D-W3b-36**. 23 tasks merged; 3 moved to W4. No migration. One item could not be completed by an agent and is a manual step for Firoz (see "Owed by Firoz").
+
+### Merged
+CU1 (#178), CU2 (#180), CU3 (#184), CU4 (#186), CU5 (#189), CU6 (#195), CU7 (#201), CU9 (#187), CU10 (#188), CU11 (#192), CU12 (#198), CU13 (#207), CU14 (#194), CU15 (#209), CU16 (#182), CU17 (#200), CU18 (#197), CU19 (#208), CU20 (#202), CU22 (#210), CU23 (#215), CU24 (#214), CU26 (#213) — **23 task PRs** — plus **11 decision PRs** (#181, #183, #185, #190, #191, #196, #203, #204, #205, #206, #211) and **4 spec PRs** (#176, #179, #193, #199). Final `main`: **`c677957`**.
+
+### Moved to W4 (D-W3b-36)
+- **CU25** — the app never reaches the auth screen on **either** platform; evidence and analysis are in D-W3b-35. Blocks any green Maestro run.
+- **CU21** — the Maestro "6-digit code" screen never appears. Likely the same root cause as CU25; diagnose CU25 first rather than chasing it twice.
+- **CU8** — trainer-web sign-in footer. Fails D-W3b-32 outright; never started.
+- The missing **`QA_GUARANTEES`** invariant ("something is still unlogged today"), without which any Maestro assertion on a not-everything-done state is luck. Root cause of a must-fix in CU22's review.
+
+### What this batch was actually for
+It was scoped as a cleanup batch of QA1/W3 review follow-ups. Most of the code was tiny — CU14 was one sentence, CU15 one line, CU7 a layout nudge. What it found was not.
+
+**Four live defects, none of which had a failing test:**
+- **CU20** — the reminder cron aborted for **every** trainer when one stored timezone was unresolvable. Found by CU17's review, not by a test.
+- **`invitations.ts`** wrote a timezone with no validation (fixed in CU20).
+- **CU22** — every trainee with a published plan saw "your coach is preparing your plan" **beside** a ready day on cold start, because the shell's loader awaits `sync.pullAndApply()` while the day load does not, and one nullable carried both "not loaded" and "none published". Diagnosed as a real client defect, not the seed gap it looked like.
+- **CU23** — `GET /me/week` had **never been implemented**. It answered seven hardcoded `"future"` days, the client could not parse them, and three call sites swallowed the error and derived day states from the date alone, so **every past day read as `missed`** whether or not it was.
+
+**At least eighteen cases of a check that was not checking what it appeared to.** This is the batch's main finding and the reason its reviews were worth their cost. The count is the orchestrator's running tally across the batch's reviews, not a figure derivable from this repository — read it as "the reviews kept finding these, and here are the ones on record" rather than as a verified number. On record: CU11's cross-trainer assertion was **structurally unfailable** — ownership could be deleted and the test stayed green while trainer 1 received trainer 2's client *by name*; the Maestro suite had **never parsed** (CU18); CU5's BEARER and JWT rules were untested, so deleting either kept 25 tests green; a green `ci` was served **entirely from cache**; a run-level `cancelled` masked all-jobs-success; CU19's simulator log capture was fire-and-forget, so an empty log would have let a red-boxing app report **`pass`** — the one bug class that job exists to catch; and CU23's predecessor asserted `status === "loaded" || status === "none"`, a near-tautology that passed on `none` **under a name claiming the plan was still fetched**.
+
+The practice that found them was **mutation testing**: reviewers reverted the production line each assertion protects and confirmed the test went red. Where that was skipped, the hole survived — CU22's first pass left the one line that makes its three-state real (the initial `loading`) with no test at all, and only a review mutation exposed it.
+
+### What went wrong in how this batch was run
+Recorded plainly, because the next orchestrator will otherwise repeat it.
+1. **Implementers were made to wait on CI.** CU19's build spent **909** tool calls and CU22's **686**, almost all polling workflow runs; their fix rounds, with a no-polling rule, spent **11** and **45** for comparable work. Every poll replays the agent's whole context. **An agent must never wait for a run** — it hands back after pushing and the orchestrator watches with a shell loop, which costs nothing.
+2. **Decision records were pushed across eleven separate PRs.** Under `strict_required_status_checks_policy` each push invalidated every open PR's up-to-date status, causing self-inflicted runner congestion — which cost CU19's `ios` job an eviction. Batch decision records into one PR.
+3. **Decisions were briefed before they were on `main`.** D-W3b-15, D-W3b-24, D-W3b-26 and D-W3b-34 were all cited to implementers while still on an unmerged branch; CU20's and CU22's reviewers each caught it, and one reviewer concluded the decisions did not exist. AGENTS.md puts decisions in the batch file so implementers can read them — merge the decision PR **before** briefing against it.
+4. **`files_owned` was wrong in the batch file twice.** CU23's lane row granted ownership of a contract its own spec lists as read-only and whose edit is a stop condition; since the batch file wins over the spec, the stale row was the authoritative instruction. Keep lane rows and specs in step.
+5. **A spec citation pointed at a file that proved the opposite.** D-W3b-25 and `CU23.md` cited `0030_perf_indexes.sql` for indexes that are in `0004_workouts.sql:20` and `0005_meals.sql:21`. The conclusion was right; an implementer following the pointer would have stopped needlessly or written a migration. Verify a citation before it carries a stop condition.
+6. **Three `files_owned` amendments were needed mid-batch** (D-W3b-5, D-W3b-19, D-W3b-33), each because a task's own acceptance criterion required a file its list had not anticipated. Worth checking at spec time.
+
+### Known gaps left on `main`
+- **`report` concludes green on `partial`.** `summarize.mjs` returns 0, so an eviction leaves four green staging jobs, one grey `cancelled` and a green `report`. CU26 makes it legible with an annotation; the run's own conclusion badge still does not show it.
+- **Per-suite QA seeding** is the fix that would remove the shared-seed contention outright, and with it the need for the `qa-staging` group at all. Flagged independently by three reviews.
+- **`DateNavigator` conveys day state by dot colour alone** (`packages/ui-mobile/src/DateNavigator.tsx:21-36,77`) and exposes no state to assistive tech, for **every** state — an AGENTS.md violation predating W3b. The recommended W4 task adds an `unknown` member **and** puts state into `accessibilityLabel`; that is also what properly closes CU23's `"rest"`-for-unknown mapping, which its reviewer examined and declined to block.
+- **The trainer week route still has CU23's `?start=` bug** — `?start=garbage` on `GET /workspaces/relationships/:rid/week` is an unhandled `RangeError` 500. Out of scope (that file is read-only reuse); the fix is to lift CU23's check into a shared helper.
+- **`GET /me/day/:date` derives no state at all** and does not validate `:date`.
+- **The Android crash scan has the same hole CU19 fixed for iOS** (`scripts/qa/run-maestro.sh:101`): a failed `adb logcat` writes a line to stderr and is then ignored — it cannot change the exit code — so an Android red box can pass. Same shape, on the platform the QA suite actually runs.
+- **Two possible unbounded refetch loops** at `ProgressTab.tsx:400` and `NotificationsScreen.tsx:295`, the same shape as the one CU24 fixed — unverified. Battery and mobile data, not just CPU.
+- **`AssignedMealPlanScreen.tsx:110`** (`const loading = effectivePlan === null`) is the next instance of the nullable conflation CU22 and CU24 removed; under `unavailable` it shows a permanent loading state.
+- **The mobile render harness only renders the web branch.** CU6's harness is `react-native-web`, so `Platform.OS === "web"`; CU23's fix round proved a mutation in the **native** branch does **not** go red. Every "mutation went red" result in this batch's mobile reviews therefore covers the web branch only.
+- **`.gitignore`'s `*.log`** silently excludes fixture logs; it bit QT8 and CU19 three times, each needing `git add -f`.
+- **`apps/api/qa-smoke/**` is still unlinted** (D-W3b-3, BT2 in W4).
+- **The api-client WebSocket handshake flake** is W4's BT6 (D-W4-12).
+
+### Owed by Firoz
+**One manual step, and it is the only thing left in this batch.** D-W3b-1 authorised an agent to add `qa-scripts` to `main`'s required checks with `gh api` after CU4 merged. **An agent cannot do it:** repository-settings writes are refused by the cloud session's proxy — `gh api -X PUT repos/thefitbud/thefitbud/rulesets/26041364` returns *"Write access to this GitHub API path is not permitted through this proxy."* (HTTP 403). CU4's spec assumed otherwise. The ruleset is id **26041364**, `bypass_actors` is empty, and the change is to add one context beside `ci`, preserving every other rule:
+
+**Do it as a read-modify-write, not a hand-built body** — a PUT assembled from scratch can silently drop `strict_required_status_checks_policy`, `do_not_enforce_on_create`, `enforcement`, `name` or `target` and weaken the ruleset:
+
+```
+gh api repos/thefitbud/thefitbud/rulesets/26041364 > ruleset.json
+```
+
+```
+jq '{name,target,enforcement,bypass_actors,conditions,rules:[.rules[]|if .type=="required_status_checks" then .parameters.required_status_checks += [{"context":"qa-scripts","integration_id":15368}] else . end]}' ruleset.json > ruleset-new.json
+```
+
+```
+gh api -X PUT repos/thefitbud/thefitbud/rulesets/26041364 --input ruleset-new.json
+```
+
+The only intended change is one added context beside `ci`. Everything else — `deletion`, `non_fast_forward`, `pull_request`, `strict_required_status_checks_policy: true`, `bypass_actors: []` — carries over untouched.
+
+**Two things to know before applying it.** The check is exercised rather than theoretical — it ran green on CU9's PR and on CU26's, which edited the very workflow it guards — though the per-head history is the orchestrator's observation and is not recorded in this repository. More to the point, and checkable here: `qa-scripts` (`.github/workflows/qa.yml:198`) carries **no concurrency group at all**, so it cannot be evicted from the `qa-staging` queue. And D-W3b-1's own hazard was that a required check left **Cancelled** hangs a PR forever: CU9 hit it three times in nine minutes (runs 41642350144, 41642951094, 41643014392), when an entire QA run was cancelled before any job started and **no `qa-scripts` check-run existed at all**. The cause was workflow-level `concurrency`, which D-W3b-6 removed and CU26's review re-confirmed absent — so the hazard is believed closed. If a PR ever hangs on a missing `qa-scripts`, removing that one context reverses this immediately.
+
+**The "What Firoz reviews" row above is discharged, not pending.** CU1's copy table and CU7's screenshots were settled in review (CU7 by D-W3b-21); CU8's screenshots are moot, since CU8 moved to W4; CU13's reported api-client mismatch was the `/me/week` shape question, which became CU23 (D-W3b-25) and is now implemented. That row also still reads as "Firoz reviews code", which AGENTS.md's no-human-code-review rule and D-W3b-16 supersede — a W4 cleanup, out of scope for a Report-only change.
+
+Nothing else is owed. No device check, no deploy, no store step: the 12 Nov rehearsal and 15 Nov invites are cancelled (D-W3b-37), and no batch after W4 starts until FitBud UI's planning PR merges.
+
