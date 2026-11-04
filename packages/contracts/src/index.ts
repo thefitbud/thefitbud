@@ -789,3 +789,9 @@ export {
   type ResponsivenessCategories,
   type ReengagementCandidatesResponse,
 } from "./read-models.js";
+export {
+  meWeekDaySchema,
+  meWeekResponseSchema,
+  type MeWeekDay,
+  type MeWeekResponse,
+} from "./me-week.js";
