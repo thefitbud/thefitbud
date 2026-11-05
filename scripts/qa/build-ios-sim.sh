@@ -38,6 +38,7 @@
 #   QA_IOS_SCHEME      override the discovered Xcode scheme.
 #
 # Secrets: none. This script reads no secret and prints no value.
+# Z5-5: QA ios red since #226; diagnosis is on the Z5-5 pull request.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
