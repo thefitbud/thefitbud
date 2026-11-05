@@ -84,6 +84,13 @@ adb wait-for-device
 # shellcheck disable=SC2016  # the loop runs on the device, not here
 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
 
+# Before any flow. A Pixel Launcher ANR dialog owns the top window and Maestro
+# then reports the auth screen as absent (CU25). Must run after boot, before
+# `maestro test`.
+# shellcheck source=android-emulator-prep.sh
+source "$(dirname "${BASH_SOURCE[0]}")/android-emulator-prep.sh"
+suppress_emulator_error_dialogs || die "could not hide emulator error dialogs."
+
 if [ "${QA_MAESTRO_SKIP_INSTALL:-0}" != "1" ]; then
   [ -f "$APK" ] || die "no APK at $APK; run scripts/qa/build-android-apk.sh first."
   echo "run-maestro: installing $(basename "$APK")"
