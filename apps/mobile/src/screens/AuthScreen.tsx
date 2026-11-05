@@ -243,6 +243,8 @@ export function AuthScreen() {
       <SignInScreen
         loading={loading}
         error={displayError}
+        initialIdentifier={identifier}
+        onIdentifierChange={setIdentifier}
         onSignIn={signInPassword}
         onUseCode={() => {
           setMode("code");
