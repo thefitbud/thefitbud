@@ -63,6 +63,12 @@ export type StableAccount = z.infer<typeof stableAccountSchema>;
 const guaranteesSchema = z.object({
   mealAssignmentsTodayMin: z.number().int().nonnegative(),
   loggedMealsTodayOnTrack: z.number().int().nonnegative(),
+  /**
+   * Meals plus workouts still unlogged on the reference date, per trainee persona.
+   * The seed builder fails when it cannot guarantee it (BT7, D-W4-14); the smoke
+   * asserts it on the live day (G4).
+   */
+  unloggedItemsTodayMin: z.number().int().nonnegative(),
   openExceptionsSlippingMin: z.number().int().nonnegative(),
   pendingCheckinsSlipping: z.number().int().nonnegative(),
   /** Check-ins the slipping client can start today, in their own timezone (QT2b). */
@@ -84,6 +90,17 @@ export type Stable = {
   guarantees: Guarantees;
   accounts: Record<AnyAccountKey, StableAccount>;
 };
+
+/**
+ * Items on a `GET /me/day/:date` response that are assigned but not yet logged:
+ * meals plus workouts, minus the logged meals and workouts.
+ */
+export function unloggedItemsOnDay(day: {
+  assignments: { workouts: readonly unknown[]; meals: readonly unknown[] };
+  logs: { workouts: number; meals: number };
+}): number {
+  return day.assignments.meals.length + day.assignments.workouts.length - day.logs.meals - day.logs.workouts;
+}
 
 export function parseStable(json: unknown): Stable {
   const parsed = stableSchema.parse(json);

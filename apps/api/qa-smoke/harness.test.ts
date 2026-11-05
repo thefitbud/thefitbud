@@ -10,7 +10,7 @@ import {
   missingSecretNames,
   readSmokeEnv,
 } from "./env.js";
-import { loadStable, localDateIn, parseStable, todaysExpectations } from "./expectations.js";
+import { loadStable, localDateIn, parseStable, todaysExpectations, unloggedItemsOnDay } from "./expectations.js";
 import { guardBaseUrl } from "./host-guard.js";
 import { dataOf, errorOf, SmokeHttp } from "./http.js";
 import { otpSignIn, passwordSignIn, SignInError } from "./signin.js";
@@ -157,6 +157,26 @@ describe("QA expectations", () => {
     expect(stable.accounts.ontrack.relationshipId).toBeDefined();
     expect(stable.accounts.slipping.signIn).toBe("otp_only");
     expect(stable.guarantees.mealAssignmentsTodayMin).toBeGreaterThan(0);
+  });
+
+  it("lists unloggedItemsTodayMin and rejects expectations without it (G4)", () => {
+    const stable = loadStable();
+    expect(stable.guarantees.unloggedItemsTodayMin).toBeGreaterThanOrEqual(1);
+    const accounts = Object.values(stable.accounts);
+    const rest: Record<string, unknown> = { ...stable.guarantees };
+    delete rest.unloggedItemsTodayMin;
+    expect(() => parseStable({ guarantees: rest, accounts })).toThrow(/unloggedItemsTodayMin/);
+  });
+
+  it("counts assigned items minus logged ones on a day", () => {
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => ({ id: String(i) }));
+    const day = (workouts: number, meals: number, loggedW: number, loggedM: number) => ({
+      assignments: { workouts: ids(workouts), meals: ids(meals) },
+      logs: { workouts: loggedW, meals: loggedM },
+    });
+    expect(unloggedItemsOnDay(day(1, 3, 0, 1))).toBe(3);
+    expect(unloggedItemsOnDay(day(0, 3, 0, 3))).toBe(0);
+    expect(unloggedItemsOnDay(day(1, 3, 1, 3))).toBe(0);
   });
 
   it("rejects an account outside the OTP allowlist", () => {

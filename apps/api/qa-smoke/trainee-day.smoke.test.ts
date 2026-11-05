@@ -7,7 +7,7 @@
  */
 import { meDayResponseSchema, weekReadModelSchema, workoutAssignmentSchema } from "@fitbud/contracts";
 import { describe, expect, it } from "vitest";
-import { todaysExpectations } from "./expectations.js";
+import { todaysExpectations, unloggedItemsOnDay } from "./expectations.js";
 import { getData, localToday, run, send, stable } from "./helpers.js";
 import { sessionFor, smokeHttp } from "./run-context.js";
 
@@ -29,6 +29,8 @@ describe("GET /me/day/:date", () => {
       expect(day.assignments.meals.length).toBe(expected.mealNames.length);
       // Other suites may log more later in the night, never fewer than the seed.
       expect(day.logs.meals).toBeGreaterThanOrEqual(expected.loggedMealCount);
+      // The seed leaves something unlogged today (BT7, G4), so the day is never "all done".
+      expect(unloggedItemsOnDay(day)).toBeGreaterThanOrEqual(stable.guarantees.unloggedItemsTodayMin);
     }
   });
 
