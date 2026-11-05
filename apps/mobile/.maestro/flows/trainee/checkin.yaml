@@ -22,6 +22,7 @@ tags:
 # Writes a submitted check-in; the nightly reset restores it (D-QA1-7).
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
@@ -55,7 +56,10 @@ tags:
 - assertVisible: ".*step 3 of 3.*"
 - tapOn: "One line: how was the week\\?"
 - inputText: "Solid week, one session missed."
-- hideKeyboard
+# Dismiss the keyboard by tapping inert text: the "Weekly check-in" title is a
+# plain Text inside Screen's keyboardShouldPersistTaps="handled" ScrollView
+# (CheckinScreen.tsx). hideKeyboard cannot dismiss the iOS keyboard (Z5-5, #241).
+- tapOn: "Weekly check-in"
 - tapOn: "Continue"
 # Review step, then send.
 - extendedWaitUntil:

@@ -67,6 +67,20 @@ function fakeCodesign(dir, mode) {
   const script = `#!/bin/bash
 printf '%s\\n' "$*" >> ${JSON.stringify(log)}
 if [ "\$1" = "-d" ]; then
+  # Z5-5b: what real codesign -d reports about the signature (stderr), and
+  # its failure on an unsigned app.
+  if [ ${JSON.stringify(mode)} = "unsigned" ]; then
+    printf '%s\\n' "\${@: -1}: code object is not signed at all" >&2
+    exit 1
+  fi
+  if [ ${JSON.stringify(mode)} = "entitlements-unreadable" ] && [ "\$2" = "--entitlements" ]; then
+    exit 1
+  fi
+  if [ ${JSON.stringify(mode)} = "devsigned" ]; then
+    printf '%s\\n' 'Signature size=4442' 'Authority=Apple Development: QA (XXXXXXXXXX)' >&2
+  else
+    printf '%s\\n' 'Signature=adhoc' >&2
+  fi
   if [ ${JSON.stringify(mode)} = "restricted" ]; then
     printf '%s\\n' '<plist><dict><key>keychain-access-groups</key><array><string>${BUNDLE_ID}</string></array></dict></plist>'
   elif [ -f ${JSON.stringify(dump)} ]; then
@@ -275,4 +289,63 @@ test("run-maestro hides the dialog before maestro test", () => {
   const maestro = src.indexOf('cd "$MOBILE_RESULTS" && maestro test');
   assert.ok(prep > 0);
   assert.ok(maestro > prep);
+});
+
+// Z5-5b (review nit on #241): ios_signature_unrestricted used to treat a failed
+// `codesign -d` as a pass, so the runner no longer required a signature at all.
+// It now requires a readable ad-hoc signature before it checks the entitlements.
+function signatureCheck(app, env) {
+  return spawnSync(
+    "bash",
+    ["-c", 'set -euo pipefail; source "$SIGN"; ios_signature_unrestricted "$APP"'],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SIGN: path.join(here, "sign-ios-simulator-app.sh"),
+        APP: app,
+        PATH: `${env.bin}:${process.env.PATH}`,
+      },
+    },
+  );
+}
+
+test("the signature check passes a readable ad-hoc signature with no entitlements", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "z5-5b-sig-"));
+  const { bin } = fakeCodesign(dir, "record");
+  const result = signatureCheck(fixtureApp(dir), { bin });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("the signature check refuses an app whose signature cannot be read", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "z5-5b-sig-"));
+  const { bin } = fakeCodesign(dir, "unsigned");
+  const result = signatureCheck(fixtureApp(dir), { bin });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /FitBudStaging\.app has no readable code signature/);
+});
+
+test("the signature check refuses a signature that is not ad-hoc", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "z5-5b-sig-"));
+  const { bin } = fakeCodesign(dir, "devsigned");
+  const result = signatureCheck(fixtureApp(dir), { bin });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /FitBudStaging\.app is not ad-hoc signed/);
+});
+
+test("the signature check refuses a signature whose entitlements cannot be read", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "z5-5b-sig-"));
+  const { bin } = fakeCodesign(dir, "entitlements-unreadable");
+  const result = signatureCheck(fixtureApp(dir), { bin });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /could not read the entitlements of FitBudStaging\.app's code signature/);
+});
+
+test("signing fails when the signature it wrote cannot be read back", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "z5-5b-sig-"));
+  const { bin } = fakeCodesign(dir, "unsigned");
+  const result = sign(fixtureApp(dir), { bin });
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /ad-hoc signed/);
+  assert.match(result.stderr, /no readable code signature/);
 });

@@ -19,6 +19,7 @@ env:
 # wired in Attention yet, and "Mark reviewed" only moves the client to Reviewed.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
