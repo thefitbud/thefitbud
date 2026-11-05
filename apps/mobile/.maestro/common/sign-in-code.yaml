@@ -26,7 +26,8 @@ appId: com.thefitbud.mobile.staging
 # tapped by that name rather than by its position under the label.
 - tapOn: "6-digit code"
 - inputText: ${QA_OTP_CODE}
-- hideKeyboard:
+- tapOn:
+    text: "Sent to .*"
     optional: true
 - tapOn:
     text: "Verify and sign in"
@@ -47,6 +48,7 @@ appId: com.thefitbud.mobile.staging
       - eraseText:
           charactersToErase: 12
           optional: true
-      - hideKeyboard:
+      - tapOn:
+          text: "Sent to .*"
           optional: true
 - assertVisible: "Today's workout|Needs you|Choose mode"

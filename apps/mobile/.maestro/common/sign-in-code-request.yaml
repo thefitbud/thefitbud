@@ -22,7 +22,9 @@ appId: com.thefitbud.mobile.staging
     timeout: 30000
 - tapOn: "you@example.com or 9876543210"
 - inputText: ${SIGN_IN_EMAIL}
-- hideKeyboard
+# Dismiss the keyboard by tapping inert text (works on iOS and Android; Maestro's
+# hideKeyboard cannot dismiss the iOS keyboard here, Z5-5 #241).
+- tapOn: "Your coach's plan for today is waiting\\."
 - tapOn: "Sign in with a code instead"
 - extendedWaitUntil:
     visible: "Send code"

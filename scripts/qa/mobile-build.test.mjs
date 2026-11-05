@@ -299,3 +299,21 @@ exit 0
   assert.match(r.stdout, /logcat buffers: main: ring buffer is 16 MiB/);
   assert.match(r.stdout, /logcat\.log has 1 lines, 1 from ReactNativeJS/);
 });
+
+// Z5-5 cause 7: Maestro's hideKeyboard cannot dismiss the iOS keyboard on the
+// auth screens (job 127139263977). The smoke-path auth flows tap inert text
+// inside the keyboardShouldPersistTaps="handled" ScrollView instead.
+test("the smoke-path auth flows dismiss the keyboard with a tap, not hideKeyboard", () => {
+  const maestro = path.join(repo, "apps/mobile/.maestro");
+  const files = {
+    "common/sign-in-password.yaml": /- inputText: \$\{QA_PASSWORD\}\n(?:#.*\n)*- tapOn: "Your coach's plan for today is waiting\\\\\."/,
+    "common/sign-in-code-request.yaml": /- inputText: \$\{SIGN_IN_EMAIL\}\n(?:#.*\n)*- tapOn: "Your coach's plan for today is waiting\\\\\."/,
+    "common/sign-in-code.yaml": /- inputText: \$\{QA_OTP_CODE\}\n- tapOn:\n\s+text: "Sent to \.\*"\n\s+optional: true/,
+    "flows/auth/sign-in-code.yaml": /- inputText: \$\{QA_OTP_CODE\}\n- tapOn:\n\s+text: "Sent to \.\*"\n\s+optional: true/,
+  };
+  for (const [rel, dismiss] of Object.entries(files)) {
+    const src = fs.readFileSync(path.join(maestro, rel), "utf8");
+    assert.doesNotMatch(src, /^\s*- hideKeyboard/m, `${rel} still uses hideKeyboard`);
+    assert.match(src, dismiss, `${rel} dismisses the keyboard by tapping inert text`);
+  }
+});
