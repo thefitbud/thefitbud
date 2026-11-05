@@ -368,12 +368,22 @@ test.describe("TW-B roster + invite", () => {
     await expect(page.getByText(/Expired/i).first()).toBeVisible();
 
     // History: Invited → Expired then Back restores status=invited.
-    // Z5-22: this step flakes; diagnosis on the PR before the fix.
+    // Z5-22: pills gain a facet count ("Expired 2") once listClients
+    // answers, so an exact /^Expired$/ name only matched if the click beat
+    // the API. Wait for the filtered page to load (the pressed Invited pill
+    // shows its count), then pick the pill in the Renewal group with or
+    // without its count.
     await page.goto("/clients");
     await page.getByRole("button", { name: /^Invited/i }).click();
     await expect(page).toHaveURL(/status=invited/);
+    await expect(
+      page.getByRole("button", { name: /^Invited \d+$/i }),
+    ).toHaveAttribute("aria-pressed", "true", { timeout: 15_000 });
     await page.getByRole("button", { name: /^More/i }).click();
-    await page.getByRole("button", { name: /^Expired$/i }).click();
+    await page
+      .getByRole("group", { name: "Renewal" })
+      .getByRole("button", { name: /^Expired( \d+)?$/i })
+      .click();
     await expect(page).toHaveURL(/renewal=expired/);
     await page.goBack();
     await expect(page).toHaveURL(/status=invited/);
