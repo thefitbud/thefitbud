@@ -5,9 +5,10 @@
 #   scripts/qa/run-maestro.sh
 #
 # Installs the staging-variant APK, runs the flows QT3 owns with the requested tag
-# filter, and captures logcat. Exits with Maestro's own exit code: a failed flow must
-# never be swallowed, because a swallowed failure plus an empty report reads as a
-# green run with no coverage.
+# filter, and captures logcat. A failed flow keeps Maestro's exit code: a swallowed
+# failure plus an empty report reads as a green run with no coverage. A Maestro pass
+# whose logcat does not show the app's own output exits 1, because the crash scan
+# then proved nothing.
 #
 # Environment:
 #   QA_MAESTRO_TAG     smoke | full (default: full). Passed as --include-tags; QT3's
@@ -100,12 +101,35 @@ fi
 mkdir -p "$MOBILE_RESULTS" "$LOGS_DIR"
 adb logcat -c || true
 
+# QT8 scans logs/logcat.log even when every flow passed. A failed `adb logcat`
+# used to write one line to stderr and leave Maestro's 0 in place, so an empty
+# log (no crash found) was indistinguishable from a clean run. React Native
+# logs `Running "main"` as the bundle starts; without that line the crash scan
+# proved nothing. Maestro's own failure is kept. A pass with an unusable log
+# fails the job, which is the conclusion this script owns.
+maestro_status=1
+captured_logcat=0
 capture_logcat() {
-  # Always collect the device log, whatever happened to the flows: QT8 scans
-  # logs/logcat.log for app crashes even when every flow passed. A failed capture must
-  # not change the exit code, which belongs to Maestro.
   # shellcheck disable=SC2317  # called from the EXIT trap below
-  adb logcat -d >"$LOGS_DIR/logcat.log" 2>/dev/null || echo "run-maestro: logcat capture failed" >&2
+  if [ "$captured_logcat" = 1 ]; then
+    return 0
+  fi
+  # shellcheck disable=SC2317
+  captured_logcat=1
+  # shellcheck disable=SC2317
+  if ! adb logcat -d >"$LOGS_DIR/logcat.log"; then
+    echo "run-maestro: logcat capture failed" >&2
+  fi
+  # shellcheck disable=SC2317
+  if ! grep -qF 'Running "main"' "$LOGS_DIR/logcat.log" 2>/dev/null; then
+    lines="$(wc -l <"$LOGS_DIR/logcat.log" 2>/dev/null || echo 0)"
+    echo "::warning title=Logcat capture produced nothing::$LOGS_DIR/logcat.log holds none of the app's own output (${lines} lines), so the Android crash scan had nothing to scan."
+    echo "run-maestro: WARNING logcat shows no app output; the crash scan proved nothing" >&2
+    # shellcheck disable=SC2317
+    if [ "$maestro_status" -eq 0 ]; then
+      maestro_status=1
+    fi
+  fi
 }
 trap capture_logcat EXIT
 
@@ -133,7 +157,11 @@ set -e
 # QT8's contract is qa-results/mobile/junit.xml. Normalise whatever name this Maestro
 # version chose; a missing report stays missing, and QT8 reports the suite as `error`.
 if [ ! -f "$MOBILE_RESULTS/junit.xml" ]; then
-  report="$(find "$MOBILE_RESULTS" -maxdepth 2 -name '*.xml' -type f | sort | head -n 1)"
+  # Piping find into head under pipefail dies with SIGPIPE (141) once head
+  # closes the pipe, even when a report exists. Read the sorted list, then
+  # take the first.
+  mapfile -t reports < <(find "$MOBILE_RESULTS" -maxdepth 2 -name '*.xml' -type f | sort)
+  report="${reports[0]:-}"
   if [ -n "$report" ]; then
     mv "$report" "$MOBILE_RESULTS/junit.xml"
     echo "run-maestro: moved $(basename "$report") to junit.xml"
@@ -142,5 +170,6 @@ if [ ! -f "$MOBILE_RESULTS/junit.xml" ]; then
   fi
 fi
 
+capture_logcat
 echo "run-maestro: maestro exited $maestro_status"
 exit "$maestro_status"
