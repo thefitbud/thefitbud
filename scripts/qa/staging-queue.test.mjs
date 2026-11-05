@@ -179,7 +179,7 @@ async function fakeApi(state, hook = () => null) {
       res.writeHead(status, { "content-type": "application/json", ...headers });
       res.end(JSON.stringify(body));
     };
-    if (injected) return send(injected.status, { message: "injected" }, injected.headers);
+    if (injected) return send(injected.status, { message: injected.message ?? "injected" }, injected.headers);
     if (req.headers.authorization !== "Bearer test-token") return send(401, { message: "no token" });
     let m;
     if ((m = url.pathname.match(/^\/repos\/o\/r\/actions\/runs\/(\d+)\/jobs$/))) {
@@ -379,4 +379,161 @@ test("queue: a permission error fails at once rather than waiting", async () => 
   assert.equal(result.code, 1, result.out);
   assert.match(result.out, /::error title=Staging queue failed::the GitHub API answered 403/);
   assert.match(result.summary, /Could not read the queue/);
+});
+
+// ------------------------------------------- review fix round: partial re-runs, cost
+
+test("a partial re-run cannot skip the queue: seed and suite jobs check the queue's attempt", () => {
+  for (const suite of SUITES) {
+    const queue = jobs.get(`queue-${suite}`);
+    assert.match(queue, /^ {4}outputs:\n {6}attempt: \$\{\{ github\.run_attempt \}\}$/m);
+    const check = `&& needs.queue-${suite}.outputs.attempt == format('{0}', github.run_attempt)`;
+    for (const name of [`seed-${suite}`, suite]) {
+      const gate = jobs.get(name).match(/^ {4}if: >-\n([\s\S]*?)\}\}$/m);
+      assert.ok(gate && gate[1].includes(check), `${name} gate checks the queue attempt`);
+    }
+  }
+  // report still runs (and says why) when both suites skipped at that check on a PR.
+  const report = jobs.get("report");
+  for (const suite of SUITES) {
+    assert.ok(
+      report.includes(`(needs.queue-${suite}.result == 'success' && needs.queue-${suite}.outputs.attempt != format('{0}', github.run_attempt))`),
+      `report gate covers a stale ${suite} turn`,
+    );
+  }
+});
+
+function stagingQueueStep() {
+  const report = jobs.get("report");
+  const start = report.indexOf("      - name: Staging queue\n");
+  const step = report.slice(start, report.indexOf("\n      - name:", start + 1));
+  const marker = "        run: |\n";
+  return step
+    .slice(step.indexOf(marker) + marker.length)
+    .split("\n")
+    .map((line) => line.replace(/^ {10}/, ""))
+    .join("\n");
+}
+
+function runStagingQueueStep(needs, attempt) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qa-queue-step-"));
+  const summaryFile = path.join(dir, "summary.md");
+  const script = path.join(dir, "step.sh");
+  fs.writeFileSync(script, stagingQueueStep());
+  return new Promise((resolve) => {
+    const child = spawn("bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", script], {
+      env: { PATH: process.env.PATH, NEEDS: JSON.stringify(needs), RUN_ATTEMPT: String(attempt), GITHUB_STEP_SUMMARY: summaryFile },
+    });
+    let out = "";
+    child.stdout.on("data", (chunk) => (out += chunk));
+    child.stderr.on("data", (chunk) => (out += chunk));
+    child.on("close", (code) => {
+      const summary = fs.existsSync(summaryFile) ? fs.readFileSync(summaryFile, "utf8") : "";
+      fs.rmSync(dir, { recursive: true, force: true });
+      resolve({ code, out, summary });
+    });
+  });
+}
+
+test("Staging queue step: a carried-over turn is an error in the run summary, a fresh one is fine", async () => {
+  const needs = (attempt) => ({
+    "queue-android": { result: "success", outputs: { attempt } },
+    "queue-ios": { result: "cancelled", outputs: {} },
+  });
+  const stale = await runStagingQueueStep(needs("1"), 2);
+  assert.equal(stale.code, 0, stale.out);
+  assert.match(stale.summary, /`android`: did NOT run: this attempt \(2\) re-ran jobs without re-running queue-android/);
+  assert.match(stale.out, /^::error title=android skipped: re-run the whole workflow::/m);
+  assert.match(stale.summary, /`ios`: superseded while it waited/);
+  assert.match(stale.out, /^::warning title=ios superseded, not failed::/m);
+
+  const fresh = await runStagingQueueStep(needs("2"), 2);
+  assert.equal(fresh.code, 0, fresh.out);
+  assert.match(fresh.summary, /`android`: took its turn, then ran/);
+  assert.doesNotMatch(fresh.out, /::error/);
+});
+
+test("queue: a run that comes back with its old place while we wait is still waited for (S1)", async () => {
+  const state = baseState();
+  state.runs[490] = run(490, "in_progress");
+  state.jobs[490] = [job("queue-android", "completed", -600, 4001, "success"), job("android", "in_progress", -590, 4002)];
+  state.runs[300] = run(300, "completed", { pull_requests: [{ number: 30 }] });
+  state.jobs[300] = [job("queue-android", "completed", -9000, 1001, "success"), job("android", "completed", -8990, 1002, "failure")];
+  let n = 0;
+  let m = 0;
+  const result = await runQueue(state, {
+    maxMinutes: 0.2,
+    hook: (pathname) => {
+      if (pathname === "/repos/o/r/actions/runs/490") {
+        n += 1;
+        if (n === 2) {
+          // Partial re-run of run 300: android again, queue-android carried over.
+          state.runs[300].status = "in_progress";
+          state.jobs[300] = [job("queue-android", "completed", -9000, 1001, "success"), job("android", "in_progress", 30, 1003)];
+        }
+        if (n === 4) state.runs[490].status = "completed";
+      }
+      if (pathname === "/repos/o/r/actions/runs/300" && ++m === 3) state.runs[300].status = "completed";
+      return null;
+    },
+  });
+  assert.equal(result.code, 0, result.out);
+  assert.ok(m >= 3, `kept polling run 300 until it finished (${m})`);
+  assert.match(result.out, /Waiting \(\d+ min so far\) for run #300 \(PR #30\)/);
+  assert.match(result.summary, /run #490 \(PR #90\), run #300 \(PR #30\)/);
+});
+
+test("queue: a secondary rate limit (403 + retry-after) is waited out, honouring retry-after (S2)", async () => {
+  const state = baseState();
+  state.runs[490] = run(490, "in_progress");
+  state.jobs[490] = [job("queue-android", "completed", -600, 4001, "success"), job("android", "in_progress", -590, 4002)];
+  let n = 0;
+  let limitedAt = 0;
+  let nextAt = 0;
+  const result = await runQueue(state, {
+    maxMinutes: 0.2,
+    hook: (pathname) => {
+      if (pathname !== "/repos/o/r/actions/runs/490") return null;
+      n += 1;
+      if (n === 2) {
+        limitedAt = Date.now();
+        return { status: 403, headers: { "retry-after": "1", "x-ratelimit-remaining": "812" } };
+      }
+      if (n === 3) {
+        nextAt = Date.now();
+        state.runs[490].status = "completed";
+      }
+      return null;
+    },
+  });
+  assert.equal(result.code, 0, result.out);
+  assert.match(result.out, /::warning title=Staging queue unreadable::the GitHub API answered 403/);
+  assert.ok(nextAt - limitedAt >= 900, `backed off ${nextAt - limitedAt} ms for retry-after: 1`);
+
+  // The same limit announced only in the body is transient too.
+  let k = 0;
+  const bodyOnly = await runQueue(baseState(), {
+    maxMinutes: 0.2,
+    hook: (pathname) =>
+      pathname.includes("/workflows/") && k++ === 0 ? { status: 403, message: "You have exceeded a secondary rate limit" } : null,
+  });
+  assert.equal(bodyOnly.code, 0, bodyOnly.out);
+  assert.match(bodyOnly.out, /Staging queue unreadable::the GitHub API answered 403/);
+});
+
+test("queue: each poll re-reads only the oldest run ahead, however long the queue", async () => {
+  const state = baseState();
+  for (const [i, id] of [461, 462, 463, 464].entries()) {
+    state.runs[id] = run(id, "in_progress");
+    state.jobs[id] = [job("queue-android", "completed", -400 + i * 10, 1000 + i, "success"), job("android", "in_progress", -300, 1100 + i)];
+  }
+  const result = await runQueue(state, { maxMinutes: 0.02 });
+  assert.equal(result.code, 1, result.out);
+  const count = (re) => result.calls.filter((call) => re.test(call)).length;
+  const polls = count(/^\/repos\/o\/r\/actions\/runs\/461$/);
+  assert.ok(polls >= 3, `polled the oldest ${polls} times`);
+  for (const id of [462, 463, 464]) {
+    assert.equal(count(new RegExp(`^/repos/o/r/actions/runs/${id}$`)), 0, `run ${id} is never re-read while 461 holds`);
+    assert.equal(count(new RegExp(`^/repos/o/r/actions/runs/${id}/jobs`)), 1, `run ${id}'s jobs are read once, in the listing`);
+  }
 });

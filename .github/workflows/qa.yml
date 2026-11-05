@@ -55,10 +55,22 @@
 #   * Order. A run's place is the moment its `queue-<suite>` job started (ties: job id).
 #     Every run computes the same total order, so two runs can never both pass, or both
 #     wait for, each other. A queue job that has not started yet has no place: it will
-#     start later, so it waits for us. A re-run starts a new queue job, so it goes to the
-#     back. So the set of runs ahead of a waiting run can only shrink, and the script
-#     lists it once (after a 30 s settle, so a job that started just before ours already
-#     reads as started) and then only watches it empty.
+#     start later, so it waits for us. "Re-run all jobs", or re-running `queue-<suite>`
+#     (which re-runs its dependents), starts a new queue job, so that run goes to the
+#     back.
+#   * Partial re-runs. "Re-run failed jobs" or "Re-run this job" on `seed-<suite>` or
+#     `<suite>` does NOT re-run `queue-<suite>`: GitHub carries its old success over.
+#     So `queue-<suite>` outputs the `github.run_attempt` it ran in, and `seed-<suite>`
+#     and `<suite>` run only when it equals their own attempt. Otherwise they are
+#     skipped (never entering `qa-staging-<suite>`), and `report` puts an error in the
+#     run summary saying to re-run all jobs or `queue-<suite>`; the suite reports
+#     `not-run`, so the run is `partial`, never a pass.
+#   * Cost. The script lists the open runs ahead of it once (after a 30 s settle, so a
+#     queue job that started just before ours already reads as started), then each
+#     minute re-reads only the OLDEST run still ahead (two API calls), since nothing
+#     behind it can start first. Before passing it lists every open run once more, so a
+#     run that came back with its old place while we waited is still waited for. Rate
+#     limits, primary or secondary (403 with `retry-after`), are waited out.
 #   * What "ahead and unfinished" means: that run is not completed, its queue job started
 #     before ours, and its `<suite>` job is not completed. The suite job comes after the
 #     seed job, so "the suite job is completed" covers the run's whole hold on the suite.
@@ -273,6 +285,11 @@ jobs:
     # Read the Actions API to see the queue; nothing else, and no checkout.
     permissions:
       actions: read
+    # The attempt this turn was taken in. "Re-run failed jobs" and "Re-run this job" on
+    # seed-android or android carry this job's old success over without running it again,
+    # so both of them refuse to run unless this equals their own github.run_attempt.
+    outputs:
+      attempt: ${{ github.run_attempt }}
     # Keyed per pull request: a newer push to the SAME pull request replaces that pull
     # request's own waiting run here, and nothing else. Every other run has a group of
     # its own (the run id), so no run can cancel another run's place in the queue.
@@ -298,8 +315,8 @@ jobs:
           const SUITE = env.QA_QUEUE_SUITE;
           const QUEUE_JOB = `queue-${SUITE}`;
           const POLL_MS = Number(env.QA_QUEUE_POLL_SECONDS || "60") * 1000;
-          // Pause before the one full listing, so a queue job that started just before ours has
-          // long been visible as started in the API (it reads as `queued` for a moment).
+          // Pause before the first full listing, so a queue job that started just before ours
+          // already reads as started in the API (it reads as `queued` for a moment).
           const SETTLE_MS = Number(env.QA_QUEUE_SETTLE_SECONDS || "30") * 1000;
           const MAX_MS = Number(env.QA_QUEUE_MAX_MINUTES || "330") * 60 * 1000;
           // Every status a run that has not finished can have.
@@ -327,9 +344,16 @@ jobs:
             }
             if (res.ok) return res.json();
             const message = `the GitHub API answered ${res.status} on ${path}`;
-            const transient = res.status >= 500 || res.status === 429 || res.headers.get("x-ratelimit-remaining") === "0";
-            const error = transient ? new Error(message) : new Fatal(message);
+            const body = await res.text().catch(() => "");
+            const retryAfter = Number(res.headers.get("retry-after"));
+            // Rate limits, primary or secondary, and server errors pass with time: wait them out.
+            const limited =
+              res.status === 429 ||
+              res.headers.get("x-ratelimit-remaining") === "0" ||
+              (res.status === 403 && ((Number.isFinite(retryAfter) && retryAfter > 0) || /secondary rate limit/i.test(body)));
+            const error = res.status >= 500 || limited ? new Error(message) : new Fatal(message);
             error.status = res.status;
+            if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterMs = retryAfter * 1000;
             throw error;
           }
 
@@ -347,28 +371,45 @@ jobs:
 
           // A run's place in the queue is the moment its queue job STARTED, ties broken by job
           // id. A queue job that has not started has no place yet: it will start after ours, so
-          // it waits for us, not we for it. A re-run starts a new queue job, so it goes to the
-          // back. Every run computes the same order, so two runs can never both wait for, or
-          // both pass, each other.
+          // it waits for us, not we for it. Re-running the workflow, or queue-<suite>, starts a
+          // new queue job, so that run goes to the back. Every run computes the same order, so
+          // two runs can never both wait for, or both pass, each other.
           function placeOf(job) {
             if (!job || job.status === "queued" || job.conclusion === "skipped" || !job.started_at) return null;
             return [Date.parse(job.started_at), Number(job.id)];
           }
           const isAhead = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
 
-          // True while `run` is ahead of this one and has not finished its suite job.
-          function holdsAhead(run, jobs, mine) {
-            if (run.status === "completed") return false;
+          // The run's place if it is ahead of this one and has not finished its suite job,
+          // otherwise null.
+          function holdingPlace(run, jobs, mine) {
+            if (run.status === "completed") return null;
             const place = placeOf(jobs.find((job) => job.name === QUEUE_JOB));
-            if (!place || !isAhead(place, mine)) return false;
+            if (!place || !isAhead(place, mine)) return null;
             const suiteJob = jobs.find((job) => job.name === SUITE);
-            return !(suiteJob && suiteJob.status === "completed");
+            return suiteJob && suiteJob.status === "completed" ? null : place;
           }
 
           const label = (run) => {
             const pr = run.pull_requests?.[0]?.number;
             return `run #${run.run_number} (${pr ? `PR #${pr}` : run.event})`;
           };
+
+          // Every open run of this workflow that holds the suite ahead of us, oldest first.
+          async function listHolders(workflowId, mine) {
+            const open = new Map();
+            for (const status of OPEN) {
+              for (const run of await pages(`/repos/${REPO}/actions/workflows/${workflowId}/runs?status=${status}`, "workflow_runs")) {
+                if (String(run.id) !== RUN_ID) open.set(String(run.id), run);
+              }
+            }
+            const found = [];
+            for (const [id, run] of open) {
+              const place = holdingPlace(run, await jobsOf(id), mine);
+              if (place) found.push({ id, run, place });
+            }
+            return found.sort((a, b) => (isAhead(a.place, b.place) ? -1 : 1));
+          }
 
           if (!env.GH_TOKEN || !REPO || !SUITE || !env.GITHUB_RUN_ID) {
             console.log("::error title=Staging queue misconfigured::GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID and QA_QUEUE_SUITE must all be set.");
@@ -379,13 +420,16 @@ jobs:
           const minutes = () => Math.round((Date.now() - started) / 60000);
           let mine = null;
           let workflowId = null;
-          // Runs ahead of this one that still hold the suite. Listed once: every run that can
-          // ever be ahead had already started its queue job when ours started, so the first full
-          // listing finds all of them, and later polls only watch that set shrink.
+          // Runs ahead of this one that still hold the suite, oldest first. Each poll re-reads
+          // only the OLDEST (two API calls), because nothing behind it can start before it ends.
+          // That keeps every waiting run at a constant cost per poll however long the queue is.
+          // The full listing runs once at the start and once more before passing, so a run that
+          // came back while we waited (a re-run that kept its old place) is still waited for.
           let holders = null;
           const waitedFor = new Map();
 
           for (;;) {
+            let pause = POLL_MS;
             try {
               if (!mine) {
                 const self = await get(`/repos/${REPO}/actions/runs/${RUN_ID}`);
@@ -395,37 +439,28 @@ jobs:
                 mine = place;
                 await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
               }
-              if (!holders) {
-                const open = new Map();
-                for (const status of OPEN) {
-                  for (const run of await pages(`/repos/${REPO}/actions/workflows/${workflowId}/runs?status=${status}`, "workflow_runs")) {
-                    if (String(run.id) !== RUN_ID) open.set(String(run.id), run);
-                  }
+              if (!holders) holders = await listHolders(workflowId, mine);
+              while (holders.length > 0) {
+                const oldest = holders[0];
+                let run;
+                try {
+                  run = await get(`/repos/${REPO}/actions/runs/${oldest.id}`);
+                } catch (error) {
+                  // A deleted run holds nothing.
+                  if (error.status !== 404) throw error;
+                  holders.shift();
+                  continue;
                 }
-                const found = new Map();
-                for (const [id, run] of open) {
-                  if (holdsAhead(run, await jobsOf(id), mine)) found.set(id, run);
-                }
-                holders = found;
-              } else {
-                for (const id of [...holders.keys()]) {
-                  let run;
-                  try {
-                    run = await get(`/repos/${REPO}/actions/runs/${id}`);
-                  } catch (error) {
-                    // A deleted run holds nothing.
-                    if (error.status === 404) {
-                      holders.delete(id);
-                      continue;
-                    }
-                    throw error;
-                  }
-                  if (holdsAhead(run, run.status === "completed" ? [] : await jobsOf(id), mine)) holders.set(id, run);
-                  else holders.delete(id);
-                }
+                waitedFor.set(oldest.id, label(run));
+                if (holdingPlace(run, run.status === "completed" ? [] : await jobsOf(oldest.id), mine)) break;
+                holders.shift();
               }
-              for (const [id, run] of holders) waitedFor.set(id, label(run));
-              if (holders.size === 0) {
+              if (holders.length === 0) {
+                // Before passing, look again at every open run, not just the ones listed first.
+                holders = await listHolders(workflowId, mine);
+                for (const holder of holders) waitedFor.set(holder.id, label(holder.run));
+              }
+              if (holders.length === 0) {
                 const behind = [...waitedFor.values()];
                 const line =
                   behind.length === 0
@@ -441,7 +476,7 @@ jobs:
                 ]);
                 process.exit(0);
               }
-              console.log(`Waiting (${minutes()} min so far) for ${[...holders.values()].map(label).join(", ")} to finish its ${SUITE} job.`);
+              console.log(`Waiting (${minutes()} min so far) for ${label(holders[0].run)} to finish its ${SUITE} job (${holders.length} run(s) ahead).`);
             } catch (error) {
               if (error instanceof Fatal) {
                 console.log(`::error title=Staging queue failed::${error.message}. The ${SUITE} suite did not run, so it reports not-run and this run partial.`);
@@ -450,9 +485,11 @@ jobs:
               }
               // Never pass on an error: an unreadable queue counts as a busy one.
               console.log(`::warning title=Staging queue unreadable::${error.message}. Still waiting; an error never counts as a clear queue.`);
+              if (error.retryAfterMs) pause = Math.max(POLL_MS, error.retryAfterMs);
             }
-            if (Date.now() - started + POLL_MS > MAX_MS) {
-              const holding = holders && holders.size > 0 ? [...holders.values()].map(label).join(", ") : "a queue it could not read";
+            const left = MAX_MS - (Date.now() - started);
+            if (left <= 0) {
+              const holding = holders && holders.length > 0 ? holders.map((holder) => label(holder.run)).join(", ") : "a queue it could not read";
               console.log(`::error title=Staging queue timed out::Waited ${minutes()} min for ${holding}. The ${SUITE} suite did not run, so it reports not-run and this run partial. Re-run this job once that run has finished.`);
               summary([
                 `### ${SUITE} staging queue`,
@@ -461,7 +498,8 @@ jobs:
               ]);
               process.exit(1);
             }
-            await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+            // A long retry-after is honoured up to the give-up time, then polled once more.
+            await new Promise((resolve) => setTimeout(resolve, Math.min(pause, left)));
           }
           QA_QUEUE_JS
 
@@ -479,6 +517,11 @@ jobs:
     # Read the Actions API to see the queue; nothing else, and no checkout.
     permissions:
       actions: read
+    # The attempt this turn was taken in. "Re-run failed jobs" and "Re-run this job" on
+    # seed-ios or ios carry this job's old success over without running it again,
+    # so both of them refuse to run unless this equals their own github.run_attempt.
+    outputs:
+      attempt: ${{ github.run_attempt }}
     # Keyed per pull request: a newer push to the SAME pull request replaces that pull
     # request's own waiting run here, and nothing else. Every other run has a group of
     # its own (the run id), so no run can cancel another run's place in the queue.
@@ -504,8 +547,8 @@ jobs:
           const SUITE = env.QA_QUEUE_SUITE;
           const QUEUE_JOB = `queue-${SUITE}`;
           const POLL_MS = Number(env.QA_QUEUE_POLL_SECONDS || "60") * 1000;
-          // Pause before the one full listing, so a queue job that started just before ours has
-          // long been visible as started in the API (it reads as `queued` for a moment).
+          // Pause before the first full listing, so a queue job that started just before ours
+          // already reads as started in the API (it reads as `queued` for a moment).
           const SETTLE_MS = Number(env.QA_QUEUE_SETTLE_SECONDS || "30") * 1000;
           const MAX_MS = Number(env.QA_QUEUE_MAX_MINUTES || "330") * 60 * 1000;
           // Every status a run that has not finished can have.
@@ -533,9 +576,16 @@ jobs:
             }
             if (res.ok) return res.json();
             const message = `the GitHub API answered ${res.status} on ${path}`;
-            const transient = res.status >= 500 || res.status === 429 || res.headers.get("x-ratelimit-remaining") === "0";
-            const error = transient ? new Error(message) : new Fatal(message);
+            const body = await res.text().catch(() => "");
+            const retryAfter = Number(res.headers.get("retry-after"));
+            // Rate limits, primary or secondary, and server errors pass with time: wait them out.
+            const limited =
+              res.status === 429 ||
+              res.headers.get("x-ratelimit-remaining") === "0" ||
+              (res.status === 403 && ((Number.isFinite(retryAfter) && retryAfter > 0) || /secondary rate limit/i.test(body)));
+            const error = res.status >= 500 || limited ? new Error(message) : new Fatal(message);
             error.status = res.status;
+            if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterMs = retryAfter * 1000;
             throw error;
           }
 
@@ -553,28 +603,45 @@ jobs:
 
           // A run's place in the queue is the moment its queue job STARTED, ties broken by job
           // id. A queue job that has not started has no place yet: it will start after ours, so
-          // it waits for us, not we for it. A re-run starts a new queue job, so it goes to the
-          // back. Every run computes the same order, so two runs can never both wait for, or
-          // both pass, each other.
+          // it waits for us, not we for it. Re-running the workflow, or queue-<suite>, starts a
+          // new queue job, so that run goes to the back. Every run computes the same order, so
+          // two runs can never both wait for, or both pass, each other.
           function placeOf(job) {
             if (!job || job.status === "queued" || job.conclusion === "skipped" || !job.started_at) return null;
             return [Date.parse(job.started_at), Number(job.id)];
           }
           const isAhead = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
 
-          // True while `run` is ahead of this one and has not finished its suite job.
-          function holdsAhead(run, jobs, mine) {
-            if (run.status === "completed") return false;
+          // The run's place if it is ahead of this one and has not finished its suite job,
+          // otherwise null.
+          function holdingPlace(run, jobs, mine) {
+            if (run.status === "completed") return null;
             const place = placeOf(jobs.find((job) => job.name === QUEUE_JOB));
-            if (!place || !isAhead(place, mine)) return false;
+            if (!place || !isAhead(place, mine)) return null;
             const suiteJob = jobs.find((job) => job.name === SUITE);
-            return !(suiteJob && suiteJob.status === "completed");
+            return suiteJob && suiteJob.status === "completed" ? null : place;
           }
 
           const label = (run) => {
             const pr = run.pull_requests?.[0]?.number;
             return `run #${run.run_number} (${pr ? `PR #${pr}` : run.event})`;
           };
+
+          // Every open run of this workflow that holds the suite ahead of us, oldest first.
+          async function listHolders(workflowId, mine) {
+            const open = new Map();
+            for (const status of OPEN) {
+              for (const run of await pages(`/repos/${REPO}/actions/workflows/${workflowId}/runs?status=${status}`, "workflow_runs")) {
+                if (String(run.id) !== RUN_ID) open.set(String(run.id), run);
+              }
+            }
+            const found = [];
+            for (const [id, run] of open) {
+              const place = holdingPlace(run, await jobsOf(id), mine);
+              if (place) found.push({ id, run, place });
+            }
+            return found.sort((a, b) => (isAhead(a.place, b.place) ? -1 : 1));
+          }
 
           if (!env.GH_TOKEN || !REPO || !SUITE || !env.GITHUB_RUN_ID) {
             console.log("::error title=Staging queue misconfigured::GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID and QA_QUEUE_SUITE must all be set.");
@@ -585,13 +652,16 @@ jobs:
           const minutes = () => Math.round((Date.now() - started) / 60000);
           let mine = null;
           let workflowId = null;
-          // Runs ahead of this one that still hold the suite. Listed once: every run that can
-          // ever be ahead had already started its queue job when ours started, so the first full
-          // listing finds all of them, and later polls only watch that set shrink.
+          // Runs ahead of this one that still hold the suite, oldest first. Each poll re-reads
+          // only the OLDEST (two API calls), because nothing behind it can start before it ends.
+          // That keeps every waiting run at a constant cost per poll however long the queue is.
+          // The full listing runs once at the start and once more before passing, so a run that
+          // came back while we waited (a re-run that kept its old place) is still waited for.
           let holders = null;
           const waitedFor = new Map();
 
           for (;;) {
+            let pause = POLL_MS;
             try {
               if (!mine) {
                 const self = await get(`/repos/${REPO}/actions/runs/${RUN_ID}`);
@@ -601,37 +671,28 @@ jobs:
                 mine = place;
                 await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
               }
-              if (!holders) {
-                const open = new Map();
-                for (const status of OPEN) {
-                  for (const run of await pages(`/repos/${REPO}/actions/workflows/${workflowId}/runs?status=${status}`, "workflow_runs")) {
-                    if (String(run.id) !== RUN_ID) open.set(String(run.id), run);
-                  }
+              if (!holders) holders = await listHolders(workflowId, mine);
+              while (holders.length > 0) {
+                const oldest = holders[0];
+                let run;
+                try {
+                  run = await get(`/repos/${REPO}/actions/runs/${oldest.id}`);
+                } catch (error) {
+                  // A deleted run holds nothing.
+                  if (error.status !== 404) throw error;
+                  holders.shift();
+                  continue;
                 }
-                const found = new Map();
-                for (const [id, run] of open) {
-                  if (holdsAhead(run, await jobsOf(id), mine)) found.set(id, run);
-                }
-                holders = found;
-              } else {
-                for (const id of [...holders.keys()]) {
-                  let run;
-                  try {
-                    run = await get(`/repos/${REPO}/actions/runs/${id}`);
-                  } catch (error) {
-                    // A deleted run holds nothing.
-                    if (error.status === 404) {
-                      holders.delete(id);
-                      continue;
-                    }
-                    throw error;
-                  }
-                  if (holdsAhead(run, run.status === "completed" ? [] : await jobsOf(id), mine)) holders.set(id, run);
-                  else holders.delete(id);
-                }
+                waitedFor.set(oldest.id, label(run));
+                if (holdingPlace(run, run.status === "completed" ? [] : await jobsOf(oldest.id), mine)) break;
+                holders.shift();
               }
-              for (const [id, run] of holders) waitedFor.set(id, label(run));
-              if (holders.size === 0) {
+              if (holders.length === 0) {
+                // Before passing, look again at every open run, not just the ones listed first.
+                holders = await listHolders(workflowId, mine);
+                for (const holder of holders) waitedFor.set(holder.id, label(holder.run));
+              }
+              if (holders.length === 0) {
                 const behind = [...waitedFor.values()];
                 const line =
                   behind.length === 0
@@ -647,7 +708,7 @@ jobs:
                 ]);
                 process.exit(0);
               }
-              console.log(`Waiting (${minutes()} min so far) for ${[...holders.values()].map(label).join(", ")} to finish its ${SUITE} job.`);
+              console.log(`Waiting (${minutes()} min so far) for ${label(holders[0].run)} to finish its ${SUITE} job (${holders.length} run(s) ahead).`);
             } catch (error) {
               if (error instanceof Fatal) {
                 console.log(`::error title=Staging queue failed::${error.message}. The ${SUITE} suite did not run, so it reports not-run and this run partial.`);
@@ -656,9 +717,11 @@ jobs:
               }
               // Never pass on an error: an unreadable queue counts as a busy one.
               console.log(`::warning title=Staging queue unreadable::${error.message}. Still waiting; an error never counts as a clear queue.`);
+              if (error.retryAfterMs) pause = Math.max(POLL_MS, error.retryAfterMs);
             }
-            if (Date.now() - started + POLL_MS > MAX_MS) {
-              const holding = holders && holders.size > 0 ? [...holders.values()].map(label).join(", ") : "a queue it could not read";
+            const left = MAX_MS - (Date.now() - started);
+            if (left <= 0) {
+              const holding = holders && holders.length > 0 ? holders.map((holder) => label(holder.run)).join(", ") : "a queue it could not read";
               console.log(`::error title=Staging queue timed out::Waited ${minutes()} min for ${holding}. The ${SUITE} suite did not run, so it reports not-run and this run partial. Re-run this job once that run has finished.`);
               summary([
                 `### ${SUITE} staging queue`,
@@ -667,7 +730,8 @@ jobs:
               ]);
               process.exit(1);
             }
-            await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+            // A long retry-after is honoured up to the give-up time, then polled once more.
+            await new Promise((resolve) => setTimeout(resolve, Math.min(pause, left)));
           }
           QA_QUEUE_JS
 
@@ -864,7 +928,8 @@ jobs:
     if: >-
       ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
           && needs.changes.outputs.staging == 'true'
-          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android') }}
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android')
+          && needs.queue-android.outputs.attempt == format('{0}', github.run_attempt) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging-qa
@@ -955,7 +1020,8 @@ jobs:
     if: >-
       ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
           && needs.changes.outputs.staging == 'true'
-          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios') }}
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios')
+          && needs.queue-ios.outputs.attempt == format('{0}', github.run_attempt) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging-qa
@@ -1332,6 +1398,7 @@ jobs:
     if: >-
       ${{ always()
           && needs.queue-android.result == 'success'
+          && needs.queue-android.outputs.attempt == format('{0}', github.run_attempt)
           && (needs.seed-android.result == 'success' || needs.seed-android.result == 'skipped')
           && ((needs.changes.outputs.staging == 'true'
                && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android'))
@@ -1567,6 +1634,7 @@ jobs:
     if: >-
       ${{ always()
           && needs.queue-ios.result == 'success'
+          && needs.queue-ios.outputs.attempt == format('{0}', github.run_attempt)
           && (needs.seed-ios.result == 'success' || needs.seed-ios.result == 'skipped')
           && ((needs.changes.outputs.staging == 'true'
                && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios'))
@@ -1872,7 +1940,14 @@ jobs:
   report:
     name: report
     needs: [changes, qa-scripts, queue-android, queue-ios, seed-api, seed-web, seed-android, seed-ios, unit, api-smoke, web-staging, android, ios]
-    if: ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped' || needs.ios.result != 'skipped') }}
+    # The queue terms: a partial re-run that skipped android and ios at their queue
+    # check, or a queue job that gave up, must still report and say why (see the
+    # "Staging queue" step).
+    if: >-
+      ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped' || needs.ios.result != 'skipped'
+          || (needs.queue-android.result == 'success' && needs.queue-android.outputs.attempt != format('{0}', github.run_attempt))
+          || (needs.queue-ios.result == 'success' && needs.queue-ios.outputs.attempt != format('{0}', github.run_attempt))
+          || needs.queue-android.result == 'failure' || needs.queue-ios.result == 'failure') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -1957,8 +2032,12 @@ jobs:
             echo "is in flight."
             echo
             echo "android and ios no longer queue this way: they wait their turn in"
-            echo "\`queue-<suite>\` (see \"Staging queue\" below), so a cancelled seed-android,"
-            echo "android, seed-ios or ios job was most likely cancelled by hand."
+            echo "\`queue-<suite>\` (see \"Staging queue\" below), and a partial re-run that"
+            echo "skips that turn is refused rather than queued, so behind the queue their"
+            echo "\`qa-staging-<suite>\` group never holds a second pending entry. A cancelled"
+            echo "seed-android, android, seed-ios or ios job was therefore most likely"
+            echo "cancelled by hand (a newer push to the same pull request cancels only its"
+            echo "waiting \`queue-<suite>\` job)."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Queue, not evict (Z5-24). Says in the run summary, every time, how the android
@@ -1970,8 +2049,10 @@ jobs:
         if: always()
         env:
           NEEDS: ${{ toJSON(needs) }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           warnings=""
+          errors=""
           {
             echo "## Staging queue (android, ios)"
             echo
@@ -1983,7 +2064,16 @@ jobs:
             echo
             for suite in android ios; do
               result=$(printf '%s' "$NEEDS" | jq -r --arg j "queue-$suite" '.[$j].result // ""')
+              attempt=$(printf '%s' "$NEEDS" | jq -r --arg j "queue-$suite" '.[$j].outputs.attempt // ""')
+              # "Re-run failed jobs" / "Re-run this job" carry queue-<suite>'s old success
+              # over. seed-<suite> and <suite> then refuse to run without a turn.
+              if [ "$result" = "success" ] && [ "$attempt" != "$RUN_ATTEMPT" ]; then
+                result="stale-turn"
+              fi
               case "$result" in
+                stale-turn)
+                  line="did NOT run: this attempt ($RUN_ATTEMPT) re-ran jobs without re-running queue-$suite (its turn was taken in attempt $attempt), so seed-$suite and $suite skipped rather than skip the queue. Re-run all jobs, or re-run queue-$suite (which re-runs its dependents)."
+                  errors="$errors|$suite skipped: re-run the whole workflow::$line" ;;
                 success) line="took its turn, then ran (the queue job's summary says whom it waited for)." ;;
                 skipped) line="not asked for in this run." ;;
                 cancelled)
@@ -1999,7 +2089,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           # Annotations go to the log, after the summary block (whose output is redirected).
           printf '%s\n' "$warnings" | tr '|' '\n' | while IFS= read -r w; do
-            [ -n "$w" ] && echo "::warning title=$w"
+            if [ -n "$w" ]; then echo "::warning title=$w"; fi
+          done
+          # An error, not a failed step: the report steps below must still run, and the
+          # skipped suite then reports not-run, so "Build the QA report" exits 3.
+          printf '%s\n' "$errors" | tr '|' '\n' | while IFS= read -r e; do
+            if [ -n "$e" ]; then echo "::error title=$e"; fi
           done
           exit 0
 
