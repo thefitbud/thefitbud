@@ -353,7 +353,7 @@ describe("coaching configuration", () => {
     expect(configure.status).toBe(200);
     expect(await configure.text()).not.toContain('"configured"');
 
-    const reads = [
+    const reads: Array<{ headers: Record<string, string> }> = [
       { headers: { Cookie: trainerCookie } },
       {
         headers: {
