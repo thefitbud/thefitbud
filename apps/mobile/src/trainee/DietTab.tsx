@@ -314,8 +314,11 @@ export function DietTab({
         timeZone,
         weekdayShortOf: weekdayShort,
         dayOfMonthOf: dayOfMonth,
+        // The same `GET /me/day` state Today's strip reads (Z5-8), so the
+        // two tabs never disagree about a day when the week fails to load.
+        day: dayTotals,
       }),
-    [weekState, weekStart, timeZone],
+    [weekState, weekStart, timeZone, dayTotals],
   );
 
   const focusMealId = useMemo(() => {

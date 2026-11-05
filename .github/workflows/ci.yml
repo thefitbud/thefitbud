@@ -116,6 +116,8 @@ jobs:
         run: |
           set -euo pipefail
           node --test scripts/qa/maestro-parse.test.mjs
+          # Z5-23: fail on any command name Maestro does not know (Z5-12 validator).
+          node scripts/qa/maestro-commands.mjs apps/mobile/.maestro
           if ! command -v maestro >/dev/null 2>&1; then
             exit 0
           fi
