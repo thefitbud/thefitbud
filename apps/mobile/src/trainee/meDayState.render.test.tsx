@@ -26,7 +26,14 @@ import {
 } from "@fitbud/contracts";
 import { DateNavigator, colors } from "@fitbud/ui-mobile";
 import { mockAuth, render, screen, waitFor } from "../test/render";
-import { localDateInTimezone, weekDatesFrom, startOfWeekMonday } from "../lib/dates";
+import {
+  addDays,
+  dayOfMonth,
+  localDateInTimezone,
+  startOfWeekMonday,
+  weekDatesFrom,
+  weekdayShort,
+} from "../lib/dates";
 
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 
@@ -56,13 +63,16 @@ function meDay(date: string, state: WeekDayState): MeDayResponse {
 
 let dayResponse: MeDayResponse | null = null;
 let weekResponse: WeekReadModel | null = null;
+/** Per-date `/me/day`; defaults to `dayResponse` for any date. */
+let dayFetch: (date: string) => Promise<MeDayResponse | null> = async () =>
+  dayResponse;
 
 const api = new Proxy(
   {},
   {
     get(_target, key: string) {
       if (key === "then") return undefined;
-      if (key === "getMeDay") return async () => dayResponse;
+      if (key === "getMeDay") return (date: string) => dayFetch(date);
       if (key === "getMeWeek") return async () => weekResponse;
       if (key === "listMeCoachNotes") return async () => ({ items: [] });
       return async () => ({ items: [], nextCursor: null });
@@ -117,6 +127,7 @@ const { navigatorDaysFor, TraineeDateNavigator } = await import(
   "./TraineeDateNavigator"
 );
 const { TodayTab, effectivePlanStateFor } = await import("./TodayTab");
+const { DietTab } = await import("./DietTab");
 
 const WEEK = weekDatesFrom(startOfWeekMonday(TODAY));
 const labels = {
@@ -166,6 +177,7 @@ const WEB_DOT: Partial<Record<WeekDayState, string>> = {
 beforeEach(() => {
   dayResponse = null;
   weekResponse = null;
+  dayFetch = async () => dayResponse;
 });
 
 describe("navigatorDaysFor reads MeDayResponse.state", () => {
@@ -311,4 +323,83 @@ describe("the strip hosts pass the day through", () => {
       view.unmount();
     },
   );
+});
+
+/**
+ * Diet reads the same `/me/day` state as Today (#249 review). Diet's own
+ * strip marks only unselected `future` days, and the selected day's style
+ * overrides that, so the state shows on a day Diet still holds a `/me/day`
+ * answer for after the trainee moves to another day whose load is pending.
+ */
+describe("DietTab passes the day through", () => {
+  it("marks a day /me/day called future, with the week unavailable", async () => {
+    const nextWeek = weekDatesFrom(addDays(startOfWeekMonday(TODAY), 7));
+    const answered = nextWeek[2]!;
+    const pending = nextWeek[1]!;
+    // The answered day's `/me/day` settles only when the test says so, after
+    // the week has already failed: the strip must then update from the day
+    // alone, not ride on a later week update.
+    let answer: () => void = () => undefined;
+    const answeredDay = new Promise<MeDayResponse>((resolve) => {
+      answer = () => resolve(meDay(answered, "future"));
+    });
+    dayFetch = (date) =>
+      date === answered ? answeredDay : new Promise<never>(() => undefined);
+    weekResponse = null;
+    const relationship = coachingRelationshipSchema.parse({
+      id: "1b65e3ad-84cf-4fe1-a546-0d62656c2c79",
+      trainerUserId: "a00ed048-8bac-4010-b641-dd888c8a8730",
+      traineeUserId: "a0a69e20-297d-4101-a5e2-ecce9b8491cb",
+      status: "active",
+      onboardingStatus: "coaching_ready",
+      invitationId: null,
+      startedAt: "2026-09-01T06:30:00.000Z",
+      endedAt: null,
+      createdAt: "2026-09-01T06:30:00.000Z",
+      updatedAt: "2026-11-01T06:30:00.000Z",
+      trainerDisplayName: "Rahul Verma",
+    });
+    const view = render(
+      <DietTab
+        relationship={relationship}
+        selectedDate={answered}
+        onSelectDate={() => undefined}
+        onOpenOverlay={() => undefined}
+      />,
+    );
+    // The week has failed first.
+    await waitFor(() => {
+      expect(screen.queryByText("Couldn't load your week. Pull down to try again")).toBeTruthy();
+    });
+    // Then the answered day's `/me/day` settles while it is selected.
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    view.rerender(
+      <DietTab
+        relationship={relationship}
+        selectedDate={pending}
+        onSelectDate={() => undefined}
+        onOpenOverlay={() => undefined}
+      />,
+    );
+
+    /** The dot of a day button: its last element child. */
+    function dotClassOf(date: string): string {
+      const label = `${weekdayShort(TIME_ZONE, date)}${dayOfMonth(TIME_ZONE, date)}`;
+      const button = Array.from(
+        view.container.querySelectorAll('[role="button"]'),
+      ).find((node) => node.textContent === label);
+      if (!button) throw new Error(`no strip button for ${date}`);
+      const dot = button.lastElementChild as HTMLElement;
+      return dot.className;
+    }
+
+    // Unselected, no week: a day nothing answered for (nextWeek[4]) carries
+    // no state, while the day `/me/day` called future has the future dot.
+    await waitFor(() => {
+      expect(dotClassOf(answered)).not.toBe(dotClassOf(nextWeek[4]!));
+    });
+    view.unmount();
+  });
 });
