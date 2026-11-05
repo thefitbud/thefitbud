@@ -163,7 +163,8 @@ describe("QA expectations", () => {
     const stable = loadStable();
     expect(stable.guarantees.unloggedItemsTodayMin).toBeGreaterThanOrEqual(1);
     const accounts = Object.values(stable.accounts);
-    const { unloggedItemsTodayMin: _omitted, ...rest } = stable.guarantees;
+    const rest: Record<string, unknown> = { ...stable.guarantees };
+    delete rest.unloggedItemsTodayMin;
     expect(() => parseStable({ guarantees: rest, accounts })).toThrow(/unloggedItemsTodayMin/);
   });
 
