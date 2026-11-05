@@ -8,6 +8,8 @@ import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 
 
 import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+import { coachingConfigurationStatusSchema } from "@fitbud/contracts";
+import { allLabelEntries } from "@fitbud/core";
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   const handle = await createSharedMemoryDb();
@@ -300,6 +302,81 @@ describe("coaching configuration", () => {
     expect(locked.status).toBe(409);
     const lockedBody = (await locked.json()) as { error: { code: string } };
     expect(lockedBody.error.code).toBe("CONFIGURATION_NOT_EDITABLE");
+  });
+
+  it("never accepts or returns the retired configured status (D12)", async () => {
+    expect(coachingConfigurationStatusSchema.options).toEqual([
+      "draft",
+      "active",
+      "superseded",
+    ]);
+    expect(coachingConfigurationStatusSchema.safeParse("configured").success).toBe(false);
+    expect(
+      allLabelEntries()
+        .filter((entry) => entry.namespace === "coaching_configuration_status")
+        .map((entry) => entry.value),
+    ).toEqual(["draft", "active", "superseded"]);
+
+    const { trainerCookie, traineeToken, relationshipId } =
+      await reachCoachingReady("no-configured");
+
+    const saved = await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...draftBody, status: "configured" }),
+      },
+      testEnv(),
+    );
+    expect(saved.status).toBe(201);
+    const savedText = await saved.text();
+    expect(savedText).not.toContain('"configured"');
+    const savedBody = JSON.parse(savedText) as {
+      data: { status: string; recordVersion: number };
+    };
+    expect(savedBody.data.status).toBe("draft");
+
+    const configure = await app.request(
+      `/configurations/relationships/${relationshipId}/configure`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "configure-no-configured",
+        },
+        body: JSON.stringify({ expectedVersion: savedBody.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(configure.status).toBe(200);
+    expect(await configure.text()).not.toContain('"configured"');
+
+    const reads = [
+      { headers: { Cookie: trainerCookie } },
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+    ];
+    for (const init of reads) {
+      const read = await app.request(
+        `/configurations/relationships/${relationshipId}`,
+        init,
+        testEnv(),
+      );
+      expect(read.status).toBe(200);
+      const text = await read.text();
+      expect(text).not.toContain('"configured"');
+      const body = JSON.parse(text) as {
+        data: { status: string; configuredAt: string | null };
+      };
+      expect(body.data.status).toBe("draft");
+      expect(body.data.configuredAt).toBeNull();
+    }
   });
 
   it("rejects configure and activate until a short goal is saved", async () => {
