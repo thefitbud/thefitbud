@@ -740,6 +740,30 @@ jobs:
   # that suite's QA user ids only (`--suite`), so it never touches another suite's
   # accounts. The four jobs are the same apart from the suite name; a change to one is a
   # change to all four (apps/api/scripts/qa-seed-suites.test.ts checks the wiring).
+  #
+  # ONE D1 IMPORT AT A TIME (Z5-7b). Every `wrangler d1 execute --remote --file` is a D1
+  # import, and a D1 database accepts only one import at a time; a second one is refused
+  # with "Currently processing a long-running import. Cannot start another import until
+  # that completes or times out." (run 42079586761: seed-ios lost that race to the other
+  # three seeds, which all started together). Two guards, pinned by
+  # scripts/qa/seed-serial.test.mjs:
+  #
+  #   * Within a run, deterministically: the seeds are a chain, seed-api -> seed-web ->
+  #     seed-android -> seed-ios, each `needs:` the one before. Each later link is gated
+  #     with `!cancelled()`, not the default success(), so a seed that was SKIPPED (its
+  #     suite not selected, or a partial re-run's queue-attempt check), FAILED or was
+  #     CANCELLED earlier in the chain never takes a later suite's seed with it: a broken
+  #     api seed must not cost ios its seed. Only a cancelled run stops the chain. Every
+  #     link keeps all of its own gates (main only, `staging-qa`, its suite, and for
+  #     android and ios its queue job's success and attempt), so the chain only orders
+  #     the imports; it never runs a seed its own gates would not. The cost: seed-ios
+  #     (and so ios) can wait for queue-android's turn; the mobile queues never wait for
+  #     api or web.
+  #   * Across runs (a nightly overlapping a dispatch seeds different suites, so their
+  #     groups do not exclude each other): d1_execute retries an import ONLY when wrangler
+  #     reports exactly that message, 6 attempts with 15/30/60/120/240 s between them.
+  #     A refused import never started, so retrying it applies nothing twice. Any other
+  #     error fails at once, as before.
   seed-api:
     name: seed-api
     needs: changes
@@ -825,17 +849,43 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
 
   seed-web:
     name: seed-web
-    needs: changes
+    # After seed-api, whatever its result: one D1 import at a time (Z5-7b, see seed-api).
+    needs: [changes, seed-api]
     # Never on a pull request, and only from main. Both are asserted here, not inferred.
     if: >-
-      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      ${{ !cancelled() && needs.changes.result == 'success'
+          && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
           && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web') }}
     runs-on: ubuntu-latest
@@ -915,18 +965,46 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
 
   seed-android:
     name: seed-android
-    # After its turn in the staging queue (queue-android), like the android job.
-    needs: [changes, queue-android]
+    # After its turn in the staging queue (queue-android), like the android job, and after
+    # seed-web whatever its result: one D1 import at a time (Z5-7b, see seed-api).
+    needs: [changes, queue-android, seed-web]
     # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    # `!cancelled()` drops the default success(), so the queue job's success is checked
+    # explicitly: without its turn the seed must not run.
     if: >-
-      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      ${{ !cancelled() && needs.changes.result == 'success' && needs.queue-android.result == 'success'
+          && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
           && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android')
           && needs.queue-android.outputs.attempt == format('{0}', github.run_attempt) }}
@@ -1007,18 +1085,46 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
 
   seed-ios:
     name: seed-ios
-    # After its turn in the staging queue (queue-ios), like the ios job.
-    needs: [changes, queue-ios]
+    # After its turn in the staging queue (queue-ios), like the ios job, and after
+    # seed-android whatever its result: one D1 import at a time (Z5-7b, see seed-api).
+    needs: [changes, queue-ios, seed-android]
     # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    # `!cancelled()` drops the default success(), so the queue job's success is checked
+    # explicitly: without its turn the seed must not run.
     if: >-
-      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      ${{ !cancelled() && needs.changes.result == 'success' && needs.queue-ios.result == 'success'
+          && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
           && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios')
           && needs.queue-ios.outputs.attempt == format('{0}', github.run_attempt) }}
@@ -1099,10 +1205,34 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
 
   # The repository's own unit run, as the `unit` suite of the QA report
   # (docs/runbooks/qa-nightly.md). `pnpm test` is turbo-driven and writes no JUnit, so
