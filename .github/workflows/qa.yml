@@ -1207,6 +1207,10 @@ jobs:
           EXPECT: ${{ needs.changes.outputs.expect || 'mobile,ios,web,api,unit' }}
           TRIGGER: ${{ needs.changes.outputs.trigger || 'manual' }}
         run: |
+          # Exit 3 means `partial` (an expected suite has no results): the step goes red
+          # and says so, because a partial run is never a pass (BT16). The upload and
+          # summary steps below are if: always(), so the artifact still ships.
+          code=0
           node scripts/qa/summarize.mjs \
             --in qa-results --out qa-report \
             --expect "$EXPECT" \
@@ -1214,7 +1218,11 @@ jobs:
             --environment staging \
             --frames apps/mobile/.maestro/README.md \
             --frames apps/trainer-web/playwright.staging.config.ts \
-            --frame-dir docs/design/mockups/png
+            --frame-dir docs/design/mockups/png || code=$?
+          if [ "$code" -eq 3 ]; then
+            echo "::error title=QA run partial, not a pass::An expected suite produced no results (often queue eviction). Read the Job summary and re-dispatch from main."
+          fi
+          exit "$code"
 
       # Must be if: always() — summarize.mjs exits 2 on a malformed input report, and it
       # writes summary.json before doing so.
@@ -1237,6 +1245,10 @@ jobs:
             echo "## QA report"
             echo
             echo "**status:** $(jq -r .status qa-report/summary.json) · **trigger:** $(jq -r .trigger qa-report/summary.json)"
+            if [ "$(jq -r .status qa-report/summary.json)" = "partial" ]; then
+              echo
+              echo "> **PARTIAL, not a pass.** An expected suite produced no results (it shows \`not-run\` below)."
+            fi
             echo
             echo "| suite | status | total | passed | failed | skipped |"
             echo "|---|---|---|---|---|---|"

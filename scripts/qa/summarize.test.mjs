@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { buildSummary, classifyCrash, iosLogProvesCapture, main, makeRedactor, parseFrameMap, parseJUnit, scanIosLog, MalformedInput, SUITES } from "./summarize.mjs";
+import { buildSummary, classifyCrash, iosLogProvesCapture, logcatProvesCapture, main, makeRedactor, parseFrameMap, parseJUnit, scanIosLog, MalformedInput, SUITES } from "./summarize.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, "fixtures");
@@ -270,7 +270,8 @@ test("CLI: exit 0 with failures, 2 for malformed input and bad usage", () => {
 test("CLI takes run metadata from the GitHub Actions environment", () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "qa-cli-"));
   const env = { ...process.env, GITHUB_RUN_ID: "123", GITHUB_REPOSITORY: "thefitbud/thefitbud", GITHUB_SERVER_URL: "https://github.com", GITHUB_SHA: "7bd0f3a1c2", GITHUB_REF_NAME: "main", GITHUB_EVENT_NAME: "schedule" };
-  const r = spawnSync("node", [path.join(here, "summarize.mjs"), "--in", path.join(fixtures, "all-pass"), "--out", out], { encoding: "utf8", env });
+  const r = spawnSync("node", [path.join(here, "summarize.mjs"), "--in", path.join(fixtures, "all-pass"), "--out", out, "--expect", LEGACY_SUITES.join(",")], { encoding: "utf8", env });
+  // all-pass holds no ios results, so the default --expect would be `partial` (exit 3, BT16).
   assert.equal(r.status, 0, r.stderr);
   const s = JSON.parse(fs.readFileSync(path.join(out, "summary.json"), "utf8"));
   assert.equal(s.trigger, "nightly");
@@ -524,4 +525,59 @@ test("the capture check cannot mask a real crash, and passes a captured log", ()
   assert.equal(iosLogProvesCapture('log: Invalid predicate: process == "X"'), false);
   assert.equal(iosLogProvesCapture('Df FitBudStaging: today loaded'), false);
   assert.equal(iosLogProvesCapture('Df FitBudStaging: Running "main"'), true);
+});
+
+// ---- Z5-6: BT16 (partial is non-zero) and G18 (empty logcat scores fail) ----
+
+/** Copies the all-pass scenario and lets the caller rewrite its logcat. */
+function allPassWithLogcat(logcat) {
+  const inDir = fs.mkdtempSync(path.join(os.tmpdir(), "qa-logcat-"));
+  fs.cpSync(path.join(fixtures, "all-pass"), inDir, { recursive: true });
+  const file = path.join(inDir, "logs", "logcat.log");
+  if (logcat === null) fs.rmSync(file);
+  else fs.writeFileSync(file, logcat);
+  return buildSummary({ inDir, outDir: fs.mkdtempSync(path.join(os.tmpdir(), "qa-report-")), expect: LEGACY_SUITES, meta: META, redact: makeRedactor(FAKE_ENV) });
+}
+
+test("G18: an Android run whose logcat is empty scores fail, not pass", () => {
+  const { summary } = allPassWithLogcat("");
+  assert.equal(suite(summary, "mobile").status, "fail");
+  assert.match(suite(summary, "mobile").reason, /holds none of the app's own output/);
+  assert.equal(summary.status, "fail");
+  assert.ok(summary.warnings.some((w) => w.startsWith("mobile: ")));
+  assert.deepEqual(validate(summary, schema), []);
+});
+
+test("G18: a missing logcat, or one with system noise but no app output, also scores fail", () => {
+  const missing = allPassWithLogcat(null).summary;
+  assert.equal(suite(missing, "mobile").status, "fail");
+  assert.match(suite(missing, "mobile").reason, /is missing/);
+  const noisy = allPassWithLogcat("11-05 05:41:02.113  900  900 I SystemServer: boot completed\n").summary;
+  assert.equal(suite(noisy, "mobile").status, "fail");
+  assert.equal(noisy.status, "fail");
+});
+
+test("G18: a logcat holding the app's Running \"main\" line still passes", () => {
+  const { summary } = allPassWithLogcat('11-05 05:41:02.113  4121  4121 I ReactNativeJS: Running "main"\n');
+  assert.equal(suite(summary, "mobile").status, "pass");
+  assert.equal(summary.status, "pass");
+  assert.equal(logcatProvesCapture('x ReactNativeJS: Running "main"'), true);
+  assert.equal(logcatProvesCapture(""), false);
+});
+
+test("BT16 CLI: a partial run exits 3 and says PARTIAL, a pass exits 0, malformed input still exits 2", () => {
+  const cli = path.join(here, "summarize.mjs");
+  const go = (sc, ...extra) => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "qa-cli-"));
+    const r = spawnSync("node", [cli, "--in", path.join(fixtures, sc), "--out", out, ...extra], { encoding: "utf8", env: { ...process.env, ...FAKE_ENV } });
+    return { ...r, out };
+  };
+  const partial = go("missing-suite", "--expect", "mobile,web,unit");
+  assert.equal(partial.status, 3, partial.stderr);
+  assert.match(partial.stderr, /PARTIAL, NOT A PASS: no results for web, unit/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(partial.out, "summary.json"), "utf8")).status, "partial", "summary.json is written before exiting 3");
+  assert.equal(go("all-pass", "--expect", "mobile,web,api,unit").status, 0);
+  assert.equal(go("truncated-junit").status, 2);
+  // A failing run that is also missing a suite is `fail` (exit 0 as before), not partial.
+  assert.equal(go("one-failure-per-suite").status, 0);
 });
