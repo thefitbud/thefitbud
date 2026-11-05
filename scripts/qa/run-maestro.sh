@@ -99,6 +99,12 @@ if [ "${QA_MAESTRO_SKIP_INSTALL:-0}" != "1" ]; then
 fi
 
 mkdir -p "$MOBILE_RESULTS" "$LOGS_DIR"
+# The log is one `logcat -d` taken after the whole suite. At the emulator's default
+# ring-buffer size the emulator's own chatter wraps the buffers within minutes and
+# evicts the app's `Running "main"` lines (run 41974112379: 4/4 flows passed, 7352
+# lines, no app output; Z5-5, #241). Make the buffers big enough to hold the suite.
+adb logcat -G 16M >/dev/null 2>&1 || echo "run-maestro: could not resize the logcat buffers" >&2
+echo "run-maestro: logcat buffers: $(adb logcat -g 2>/dev/null | tr '\n' ' ')"
 adb logcat -c || true
 
 # QT8 scans logs/logcat.log even when every flow passed. A failed `adb logcat`
@@ -120,6 +126,8 @@ capture_logcat() {
   if ! adb logcat -d >"$LOGS_DIR/logcat.log"; then
     echo "run-maestro: logcat capture failed" >&2
   fi
+  # shellcheck disable=SC2317
+  echo "run-maestro: logcat.log has $(wc -l <"$LOGS_DIR/logcat.log" 2>/dev/null || echo 0) lines, $(grep -c 'ReactNativeJS' "$LOGS_DIR/logcat.log" 2>/dev/null || true) from ReactNativeJS"
   # shellcheck disable=SC2317
   if ! grep -qF 'Running "main"' "$LOGS_DIR/logcat.log" 2>/dev/null; then
     lines="$(wc -l <"$LOGS_DIR/logcat.log" 2>/dev/null || echo 0)"

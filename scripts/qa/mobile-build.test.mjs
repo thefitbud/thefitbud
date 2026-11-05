@@ -250,3 +250,52 @@ test("the changes filter counts the Maestro build and run scripts as mobile", ()
     assert.ok(!matches(file), `${file} should not run the Maestro jobs`);
   }
 });
+
+test("run-maestro enlarges the logcat buffers before it clears them and runs the suite", () => {
+  const dir = tmp();
+  const calls = path.join(dir, "calls.log");
+  write(
+    path.join(dir, "bin/adb"),
+    `#!/bin/bash
+echo "adb $*" >> ${JSON.stringify(calls)}
+case "$*" in
+  "logcat -d") echo '11-05 05:41:02.113  4121  4121 I ReactNativeJS: Running "main"'; exit 0 ;;
+  "logcat -g") echo "main: ring buffer is 16 MiB"; exit 0 ;;
+  "shell settings get global hide_error_dialogs") printf '1'; exit 0 ;;
+  *) exit 0 ;;
+esac
+`,
+    0o755,
+  );
+  write(
+    path.join(dir, "bin/maestro"),
+    `#!/bin/bash
+echo "maestro test" >> ${JSON.stringify(calls)}
+printf '%s\\n' '<testsuite></testsuite>' > junit.xml
+exit 0
+`,
+    0o755,
+  );
+  const r = spawnSync("bash", [path.join(here, "run-maestro.sh")], {
+    cwd: repo,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${path.join(dir, "bin")}:${process.env.PATH}`,
+      QA_TEST_OTP_CODE: "000000",
+      FITBUD_QA_PASSWORD: "not-a-real-password",
+      QA_MAESTRO_SKIP_INSTALL: "1",
+      QA_RESULTS_DIR: path.join(dir, "qa-results"),
+      QA_MAESTRO_TAG: "smoke",
+    },
+  });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const log = fs.readFileSync(calls, "utf8").split("\n");
+  const grow = log.indexOf("adb logcat -G 16M");
+  const clear = log.indexOf("adb logcat -c");
+  const suite = log.indexOf("maestro test");
+  assert.ok(grow >= 0, "the buffers are resized");
+  assert.ok(grow < clear && clear < suite, "resize, then clear, then the suite");
+  assert.match(r.stdout, /logcat buffers: main: ring buffer is 16 MiB/);
+  assert.match(r.stdout, /logcat\.log has 1 lines, 1 from ReactNativeJS/);
+});
