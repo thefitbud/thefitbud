@@ -21,10 +21,13 @@
 #
 # xcodebuild itself does not sign (CODE_SIGNING_ALLOWED=NO). The runner has no
 # development certificate, and the app's push and App Group entitlements would
-# make a normal signature demand one. The .app is ad-hoc signed afterwards
-# (sign-ios-simulator-app.sh). An unsigned simulator build has no keychain
-# identity: SecureStore fails with -34018 and the auth screen never appears
-# (CU25). Ad-hoc signing needs no certificate and no secret.
+# make a normal signature demand one. The keychain entitlements are embedded in
+# the binary by the linker (LD_ENTITLEMENTS_SECTION) and the .app is ad-hoc
+# signed afterwards, with no entitlements in the signature
+# (sign-ios-simulator-app.sh, Z5-5). Without the entitlements SecureStore fails
+# with -34018 and the auth screen never appears (CU25); with them in the
+# signature the app is killed at launch (Z5-5). Ad-hoc signing needs no
+# certificate and no secret.
 #
 # Environment (all optional):
 #   QA_IOS_APP_DIR     where the finished .app is copied
@@ -101,8 +104,11 @@ echo "build-ios-sim: expo prebuild"
 IOS_DIR="$MOBILE/ios"
 [ -d "$IOS_DIR" ] || die "expo prebuild produced no apps/mobile/ios."
 
+# shellcheck source=ios-build-helpers.sh
+source "$(dirname "${BASH_SOURCE[0]}")/ios-build-helpers.sh"
+
 echo "build-ios-sim: pod install"
-(cd "$IOS_DIR" && pod install)
+(cd "$IOS_DIR" && pod_install_with_retry) || die "pod install failed."
 
 WORKSPACE="$(find "$IOS_DIR" -maxdepth 1 -name '*.xcworkspace' -type d | sort | head -n 1)"
 [ -n "$WORKSPACE" ] || die "no .xcworkspace under apps/mobile/ios after pod install."
@@ -122,6 +128,25 @@ else
 fi
 echo "build-ios-sim: workspace=$(basename "$WORKSPACE") scheme=$SCHEME"
 
+# @sentry/react-native's Xcode phases resolve @sentry/cli from apps/mobile/ios, where
+# pnpm does not link it, and fail the build before they read
+# SENTRY_DISABLE_AUTO_UPLOAD (Z5-5, see ios-build-helpers.sh). xcodebuild passes its
+# environment to the phase scripts, which skip that resolve when this is set. The
+# upload stays off: nothing here enables it.
+SENTRY_CLI_EXECUTABLE="$(resolve_sentry_cli "$MOBILE")" || die "cannot locate @sentry/react-native's sentry-cli; the Sentry Xcode phases would fail the build."
+export SENTRY_CLI_EXECUTABLE
+echo "build-ios-sim: sentry-cli for the Xcode phases at $SENTRY_CLI_EXECUTABLE"
+
+# The keychain entitlements go into the binary, not the code signature (Z5-5, see
+# sign-ios-simulator-app.sh): the linker embeds this plist in __TEXT,__entitlements,
+# which is where the simulator reads entitlements from, exactly as Xcode does for its
+# own simulator builds. An ad-hoc signature carrying them is killed at launch.
+SIM_ENTITLEMENTS="$DERIVED/simulator-entitlements.xcent"
+mkdir -p "$DERIVED"
+node "$ROOT/scripts/qa/simulator-keychain-entitlements.mjs" "$EXPECTED_BUNDLE_ID" >"$SIM_ENTITLEMENTS" \
+  || die "could not write the simulator entitlements plist."
+echo "build-ios-sim: embedding $SIM_ENTITLEMENTS in __TEXT,__entitlements"
+
 echo "build-ios-sim: xcodebuild"
 xcodebuild \
   -workspace "$WORKSPACE" \
@@ -133,6 +158,7 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
+  LD_ENTITLEMENTS_SECTION="$SIM_ENTITLEMENTS" \
   build
 
 PRODUCTS="$DERIVED/Build/Products/$CONFIGURATION-iphonesimulator"

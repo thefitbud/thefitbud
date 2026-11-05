@@ -35,7 +35,8 @@ tags:
 - tapOn:
     below: "6-digit code"
 - inputText: ${QA_OTP_CODE}
-- hideKeyboard:
+- tapOn:
+    text: "Sent to .*"
     optional: true
 # QT9: a double tap on Verify must produce one sign-in and no error. The first
 # tap starts the request; the second lands while it is in flight (or after the
@@ -61,7 +62,8 @@ tags:
       - eraseText:
           charactersToErase: 12
           optional: true
-      - hideKeyboard:
+      - tapOn:
+          text: "Sent to .*"
           optional: true
 - extendedWaitUntil:
     visible: "Today's workout|Needs you|Choose mode"

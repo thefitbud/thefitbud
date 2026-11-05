@@ -105,17 +105,19 @@ APP="${apps[0]:-}"
 APP_EXECUTABLE="$(plutil -extract CFBundleExecutable raw "$APP/Info.plist")"
 [ -n "$APP_EXECUTABLE" ] || die "$APP/Info.plist has no CFBundleExecutable."
 
-# An unsigned app reaches the simulator and then fails every flow on the first
-# step: SecureStore throws -34018 and the offline screen replaces sign-in
-# (CU25). Refuse to install that app. codesign writes the entitlements to
-# stdout and a note to stderr; a missing signature is a non-zero status.
-IOS_ENTITLEMENTS="$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)"
-# Here-strings, not a pipe into `grep -q`: under pipefail a pipe can die with
-# SIGPIPE even when the key is present.
-grep -q -F '<key>keychain-access-groups</key>' <<<"$IOS_ENTITLEMENTS" \
-  || die "the simulator app has no keychain-access-groups entitlement, so SecureStore fails with -34018 and the auth screen never appears. build-ios-sim.sh must ad-hoc sign it."
-grep -q -F '<key>application-identifier</key>' <<<"$IOS_ENTITLEMENTS" \
-  || die "the simulator app has no application-identifier entitlement, so the keychain refuses every read. build-ios-sim.sh must ad-hoc sign it."
+# An app without keychain entitlements fails every flow on the first step:
+# SecureStore throws -34018 and the offline screen replaces sign-in (CU25). An
+# app whose ad-hoc signature carries them is killed at launch with "Taskgated
+# Invalid Signature" (Z5-5, run 41979502253). Refuse both before installing: the
+# entitlements must be embedded in the binary's __TEXT,__entitlements section and
+# absent from the code signature (sign-ios-simulator-app.sh).
+# shellcheck source=sign-ios-simulator-app.sh
+source "$(dirname "${BASH_SOURCE[0]}")/sign-ios-simulator-app.sh"
+APP_BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist")"
+ios_embedded_entitlements_ok "$APP" "$APP_BUNDLE_ID" \
+  || die "the simulator app has no embedded keychain entitlements, so SecureStore fails with -34018 and the auth screen never appears. build-ios-sim.sh must embed them (LD_ENTITLEMENTS_SECTION)."
+ios_signature_unrestricted "$APP" \
+  || die "the simulator app's code signature carries restricted entitlements, so macOS kills it at launch. sign-ios-simulator-app.sh must sign it without --entitlements."
 
 xcrun simctl bootstatus "$UDID" -b
 
@@ -143,6 +145,39 @@ stop_log_stream() {
   wait "$LOG_PID" 2>/dev/null || true
 }
 trap stop_log_stream EXIT
+
+# Launch probe (Z5-5, #241). In run 41974112379 every flow failed at its first
+# launchApp step with no reason in the job log and no app process in the simulator
+# log. Launch once here and print what simctl says, so a launch refusal or an
+# immediate crash is visible in the job log. Diagnostic only: it never changes the
+# exit code, which belongs to Maestro.
+BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist" 2>/dev/null || true)"
+CRASH_MARK="$LOGS_DIR/.ios-suite-start"
+: >"$CRASH_MARK"
+if [ -n "$BUNDLE_ID" ]; then
+  echo "run-maestro-ios: launch probe: $(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1 | tr '\n' ' ')"
+  sleep 8
+  if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -qF "$BUNDLE_ID"; then
+    echo "run-maestro-ios: launch probe: $BUNDLE_ID is running after 8 s"
+  else
+    echo "::warning title=iOS launch probe::$BUNDLE_ID is not running 8 s after simctl launch; see the crash report lines below."
+  fi
+  xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+fi
+
+# Prints the decisive lines of any crash report the simulator wrote for the app
+# since the probe started, and the first failure reason of each flow.
+print_ios_failure_evidence() {
+  local report
+  while IFS= read -r report; do
+    [ -n "$report" ] || continue
+    echo "run-maestro-ios: crash report $(basename "$report"):"
+    grep -E '"(exception|termination|type|signal|codes|indicator|namespace|reasons)"|^(Exception Type|Exception Codes|Termination Reason|Triggered by Thread|Crashed Thread)' "$report" 2>/dev/null | cut -c1-300 | sed -n '1,20p' || true
+  done < <(find "$HOME/Library/Logs/DiagnosticReports" -type f -newer "$CRASH_MARK" \( -name "${APP_EXECUTABLE}*" -o -name "*${BUNDLE_ID:-none}*" \) 2>/dev/null | sort)
+  if [ -f "$IOS_RESULTS/junit.xml" ]; then
+    grep -oE 'failure message="[^"]{0,300}' "$IOS_RESULTS/junit.xml" 2>/dev/null | sed 's/^/run-maestro-ios: /' || true
+  fi
+}
 
 echo "run-maestro-ios: tag=$TAG udid=$UDID workspace=$WORKSPACE results=$IOS_RESULTS"
 
@@ -193,6 +228,10 @@ fi
 if ! grep -qF 'Running "main"' "$SIM_LOG" 2>/dev/null; then
   echo "::warning title=Simulator log capture produced nothing::$SIM_LOG holds none of the app's own output ($(wc -l <"$SIM_LOG" 2>/dev/null || echo 0) lines), so the iOS crash scan had nothing to scan. The log stream --predicate probably did not match the app process (CFBundleExecutable is \"$APP_EXECUTABLE\")."
   echo "run-maestro-ios: WARNING $SIM_LOG shows no app output; the crash scan proved nothing" >&2
+fi
+
+if [ "$maestro_status" -ne 0 ]; then
+  print_ios_failure_evidence
 fi
 
 echo "run-maestro-ios: maestro exited $maestro_status"

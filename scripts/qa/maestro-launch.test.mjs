@@ -50,38 +50,59 @@ test("the entitlements CLI writes the same plist and refuses a bad id", () => {
   assert.equal(bad.stdout, "");
 });
 
+// Z5-5 (#241): the CU25 signing assertions below were replaced, with Firoz's
+// approval (5 Nov 2026, via the W5 orchestrator), because an ad-hoc signature
+// carrying restricted entitlements is killed at launch ("Taskgated Invalid
+// Signature", run 41979502253). They now pin the replacement design: the
+// entitlements are embedded in __TEXT,__entitlements and the ad-hoc signature
+// carries none.
 function fakeCodesign(dir, mode) {
   const log = path.join(dir, "codesign.log");
   const dump = path.join(dir, "dump.plist");
   const bin = path.join(dir, "bin");
-  fs.mkdirSync(bin);
+  fs.mkdirSync(bin, { recursive: true });
+  // mode "record": a signature has whatever --entitlements put in it (nothing
+  // when the flag is absent). mode "restricted": the signature always reads
+  // back with a keychain entitlement in it.
   const script = `#!/bin/bash
 printf '%s\\n' "$*" >> ${JSON.stringify(log)}
 if [ "\$1" = "-d" ]; then
-  cat ${JSON.stringify(dump)}
+  if [ ${JSON.stringify(mode)} = "restricted" ]; then
+    printf '%s\\n' '<plist><dict><key>keychain-access-groups</key><array><string>${BUNDLE_ID}</string></array></dict></plist>'
+  elif [ -f ${JSON.stringify(dump)} ]; then
+    cat ${JSON.stringify(dump)}
+  fi
   exit 0
 fi
 prev=""
 for a in "\$@"; do
   if [ "\$prev" = "--entitlements" ]; then
-    if [ ${JSON.stringify(mode)} = "drop-keychain" ]; then
-      printf '%s\\n' '<plist><dict><key>application-identifier</key><string>${BUNDLE_ID}</string></dict></plist>' > ${JSON.stringify(dump)}
-    else
-      cp "\$a" ${JSON.stringify(dump)}
-    fi
+    cp "\$a" ${JSON.stringify(dump)}
   fi
   prev="\$a"
 done
 exit 0
 `;
   fs.writeFileSync(path.join(bin, "codesign"), script, { mode: 0o755 });
+  // otool -l lists a __entitlements section when the binary carries the plist.
+  const otool = `#!/bin/bash
+f="\${@: -1}"
+if grep -a -q -F '<key>keychain-access-groups</key>' "\$f"; then
+  printf '%s\\n' 'Section' '  sectname __entitlements' '   segname __TEXT'
+fi
+printf '%s\\n' 'Section' '  sectname __text' '   segname __TEXT'
+exit 0
+`;
+  fs.writeFileSync(path.join(bin, "otool"), otool, { mode: 0o755 });
   return { bin, log };
 }
 
-function fixtureApp(dir) {
+function fixtureApp(dir, { embedded = true } = {}) {
   const app = path.join(dir, "FitBudStaging.app");
   fs.mkdirSync(path.join(app, "Frameworks", "Inner.framework"), { recursive: true });
   fs.mkdirSync(path.join(app, "PlugIns", "Widget.appex"), { recursive: true });
+  const body = embedded ? `\u0000\u0001MACHO${keychainEntitlementsPlist(BUNDLE_ID)}\u0000` : "\u0000\u0001MACHO\u0000";
+  fs.writeFileSync(path.join(app, "FitBudStaging"), body);
   return app;
 }
 
@@ -105,31 +126,51 @@ function sign(app, env) {
   );
 }
 
-test("ad-hoc signing embeds the keychain entitlement and signs nested bundles first", () => {
+test("ad-hoc signing carries no entitlements and signs nested bundles first", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cu25-sign-"));
   const { bin, log } = fakeCodesign(dir, "record");
   const result = sign(fixtureApp(dir), { bin });
   assert.equal(result.status, 0, result.stderr);
   const lines = fs.readFileSync(log, "utf8").trim().split("\n");
-  const nested = lines.filter((line) => !line.startsWith("-d"));
-  const outerAt = nested.findIndex((line) => line.includes("--entitlements"));
-  const innerAt = nested.findIndex((line) => line.includes("Inner.framework"));
-  const widgetAt = nested.findIndex((line) => line.includes("Widget.appex"));
-  assert.ok(outerAt > innerAt && innerAt >= 0, nested.join("\n"));
-  assert.ok(outerAt > widgetAt && widgetAt >= 0, nested.join("\n"));
-  const outer = nested[outerAt];
-  assert.ok(outer.includes("--generate-entitlement-der"));
-  assert.ok(outer.includes("FitBudStaging.app"));
-  assert.ok(lines.at(-1).startsWith("-d "), lines.join("\n"));
+  const signing = lines.filter((line) => !line.startsWith("-d"));
+  for (const line of signing) {
+    assert.ok(!line.includes("--entitlements"), `no signature may carry entitlements: ${line}`);
+    assert.ok(line.startsWith("--force --sign - "), line);
+  }
+  const outerAt = signing.findIndex((line) => line.endsWith("FitBudStaging.app"));
+  const innerAt = signing.findIndex((line) => line.includes("Inner.framework"));
+  const widgetAt = signing.findIndex((line) => line.includes("Widget.appex"));
+  assert.ok(outerAt > innerAt && innerAt >= 0, signing.join("\n"));
+  assert.ok(outerAt > widgetAt && widgetAt >= 0, signing.join("\n"));
+  assert.ok(lines.at(-1).startsWith("-d "), "the signature is read back after signing");
   assert.match(result.stdout, /ad-hoc signed FitBudStaging\.app as com\.thefitbud\.mobile\.staging/);
 });
 
-test("signing refuses a signature that dropped the keychain entitlement", () => {
+test("signing refuses a signature that carries a restricted entitlement", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cu25-sign-"));
-  const { bin } = fakeCodesign(dir, "drop-keychain");
+  const { bin } = fakeCodesign(dir, "restricted");
   const result = sign(fixtureApp(dir), { bin });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /no keychain-access-groups entitlement/);
+  assert.match(result.stderr, /restricted entitlement <key>keychain-access-groups<\/key>/);
+});
+
+test("signing refuses a binary without the embedded keychain entitlements", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cu25-sign-"));
+  const { bin, log } = fakeCodesign(dir, "record");
+  const result = sign(fixtureApp(dir, { embedded: false }), { bin });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /no __TEXT,__entitlements section/);
+  assert.ok(!fs.existsSync(log), "nothing is signed when the entitlements are missing");
+});
+
+test("the simulator build embeds the entitlements through the linker", () => {
+  const src = read("build-ios-sim.sh");
+  const plist = src.indexOf('simulator-keychain-entitlements.mjs" "$EXPECTED_BUNDLE_ID" >"$SIM_ENTITLEMENTS"');
+  const xcodebuild = src.indexOf("\nxcodebuild \\");
+  const section = src.indexOf('LD_ENTITLEMENTS_SECTION="$SIM_ENTITLEMENTS"');
+  const buildArg = src.indexOf("\n  build\n");
+  assert.ok(plist > 0 && plist < xcodebuild, "the plist is written before xcodebuild");
+  assert.ok(section > xcodebuild && section < buildArg, "and handed to xcodebuild's linker");
 });
 
 test("the simulator build signs after xcodebuild and before it reports the app written", () => {
@@ -142,14 +183,15 @@ test("the simulator build signs after xcodebuild and before it reports the app w
   assert.ok(wrote > sign);
 });
 
-test("the iOS runner refuses to install an app with no keychain entitlement", () => {
+test("the iOS runner refuses an app without embedded entitlements or with a restricted signature", () => {
   const src = read("run-maestro-ios.sh");
-  const guard = src.indexOf("<key>keychain-access-groups</key>");
+  const embedded = src.indexOf('ios_embedded_entitlements_ok "$APP" "$APP_BUNDLE_ID"');
+  const unrestricted = src.indexOf('ios_signature_unrestricted "$APP"');
   const install = src.indexOf("simctl install");
   const maestro = src.indexOf("maestro --device");
-  assert.ok(guard > 0);
-  assert.ok(install > guard);
-  assert.ok(maestro > guard);
+  assert.ok(embedded > 0 && unrestricted > 0);
+  assert.ok(install > embedded && install > unrestricted);
+  assert.ok(maestro > embedded && maestro > unrestricted);
 });
 
 function fakeAdb(dir, reply) {

@@ -136,7 +136,9 @@ jobs:
           fi
           files=$(git diff --name-only "$BASE...$HEAD")
           echo "$files"
-          mobile=$(echo "$files" | grep -Ec '^(apps/mobile/|packages/ui-mobile/)' || true)
+          # The scripts that build the apps, boot the devices and run Maestro count as
+          # mobile too: a change to them can only be proven by the Maestro jobs (Z5-5).
+          mobile=$(echo "$files" | grep -Ec '^(apps/mobile/|packages/ui-mobile/|scripts/qa/(build-android-apk|build-ios-sim|ios-build-helpers|sign-ios-simulator-app|simulator-keychain-entitlements|android-emulator-prep|android-system-image|run-maestro|run-maestro-ios)\.(sh|mjs)$)' || true)
           # scripts/qa/** is invisible to pnpm lint, pnpm typecheck and pnpm test
           # (pnpm-workspace.yaml covers apps/* and packages/* only), so this workflow
           # is the only place its tests can run. See the qa-scripts job.
@@ -718,6 +720,13 @@ jobs:
             ~/.android/avd/*
             ~/.android/adb*
           key: avd-api34-${{ runner.os }}
+
+      # emulator-runner downloads the system image once and fails on a corrupt
+      # download (run 41960026903, "Error on ZipFile unknown archive"). Installing it
+      # here with retries makes emulator-runner's own install a no-op (Z5-5).
+      - name: Install the emulator system image
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: scripts/qa/android-system-image.sh
 
       - name: Create the AVD snapshot
         if: ${{ steps.guard.outputs.secrets == 'true' && steps.avd-cache.outputs.cache-hit != 'true' }}
