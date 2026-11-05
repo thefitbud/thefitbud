@@ -13,8 +13,15 @@ export const SKIP_MESSAGE = "skipped: QA secrets not set";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const API_DIR = path.resolve(here, "../../../api");
+/**
+ * This suite's own persona set (D-W5-14). The expectation files are keyed by suite;
+ * the staging web suite reads `suites.web` only and signs in only as those accounts,
+ * so the API smoke's and the Maestro suites' writes never change what it reads.
+ */
+export const QA_WEB_SUITE = "web";
 const COMMITTED_EXPECTATIONS = path.join(API_DIR, "src/seed/qa/expectations.json");
-const RUN_EXPECTATIONS = path.join(API_DIR, ".qa-seed/expectations.json");
+/** Written by `qa-seed.ts --suite web` for the run that seeded this suite's world. */
+const RUN_EXPECTATIONS = path.join(API_DIR, ".qa-seed", QA_WEB_SUITE, "expectations.json");
 
 type Env = Record<string, string | undefined>;
 
@@ -48,11 +55,23 @@ export type QaExpectations = {
   accounts: QaAccount[];
 };
 
+/** Both expectation files: `{ referenceDate, suites: { <suite>: { guarantees, accounts } } }`. */
+type QaExpectationsFile = {
+  referenceDate?: string;
+  suites?: Record<string, Omit<QaExpectations, "referenceDate"> | undefined>;
+};
+
+/** The web suite's entry of a keyed expectations file, or `undefined` when it has none. */
+export function webSuiteEntry(file: QaExpectationsFile): Omit<QaExpectations, "referenceDate"> | undefined {
+  return file.suites?.[QA_WEB_SUITE];
+}
+
 /**
- * Ids, emails and names come from the COMMITTED file (stable for every reference
- * date). Anything dated comes from this run's own copy when the nightly job left one
- * (`apps/api/.qa-seed/expectations.json`); the committed copy carries a stale
- * reference date. This suite only needs `referenceDate` from the run copy, for the log.
+ * Ids, emails and names come from the COMMITTED file's `suites.web` (stable for every
+ * reference date). Anything dated comes from this run's own copy when the nightly job
+ * left one (`apps/api/.qa-seed/web/expectations.json`); the committed copy carries a
+ * stale reference date. This suite only needs `referenceDate` from the run copy, for
+ * the log, and only from a copy that seeded the web suite.
  */
 export function loadExpectations(env: Env = process.env): QaExpectations {
   const committedPath = env.QA_EXPECTATIONS_FILE || COMMITTED_EXPECTATIONS;
@@ -62,13 +81,17 @@ export function loadExpectations(env: Env = process.env): QaExpectations {
         "Set QA_EXPECTATIONS_FILE to point at one.",
     );
   }
-  const committed = JSON.parse(readFileSync(committedPath, "utf8")) as QaExpectations;
-  let referenceDate = committed.referenceDate;
-  if (!env.QA_EXPECTATIONS_FILE && existsSync(RUN_EXPECTATIONS)) {
-    const run = JSON.parse(readFileSync(RUN_EXPECTATIONS, "utf8")) as Partial<QaExpectations>;
-    if (typeof run.referenceDate === "string") referenceDate = run.referenceDate;
+  const committed = JSON.parse(readFileSync(committedPath, "utf8")) as QaExpectationsFile;
+  const entry = webSuiteEntry(committed);
+  if (!entry) {
+    throw new Error(`QA expectations have no "${QA_WEB_SUITE}" suite (D-W5-14); re-run qa-seed --update-expectations.`);
   }
-  return { ...committed, referenceDate };
+  let referenceDate = committed.referenceDate ?? "";
+  if (!env.QA_EXPECTATIONS_FILE && existsSync(RUN_EXPECTATIONS)) {
+    const run = JSON.parse(readFileSync(RUN_EXPECTATIONS, "utf8")) as QaExpectationsFile;
+    if (webSuiteEntry(run) && typeof run.referenceDate === "string") referenceDate = run.referenceDate;
+  }
+  return { ...entry, referenceDate };
 }
 
 export function account(expectations: QaExpectations, key: string): QaAccount {

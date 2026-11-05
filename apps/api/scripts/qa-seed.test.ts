@@ -37,7 +37,9 @@ import {
   QA_GUARANTEES,
   qaReferenceInstant,
   stableExpectations,
+  suiteExpectations,
   type QaExpectations,
+  type QaExpectationsFile,
   type QaSeedResult,
 } from "../src/seed/qa/build.js";
 import { localDayStartIso } from "../src/seed/demo/ids.js";
@@ -52,8 +54,13 @@ const OTHER_REFERENCE_DATE = "2026-11-09";
 const TEST_QA_PASSWORD = "qa-seed-vitest-input-2026";
 
 const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const committedExpectations = JSON.parse(
-  readFileSync(path.join(apiRoot, "src/seed/qa/expectations.json"), "utf8"),
+// The committed file is keyed by suite (D-W5-14, Z5-7); this file tests the `api`
+// suite (the QA1 world, which `buildQaSeed` builds by default), so it reads that entry.
+const committedExpectations = suiteExpectations(
+  JSON.parse(
+    readFileSync(path.join(apiRoot, "src/seed/qa/expectations.json"), "utf8"),
+  ) as QaExpectationsFile,
+  "api",
 ) as QaExpectations;
 
 type Sqlite = MemoryDbHandle["sqlite"];
