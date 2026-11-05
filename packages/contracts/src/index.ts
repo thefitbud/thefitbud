@@ -12,6 +12,9 @@ export {
   authOtpVerifyResponseSchema,
   authPasswordResetRequestSchema,
   authPasswordSetRequestSchema,
+  authRefreshRequestSchema,
+  authRefreshResponseSchema,
+  authTokenKindSchema,
   authTokenResponseSchema,
   type AuthLoginRequest,
   type AuthOtpStartRequest,
@@ -20,6 +23,9 @@ export {
   type AuthOtpVerifyResponse,
   type AuthPasswordResetRequest,
   type AuthPasswordSetRequest,
+  type AuthRefreshRequest,
+  type AuthRefreshResponse,
+  type AuthTokenKind,
   type AuthTokenResponse,
 } from "./auth.js";
 

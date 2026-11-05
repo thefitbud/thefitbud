@@ -10,6 +10,12 @@ Everything design lives here. **One file per screen state; if it is not in `mock
 2. **Original frames** (approved 18–21 Oct): [DESIGN-NOTES.md](DESIGN-NOTES.md). Where an original frame shows something a v3 decision changed (old Today ring card, old trainer tab bar "Attention · Clients · Check-ins · More", the exception drawer), follow the v3 decision; the Status column flags these.
 3. Content rules always apply: [../spec/01-product-rules.md](../spec/01-product-rules.md), [../spec/banned-strings.json](../spec/banned-strings.json).
 
+**Locked without a frame (31 Oct 2026, owner):** the trainer-web note-saved confirmation (TW-34; the old web toast frame 134 was removed on 22 Oct).
+- Saving a note closes the drawer and shows "Saved privately" or "Shared with <first name>" in the deep-navy bottom pill (`.home-toast`, the same pattern as the Home toast and mobile frame 05) for 4 s.
+- The confirmation lives in the client workspace, not in the drawer, so the workspace refresh after a save cannot remove it.
+- Reference screenshots: `docs/qa/TW-34/` (1440 × 900).
+- Build to this; do not stop for a missing frame.
+
 Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Meals/Steps chips); Active workout (11, 11b) is **light**; Mark reviewed moves the client to a Reviewed section until every item is resolved; every coach gets a Sessions tab (calendar lives inside Sessions on web); client Check-ins tab with an Overdue filter is web/iPad only (trainer-mobile check-in history removed; trainer mobile = quick jobs).
 
 ## Layout
@@ -96,6 +102,7 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 27 | Live Activity | collapsed (state 1 of 2) | iOS | [27-trainee-lock-live-activity-ios.png](mockups/png/27-trainee-lock-live-activity-ios.png) | — | Approved |
 | 27b | Live Activity | expanded, touch and hold (state 2 of 2) | iOS | [27b-trainee-live-activity-expanded-ios.png](mockups/png/27b-trainee-live-activity-expanded-ios.png) | — | Approved |
 | 27c | Live Activity | collapsed, resting | iOS | [27c-trainee-lock-live-rest-ios.png](mockups/png/27c-trainee-lock-live-rest-ios.png) | — | Approved |
+| 27 rest | Workout ongoing notification (Android) | resting · countdown only, no bar (D-W3-13) | Android | [27-android-rest.png](mockups/png/27-android-rest.png) | [html](mockups/html/27-android-rest.html) | Approved · updated 3 Nov 2026 (bar removed) |
 | 28 | Lock · meal reminder | Open + Snooze | iOS | [28-trainee-lock-meal-push-ios.png](mockups/png/28-trainee-lock-meal-push-ios.png) | [html](mockups/html/28-trainee-lock-meal-push-ios.html) | Approved |
 | 29 | In-app banner | meal over v3 Today | iOS | [29-trainee-inapp-meal-v3-ios.png](mockups/png/29-trainee-inapp-meal-v3-ios.png) | [html](mockups/html/29-trainee-inapp-meal-v3-ios.html) | Locked (22 Oct round, locked 28 Oct) · on v3 Today |
 | 29b | In-app banner | coach note over v3 Today | iOS | [29b-trainee-inapp-note-v3-ios.png](mockups/png/29b-trainee-inapp-note-v3-ios.png) | [html](mockups/html/29b-trainee-inapp-note-v3-ios.html) | Locked (22 Oct round, locked 28 Oct) · on v3 Today |
@@ -127,6 +134,16 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | 54 | Android 13 permission prompt | Default | Android | [54-trainer-mobile-permission-prompt-android.png](mockups/png/54-trainer-mobile-permission-prompt-android.png) | — | Approved |
 | 55 | Profile | Default | iOS | [55-trainer-mobile-profile-ios.png](mockups/png/55-trainer-mobile-profile-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 56 | Help | no mail app sheet | iOS | [56-trainer-mobile-help-sheet-ios.png](mockups/png/56-trainer-mobile-help-sheet-ios.png) | — | Approved · old tab bar: use v3 tabs |
+| DS5 | Sign in | legal footer below help | iOS | [ds5-ios-signin-footer.png](mockups/png/ds5-ios-signin-footer.png) | [html](mockups/html/ds5-ios-signin-footer.html) | Approved (DS5) |
+| DS5 | Sign in | legal footer below help | Web | [ds5-web-signin-footer.png](mockups/png/ds5-web-signin-footer.png) | [html](mockups/html/ds5-web-signin-footer.html) | Approved (DS5) |
+| DS5 | More (trainee) | Legal group | iOS | [ds5-ios-more-legal.png](mockups/png/ds5-ios-more-legal.png) | [html](mockups/html/ds5-ios-more-legal.html) | Approved (DS5) |
+| DS5 | Privacy policy | in-app browser | iOS | [ds5-ios-privacy.png](mockups/png/ds5-ios-privacy.png) | [html](mockups/html/ds5-ios-privacy.html) | Approved (DS5) |
+| DS5 | Terms of use | in-app browser | iOS | [ds5-ios-terms.png](mockups/png/ds5-ios-terms.png) | [html](mockups/html/ds5-ios-terms.html) | Approved (DS5) |
+| DS5 | Credits and licences | in-app browser | iOS | [ds5-ios-credits.png](mockups/png/ds5-ios-credits.png) | [html](mockups/html/ds5-ios-credits.html) | Approved (DS5) |
+| DS5 | Privacy policy | public page | Web | [ds5-web-privacy.png](mockups/png/ds5-web-privacy.png) | [html](mockups/html/ds5-web-privacy.html) | Approved (DS5) |
+| DS5 | Terms of use | public page | Web | [ds5-web-terms.png](mockups/png/ds5-web-terms.png) | [html](mockups/html/ds5-web-terms.html) | Approved (DS5) |
+| DS5 | Credits and licences | public page | Web | [ds5-web-credits.png](mockups/png/ds5-web-credits.png) | [html](mockups/html/ds5-web-credits.html) | Approved (DS5) |
+| DS5 | More (trainer) | frame 51 layout + Legal group (D-W3-14) | iOS | [ds5-ios-trainer-more-legal.png](mockups/png/ds5-ios-trainer-more-legal.png) | [html](mockups/html/ds5-ios-trainer-more-legal.html) | Approved 3 Nov 2026 · replaces 51 for BT3d |
 | 57 | Sign out confirm | Default | iOS | [57-trainer-mobile-signout-confirm-ios.png](mockups/png/57-trainer-mobile-signout-confirm-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 58 | Notification settings | offline, save failed snackbar | iOS | [58-trainer-mobile-more-offline-ios.png](mockups/png/58-trainer-mobile-more-offline-ios.png) | — | Approved · old tab bar: use v3 tabs |
 | 59 | Role select | Default | iOS | [59-trainer-mobile-role-select-ios.png](mockups/png/59-trainer-mobile-role-select-ios.png) | — | Approved · old tab bar: use v3 tabs |
@@ -299,3 +316,28 @@ Locked decisions in brief: Today = Option B (kcal ring + macro bars + Workout/Me
 | IP-13 | Single-client logging | during session | iOS | [IP-13-trainer-mobile-single-log-v3-ios.png](mockups/png/IP-13-trainer-mobile-single-log-v3-ios.png) | [html](mockups/html/IP-13-trainer-mobile-single-log-v3-ios.html) | **Locked** (v3, 21 Oct) |
 | IP-14 | After-session quick log | sheet | iOS | [IP-14-trainer-mobile-after-quick-log-v3-ios.png](mockups/png/IP-14-trainer-mobile-after-quick-log-v3-ios.png) | [html](mockups/html/IP-14-trainer-mobile-after-quick-log-v3-ios.html) | **Locked** (v3, 21 Oct) |
 | IP-16 | Suggest a change (trainee) | coach-logged set | iOS | [IP-16-trainee-suggest-change-v3-ios.png](mockups/png/IP-16-trainee-suggest-change-v3-ios.png) | [html](mockups/html/IP-16-trainee-suggest-change-v3-ios.html) | **Locked** (v3, 21 Oct) |
+
+## W5–W12 frames (DS1–DS4, DS6, DS7, BP1): approval
+Batch refs updated 4 Nov 2026 to PLAN-v2 numbering: DS1, DS2, DS4, DS7 → W7; DS3 → W8; BP1 → **W12** (Z12-29, Z12-30); DS6 → **superseded by DS8** for in-person logging (PLAN-v2 D-P2-15), the rest parked with Phase 10 (W14).
+Firoz approved these frames on 3 Nov 2026. They are the target, but the coding agent may refine layout and details for better UI/UX while building, as long as the spec's behaviour and copy are kept.
+
+## DS8: trainer mobile in-person workout logging (W10 Z10-16–Z10-18, W9 Z9-11)
+Drawn 4 Nov 2026 by FitBud UI with `mockups/tools/ds8_frames.py` (same tokens and the trainee set-entry row and kg keypad from frames 11/11b/11c). iOS 390×844 @3x. **Approved by Firoz 4 Nov 2026.** The live-logging frames (DS8 b and c) stay in the mockups, approved and parked for Phase 10 (W14) implementation (PLAN-v2 D-P2-21). The a, d and W9 frames are used in beta for trainer log/edit (Z10-16, Z9-11). Supersedes DS6 for in-person logging; the rest of DS6 stays parked with Phase 10 (W14).
+
+| ID | Screen | State | Platform | Frame | HTML | Status |
+|---|---|---|---|---|---|---|
+| DS8 | Start workout | pick clients + mode (live / past) | iOS | [DS8-a1-start-pick-mode-ios.png](mockups/png/DS8-a1-start-pick-mode-ios.png) | [html](mockups/html/DS8-a1-start-pick-mode-ios.html) | Approved by Firoz 4 Nov 2026 |
+| DS8 | Start workout | empty: no workouts today | iOS | [DS8-a2-start-empty-ios.png](mockups/png/DS8-a2-start-empty-ios.png) | [html](mockups/html/DS8-a2-start-empty-ios.html) | Approved by Firoz 4 Nov 2026 |
+| DS8 | Live log, one client | set entry + kg keypad | iOS | [DS8-b1-live-single-keypad-ios.png](mockups/png/DS8-b1-live-single-keypad-ios.png) | [html](mockups/html/DS8-b1-live-single-keypad-ios.html) | Approved by Firoz 4 Nov 2026; parked for Phase 10 (W14) implementation |
+| DS8 | Live log, one client | rest timer | iOS | [DS8-b2-live-single-rest-ios.png](mockups/png/DS8-b2-live-single-rest-ios.png) | [html](mockups/html/DS8-b2-live-single-rest-ios.html) | Approved by Firoz 4 Nov 2026; parked for Phase 10 (W14) implementation |
+| DS8 | Live log, one client | finish confirmation | iOS | [DS8-b3-live-finish-confirm-ios.png](mockups/png/DS8-b3-live-finish-confirm-ios.png) | [html](mockups/html/DS8-b3-live-finish-confirm-ios.html) | Approved by Firoz 4 Nov 2026; parked for Phase 10 (W14) implementation |
+| DS8 | Live log, parallel | client chips + keypad | iOS | [DS8-c1-live-multi-ios.png](mockups/png/DS8-c1-live-multi-ios.png) | [html](mockups/html/DS8-c1-live-multi-ios.html) | Approved by Firoz 4 Nov 2026; parked for Phase 10 (W14) implementation |
+| DS8 | Live log, parallel | switched client, other resting | iOS | [DS8-c2-live-multi-switched-ios.png](mockups/png/DS8-c2-live-multi-switched-ios.png) | [html](mockups/html/DS8-c2-live-multi-switched-ios.html) | Approved by Firoz 4 Nov 2026; parked for Phase 10 (W14) implementation |
+| DS8 | Live log, parallel | finish all confirmation | iOS | [DS8-c3-live-multi-finish-all-ios.png](mockups/png/DS8-c3-live-multi-finish-all-ios.png) | [html](mockups/html/DS8-c3-live-multi-finish-all-ios.html) | Approved by Firoz 4 Nov 2026; parked for Phase 10 (W14) implementation |
+| DS8 | Live log, parallel | offline, sets queued | iOS | [DS8-c4-live-offline-ios.png](mockups/png/DS8-c4-live-offline-ios.png) | [html](mockups/html/DS8-c4-live-offline-ios.html) | Approved by Firoz 4 Nov 2026; parked for Phase 10 (W14) implementation |
+| DS8 | Log past workout | prefilled form | iOS | [DS8-d1-log-form-ios.png](mockups/png/DS8-d1-log-form-ios.png) | [html](mockups/html/DS8-d1-log-form-ios.html) | Approved by Firoz 4 Nov 2026 |
+| DS8 | Log past workout | 7-day limit, nothing planned | iOS | [DS8-d2-log-form-date-limit-ios.png](mockups/png/DS8-d2-log-form-date-limit-ios.png) | [html](mockups/html/DS8-d2-log-form-date-limit-ios.html) | Approved by Firoz 4 Nov 2026 |
+| DS8 | Log past workout | saving | iOS | [DS8-d3-log-form-saving-ios.png](mockups/png/DS8-d3-log-form-saving-ios.png) | [html](mockups/html/DS8-d3-log-form-saving-ios.html) | Approved by Firoz 4 Nov 2026 |
+| DS8 | Log past workout | not saved (offline/unavailable) | iOS | [DS8-d4-log-form-not-saved-ios.png](mockups/png/DS8-d4-log-form-not-saved-ios.png) | [html](mockups/html/DS8-d4-log-form-not-saved-ios.html) | Approved by Firoz 4 Nov 2026 |
+| DS8 | Log past workout | ended client, read-only | iOS | [DS8-d5-log-form-ended-ios.png](mockups/png/DS8-d5-log-form-ended-ios.png) | [html](mockups/html/DS8-d5-log-form-ended-ios.html) | Approved by Firoz 4 Nov 2026 |
+| DS8 | Trainee workout (W9 Z9-11) | Logged by your coach, read-only | iOS | [DS8-w9-trainee-coach-logged-ios.png](mockups/png/DS8-w9-trainee-coach-logged-ios.png) | [html](mockups/html/DS8-w9-trainee-coach-logged-ios.html) | Approved by Firoz 4 Nov 2026 |

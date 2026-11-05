@@ -1,0 +1,26 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      WorkoutSetActionReceiver (the notification's buttons, LA3) is declared in
+      the app's manifest by plugins/withLiveActivity.js (its Android part).
+
+      RestEndReceiver (LA3d) is declared here instead, in the module's own
+      manifest, which the Android Gradle plugin merges into the app's. It needs
+      nothing from the app config — no variant-dependent name, no permission,
+      no intent filter — so it is declared next to the code it wakes rather
+      than in a config plugin. Both are `exported="false"` with no intent
+      filter: only FitBud's own explicit PendingIntents reach them, so no other
+      app can press a button or fake a rest ending.
+
+      No <uses-permission> is added by this module. The rest-end repaint is an
+      inexact alarm (AlarmManager.setAndAllowWhileIdle), which is allowed to
+      fire in Doze without SCHEDULE_EXACT_ALARM or USE_EXACT_ALARM; both of
+      those are user-visible and store-reviewed, and repainting a notification
+      does not earn them.
+    -->
+    <application>
+        <receiver
+            android:name="com.thefitbud.liveactivity.RestEndReceiver"
+            android:enabled="true"
+            android:exported="false" />
+    </application>
+</manifest>

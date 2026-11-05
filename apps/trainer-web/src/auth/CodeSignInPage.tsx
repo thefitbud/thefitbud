@@ -6,6 +6,7 @@ import { OtpCodeInput } from "./OtpCodeInput";
 import { Button } from "../components/Button";
 import { useConfig, isWhatsAppOtpEnabled } from "../lib/config";
 import { apiClient } from "../lib/api";
+import { pickSessionRefresh } from "../lib/session";
 import { fetchDevMailCode } from "../lib/auth-flow";
 import { useOnline } from "../hooks/useOnline";
 
@@ -95,7 +96,11 @@ export function CodeSignInPage() {
         purpose: "login",
       });
       if (result.purpose === "login") {
-        await signInWithToken(result.token, identifier.trim());
+        await signInWithToken(
+          result.token,
+          identifier.trim(),
+          pickSessionRefresh(result),
+        );
         return;
       }
       setError("That code didn't work. Check the latest message or resend.");

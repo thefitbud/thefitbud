@@ -95,6 +95,16 @@ export {
   workoutWindowForLocalDate,
 } from "./timezone.js";
 
+export {
+  FALLBACK_DISPLAY_TIME_ZONE,
+  UnsupportedTimeZoneError,
+  clearTimeZoneResolutionCache,
+  deviceTimeZone,
+  resolveIntlTimeZone,
+  timeZoneCandidates,
+  zonedDateTimeFormat,
+} from "./zone.js";
+
 export { IST_TIME_ZONE, istDate, istInstantAt } from "./clock.js";
 export { greetingFor } from "./greeting.js";
 
@@ -331,4 +341,5 @@ export {
 } from "./notification-copy.js";
 export { routeForLinkKind, type LinkKind } from "./links.js";
 export { canLog, type LogDecision } from "./late-logging.js";
+export { TEST_OTP_IDENTIFIER_RE } from "./test-otp-identifier.js";
 export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";

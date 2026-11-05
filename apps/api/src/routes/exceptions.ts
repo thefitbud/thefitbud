@@ -4,7 +4,7 @@ import {
   exceptionStatusParameter,
 } from "../openapi/document";
 import { Hono } from "hono";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import {
   acknowledgeExceptionRequestSchema,
   attentionFeedResponseSchema,
@@ -58,6 +58,7 @@ import {
   requireAuthMiddleware,
   requireRole,
 } from "../middleware/auth";
+import { selectInChunks } from "../lib/in-array-chunks";
 import { queueRealtimeHint } from "../realtime/emit";
 import type { ActorContext, Env, Variables } from "../types";
 import { canAccessRelationship } from "./relationships";
@@ -222,16 +223,29 @@ exceptionRoutes.get(
       { groupByRelationship },
     );
 
-    const profileRows = await db.select().from(traineeProfiles);
+    // Only the clients in this feed: never whole tables (I1b).
+    const traineeUserIds = attention.map((item) => item.traineeUserId);
+    const profileRows = await selectInChunks(traineeUserIds, (ids) =>
+      db
+        .select({
+          userId: traineeProfiles.userId,
+          displayName: traineeProfiles.displayName,
+        })
+        .from(traineeProfiles)
+        .where(inArray(traineeProfiles.userId, ids)),
+    );
     const nameByUserId = new Map(
       profileRows.map((row) => [row.userId, row.displayName]),
     );
-    const identityRows = await db
-      .select({
-        userId: userIdentities.userId,
-        mobileE164: userIdentities.mobileE164,
-      })
-      .from(userIdentities);
+    const identityRows = await selectInChunks(traineeUserIds, (ids) =>
+      db
+        .select({
+          userId: userIdentities.userId,
+          mobileE164: userIdentities.mobileE164,
+        })
+        .from(userIdentities)
+        .where(inArray(userIdentities.userId, ids)),
+    );
     const phoneByUserId = new Map(
       identityRows.map((row) => [row.userId, row.mobileE164]),
     );

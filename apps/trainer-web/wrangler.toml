@@ -1,0 +1,45 @@
+# FitBud trainer web — Cloudflare Worker with static assets (task WD1,
+# decisions D-W2-2, D-W2-7, D-W2-11). Deploy: docs/runbooks/trainer-web-deploy.md.
+#
+# The Worker (worker/index.ts) serves the built SPA from ./dist with fallback
+# to index.html, forwards /api/* to the API Worker through the API service
+# binding with the /api prefix stripped (like the Vite dev proxy), and forwards
+# /i/* (invite links) unchanged. Same origin: no CORS, first-party cookies.
+#
+# run_worker_first: without it the asset layer answers browser navigations to
+# unknown paths (such as /i/<token>) with index.html before the Worker runs.
+#
+# Wrangler does not inherit routes or service bindings into [env.*], so each
+# env repeats them. Worker names: fitbud-web-staging, fitbud-web-production.
+
+name = "fitbud-web"
+main = "worker/index.ts"
+compatibility_date = "2025-04-01"
+assets = { directory = "./dist", not_found_handling = "single-page-application", binding = "ASSETS", run_worker_first = ["/api/*", "/i/*"] }
+
+# Local / default: the API Worker without an env (fitbud-api).
+[[services]]
+binding = "API"
+service = "fitbud-api"
+
+[env.staging]
+routes = [{ pattern = "app-staging.thefitbud.com", custom_domain = true }]
+
+[[env.staging.services]]
+binding = "API"
+service = "fitbud-api-staging"
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
+[env.production]
+routes = [{ pattern = "app.thefitbud.com", custom_domain = true }]
+
+[[env.production.services]]
+binding = "API"
+service = "fitbud-api-production"
+
+[env.production.observability]
+enabled = true
+head_sampling_rate = 0.2

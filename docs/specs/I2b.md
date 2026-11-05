@@ -37,7 +37,7 @@ size: M
 - **Source artifacts: D-W1-7 (decided by Firoz, 31 Oct 2026; on `main` via PR #74).** Copy, byte for byte, from `apps/api/seed/library/incoming/2026.10.9/`: `manifest.json`, `library-2026.10.9.json`, `ATTRIBUTION.md` and `sql/01_lookups.sql` to `sql/06_seed_version.sql` (6 files) into `apps/api/seed/library/` and `apps/api/seed/library/sql/`, then remove `apps/api/seed/library/library-2026.10.2.json`. Do not edit anything under `incoming/` (read-only input, not owned).
 - The release has **no** `02b_food_extras.sql` or `08_post_seed.sql`. Decided (Firoz, 31 Oct 2026): I2b creates both as empty files (a one-line header comment, no SQL statements) and keeps them. They are not in the manifest, so the sha256 check does not cover them. I2f adds the first correction to `08`.
 - The source manifest also lists 353 exercises (the old base inside `03_exercises.sql`). The 1,362-exercise base is I2c's `03b`, not this task.
-- The current demo seed (`apps/api/scripts/seed-demo.ts`) must still load on top; Agents.md requires realistic persisted data in tests.
+- The current demo seed (`apps/api/scripts/seed-demo.ts`) must still load on top; AGENTS.md requires realistic persisted data in tests.
 
 ## Gap list
 - `apps/api/seed/library/manifest.json:2-6`: release `2026.10.2`, 693 foods, 353 exercises. Target: identical to `apps/api/seed/library/incoming/2026.10.9/manifest.json` (`seed_version` 2026.10.9, `counts.foods` 1243).

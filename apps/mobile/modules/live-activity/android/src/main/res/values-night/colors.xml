@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark shade of frame 27-android-trainee-workout-notif.png. -->
+<resources>
+    <color name="fitbud_workout_accent">#C3B1FF</color>
+    <color name="fitbud_workout_on_accent">#1A1248</color>
+    <color name="fitbud_workout_group">#3A3744</color>
+</resources>

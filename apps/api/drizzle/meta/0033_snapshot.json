@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c5fe42b5-34cd-41ba-a3e8-7e08ed29dc20",
+  "id": "caaee7ec-a1d1-46e9-87ca-148b9b8d6a27",
   "prevId": "82309ce4-5c03-4447-96c7-ec86d3b093b8",
   "tables": {
     "auth_otps": {
@@ -1327,7 +1327,7 @@
             "coaching_relationship_id"
           ],
           "isUnique": true,
-          "where": "\"coaching_configurations\".\"status\" = 'draft'"
+          "where": "\"coaching_configurations\".\"status\" in ('draft', 'configured')"
         },
         "coaching_configurations_status_idx": {
           "name": "coaching_configurations_status_idx",
@@ -5621,6 +5621,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "attempt_started_at": {
+          "name": "attempt_started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "accepted_at": {

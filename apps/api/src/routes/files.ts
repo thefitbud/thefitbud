@@ -17,6 +17,7 @@ import { coachingRelationships, mediaAssets } from "../db/schema";
 import { mapMediaAsset } from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok, type AppContext } from "../lib/envelope";
+import { mediaKey } from "../lib/media-key";
 import {
   DOWNLOAD_TARGET_TTL_MS,
   MAX_UPLOAD_BYTES,
@@ -371,7 +372,7 @@ fileRoutes.put(
       );
     }
 
-    await bucket.put(asset.objectKey, body, {
+    await bucket.put(mediaKey(c.env, asset.objectKey), body, {
       httpMetadata: { contentType },
       customMetadata: {
         mediaAssetId: asset.id,
@@ -499,7 +500,7 @@ fileRoutes.post(
       );
     }
 
-    const object = await bucket.head(loaded.asset.objectKey);
+    const object = await bucket.head(mediaKey(c.env, loaded.asset.objectKey));
     if (!object) {
       return fail(
         c,
@@ -667,7 +668,7 @@ fileRoutes.get(
       return fail(c, 404, "MEDIA_ASSET_NOT_FOUND", "Media asset not found.");
     }
 
-    const object = await bucket.get(asset.objectKey);
+    const object = await bucket.get(mediaKey(c.env, asset.objectKey));
     if (!object) {
       return fail(c, 404, "MEDIA_OBJECT_NOT_FOUND", "Media object not found.");
     }

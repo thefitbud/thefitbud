@@ -1,7 +1,12 @@
 import { ApiClientError } from "@fitbud/api-client";
 import type { MeResponse } from "@fitbud/contracts";
-import { apiClient } from "./api";
-import { clearSession, storeSession } from "./session";
+import { apiClient, cancelTokenRefresh, scheduleTokenRefresh } from "./api";
+import {
+  clearSession,
+  pickSessionRefresh,
+  storeSession,
+  type SessionRefresh,
+} from "./session";
 import { stage1Api } from "./stage1-api";
 
 export class AuthFlowError extends Error {
@@ -66,20 +71,24 @@ function isForbiddenRole(err: unknown): boolean {
 }
 
 /**
- * Store the bearer token and load `/me`. Cookie session is best-effort —
+ * Store the bearer token (plus refresh token and expiry in Firebase mode) and
+ * load `/me`. Cookie session is best-effort —
  * trainee-only accounts are rejected by POST /auth/session but must still
  * keep a client session so RequireAuth can show the trainee gate on any route.
  */
 export async function establishTrainerSession(
   idToken: string,
   emailHint: string,
+  refresh?: SessionRefresh,
 ): Promise<MeResponse> {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  storeSession(idToken, emailHint.trim().toLowerCase());
+  storeSession(idToken, emailHint.trim().toLowerCase(), refresh);
+  scheduleTokenRefresh();
   try {
     await apiClient.createWebSession({ idToken, timezone });
   } catch (err) {
     if (!isForbiddenRole(err)) {
+      cancelTokenRefresh();
       clearSession();
       throw mapLoginError(err);
     }
@@ -87,6 +96,7 @@ export async function establishTrainerSession(
   try {
     return await apiClient.me();
   } catch (err) {
+    cancelTokenRefresh();
     clearSession();
     throw mapLoginError(err);
   }
@@ -97,11 +107,15 @@ export async function signInWithPassword(
   password: string,
 ): Promise<MeResponse> {
   try {
-    const { token } = await stage1Api.login({ identifier, password });
+    const result = await stage1Api.login({ identifier, password });
     const emailHint = identifier.includes("@")
       ? identifier
       : `${identifier}@fitbud.local`;
-    return await establishTrainerSession(token, emailHint);
+    return await establishTrainerSession(
+      result.token,
+      emailHint,
+      pickSessionRefresh(result),
+    );
   } catch (err) {
     if (err instanceof AuthFlowError) throw err;
     throw mapLoginError(err);
@@ -111,9 +125,10 @@ export async function signInWithPassword(
 export async function signInWithOtpToken(
   token: string,
   identifier: string,
+  refresh?: SessionRefresh,
 ): Promise<MeResponse> {
   try {
-    return await establishTrainerSession(token, identifier);
+    return await establishTrainerSession(token, identifier, refresh);
   } catch (err) {
     if (err instanceof AuthFlowError) throw err;
     throw mapLoginError(err);

@@ -6,7 +6,7 @@ export type DeviceTokenPlatform = z.infer<typeof deviceTokenPlatformSchema>;
 export const devicePlatformSchema = deviceTokenPlatformSchema;
 export type DevicePlatform = DeviceTokenPlatform;
 
-export const deviceTokenProviderSchema = z.enum(["fcm"]);
+export const deviceTokenProviderSchema = z.enum(["fcm", "expo"]);
 export type DeviceTokenProvider = z.infer<typeof deviceTokenProviderSchema>;
 
 export const deviceTokenStatusSchema = z.enum(["active", "revoked"]);

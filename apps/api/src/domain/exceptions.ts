@@ -28,6 +28,7 @@ import {
 } from "../db/schema";
 import { loadTraineeTimezone } from "./assignment-schedule";
 import { createId, nowIso } from "../lib/crypto";
+import { selectInChunks } from "../lib/in-array-chunks";
 
 type Db = ReturnType<typeof createDb>;
 type ExceptionRow = typeof exceptions.$inferSelect;
@@ -450,17 +451,25 @@ export async function listAttentionExceptionsForTrainer(
     ? Math.min(Math.max(limit, 1) * 40, 500)
     : limit;
 
-  const rows = await db
-    .select()
-    .from(exceptions)
-    .where(
-      and(
-        inArray(exceptions.coachingRelationshipId, relationshipIds),
-        inArray(exceptions.status, ["detected", "active", "acknowledged"]),
-      ),
+  // Chunked so a trainer with more than 90 clients stays under D1's bound-parameter
+  // cap; each chunk keeps its own newest rows, then the merge re-applies the limit.
+  const rows = (
+    await selectInChunks(relationshipIds, (ids) =>
+      db
+        .select()
+        .from(exceptions)
+        .where(
+          and(
+            inArray(exceptions.coachingRelationshipId, ids),
+            inArray(exceptions.status, ["detected", "active", "acknowledged"]),
+          ),
+        )
+        .orderBy(desc(exceptions.detectedAt))
+        .limit(rowLimit),
     )
-    .orderBy(desc(exceptions.detectedAt))
-    .limit(rowLimit);
+  )
+    .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))
+    .slice(0, rowLimit);
 
   return rows.flatMap((exception) => {
     const relationship = relationshipById.get(exception.coachingRelationshipId);

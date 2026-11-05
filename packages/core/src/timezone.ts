@@ -1,3 +1,5 @@
+import { zonedDateTimeFormat } from "./zone.js";
+
 /**
  * Convert a trainee-local calendar date + wall time into a UTC ISO string.
  * Uses Intl so Workers and Node share the same behavior without extra deps.
@@ -51,7 +53,7 @@ function getZonedParts(
   minute: number;
   second: number;
 } {
-  const dtf = new Intl.DateTimeFormat("en-US", {
+  const dtf = zonedDateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
     month: "2-digit",

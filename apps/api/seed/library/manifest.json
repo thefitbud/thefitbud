@@ -1,17 +1,18 @@
 {
- "seed_version": "2026.10.2",
+ "seed_version": "2026.10.9",
  "generated_at": "2026-10-12T00:00:00.000Z",
- "content_sha256": "732bc3ea9186d6ad5bc28d0c05265bf7ef0925cbcfd1e5e97eab9ca58af61ffa",
+ "content_sha256": "e9782a0bae8f7293ca5f9a539ef9f55c77116333a017a9d6020190862c69caf3",
  "counts": {
-  "foods": 693,
+  "foods": 1243,
   "foods_by_source": {
-   "indb": 313,
-   "usda_fdc": 380
+   "indb": 110,
+   "usda_fdc": 1125,
+   "web_average": 8
   },
   "foods_by_cuisine": {
-   "indian": 314,
-   "indian_pantry": 251,
-   "global": 128
+   "indian": 136,
+   "indian_pantry": 252,
+   "global": 855
   },
   "exercises": 353,
   "exercises_by_setting": {
@@ -23,39 +24,39 @@
   },
   "templates": 10,
   "redirects": 1,
-  "food_servings": 2333,
-  "food_aliases": 2948,
+  "food_servings": 3979,
+  "food_aliases": 3574,
   "exercise_media": 242,
   "exercise_relations": 947
  },
  "files": {
-  "library-2026.10.2.json": {
-   "sha256": "474d5cd342b4730bba7723af4b86347e7256519783f67d2114cdbc51ee6b4632",
-   "bytes": 4357815
+  "library-2026.10.9.json": {
+   "sha256": "0e08bddefbcf1991ecec255904162ade9bae3474825605482b365a33f8f0e40e",
+   "bytes": 9716400
   },
   "01_lookups.sql": {
-   "sha256": "f03412efa686d296b10445f36ece30db14bb94887eebaf66ea0225a8da3a6d6c",
-   "bytes": 39020
+   "sha256": "7dc105198f99ea9cbdba47746bc29925c0da49bd9a8db51522454ebae6f2b48f",
+   "bytes": 40690
   },
   "02_foods.sql": {
-   "sha256": "dcb14210a33b7d0e7147270a494afc4ec056d9b8439f4d14c455b21a1fceec6e",
-   "bytes": 15294250
+   "sha256": "43fd5245aa88cfc148f0a9fb69a92d1ff6ecd936190c20446e8797de019b001f",
+   "bytes": 22968287
   },
   "03_exercises.sql": {
-   "sha256": "44d105452156142cf8af9ce0cbc2fe08c2074ebc09b57b48b8ef25af9326ddaa",
+   "sha256": "477ae0c6370a502784c0c385988ce288b9290b24d716036ad3782bdd6e4589d5",
    "bytes": 4126045
   },
   "04_templates.sql": {
-   "sha256": "bbf4109c9253a2a335d9883a44271e3f81bcad78ec3fee2c7581f3de75df270e",
-   "bytes": 102142
+   "sha256": "4890370964a18ed763b7856f180f1f3b7c059e3a688c6bc5f318aa2b0b50e1dd",
+   "bytes": 82515
   },
   "05_search.sql": {
-   "sha256": "575ab4c2475dced6dc37b143feae66ec4e70af69d451790a62e8b32f7710fb5b",
+   "sha256": "13e6459d60b8ff81f06bdea00eb2a49e199b1b5c1696dbee509602318dc60f54",
    "bytes": 1423
   },
   "06_seed_version.sql": {
-   "sha256": "8ecad8a4a1fc0c16342d956c5a2325011aec3ad7816b7fbcded522e23abe44de",
-   "bytes": 775
+   "sha256": "e6f2934076e30302485cf0d9221bacfc15adbe87e809cebec43633380473bb12",
+   "bytes": 776
   }
  }
 }

@@ -59,7 +59,7 @@ function tableColumns(
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 after 0029, then 0031, 0032, and 0033", async () => {
+  it("places 0030 to 0034 in order after 0029, with 0034 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -69,21 +69,24 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 1]).toBe("0030_perf_indexes");
     expect(tags[previous + 2]).toBe("0031_library_schema");
     expect(tags[previous + 3]).toBe("0032_meal_compliance_local_date");
-    expect(tags[previous + 4]).toBe("0033_remove_configured_status");
-    expect(tags.at(-1)).toBe("0033_remove_configured_status");
+    expect(tags[previous + 4]).toBe("0033_reminder_attempt_marker");
+    expect(tags[previous + 5]).toBe("0034_remove_configured_status");
+    expect(tags.at(-1)).toBe("0034_remove_configured_status");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
     expect(journal[previous + 3]?.idx).toBe(32);
     expect(journal[previous + 4]?.idx).toBe(33);
+    expect(journal[previous + 5]?.idx).toBe(34);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
     expect(files[previousFile + 1]).toBe("0030_perf_indexes.sql");
     expect(files[previousFile + 2]).toBe("0031_library_schema.sql");
     expect(files[previousFile + 3]).toBe("0032_meal_compliance_local_date.sql");
-    expect(files[previousFile + 4]).toBe("0033_remove_configured_status.sql");
-    expect(files.at(-1)).toBe("0033_remove_configured_status.sql");
+    expect(files[previousFile + 4]).toBe("0033_reminder_attempt_marker.sql");
+    expect(files[previousFile + 5]).toBe("0034_remove_configured_status.sql");
+    expect(files.at(-1)).toBe("0034_remove_configured_status.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -104,7 +107,7 @@ describe("migration chain and seeds", () => {
       "'katori','Katori','household',150000000,'FitBud decision: 1 katori = 150 g/ml'",
     );
     const removeConfiguredSql = readFileSync(
-      join(drizzleDir, "0033_remove_configured_status.sql"),
+      join(drizzleDir, "0034_remove_configured_status.sql"),
       "utf8",
     );
     expect(removeConfiguredSql).toContain(
@@ -128,6 +131,10 @@ describe("migration chain and seeds", () => {
         "logged_at",
       ]);
       expect(tableColumns(handle.sqlite, "meal_compliance")).toContain("local_date");
+      // 0033 (X4i): the at-most-once attempt marker, nullable and not backfilled.
+      expect(tableColumns(handle.sqlite, "notification_deliveries")).toContain(
+        "attempt_started_at",
+      );
       expect(
         indexColumns(handle.sqlite, "meal_compliance_relationship_local_date_idx"),
       ).toEqual(["coaching_relationship_id", "local_date"]);
@@ -272,7 +279,7 @@ describe("migration chain and seeds", () => {
   it("rewrites configured coaching rows to draft and opens only drafts", async () => {
     const handle = await createMemoryDb({
       foreignKeys: false,
-      through: "0032_meal_compliance_local_date.sql",
+      through: "0033_reminder_attempt_marker.sql",
     });
     try {
       const insert = (
@@ -293,7 +300,7 @@ describe("migration chain and seeds", () => {
       insert("cfg-draft", "rel-draft", "draft", null);
       insert("cfg-open", "rel-open", "configured", "2026-10-02T00:00:00.000Z");
 
-      handle.applyMigrationsFrom("0033_remove_configured_status.sql");
+      handle.applyMigrationsFrom("0034_remove_configured_status.sql");
 
       const rows =
         handle.sqlite.exec(
@@ -390,7 +397,7 @@ describe("migration chain and seeds", () => {
           handle.sqlite.exec(
             "SELECT COUNT(*) FROM food_library_items WHERE ownership='global' AND status='active'",
           )[0]?.values[0]?.[0];
-        expect(foodCount).toBe(693);
+        expect(foodCount).toBe(1243);
         const exerciseCount =
           handle.sqlite.exec(
             "SELECT COUNT(*) FROM exercise_library_items WHERE ownership='global' AND status='active'",

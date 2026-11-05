@@ -1,5 +1,7 @@
+import { format } from "node:util";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { exportPKCS8, generateKeyPair } from "jose";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
@@ -31,6 +33,36 @@ function testEnv(): Env {
     ENVIRONMENT: "local",
     EMAIL_PROVIDER: "dev_sink",
   };
+}
+
+async function firebaseEnv(): Promise<Env> {
+  const serviceAccount = await generateKeyPair("RS256", { extractable: true });
+  return {
+    ...testEnv(),
+    AUTH_MODE: "firebase",
+    FIREBASE_WEB_API_KEY: "test-web-api-key",
+    FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+      client_email: "firebase-adminsdk@fitbud-local.iam.gserviceaccount.com",
+      private_key: await exportPKCS8(serviceAccount.privateKey),
+    }),
+  };
+}
+
+/** Everything written to the console during `run`, as one string. */
+async function captureConsole(run: () => Promise<void>): Promise<string> {
+  const lines: string[] = [];
+  const spies = (["log", "info", "warn", "error", "debug"] as const).map((level) =>
+    vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+      // util.format keeps Error messages and stacks (JSON.stringify drops them).
+      lines.push(format(...args));
+    }),
+  );
+  try {
+    await run();
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
+  return lines.join("\n");
 }
 
 async function createTrainerSession(email: string) {
@@ -67,6 +99,37 @@ async function createInvitation(trainerCookie: string, recipientEmail: string) {
   return (await created.json()) as {
     data: { token: string; id: string };
   };
+}
+
+async function inviteOtpProof(recipientEmail: string): Promise<string> {
+  await app.request(
+    "/auth/otp/start",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: recipientEmail, purpose: "invite" }),
+    },
+    testEnv(),
+  );
+  const mail = await app.request(
+    `/dev/mail?to=${encodeURIComponent(recipientEmail)}&limit=1`,
+    {},
+    testEnv(),
+  );
+  const mailBody = (await mail.json()) as { data: { items: Array<{ textBody: string }> } };
+  const code = mailBody.data.items[0]?.textBody.match(/\b(\d{6})\b/)?.[1];
+  expect(code).toBeTruthy();
+  const verify = await app.request(
+    "/auth/otp/verify",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: recipientEmail, purpose: "invite", code }),
+    },
+    testEnv(),
+  );
+  expect(verify.status).toBe(200);
+  return ((await verify.json()) as { data: { otpProof: string } }).data.otpProof;
 }
 
 describe("invitations accept (password + otp)", () => {
@@ -152,6 +215,166 @@ describe("invitations accept (password + otp)", () => {
     expect(acceptBody.data.userId).toBeTruthy();
   });
 
+  it("returns an exchanged Firebase ID token when AUTH_MODE=firebase", async () => {
+    const trainer = await createTrainerSession("invite-fb-coach@example.com");
+    const recipientEmail = "invite-fb-trainee@example.com";
+    const invite = await createInvitation(trainer.cookie, recipientEmail);
+    const otpProof = await inviteOtpProof(recipientEmail);
+
+    const serviceAccount = await generateKeyPair("RS256", { extractable: true });
+    const googleFetch = vi.fn(async () =>
+      Response.json({ idToken: "invite-id-token", refreshToken: "invite-refresh", expiresIn: "3600" }),
+    );
+    vi.stubGlobal("fetch", googleFetch);
+    try {
+      const accept = await app.request(
+        "/invitations/accept",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: invite.data.token,
+            password: "Str0ng-enough",
+            otpProof,
+            displayName: "Invite Trainee",
+          }),
+        },
+        {
+          ...testEnv(),
+          AUTH_MODE: "firebase",
+          FIREBASE_WEB_API_KEY: "test-web-api-key",
+          FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+            client_email: "firebase-adminsdk@fitbud-local.iam.gserviceaccount.com",
+            private_key: await exportPKCS8(serviceAccount.privateKey),
+          }),
+        },
+      );
+      expect(accept.status).toBe(200);
+      const body = (await accept.json()) as { data: Record<string, unknown> };
+      expect(body.data).toMatchObject({
+        token: "invite-id-token",
+        tokenKind: "firebase_id_token",
+        refreshToken: "invite-refresh",
+        expiresIn: 3600,
+      });
+      expect(googleFetch).toHaveBeenCalledTimes(1);
+      // The custom token goes to Google only; it is never in the response.
+      const googleCalls = googleFetch.mock.calls as unknown as Array<[string, RequestInit]>;
+      const sentToGoogle = JSON.parse(String(googleCalls[0]![1].body)) as { token: string };
+      expect(sentToGoogle.token.split(".")).toHaveLength(3);
+      expect(JSON.stringify(body)).not.toContain(sentToGoogle.token);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("returns 401 AUTH_EXCHANGE_FAILED when the token exchange fails, and the invitation stays accepted", async () => {
+    const trainer = await createTrainerSession("invite-fbfail-coach@example.com");
+    const recipientEmail = "invite-fbfail-trainee@example.com";
+    const invite = await createInvitation(trainer.cookie, recipientEmail);
+    const otpProof = await inviteOtpProof(recipientEmail);
+    const env = await firebaseEnv();
+
+    const googleFetch = vi.fn(async () =>
+      Response.json(
+        { error: { code: 400, message: "INVALID_CUSTOM_TOKEN google-detail-xyz" } },
+        { status: 400 },
+      ),
+    );
+    vi.stubGlobal("fetch", googleFetch);
+    let status = 0;
+    let body: { error?: { code: string; message: string } } = {};
+    let logs = "";
+    try {
+      logs = await captureConsole(async () => {
+        const accept = await app.request(
+          "/invitations/accept",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: invite.data.token,
+              password: "Str0ng-enough",
+              otpProof,
+              displayName: "Invite Trainee",
+            }),
+          },
+          env,
+        );
+        status = accept.status;
+        body = (await accept.json()) as typeof body;
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(status).toBe(401);
+    expect(body.error?.code).toBe("AUTH_EXCHANGE_FAILED");
+    expect(googleFetch).toHaveBeenCalledTimes(1);
+    const googleCalls = googleFetch.mock.calls as unknown as Array<[string, RequestInit]>;
+    const customToken = (JSON.parse(String(googleCalls[0]![1].body)) as { token: string }).token;
+    // The capture sees Error objects too, so a logged error could not hide a leak.
+    const probe = await captureConsole(async () => {
+      console.error("probe", new Error("probe-detail"));
+    });
+    expect(probe).toContain("probe-detail");
+    // Neither the error body nor the logs carry tokens, the password or Google's response.
+    for (const secret of [customToken, invite.data.token, otpProof, "Str0ng-enough", "google-detail-xyz"]) {
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(logs).not.toContain(secret);
+    }
+
+    // The account and relationship were created; the user can sign in with a code.
+    const tokenHash = await sha256Hex(invite.data.token);
+    const [row] = await db
+      .select()
+      .from(schema.clientInvitations)
+      .where(eq(schema.clientInvitations.tokenHash, tokenHash));
+    expect(row?.status).toBe("accepted");
+    expect(row?.acceptedUserId).toBeTruthy();
+    const relationships = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.invitationId, row!.id));
+    expect(relationships).toHaveLength(1);
+    expect(relationships[0]?.status).toBe("active");
+    expect(relationships[0]?.traineeUserId).toBe(row?.acceptedUserId);
+  });
+
+  it("returns the test-mode token response unchanged (no refresh fields, no Google call)", async () => {
+    const trainer = await createTrainerSession("invite-testmode-coach@example.com");
+    const recipientEmail = "invite-testmode-trainee@example.com";
+    const invite = await createInvitation(trainer.cookie, recipientEmail);
+    const otpProof = await inviteOtpProof(recipientEmail);
+    const googleFetch = vi.fn(async () => Response.json({}));
+    vi.stubGlobal("fetch", googleFetch);
+    try {
+      const accept = await app.request(
+        "/invitations/accept",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: invite.data.token,
+            password: "Str0ng-enough",
+            otpProof,
+            displayName: "Invite Trainee",
+          }),
+        },
+        testEnv(),
+      );
+      expect(accept.status).toBe(200);
+      const body = (await accept.json()) as { data: Record<string, unknown> };
+      expect(Object.keys(body.data).sort()).toEqual(
+        ["relationshipId", "token", "tokenKind", "userId"],
+      );
+      expect(body.data.tokenKind).toBe("test_id_token");
+      expect(googleFetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns 409 INVITATION_EXPIRED for an expired token", async () => {
     const trainer = await createTrainerSession("invite-exp-coach@example.com");
     const invite = await createInvitation(trainer.cookie, "invite-exp@example.com");
@@ -210,5 +433,114 @@ describe("invitations accept (password + otp)", () => {
     expect(response.status).toBe(410);
     const body = (await response.json()) as { error: { code: string } };
     expect(body.error.code).toBe("INVITATION_REVOKED");
+  });
+});
+
+describe("invitations accept: stored timezone (CU20)", () => {
+  let db: Db;
+  let close: () => void;
+
+  beforeEach(async () => {
+    const handle = await createMemoryDb();
+    db = handle.db;
+    close = handle.close;
+    setTestDbOverride(db);
+  });
+
+  afterEach(() => {
+    setTestDbOverride(null);
+    close();
+  });
+
+  async function accept(token: string, timezone: string) {
+    return app.request(
+      "/invitations/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          password: "Str0ng-enough",
+          otpProof: await inviteOtpProof(RECIPIENTS.get(token)!),
+          displayName: "Invite Trainee",
+          timezone,
+        }),
+      },
+      testEnv(),
+    );
+  }
+
+  const RECIPIENTS = new Map<string, string>();
+
+  async function invite(slug: string): Promise<string> {
+    const trainer = await createTrainerSession(`tz-${slug}-coach@example.com`);
+    const recipientEmail = `tz-${slug}-trainee@example.com`;
+    const created = await createInvitation(trainer.cookie, recipientEmail);
+    RECIPIENTS.set(created.data.token, recipientEmail);
+    return created.data.token;
+  }
+
+  it("rejects a timezone that is not a resolvable IANA zone, and writes nothing", async () => {
+    const token = await invite("bad");
+    const response = await accept(token, "lol");
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      error: { code: string; message: string };
+    };
+    expect(body.error.code).toBe("INVALID_TIMEZONE");
+    // Static text, so a client can show it as-is (D-W3b-7): it repeats nothing
+    // from the request.
+    expect(body.error.message).toBe("Timezone is not a valid IANA zone.");
+    expect(body.error.message).not.toContain("lol");
+
+    // The invitation is untouched and no user carries the rejected value.
+    const invitations = await db
+      .select()
+      .from(schema.clientInvitations)
+      .where(eq(schema.clientInvitations.tokenHash, await sha256Hex(token)));
+    expect(invitations[0]?.status).toBe("pending");
+    const users = await db.select().from(schema.users);
+    expect(users.map((user) => user.timezone)).not.toContain("lol");
+  });
+
+  it("accepts a valid IANA zone and stores it", async () => {
+    const token = await invite("good");
+    const response = await accept(token, "Asia/Kolkata");
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { userId: string } };
+    const stored = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, body.data.userId));
+    expect(stored[0]?.timezone).toBe("Asia/Kolkata");
+  });
+
+  it("accepts a request with no timezone at all", async () => {
+    const trainer = await createTrainerSession("tz-none-coach@example.com");
+    const recipientEmail = "tz-none-trainee@example.com";
+    const created = await createInvitation(trainer.cookie, recipientEmail);
+    const response = await app.request(
+      "/invitations/accept",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: created.data.token,
+          password: "Str0ng-enough",
+          otpProof: await inviteOtpProof(recipientEmail),
+          displayName: "Invite Trainee",
+        }),
+      },
+      testEnv(),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { userId: string } };
+    const stored = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, body.data.userId));
+    expect(stored[0]?.timezone).toBe("UTC");
   });
 });

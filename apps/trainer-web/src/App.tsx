@@ -34,6 +34,7 @@ import { SettingsHelpPage } from "./pages/settings/SettingsHelpPage";
 import { SettingsLayout } from "./pages/settings/SettingsLayout";
 import { UnitsLanguagePage } from "./pages/settings/UnitsLanguagePage";
 import { SpecimensPage } from "./pages/SpecimensPage";
+import { CreditsPage, PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
 
 export function App() {
   return (
@@ -44,6 +45,9 @@ export function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/__specimens" element={<SpecimensPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/credits" element={<CreditsPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<WelcomePage />} />
           <Route path="/" element={<HomePage />} />

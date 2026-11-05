@@ -1,0 +1,41 @@
+appId: com.thefitbud.mobile.staging
+name: Trainer Clients
+tags:
+  - trainer
+  - smoke
+  - full
+env:
+  # Display names are fixed by the QA seed (D-QA1-3, "QA " prefix); the same
+  # values are in apps/api/src/seed/qa/expectations.json. The runner may override.
+  QA_ONTRACK_NAME: QA Aarav
+  QA_SLIPPING_NAME: QA Rohan
+---
+# Clients list and one client's status, as the QA trainer.
+#
+# Env from the runner: QA_TRAINER_EMAIL, QA_PASSWORD.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ${QA_SLIPPING_NAME}
+    timeout: 30000
+- assertVisible: ${QA_ONTRACK_NAME}
+- takeScreenshot: trainer-clients__list
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: ${QA_SLIPPING_NAME}
+- extendedWaitUntil:
+    visible: "This week"
+    timeout: 30000
+- assertVisible: ${QA_SLIPPING_NAME}
+- assertVisible: "Recent activity"
+- assertNotVisible: "Coaching ended.*"
+- takeScreenshot: trainer-client-status__loaded
+- runFlow: ../../common/assert-no-crash.yaml

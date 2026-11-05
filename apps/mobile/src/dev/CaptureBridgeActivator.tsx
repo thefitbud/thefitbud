@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { stage1Api } from "../lib/stage1Api";
+import { pickSessionRefresh } from "../lib/api";
 import { createTestIdToken } from "../lib/testToken";
 import {
   installCaptureGlobals,
@@ -22,7 +23,7 @@ export function CaptureBridgeActivator() {
         signOut();
         await new Promise((r) => setTimeout(r, 300));
         const result = await s1.login({ identifier: email, password });
-        await signInWithToken(result.token);
+        await signInWithToken(result.token, pickSessionRefresh(result));
       },
       async signInWithTestInvite() {
         signOut();

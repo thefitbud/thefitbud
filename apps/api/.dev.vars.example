@@ -7,12 +7,21 @@ MEDIA_SIGNING_SECRET=local-dev-media-signing-secret-change-me
 
 # Runtime environment: local enables dev mail sink and test auth.
 ENVIRONMENT=local
+# System email: dev_sink (default, local only) | disabled | zeptomail
 EMAIL_PROVIDER=dev_sink
+# ZeptoMail send-mail token, only for EMAIL_PROVIDER=zeptomail. Never commit a real value.
+# ZEPTOMAIL_TOKEN=
 SUPPORT_EMAIL=support@example.test
 APP_HOST=localhost:8787
 SYSTEM_EMAIL_FROM=FitBud <noreply@example.test>
 SYSTEM_EMAIL_REPLY_TO=support@example.test
 ADMIN_ALERT_EMAILS=alerts@example.test
+
+# Test-mode email OTP for the qa+…@thefitbud.com QA accounts (QT1, D-QA1-1):
+# staging secrets only; never production. Inactive unless ENVIRONMENT=staging,
+# so leaving these blank locally is correct (local already has the dev mail sink).
+QA_TEST_OTP_ENABLED=
+QA_TEST_OTP_CODE=
 
 # Feature flag overrides (optional): 1/true or 0/false
 # FLAG_WA_OTP=0

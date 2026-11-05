@@ -234,7 +234,14 @@
     "idx": 33,
     "version": "7",
     "when": 1730217600000,
-    "tag": "0033_remove_configured_status",
+    "tag": "0033_reminder_attempt_marker",
+    "breakpoints": true
+  },
+  {
+    "idx": 34,
+    "version": "7",
+    "when": 1730304000000,
+    "tag": "0034_remove_configured_status",
     "breakpoints": true
   }
 ]

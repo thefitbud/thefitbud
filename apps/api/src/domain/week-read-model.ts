@@ -3,6 +3,7 @@ import {
   type WeekDayState,
   type WeekReadModel,
   type WeekTodayNutrition,
+  type WorkoutExecutionStatus,
 } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
@@ -119,6 +120,68 @@ function loggedTodayNutrition(
     fatG: unscaleNutrient(fatScaled),
   };
   return hasUnknown ? { ...macros, hasUnknown: true } : macros;
+}
+
+/**
+ * One scheduled workout, as `buildWeekReadModel` and `GET /me/day/:date`
+ * both see it. `executionStatus` is null when nothing was logged. Missed is
+ * never stored on the execution; it is derived.
+ */
+export type WeekDayWorkout = {
+  windowEndsAt: string;
+  workoutDayName: string;
+  executionStatus: WorkoutExecutionStatus | null;
+};
+
+/**
+ * The only derivation of a day's `done` / `partial` / `missed` / `rest` /
+ * `future` state (BT9, D-W4-14). `buildWeekReadModel` calls it for each day
+ * of the week, and `GET /me/day/:date` calls it for the requested date.
+ * There is no other day-state rule: a state that is not produced here is
+ * not a state FitBud shows.
+ *
+ * `today` is the trainee's civil date for `nowIso` in their timezone. The
+ * caller resolves that; this function does not invent a clock.
+ */
+export function deriveWeekDayFromWorkouts(input: {
+  date: string;
+  today: string;
+  nowIso: string;
+  workouts: readonly WeekDayWorkout[];
+}): { state: WeekDayState; workoutLabel: string } {
+  const { date, today, nowIso, workouts } = input;
+  if (workouts.length === 0) {
+    return {
+      state: date > today ? "future" : "rest",
+      workoutLabel: "Rest",
+    };
+  }
+  const workoutLabel = workouts[0]!.workoutDayName;
+  if (date > today) {
+    return { state: "future", workoutLabel };
+  }
+  const woStatuses = workouts.map((workout) =>
+    deriveWorkoutAssignmentStatus({
+      nowIso,
+      windowEndsAt: workout.windowEndsAt,
+      executionStatus: workout.executionStatus,
+    }),
+  );
+  const allDone = woStatuses.every(
+    (status) =>
+      status === "completed" || status === "modified" || status === "skipped",
+  );
+  const anyDone = woStatuses.some(
+    (status) =>
+      status === "completed" || status === "modified" || status === "skipped",
+  );
+  const allMissed = woStatuses.every((status) => status === "missed");
+  if (allDone) return { state: "done", workoutLabel };
+  if (allMissed || (!anyDone && date < today)) {
+    return { state: "missed", workoutLabel };
+  }
+  if (anyDone) return { state: "partial", workoutLabel };
+  return { state: date < today ? "missed" : "partial", workoutLabel };
 }
 
 export async function buildWeekReadModel(
@@ -250,35 +313,16 @@ export async function buildWeekReadModel(
     // Always count all planned slots for the day (matches trainee Diet "N of M").
     const mealsAssignedDay = dayMeals.length;
 
-    let workoutLabel = "Rest";
-    let workoutState: WeekDayState = "rest";
-    if (dayWorkouts.length === 0) {
-      workoutState = date > today ? "future" : "rest";
-      workoutLabel = "Rest";
-    } else if (date > today) {
-      workoutState = "future";
-      workoutLabel = dayWorkouts[0]!.assignment.workoutDayName;
-    } else {
-      workoutLabel = dayWorkouts[0]!.assignment.workoutDayName;
-      const woStatuses = dayWorkouts.map((w) =>
-        deriveWorkoutAssignmentStatus({
-          nowIso: input.nowIso,
-          windowEndsAt: w.assignment.windowEndsAt,
-          executionStatus: w.execution?.status ?? null,
-        }),
-      );
-      const allDone = woStatuses.every(
-        (s) => s === "completed" || s === "modified" || s === "skipped",
-      );
-      const anyDone = woStatuses.some(
-        (s) => s === "completed" || s === "modified" || s === "skipped",
-      );
-      const allMissed = woStatuses.every((s) => s === "missed");
-      if (allDone) workoutState = "done";
-      else if (allMissed || (!anyDone && date < today)) workoutState = "missed";
-      else if (anyDone) workoutState = "partial";
-      else workoutState = date < today ? "missed" : "partial";
-    }
+    const { state: workoutState, workoutLabel } = deriveWeekDayFromWorkouts({
+      date,
+      today,
+      nowIso: input.nowIso,
+      workouts: dayWorkouts.map((w) => ({
+        windowEndsAt: w.assignment.windowEndsAt,
+        workoutDayName: w.assignment.workoutDayName,
+        executionStatus: w.execution?.status ?? null,
+      })),
+    });
 
     return {
       date,

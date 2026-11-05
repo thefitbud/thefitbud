@@ -13,6 +13,35 @@ import { addDaysIso, createId, createSessionToken, nowIso, sha256Hex } from "../
 import type { ActorContext } from "../types";
 import type { VerifiedFirebaseIdentity } from "./firebase";
 
+/**
+ * Per-request memo of `user_roles` reads (I1b). Create one per request with
+ * `createIdentityRequestCache()` and pass it to every identity call in that
+ * request; never keep one across requests, or role changes would go unseen.
+ */
+export type IdentityRequestCache = { roles: Map<string, Role[]> };
+
+export function createIdentityRequestCache(): IdentityRequestCache {
+  return { roles: new Map() };
+}
+
+async function loadRoles(
+  db: Db,
+  userId: string,
+  cache?: IdentityRequestCache,
+): Promise<Role[]> {
+  const cached = cache?.roles.get(userId);
+  if (cached) {
+    return cached;
+  }
+  const rows = await db
+    .select({ role: userRoles.role })
+    .from(userRoles)
+    .where(eq(userRoles.userId, userId));
+  const roles = rows.map((row) => row.role);
+  cache?.roles.set(userId, roles);
+  return roles;
+}
+
 export async function findOrCreateUserFromFirebase(
   db: Db,
   identity: VerifiedFirebaseIdentity,
@@ -50,20 +79,19 @@ export async function ensureRoleAndProfile(
     role: Role;
     displayName: string;
   },
+  cache?: IdentityRequestCache,
 ): Promise<void> {
   const timestamp = nowIso();
-  const existingRoles = await db
-    .select({ role: userRoles.role })
-    .from(userRoles)
-    .where(eq(userRoles.userId, input.userId));
+  const existingRoles = await loadRoles(db, input.userId, cache);
 
-  if (!existingRoles.some((row) => row.role === input.role)) {
+  if (!existingRoles.includes(input.role)) {
     await db.insert(userRoles).values({
       id: createId(),
       userId: input.userId,
       role: input.role,
       createdAt: timestamp,
     });
+    cache?.roles.set(input.userId, [...existingRoles, input.role]);
   }
 
   if (input.role === "trainer") {
@@ -139,6 +167,7 @@ export async function loadActorByUserId(
     authMethod: ActorContext["authMethod"];
     requestedRole?: Role | null;
   },
+  cache?: IdentityRequestCache,
 ): Promise<ActorContext | null> {
   const userRows = await db
     .select()
@@ -150,12 +179,8 @@ export async function loadActorByUserId(
     return null;
   }
 
-  const roles = await db
-    .select({ role: userRoles.role })
-    .from(userRoles)
-    .where(eq(userRoles.userId, user.id));
-
-  const permittedRoles = roles.map((row) => row.role);
+  // A copy, so a caller changing the actor cannot change the memo.
+  const permittedRoles = [...(await loadRoles(db, user.id, cache))];
   if (permittedRoles.length === 0) {
     return null;
   }
@@ -195,6 +220,7 @@ export async function loadActorBySessionToken(
   db: Db,
   token: string,
   requestedRole?: Role | null,
+  cache?: IdentityRequestCache,
 ): Promise<ActorContext | null> {
   const tokenHash = await sha256Hex(token);
   const sessions = await db
@@ -212,18 +238,23 @@ export async function loadActorBySessionToken(
     .set({ lastSeenAt: nowIso() })
     .where(eq(webSessions.id, session.id));
 
-  return loadActorByUserId(db, {
-    userId: session.userId,
-    surface: "trainer_web",
-    authMethod: "session",
-    requestedRole,
-  });
+  return loadActorByUserId(
+    db,
+    {
+      userId: session.userId,
+      surface: "trainer_web",
+      authMethod: "session",
+      requestedRole,
+    },
+    cache,
+  );
 }
 
 export async function loadActorByFirebaseUid(
   db: Db,
   firebaseUid: string,
   requestedRole?: Role | null,
+  cache?: IdentityRequestCache,
 ): Promise<ActorContext | null> {
   const userRows = await db
     .select({ id: users.id })
@@ -235,10 +266,14 @@ export async function loadActorByFirebaseUid(
     return null;
   }
 
-  return loadActorByUserId(db, {
-    userId: user.id,
-    surface: "mobile",
-    authMethod: "bearer",
-    requestedRole,
-  });
+  return loadActorByUserId(
+    db,
+    {
+      userId: user.id,
+      surface: "mobile",
+      authMethod: "bearer",
+      requestedRole,
+    },
+    cache,
+  );
 }

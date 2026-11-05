@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="mobile" tests="4" failures="1" time="102.800">
+<testsuite name="mobile" tests="4" failures="1" skipped="0" timestamp="2026-11-03T20:30:12" time="102.800">
+  <testcase name="trainee-today" classname="mobile" time="41.200"/>
+  <testcase name="trainee-today" classname="mobile" time="9.000"><failure message="Login failed for trainee@gmail.com with code 482913 and password dummy-not-a-real-password, header Bearer abc123.def456 from qa+trainer@thefitbud.com">Login failed for trainee@gmail.com with code 482913 and password hunter2-QA-pass, header Bearer abc123.def456 from qa+trainer@thefitbud.com</failure></testcase>
+  <testcase name="trainer-home" classname="mobile" time="22.500"/>
+  <testcase name="trainer-client-status" classname="mobile" time="30.100"/>
+</testsuite>
+</testsuites>

@@ -16,6 +16,11 @@ export default defineConfig({
       "/api": {
         target: apiTarget,
         changeOrigin: true,
+        // Realtime upgrades go through this proxy too. Without `ws`, the dev
+        // server answers the upgrade itself instead of forwarding it, so every
+        // handshake fails locally and in e2e — the deployed web Worker does
+        // forward it (WD1), so dev would disagree with staging.
+        ws: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },

@@ -7,7 +7,7 @@ export type DateNavigatorDay = {
   localDate: string;
   weekdayLabel: string;
   dayLabel: string;
-  state: "done" | "partial" | "open" | "rest" | "future";
+  state: "done" | "partial" | "open" | "rest" | "future" | "unknown";
 };
 
 type Props = {
@@ -30,8 +30,28 @@ function dotColor(state: DateNavigatorDay["state"]): string {
       return colors.lightGrey;
     case "future":
       return colors.midGrey;
-    default:
+    case "unknown":
+      // Same no-information colour the strip used when unknown was stored as
+      // rest. The spoken label is what tells the states apart.
       return colors.lightGrey;
+  }
+}
+
+/** Spoken day state. One static phrase per member; nothing is inferred. */
+function stateLabel(state: DateNavigatorDay["state"]): string {
+  switch (state) {
+    case "done":
+      return "done";
+    case "partial":
+      return "partial";
+    case "open":
+      return "open";
+    case "rest":
+      return "rest";
+    case "future":
+      return "future";
+    case "unknown":
+      return "unknown";
   }
 }
 
@@ -74,7 +94,7 @@ export function DateNavigator({
                   key={day.localDate}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
-                  accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}`}
+                  accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}, ${stateLabel(day.state)}`}
                   onPress={() => onSelect(day.localDate)}
                   style={[styles.day, selected ? styles.daySelected : null]}
                 >

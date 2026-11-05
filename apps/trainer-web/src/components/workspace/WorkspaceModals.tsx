@@ -20,6 +20,7 @@ export function WorkspaceModals({
   modal,
   onClose,
   onChanged,
+  onNoteSaved,
 }: {
   relationshipId: string;
   traineeName: string;
@@ -30,6 +31,8 @@ export function WorkspaceModals({
   modal: WorkspaceModal;
   onClose: () => void;
   onChanged: () => void;
+  /** TW-34: the note is saved; the layout closes the drawer and shows the toast. */
+  onNoteSaved: (message: string) => void;
 }) {
   if (!modal) return null;
 
@@ -53,7 +56,7 @@ export function WorkspaceModals({
             traineeName={traineeName}
             traineeGender={traineeGender}
             note={modal.note}
-            onSaved={onChanged}
+            onSaved={onNoteSaved}
             onClose={onClose}
           />
         </aside>

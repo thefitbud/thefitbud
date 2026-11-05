@@ -60,24 +60,12 @@ import {
   scheduledAssignments,
   sortMealsByTime,
 } from "./scheduledAssignments";
-import type { WeekDayState } from "@fitbud/contracts";
-
-function mapWeekState(state: WeekDayState): DateNavigatorDay["state"] {
-  switch (state) {
-    case "done":
-      return "done";
-    case "partial":
-      return "partial";
-    case "missed":
-      return "open";
-    case "rest":
-      return "rest";
-    case "future":
-      return "future";
-    default:
-      return "open";
-  }
-}
+import {
+  WEEK_UNAVAILABLE_MESSAGE,
+  loadWeekModel,
+  navigatorDaysFor,
+  type WeekModelState,
+} from "./TraineeDateNavigator";
 
 function MacroBar({
   label,
@@ -196,17 +184,22 @@ export function DietTab({
     () => startOfWeekMonday(selectedDate),
     [selectedDate],
   );
-  const [weekModel, setWeekModel] = useState<Awaited<
-    ReturnType<typeof s1.getMeWeek>
-  > | null>(null);
+  // Four-state, never a nullable model: see `WeekModelState` (CU23,
+  // D-W3b-25). The old `catch { setWeekModel(null) }` made a failed
+  // `GET /me/week` indistinguishable from "not loaded", and the strip below
+  // then derived every past day as `missed` from the date alone.
+  const [weekState, setWeekState] = useState<WeekModelState>({
+    status: "loading",
+  });
 
   const loadWeek = useCallback(async () => {
-    try {
-      const week = await s1.getMeWeek(weekStart);
-      setWeekModel(week);
-    } catch {
-      setWeekModel(null);
-    }
+    setWeekState(
+      await loadWeekModel(
+        (start) => s1.getMeWeek(start),
+        weekStart,
+        "DietTab.getMeWeek",
+      ),
+    );
   }, [s1, weekStart]);
 
   const load = useCallback(async () => {
@@ -313,20 +306,20 @@ export function DietTab({
   const carbsRing = nutritionRings.find((r) => r.key === "carbs");
   const fatRing = nutritionRings.find((r) => r.key === "fat");
 
-  const weekDays = useMemo((): DateNavigatorDay[] => {
-    const dates = weekDatesFrom(weekStart);
-    const byDate = new Map(
-      (weekModel?.days ?? []).map((day) => [day.date, day.state]),
-    );
-    return dates.map((localDate) => ({
-      localDate,
-      weekdayLabel: weekdayShort(timeZone, localDate),
-      dayLabel: dayOfMonth(timeZone, localDate),
-      state: mapWeekState(
-        byDate.get(localDate) ?? (localDate > today ? "future" : "missed"),
-      ),
-    }));
-  }, [weekModel?.days, weekStart, timeZone, today]);
+  const weekDays = useMemo(
+    (): DateNavigatorDay[] =>
+      navigatorDaysFor({
+        weekState,
+        dates: weekDatesFrom(weekStart),
+        timeZone,
+        weekdayShortOf: weekdayShort,
+        dayOfMonthOf: dayOfMonth,
+        // The same `GET /me/day` state Today's strip reads (Z5-8), so the
+        // two tabs never disagree about a day when the week fails to load.
+        day: dayTotals,
+      }),
+    [weekState, weekStart, timeZone, dayTotals],
+  );
 
   const focusMealId = useMemo(() => {
     if (photoPromptId) return photoPromptId;
@@ -707,6 +700,14 @@ export function DietTab({
       </View>
 
       {error ? <ErrorBanner message={error} /> : null}
+      {/*
+        The week strip's states come from `GET /me/week`. When that call
+        fails the dots carry no state and the trainee is told so (CU23,
+        D-W3b-25) — they are never filled in from the date alone.
+      */}
+      {weekState.status === "unavailable" ? (
+        <ErrorBanner message={WEEK_UNAVAILABLE_MESSAGE} />
+      ) : null}
       {offline ? (
         <Text style={styles.offline}>Saved on phone · Not sent yet</Text>
       ) : null}

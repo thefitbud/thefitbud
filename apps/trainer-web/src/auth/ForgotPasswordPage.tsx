@@ -6,6 +6,7 @@ import { Button } from "../components/Button";
 import { useAuth } from "./AuthProvider";
 import { fetchDevMailCode } from "../lib/auth-flow";
 import { apiClient } from "../lib/api";
+import { pickSessionRefresh } from "../lib/session";
 import { stage1Api } from "../lib/stage1-api";
 import { useOnline } from "../hooks/useOnline";
 
@@ -120,7 +121,11 @@ export function ForgotPasswordPage() {
         resetProof,
         newPassword,
       });
-      await signInWithToken(result.token, identifier.trim());
+      await signInWithToken(
+        result.token,
+        identifier.trim(),
+        pickSessionRefresh(result),
+      );
       navigate(next, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset password.");

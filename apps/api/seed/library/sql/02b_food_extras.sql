@@ -1,0 +1,1 @@
+-- Food extras that load after 02_foods.sql. Not part of the locked 2026.10.9 release (no sha256 in manifest.json).

@@ -40,16 +40,14 @@ export const optionalAuthMiddleware = createMiddleware<{
 
   if (authHeader?.startsWith("Bearer ")) {
     const authMode = c.env.AUTH_MODE === "firebase" ? "firebase" : "test";
-    if (
-      authMode === "test" &&
-      c.env.ENVIRONMENT !== "local" &&
-      process.env.VITEST !== "true"
-    ) {
+    // Staging/production never get here with test auth (runtime guard). Any other
+    // non-local environment still refuses the unsigned test tokens.
+    if (authMode === "test" && c.env.ENVIRONMENT !== "local") {
       return fail(
         c,
-        503,
-        "AUTH_MODE_TEST_DISABLED",
-        "Test authentication is not enabled in this environment.",
+        500,
+        "RUNTIME_MISCONFIGURED",
+        "Test authentication is only available in local development.",
       );
     }
     const token = authHeader.slice("Bearer ".length).trim();

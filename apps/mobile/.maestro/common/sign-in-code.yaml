@@ -1,0 +1,54 @@
+# Subflow (QT3): sign in with the staging test-mode login code (QT1).
+#
+# Inputs (env):
+#   SIGN_IN_EMAIL  a qa+...@thefitbud.com address, passed by the caller
+#   QA_OTP_CODE    the 6-digit code, from the runner (GitHub secret QA_TEST_OTP_CODE)
+#
+# D-QA1-14: the QA code is treated as public, but screenshots are published
+# unredacted, so NOTHING in this file takes a screenshot, and no caller may
+# between the code being typed and the sign-in settling. Maestro also takes an
+# automatic screenshot when a command FAILS. The code field does not clear on a
+# failed sign-in, so every command that can fail while the code is on screen is
+# optional here, and a failed sign-in wipes the field before the real
+# assertion at the end can fail and trigger that screenshot.
+#
+# Ends on the signed-in home: trainee Today, trainer "Needs you", or role select.
+# Maestro parses every file reached by `runFlow:` as a flow in its own right, so
+# this subflow needs a config section and the `---` separator even though it only
+# ever runs from a caller, and `appId` in that section is required rather than
+# inherited (CU18; the full reasoning is in common/assert-no-crash.yaml). The
+# value is inert for a subflow -- the calling flow's config governs -- and no
+# `tags:` are set, so this file is never collected as a top-level flow.
+appId: com.thefitbud.mobile.staging
+---
+- runFlow: sign-in-code-request.yaml
+# `Field` names its TextInput with its label (CU15), so the code field is
+# tapped by that name rather than by its position under the label.
+- tapOn: "6-digit code"
+- inputText: ${QA_OTP_CODE}
+- tapOn:
+    text: "Sent to .*"
+    optional: true
+- tapOn:
+    text: "Verify and sign in"
+    optional: true
+- extendedWaitUntil:
+    visible: "Today's workout|Needs you|Choose mode"
+    timeout: 30000
+    optional: true
+- runFlow:
+    when:
+      visible: "6-digit code"
+    commands:
+      # Sign-in did not leave the code screen: clear the field before the final
+      # assertion fails and Maestro screenshots the failure.
+      - tapOn:
+          text: "6-digit code"
+          optional: true
+      - eraseText:
+          charactersToErase: 12
+          optional: true
+      - tapOn:
+          text: "Sent to .*"
+          optional: true
+- assertVisible: "Today's workout|Needs you|Choose mode"

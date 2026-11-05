@@ -2,6 +2,24 @@ import { createId, nowIso } from "./crypto";
 import type { Db } from "../db/client";
 import { devMailOutbox } from "../db/schema";
 import type { Env } from "../types";
+import { EmailSendError, sendZeptoMail } from "./zeptomail";
+
+export { EmailSendError } from "./zeptomail";
+
+/** The configured provider can't send (no ZeptoMail token, or resend / ses, which aren't built). */
+export class EmailNotConfiguredError extends Error {
+  readonly code = "EMAIL_PROVIDER_NOT_CONFIGURED" as const;
+
+  constructor() {
+    super("EMAIL_PROVIDER_NOT_CONFIGURED");
+    this.name = "EmailNotConfiguredError";
+  }
+}
+
+/** True for a failed or impossible email send; false for any other error. */
+export function isEmailDeliveryFailure(err: unknown): err is EmailSendError | EmailNotConfiguredError {
+  return err instanceof EmailSendError || err instanceof EmailNotConfiguredError;
+}
 
 export type EmailTemplate =
   | "otp"
@@ -41,5 +59,17 @@ export async function sendSystemEmail(
     console.log(`[DEV MAIL] to=${input.to} subject=${input.subject}`);
     return;
   }
-  throw new Error("EMAIL_PROVIDER_NOT_CONFIGURED");
+  if (provider === "zeptomail") {
+    const token = env.ZEPTOMAIL_TOKEN?.trim();
+    if (!token) {
+      throw new EmailNotConfiguredError();
+    }
+    await sendZeptoMail(
+      { token, from: env.SYSTEM_EMAIL_FROM, replyTo: env.SYSTEM_EMAIL_REPLY_TO },
+      { to: input.to, subject: input.subject, text: input.text, html: input.html },
+    );
+    return;
+  }
+  // resend / ses are named in the type but not implemented.
+  throw new EmailNotConfiguredError();
 }

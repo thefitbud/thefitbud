@@ -12,6 +12,12 @@
     "scripts/db-reset.ts",
     "scripts/library-seed.ts",
     "scripts/local-traces.ts",
-    "scripts/lib/**/*.ts"
+    "scripts/deploy-env.ts",
+    "scripts/deploy-env.test.ts",
+    "scripts/lib/**/*.ts",
+    "scripts/qa-seed.ts",
+    "scripts/qa-reset.ts",
+    "scripts/qa-seed.test.ts",
+    "qa-smoke"
   ]
 }

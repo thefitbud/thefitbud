@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { authTokenKindSchema } from "./auth.js";
 import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 
 /** Invitation lifecycle as persisted on client_invitations. */
@@ -86,7 +87,9 @@ export const acceptInvitationRequestSchema = z.object({
 
 export const acceptInvitationWithTokenResponseSchema = z.object({
   token: z.string(),
-  tokenKind: z.enum(["test_id_token", "firebase_custom_token"]),
+  tokenKind: authTokenKindSchema,
+  refreshToken: z.string().optional(),
+  expiresIn: z.number().int().positive().optional(),
   userId: uuidSchema,
   relationshipId: uuidSchema,
 });
