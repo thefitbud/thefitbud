@@ -15,6 +15,9 @@
 # Written without a device in the AB3 session; first run is Firoz's or QA1's.
 appId: com.thefitbud.mobile.staging
 ---
+# clearState does not clear the iOS keychain, where the session lives
+# (Z5-5b, cause 9); clearKeychain does, and is a no-op on Android.
+- clearKeychain
 - clearState
 - launchApp
 

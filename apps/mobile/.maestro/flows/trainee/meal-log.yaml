@@ -15,6 +15,7 @@ tags:
 # the clock, and a meal that is already logged or closed shows no action.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
@@ -42,7 +43,10 @@ tags:
     timeout: 10000
 - tapOn: "Search foods"
 - inputText: "dal"
-- hideKeyboard
+# Dismiss the keyboard by tapping inert text: the "Results" heading is a plain
+# Text inside the keyboardShouldPersistTaps="handled" results ScrollView
+# (FoodSearchScreen.tsx). hideKeyboard cannot dismiss the iOS keyboard (Z5-5, #241).
+- tapOn: "Results"
 - extendedWaitUntil:
     visible: "Add .*"
     timeout: 20000

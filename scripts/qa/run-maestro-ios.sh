@@ -117,7 +117,7 @@ APP_BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist")"
 ios_embedded_entitlements_ok "$APP" "$APP_BUNDLE_ID" \
   || die "the simulator app has no embedded keychain entitlements, so SecureStore fails with -34018 and the auth screen never appears. build-ios-sim.sh must embed them (LD_ENTITLEMENTS_SECTION)."
 ios_signature_unrestricted "$APP" \
-  || die "the simulator app's code signature carries restricted entitlements, so macOS kills it at launch. sign-ios-simulator-app.sh must sign it without --entitlements."
+  || die "the simulator app needs a readable ad-hoc code signature with no restricted entitlements (see the line above): unsigned, it has no keychain identity; with restricted entitlements, macOS kills it at launch. sign-ios-simulator-app.sh must sign it without --entitlements."
 
 xcrun simctl bootstatus "$UDID" -b
 
