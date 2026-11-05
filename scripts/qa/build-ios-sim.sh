@@ -21,10 +21,13 @@
 #
 # xcodebuild itself does not sign (CODE_SIGNING_ALLOWED=NO). The runner has no
 # development certificate, and the app's push and App Group entitlements would
-# make a normal signature demand one. The .app is ad-hoc signed afterwards
-# (sign-ios-simulator-app.sh). An unsigned simulator build has no keychain
-# identity: SecureStore fails with -34018 and the auth screen never appears
-# (CU25). Ad-hoc signing needs no certificate and no secret.
+# make a normal signature demand one. The keychain entitlements are embedded in
+# the binary by the linker (LD_ENTITLEMENTS_SECTION) and the .app is ad-hoc
+# signed afterwards, with no entitlements in the signature
+# (sign-ios-simulator-app.sh, Z5-5). Without the entitlements SecureStore fails
+# with -34018 and the auth screen never appears (CU25); with them in the
+# signature the app is killed at launch (Z5-5). Ad-hoc signing needs no
+# certificate and no secret.
 #
 # Environment (all optional):
 #   QA_IOS_APP_DIR     where the finished .app is copied
@@ -134,6 +137,16 @@ SENTRY_CLI_EXECUTABLE="$(resolve_sentry_cli "$MOBILE")" || die "cannot locate @s
 export SENTRY_CLI_EXECUTABLE
 echo "build-ios-sim: sentry-cli for the Xcode phases at $SENTRY_CLI_EXECUTABLE"
 
+# The keychain entitlements go into the binary, not the code signature (Z5-5, see
+# sign-ios-simulator-app.sh): the linker embeds this plist in __TEXT,__entitlements,
+# which is where the simulator reads entitlements from, exactly as Xcode does for its
+# own simulator builds. An ad-hoc signature carrying them is killed at launch.
+SIM_ENTITLEMENTS="$DERIVED/simulator-entitlements.xcent"
+mkdir -p "$DERIVED"
+node "$ROOT/scripts/qa/simulator-keychain-entitlements.mjs" "$EXPECTED_BUNDLE_ID" >"$SIM_ENTITLEMENTS" \
+  || die "could not write the simulator entitlements plist."
+echo "build-ios-sim: embedding $SIM_ENTITLEMENTS in __TEXT,__entitlements"
+
 echo "build-ios-sim: xcodebuild"
 xcodebuild \
   -workspace "$WORKSPACE" \
@@ -145,6 +158,7 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
+  LD_ENTITLEMENTS_SECTION="$SIM_ENTITLEMENTS" \
   build
 
 PRODUCTS="$DERIVED/Build/Products/$CONFIGURATION-iphonesimulator"
