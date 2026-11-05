@@ -10,6 +10,7 @@ tags:
 # Env from the runner: QA_ONTRACK_EMAIL, QA_PASSWORD.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:

@@ -47,8 +47,12 @@ next to it. The branches that exist today:
   session-persists.yaml         AB3, manual, not part of the suite
 ```
 
-Every flow starts with `launchApp: clearState: true`, signs in through a `common/`
-subflow, and calls `assert-no-crash.yaml` after every screenshot.
+Every flow starts with `launchApp` with `clearState: true` and `clearKeychain: true`,
+signs in through a `common/` subflow, and calls `assert-no-crash.yaml` after every
+screenshot. `clearState` alone does not clear the iOS simulator keychain, where
+SecureStore keeps the session, so without `clearKeychain` a flow after a
+signed-in flow opens already signed in (Z5-5b, cause 9). On Android
+`clearKeychain` does nothing and `clearState` already wipes the session.
 
 | Flow | Tags | Account | Sign-in |
 |---|---|---|---|

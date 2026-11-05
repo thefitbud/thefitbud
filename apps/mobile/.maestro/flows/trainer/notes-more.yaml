@@ -14,6 +14,7 @@ env:
 # fixed QA string, never client data.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
@@ -38,7 +39,10 @@ env:
     timeout: 10000
 - tapOn: "Note"
 - inputText: "QA nightly note. Safe to delete."
-- hideKeyboard
+# Dismiss the keyboard by tapping inert text: the "Coach notes" section title is a
+# plain Text inside Screen's keyboardShouldPersistTaps="handled" ScrollView
+# (ClientStatusScreen.tsx). hideKeyboard cannot dismiss the iOS keyboard (Z5-5, #241).
+- tapOn: "Coach notes"
 - takeScreenshot: trainer-notes__composer
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Save note"

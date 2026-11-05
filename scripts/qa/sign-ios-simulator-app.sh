@@ -70,10 +70,24 @@ ios_embedded_entitlements_ok() {
   fi
 }
 
-# Succeeds when the code signature carries none of the restricted keys.
+# Succeeds when the app has a readable ad-hoc code signature that carries none of
+# the restricted keys. An unreadable signature is a failure, not a pass (Z5-5b):
+# an unsigned app has no keychain identity, and a signature that cannot be read
+# proves nothing about its entitlements.
 ios_signature_unrestricted() {
-  local app="$1" dumped key
-  dumped="$(codesign -d --entitlements :- "$app" 2>/dev/null || true)"
+  local app="$1" info dumped key
+  if ! info="$(codesign -d --verbose=2 "$app" 2>&1)"; then
+    echo "sign-ios-simulator-app: $(basename "$app") has no readable code signature; sign it with sign-ios-simulator-app.sh" >&2
+    return 1
+  fi
+  if ! grep -q -x -F 'Signature=adhoc' <<<"$info"; then
+    echo "sign-ios-simulator-app: $(basename "$app") is not ad-hoc signed; sign it with sign-ios-simulator-app.sh" >&2
+    return 1
+  fi
+  if ! dumped="$(codesign -d --entitlements :- "$app" 2>/dev/null)"; then
+    echo "sign-ios-simulator-app: could not read the entitlements of $(basename "$app")'s code signature" >&2
+    return 1
+  fi
   for key in "${IOS_RESTRICTED_ENTITLEMENT_KEYS[@]}"; do
     if grep -q -F "$key" <<<"$dumped"; then
       echo "sign-ios-simulator-app: the code signature carries the restricted entitlement ${key}; macOS kills such an ad-hoc app at launch (Taskgated Invalid Signature)" >&2

@@ -16,6 +16,7 @@ tags:
 # Without them the flow checks the structure only.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:

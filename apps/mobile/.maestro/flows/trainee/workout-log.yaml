@@ -23,6 +23,7 @@ tags:
 # order (trainee before trainer) give that.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:

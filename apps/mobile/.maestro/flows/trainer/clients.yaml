@@ -15,6 +15,7 @@ env:
 # Env from the runner: QA_TRAINER_EMAIL, QA_PASSWORD.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
