@@ -33,6 +33,18 @@ type Props = {
   onForgotPassword: () => void;
   onHaveInviteCode?: () => void;
   inviteTrainerName?: string | null;
+  /**
+   * Value already held by AuthScreen. This screen remounts when the mode
+   * changes, so the seed is what comes back from code or reset sign-in.
+   */
+  initialIdentifier?: string;
+  /**
+   * AuthScreen owns the identifier the code and reset screens submit.
+   * Typing stays local until this reports it; without the report, "Sign in
+   * with a code instead" opens an empty field and Send code never requests
+   * an OTP (CU21).
+   */
+  onIdentifierChange?: (value: string) => void;
 };
 
 export function SignInScreen({
@@ -43,9 +55,11 @@ export function SignInScreen({
   onForgotPassword,
   onHaveInviteCode,
   inviteTrainerName,
+  initialIdentifier = "",
+  onIdentifierChange,
 }: Props) {
   const { config } = useConfig();
-  const [identifier, setIdentifier] = useState("");
+  const [identifier, setIdentifier] = useState(initialIdentifier);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const waSoon = !isWhatsAppOtpEnabled(config);
@@ -85,7 +99,10 @@ export function SignInScreen({
           <Field
             label="Mobile number or email"
             value={identifier}
-            onChangeText={setIdentifier}
+            onChangeText={(value) => {
+              setIdentifier(value);
+              onIdentifierChange?.(value);
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
