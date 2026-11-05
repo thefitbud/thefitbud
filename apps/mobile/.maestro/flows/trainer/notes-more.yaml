@@ -23,10 +23,12 @@ env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
 
 - tapOn: "Clients"
+# The client row is one element on iOS; match the name inside its label
+# (see flows/trainer/clients.yaml, Z5-5b cause 10).
 - extendedWaitUntil:
-    visible: ${QA_SLIPPING_NAME}
+    visible: ".*${QA_SLIPPING_NAME}.*"
     timeout: 30000
-- tapOn: ${QA_SLIPPING_NAME}
+- tapOn: ".*${QA_SLIPPING_NAME}.*"
 - extendedWaitUntil:
     visible: "This week"
     timeout: 30000

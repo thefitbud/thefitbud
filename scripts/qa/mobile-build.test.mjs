@@ -436,3 +436,50 @@ test("no flow dismisses the keyboard with hideKeyboard; the full-tag flows tap i
     assert.match(screen, /<Screen\b/, `${c.screen} renders inside Screen's handled ScrollView`);
   }
 });
+
+// Cause 10 (job 127261380352): a client row is one Pressable with no
+// accessibilityLabel, so iOS exposes it as one element labelled with all of its
+// text. On the client list the name is matched inside that label; on the client
+// status screen, where the name is a plain Text header, it stays exact.
+test("the client-list steps match the client name inside the row's iOS label", () => {
+  const tab = fs.readFileSync(path.join(repo, "apps/mobile/src/trainer/ClientsTab.tsx"), "utf8");
+  const row = tab.match(/<Pressable\s+key=\{row\.key\}[^>]*>/);
+  assert.ok(row, "ClientsTab renders each client row as a Pressable");
+  assert.doesNotMatch(row[0], /accessibilityLabel/, "the row has no label of its own");
+  assert.match(tab, /<Text style=\{styles\.name\}>\{formatPersonName\(row\.name\)\}<\/Text>/);
+
+  const clients = fs.readFileSync(path.join(maestroDir, "flows/trainer/clients.yaml"), "utf8");
+  const list = clients.slice(clients.indexOf('- tapOn: "Clients"'), clients.indexOf('visible: "This week"'));
+  assert.match(list, /visible: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+  assert.match(list, /- assertVisible: "\.\*\$\{QA_ONTRACK_NAME\}\.\*"/);
+  assert.match(list, /- tapOn: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+  assert.doesNotMatch(list, /(visible|assertVisible|tapOn): \$\{QA_/, "no exact name selector on the list");
+  // Every check on the list still runs: wait, the second client, screenshot.
+  assert.match(list, /- takeScreenshot: trainer-clients__list/);
+  const status = clients.slice(clients.indexOf('visible: "This week"'));
+  assert.match(status, /- assertVisible: \$\{QA_SLIPPING_NAME\}\n/, "the status header stays an exact match");
+  assert.match(
+    fs.readFileSync(path.join(repo, "apps/mobile/src/trainer/ClientStatusScreen.tsx"), "utf8"),
+    /<Text style=\{styles\.h1\}>\{name\}<\/Text>/,
+  );
+
+  const notes = fs.readFileSync(path.join(maestroDir, "flows/trainer/notes-more.yaml"), "utf8");
+  const notesList = notes.slice(notes.indexOf('- tapOn: "Clients"'), notes.indexOf('visible: "This week"'));
+  assert.match(notesList, /visible: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+  assert.match(notesList, /- tapOn: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+});
+
+// Cause 11 (job 127261380352): each step on trainee Today takes about ten times
+// as long on iOS, so a 20 s scroll limit allowed about one look-and-swipe.
+test("the Today scrolls below the workout card allow 120 s on iOS", () => {
+  const today = fs.readFileSync(path.join(maestroDir, "flows/trainee/today.yaml"), "utf8");
+  const steps = [...today.matchAll(/- scrollUntilVisible:\n\s+element: ("[^"\n]+")\n\s+timeout: (\d+)/g)];
+  const byElement = Object.fromEntries(steps.map((m) => [m[1], Number(m[2])]));
+  for (const element of ['"Nutrition"', '"Meals"', '".*${QA_TODAY_MEAL_NAME}.*"']) {
+    assert.ok(element in byElement, `today.yaml scrolls to ${element}`);
+    assert.ok(byElement[element] >= 120000, `${element}: ${byElement[element]} ms`);
+  }
+  // The scrolls stay in order, and nothing that checks the screen was dropped.
+  assert.ok(today.indexOf('element: "Nutrition"') < today.indexOf('element: "Meals"'));
+  assert.match(today, /- assertNotVisible: "No meals planned today\\\\\."/);
+});

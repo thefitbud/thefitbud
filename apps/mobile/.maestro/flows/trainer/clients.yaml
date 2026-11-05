@@ -24,14 +24,18 @@ env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
 
 - tapOn: "Clients"
+# Each client row is one tappable Pressable with no accessibilityLabel
+# (ClientsTab.tsx). iOS exposes it as a single element labelled with its
+# children's text joined ("QR QA Rohan ..."), so the name is matched inside that
+# label; Android also exposes the name's own text node (Z5-5b, cause 10).
 - extendedWaitUntil:
-    visible: ${QA_SLIPPING_NAME}
+    visible: ".*${QA_SLIPPING_NAME}.*"
     timeout: 30000
-- assertVisible: ${QA_ONTRACK_NAME}
+- assertVisible: ".*${QA_ONTRACK_NAME}.*"
 - takeScreenshot: trainer-clients__list
 - runFlow: ../../common/assert-no-crash.yaml
 
-- tapOn: ${QA_SLIPPING_NAME}
+- tapOn: ".*${QA_SLIPPING_NAME}.*"
 - extendedWaitUntil:
     visible: "This week"
     timeout: 30000

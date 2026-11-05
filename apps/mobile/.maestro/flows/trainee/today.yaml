@@ -71,12 +71,17 @@ tags:
       - assertVisible: ".*${QA_TODAY_WORKOUT_NAME}.*"
 
 # Nutrition and the planned meals sit below the workout card.
+# 120 s, not 20 s: on iOS each step on this screen takes about ten times as long
+# as on Android (the flow ran 12m 53s before failing on iOS, 1m 21s on Android),
+# so 20 s left time for about one look-and-swipe (Z5-5b, cause 11, job
+# 127261380352). A longer limit only lets the scroll continue; Android still
+# stops as soon as the element is on screen.
 - scrollUntilVisible:
     element: "Nutrition"
-    timeout: 20000
+    timeout: 120000
 - scrollUntilVisible:
     element: "Meals"
-    timeout: 20000
+    timeout: 120000
 - assertNotVisible: "No meals planned today\\."
 - runFlow:
     when:
@@ -84,5 +89,5 @@ tags:
     commands:
       - scrollUntilVisible:
           element: ".*${QA_TODAY_MEAL_NAME}.*"
-          timeout: 20000
+          timeout: 120000
 - runFlow: ../../common/assert-no-crash.yaml
