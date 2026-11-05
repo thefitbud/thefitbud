@@ -9,6 +9,9 @@ build
 !.env.example
 coverage
 *.log
+# QA fixtures are inputs, not run output. *.log hid them from `git add`
+# (QT8, QA1; three CU19 ios fixtures needed `git add -f`).
+!scripts/qa/fixtures/**/*.log
 .DS_Store
 apps/mobile/.expo
 apps/mobile/dist
