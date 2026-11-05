@@ -10,6 +10,10 @@ import {
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import {
+  PLAN_UNAVAILABLE_MESSAGE,
+  type EffectivePlanState,
+} from "./TodayTab";
 import { MessageCircle, Sparkles } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { Button } from "../components/Button";
@@ -26,7 +30,14 @@ import { sortMealsByTime } from "./scheduledAssignments";
 type DayKind = "training" | "rest";
 
 type Props = {
-  effectivePlan: EffectivePlanResponse | null;
+  /**
+   * The shell's four-state plan (CU24). `null` used to mean loading, which
+   * is also what `planFromState` returns for `none` and `unavailable`, so
+   * this screen spun forever after a failed load (BT15, D-W4-16).
+   */
+  planState: EffectivePlanState;
+  /** Same handler as Today's pull-to-refresh. Required for the retry to be real. */
+  onRetryPlan?: () => void;
   coachName?: string;
   onBack: () => void;
   onAskCoach?: () => void;
@@ -74,13 +85,16 @@ function itemPortion(item: MealPrescription["items"][number]): string | null {
 }
 
 export function AssignedMealPlanScreen({
-  effectivePlan,
+  planState,
+  onRetryPlan,
   coachName = "Your coach",
   onBack,
   onAskCoach,
   insetTabBar = false,
 }: Props) {
   const [dayKind, setDayKind] = useState<DayKind>("training");
+  const effectivePlan: EffectivePlanResponse | null =
+    planState.status === "loaded" ? planState.plan : null;
   const meals = sortMealsByTime(
     effectivePlan?.version?.content.mealPrescriptions ?? [],
   );
@@ -107,7 +121,8 @@ export function AssignedMealPlanScreen({
     return base;
   }, [dayKind, meals]);
 
-  const loading = effectivePlan === null;
+  const loading = planState.status === "loading";
+  const unavailable = planState.status === "unavailable";
   const changeNote = publishedAt
     ? `From ${formatCivilDate(publishedAt.slice(0, 10))}: your coach updated this plan.`
     : null;
@@ -141,6 +156,22 @@ export function AssignedMealPlanScreen({
 
         {loading ? (
           <Text style={styles.muted}>Loading meal plan…</Text>
+        ) : unavailable ? (
+          <View>
+            <Text style={styles.muted}>{PLAN_UNAVAILABLE_MESSAGE}</Text>
+            {onRetryPlan ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+                onPress={() => {
+                  onRetryPlan();
+                }}
+                style={styles.retry}
+              >
+                <Text style={styles.retryLabel}>Try again</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : meals.length === 0 ? (
           <Text style={styles.muted}>
             Meals from your coach&apos;s plan appear here when a plan is published.
@@ -261,6 +292,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: spacing.lg,
+  },
+  retry: {
+    marginTop: spacing.sm,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  retryLabel: {
+    color: colors.indigo,
+    fontSize: 16,
   },
   summary: {
     alignItems: "center",

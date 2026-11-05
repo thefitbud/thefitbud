@@ -19,7 +19,7 @@ import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { ZEPTOMAIL_ENDPOINT } from "../lib/zeptomail.js";
 import { runtimeMisconfigurations } from "../middleware/runtime-guard.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
-import type { TestOtpEnv } from "../auth/test-otp.js";
+import type { Env } from "../types.js";
 
 /**
  * QT1: the staging-only fixed QA OTP code, end to end on the in-memory D1.
@@ -68,7 +68,7 @@ describe("staging-only test-mode OTP (QT1)", () => {
    * A correctly configured deployed Worker: firebase auth, a real push mode and
    * ZeptoMail, so the runtime guard has nothing to complain about on staging.
    */
-  function deployedEnv(overrides: Partial<TestOtpEnv> = {}): TestOtpEnv {
+  function deployedEnv(overrides: Partial<Env> = {}): Env {
     return {
       DB: dummyD1(),
       MEDIA: createMemoryR2Bucket(),
@@ -85,10 +85,10 @@ describe("staging-only test-mode OTP (QT1)", () => {
       QA_TEST_OTP_ENABLED: "on",
       QA_TEST_OTP_CODE: FIXED_CODE,
       ...overrides,
-    } as TestOtpEnv;
+    } as Env;
   }
 
-  function post(path: string, body: unknown, env: TestOtpEnv) {
+  function post(path: string, body: unknown, env: Env) {
     return app.request(
       path,
       {
@@ -100,9 +100,9 @@ describe("staging-only test-mode OTP (QT1)", () => {
     );
   }
 
-  const start = (identifier: string, env: TestOtpEnv, purpose = "login") =>
+  const start = (identifier: string, env: Env, purpose = "login") =>
     post("/auth/otp/start", { identifier, purpose }, env);
-  const verify = (identifier: string, code: string, env: TestOtpEnv, purpose = "login") =>
+  const verify = (identifier: string, code: string, env: Env, purpose = "login") =>
     post("/auth/otp/verify", { identifier, purpose, code }, env);
 
   async function seedEmailUser(email: string, displayName: string) {
@@ -353,7 +353,7 @@ describe("staging-only test-mode OTP (QT1)", () => {
     ["the purpose is not login", {}],
   ])("stays on the normal path on staging when %s", async (label, overrides) => {
     await seedEmailUser(QA_EMAIL, "QA Trainer");
-    const env = deployedEnv(overrides as Partial<TestOtpEnv>);
+    const env = deployedEnv(overrides as Partial<Env>);
     const purpose = label === "the purpose is not login" ? "reset" : "login";
 
     expect((await start(QA_EMAIL, env, purpose)).status).toBe(202);

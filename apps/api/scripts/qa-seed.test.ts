@@ -429,6 +429,56 @@ describe("QA seed (QT2)", () => {
     expect(() => qaPasswordHash("short")).toThrow(/PASSWORD_LENGTH/);
   });
 
+  it("leaves every trainee something still unlogged today", async () => {
+    // Persisted rows, not the expectations object: deleting or logging the last
+    // unlogged assignment makes this count fall below the guarantee.
+    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    try {
+      handle.sqlite.exec(built.sql);
+      await yieldToEventLoop();
+      const referenceInstant = qaReferenceInstant(REFERENCE_DATE);
+      for (const account of built.expectations.accounts) {
+        if (account.role !== "trainee" || !account.relationshipId) {
+          continue;
+        }
+        const timezone = String(
+          handle.sqlite.exec(
+            `SELECT timezone FROM users WHERE id = '${account.userId}'`,
+          )[0]?.values[0]?.[0] ?? "",
+        );
+        const localDate = new Intl.DateTimeFormat("en-CA", {
+          timeZone: timezone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(referenceInstant));
+        const relationshipId = account.relationshipId;
+        const unloggedMeals = Number(
+          handle.sqlite.exec(
+            `SELECT count(*) FROM meal_assignments
+             WHERE coaching_relationship_id = '${relationshipId}'
+               AND local_date = '${localDate}'
+               AND id NOT IN (SELECT assignment_id FROM meal_compliance)`,
+          )[0]?.values[0]?.[0] ?? 0,
+        );
+        const unloggedWorkouts = Number(
+          handle.sqlite.exec(
+            `SELECT count(*) FROM workout_assignments
+             WHERE coaching_relationship_id = '${relationshipId}'
+               AND local_date = '${localDate}'
+               AND id NOT IN (SELECT assignment_id FROM workout_executions)`,
+          )[0]?.values[0]?.[0] ?? 0,
+        );
+        expect(
+          unloggedMeals + unloggedWorkouts,
+          `${account.email} on ${localDate}`,
+        ).toBeGreaterThanOrEqual(QA_GUARANTEES.unloggedItemsTodayMin);
+      }
+    } finally {
+      handle.close();
+    }
+  }, 120_000);
+
   it("keeps the committed expectations.json in step with the generated world", () => {
     expect(stableExpectations(committedExpectations)).toBe(
       stableExpectations(built.expectations),

@@ -120,6 +120,9 @@ SUPPORT_EMAIL = "tech@thefitbud.com"
 ADMIN_ALERT_EMAILS = "tech@thefitbud.com"
 SYSTEM_EMAIL_FROM = "FitBud <no-reply@thefitbud.com>"
 SYSTEM_EMAIL_REPLY_TO = "tech@thefitbud.com"
+# Crash-reporting environment tag (BT2). The DSN is the Worker secret
+# SENTRY_DSN, set with `wrangler secret put` — never a var here (D-W4-5).
+SENTRY_ENVIRONMENT = "staging"
 
 [env.production]
 routes = [{ pattern = "api.thefitbud.com", custom_domain = true }]
@@ -169,3 +172,6 @@ SUPPORT_EMAIL = "tech@thefitbud.com"
 ADMIN_ALERT_EMAILS = "tech@thefitbud.com"
 SYSTEM_EMAIL_FROM = "FitBud <no-reply@thefitbud.com>"
 SYSTEM_EMAIL_REPLY_TO = "tech@thefitbud.com"
+# Crash-reporting environment tag (BT2). The DSN is the Worker secret
+# SENTRY_DSN, set with `wrangler secret put` — never a var here (D-W4-5).
+SENTRY_ENVIRONMENT = "production"

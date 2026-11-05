@@ -75,17 +75,13 @@ export async function loadWeekModel(
 }
 
 /**
- * The day strip when the week is unknown.
+ * The day strip when the week is unknown (BT13, D-W4-16).
  *
- * `DateNavigatorDay["state"]` has no "unknown" member and
- * `packages/ui-mobile` is outside CU23's `files_owned`, so an unknown day
- * takes the strip's own no-information dot — the same `lightGrey` its
- * `dotColor` falls back to — and the screens say in words why. It is one
- * constant for all seven days, never a state derived from the date, so a day
- * is never claimed to be done, missed or a rest day on no evidence. The PR
- * names adding an explicit `unknown` variant as the follow-up.
+ * One constant for every day the server did not describe. It is never a
+ * state derived from the date, so a day is never claimed to be done, missed
+ * or a rest day on no evidence.
  */
-const UNKNOWN_DAY_STATE: DateNavigatorDay["state"] = "rest";
+const UNKNOWN_DAY_STATE: DateNavigatorDay["state"] = "unknown";
 
 export function navigatorDaysFor(input: {
   weekState: WeekModelState;
