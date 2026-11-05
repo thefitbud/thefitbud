@@ -38,7 +38,6 @@
 #   QA_IOS_SCHEME      override the discovered Xcode scheme.
 #
 # Secrets: none. This script reads no secret and prints no value.
-# Z5-5: QA ios red since #226; diagnosis is on the Z5-5 pull request.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -102,8 +101,11 @@ echo "build-ios-sim: expo prebuild"
 IOS_DIR="$MOBILE/ios"
 [ -d "$IOS_DIR" ] || die "expo prebuild produced no apps/mobile/ios."
 
+# shellcheck source=ios-build-helpers.sh
+source "$(dirname "${BASH_SOURCE[0]}")/ios-build-helpers.sh"
+
 echo "build-ios-sim: pod install"
-(cd "$IOS_DIR" && pod install)
+(cd "$IOS_DIR" && pod_install_with_retry) || die "pod install failed."
 
 WORKSPACE="$(find "$IOS_DIR" -maxdepth 1 -name '*.xcworkspace' -type d | sort | head -n 1)"
 [ -n "$WORKSPACE" ] || die "no .xcworkspace under apps/mobile/ios after pod install."
@@ -122,6 +124,15 @@ else
   [ -n "$SCHEME" ] || die "none of the schemes [$(printf '%s' "$SCHEMES" | tr '\n' ' ')] matches the project name \"$PROJECT_NAME\"; set QA_IOS_SCHEME."
 fi
 echo "build-ios-sim: workspace=$(basename "$WORKSPACE") scheme=$SCHEME"
+
+# @sentry/react-native's Xcode phases resolve @sentry/cli from apps/mobile/ios, where
+# pnpm does not link it, and fail the build before they read
+# SENTRY_DISABLE_AUTO_UPLOAD (Z5-5, see ios-build-helpers.sh). xcodebuild passes its
+# environment to the phase scripts, which skip that resolve when this is set. The
+# upload stays off: nothing here enables it.
+SENTRY_CLI_EXECUTABLE="$(resolve_sentry_cli "$MOBILE")" || die "cannot locate @sentry/react-native's sentry-cli; the Sentry Xcode phases would fail the build."
+export SENTRY_CLI_EXECUTABLE
+echo "build-ios-sim: sentry-cli for the Xcode phases at $SENTRY_CLI_EXECUTABLE"
 
 echo "build-ios-sim: xcodebuild"
 xcodebuild \
