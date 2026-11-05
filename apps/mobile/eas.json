@@ -23,10 +23,24 @@
     },
     "production": {
       "distribution": "store",
+      "autoIncrement": true,
       "env": {
         "APP_VARIANT": "production",
         "EXPO_PUBLIC_API_BASE_URL": "https://api.thefitbud.com",
         "EXPO_PUBLIC_TRAINER_WEB_URL": "https://app.thefitbud.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "$ASC_APP_ID",
+        "appleTeamId": "$APPLE_TEAM_ID"
+      },
+      "android": {
+        "track": "internal",
+        "releaseStatus": "completed",
+        "serviceAccountKeyPath": "$GOOGLE_SERVICE_ACCOUNT_KEY_PATH"
       }
     }
   }
