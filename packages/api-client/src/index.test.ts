@@ -614,7 +614,7 @@ describe("FitBudApiClient", () => {
         onClose,
         WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
       });
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
       expect(refresh).not.toHaveBeenCalled();
       expect(onClose).toHaveBeenCalledTimes(1);
       sub.close();
@@ -780,7 +780,7 @@ describe("FitBudApiClient", () => {
         onError,
         WebSocketImpl: WebSocketImpl as unknown as typeof WebSocket,
       });
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
       expect(WebSocketImpl).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalledTimes(1);
       sub.close();

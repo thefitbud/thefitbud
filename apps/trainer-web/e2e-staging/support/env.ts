@@ -42,6 +42,8 @@ export type QaExpectations = {
   guarantees: {
     openExceptionsSlippingMin: number;
     pendingCheckinsSlipping: number;
+    clientsFirstTrainer: number;
+    clientsSecondTrainer: number;
   };
   accounts: QaAccount[];
 };
