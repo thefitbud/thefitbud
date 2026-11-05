@@ -368,6 +368,7 @@ test.describe("TW-B roster + invite", () => {
     await expect(page.getByText(/Expired/i).first()).toBeVisible();
 
     // History: Invited → Expired then Back restores status=invited.
+    // Z5-22: this step flakes; diagnosis on the PR before the fix.
     await page.goto("/clients");
     await page.getByRole("button", { name: /^Invited/i }).click();
     await expect(page).toHaveURL(/status=invited/);
