@@ -2,13 +2,22 @@ import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { Text } from "../../components/Text";
 import type { DateNavigatorDay, RingDatum } from "@fitbud/ui-mobile";
 import { colors, spacing } from "@fitbud/ui-mobile";
+import { labelFor } from "@fitbud/core";
 import { formatHeadingDate } from "../../lib/dates";
 
 export function isExpoWeb(): boolean {
   return Platform.OS === "web";
 }
 
-/** Expo web: avoid ui-mobile DateNavigator/NutritionRings until RN-web gap/SVG issues are resolved. */
+/**
+ * Expo web: avoid ui-mobile DateNavigator/NutritionRings until RN-web gap/SVG issues are resolved.
+ *
+ * One case per state and no `default` (Z5-9, G1): the old `default` painted
+ * `unknown` the same grey as `future`, so a day the server never described
+ * looked like an upcoming one. `unknown` takes the same no-information grey
+ * as the native strip (`packages/ui-mobile/src/DateNavigator.tsx`). The
+ * colour is never the only signal: each day's accessible name says its state.
+ */
 function dotColor(state: DateNavigatorDay["state"]): string {
   switch (state) {
     case "done":
@@ -19,8 +28,34 @@ function dotColor(state: DateNavigatorDay["state"]): string {
       return colors.indigo;
     case "rest":
       return colors.lightGrey;
-    default:
+    case "future":
       return colors.midGrey;
+    case "unknown":
+      return colors.lightGrey;
+  }
+}
+
+/**
+ * The spoken state of a day (Z5-9, G1). The words come from the shared
+ * `week_day_state` labels, so no raw enum value is read out. The strip's
+ * `open` is the server's `missed` (`mapWeekState` in
+ * `TraineeDateNavigator.tsx`). `unknown` is not a server state, so it has no
+ * shared label: it is a fixed phrase saying the state is not known.
+ */
+export function webDayStateLabel(state: DateNavigatorDay["state"]): string {
+  switch (state) {
+    case "done":
+      return labelFor("week_day_state", "done");
+    case "partial":
+      return labelFor("week_day_state", "partial");
+    case "open":
+      return labelFor("week_day_state", "missed");
+    case "rest":
+      return labelFor("week_day_state", "rest");
+    case "future":
+      return labelFor("week_day_state", "future");
+    case "unknown":
+      return "State not known";
   }
 }
 
@@ -49,6 +84,8 @@ export function WebDateHeading({
                   <Pressable
                     key={day.localDate}
                     accessibilityRole="button"
+                    aria-selected={selected}
+                    accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}, ${webDayStateLabel(day.state)}`}
                     onPress={() => onSelectDate(day.localDate)}
                     style={[
                       styles.dayPill,
