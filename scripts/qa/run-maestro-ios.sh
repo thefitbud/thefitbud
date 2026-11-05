@@ -92,7 +92,11 @@ QA_TRAINER_EMAIL="$(read_email trainer)"
 QA_ONTRACK_EMAIL="$(read_email ontrack)"
 QA_SLIPPING_EMAIL="$(read_email slipping)"
 
-APP="$(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d | sort | head -n 1)"
+# Piping find into head under pipefail dies with SIGPIPE (141) once head
+# closes the pipe, even when a .app exists. Read the sorted list, then take
+# the first.
+mapfile -t apps < <(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d | sort)
+APP="${apps[0]:-}"
 [ -n "$APP" ] || die "no .app under $APP_DIR; run scripts/qa/build-ios-sim.sh first."
 APP_EXECUTABLE="$(plutil -extract CFBundleExecutable raw "$APP/Info.plist")"
 [ -n "$APP_EXECUTABLE" ] || die "$APP/Info.plist has no CFBundleExecutable."
@@ -161,7 +165,9 @@ set -e
 # Maestro version chose; a missing report stays missing, and the ios suite is
 # reported as `error`.
 if [ ! -f "$IOS_RESULTS/junit.xml" ]; then
-  report="$(find "$IOS_RESULTS" -maxdepth 2 -name '*.xml' -type f | sort | head -n 1)"
+  # Same SIGPIPE hazard as the .app lookup above.
+  mapfile -t reports < <(find "$IOS_RESULTS" -maxdepth 2 -name '*.xml' -type f | sort)
+  report="${reports[0]:-}"
   if [ -n "$report" ]; then
     mv "$report" "$IOS_RESULTS/junit.xml"
     echo "run-maestro-ios: moved $(basename "$report") to junit.xml"
