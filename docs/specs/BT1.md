@@ -26,7 +26,7 @@ size: M
 - No release runbook in `docs/runbooks/`.
 
 ## Acceptance criteria
-- [ ] `eas.json` production: `autoIncrement` per D-W4-8, env `APP_VARIANT=production`, `EXPO_PUBLIC_API_URL=https://api.thefitbud.com`; `submit.production.ios` with `ascAppId` and `appleTeamId` placeholders read from env (no real IDs in the file); `submit.production.android` with `track: "internal"` then promote to closed testing, `serviceAccountKeyPath` pointing to a path outside the repo.
+- [ ] `eas.json` production: `autoIncrement` per D-W4-8, env `APP_VARIANT=production`, `EXPO_PUBLIC_API_BASE_URL=https://api.thefitbud.com`; `submit.production.ios` with `ascAppId` and `appleTeamId` placeholders read from env (no real IDs in the file); `submit.production.android` with `track: "internal"` then promote to closed testing, `serviceAccountKeyPath` pointing to a path outside the repo.
 - [ ] `store-release.md`: App Store Connect record, TestFlight groups, beta review info, App Privacy answers (data types collected, linked to user, not used for tracking); Play Console record, closed testing track, testers list, Data safety form, content rating, target audience; privacy URL; `eas build` and `eas submit` commands; what to check before external review.
 - [ ] The runbook lists secrets by name only (`EXPO_TOKEN` if run in CI, `SENTRY_AUTH_TOKEN`) and says where each lives.
 
