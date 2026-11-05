@@ -160,3 +160,7 @@ test("neither Maestro runner pipes find into head", () => {
     assert.doesNotMatch(read(file), /\| *head\b/, path.basename(file));
   }
 });
+
+test("the iOS runner does not use mapfile or readarray (macos-15 bash is 3.2)", () => {
+  assert.doesNotMatch(read(iosScript), /\b(mapfile|readarray)\b/);
+});

@@ -94,8 +94,12 @@ QA_SLIPPING_EMAIL="$(read_email slipping)"
 
 # Piping find into head under pipefail dies with SIGPIPE (141) once head
 # closes the pipe, even when a .app exists. Read the sorted list, then take
-# the first.
-mapfile -t apps < <(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d | sort)
+# the first. A while-read over process substitution so this runs on the
+# macos-15 runner's bash 3.2, which has no array-from-stdin builtin.
+apps=()
+while IFS= read -r app; do
+  [ -n "$app" ] && apps+=("$app")
+done < <(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d | sort)
 APP="${apps[0]:-}"
 [ -n "$APP" ] || die "no .app under $APP_DIR; run scripts/qa/build-ios-sim.sh first."
 APP_EXECUTABLE="$(plutil -extract CFBundleExecutable raw "$APP/Info.plist")"
@@ -165,8 +169,12 @@ set -e
 # Maestro version chose; a missing report stays missing, and the ios suite is
 # reported as `error`.
 if [ ! -f "$IOS_RESULTS/junit.xml" ]; then
-  # Same SIGPIPE hazard as the .app lookup above.
-  mapfile -t reports < <(find "$IOS_RESULTS" -maxdepth 2 -name '*.xml' -type f | sort)
+  # Same SIGPIPE hazard as the .app lookup above. while-read: bash 3.2
+  # on macos-15 has no array-from-stdin builtin.
+  reports=()
+  while IFS= read -r found; do
+    [ -n "$found" ] && reports+=("$found")
+  done < <(find "$IOS_RESULTS" -maxdepth 2 -name '*.xml' -type f | sort)
   report="${reports[0]:-}"
   if [ -n "$report" ]; then
     mv "$report" "$IOS_RESULTS/junit.xml"
