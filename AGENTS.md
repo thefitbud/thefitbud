@@ -12,6 +12,8 @@ Build the smallest coherent MVP that connects trainer expectations with low-fric
 | **Coding agents** (Claude Code cloud sessions) | Run a whole batch: build, review, merge, write the batch report. | Run remote or deploy commands, handle secrets. |
 | **Firoz** (owner, tech@thefitbud.com) | Launches a batch, answers open decisions, does the manual steps (DNS, secrets, deploys, store consoles, device checks). | Review code line by line (see "No human code review"); review planning PRs (D-W3b-16). |
 
+**Starting a batch from W5 on? Read first** the "Read first" section at the top of [docs/specs/batches/W5.md](docs/specs/batches/W5.md): W4 was run by a Cursor orchestrator agent, not Claude, and the beta plan changed (PLAN-v2.md).
+
 **One batch runs in one tool.** Planning hands over through merged specs and batch files only. The flow is in `docs/specs/README.md`.
 
 ## Source of truth
