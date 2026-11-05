@@ -1726,13 +1726,13 @@ jobs:
           echo "--- runtimes on this image ---"
           xcrun simctl list runtimes
           echo "--- iPhone device types on this image ---"
-          xcrun simctl list devicetypes | grep -i iphone || true
+          xcrun simctl list devicetypes | grep -iF iphone || true
 
-          if ! xcrun simctl list runtimes | grep -q "$QA_IOS_RUNTIME"; then
+          if ! xcrun simctl list runtimes | grep -Fq "$QA_IOS_RUNTIME"; then
             echo "::error title=iOS runtime missing::$QA_IOS_RUNTIME is not installed on this runner image (see the list above). Pin a runtime the image ships."
             exit 1
           fi
-          if ! xcrun simctl list devicetypes | grep -q "$QA_IOS_DEVICE_TYPE"; then
+          if ! xcrun simctl list devicetypes | grep -Fq "$QA_IOS_DEVICE_TYPE"; then
             echo "::error title=Simulator device type missing::$QA_IOS_DEVICE_TYPE is not available on this runner image (see the list above)."
             exit 1
           fi
@@ -1755,7 +1755,7 @@ jobs:
           done
           if [ -z "$host_zone" ]; then
             echo "::error title=Host time zone could not be set::macOS accepted neither $QA_IOS_TIME_ZONE nor $QA_IOS_TIME_ZONE_FALLBACK. Names this host accepts:"
-            sudo systemsetup -listtimezones | tr ' ' '\n' | grep -i 'asia/' || true
+            sudo systemsetup -listtimezones | tr ' ' '\n' | grep -iF 'asia/' || true
             exit 1
           fi
           echo "::notice title=Host zone::set with the name \"$host_zone\"; macOS accepted it."
