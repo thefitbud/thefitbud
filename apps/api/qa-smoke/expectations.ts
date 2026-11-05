@@ -1,12 +1,12 @@
 /**
- * What the suite knows about the QA world (QT2).
+ * What the suite knows about its QA world (QT2), the `api` suite's personas (D-W5-14).
  *
- * Two sources, deliberately kept apart:
+ * Two sources, deliberately kept apart, both keyed by suite (`suites.api`):
  *
  *  - STABLE, committed: `apps/api/src/seed/qa/expectations.json` (accounts, ids,
  *    names, sign-in methods, `guarantees`). The same for every reference date.
- *  - PER RUN, generated: `apps/api/.qa-seed/expectations.json`, written by
- *    `scripts/qa-seed.ts` for the run that seeded staging (`referenceDate`, `today`,
+ *  - PER RUN, generated: `apps/api/.qa-seed/api/expectations.json`, written by
+ *    `scripts/qa-seed.ts --suite api` for the run that seeded staging (`referenceDate`, `today`,
  *    `loggableWorkout`, `rowCounts`). Absent on a machine that never ran the seed.
  *
  * Anything dated comes only from the per-run file, and a test uses it only when its
@@ -23,8 +23,22 @@ import { TEST_OTP_IDENTIFIER_RE } from "../src/auth/test-otp.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(here, "..");
+/**
+ * This suite's own persona set (D-W5-14). Both expectation files are keyed by suite;
+ * the staging API smoke reads `suites.api` only and signs in only as those accounts,
+ * so the web, Android and iOS suites' writes never change what it reads.
+ */
+export const QA_SMOKE_SUITE = "api";
 export const COMMITTED_EXPECTATIONS = path.join(apiRoot, "src", "seed", "qa", "expectations.json");
-export const RUN_EXPECTATIONS = path.join(apiRoot, ".qa-seed", "expectations.json");
+/** Written by `qa-seed.ts --suite api` for the run that seeded this suite's world. */
+export const RUN_EXPECTATIONS = path.join(apiRoot, ".qa-seed", QA_SMOKE_SUITE, "expectations.json");
+
+/** This suite's entry of a keyed expectations file (`{ suites: { api: … } }`), or `undefined`. */
+function suiteEntry(json: unknown): Record<string, unknown> | undefined {
+  const suites = (json as { suites?: Record<string, unknown> } | null)?.suites;
+  const entry = suites?.[QA_SMOKE_SUITE];
+  return entry && typeof entry === "object" ? (entry as Record<string, unknown>) : undefined;
+}
 
 /**
  * The accounts `global-setup.ts` signs in once per run. `run-context.ts` derives the
@@ -112,8 +126,13 @@ export function parseStable(json: unknown): Stable {
   return { guarantees: parsed.guarantees, accounts };
 }
 
+/** The committed file's `suites.api` entry, validated by {@link parseStable}. */
 export function loadStable(file = COMMITTED_EXPECTATIONS): Stable {
-  return parseStable(JSON.parse(readFileSync(file, "utf8")));
+  const entry = suiteEntry(JSON.parse(readFileSync(file, "utf8")));
+  if (!entry) {
+    throw new Error(`The QA expectations have no "${QA_SMOKE_SUITE}" suite.`);
+  }
+  return parseStable(entry);
 }
 
 const runAccountSchema = z.object({
@@ -152,10 +171,17 @@ export type RunExpectations = {
   accounts: Partial<Record<AnyAccountKey, z.infer<typeof runAccountSchema>>>;
 };
 
-/** The seed run's own file, or `null` when this machine did not generate one. */
+/**
+ * The seed run's own file, or `null` when this machine did not generate one or it
+ * seeded another suite (D-W5-14: dated values from another suite's world describe
+ * other accounts).
+ */
 export function loadRun(file = RUN_EXPECTATIONS): RunExpectations | null {
   if (!existsSync(file)) return null;
-  const parsed = runSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+  const json = JSON.parse(readFileSync(file, "utf8")) as { referenceDate?: unknown };
+  const entry = suiteEntry(json);
+  if (!entry) return null;
+  const parsed = runSchema.parse({ referenceDate: json.referenceDate, accounts: entry.accounts });
   const accounts: RunExpectations["accounts"] = {};
   for (const account of parsed.accounts) accounts[account.key] = account;
   return { referenceDate: parsed.referenceDate, accounts };

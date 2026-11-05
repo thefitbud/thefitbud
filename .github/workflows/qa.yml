@@ -18,16 +18,23 @@
 #
 # Secrets are referenced by name only and never echoed: QA_TEST_OTP_CODE,
 # FITBUD_QA_PASSWORD, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID. EXPO_TOKEN is not
-# used (D-QA1-8). The only remote write is `seed-reset`, which runs on `schedule` or
-# `workflow_dispatch` from `main` only, inside the `staging-qa` environment (D-QA1-9).
+# used (D-QA1-8). The only remote writes are the four `seed-<suite>` jobs, which run on
+# `schedule` or `workflow_dispatch` from `main` only, inside the `staging-qa`
+# environment (D-QA1-9).
 #
-# One staging writer at a time (D-QA1-7) is enforced per job, not per workflow: the
-# jobs that touch the shared staging QA accounts (`seed-reset`, `api-smoke`,
-# `web-staging`, `android`, `ios`) each hold the `qa-staging` concurrency group and are
-# chained so only one of them runs at a time, while `changes`, `qa-scripts`, `unit` and
-# `report` stay outside it. `ios` is sequenced after `android` for that reason: both drive the
-# same QA accounts, and the group alone would not keep them apart if they could start
-# together.
+# One persona set per suite (D-W5-14, Z5-7). `api` (the API smoke), `web`, `android`
+# and `ios` each sign in as their own QA accounts (apps/api/src/seed/qa/accounts.ts) and
+# each has its own seed job, `seed-<suite>`, which resets and reseeds that suite's
+# accounts only (`qa-reset.ts --suite <suite>`, `qa-seed.ts --suite <suite>`). No suite
+# can change what another suite reads, so the suites no longer queue behind each other:
+# the old chain (one `qa-staging` group held in turn by seed-reset, api-smoke,
+# web-staging, android and ios) is gone, and the four suites run side by side.
+#
+# One writer per QA world at a time is still enforced, per suite: `seed-<suite>` and the
+# suite's own job hold `qa-staging-<suite>`, and the suite job `needs:` its seed job. Two
+# runs of the SAME suite (a nightly and a PR smoke, or two PR smokes) still drive the
+# same accounts, so the group stays for exactly that. `changes`, `qa-scripts`, `unit` and
+# `report` stay outside every group.
 #
 # Queue eviction: SURFACED, NOT PREVENTED (D-W3b-26, the task D-W3b-6 asked for).
 #
@@ -36,9 +43,11 @@
 # cancelled while pending on run 41783371236, and `ios` — the last link, so the most
 # exposed (D-W3b-34) — on run 41784737040.
 #
-# Each link of the chain claims `qa-staging` separately, so one run re-queues up to five
-# times and every re-queue is a fresh chance to be evicted by another run. The three
-# obvious ways to shorten that chain were examined and all three are worse:
+# Each suite's two links (its seed job, then its suite job) claim `qa-staging-<suite>`
+# separately, so a staging run re-queues twice per suite, and every re-queue is a fresh
+# chance to be evicted by another run of the same suite. Per-suite groups (D-W5-14)
+# mean a run of one suite no longer evicts another suite's pending job. The three
+# obvious ways to shorten the remaining chain were examined and all three are worse:
 #
 #   * Moving the group to the workflow level does not reduce arrivals (a run still
 #     claims once at a time, because `needs:` already serialises the claims within a
@@ -47,8 +56,8 @@
 #   * A single gate job holding the group with the writers chained behind it by
 #     `needs:` releases the group when the gate job ENDS, which is before any writer
 #     starts. Two runs' gates would then complete in turn and their writers would
-#     overlap on the shared seed. That breaks D-QA1-7, the invariant the group exists
-#     for, so it is not an option at any price.
+#     overlap on the suite's seed. That breaks the one-writer invariant the group
+#     exists for, so it is not an option at any price.
 #   * Refusing to start when another staging run is in flight converts an eviction
 #     into an immediate hard failure, needs the Actions API and a token this workflow
 #     deliberately does not have (`permissions: contents: read`), and still races.
@@ -61,10 +70,10 @@
 # evicted suite produces no results, summarize.mjs reports it `not-run` and the run
 # `partial`, which is never a pass. Re-dispatch stays deliberate and by hand.
 #
-# Still open, and not this file's to decide: per-suite QA personas would remove the
-# shared-seed contention outright and with it the group, and running one platform
-# rather than two on the advisory PR smoke would halve PR arrivals — but D-QA1-10 asks
-# for both platforms, so that is the owner's call.
+# Per-suite QA personas (D-W5-14) removed the cross-suite contention; what is left is
+# contention between runs of the same suite. Still open, and not this file's to decide:
+# running one platform rather than two on the advisory PR smoke would halve PR
+# arrivals — but D-QA1-10 asks for both platforms, so that is the owner's call.
 #
 # `qa-scripts` is a required check on main (D-W3b-1) and a job inside a concurrency
 # group can be left Pending, or cancelled when a newer run queues, so a required
@@ -220,22 +229,29 @@ jobs:
       - name: Report builder tests
         run: node --test "scripts/qa/**/*.test.mjs"
 
-  # The only remote write in this repository's CI. Applies QT2's reset then its seed to
-  # fitbud-staging, in that order, scoped to the three QA user ids (D-QA1-3).
-  seed-reset:
-    name: seed-reset
+  # The only remote writes in this repository's CI: one job per QA suite (D-W5-14).
+  # Each applies QT2's reset then its seed to fitbud-staging, in that order, scoped to
+  # that suite's QA user ids only (`--suite`), so it never touches another suite's
+  # accounts. The four jobs are the same apart from the suite name; a change to one is a
+  # change to all four (apps/api/scripts/qa-seed-suites.test.ts checks the wiring).
+  seed-api:
+    name: seed-api
     needs: changes
     # Never on a pull request, and only from main. Both are asserted here, not inferred.
-    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.changes.outputs.staging == 'true' }}
+    if: >-
+      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'api') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging-qa
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-api
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: api
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -289,24 +305,294 @@ jobs:
       # QT2's scripts only write files; they refuse --remote themselves. tsx, not
       # node --experimental-strip-types: the scripts import .js specifiers that bare
       # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
-      - name: Generate the reset and seed SQL
+      - name: Generate the api suite's reset and seed SQL
         env:
           FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
         run: |
-          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts
-          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
 
       # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
       # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
-      - name: Apply the reset, then the seed, to fitbud-staging
+      - name: Apply the api suite's reset, then its seed, to fitbud-staging
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file .qa-seed/qa-reset.sql
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
           pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file .qa-seed/qa-seed.sql
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+
+  seed-web:
+    name: seed-web
+    needs: changes
+    # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    if: >-
+      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-qa
+    # One writer per QA world at a time; see the note at the top of this file.
+    concurrency:
+      group: qa-staging-web
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Require the seed secrets
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these in the staging-qa environment (QA1 manual steps 3 and 4):$missing"
+            exit 1
+          fi
+          echo "Both seed secrets and the Cloudflare credentials are present."
+
+      # QT2's scripts only write files; they refuse --remote themselves. tsx, not
+      # node --experimental-strip-types: the scripts import .js specifiers that bare
+      # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
+      - name: Generate the web suite's reset and seed SQL
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
+
+      # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
+      # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
+      - name: Apply the web suite's reset, then its seed, to fitbud-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+
+  seed-android:
+    name: seed-android
+    needs: changes
+    # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    if: >-
+      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-qa
+    # One writer per QA world at a time; see the note at the top of this file.
+    concurrency:
+      group: qa-staging-android
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Require the seed secrets
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these in the staging-qa environment (QA1 manual steps 3 and 4):$missing"
+            exit 1
+          fi
+          echo "Both seed secrets and the Cloudflare credentials are present."
+
+      # QT2's scripts only write files; they refuse --remote themselves. tsx, not
+      # node --experimental-strip-types: the scripts import .js specifiers that bare
+      # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
+      - name: Generate the android suite's reset and seed SQL
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
+
+      # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
+      # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
+      - name: Apply the android suite's reset, then its seed, to fitbud-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+
+  seed-ios:
+    name: seed-ios
+    needs: changes
+    # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    if: >-
+      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-qa
+    # One writer per QA world at a time; see the note at the top of this file.
+    concurrency:
+      group: qa-staging-ios
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: ios
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Require the seed secrets
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these in the staging-qa environment (QA1 manual steps 3 and 4):$missing"
+            exit 1
+          fi
+          echo "Both seed secrets and the Cloudflare credentials are present."
+
+      # QT2's scripts only write files; they refuse --remote themselves. tsx, not
+      # node --experimental-strip-types: the scripts import .js specifiers that bare
+      # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
+      - name: Generate the ios suite's reset and seed SQL
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
+
+      # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
+      # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
+      - name: Apply the ios suite's reset, then its seed, to fitbud-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+            --env staging --remote --yes --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
 
   # The repository's own unit run, as the `unit` suite of the QA report
   # (docs/runbooks/qa-nightly.md). `pnpm test` is turbo-driven and writes no JUnit, so
@@ -397,18 +683,20 @@ jobs:
           path: qa-upload
           retention-days: 14
 
+  # Signs in as the `api` suite's QA accounts only (apps/api/qa-smoke/expectations.ts
+  # reads `suites.api`), so it waits for its own seed and nothing else (D-W5-14).
   api-smoke:
     name: api-smoke
-    needs: [changes, seed-reset]
+    needs: [changes, seed-api]
     if: >-
       ${{ always() && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'api')
-          && needs.seed-reset.result == 'success' }}
+          && needs.seed-api.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-api
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -490,19 +778,19 @@ jobs:
 
   web-staging:
     name: web-staging
-    # `api-smoke` is a dependency for ordering only: the `if:` below is unchanged and
-    # still starts with always(), so this job runs whatever api-smoke concluded. The
-    # edge exists so the two never hold the staging accounts at the same moment.
-    needs: [changes, seed-reset, api-smoke]
+    # Signs in as the `web` suite's QA accounts only (e2e-staging/support/env.ts reads
+    # `suites.web`), so it no longer waits for api-smoke: the two never share an
+    # account (D-W5-14).
+    needs: [changes, seed-web]
     if: >-
       ${{ always() && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web')
-          && needs.seed-reset.result == 'success' }}
+          && needs.seed-web.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-web
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -592,25 +880,27 @@ jobs:
 
   android:
     name: android
-    # `api-smoke` and `web-staging` are dependencies for ordering only: the `if:` below
-    # is unchanged and still starts with always(), so this job runs whatever they
-    # concluded (on a pull request both are skipped, as before).
-    needs: [changes, seed-reset, api-smoke, web-staging]
+    # Signs in as the `android` suite's QA accounts only (D-W5-14; see "Point the
+    # Maestro runner" below), so it no longer waits for api-smoke or web-staging. On a
+    # pull request seed-android is skipped and the PR smoke uses the accounts the last
+    # nightly or dispatched run seeded, as before.
+    needs: [changes, seed-android]
     if: >-
       ${{ always()
-          && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
+          && (needs.seed-android.result == 'success' || needs.seed-android.result == 'skipped')
           && ((needs.changes.outputs.staging == 'true'
                && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android'))
               || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-android
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
       QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
+      QA_SEED_SUITE: android
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -741,6 +1031,31 @@ jobs:
           disable-animations: false
           script: echo "AVD created"
 
+      # D-W5-14: this job signs in as the `android` suite's QA accounts, never another
+      # suite's. scripts/qa/run-maestro.sh reads the account emails from
+      # apps/api/src/seed/qa/expectations.json as `.accounts[] | select(.key == ...)`,
+      # but that file is keyed by suite (`suites.<name>.accounts`); its top-level
+      # `accounts` is only a default copy for those scripts. This step rewrites the
+      # runner's checkout of the file (never the repository) to this suite's entry, and
+      # fails unless every email it leaves is `qa+android-...`, so the job cannot run on
+      # another suite's accounts whatever the default copy holds. Follow-up: once
+      # run-maestro*.sh read `suites[$QA_SEED_SUITE]` themselves, drop this step.
+      - name: Point the Maestro runner at the android personas
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          exp=apps/api/src/seed/qa/expectations.json
+          jq --arg s "$QA_SEED_SUITE" \
+            'if (.suites[$s].accounts | length) > 0 then {referenceDate, suite: $s, accounts: .suites[$s].accounts} else error("expectations.json has no \($s) suite") end' \
+            "$exp" > "$RUNNER_TEMP/suite-expectations.json"
+          total=$(jq '.accounts | length' "$RUNNER_TEMP/suite-expectations.json")
+          foreign=$(jq -r --arg s "$QA_SEED_SUITE" '[.accounts[].email | select(startswith("qa+\($s)-") | not)] | length' "$RUNNER_TEMP/suite-expectations.json")
+          if [ "$total" -lt 3 ] || [ "$foreign" -ne 0 ]; then
+            echo "::error title=Wrong QA personas::expected only qa+$QA_SEED_SUITE-... accounts for the $QA_SEED_SUITE suite (D-W5-14); got $total accounts, $foreign from another suite."
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/suite-expectations.json" "$exp"
+          echo "Maestro will sign in as the $QA_SEED_SUITE suite's $total QA accounts."
+
       # Emulator flakiness on hosted runners is accepted (D-QA1-8): there is no EAS or
       # Maestro Cloud fallback. A failure here is a real failure of the run.
       - name: Maestro suite
@@ -800,26 +1115,26 @@ jobs:
   # loudly here instead of quietly testing something else.
   ios:
     name: ios
-    # `android` is a dependency for ordering, not for its result: both jobs drive the
-    # same staging QA accounts, and the `qa-staging` group alone would not keep them
-    # apart if they could start at the same time. The `if:` below starts with always()
-    # so this job runs whatever `android` concluded.
-    needs: [changes, seed-reset, api-smoke, web-staging, android]
+    # No longer sequenced after `android`: the two used to drive the same QA accounts,
+    # and now each signs in as its own suite's (D-W5-14: android and ios do not share,
+    # so one platform's logs cannot change the other's Today). They run side by side.
+    needs: [changes, seed-ios]
     if: >-
       ${{ always()
-          && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
+          && (needs.seed-ios.result == 'success' || needs.seed-ios.result == 'skipped')
           && ((needs.changes.outputs.staging == 'true'
                && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios'))
               || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
     runs-on: macos-15
     timeout-minutes: 120
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-ios
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
       QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
+      QA_SEED_SUITE: ios
       # Pinned Xcode, simulator device type and runtime. All three are on the
       # macos-15 arm64 image; the steps below print what the image has and fail with
       # a message naming the missing one rather than an opaque simctl error.
@@ -1047,6 +1362,26 @@ jobs:
         if: ${{ steps.guard.outputs.secrets == 'true' }}
         run: maestro --version
 
+      # D-W5-14: as in `android`, rewrite the runner's checkout of expectations.json to
+      # this suite's entry so scripts/qa/run-maestro-ios.sh signs in as the `ios`
+      # suite's QA accounts and nobody else's. Follow-up: drop this step once
+      # run-maestro*.sh read `suites[$QA_SEED_SUITE]` themselves.
+      - name: Point the Maestro runner at the ios personas
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          exp=apps/api/src/seed/qa/expectations.json
+          jq --arg s "$QA_SEED_SUITE" \
+            'if (.suites[$s].accounts | length) > 0 then {referenceDate, suite: $s, accounts: .suites[$s].accounts} else error("expectations.json has no \($s) suite") end' \
+            "$exp" > "$RUNNER_TEMP/suite-expectations.json"
+          total=$(jq '.accounts | length' "$RUNNER_TEMP/suite-expectations.json")
+          foreign=$(jq -r --arg s "$QA_SEED_SUITE" '[.accounts[].email | select(startswith("qa+\($s)-") | not)] | length' "$RUNNER_TEMP/suite-expectations.json")
+          if [ "$total" -lt 3 ] || [ "$foreign" -ne 0 ]; then
+            echo "::error title=Wrong QA personas::expected only qa+$QA_SEED_SUITE-... accounts for the $QA_SEED_SUITE suite (D-W5-14); got $total accounts, $foreign from another suite."
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/suite-expectations.json" "$exp"
+          echo "Maestro will sign in as the $QA_SEED_SUITE suite's $total QA accounts."
+
       # Simulator flakiness on hosted runners is accepted (D-QA1-8, D-W3b-14): there
       # is no EAS or Maestro Cloud fallback. A failure here is a real failure of the
       # run.
@@ -1090,13 +1425,13 @@ jobs:
   # `ios` share that gate, so either one having run is enough.
   report:
     name: report
-    needs: [changes, qa-scripts, seed-reset, unit, api-smoke, web-staging, android, ios]
+    needs: [changes, qa-scripts, seed-api, seed-web, seed-android, seed-ios, unit, api-smoke, web-staging, android, ios]
     if: ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped' || needs.ios.result != 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       # Evicted, not failed (D-W3b-26). A staging job cancelled while PENDING was
-      # evicted from the `qa-staging` queue by newer arrivals, not broken by this
+      # evicted from its `qa-staging-<suite>` queue by newer arrivals, not broken by this
       # commit: GitHub keeps one pending entry per group and a third arrival cancels
       # the older one. Without this step the only signal is a grey `cancelled` next to
       # four greens, which reads as a failure of the run and has repeatedly been
@@ -1122,9 +1457,9 @@ jobs:
         if: always()
         env:
           # Derived from this job's own `needs:` rather than from a second hardcoded
-          # list of job names, so a sixth staging writer added to the group and to
+          # list of job names, so a new staging writer added to a group and to
           # `needs:` is covered here with no further edit. Only the jobs OUTSIDE
-          # `qa-staging` are named, and that list fails in the safe direction: a new
+          # every `qa-staging-<suite>` group are named, and that list fails in the safe direction: a new
           # non-group job nobody adds to it produces one spurious warning, which is
           # visible, where a stale list of writers would have produced silence.
           NEEDS: ${{ toJSON(needs) }}
@@ -1154,13 +1489,13 @@ jobs:
             fi
             exit 0
           fi
-          echo "::warning title=Staging job cancelled, not failed::Cancelled rather than failed:$cancelled. On the qa-staging group that is almost always queue eviction: GitHub keeps one pending entry per concurrency group (D-W3b-26), so a newer run displaces the older pending one. A cancellation requested by hand looks the same from here. Either way their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
+          echo "::warning title=Staging job cancelled, not failed::Cancelled rather than failed:$cancelled. On the qa-staging-<suite> groups that is almost always queue eviction: GitHub keeps one pending entry per concurrency group (D-W3b-26), so a newer run displaces the older pending one. A cancellation requested by hand looks the same from here. Either way their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
           {
             echo "## Cancelled, not failed"
             echo
-            echo "Cancelled on \`qa-staging\`:$cancelled"
+            echo "Cancelled on the \`qa-staging-<suite>\` groups:$cancelled"
             echo
-            echo "These jobs were **not broken by this commit**. On this group a"
+            echo "These jobs were **not broken by this commit**. On these groups a"
             echo "cancellation is almost always queue eviction:"
             echo "\`cancel-in-progress: false\` keeps only one pending entry per"
             echo "concurrency group, so a newer run displaces the older pending one"
