@@ -84,7 +84,7 @@ export function WebDateHeading({
                   <Pressable
                     key={day.localDate}
                     accessibilityRole="button"
-                    aria-selected={selected}
+                    aria-current={selected ? "date" : undefined}
                     accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}, ${webDayStateLabel(day.state)}`}
                     onPress={() => onSelectDate(day.localDate)}
                     style={[

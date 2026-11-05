@@ -87,12 +87,21 @@ describe("WebDateHeading accessible state", () => {
     expect(webDayStateLabel("open")).toBe("Missed");
   });
 
-  it("marks only the selected day as selected", () => {
+  it("marks only the selected day as the current date", () => {
+    // `aria-current="date"`, not `aria-selected`: ARIA does not allow
+    // `aria-selected` on role=button.
     renderStrip(WEEK[2]!.localDate);
     const selected = screen.getByRole("button", { name: "Wed 14, Missed" });
-    expect(selected.getAttribute("aria-selected")).toBe("true");
-    const other = screen.getByRole("button", { name: "Wed 12, Done" });
-    expect(other.getAttribute("aria-selected")).not.toBe("true");
+    expect(selected.getAttribute("aria-current")).toBe("date");
+    expect(selected.hasAttribute("aria-selected")).toBe(false);
+    for (const state of STATES) {
+      if (state === "open") continue;
+      const index = STATES.indexOf(state);
+      const other = screen.getByRole("button", {
+        name: `Wed ${12 + index}, ${SPOKEN[state]}`,
+      });
+      expect(other.hasAttribute("aria-current")).toBe(false);
+    }
   });
 });
 
