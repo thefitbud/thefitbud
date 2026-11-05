@@ -2,8 +2,10 @@
 // Builds the `qa-report` artifact: summary.json (schema: report.schema.json, version 1),
 // screenshots/<suite>/<name>.png and redacted copies of the raw reports and logs.
 // Node built-ins only. Exit 0 even when tests failed (status lives in summary.json),
-// 2 when an input report is malformed or the arguments are wrong. summary.json is
-// written before exiting 2, so the artifact upload still has something to carry.
+// 2 when an input report is malformed or the arguments are wrong, 3 when the run is
+// `partial` (an expected suite produced no results, e.g. queue eviction: never a pass,
+// BT16). summary.json is written before exiting 2 or 3, so the artifact upload still
+// has something to carry.
 //
 // Input layout (QT7 arranges it):
 //   <in>/<suite>/junit.xml          suite = mobile | ios | web | api | unit
@@ -269,6 +271,15 @@ const IOS_LOG_PATTERNS = [
 // can only be there if the predicate matched the app and the stream was captured.
 const IOS_LOG_SENTINEL = /Running "main"/;
 
+/**
+ * Does this logcat dump prove the app's own output was captured? Same sentinel as
+ * iOS and as run-maestro.sh (BT12). It is one dump for the whole suite, so it proves
+ * the app started at least once, not that every flow was covered.
+ */
+export function logcatProvesCapture(text) {
+  return IOS_LOG_SENTINEL.test(String(text));
+}
+
 /** Does this iOS log prove the app's own output was captured? */
 export function iosLogProvesCapture(text) {
   return IOS_LOG_SENTINEL.test(String(text));
@@ -487,6 +498,20 @@ export function buildSummary(opts) {
     }
   }
 
+  // An Android `pass` is only worth anything if the logcat proves the app's own
+  // output was captured (G18). run-maestro.sh already exits 1 in that case, but the
+  // report must not rely on it: an empty, missing or app-less logcat means the crash
+  // scan had nothing to scan, so the suite scores fail. A crash already forced `fail`.
+  const mobileSuite = suites.find((s) => s.name === "mobile");
+  if (mobileSuite.status === "pass") {
+    const file = logFiles.find((l) => path.basename(l) === DEVICE_LOGS.mobile);
+    if (!file || !logcatProvesCapture(fs.readFileSync(file, "utf8"))) {
+      mobileSuite.status = "fail";
+      mobileSuite.reason = `every flow passed but logs/${DEVICE_LOGS.mobile} ${file ? "holds none of the app's own output" : "is missing"}, so the Android crash scan proved nothing`;
+      warnings.push(`mobile: logs/${DEVICE_LOGS.mobile} ${file ? "shows no app output" : "is missing"}; the logcat capture did not work, so a pass could not be trusted`);
+    }
+  }
+
   // An ios `pass` is only worth anything if the crash scan had something to scan.
   // Without the sentinel the detector proved nothing, so the suite is `error` --
   // results exist but are unusable -- and never a silent pass. This cannot mask a
@@ -608,7 +633,15 @@ export function main(argv, env = process.env) {
   for (const m of malformed) console.error(`summarize: malformed input: ${m}`);
   const line = summary.suites.map((s) => `${s.name}=${s.status}`).join(" ");
   console.log(`summarize: ${summary.status} (${line}), ${summary.crashes.length} crashes, ${summary.screenshots.length} screenshots -> ${path.join(args.out, "summary.json")}`);
-  return malformed.length ? 2 : 0;
+  if (malformed.length) return 2;
+  // `partial` is never a pass: exit non-zero so a run that lost a suite does not show
+  // a green report step (BT16). 3, not 1, so it reads apart from bad input (2).
+  if (summary.status === "partial") {
+    const missing = summary.suites.filter((s) => s.status === "not-run").map((s) => s.name).join(", ");
+    console.error(`summarize: PARTIAL, NOT A PASS: no results for ${missing}`);
+    return 3;
+  }
+  return 0;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
