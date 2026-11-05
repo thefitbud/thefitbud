@@ -468,6 +468,7 @@ export function TodayTab({
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
           weekState={weekState}
+          day={dayTotals}
         />
 
         {offlineHint ? (

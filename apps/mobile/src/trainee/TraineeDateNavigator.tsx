@@ -1,7 +1,11 @@
 import { useMemo } from "react";
 import { Platform, StyleSheet } from "react-native";
 import { Text } from "../components/Text";
-import type { WeekDayState, WeekReadModel } from "@fitbud/contracts";
+import type {
+  MeDayResponse,
+  WeekDayState,
+  WeekReadModel,
+} from "@fitbud/contracts";
 import {
   DateNavigator,
   colors,
@@ -83,17 +87,32 @@ export async function loadWeekModel(
  */
 const UNKNOWN_DAY_STATE: DateNavigatorDay["state"] = "unknown";
 
+/**
+ * The part of `GET /me/day/:date` the strip reads: the day it describes and
+ * the state the server derived for it (BT17, Z5-8).
+ */
+export type MeDayState = Pick<MeDayResponse, "date" | "state">;
+
 export function navigatorDaysFor(input: {
   weekState: WeekModelState;
   dates: readonly string[];
   timeZone: string;
   weekdayShortOf: (timeZone: string, localDate: string) => string;
   dayOfMonthOf: (timeZone: string, localDate: string) => string;
+  /**
+   * The host's own `GET /me/day/:date` response (Z5-8, G10). Its `state` is
+   * the server's state for that one day, so it is what the strip shows for
+   * that date, whether or not the week loaded. It applies only to the date
+   * it names: a response still held for the previously selected day never
+   * paints the newly selected one.
+   */
+  day?: MeDayState | null;
 }): DateNavigatorDay[] {
   const byDate =
     input.weekState.status === "loaded"
       ? new Map(input.weekState.week.days.map((day) => [day.date, day.state]))
       : new Map<string, WeekDayState>();
+  if (input.day) byDate.set(input.day.date, input.day.state);
   return input.dates.map((localDate) => {
     const state = byDate.get(localDate);
     return {
@@ -147,6 +166,12 @@ type Props = {
    * retry it cannot perform" (D-W3b-32) — is what this restores.
    */
   weekState: WeekModelState;
+  /**
+   * The host's `GET /me/day/:date` response for the selected day, or null
+   * when it has not loaded or failed (Z5-8). Like the week, the host owns
+   * it; this component fetches nothing.
+   */
+  day?: MeDayState | null;
 };
 
 export function TraineeDateNavigator({
@@ -154,6 +179,7 @@ export function TraineeDateNavigator({
   onSelectDate,
   showPreviewBanner = true,
   weekState,
+  day = null,
 }: Props) {
   const { me } = useAuth();
   const timeZone = me?.timezone ?? "UTC";
@@ -174,8 +200,9 @@ export function TraineeDateNavigator({
         timeZone,
         weekdayShortOf: weekdayShort,
         dayOfMonthOf: dayOfMonth,
+        day,
       }),
-    [weekState, weekStart, timeZone],
+    [weekState, weekStart, timeZone, day],
   );
 
   if (Platform.OS === "web") {
