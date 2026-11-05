@@ -8,7 +8,12 @@
  * runs `wrangler deploy --dry-run` (no upload, no --yes needed); migrations
  * have no dry run, so `migrate --dry-run` prints the command and exits 0.
  * Only the owner runs these for real.
+ *
+ * A deploy also passes `--var SENTRY_RELEASE:<commit sha>` so the Worker's Sentry
+ * events carry the release (`sentryRelease` in src/lib/sentry.ts reads that var).
+ * No SHA (not a checkout, or the VCS binary missing) means no var, with a warning.
  */
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatCommand, runCommandSync } from "./lib/run-command.js";
@@ -73,12 +78,26 @@ export function parseDeployArgs(argv: string[]): DeployArgs {
   return { action, env: env as DeployEnv, yes, dryRun };
 }
 
-/** Wrangler argv (after `pnpm exec`) for the requested action. */
-export function wranglerArgs(args: DeployArgs): string[] {
+const COMMIT_SHA_RE = /^[0-9a-f]{40}$/u;
+
+/** The checked-out commit, or null when it cannot be read (never throws). */
+export function readCommitSha(cwd: string): string | null {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" });
+  if (result.error || result.status !== 0) return null;
+  const sha = String(result.stdout).trim();
+  return COMMIT_SHA_RE.test(sha) ? sha : null;
+}
+
+/**
+ * Wrangler argv (after `pnpm exec`) for the requested action. `release`, when given,
+ * is passed to a deploy as the `SENTRY_RELEASE` var; migrations ignore it.
+ */
+export function wranglerArgs(args: DeployArgs, release?: string | null): string[] {
   if (args.action === "deploy") {
-    return args.dryRun
+    const base = args.dryRun
       ? ["wrangler", "deploy", "--dry-run", "--env", args.env]
       : ["wrangler", "deploy", "--env", args.env];
+    return release ? [...base, "--var", `SENTRY_RELEASE:${release}`] : base;
   }
   return [
     "wrangler",
@@ -93,7 +112,11 @@ export function wranglerArgs(args: DeployArgs): string[] {
 }
 
 /** Runs the action; returns the process exit code. */
-export function runDeployEnv(argv: string[], cwd: string): number {
+export function runDeployEnv(
+  argv: string[],
+  cwd: string,
+  readRelease: (cwd: string) => string | null = readCommitSha,
+): number {
   let args: DeployArgs;
   try {
     args = parseDeployArgs(argv);
@@ -101,7 +124,11 @@ export function runDeployEnv(argv: string[], cwd: string): number {
     console.error((error as Error).message);
     return 1;
   }
-  const command = ["exec", ...wranglerArgs(args)];
+  const release = args.action === "deploy" ? readRelease(cwd) : null;
+  if (args.action === "deploy" && !release) {
+    console.warn("No commit found: deploying without SENTRY_RELEASE.");
+  }
+  const command = ["exec", ...wranglerArgs(args, release)];
   const printed = formatCommand("pnpm", command);
 
   if (args.action === "deploy" && args.dryRun) {

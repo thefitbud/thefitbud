@@ -11,7 +11,7 @@ import {
   assertAllowedNavigation,
   resolveStagingBaseUrl,
 } from "./support/host-guard";
-import { loadExpectations, missingSecrets, missingSecretsMessage } from "./support/env";
+import { loadExpectations, missingSecrets, missingSecretsMessage, type QaExpectations } from "./support/env";
 import { TEST_OTP_IDENTIFIER_RE } from "@fitbud/core";
 import { SHOT_NAME_RE, isScreenshotSafe, shot } from "./support/screenshots";
 
@@ -224,10 +224,38 @@ test.describe("screenshots never carry a credential (D-QA1-14)", () => {
   });
 });
 
+/**
+ * How many QA accounts the committed expectations must list: every trainer in the file
+ * plus the clients the seed guarantees them (`guarantees.clientsFirstTrainer` and
+ * `clientsSecondTrainer`). Derived, not a literal, so adding or dropping a persona in
+ * the seed moves the guarantees and the account list together or this spec fails (G9).
+ */
+function expectedQaAccountCount(expectations: QaExpectations): number {
+  const trainers = expectations.accounts.filter((a) => a.role === "trainer").length;
+  const { clientsFirstTrainer, clientsSecondTrainer } = expectations.guarantees;
+  return trainers + clientsFirstTrainer + clientsSecondTrainer;
+}
+
 test.describe("QA accounts vs the QT1 allowlist", () => {
-  test("all three committed QA emails match TEST_OTP_IDENTIFIER_RE (catches QT1 or QT2 drift)", () => {
-    const emails = loadExpectations().accounts.map((a) => a.email);
-    expect(emails).toHaveLength(3);
+  test("every committed QA email matches TEST_OTP_IDENTIFIER_RE (catches QT1 or QT2 drift)", () => {
+    const expectations = loadExpectations();
+    const emails = expectations.accounts.map((a) => a.email);
+    expect(emails).toHaveLength(expectedQaAccountCount(expectations));
     for (const email of emails) expect(TEST_OTP_IDENTIFIER_RE.test(email), email).toBe(true);
+  });
+
+  test("the expected account count follows the guarantees, not a literal", () => {
+    const expectations = loadExpectations();
+    const base = expectedQaAccountCount(expectations);
+    const withExtraClient = {
+      ...expectations,
+      guarantees: { ...expectations.guarantees, clientsSecondTrainer: expectations.guarantees.clientsSecondTrainer + 1 },
+    };
+    expect(expectedQaAccountCount(withExtraClient)).toBe(base + 1);
+    const withoutTrainer = {
+      ...expectations,
+      accounts: expectations.accounts.filter((a, i) => !(a.role === "trainer" && i === expectations.accounts.findIndex((x) => x.role === "trainer"))),
+    };
+    expect(expectedQaAccountCount(withoutTrainer)).toBe(base - 1);
   });
 });

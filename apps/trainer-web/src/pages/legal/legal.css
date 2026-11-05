@@ -248,14 +248,18 @@
 
 /* Sign-in footer: Privacy, Terms, Credits and licences (ds5-web-signin-footer.png). */
 .auth-legal-links {
-  /* In flow below the help line (D-W3-15). */
-  margin-top: 4px;
+  /* In flow, directly below the help line's 44px target (D-W3-15). No gap:
+     the help text sits at the bottom of its target (AuthLayout), so the two
+     text rows land 27px apart as on ds5-web-signin-footer.png (Z5-16). */
+  margin-top: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
   column-gap: 4px;
-  font-size: 13px;
+  /* 13px at the default root; rem so the text follows the user's browser
+     font size (Z5-16). The 44px targets below stay in px as a floor. */
+  font-size: 0.8125rem;
 }
 .auth-legal-links a {
   display: inline-flex;

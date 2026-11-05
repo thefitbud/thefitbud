@@ -6,7 +6,7 @@ vi.mock("./lib/run-command.js", async (importOriginal) => {
 });
 
 import { runCommandSync } from "./lib/run-command.js";
-import { parseDeployArgs, runDeployEnv, wranglerArgs } from "./deploy-env.js";
+import { parseDeployArgs, readCommitSha, runDeployEnv, wranglerArgs } from "./deploy-env.js";
 
 const run = vi.mocked(runCommandSync);
 
@@ -155,5 +155,63 @@ describe("runDeployEnv", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(runDeployEnv(["deploy", "--env", "dev", "--yes"], "/api")).toBe(1);
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe("SENTRY_RELEASE (G8)", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+
+  afterEach(() => {
+    run.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it("passes the release as a Wrangler var on deploy, dry run included", () => {
+    expect(wranglerArgs(parseDeployArgs(["deploy", "--env", "staging"]), SHA)).toEqual([
+      "wrangler", "deploy", "--env", "staging", "--var", `SENTRY_RELEASE:${SHA}`,
+    ]);
+    expect(wranglerArgs(parseDeployArgs(["deploy", "--env", "production", "--dry-run"]), SHA)).toEqual([
+      "wrangler", "deploy", "--dry-run", "--env", "production", "--var", `SENTRY_RELEASE:${SHA}`,
+    ]);
+  });
+
+  it("leaves migrations and a missing release alone", () => {
+    expect(wranglerArgs(parseDeployArgs(["migrate", "--env", "staging"]), SHA)).not.toContain("--var");
+    expect(wranglerArgs(parseDeployArgs(["deploy", "--env", "staging"]), null)).toEqual([
+      "wrangler", "deploy", "--env", "staging",
+    ]);
+  });
+
+  it("runs the deploy with the release var and logs it", () => {
+    const logs = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(runDeployEnv(["deploy", "--env", "staging", "--yes"], "/api", () => SHA)).toBe(0);
+    expect(run).toHaveBeenCalledWith(
+      "pnpm",
+      ["exec", "wrangler", "deploy", "--env", "staging", "--var", `SENTRY_RELEASE:${SHA}`],
+      { cwd: "/api" },
+    );
+    expect(logs.mock.calls.flat().join("\n")).toContain(`SENTRY_RELEASE:${SHA}`);
+  });
+
+  it("deploys without the var, and says so, when there is no commit", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(runDeployEnv(["deploy", "--env", "staging", "--yes"], "/api", () => null)).toBe(0);
+    expect(run).toHaveBeenCalledWith("pnpm", ["exec", "wrangler", "deploy", "--env", "staging"], {
+      cwd: "/api",
+    });
+    expect(warnings.mock.calls.flat().join("\n")).toContain("SENTRY_RELEASE");
+  });
+
+  it("never looks up a commit for a migration", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const readRelease = vi.fn(() => SHA);
+    expect(runDeployEnv(["migrate", "--env", "staging", "--yes"], "/api", readRelease)).toBe(0);
+    expect(readRelease).not.toHaveBeenCalled();
+  });
+
+  it("readCommitSha returns a 40-hex HEAD inside a checkout and null elsewhere", () => {
+    expect(readCommitSha(process.cwd())).toMatch(/^[0-9a-f]{40}$/u);
+    expect(readCommitSha("/nonexistent-dir-for-deploy-env-test")).toBeNull();
   });
 });
