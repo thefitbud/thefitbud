@@ -1,9 +1,11 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import type {
   DietAdjustmentScope,
   PlanContent,
 } from "@fitbud/contracts";
 import {
+  addDaysToLocalDate,
   clipInclusiveLocalRange,
   formatLocalDate,
   localDatesInRange,
@@ -139,25 +141,53 @@ export async function loadAssignmentPolicy(
 
 const WORKOUT_INSERT_CHUNK = 6;
 
-export async function insertWorkoutAssignments(
+type WorkoutAssignmentInput = {
+  relationshipId: string;
+  planId: string;
+  planVersionId: string;
+  content: PlanContent;
+  timeZone: string;
+  completionWindowHours: number;
+  dates: readonly string[];
+  now: string;
+};
+
+/** A write that can run on its own (`await`) or inside one `db.batch`. */
+export type ScheduleWrite = BatchItem<"sqlite">;
+
+/**
+ * Planned schedule writes: the statements (not yet run, so a caller can put
+ * them in one D1 batch with other writes) and the rows they touch.
+ */
+export type PlannedAssignmentWrites<Row> = {
+  statements: ScheduleWrite[];
+  /** Superseded rows of the same plan version that the statements re-open. */
+  revived: Row[];
+  /** New rows the statements insert. */
+  inserted: Row[];
+};
+
+async function runSequentially(statements: readonly ScheduleWrite[]): Promise<void> {
+  for (const statement of statements) {
+    await statement;
+  }
+}
+
+/**
+ * Plans the workout rows for `dates` without writing. Reads happen now; running
+ * the returned statements in order is what insertWorkoutAssignments does.
+ */
+export async function planWorkoutAssignments(
   db: Db,
-  input: {
-    relationshipId: string;
-    planId: string;
-    planVersionId: string;
-    content: PlanContent;
-    timeZone: string;
-    completionWindowHours: number;
-    dates: readonly string[];
-    now: string;
-  },
-): Promise<WorkoutAssignmentRow[]> {
+  input: WorkoutAssignmentInput,
+): Promise<PlannedAssignmentWrites<WorkoutAssignmentRow>> {
   if (input.dates.length === 0) {
-    return [];
+    return { statements: [], revived: [], inserted: [] };
   }
   const sortedDates = [...input.dates].sort();
   const minDate = sortedDates[0]!;
   const maxDate = sortedDates[sortedDates.length - 1]!;
+  const statements: ScheduleWrite[] = [];
   const toRevive = await db
     .select()
     .from(workoutAssignments)
@@ -171,27 +201,31 @@ export async function insertWorkoutAssignments(
       ),
     );
   if (toRevive.length > 0) {
-    await db
-      .update(workoutAssignments)
-      .set({
-        scheduleStatus: "scheduled",
-        supersededAt: null,
-        supersededByPlanVersionId: null,
-        updatedAt: input.now,
-      })
-      .where(
-        and(
-          eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
-          eq(workoutAssignments.planVersionId, input.planVersionId),
-          eq(workoutAssignments.scheduleStatus, "superseded"),
-          gte(workoutAssignments.localDate, minDate),
-          lte(workoutAssignments.localDate, maxDate),
+    statements.push(
+      db
+        .update(workoutAssignments)
+        .set({
+          scheduleStatus: "scheduled",
+          supersededAt: null,
+          supersededByPlanVersionId: null,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+            eq(workoutAssignments.planVersionId, input.planVersionId),
+            eq(workoutAssignments.scheduleStatus, "superseded"),
+            gte(workoutAssignments.localDate, minDate),
+            lte(workoutAssignments.localDate, maxDate),
+          ),
         ),
-      );
+    );
   }
+  const revivedIds = new Set(toRevive.map((row) => row.id));
 
   const existing = await db
     .select({
+      id: workoutAssignments.id,
       planVersionId: workoutAssignments.planVersionId,
       workoutDayId: workoutAssignments.workoutDayId,
       localDate: workoutAssignments.localDate,
@@ -205,22 +239,19 @@ export async function insertWorkoutAssignments(
         lte(workoutAssignments.localDate, maxDate),
       ),
     );
+  // Rows the revive statement re-opens count as scheduled, exactly as they
+  // would once the revive has run.
+  const scheduled = existing.filter(
+    (row) => row.scheduleStatus === "scheduled" || revivedIds.has(row.id),
+  );
   const sameVersionKeys = new Set(
-    existing
-      .filter(
-        (row) =>
-          row.planVersionId === input.planVersionId &&
-          row.scheduleStatus === "scheduled",
-      )
+    scheduled
+      .filter((row) => row.planVersionId === input.planVersionId)
       .map((row) => `${row.workoutDayId}:${row.localDate}`),
   );
   const blockedDates = new Set(
-    existing
-      .filter(
-        (row) =>
-          row.scheduleStatus === "scheduled" &&
-          row.planVersionId !== input.planVersionId,
-      )
+    scheduled
+      .filter((row) => row.planVersionId !== input.planVersionId)
       .map((row) => row.localDate),
   );
   const placed = workoutSessionsOnDates(input.content.workoutDays, input.dates);
@@ -255,36 +286,48 @@ export async function insertWorkoutAssignments(
   }
   for (let i = 0; i < rows.length; i += WORKOUT_INSERT_CHUNK) {
     const chunk = rows.slice(i, i + WORKOUT_INSERT_CHUNK);
-    await db
-      .insert(workoutAssignments)
-      .values(chunk)
-      .onConflictDoNothing();
+    statements.push(
+      db.insert(workoutAssignments).values(chunk).onConflictDoNothing(),
+    );
   }
-  return [...toRevive, ...rows];
+  return { statements, revived: toRevive, inserted: rows };
+}
+
+export async function insertWorkoutAssignments(
+  db: Db,
+  input: WorkoutAssignmentInput,
+): Promise<WorkoutAssignmentRow[]> {
+  const planned = await planWorkoutAssignments(db, input);
+  await runSequentially(planned.statements);
+  return [...planned.revived, ...planned.inserted];
 }
 
 const MEAL_INSERT_CHUNK = 6;
 
-export async function insertMealAssignments(
+type MealAssignmentInput = {
+  relationshipId: string;
+  planId: string;
+  planVersionId: string;
+  content: PlanContent;
+  timeZone: string;
+  confirmationWindowHours: number;
+  photoRequirement: "none" | "selected_meals" | "all_meals";
+  dates: readonly string[];
+  now: string;
+};
+
+/** Plans the meal rows for `dates` without writing (see planWorkoutAssignments). */
+export async function planMealAssignments(
   db: Db,
-  input: {
-    relationshipId: string;
-    planId: string;
-    planVersionId: string;
-    content: PlanContent;
-    timeZone: string;
-    confirmationWindowHours: number;
-    photoRequirement: "none" | "selected_meals" | "all_meals";
-    dates: readonly string[];
-    now: string;
-  },
-): Promise<MealAssignmentRow[]> {
+  input: MealAssignmentInput,
+): Promise<PlannedAssignmentWrites<MealAssignmentRow>> {
   if (input.dates.length === 0) {
-    return [];
+    return { statements: [], revived: [], inserted: [] };
   }
   const sortedDates = [...input.dates].sort();
   const minDate = sortedDates[0]!;
   const maxDate = sortedDates[sortedDates.length - 1]!;
+  const statements: ScheduleWrite[] = [];
   const toRevive = await db
     .select()
     .from(mealAssignments)
@@ -298,27 +341,31 @@ export async function insertMealAssignments(
       ),
     );
   if (toRevive.length > 0) {
-    await db
-      .update(mealAssignments)
-      .set({
-        scheduleStatus: "scheduled",
-        supersededAt: null,
-        supersededByPlanVersionId: null,
-        updatedAt: input.now,
-      })
-      .where(
-        and(
-          eq(mealAssignments.coachingRelationshipId, input.relationshipId),
-          eq(mealAssignments.planVersionId, input.planVersionId),
-          eq(mealAssignments.scheduleStatus, "superseded"),
-          gte(mealAssignments.localDate, minDate),
-          lte(mealAssignments.localDate, maxDate),
+    statements.push(
+      db
+        .update(mealAssignments)
+        .set({
+          scheduleStatus: "scheduled",
+          supersededAt: null,
+          supersededByPlanVersionId: null,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+            eq(mealAssignments.planVersionId, input.planVersionId),
+            eq(mealAssignments.scheduleStatus, "superseded"),
+            gte(mealAssignments.localDate, minDate),
+            lte(mealAssignments.localDate, maxDate),
+          ),
         ),
-      );
+    );
   }
+  const revivedIds = new Set(toRevive.map((row) => row.id));
 
   const existing = await db
     .select({
+      id: mealAssignments.id,
       planVersionId: mealAssignments.planVersionId,
       mealPrescriptionId: mealAssignments.mealPrescriptionId,
       mealName: mealAssignments.mealName,
@@ -333,25 +380,20 @@ export async function insertMealAssignments(
         lte(mealAssignments.localDate, maxDate),
       ),
     );
+  const scheduled = existing.filter(
+    (row) => row.scheduleStatus === "scheduled" || revivedIds.has(row.id),
+  );
   const sameVersionKeys = new Set(
-    existing
-      .filter(
-        (row) =>
-          row.planVersionId === input.planVersionId &&
-          row.scheduleStatus === "scheduled",
-      )
+    scheduled
+      .filter((row) => row.planVersionId === input.planVersionId)
       .map((row) => `${row.mealPrescriptionId}:${row.localDate}`),
   );
   // Kept (logged) meals from another version stay scheduled after supersede.
   // Block only that slot (by name+date), not the whole day, so unlogged slots
   // can be recreated from the new version.
   const keptSlotKeys = new Set(
-    existing
-      .filter(
-        (row) =>
-          row.scheduleStatus === "scheduled" &&
-          row.planVersionId !== input.planVersionId,
-      )
+    scheduled
+      .filter((row) => row.planVersionId !== input.planVersionId)
       .map((row) => `${row.mealName.trim().toLowerCase()}:${row.localDate}`),
   );
   const placed = mealsOnDates(input.content.mealPrescriptions, input.dates);
@@ -392,12 +434,20 @@ export async function insertMealAssignments(
   }
   for (let i = 0; i < rows.length; i += MEAL_INSERT_CHUNK) {
     const chunk = rows.slice(i, i + MEAL_INSERT_CHUNK);
-    await db
-      .insert(mealAssignments)
-      .values(chunk)
-      .onConflictDoNothing();
+    statements.push(
+      db.insert(mealAssignments).values(chunk).onConflictDoNothing(),
+    );
   }
-  return [...toRevive, ...rows];
+  return { statements, revived: toRevive, inserted: rows };
+}
+
+export async function insertMealAssignments(
+  db: Db,
+  input: MealAssignmentInput,
+): Promise<MealAssignmentRow[]> {
+  const planned = await planMealAssignments(db, input);
+  await runSequentially(planned.statements);
+  return [...planned.revived, ...planned.inserted];
 }
 
 function dateInSupersedeRange(
@@ -675,43 +725,102 @@ async function loadEffectiveVersion(db: Db, relationshipId: string) {
   return rows[0] ?? null;
 }
 
-/** Fill the rolling assignment horizon for one relationship (used after Activate). */
-export async function replenishRelationship(
+/** Expectation values the schedule is built from (the active configuration's). */
+export type ScheduleExpectations = {
+  completionWindowHours: number | null;
+  nutrition: {
+    confirmationWindowHours: number;
+    photoRequirement: "none" | "selected_meals" | "all_meals";
+  } | null;
+};
+
+type PlannedReplenishment = {
+  statements: ScheduleWrite[];
+  workoutsCreated: number;
+  mealsCreated: number;
+  revivedWorkouts: WorkoutAssignmentRow[];
+  revivedMeals: MealAssignmentRow[];
+};
+
+const EMPTY_REPLENISHMENT: PlannedReplenishment = {
+  statements: [],
+  workoutsCreated: 0,
+  mealsCreated: 0,
+  revivedWorkouts: [],
+  revivedMeals: [],
+};
+
+/**
+ * Plans the rolling 7-day horizon for one relationship without writing.
+ * `expectations` defaults to the active configuration; Activate passes the
+ * draft's values because the draft only becomes active in the same batch.
+ * `fromDate` (trainee-local) skips earlier days.
+ */
+async function planRelationshipReplenishment(
   db: Db,
-  relationshipId: string,
-  traineeUserId: string,
-  now: string,
-): Promise<{ workoutsCreated: number; mealsCreated: number }> {
+  input: {
+    relationshipId: string;
+    traineeUserId: string;
+    now: string;
+    fromDate?: string;
+    expectations?: ScheduleExpectations;
+  },
+): Promise<PlannedReplenishment> {
+  const { relationshipId, now } = input;
   const effective = await loadEffectiveVersion(db, relationshipId);
-  if (!effective) return { workoutsCreated: 0, mealsCreated: 0 };
-  const timeZone = await loadTraineeTimezone(db, traineeUserId);
+  if (!effective) return EMPTY_REPLENISHMENT;
+  const timeZone = await loadTraineeTimezone(db, input.traineeUserId);
   const today = formatLocalDate(new Date(now), timeZone);
   const horizon = resolveAssignmentWindow({ window: "next_7_days", today });
-  if (!horizon.ok) return { workoutsCreated: 0, mealsCreated: 0 };
+  if (!horizon.ok) return EMPTY_REPLENISHMENT;
   const clipped = clipInclusiveLocalRange(
     horizon.range,
     effectiveLocalBounds(effective.version, timeZone),
   );
-  if (!clipped) return { workoutsCreated: 0, mealsCreated: 0 };
-  const dates = localDatesInRange(clipped);
+  if (!clipped) return EMPTY_REPLENISHMENT;
+  const dates = localDatesInRange(clipped).filter(
+    (date) => !input.fromDate || date >= input.fromDate,
+  );
+  if (dates.length === 0) return EMPTY_REPLENISHMENT;
   const content = parsePlanContentJson(effective.version.contentJson);
-  let workoutsCreated = 0;
-  let mealsCreated = 0;
-  const hours = await loadActiveWorkoutHours(db, relationshipId);
+  const planned: PlannedReplenishment = {
+    statements: [],
+    workoutsCreated: 0,
+    mealsCreated: 0,
+    revivedWorkouts: [],
+    revivedMeals: [],
+  };
+  const addWorkouts = (writes: PlannedAssignmentWrites<WorkoutAssignmentRow>) => {
+    planned.statements.push(...writes.statements);
+    planned.revivedWorkouts.push(...writes.revived);
+    planned.workoutsCreated += writes.revived.length + writes.inserted.length;
+  };
+  const addMeals = (writes: PlannedAssignmentWrites<MealAssignmentRow>) => {
+    planned.statements.push(...writes.statements);
+    planned.revivedMeals.push(...writes.revived);
+    planned.mealsCreated += writes.revived.length + writes.inserted.length;
+  };
+
+  const hours = input.expectations
+    ? input.expectations.completionWindowHours
+    : await loadActiveWorkoutHours(db, relationshipId);
   if (hours != null && content.workoutDays.length > 0) {
-    const created = await insertWorkoutAssignments(db, {
-      relationshipId,
-      planId: effective.plan.id,
-      planVersionId: effective.version.id,
-      content,
-      timeZone,
-      completionWindowHours: hours,
-      dates,
-      now,
-    });
-    workoutsCreated += created.length;
+    addWorkouts(
+      await planWorkoutAssignments(db, {
+        relationshipId,
+        planId: effective.plan.id,
+        planVersionId: effective.version.id,
+        content,
+        timeZone,
+        completionWindowHours: hours,
+        dates,
+        now,
+      }),
+    );
   }
-  const nutrition = await loadActiveNutrition(db, relationshipId);
+  const nutrition = input.expectations
+    ? input.expectations.nutrition
+    : await loadActiveNutrition(db, relationshipId);
   if (nutrition && content.mealPrescriptions.length > 0) {
     const policy = await loadAssignmentPolicy(db, effective.version.id);
     if (
@@ -722,18 +831,19 @@ export async function replenishRelationship(
       const todayDates = dates.filter((date) => date === policy.dietScopeLocalDate);
       const futureDates = dates.filter((date) => date > policy.dietScopeLocalDate!);
       if (todayDates.length > 0) {
-        const created = await insertMealAssignments(db, {
-          relationshipId,
-          planId: effective.plan.id,
-          planVersionId: effective.version.id,
-          content,
-          timeZone,
-          confirmationWindowHours: nutrition.confirmationWindowHours,
-          photoRequirement: nutrition.photoRequirement,
-          dates: todayDates,
-          now,
-        });
-        mealsCreated += created.length;
+        addMeals(
+          await planMealAssignments(db, {
+            relationshipId,
+            planId: effective.plan.id,
+            planVersionId: effective.version.id,
+            content,
+            timeZone,
+            confirmationWindowHours: nutrition.confirmationWindowHours,
+            photoRequirement: nutrition.photoRequirement,
+            dates: todayDates,
+            now,
+          }),
+        );
       }
       if (futureDates.length > 0) {
         const previousRows = await db
@@ -744,34 +854,232 @@ export async function replenishRelationship(
         const previous = previousRows[0];
         if (previous) {
           const previousContent = parsePlanContentJson(previous.contentJson);
-          const created = await insertMealAssignments(db, {
-            relationshipId,
-            planId: effective.plan.id,
-            planVersionId: previous.id,
-            content: previousContent,
-            timeZone,
-            confirmationWindowHours: nutrition.confirmationWindowHours,
-            photoRequirement: nutrition.photoRequirement,
-            dates: futureDates,
-            now,
-          });
-          mealsCreated += created.length;
+          addMeals(
+            await planMealAssignments(db, {
+              relationshipId,
+              planId: effective.plan.id,
+              planVersionId: previous.id,
+              content: previousContent,
+              timeZone,
+              confirmationWindowHours: nutrition.confirmationWindowHours,
+              photoRequirement: nutrition.photoRequirement,
+              dates: futureDates,
+              now,
+            }),
+          );
         }
       }
     } else {
-      const created = await insertMealAssignments(db, {
-        relationshipId,
-        planId: effective.plan.id,
-        planVersionId: effective.version.id,
-        content,
-        timeZone,
-        confirmationWindowHours: nutrition.confirmationWindowHours,
-        photoRequirement: nutrition.photoRequirement,
-        dates,
-        now,
-      });
-      mealsCreated += created.length;
+      addMeals(
+        await planMealAssignments(db, {
+          relationshipId,
+          planId: effective.plan.id,
+          planVersionId: effective.version.id,
+          content,
+          timeZone,
+          confirmationWindowHours: nutrition.confirmationWindowHours,
+          photoRequirement: nutrition.photoRequirement,
+          dates,
+          now,
+        }),
+      );
     }
   }
-  return { workoutsCreated, mealsCreated };
+  return planned;
+}
+
+/** Fill the rolling assignment horizon for one relationship from its active configuration. */
+export async function replenishRelationship(
+  db: Db,
+  relationshipId: string,
+  traineeUserId: string,
+  now: string,
+): Promise<{ workoutsCreated: number; mealsCreated: number }> {
+  const planned = await planRelationshipReplenishment(db, {
+    relationshipId,
+    traineeUserId,
+    now,
+  });
+  await runSequentially(planned.statements);
+  return {
+    workoutsCreated: planned.workoutsCreated,
+    mealsCreated: planned.mealsCreated,
+  };
+}
+
+function prescriptionPhotoRequired(mealPrescriptionJson: string): boolean {
+  try {
+    const parsed = JSON.parse(mealPrescriptionJson) as { photoRequired?: unknown };
+    return parsed.photoRequired === true;
+  } catch {
+    // A row with unreadable prescription JSON keeps the per-meal flag off;
+    // the configuration's all_meals requirement still applies.
+    return false;
+  }
+}
+
+/**
+ * Re-times unstarted scheduled rows on or after `fromDate` to new expectation
+ * values. A row with a workout execution or meal compliance keeps its window:
+ * what the trainee already logged is judged against the window it had.
+ */
+async function planScheduleRetiming(
+  db: Db,
+  input: {
+    relationshipId: string;
+    timeZone: string;
+    fromDate: string;
+    expectations: ScheduleExpectations;
+    revivedWorkouts: readonly WorkoutAssignmentRow[];
+    revivedMeals: readonly MealAssignmentRow[];
+    now: string;
+  },
+): Promise<ScheduleWrite[]> {
+  const statements: ScheduleWrite[] = [];
+  const hours = input.expectations.completionWindowHours;
+  if (hours != null) {
+    const scheduled = await db
+      .select()
+      .from(workoutAssignments)
+      .where(
+        and(
+          eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+          eq(workoutAssignments.scheduleStatus, "scheduled"),
+          gte(workoutAssignments.localDate, input.fromDate),
+        ),
+      );
+    const rows = [
+      ...scheduled,
+      ...input.revivedWorkouts.filter((row) => row.localDate >= input.fromDate),
+    ];
+    for (const row of rows) {
+      const window = workoutWindowForLocalDate({
+        localDate: row.localDate,
+        timeZone: input.timeZone,
+        completionWindowHours: hours,
+      });
+      if (
+        window.windowStartsAt === row.windowStartsAt &&
+        window.windowEndsAt === row.windowEndsAt
+      ) {
+        continue;
+      }
+      statements.push(
+        db
+          .update(workoutAssignments)
+          .set({
+            windowStartsAt: window.windowStartsAt,
+            windowEndsAt: window.windowEndsAt,
+            updatedAt: input.now,
+          })
+          .where(
+            and(
+              eq(workoutAssignments.id, row.id),
+              sql`not exists (select 1 from ${workoutExecutions} where ${workoutExecutions.assignmentId} = ${row.id})`,
+            ),
+          ),
+      );
+    }
+  }
+  const nutrition = input.expectations.nutrition;
+  if (nutrition) {
+    const scheduled = await db
+      .select()
+      .from(mealAssignments)
+      .where(
+        and(
+          eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
+          gte(mealAssignments.localDate, input.fromDate),
+        ),
+      );
+    const rows = [
+      ...scheduled,
+      ...input.revivedMeals.filter((row) => row.localDate >= input.fromDate),
+    ];
+    for (const row of rows) {
+      const window = mealWindowForLocalDate({
+        localDate: row.localDate,
+        timeZone: input.timeZone,
+        confirmationWindowHours: nutrition.confirmationWindowHours,
+      });
+      const photoRequired = resolveMealPhotoRequired({
+        photoRequirement: nutrition.photoRequirement,
+        prescriptionPhotoRequired: prescriptionPhotoRequired(row.mealPrescriptionJson),
+      });
+      if (
+        window.windowStartsAt === row.windowStartsAt &&
+        window.windowEndsAt === row.windowEndsAt &&
+        photoRequired === row.photoRequired
+      ) {
+        continue;
+      }
+      statements.push(
+        db
+          .update(mealAssignments)
+          .set({
+            windowStartsAt: window.windowStartsAt,
+            windowEndsAt: window.windowEndsAt,
+            photoRequired,
+            updatedAt: input.now,
+          })
+          .where(
+            and(
+              eq(mealAssignments.id, row.id),
+              sql`not exists (select 1 from ${mealCompliance} where ${mealCompliance.assignmentId} = ${row.id})`,
+            ),
+          ),
+      );
+    }
+  }
+  return statements;
+}
+
+/**
+ * The schedule writes for activating a configuration (D12/D12b), to run in
+ * the same D1 batch as the status change.
+ *
+ * - First activation: the schedule starts today in the trainee's timezone.
+ * - Save as vN+1 (a previous version was active): today stays on vN's
+ *   targets; new targets apply from tomorrow in the trainee's timezone. Rows
+ *   from tomorrow are re-timed and missing rows are created with vN+1's values.
+ */
+export async function planActivationSchedule(
+  db: Db,
+  input: {
+    relationshipId: string;
+    traineeUserId: string;
+    now: string;
+    replacesActiveVersion: boolean;
+    expectations: ScheduleExpectations;
+  },
+): Promise<{ statements: ScheduleWrite[]; fromDate: string; timeZone: string }> {
+  const timeZone = await loadTraineeTimezone(db, input.traineeUserId);
+  const today = formatLocalDate(new Date(input.now), timeZone);
+  const fromDate = input.replacesActiveVersion
+    ? addDaysToLocalDate(today, 1)
+    : today;
+  const replenishment = await planRelationshipReplenishment(db, {
+    relationshipId: input.relationshipId,
+    traineeUserId: input.traineeUserId,
+    now: input.now,
+    fromDate,
+    expectations: input.expectations,
+  });
+  const retiming = await planScheduleRetiming(db, {
+    relationshipId: input.relationshipId,
+    timeZone,
+    fromDate,
+    expectations: input.expectations,
+    revivedWorkouts: replenishment.revivedWorkouts,
+    revivedMeals: replenishment.revivedMeals,
+    now: input.now,
+  });
+  // Retiming reads rows as they are before the batch, so it never touches the
+  // rows this batch inserts (they already carry the new values).
+  return {
+    statements: [...replenishment.statements, ...retiming],
+    fromDate,
+    timeZone,
+  };
 }

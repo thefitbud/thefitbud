@@ -300,7 +300,7 @@ export const coachingConfigurations = sqliteTable(
       .notNull()
       .references(() => coachingRelationships.id),
     status: text("status", {
-      enum: ["draft", "configured", "active", "superseded"],
+      enum: ["draft", "active", "superseded"],
     })
       .notNull()
       .default("draft"),

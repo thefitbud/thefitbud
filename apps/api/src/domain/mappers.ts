@@ -288,8 +288,7 @@ export function mapCoachingConfiguration(input: {
     requireProgressPhotos: tracking.requireProgressPhotos,
     requireSessionRpe: tracking.requireSessionRpe,
   };
-  const status =
-    configuration.status === "configured" ? "draft" : configuration.status;
+  const status = configuration.status;
   const missingSections =
     status === "draft"
       ? missingConfigurationSections({

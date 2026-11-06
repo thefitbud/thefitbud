@@ -38,7 +38,7 @@ export {
   canActivateConfiguration,
   canCreateConfigurationVersion,
   canEditCoachingConfiguration,
-  canMarkConfigurationConfigured,
+  canDiscardConfiguration,
   canSaveConfigurationDraft,
   hasGoalShort,
   missingConfigurationSections,

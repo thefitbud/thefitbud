@@ -13,6 +13,7 @@ import {
 import {
   canActivateConfiguration,
   canCreateConfigurationVersion,
+  canDiscardConfiguration,
   canEditCoachingConfiguration,
   canSaveConfigurationDraft,
   missingConfigurationSections,
@@ -27,12 +28,14 @@ import {
   trackingRequirements,
   workoutExpectations,
 } from "../db/schema";
-import { replenishRelationship } from "../domain/assignment-schedule";
+import {
+  planActivationSchedule,
+  type ScheduleWrite,
+} from "../domain/assignment-schedule";
 import { onboardingStatusForRelationship } from "../domain/client-status";
 import { mapCoachingConfiguration } from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
-import { writeStructuredLog } from "../lib/log";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   findIdempotencyRecord,
@@ -51,7 +54,7 @@ const NEW_VERSION_OPERATION = "configuration.new_version";
 const COPY_DRAFT_OPERATION = "configuration.copy_draft";
 
 function isOpenConfigurationStatus(status: string): boolean {
-  return status === "draft" || status === "configured";
+  return status === "draft";
 }
 
 export const configurationRoutes = new Hono<{
@@ -517,7 +520,7 @@ configurationRoutes.delete(
     tag: "Configurations",
     summary: "Discard the open configuration draft (vN+1 or first draft).",
     description:
-      "Deletes the open draft and its expectation rows. When an active version remains, GET returns that active row again.",
+      "Deletes the open draft and its expectation rows in one batch. When an active version remains, it is returned (and GET returns it again); otherwise null. Active and superseded versions cannot be discarded (409 CONFIGURATION_NOT_DRAFT). Optional `expectedVersion` query: the draft's recordVersion the trainer last saw (409 CONFIGURATION_VERSION_CONFLICT when it changed).",
     roles: ["trainer"],
     response: coachingConfigurationSchema.nullable(),
   }),
@@ -548,32 +551,94 @@ configurationRoutes.delete(
     );
     if (!writable.ok) return writable.response;
 
+    const expectedVersionParam = c.req.query("expectedVersion");
+    let expectedVersion: number | null = null;
+    if (expectedVersionParam !== undefined) {
+      if (!/^\d+$/.test(expectedVersionParam)) {
+        return fail(
+          c,
+          400,
+          "INVALID_REQUEST",
+          "expectedVersion must be a whole number.",
+        );
+      }
+      expectedVersion = Number(expectedVersionParam);
+    }
+
     const rows = await listConfigurations(db, relationshipId);
-    const open = rows.find((row) => isOpenConfigurationStatus(row.status));
+    const open = rows.find((row) => canDiscardConfiguration(row.status));
     if (!open) {
+      if (rows.length > 0) {
+        return fail(
+          c,
+          409,
+          "CONFIGURATION_NOT_DRAFT",
+          "Only a draft configuration can be discarded.",
+        );
+      }
       return fail(
         c,
         404,
-        "CONFIGURATION_DRAFT_NOT_FOUND",
-        "There is no open configuration draft to discard.",
+        "CONFIGURATION_NOT_FOUND",
+        "There is no configuration draft to discard.",
+      );
+    }
+    if (expectedVersion !== null && open.recordVersion !== expectedVersion) {
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_VERSION_CONFLICT",
+        "Configuration was changed after this version was loaded.",
+        { expectedVersion, currentVersion: open.recordVersion },
       );
     }
 
-    await db
-      .delete(workoutExpectations)
-      .where(eq(workoutExpectations.coachingConfigurationId, open.id));
-    await db
-      .delete(nutritionExpectations)
-      .where(eq(nutritionExpectations.coachingConfigurationId, open.id));
-    await db
-      .delete(checkinSchedules)
-      .where(eq(checkinSchedules.coachingConfigurationId, open.id));
-    await db
-      .delete(trackingRequirements)
-      .where(eq(trackingRequirements.coachingConfigurationId, open.id));
-    await db
-      .delete(coachingConfigurations)
-      .where(eq(coachingConfigurations.id, open.id));
+    // One batch: the draft and its expectation rows go together or not at all.
+    // Each child delete is scoped to a draft row so a stale id can never
+    // remove an active or superseded version's rows.
+    const draftScope = sql`exists (
+      select 1 from coaching_configurations
+      where id = ${open.id} and status = 'draft'
+    )`;
+    await db.batch([
+      db
+        .delete(workoutExpectations)
+        .where(
+          and(
+            eq(workoutExpectations.coachingConfigurationId, open.id),
+            draftScope,
+          ),
+        ),
+      db
+        .delete(nutritionExpectations)
+        .where(
+          and(
+            eq(nutritionExpectations.coachingConfigurationId, open.id),
+            draftScope,
+          ),
+        ),
+      db
+        .delete(checkinSchedules)
+        .where(
+          and(eq(checkinSchedules.coachingConfigurationId, open.id), draftScope),
+        ),
+      db
+        .delete(trackingRequirements)
+        .where(
+          and(
+            eq(trackingRequirements.coachingConfigurationId, open.id),
+            draftScope,
+          ),
+        ),
+      db
+        .delete(coachingConfigurations)
+        .where(
+          and(
+            eq(coachingConfigurations.id, open.id),
+            eq(coachingConfigurations.status, "draft"),
+          ),
+        ),
+    ]);
 
     const remaining = await loadConfigurationBundle(db, relationshipId);
     return ok(c, remaining ? parseMappedConfiguration(remaining) : null);
@@ -728,7 +793,7 @@ configurationRoutes.post(
     summary:
       "Activate a configuration draft (first setup or Save as vN+1).",
     description:
-      "Validates required sections, then supersedes any previous active row and activates the draft in one db.batch. After success, materialises the assignment schedule for this relationship. Saving an edit draft goes live immediately (D12b option a).",
+      "Activates a draft in one step (D12: no configured status). Missing required sections (D17: goal, expectations, check-ins, tracking) return 409 CONFIGURATION_INCOMPLETE with details.missingSections. Superseding the previous active version, activating the draft and writing the assignment schedule run in one D1 batch, so a failure leaves the draft and the previous version unchanged. First activation starts the schedule today; Save as vN+1 goes live now and its new targets apply from tomorrow in the trainee's timezone (D12b option a).",
     roles: ["trainer"],
     idempotency: true,
     body: activateConfigurationRequestSchema,
@@ -883,9 +948,9 @@ configurationRoutes.post(
     if (missingSections.length > 0) {
       return fail(
         c,
-        422,
+        409,
         "CONFIGURATION_INCOMPLETE",
-        "Required configuration sections are incomplete.",
+        "Complete every required section before activating.",
         { missingSections },
       );
     }
@@ -900,8 +965,27 @@ configurationRoutes.post(
     const draftStillAtExpectedVersion = sql`exists (
       select 1 from coaching_configurations
       where id = ${draftId}
+        and status = 'draft'
         and record_version = ${expectedVersion}
     )`;
+
+    const supersedePrevious = previousActive
+      ? [
+          db
+            .update(coachingConfigurations)
+            .set({
+              status: "superseded",
+              updatedAt: timestamp,
+            })
+            .where(
+              and(
+                eq(coachingConfigurations.id, previousActive.id),
+                eq(coachingConfigurations.status, "active"),
+                draftStillAtExpectedVersion,
+              ),
+            ),
+        ]
+      : [];
 
     const activateUpdate = db
       .update(coachingConfigurations)
@@ -915,37 +999,64 @@ configurationRoutes.post(
         and(
           eq(coachingConfigurations.id, draftId),
           eq(coachingConfigurations.recordVersion, expectedVersion),
-          sql`${coachingConfigurations.status} in ('draft', 'configured')`,
+          eq(coachingConfigurations.status, "draft"),
         ),
       );
 
-    if (previousActive) {
-      await db.batch([
-        db
-          .update(coachingConfigurations)
-          .set({
-            status: "superseded",
-            updatedAt: timestamp,
-          })
-          .where(
-            and(
-              eq(coachingConfigurations.id, previousActive.id),
-              eq(coachingConfigurations.status, "active"),
-              draftStillAtExpectedVersion,
-            ),
-          ),
-        activateUpdate,
-      ]);
-    } else {
-      await db.batch([activateUpdate]);
-    }
+    // Fails the whole batch unless the draft is now active at the new
+    // version. It writes NULL into a NOT NULL column of this relationship's
+    // row (which always exists), but only when the activation above matched
+    // nothing (a concurrent save, discard or activate); otherwise it matches
+    // no row and changes nothing. The schedule below is then never written
+    // for a configuration that did not go live.
+    const requireActivated = db
+      .update(coachingRelationships)
+      .set({ trainerUserId: sql`null` })
+      .where(
+        and(
+          eq(coachingRelationships.id, relationshipId),
+          sql`not exists (
+            select 1 from coaching_configurations
+            where id = ${draftId}
+              and status = 'active'
+              and record_version = ${expectedVersion + 1}
+          )`,
+        ),
+      );
 
-    const updated = await loadConfigurationBundle(db, relationshipId, draftId);
-    if (
-      !updated ||
-      updated.configuration.status !== "active" ||
-      updated.configuration.recordVersion !== expectedVersion + 1
-    ) {
+    const schedule = await planActivationSchedule(db, {
+      relationshipId,
+      traineeUserId: ownership.relationship.traineeUserId,
+      now: timestamp,
+      replacesActiveVersion: Boolean(previousActive),
+      expectations: {
+        completionWindowHours: mapped.workout.completionWindowHours,
+        nutrition: {
+          confirmationWindowHours: mapped.nutrition.confirmationWindowHours,
+          photoRequirement: mapped.nutrition.photoRequirement,
+        },
+      },
+    });
+
+    // One D1 batch = one transaction: supersede vN, activate the draft and
+    // write the schedule commit together or not at all.
+    const writes: [ScheduleWrite, ...ScheduleWrite[]] = [
+      ...supersedePrevious,
+      activateUpdate,
+      requireActivated,
+      ...schedule.statements,
+    ] as [ScheduleWrite, ...ScheduleWrite[]];
+    try {
+      await db.batch(writes);
+    } catch (error) {
+      const current = await loadConfigurationBundle(db, relationshipId, draftId);
+      const draftUnchanged =
+        current?.configuration.status === "draft" &&
+        current.configuration.recordVersion === expectedVersion;
+      if (draftUnchanged) {
+        // Nothing raced us: a real failure. The batch rolled back; surface it.
+        throw error;
+      }
       return fail(
         c,
         409,
@@ -953,25 +1064,14 @@ configurationRoutes.post(
         "Configuration was changed after this version was loaded.",
         {
           expectedVersion,
-          currentVersion: updated?.configuration.recordVersion ?? null,
+          currentVersion: current?.configuration.recordVersion ?? null,
         },
       );
     }
 
-    try {
-      await replenishRelationship(
-        db,
-        relationshipId,
-        ownership.relationship.traineeUserId,
-        timestamp,
-      );
-    } catch (error) {
-      writeStructuredLog({
-        level: "error",
-        message: "Assignment replenishment failed after configuration activate",
-        relationshipId,
-        errorName: error instanceof Error ? error.name : "Error",
-      });
+    const updated = await loadConfigurationBundle(db, relationshipId, draftId);
+    if (!updated) {
+      throw new Error("Activated configuration could not be reloaded.");
     }
 
     const data = parseMappedConfiguration(updated);

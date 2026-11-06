@@ -344,7 +344,7 @@ export function ConfigureCoachingPage() {
     void load();
   }, [load]);
 
-  const status: string | null = configuration?.status ?? null;
+  const status = configuration?.status ?? null;
   const expectedVersion = configuration?.recordVersion ?? 0;
   const canEdit =
     !relationshipEnded &&
@@ -551,52 +551,6 @@ export function ConfigureCoachingPage() {
     }
   }
 
-  async function markConfigured() {
-    if (!relationshipId || mutationsBlocked || !online) return;
-    if (!form.goalShort.trim()) {
-      setGoalError("A short goal is required.");
-      setForceGoalOpen(true);
-      setError("A short goal is required before marking configured.");
-      return;
-    }
-    setActing(true);
-    setError(null);
-    setMessage(null);
-    setGoalError(null);
-    try {
-      // Always persist form fields (including check-in form) before status change.
-      let current = await persistConfigurationFields(
-        configuration?.recordVersion ?? expectedVersion,
-      );
-      applyConfiguration(current);
-      if (current.status === "draft") {
-        current = await apiClient.configureConfiguration(
-          relationshipId,
-          { expectedVersion: current.recordVersion },
-          createIdempotencyKey(),
-        );
-        applyConfiguration(current);
-      }
-      showToast("Marked configured");
-      reloadWorkspace();
-    } catch (err) {
-      if (
-        err instanceof ApiClientError &&
-        err.code === "CONFIGURATION_INCOMPLETE"
-      ) {
-        setGoalError("A short goal is required.");
-        setForceGoalOpen(true);
-      }
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not mark configured.",
-      );
-    } finally {
-      setActing(false);
-    }
-  }
-
   async function activate() {
     if (!relationshipId || !configuration || mutationsBlocked) return;
     setActing(true);
@@ -605,23 +559,15 @@ export function ConfigureCoachingPage() {
     setGoalError(null);
     try {
       let current = configuration;
-      const currentStatus: string = current.status;
-      if (currentStatus === "draft" || currentStatus === "configured") {
+      if (current.status === "draft") {
         if (!form.goalShort.trim()) {
           setGoalError("A short goal is required.");
           setForceGoalOpen(true);
           setError("A short goal is required before activation.");
           return;
         }
+        // Save the form, then activate it in one step (D12).
         current = await persistConfigurationFields(current.recordVersion);
-        applyConfiguration(current);
-      }
-      if (current.status === "draft") {
-        current = await apiClient.configureConfiguration(
-          relationshipId,
-          { expectedVersion: current.recordVersion },
-          createIdempotencyKey(),
-        );
         applyConfiguration(current);
       }
       const updated = await apiClient.activateConfiguration(
@@ -640,10 +586,12 @@ export function ConfigureCoachingPage() {
         err instanceof ApiClientError &&
         err.code === "CONFIGURATION_INCOMPLETE"
       ) {
-        setGoalError("A short goal is required.");
-        setForceGoalOpen(true);
-      }
-      if (
+        if (!form.goalShort.trim()) {
+          setGoalError("A short goal is required.");
+          setForceGoalOpen(true);
+        }
+        setError(err.message);
+      } else if (
         err instanceof ApiClientError &&
         err.code === "CONFIGURATION_NOT_EDITABLE"
       ) {
@@ -677,7 +625,9 @@ export function ConfigureCoachingPage() {
       );
       applyConfiguration(created);
       setForceGoalOpen(true);
-      setMessage("New draft version created. Edit and activate when ready.");
+      setMessage(
+        "New draft version created. Activate it to go live. New targets start tomorrow.",
+      );
       showToast("New version created");
       reloadWorkspace();
     } catch (err) {
@@ -766,13 +716,7 @@ export function ConfigureCoachingPage() {
       })
     : null;
 
-  const statusKey =
-    status === "draft" ||
-    status === "configured" ||
-    status === "active" ||
-    status === "superseded"
-      ? status
-      : "draft";
+  const statusKey = status ?? "draft";
   const statusLabel =
     status == null
       ? "Draft"
@@ -789,7 +733,7 @@ export function ConfigureCoachingPage() {
         disabled: acting || mutationsBlocked,
       };
     }
-    if (status === "configured") {
+    if (status === "draft" && form.goalShort.trim() && canEdit) {
       return {
         label: "Activate",
         onClick: () => {
@@ -1407,15 +1351,15 @@ export function ConfigureCoachingPage() {
           {statusLabel}
         </span>
         <div className="screen-sticky-footer-actions">
-          {status === "draft" && form.goalShort.trim() && canEdit ? (
+          {primaryAction?.label === "Activate" ? (
             <Button
               variant="secondary"
               disabled={acting || mutationsBlocked}
               onClick={() => {
-                void markConfigured();
+                void saveDraft();
               }}
             >
-              Mark configured
+              Save draft
             </Button>
           ) : null}
           {primaryAction ? (

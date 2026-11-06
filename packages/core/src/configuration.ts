@@ -83,30 +83,25 @@ export function canCreateConfigurationVersion(input: {
   return input.hasActive && !input.hasOpen;
 }
 
-/** Stored rows may still use the legacy configured value until Activate/Save changes. */
-type StoredCoachingConfigurationStatus = CoachingConfigurationStatus | "configured";
-
-/** Draft save is allowed before activation (draft or legacy configured). */
+/** Draft save is allowed before activation. */
 export function canSaveConfigurationDraft(
-  status: StoredCoachingConfigurationStatus | null,
+  status: CoachingConfigurationStatus | null,
 ): boolean {
-  return status === null || status === "draft" || status === "configured";
+  return status === null || status === "draft";
 }
 
-/**
- * @deprecated Configure is a no-op. Kept for older clients that still call it.
- */
-export function canMarkConfigurationConfigured(
-  status: StoredCoachingConfigurationStatus,
-): boolean {
-  return status === "draft" || status === "configured";
-}
-
-/** Draft (or legacy configured) → Active. */
+/** Draft → Active in one step (D12: there is no configured status). */
 export function canActivateConfiguration(
-  status: StoredCoachingConfigurationStatus,
+  status: CoachingConfigurationStatus,
 ): boolean {
-  return status === "draft" || status === "configured";
+  return status === "draft";
+}
+
+/** Only a draft can be discarded; active and superseded versions are history. */
+export function canDiscardConfiguration(
+  status: CoachingConfigurationStatus,
+): boolean {
+  return status === "draft";
 }
 
 /** Whether a short goal is acceptable for activate. */
