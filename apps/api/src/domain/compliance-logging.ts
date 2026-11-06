@@ -3,6 +3,7 @@ import type { LoggedFoodItem } from "@fitbud/contracts";
 import { canLog, scaleMacro, sumMacros } from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
+  coachingRelationships,
   exceptions,
   foodLibraryItems,
   foodLibraryServings,
@@ -11,6 +12,15 @@ import {
 } from "../db/schema.js";
 import { resolveLibraryId } from "./library-redirects.js";
 import { createId, nowIso } from "../lib/crypto.js";
+import {
+  LOG_TIME_ERROR_CODES,
+  assertLogTimeWithinBounds,
+  isInEndedPeriod,
+  type LogTimeRejection,
+} from "./log-time-bounds.js";
+
+/** Stable code for a trainee write on a coach-created entry (R1; 409). */
+export const COACH_LOGGED_READ_ONLY_CODE = "COACH_LOGGED_READ_ONLY";
 
 export async function assertMealLogAllowed(
   db: Db,
@@ -23,10 +33,13 @@ export async function assertMealLogAllowed(
     clientLoggedAt?: string;
     nowIso: string;
     alreadyLogged: boolean;
+    /** R1 (Z6-20): who wrote the existing entry, when there is one. */
+    existingLoggedByRole?: "trainee" | "coach" | null;
   },
 ): Promise<
   | { ok: true; loggedLate: boolean; loggedAfterResolve: boolean }
-  | { ok: false; code: string; reason: string }
+  | { ok: false; code: string; reason: LogTimeRejection; status: 422 }
+  | { ok: false; code: string; reason: string; status?: undefined }
 > {
   const [assignment] = await db
     .select()
@@ -35,6 +48,45 @@ export async function assertMealLogAllowed(
     .limit(1);
   if (!assignment) {
     return { ok: false, code: "ASSIGNMENT_NOT_FOUND", reason: "not_found" };
+  }
+  // R1 (D-P2-21, Z6-20): an entry the coach created is read-only to the trainee.
+  if (input.existingLoggedByRole === "coach") {
+    return { ok: false, code: COACH_LOGGED_READ_ONLY_CODE, reason: "coach_logged" };
+  }
+  // EC1 rule 1: after a reactivation, nothing dated in the frozen period may
+  // be logged, so exceptions closed at the end can never be reopened or fed.
+  const [relationship] = await db
+    .select({ reactivatedAt: coachingRelationships.reactivatedAt })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, input.relationshipId))
+    .limit(1);
+  if (
+    isInEndedPeriod({
+      reactivatedAt: relationship?.reactivatedAt ?? null,
+      loggedAt: input.clientLoggedAt ?? input.nowIso,
+      localDate: assignment.localDate,
+      timeZone: input.traineeTimezone,
+    })
+  ) {
+    return {
+      ok: false,
+      code: LOG_TIME_ERROR_CODES.ended_period,
+      reason: "ended_period",
+      status: 422,
+    };
+  }
+  const bounds = assertLogTimeWithinBounds({
+    clientLoggedAt: input.clientLoggedAt ?? input.nowIso,
+    windowStart: assignment.windowStartsAt,
+    now: input.nowIso,
+  });
+  if (!bounds.ok) {
+    return {
+      ok: false,
+      code: LOG_TIME_ERROR_CODES[bounds.reason],
+      reason: bounds.reason,
+      status: 422,
+    };
   }
   const prescription = JSON.parse(assignment.mealPrescriptionJson) as {
     required?: boolean;

@@ -22,7 +22,7 @@
  * source other than these predicates: the reset changes nothing at all when no QA
  * row is present, and leaves every non-QA row untouched beside the demo world.
  *
- * The schema declares 127 foreign keys, 18 of them `ON DELETE CASCADE` and none
+ * The schema declares 141 foreign-key columns, 20 of them `ON DELETE CASCADE` and none
  * `ON DELETE SET NULL` (`PRAGMA foreign_key_list`, migrations in `drizzle/`).
  * They are why the order matters, and they are also safe for the reset: every
  * cascading child of a table in this plan is itself in this plan, so a cascade from
@@ -124,6 +124,24 @@ export const QA_TABLE_PLAN: readonly QaTablePlan[] = [
     userColumns: ["trainer_user_id", "trainee_user_id", "ended_by_user_id"],
   },
   {
+    // Steps read from a phone (Z6-4): a projection the demo seed never emits.
+    // Reset only; the row cascades with its relationship.
+    table: "daily_steps",
+    pk: ["id"],
+    resetOnly: true,
+    parents: [{ column: "coaching_relationship_id", table: "coaching_relationships" }],
+  },
+  {
+    // Audit rows for trainer creates and edits of a client's logs (Z6-18): written
+    // by the API only, never emitted by the demo seed. Reset only; the row cascades
+    // with its relationship, and both user columns are QA ids when the row is ours.
+    table: "log_edit_events",
+    pk: ["id"],
+    userColumns: ["trainee_user_id", "actor_user_id"],
+    resetOnly: true,
+    parents: [{ column: "coaching_relationship_id", table: "coaching_relationships" }],
+  },
+  {
     table: "coaching_configurations",
     pk: ["id"],
     parents: [{ column: "coaching_relationship_id", table: "coaching_relationships" }],
@@ -152,6 +170,17 @@ export const QA_TABLE_PLAN: readonly QaTablePlan[] = [
     table: "subscription_versions",
     pk: ["id"],
     parents: [{ column: "coaching_relationship_id", table: "coaching_relationships" }],
+  },
+  {
+    // Z6-8 (D-W6-22, D-W6-24): payment records the trainer tracks. No cascade, so
+    // the reset must delete them before their subscription version and relationship.
+    table: "payment_records",
+    pk: ["id"],
+    userColumns: ["created_by"],
+    parents: [
+      { column: "coaching_relationship_id", table: "coaching_relationships" },
+      { column: "subscription_version_id", table: "subscription_versions" },
+    ],
   },
   {
     table: "onboarding_form_responses",

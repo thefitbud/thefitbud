@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -15,14 +16,29 @@ export const users = sqliteTable(
   {
     id: text("id").primaryKey(),
     firebaseUid: text("firebase_uid").notNull(),
-    accountState: text("account_state", { enum: ["active", "disabled"] })
+    accountState: text("account_state", { enum: ["active", "disabled", "archived"] })
       .notNull()
       .default("active"),
     timezone: text("timezone").notNull().default("UTC"),
+    /** ISO UTC; set exactly when account_state is 'archived' (Z6-16, D-W6-7). */
+    archivedAt: text("archived_at"),
+    /** ISO UTC; the daily purge removes archived accounts past this instant. */
+    purgeAfter: text("purge_after"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("users_firebase_uid_uidx").on(table.firebaseUid)],
+  (table) => [
+    uniqueIndex("users_firebase_uid_uidx").on(table.firebaseUid),
+    index("users_purge_after_idx").on(table.purgeAfter),
+    check(
+      "users_archived_at_chk",
+      sql`(${table.accountState} = 'archived') = (${table.archivedAt} IS NOT NULL)`,
+    ),
+    check(
+      "users_purge_after_chk",
+      sql`(${table.accountState} = 'archived') = (${table.purgeAfter} IS NOT NULL)`,
+    ),
+  ],
 );
 
 export const userRoles = sqliteTable(
@@ -309,6 +325,8 @@ export const coachingConfigurations = sqliteTable(
     goalShort: text("goal_short"),
     goalDescription: text("goal_description"),
     notes: text("notes"),
+    /** Daily steps target for this client; trainer-editable (Z6-4, v13 B4a). */
+    stepsTarget: integer("steps_target").notNull().default(8000),
     configuredAt: text("configured_at"),
     activatedAt: text("activated_at"),
     createdAt: text("created_at").notNull(),
@@ -345,6 +363,15 @@ export const subscriptionVersions = sqliteTable(
     startsOn: text("starts_on").notNull(),
     renewsOn: text("renews_on").notNull(),
     createdAt: text("created_at").notNull(),
+    // Tracking only (D-W6-5): what the client pays, never a collection. NULL on
+    // rows written before 0036; no amount is invented for them.
+    amountPaise: integer("amount_paise"),
+    subscriptionType: text("subscription_type", {
+      enum: ["weekly", "monthly", "quarterly", "yearly", "custom"],
+    }),
+    coachingMode: text("coaching_mode", {
+      enum: ["online", "in_person", "hybrid"],
+    }),
   },
   (table) => [
     uniqueIndex("subscription_versions_relationship_version_uidx").on(
@@ -353,6 +380,127 @@ export const subscriptionVersions = sqliteTable(
     ),
     index("subscription_versions_relationship_idx").on(
       table.coachingRelationshipId,
+    ),
+    // Parent key for the same-relationship foreign key on payment_records.
+    uniqueIndex("subscription_versions_relationship_id_uidx").on(
+      table.coachingRelationshipId,
+      table.id,
+    ),
+    check(
+      "subscription_versions_amount_paise_chk",
+      sql`${table.amountPaise} IS NULL OR (typeof(${table.amountPaise}) = 'integer' AND ${table.amountPaise} >= 0)`,
+    ),
+    check(
+      "subscription_versions_subscription_type_chk",
+      sql`${table.subscriptionType} IS NULL OR ${table.subscriptionType} IN ('weekly', 'monthly', 'quarterly', 'yearly', 'custom')`,
+    ),
+    check(
+      "subscription_versions_coaching_mode_chk",
+      sql`${table.coachingMode} IS NULL OR ${table.coachingMode} IN ('online', 'in_person', 'hybrid')`,
+    ),
+  ],
+);
+
+/**
+ * Payments the trainer tracks against a subscription version. Tracking only
+ * (D-W6-5): no gateway, invoice, transaction or session-count fields. The
+ * subscription version must belong to the same relationship.
+ */
+export const paymentRecords = sqliteTable(
+  "payment_records",
+  {
+    id: text("id").primaryKey(),
+    coachingRelationshipId: text("coaching_relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id),
+    subscriptionVersionId: text("subscription_version_id").notNull(),
+    amountPaise: integer("amount_paise").notNull(),
+    /** Civil date (YYYY-MM-DD) in the trainer's timezone. */
+    dueOn: text("due_on").notNull(),
+    /** Civil date (YYYY-MM-DD); set exactly when the status is paid. */
+    paidOn: text("paid_on"),
+    status: text("status", { enum: ["paid", "unpaid"] }).notNull(),
+    method: text("method", { enum: ["cash", "upi", "bank"] }),
+    note: text("note"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "payment_records_subscription_version_fk",
+      columns: [table.coachingRelationshipId, table.subscriptionVersionId],
+      foreignColumns: [
+        subscriptionVersions.coachingRelationshipId,
+        subscriptionVersions.id,
+      ],
+    }),
+    index("payment_records_relationship_due_idx").on(
+      table.coachingRelationshipId,
+      table.dueOn,
+    ),
+    check(
+      "payment_records_amount_paise_chk",
+      sql`typeof(${table.amountPaise}) = 'integer' AND ${table.amountPaise} > 0`,
+    ),
+    check(
+      "payment_records_due_on_chk",
+      sql`${table.dueOn} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check(
+      "payment_records_paid_on_chk",
+      sql`${table.paidOn} IS NULL OR ${table.paidOn} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check(
+      "payment_records_status_chk",
+      sql`(${table.status} = 'paid' AND ${table.paidOn} IS NOT NULL) OR (${table.status} = 'unpaid' AND ${table.paidOn} IS NULL AND ${table.method} IS NULL)`,
+    ),
+    check(
+      "payment_records_method_chk",
+      sql`${table.method} IS NULL OR ${table.method} IN ('cash', 'upi', 'bank')`,
+    ),
+  ],
+);
+
+/**
+ * One row per client per trainee-local day of steps read from the phone's health
+ * store (Z6-4, v13 B4a). A projection: the device is the source, this is the copy
+ * trainers read. Cascades with the relationship, like the other per-relationship
+ * rows that only mean something beside it.
+ */
+export const dailySteps = sqliteTable(
+  "daily_steps",
+  {
+    id: text("id").primaryKey(),
+    coachingRelationshipId: text("coaching_relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+    /** Civil date (YYYY-MM-DD) in the trainee's timezone. */
+    localDate: text("local_date").notNull(),
+    steps: integer("steps").notNull(),
+    source: text("source", {
+      enum: ["apple_health", "health_connect", "manual"],
+    }).notNull(),
+    syncedAt: text("synced_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("daily_steps_relationship_date_uidx").on(
+      table.coachingRelationshipId,
+      table.localDate,
+    ),
+    check(
+      "daily_steps_steps_chk",
+      sql`typeof(${table.steps}) = 'integer' AND ${table.steps} BETWEEN 0 AND 200000`,
+    ),
+    check(
+      "daily_steps_local_date_chk",
+      sql`${table.localDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check(
+      "daily_steps_source_chk",
+      sql`${table.source} IN ('apple_health', 'health_connect', 'manual')`,
     ),
   ],
 );
@@ -599,6 +747,14 @@ export const workoutExecutions = sqliteTable(
     clientLoggedAt: text("client_logged_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** Who created the entry (Z6-18, D-P2-21 R1): a coach-made entry is read-only to the trainee. */
+    loggedByRole: text("logged_by_role", { enum: ["trainee", "coach"] })
+      .notNull()
+      .default("trainee"),
+    loggedByUserId: text("logged_by_user_id").references(() => users.id),
+    lastEditedByRole: text("last_edited_by_role", { enum: ["trainee", "coach"] }),
+    lastEditedByUserId: text("last_edited_by_user_id").references(() => users.id),
+    lastEditedAt: text("last_edited_at"),
   },
   (table) => [
     uniqueIndex("workout_executions_assignment_uidx").on(table.assignmentId),
@@ -610,6 +766,11 @@ export const workoutExecutions = sqliteTable(
       table.completedAt,
     ),
     index("workout_executions_trainee_idx").on(table.traineeUserId),
+    check("workout_executions_logged_by_role_chk", sql`${table.loggedByRole} IN ('trainee', 'coach')`),
+    check(
+      "workout_executions_last_edited_by_role_chk",
+      sql`${table.lastEditedByRole} IS NULL OR ${table.lastEditedByRole} IN ('trainee', 'coach')`,
+    ),
   ],
 );
 
@@ -654,12 +815,29 @@ export const setExecutions = sqliteTable(
     prescribedLoadLabel: text("prescribed_load_label"),
     actualReps: integer("actual_reps"),
     actualLoadLabel: text("actual_load_label"),
+    /**
+     * Numeric loads parsed from the labels (Z6-1, `domain/load-parser.ts`).
+     * The labels stay the display source; these columns feed strength charts.
+     * kg is null unless the label states a weight ("40 kg", "90 lb", "BW+10").
+     */
+    prescribedLoadKg: real("prescribed_load_kg"),
+    actualLoadKg: real("actual_load_kg"),
+    /** Kind of the set's load: from the actual label once logged, else the prescribed one. */
+    loadKind: text("load_kind", {
+      enum: ["kg", "bodyweight", "bodyweight_plus", "text"],
+    })
+      .notNull()
+      .default("text"),
     completedAt: text("completed_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
     index("set_executions_exercise_idx").on(table.exerciseExecutionId),
+    check(
+      "set_executions_load_kind_chk",
+      sql`${table.loadKind} IN ('kg', 'bodyweight', 'bodyweight_plus', 'text')`,
+    ),
   ],
 );
 
@@ -762,6 +940,14 @@ export const mealCompliance = sqliteTable(
     clientLoggedAt: text("client_logged_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** Who created the entry (Z6-18, D-P2-21 R1): a coach-made entry is read-only to the trainee. */
+    loggedByRole: text("logged_by_role", { enum: ["trainee", "coach"] })
+      .notNull()
+      .default("trainee"),
+    loggedByUserId: text("logged_by_user_id").references(() => users.id),
+    lastEditedByRole: text("last_edited_by_role", { enum: ["trainee", "coach"] }),
+    lastEditedByUserId: text("last_edited_by_user_id").references(() => users.id),
+    lastEditedAt: text("last_edited_at"),
   },
   (table) => [
     uniqueIndex("meal_compliance_assignment_uidx").on(table.assignmentId),
@@ -775,6 +961,11 @@ export const mealCompliance = sqliteTable(
       table.localDate,
     ),
     index("meal_compliance_trainee_idx").on(table.traineeUserId),
+    check("meal_compliance_logged_by_role_chk", sql`${table.loggedByRole} IN ('trainee', 'coach')`),
+    check(
+      "meal_compliance_last_edited_by_role_chk",
+      sql`${table.lastEditedByRole} IS NULL OR ${table.lastEditedByRole} IN ('trainee', 'coach')`,
+    ),
   ],
 );
 
@@ -1113,6 +1304,14 @@ export const measurements = sqliteTable(
     recordVersion: integer("record_version").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** Who created the entry (Z6-18, D-P2-21 R1): a coach-made entry is read-only to the trainee. */
+    loggedByRole: text("logged_by_role", { enum: ["trainee", "coach"] })
+      .notNull()
+      .default("trainee"),
+    loggedByUserId: text("logged_by_user_id").references(() => users.id),
+    lastEditedByRole: text("last_edited_by_role", { enum: ["trainee", "coach"] }),
+    lastEditedByUserId: text("last_edited_by_user_id").references(() => users.id),
+    lastEditedAt: text("last_edited_at"),
   },
   (table) => [
     index("measurements_relationship_observed_idx").on(
@@ -1121,6 +1320,58 @@ export const measurements = sqliteTable(
     ),
     index("measurements_trainee_idx").on(table.traineeUserId),
     index("measurements_checkin_idx").on(table.checkinId),
+    check("measurements_logged_by_role_chk", sql`${table.loggedByRole} IN ('trainee', 'coach')`),
+    check(
+      "measurements_last_edited_by_role_chk",
+      sql`${table.lastEditedByRole} IS NULL OR ${table.lastEditedByRole} IN ('trainee', 'coach')`,
+    ),
+  ],
+);
+
+/**
+ * Audit trail of trainer creates and edits of a client's log entries (Z6-18, D-P2-21 R4).
+ * The relationship owns the rows (ON DELETE CASCADE), so wiping or purging a relationship
+ * needs no separate delete. entity_id points at one of three tables, so it has no foreign key.
+ */
+export const logEditEvents = sqliteTable(
+  "log_edit_events",
+  {
+    id: text("id").primaryKey(),
+    coachingRelationshipId: text("coaching_relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+    traineeUserId: text("trainee_user_id")
+      .notNull()
+      .references(() => users.id),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => users.id),
+    actorRole: text("actor_role", { enum: ["trainee", "coach"] }).notNull(),
+    entityType: text("entity_type", {
+      enum: ["workout_execution", "meal_compliance", "measurement"],
+    }).notNull(),
+    entityId: text("entity_id").notNull(),
+    action: text("action", { enum: ["create", "edit"] }).notNull(),
+    /** NULL exactly when action is 'create'. */
+    beforeJson: text("before_json"),
+    afterJson: text("after_json").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("log_edit_events_relationship_created_idx").on(
+      table.coachingRelationshipId,
+      table.createdAt,
+    ),
+    check("log_edit_events_actor_role_chk", sql`${table.actorRole} IN ('trainee', 'coach')`),
+    check(
+      "log_edit_events_entity_type_chk",
+      sql`${table.entityType} IN ('workout_execution', 'meal_compliance', 'measurement')`,
+    ),
+    check("log_edit_events_action_chk", sql`${table.action} IN ('create', 'edit')`),
+    check(
+      "log_edit_events_before_json_chk",
+      sql`(${table.action} = 'create') = (${table.beforeJson} IS NULL)`,
+    ),
   ],
 );
 
@@ -1301,6 +1552,10 @@ export const notificationPreferences = sqliteTable(
     trainerCategoriesJson: text("trainer_categories_json").notNull().default("[]"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** "Coach updates to my logs" (Z6-18, D-P2-21 R5); on by default for everyone. */
+    coachLogUpdates: integer("coach_log_updates", { mode: "boolean" })
+      .notNull()
+      .default(true),
   },
 );
 
@@ -1369,6 +1624,9 @@ export const notifications = sqliteTable(
         "trainer_renewal",
         "trainer_meal_times_changed",
         "admin_whatsapp_budget",
+        // Z6-19 (D-W6-30, D-W6-32): a trainer created or edited one of the trainee's logs.
+        // No DB CHECK on this column, so no migration.
+        "coach_log_updated",
       ],
     }).notNull(),
     domainEntityType: text("domain_entity_type", {

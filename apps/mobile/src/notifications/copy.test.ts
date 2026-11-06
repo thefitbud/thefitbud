@@ -111,3 +111,58 @@ describe("notificationRowTitle", () => {
     expect(notificationRowTitle(row)).not.toContain("_");
   });
 });
+
+describe("coach log updates (Z6-19, D-W6-33)", () => {
+  const eventId = "55555555-5555-4555-8555-555555555555";
+  function coachRow(dedupeKey: string): Notification {
+    return {
+      ...base,
+      type: "coach_log_updated",
+      notificationType: "coach_log_updated",
+      domainEntityType: "workout_assignment",
+      dedupeKey,
+      route: "/workout/44444444-4444-4444-8444-444444444444",
+      routing: {
+        ...base.routing,
+        notificationType: "coach_log_updated",
+        domainEntityType: "workout_assignment",
+      },
+    };
+  }
+
+  it("uses Firoz's copy for a coach create and a coach edit", () => {
+    const created = coachRow(`coach_log_updated:create:workout_execution:${eventId}`);
+    expect(notificationRowTitle(created)).toBe("Logged by your coach");
+    expect(notificationRowBody(created)).toBe("Your coach logged a workout for you.");
+
+    const edited = coachRow(`coach_log_updated:edit:workout_execution:${eventId}`);
+    expect(notificationRowTitle(edited)).toBe("Edited by your coach");
+    expect(notificationRowBody(edited)).toBe("Your coach updated one of your workouts.");
+  });
+
+  it("uses the meal and measurement wording from D-W6-33 (Z6-20)", () => {
+    const meal = (action: string) => coachRow(`coach_log_updated:${action}:meal_compliance:${eventId}`);
+    expect(notificationRowTitle(meal("create"))).toBe("Logged by your coach");
+    expect(notificationRowBody(meal("create"))).toBe("Your coach logged a meal for you.");
+    expect(notificationRowTitle(meal("edit"))).toBe("Edited by your coach");
+    expect(notificationRowBody(meal("edit"))).toBe("Your coach updated one of your meals.");
+
+    const measurement = (action: string) =>
+      coachRow(`coach_log_updated:${action}:measurement:${eventId}`);
+    expect(notificationRowTitle(measurement("create"))).toBe("Logged by your coach");
+    expect(notificationRowBody(measurement("create"))).toBe(
+      "Your coach logged a measurement for you.",
+    );
+    expect(notificationRowTitle(measurement("edit"))).toBe("Edited by your coach");
+    expect(notificationRowBody(measurement("edit"))).toBe(
+      "Your coach updated one of your measurements.",
+    );
+  });
+
+  it("falls back to the plain label for a key it does not know", () => {
+    const unknown = coachRow(`coach_log_updated:delete:workout_execution:${eventId}`);
+    expect(notificationRowTitle(unknown)).toBe("Update from your coach");
+    expect(notificationRowBody(unknown)).toBe("");
+    expect(notificationRowTitle(unknown)).not.toContain("_");
+  });
+});

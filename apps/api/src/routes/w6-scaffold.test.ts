@@ -41,13 +41,8 @@ function testEnv(): Env {
   };
 }
 
-const MOUNTS = [
-  "/strength",
-  "/client-settings",
-  "/steps",
-  "/exceptions/bulk",
-  "/account",
-] as const;
+// Every W6 scaffold router has been replaced by its task (D-W6-15).
+const MOUNTS: readonly string[] = [];
 
 async function expectNotImplemented(response: Response) {
   expect(response.status).toBe(404);
@@ -117,15 +112,28 @@ describe("W6 scaffold mounts", () => {
     });
   }
 
-  it("/exceptions/bulk is matched before /exceptions, and the existing exceptions router is unchanged", async () => {
+  it("/exceptions/bulk/resolve reaches the real bulk router (Z6-10, D-W6-15), and the existing exceptions router is unchanged", async () => {
     const cookie = await trainerCookie();
-    await expectNotImplemented(
-      await app.request(
-        "/exceptions/bulk/resolve",
-        { method: "POST", headers: { Cookie: cookie } },
-        testEnv(),
-      ),
+    // Unauthenticated: the bulk router's own auth answers 401, not the scaffold.
+    const anonBulk = await app.request(
+      "/exceptions/bulk/resolve",
+      { method: "POST" },
+      testEnv(),
     );
+    expect(anonBulk.status).toBe(401);
+    // Signed in without a body: the bulk router's validation answers, so the path
+    // is matched before /exceptions/:exceptionId.
+    const bulk = await app.request(
+      "/exceptions/bulk/resolve",
+      { method: "POST", headers: { Cookie: cookie } },
+      testEnv(),
+    );
+    expect(bulk.status).toBe(400);
+    const bulkBody = (await bulk.json()) as {
+      error: { code: string; message: string };
+    };
+    expect(bulkBody.error.code).toBe("INVALID_REQUEST");
+    expect(bulkBody.error.message).toBe("Invalid bulk resolve request.");
 
     // The existing exceptions router answers /exceptions/:id with its own auth and
     // lookup errors: unauthenticated callers get 401, a trainer gets a domain error
@@ -145,11 +153,21 @@ describe("W6 scaffold mounts", () => {
   });
 });
 
-describe("W6 account-purge stub", () => {
-  it("runAccountPurge does nothing", async () => {
-    await expect(
-      runAccountPurge(testEnv(), new Date()),
-    ).resolves.toBeUndefined();
+describe("W6 account purge wiring", () => {
+  // Z6-17 replaced the Z5-4 stub (D-W6-15); its behaviour is tested in jobs/account-purge.test.ts.
+  it("runAccountPurge purges nothing when no archived account is due", async () => {
+    const memory = await createMemoryDb();
+    setTestDbOverride(memory.db);
+    try {
+      await expect(runAccountPurge(testEnv(), new Date())).resolves.toEqual({
+        selected: 0,
+        purged: 0,
+        failed: 0,
+      });
+    } finally {
+      setTestDbOverride(null);
+      memory.close();
+    }
   });
 
   it("scheduled() calls runAccountPurge once with the env and the scheduled time", async () => {
@@ -191,10 +209,9 @@ describe("W6 scaffold exports resolve", () => {
       contracts.W6CheckinFormV2Contract,
       contracts.W6ClientSettingsContract,
       contracts.W6StepsContract,
-      contracts.W6ExceptionBulkContract,
       contracts.W6AccountContract,
       contracts.W6CoachLogContract,
-    ] = [{}, {}, {}, {}, {}, {}, {}];
-    expect(placeholders).toHaveLength(7);
+    ] = [{}, {}, {}, {}, {}, {}];
+    expect(placeholders).toHaveLength(6);
   });
 });

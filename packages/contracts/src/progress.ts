@@ -78,6 +78,14 @@ export const measurementSchema = z.object({
   checkinId: uuidSchema.nullable(),
   mediaAssetId: uuidSchema.nullable(),
   recordVersion: z.number().int().nonnegative(),
+  /**
+   * Who logged the entry (Z6-20, R1): `coach` entries are read-only to the
+   * trainee ("Logged by your coach"). The API always sends it (REST reads and
+   * sync pull payloads); optional so older clients' fixtures parse.
+   */
+  loggedByRole: z.enum(["trainee", "coach"]).optional(),
+  /** Set when a coach edited the entry ("Edited by your coach"). */
+  lastEditedByRole: z.enum(["trainee", "coach"]).nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });

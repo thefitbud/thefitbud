@@ -243,5 +243,40 @@
     "when": 1730304000000,
     "tag": "0034_remove_configured_status",
     "breakpoints": true
+  },
+  {
+    "idx": 35,
+    "version": "7",
+    "when": 1730390400000,
+    "tag": "0035_numeric_set_load",
+    "breakpoints": true
+  },
+  {
+    "idx": 36,
+    "version": "7",
+    "when": 1730476800000,
+    "tag": "0036_payment_tracking",
+    "breakpoints": true
+  },
+  {
+    "idx": 37,
+    "version": "7",
+    "when": 1730563200000,
+    "tag": "0037_daily_steps",
+    "breakpoints": true
+  },
+  {
+    "idx": 38,
+    "version": "7",
+    "when": 1730649600000,
+    "tag": "0038_archived_account_state",
+    "breakpoints": true
+  },
+  {
+    "idx": 39,
+    "version": "7",
+    "when": 1730736000000,
+    "tag": "0039_log_authorship",
+    "breakpoints": true
   }
 ]

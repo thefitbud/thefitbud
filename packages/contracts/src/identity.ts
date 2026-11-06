@@ -8,7 +8,8 @@ export type Role = z.infer<typeof roleSchema>;
 export const surfaceSchema = z.enum(["trainer_web", "mobile"]);
 export type Surface = z.infer<typeof surfaceSchema>;
 
-export const accountStateSchema = z.enum(["active", "disabled"]);
+/** `archived`: deleted by the user, kept for 6 months, reactivated by signing in (Z6-14, D-W6-7). */
+export const accountStateSchema = z.enum(["active", "disabled", "archived"]);
 export type AccountState = z.infer<typeof accountStateSchema>;
 
 export const uuidSchema = z.string().uuid();

@@ -33,6 +33,10 @@ function dummyD1(): D1Database {
   } as unknown as D1Database;
 }
 
+function windowOpen(item: { windowStartsAt: string }): boolean {
+  return Date.parse(item.windowStartsAt) <= Date.now();
+}
+
 function testEnv(): Env {
   return {
     DB: dummyD1(),
@@ -62,14 +66,14 @@ async function createTrainerSession(email: string) {
   return { cookie: setCookie!.split(";")[0]! };
 }
 
-function sampleContent() {
+function sampleContent(weekday = 1) {
   return {
     workoutDays: [
       {
         id: "11111111-1111-4111-8111-111111111111",
         order: 1,
         name: "Day A",
-        weekday: 1,
+        weekday,
         exercises: [
           {
             id: "22222222-2222-4222-8222-222222222222",
@@ -100,7 +104,11 @@ function sampleContent() {
   };
 }
 
-async function reachEffectivePlan(suffix: string, requireSessionRpe = false) {
+async function reachEffectivePlan(
+  suffix: string,
+  requireSessionRpe = false,
+  sessionToday = false,
+) {
   const trainer = await createTrainerSession(`wo-coach-${suffix}@example.com`);
   const created = await app.request(
     "/invitations",
@@ -257,7 +265,11 @@ async function reachEffectivePlan(suffix: string, requireSessionRpe = false) {
       },
       body: JSON.stringify({
         title: "Foundation",
-        content: sampleContent(),
+        content: sampleContent(
+          sessionToday
+            ? weekdayFromLocalDate(formatLocalDate(new Date(), "Asia/Kolkata"))
+            : 1,
+        ),
       }),
     },
     testEnv(),
@@ -366,7 +378,7 @@ describe("workout assignment and execution", () => {
 
   it("runs start → set complete without re-entry → complete; trainer adherence matches", async () => {
     const { trainerCookie, traineeToken, relationshipId, today, toDate } =
-      await reachEffectivePlan("loop");
+      await reachEffectivePlan("loop", false, true);
 
     const listed = await app.request(
       `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
@@ -380,10 +392,10 @@ describe("workout assignment and execution", () => {
     );
     expect(listed.status).toBe(200);
     const listBody = (await listed.json()) as {
-      data: { items: Array<{ id: string; status: string }> };
+      data: { items: Array<{ id: string; status: string; windowStartsAt: string }> };
     };
     const assignment = listBody.data.items.find(
-      (item) => item.status === "assigned",
+      (item) => item.status === "assigned" && windowOpen(item),
     );
     expect(assignment).toBeTruthy();
     const assignmentId = assignment!.id;
@@ -405,10 +417,15 @@ describe("workout assignment and execution", () => {
       data: {
         id: string;
         status: string;
+        loggedByRole?: string;
+        lastEditedByRole?: string | null;
         exercises: Array<{ sets: Array<{ id: string }> }>;
       };
     };
     expect(startedBody.data.status).toBe("started");
+    // Z6-19 (R1): a workout the trainee logs reads as theirs, not edited by the coach.
+    expect(startedBody.data.loggedByRole).toBe("trainee");
+    expect(startedBody.data.lastEditedByRole).toBeNull();
     const executionId = startedBody.data.id;
     const setIds = startedBody.data.exercises[0]!.sets.map((set) => set.id);
 
@@ -470,7 +487,7 @@ describe("workout assignment and execution", () => {
 
   it("marks modified when set values change and requires session RPE when configured", async () => {
     const { traineeToken, relationshipId, today, toDate } =
-      await reachEffectivePlan("rpe", true);
+      await reachEffectivePlan("rpe", true, true);
     const listed = await app.request(
       `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
       {
@@ -482,10 +499,10 @@ describe("workout assignment and execution", () => {
       testEnv(),
     );
     const listBody = (await listed.json()) as {
-      data: { items: Array<{ id: string; status: string }> };
+      data: { items: Array<{ id: string; status: string; windowStartsAt: string }> };
     };
     const assignmentId = listBody.data.items.find(
-      (item) => item.status === "assigned",
+      (item) => item.status === "assigned" && windowOpen(item),
     )!.id;
 
     const started = await app.request(
@@ -580,7 +597,7 @@ describe("workout assignment and execution", () => {
 
   it("supports pause, resume, and skip assignment", async () => {
     const { traineeToken, relationshipId, today, toDate } =
-      await reachEffectivePlan("pause");
+      await reachEffectivePlan("pause", false, true);
     const listed = await app.request(
       `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
       {
@@ -593,9 +610,9 @@ describe("workout assignment and execution", () => {
     );
     const assignmentId = (
       (await listed.json()) as {
-        data: { items: Array<{ id: string; status: string }> };
+        data: { items: Array<{ id: string; status: string; windowStartsAt: string }> };
       }
-    ).data.items.find((item) => item.status === "assigned")!.id;
+    ).data.items.find((item) => item.status === "assigned" && windowOpen(item))!.id;
 
     const started = await app.request(
       `/workouts/assignments/${assignmentId}/start`,
@@ -663,7 +680,7 @@ describe("workout assignment and execution", () => {
     );
     const skipTarget = (
       (await listedAgain.json()) as {
-        data: { items: Array<{ id: string; status: string }> };
+        data: { items: Array<{ id: string; status: string; windowStartsAt: string }> };
       }
     ).data.items.find(
       (item) => item.status === "assigned" && item.id !== assignmentId,
@@ -688,6 +705,59 @@ describe("workout assignment and execution", () => {
     ).toBe("skipped");
   });
 
+  it("rejects starting a workout before its day starts and allows today's", async () => {
+    const { traineeToken, relationshipId, today, toDate } =
+      await reachEffectivePlan("lt-start", false, true);
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const items = (
+      (await listed.json()) as {
+        data: {
+          items: Array<{ id: string; localDate: string; windowStartsAt: string }>;
+        };
+      }
+    ).data.items;
+    const future = items.find((item) => !windowOpen(item))!;
+    const todays = items.find((item) => item.localDate === today)!;
+    expect(future).toBeTruthy();
+    expect(todays).toBeTruthy();
+
+    const start = (id: string, key: string) =>
+      app.request(
+        `/workouts/assignments/${id}/start`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${traineeToken}`,
+            "x-fitbud-role": "trainee",
+            "Idempotency-Key": key,
+          },
+        },
+        testEnv(),
+      );
+    const early = await start(future.id, "lt-start-1");
+    expect(early.status).toBe(422);
+    expect(
+      ((await early.json()) as { error: { code: string } }).error.code,
+    ).toBe("LOG_TIME_BEFORE_WINDOW");
+    const executions = await getTestDbOverride()!
+      .select()
+      .from(schema.workoutExecutions)
+      .where(eq(schema.workoutExecutions.assignmentId, future.id));
+    expect(executions).toEqual([]);
+
+    const onTime = await start(todays.id, "lt-start-2");
+    expect(onTime.status).toBe(200);
+  });
+
   it("derives Missed when the window expires without execution", async () => {
     const { traineeToken, relationshipId, today, toDate } =
       await reachEffectivePlan("miss");
@@ -703,7 +773,7 @@ describe("workout assignment and execution", () => {
     );
     const assignmentId = (
       (await listed.json()) as {
-        data: { items: Array<{ id: string; status: string }> };
+        data: { items: Array<{ id: string; status: string; windowStartsAt: string }> };
       }
     ).data.items.find((item) => item.status === "assigned")!.id;
 
@@ -858,7 +928,7 @@ describe("workout assignment and execution", () => {
 
   it("keeps a started session on its plan version when a later workout plan is published", async () => {
     const { trainerCookie, traineeToken, relationshipId, planId, versionId, today, toDate } =
-      await reachEffectivePlan("protect");
+      await reachEffectivePlan("protect", false, true);
     const listed = await app.request(
       `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
       {

@@ -122,6 +122,9 @@ export function domainEntityTypeForReminder(
       return domainEntityTypeForActivity(activityType ?? "checkin");
     case "checkin_reviewed":
       return "checkin";
+    case "coach_log_updated":
+      // The sender (coach-log.ts) sets the entity; workouts route to their assignment.
+      return "workout_assignment";
     case "plan_published":
     case "coach_answered":
     case "reminders_paused":
@@ -210,6 +213,7 @@ export function reminderPreferenceForNotification(input: {
     case "trainer_renewal":
     case "trainer_meal_times_changed":
     case "admin_whatsapp_budget":
+    case "coach_log_updated": // gated by "Coach updates to my logs", not a reminder category
       return null;
   }
 }
@@ -745,6 +749,11 @@ export function routeTargetFromPushPayload(payload: PushPayload): {
       }
       if (payload.domainEntityType === "meal_assignment") {
         return { tab: "diet", ...target };
+      }
+      return { tab: "today", ...target };
+    case "coach_log_updated":
+      if (payload.domainEntityType === "workout_assignment") {
+        return { tab: "workout", ...target };
       }
       return { tab: "today", ...target };
     case "plan_published":

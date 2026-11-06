@@ -576,6 +576,9 @@ export function mapWorkoutExecutionSummary(
     completedAt: row.completedAt,
     sessionRpe: row.sessionRpe,
     requireSessionRpe: row.requireSessionRpe,
+    // Z6-19 (R1, D-W6-36): REST reads and sync pull payloads both carry authorship.
+    loggedByRole: row.loggedByRole,
+    lastEditedByRole: row.lastEditedByRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -766,6 +769,8 @@ export function mapMealCompliance(row: MealComplianceRow): MealCompliance {
           },
         }
       : {}),
+    loggedByRole: row.loggedByRole,
+    lastEditedByRole: row.lastEditedByRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -1051,6 +1056,8 @@ export function mapMeasurement(row: MeasurementRow): Measurement {
     checkinId: row.checkinId,
     mediaAssetId: row.mediaAssetId,
     recordVersion: row.recordVersion,
+    loggedByRole: row.loggedByRole,
+    lastEditedByRole: row.lastEditedByRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -1121,6 +1128,7 @@ export function mapNotificationPreferences(
     locale: string | null;
     quietHoursStart: string | null;
     quietHoursEnd: string | null;
+    coachLogUpdates: boolean;
     updatedAt: string;
   },
   userTimezone: string | null,
@@ -1147,6 +1155,7 @@ export function mapNotificationPreferences(
     traineeTimezone: userTimezone,
     locale: row.locale,
     trainerCategories: parseTrainerCategoriesJson(row.trainerCategoriesJson),
+    coachLogUpdates: row.coachLogUpdates,
     preferredWorkoutTime: row.preferredWorkoutTime,
     quietHoursStart: row.quietHoursStart,
     quietHoursEnd: row.quietHoursEnd,

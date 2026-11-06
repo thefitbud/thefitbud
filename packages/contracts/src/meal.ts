@@ -110,6 +110,14 @@ export const mealComplianceSchema = z.object({
       fatG: z.number().nonnegative().nullable(),
     })
     .optional(),
+  /**
+   * Who logged the entry (Z6-20, R1): `coach` entries are read-only to the
+   * trainee ("Logged by your coach"). The API always sends it (REST reads and
+   * sync pull payloads); optional so older clients' fixtures parse.
+   */
+  loggedByRole: z.enum(["trainee", "coach"]).optional(),
+  /** Set when a coach edited the entry ("Edited by your coach"). */
+  lastEditedByRole: z.enum(["trainee", "coach"]).nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });

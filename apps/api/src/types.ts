@@ -82,7 +82,20 @@ export type Variables = {
 export type ActorContext = {
   userId: string;
   firebaseUid: string;
-  accountState: "active" | "disabled";
+  /**
+   * `archived` reaches a handler only on GET /account/status and
+   * POST /account/reactivation; the auth middleware answers every other route
+   * with 403 ACCOUNT_ARCHIVED (Z6-14, D-W6-27).
+   */
+  accountState: "active" | "disabled" | "archived";
+  /**
+   * When this credential's sign-in happened (ISO UTC): the Firebase token's
+   * `auth_time` for bearer requests, `web_sessions.created_at` for cookie
+   * sessions. Set by the auth middleware; null or absent when the credential
+   * carries none (never fresh proof). Account deletion needs it within 5 minutes
+   * (D-W6-31).
+   */
+  authTime?: string | null;
   timezone: string;
   permittedRoles: Array<"trainer" | "trainee">;
   selectedRole: "trainer" | "trainee" | null;

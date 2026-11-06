@@ -1,4 +1,9 @@
-import type { Notification, NotificationType } from "@fitbud/contracts";
+import {
+  parseCoachLogDedupeKey,
+  type CoachLogEntityType,
+  type Notification,
+  type NotificationType,
+} from "@fitbud/contracts";
 import { labelFor, trainerNotificationCopy } from "@fitbud/core";
 
 /** Lock-screen body when "Hide details on lock screen" is on. */
@@ -77,6 +82,38 @@ export function noteBannerCopy(coachName?: string | null): { title: string } {
   return { title: `${coachOrFallback(coachName)} has a note for you` };
 }
 
+/**
+ * "Coach updates to my logs" (Z6-19, D-W6-33, copy by Firoz). One type covers
+ * a coach create and a coach edit; the dedupe key says which. A key this
+ * build does not know falls back to the type label.
+ */
+export function coachLogCopy(notification: Pick<Notification, "dedupeKey">): {
+  title: string;
+  body: string;
+} {
+  const parsed = parseCoachLogDedupeKey(notification.dedupeKey);
+  if (parsed?.action === "create") {
+    return {
+      title: "Logged by your coach",
+      body: `Your coach logged ${COACH_LOG_THING[parsed.entityType].one} for you.`,
+    };
+  }
+  if (parsed?.action === "edit") {
+    return {
+      title: "Edited by your coach",
+      body: `Your coach updated one of your ${COACH_LOG_THING[parsed.entityType].many}.`,
+    };
+  }
+  return { title: labelFor("notification_type", "coach_log_updated"), body: "" };
+}
+
+/** What the coach logged or edited, by entity type (D-W6-33; Z6-20 added meals and measurements). */
+const COACH_LOG_THING: Record<CoachLogEntityType, { one: string; many: string }> = {
+  workout_execution: { one: "a workout", many: "workouts" },
+  meal_compliance: { one: "a meal", many: "meals" },
+  measurement: { one: "a measurement", many: "measurements" },
+};
+
 export function inAppMealBannerCopy(mealLabel: string): { title: string } {
   return { title: `${mealLabel} isn't logged yet` };
 }
@@ -136,6 +173,8 @@ export function notificationRowTitle(
       return "Clients need attention";
     case "admin_whatsapp_budget":
       return "WhatsApp budget alert";
+    case "coach_log_updated":
+      return coachLogCopy(notification).title;
     default: {
       const _exhaustive: never = type;
       return labelFor("notification_type", _exhaustive);
@@ -194,6 +233,8 @@ export function notificationRowBody(
       return "Open Attention to see who needs you.";
     case "admin_whatsapp_budget":
       return "Admin-only budget notice.";
+    case "coach_log_updated":
+      return coachLogCopy(notification).body;
     default:
       return "";
   }
