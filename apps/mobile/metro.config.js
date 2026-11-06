@@ -1,4 +1,4 @@
-const { getDefaultConfig } = require("expo/metro-config");
+const { getSentryExpoConfig } = require("@sentry/react-native/metro");
 const { resolve } = require("metro-resolver");
 const fs = require("fs");
 const http = require("http");
@@ -11,8 +11,17 @@ const API_PROXY_TARGET = (
 const projectRoot = __dirname;
 const monorepoRoot = path.resolve(projectRoot, "../..");
 
-/** @type {import('expo/metro-config').MetroConfig} */
-const config = getDefaultConfig(projectRoot);
+/**
+ * BT2b gap G6 (Z5-11). `getSentryExpoConfig` is Sentry's documented Expo entry
+ * point: it calls Expo's `getDefaultConfig` and registers Sentry's debug-id
+ * plugin with Expo's serializer, so every release bundle and its source map
+ * carry the debug id that crash reports are matched against. It needs only
+ * `@sentry/react-native` at bundle time, not `@sentry/cli` (that is used by the
+ * separate upload step).
+ *
+ * @type {import('expo/metro-config').MetroConfig}
+ */
+const config = getSentryExpoConfig(projectRoot);
 
 config.watchFolders = [monorepoRoot];
 config.resolver.nodeModulesPaths = [
@@ -116,9 +125,15 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return resolve(context, moduleName, platform);
 };
 
+// Sentry adds its own dev-server middleware here; chain it instead of replacing it.
+const sentryEnhanceMiddleware = config.server?.enhanceMiddleware;
+
 config.server = {
   ...config.server,
-  enhanceMiddleware: (middleware) => {
+  enhanceMiddleware: (baseMiddleware, server) => {
+    const middleware = sentryEnhanceMiddleware
+      ? sentryEnhanceMiddleware(baseMiddleware, server)
+      : baseMiddleware;
     return (req, res, next) => {
       const url = req.url ?? "";
       if (!url.startsWith("/__fitbud_api")) {

@@ -32,7 +32,7 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["src/**/*.test.ts", "app.config.test.ts", "eslint-rules/**/*.test.mjs"],
+          include: ["src/**/*.test.ts", "app.config.test.ts", "metro.config.test.ts", "eslint-rules/**/*.test.mjs"],
         },
       },
       {

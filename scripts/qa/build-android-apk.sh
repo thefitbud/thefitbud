@@ -77,7 +77,7 @@ GRADLE_DIR="$MOBILE/android"
 [ -x "$GRADLE_DIR/gradlew" ] || die "expo prebuild produced no android/gradlew."
 
 # Fail here rather than after a 15-minute build if the variant did not take effect.
-if ! grep -q "applicationId ['\"]${EXPECTED_PACKAGE}['\"]" "$GRADLE_DIR/app/build.gradle"; then
+if ! grep -Fq -e "applicationId '${EXPECTED_PACKAGE}'" -e "applicationId \"${EXPECTED_PACKAGE}\"" "$GRADLE_DIR/app/build.gradle"; then
   die "android/app/build.gradle does not set applicationId $EXPECTED_PACKAGE; check APP_VARIANT."
 fi
 
@@ -91,16 +91,16 @@ case "$GRADLE_TASK" in
   *) die "unsupported Gradle task \"$GRADLE_TASK\" (assembleRelease or assembleDebug)." ;;
 esac
 
-APK_SRC="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -type f | sort | head -n 1)"
+APK_SRC="$(find "$APK_DIR" -maxdepth 1 -name '*.apk' -type f | sort | sed -n 1p)"
 [ -n "$APK_SRC" ] || die "no .apk under $APK_DIR after $GRADLE_TASK."
 
 mkdir -p "$(dirname "$APK_OUT")"
 cp "$APK_SRC" "$APK_OUT"
 
 # aapt2 ships with the SDK's build-tools; when present, confirm the real applicationId.
-AAPT="$(find "$SDK_DIR/build-tools" -maxdepth 2 -name aapt2 -type f 2>/dev/null | sort -r | head -n 1 || true)"
+AAPT="$(find "$SDK_DIR/build-tools" -maxdepth 2 -name aapt2 -type f 2>/dev/null | sort -r | sed -n 1p || true)"
 if [ -n "$AAPT" ]; then
-  if ! "$AAPT" dump packagename "$APK_OUT" | grep -qx "$EXPECTED_PACKAGE"; then
+  if ! "$AAPT" dump packagename "$APK_OUT" | grep -Fqx "$EXPECTED_PACKAGE"; then
     die "the built APK is not $EXPECTED_PACKAGE."
   fi
   echo "build-android-apk: package verified as $EXPECTED_PACKAGE"
