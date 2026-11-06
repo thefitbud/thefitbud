@@ -27,8 +27,8 @@ import { createMemoryDb } from "../test-support/memory-db.js";
  */
 
 const TZ_OFFSET = "+05:30";
-const at = (localDateTime: string) =>
-  new Date(`2026-11-${localDateTime}:00.000${TZ_OFFSET}`);
+const at = (localDateTime: string, offset = TZ_OFFSET) =>
+  new Date(`2026-11-${localDateTime}:00.000${offset}`);
 
 function dummyD1(): D1Database {
   return {
@@ -141,14 +141,14 @@ function planContent() {
   };
 }
 
-async function reachCoaching(db: Db) {
+async function reachCoaching(db: Db, timeZone = "Asia/Kolkata") {
   const trainerToken = createTestIdToken(
     "trainer-ended-period@example.com",
     "ended-period-coach@example.com",
   );
   const session = await post("/auth/session", {}, {
     idToken: trainerToken,
-    timezone: "Asia/Kolkata",
+    timezone: timeZone,
   });
   expect(session.status).toBe(200);
   const trainer = { Cookie: session.headers.get("set-cookie")!.split(";")[0]! };
@@ -172,7 +172,7 @@ async function reachCoaching(db: Db) {
   const accept = await post(
     "/invitations/accept",
     { Authorization: `Bearer ${traineeToken}` },
-    { token: invitation.token, timezone: "Asia/Kolkata" },
+    { token: invitation.token, timezone: timeZone },
   );
   const relationshipId = (
     (await accept.json()) as { data: { relationship: { id: string } } }
@@ -570,4 +570,76 @@ describe("Z6-12 ended period stays frozen after reactivation", () => {
       .where(eq(schema.workoutExecutions.id, execution.id));
     expect(after).toEqual(before);
   });
+  // A missed item dated ON the reactivation day belongs to the new period:
+  // evaluation must still raise it (only earlier days are frozen).
+  it.each([
+    // Reactivation times chosen so the UTC date differs from the local date,
+    // which proves the reactivation day is taken in the trainee's timezone.
+    { timeZone: "Asia/Kolkata", offset: "+05:30", reactivateAt: "12T04:00", assignAt: "12T04:30" },
+    { timeZone: "America/New_York", offset: "-05:00", reactivateAt: "12T21:00", assignAt: "12T21:30" },
+  ])(
+    "a missed item dated on the reactivation day still raises an exception ($timeZone)",
+    async ({ timeZone, offset, reactivateAt, assignAt }) => {
+      vi.setSystemTime(at("09T09:00", offset));
+      const story = await reachCoaching(db, timeZone);
+      const { trainer, trainee, relationshipId } = story;
+
+      vi.setSystemTime(at("10T10:00", offset));
+      expect(
+        (await post(`/relationships/${relationshipId}/end`, trainer, { reason: "paused" }, "ep-day-end"))
+          .status,
+      ).toBe(200);
+
+      // Reactivated on Thu 12 Nov (local), and a plan assigned from that day.
+      vi.setSystemTime(at(reactivateAt, offset));
+      expect(at(reactivateAt, offset).toISOString().slice(0, 10)).not.toBe("2026-11-12");
+      expect(
+        (await post(`/relationships/${relationshipId}/reactivate`, trainer, {}, "ep-day-react")).status,
+      ).toBe(200);
+      expect(
+        (await post(`/relationships/${relationshipId}/reactivate/confirm`, trainee, {})).status,
+      ).toBe(200);
+      vi.setSystemTime(at(assignAt, offset));
+      const assigned = await post(
+        `/plans/${story.planId}/versions/${story.versionId}/assign`,
+        trainer,
+        {
+          effectiveFrom: at("12T00:00", offset).toISOString(),
+          window: 7,
+          dietChangeScope: "today_onward",
+          notifyClient: false,
+        },
+        "ep-day-assign",
+      );
+      expect(assigned.status).toBe(200);
+      const reactivationDayLunch = await story.lunchOn("2026-11-12");
+      const reactivationDayWorkout = await story.workoutOn("2026-11-12");
+
+      // Nothing logged; once both windows close, evaluation raises them.
+      vi.setSystemTime(
+        new Date(
+          Math.max(
+            Date.parse(reactivationDayLunch.windowEndsAt),
+            Date.parse(reactivationDayWorkout.windowEndsAt),
+          ) + 60 * 60_000,
+        ),
+      );
+      const evaluated = await post(
+        `/exceptions/relationships/${relationshipId}/evaluate`,
+        trainer,
+        {},
+        "ep-day-eval",
+      );
+      expect(evaluated.status).toBe(200);
+      const rows = await exceptionRows(relationshipId);
+      const lunchException = rows.find((row) => row.sourceEntityId === reactivationDayLunch.id);
+      const workoutException = rows.find(
+        (row) => row.sourceEntityId === reactivationDayWorkout.id,
+      );
+      expect(lunchException?.type).toBe("overdue_meal");
+      expect(lunchException?.status).toBe("active");
+      expect(workoutException?.type).toBe("missed_workout");
+      expect(workoutException?.status).toBe("active");
+    },
+  );
 });
