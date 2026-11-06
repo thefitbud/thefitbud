@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1785–1810. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-22 -->
 ### TW-22 · Check-ins inbox (all clients)
@@ -25,8 +25,6 @@
 1. **Purpose.** Process check-ins across all clients.
 2. **Entry.** Navigation, Home section "View all", bell.
 3. **Legacy (do not keep).** `shots/d1440_05_checkins.png`. Due, Overdue and Submitted tabs with counts. **It lists relationship UUIDs instead of client names.**
-
-   ![Implemented check-ins inbox](../img/impl_d1440_05_checkins.jpg){.shot}
 
 4. **Gaps to close.** UUIDs are shown. There's no Reviewed tab. No quick nudge for overdue items.
 5. **Target design.**
@@ -48,17 +46,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY: shows old UI, do not copy** (embedded in the guide section): `impl_d1440_05_checkins.jpg`
-
-  ![impl_d1440_05_checkins.jpg](../img/impl_d1440_05_checkins.jpg)
-
-- **REFERENCE: external inspiration (competitor help-centre screenshot)** (cited by the section or by guide Appendix D): `ref_everfit_checkin_dashboard_1.jpg`
-
-  ![ref_everfit_checkin_dashboard_1.jpg](../img/ref_everfit_checkin_dashboard_1.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 

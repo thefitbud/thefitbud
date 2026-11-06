@@ -41,6 +41,18 @@ export type ExceptionSourceEntityType = z.infer<
 export const exceptionActionKindSchema = z.enum(["acknowledge", "resolve"]);
 export type ExceptionActionKind = z.infer<typeof exceptionActionKindSchema>;
 
+/**
+ * Why a resolved exception left the open set.
+ * Only coaching end (system) and trainer resolve write this. There is no
+ * auto_resolve: late logs stay open as logged-later for a trainer resolve
+ * (OQ-23 / Firoz product lock 28 Oct 2026).
+ */
+export const exceptionClosedReasonSchema = z.enum([
+  "coaching_ended",
+  "trainer",
+]);
+export type ExceptionClosedReason = z.infer<typeof exceptionClosedReasonSchema>;
+
 export const interventionKindSchema = z.enum([
   "note",
   "acknowledge",
@@ -65,6 +77,7 @@ export const exceptionSchema = z.object({
   activatedAt: isoDateTimeSchema.nullable(),
   acknowledgedAt: isoDateTimeSchema.nullable(),
   resolvedAt: isoDateTimeSchema.nullable(),
+  closedReason: exceptionClosedReasonSchema.nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -114,6 +127,12 @@ export const acknowledgeExceptionRequestSchema = z.object({
 });
 export type AcknowledgeExceptionRequest = z.infer<
   typeof acknowledgeExceptionRequestSchema
+>;
+
+/** Compensating action for Mark reviewed. No body fields. */
+export const undoExceptionAcknowledgeRequestSchema = z.object({});
+export type UndoExceptionAcknowledgeRequest = z.infer<
+  typeof undoExceptionAcknowledgeRequestSchema
 >;
 
 export const resolveExceptionRequestSchema = z.object({

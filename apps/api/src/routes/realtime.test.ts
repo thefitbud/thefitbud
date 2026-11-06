@@ -38,6 +38,7 @@ function testEnv(sink?: RealtimeEvent[]): Env {
     FIREBASE_PROJECT_ID: "fitbud-local",
     SESSION_COOKIE_NAME: "fitbud_session",
     AUTH_MODE: "test",
+    ENVIRONMENT: "local",
     MEDIA_SIGNING_SECRET: "fitbud-local-file-signing-secret",
     REALTIME_TEST_SINK: sink,
   };

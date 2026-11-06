@@ -97,7 +97,6 @@ export function ClientCheckinsPage() {
 
   const preview = useMemo(() => {
     if (!scheduleDate) return null;
-    const dueLocal = `${scheduleDate}T23:59:00`;
     // Approximate: show civil due in client TZ label + trainer clock for same instant mid-day.
     const mid = new Date(`${scheduleDate}T18:29:00.000Z`);
     const clientLabel = formatCivilDate(scheduleDate);

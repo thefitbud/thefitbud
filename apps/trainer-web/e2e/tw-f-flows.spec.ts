@@ -1,21 +1,11 @@
 /**
  * TW-F behavioural proofs: templates hub, form builders, libraries, use/fork.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { signIn } from "./support/session";
 
-const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 const ONBOARDING = "10111111-1111-4111-8111-111111111111";
 const CHECKIN = "c1000001-0000-4000-8000-000000000001";
-
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByTestId("screen-TW-01").waitFor({ state: "visible" });
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 45_000 });
-}
 
 test.describe("TW-F templates, forms, libraries", () => {
   test.beforeEach(async ({ page }) => {

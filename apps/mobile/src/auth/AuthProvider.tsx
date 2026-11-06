@@ -17,12 +17,28 @@ import type {
   MeResponse,
   Role,
 } from "@fitbud/contracts";
-import { createMobileApiClient, resolveApiBaseUrl } from "../lib/api";
+import { AppState, Platform } from "react-native";
+import { isTestIdToken } from "../lib/testToken";
+import { authErrorCopy } from "../lib/authErrors";
+import {
+  createMobileApiClient,
+  createTokenSession,
+  isForegroundAppState,
+  type SessionRefresh,
+  type TokenSession,
+} from "../lib/api";
 import {
   clearPersistedSession,
+  loadNativeSession,
   loadPersistedSession,
   persistSession,
+  persistTokenState,
 } from "../lib/sessionStorage";
+import {
+  OFFLINE_MESSAGE,
+  SIGNED_OUT_MESSAGE,
+  restoreSession,
+} from "./sessionRestore";
 import {
   resolveAppRoute,
   selectInitialMobileRole,
@@ -30,7 +46,11 @@ import {
 } from "../navigation/resolveRoute";
 import type { ParsedDeepLink } from "../navigation/linking";
 import { useAppDeepLinks } from "../navigation/useAppDeepLinks";
-import { registerLocalDeviceToken } from "../notifications/register";
+import {
+  registerDeviceTokenForPush,
+  signOutPushRegistration,
+  watchPushTokenChanges,
+} from "../notifications/register";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { deepLinkFromNotificationPayload } from "../notifications/routing";
 
@@ -44,7 +64,7 @@ type AuthContextValue = {
   api: FitBudApiClient;
   pendingNotificationLink: NotificationDeepLink | null;
   pendingDeepLink: ParsedDeepLink | null;
-  signInWithToken: (token: string) => Promise<void>;
+  signInWithToken: (token: string, refresh?: SessionRefresh) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
   refreshSession: () => Promise<void>;
@@ -58,20 +78,19 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * User-facing text for a failed call. Never a raw `error.message` (a ZodError's
+ * is a JSON dump): API errors keep the API's own message, known failure
+ * classes get a short code (`AUTH-NET`, `AUTH-PARSE`, ...), and a dev build
+ * logs the details (D-W3-12).
+ */
 function messageFromError(error: unknown): string {
-  if (error instanceof ApiClientError) {
-    return error.message;
-  }
-  const message =
-    error instanceof Error ? error.message : "Something went wrong.";
-  if (message === "Network request failed") {
-    return `Network request failed. Could not reach ${resolveApiBaseUrl()}.`;
-  }
-  return message;
+  return authErrorCopy(error, "general", "messageFromError");
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const persisted = loadPersistedSession();
+  // Read once: later renders must not re-read storage.
+  const [persisted] = useState(() => loadPersistedSession());
   const [accessToken, setAccessToken] = useState<string | null>(
     persisted.accessToken,
   );
@@ -92,23 +111,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useState<NotificationDeepLink | null>(null);
   const [pendingDeepLink, setPendingDeepLink] =
     useState<ParsedDeepLink | null>(null);
+  // Native reads SecureStore asynchronously (D-W3-11): hold the splash until
+  // that restore has answered, so sign-in never flashes for a signed-in user.
+  const [restorePhase, setRestorePhase] = useState<"restoring" | "offline" | "done">(
+    Platform.OS === "web" ? "done" : "restoring",
+  );
   const [sessionHydrated, setSessionHydrated] = useState(
-    !persisted.accessToken,
+    !persisted.accessToken && Platform.OS === "web",
   );
 
-  const accessTokenRef = useRef<string | null>(persisted.accessToken);
   const selectedRoleRef = useRef<Role | null>(persisted.selectedRole);
-  accessTokenRef.current = accessToken;
   selectedRoleRef.current = selectedRole;
+  // Set once signOut exists; the token session calls it when refresh is refused.
+  const onExpiredRef = useRef<() => void>(() => undefined);
 
-  const api = useMemo(
-    () =>
-      createMobileApiClient({
-        getAccessToken: () => accessTokenRef.current,
-        getSelectedRole: () => selectedRoleRef.current,
-      }),
-    [],
-  );
+  // The token session owns the access token, refresh token and expiry
+  // (D-W2-3). Web persists them in localStorage; native persists only the
+  // refresh token, in SecureStore (D-W3-11).
+  const { api, tokens } = useMemo(() => {
+    let client: FitBudApiClient | null = null;
+    const session: TokenSession = createTokenSession({
+      initial: {
+        accessToken: persisted.accessToken,
+        refreshToken: persisted.refreshToken,
+        expiresAt: persisted.expiresAt,
+      },
+      refreshAuth: (refreshToken) => client!.refreshAuth(refreshToken),
+      persist: (state) => {
+        setAccessToken(state.accessToken);
+        persistTokenState(state, selectedRoleRef.current);
+      },
+      onExpired: () => onExpiredRef.current(),
+    });
+    client = createMobileApiClient({
+      getAccessToken: () => session.getAccessToken(),
+      getSelectedRole: () => selectedRoleRef.current,
+      refreshAccessToken: () => session.refresh(),
+    });
+    return { api: client, tokens: session };
+  }, []);
+
+  // Timer runs in the foreground only; on return to the foreground it
+  // refreshes straight away if the expiry has passed.
+  useEffect(() => {
+    // The provider mounts while the app is on screen; currentState can still
+    // read "unknown" this early on some platforms.
+    tokens.setForeground(AppState.currentState !== "background");
+    const subscription = AppState.addEventListener("change", (next) => {
+      tokens.setForeground(isForegroundAppState(next));
+    });
+    return () => {
+      subscription.remove();
+      tokens.setForeground(false);
+    };
+  }, [tokens]);
 
   const loadRelationships = useCallback(
     async (client: FitBudApiClient) => {
@@ -120,13 +176,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Set when a device token is registered, so sign-out can unregister it.
+  const pushInstallationRef = useRef<string | null>(null);
+  const stopPushTokenWatchRef = useRef<(() => void) | null>(null);
+
+  /**
+   * Register this device for push after `/me` succeeds, for either role
+   * (D-B9). Best-effort: permission denied, or a failed call
+   * never surfaces an error and never blocks the app.
+   */
   const registerPushToken = useCallback(async (client: FitBudApiClient) => {
+    const testMode = isTestIdToken(tokens.getAccessToken() ?? "");
     try {
-      await registerLocalDeviceToken(client);
+      const outcome = await registerDeviceTokenForPush(client, { testMode });
+      if (outcome.status !== "registered") {
+        // permission_denied or failed: push
+        // stays off for this install, the app carries on.
+        return;
+      }
+      pushInstallationRef.current = outcome.registration.installationId;
+      if (!stopPushTokenWatchRef.current) {
+        stopPushTokenWatchRef.current = await watchPushTokenChanges(client, {
+          testMode,
+        });
+      }
     } catch {
-      // Push registration is best-effort in local test mode.
+      // Push registration is best-effort.
     }
-  }, []);
+  }, [tokens]);
+
+  useEffect(
+    () => () => {
+      stopPushTokenWatchRef.current?.();
+      stopPushTokenWatchRef.current = null;
+    },
+    [],
+  );
 
   const applyMe = useCallback(
     async (
@@ -146,11 +231,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (role === "trainee" || role === "trainer") {
         await loadRelationships(client);
-        // Device-token registration is trainer-facing in local demo; trainee
-        // calls were 403-ing and polluting the console — skip for trainees.
-        if (role === "trainer") {
-          await registerPushToken(client);
-        }
+        // Both roles may register a device (D-B9); the route allows trainer
+        // and trainee once a role is selected.
+        await registerPushToken(client);
       } else {
         // Dual-role awaiting explicit selection.
         setRelationships([]);
@@ -160,8 +243,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadRelationships, registerPushToken],
   );
 
+  const restorePhaseRef = useRef(restorePhase);
+  restorePhaseRef.current = restorePhase;
+  const restoreStartedRef = useRef(false);
+
+  /**
+   * Native startup restore and its Retry (AB3). Reads SecureStore, refreshes
+   * the ID token, then loads `/me`. Only a definitive refusal signs the user
+   * out; a network problem keeps the stored session and offers Retry.
+   */
+  const runRestore = useCallback(async () => {
+    restorePhaseRef.current = "restoring";
+    setRestorePhase("restoring");
+    setErrorMessage(null);
+    const offline = () => {
+      restorePhaseRef.current = "offline";
+      setRestorePhase("offline");
+      setErrorMessage(OFFLINE_MESSAGE);
+      setBootstrapping(false);
+      setSessionHydrated(true);
+    };
+    const clearSession = () => {
+      tokens.clear();
+      clearPersistedSession();
+    };
+    const result = await restoreSession({
+      load: loadNativeSession,
+      refreshAuth: (refreshToken) => api.refreshAuth(refreshToken),
+      adoptTokens: (token, refresh) => tokens.signIn(token, refresh),
+      fetchMe: () => api.me(),
+      clearSession,
+    });
+
+    if (result.status === "signed_in") {
+      try {
+        await applyMe(result.me, result.preferredRole, api);
+        persistSession({
+          accessToken: tokens.getAccessToken(),
+          selectedRole: selectedRoleRef.current,
+          userId: result.me.userId,
+        });
+        restorePhaseRef.current = "done";
+        setRestorePhase("done");
+        setBootstrapping(false);
+        setSessionHydrated(true);
+        return;
+      } catch (error) {
+        if (error instanceof ApiClientError && error.status === 401) {
+          clearSession();
+          setMe(null);
+          setSelectedRole(null);
+          selectedRoleRef.current = null;
+          setRelationships([]);
+          setErrorMessage(SIGNED_OUT_MESSAGE);
+          restorePhaseRef.current = "done";
+          setRestorePhase("done");
+          setBootstrapping(false);
+          setSessionHydrated(true);
+          return;
+        }
+        offline();
+        return;
+      }
+    }
+    if (result.status === "offline") {
+      offline();
+      return;
+    }
+    // Signed out: nothing stored, or the server refused the session.
+    setMe(null);
+    setSelectedRole(null);
+    selectedRoleRef.current = null;
+    setRelationships([]);
+    setErrorMessage(result.reason === "refused" ? SIGNED_OUT_MESSAGE : null);
+    restorePhaseRef.current = "done";
+    setRestorePhase("done");
+    setBootstrapping(false);
+    setSessionHydrated(true);
+  }, [api, applyMe, tokens]);
+
   const refreshSession = useCallback(async () => {
-    if (!accessTokenRef.current) {
+    if (restorePhaseRef.current === "offline") {
+      // Retry after "Can't reach FitBud": run the whole restore again.
+      await runRestore();
+      return;
+    }
+    if (!tokens.getAccessToken()) {
       return;
     }
     setBootstrapping(true);
@@ -170,16 +337,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const meResponse = await api.me();
       await applyMe(meResponse, selectedRoleRef.current, api);
       persistSession({
-        accessToken: accessTokenRef.current,
+        accessToken: tokens.getAccessToken(),
         selectedRole: selectedRoleRef.current,
+        userId: meResponse.userId,
       });
     } catch (error) {
+      // The client already tried one refresh before this 401 reached us.
       if (error instanceof ApiClientError && error.status === 401) {
         setMe(null);
         setSelectedRole(null);
         selectedRoleRef.current = null;
-        setAccessToken(null);
-        accessTokenRef.current = null;
+        tokens.clear();
         clearPersistedSession();
         setRelationships([]);
         setRelationshipsLoaded(true);
@@ -191,9 +359,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBootstrapping(false);
       setSessionHydrated(true);
     }
-  }, [api, applyMe]);
+  }, [api, applyMe, runRestore, tokens]);
 
   useEffect(() => {
+    if (Platform.OS !== "web") {
+      if (restoreStartedRef.current) return;
+      restoreStartedRef.current = true;
+      void runRestore();
+      return;
+    }
     if (!persisted.accessToken) return;
     void refreshSession();
   }, []);
@@ -212,24 +386,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Re-fetch /me with the role header so selectedRole is authoritative.
         const meResponse = await api.me();
         await applyMe(meResponse, role, api);
+        // Native only: remember the chosen role for the next cold start. Web
+        // keeps its existing behaviour.
+        if (Platform.OS !== "web") {
+          persistSession({
+            accessToken: tokens.getAccessToken(),
+            selectedRole: selectedRoleRef.current,
+            userId: meResponse.userId,
+          });
+        }
       } catch (error) {
         setErrorMessage(messageFromError(error));
       } finally {
         setBootstrapping(false);
       }
     },
-    [api, applyMe, me],
+    [api, applyMe, me, tokens],
   );
 
   const signInWithToken = useCallback(
-    async (token: string) => {
+    async (token: string, refresh?: SessionRefresh) => {
       const trimmed = token.trim();
       if (!trimmed) {
         setErrorMessage("Enter a test identity token or Firebase UID.");
         return;
       }
-      accessTokenRef.current = trimmed;
-      setAccessToken(trimmed);
+      selectedRoleRef.current = null;
+      tokens.signIn(trimmed, refresh);
       persistSession({ accessToken: trimmed, selectedRole: null });
       setBootstrapping(true);
       setErrorMessage(null);
@@ -246,8 +429,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const meResponse = await api.me();
         await applyMe(meResponse, null, api);
         persistSession({
-          accessToken: trimmed,
+          accessToken: tokens.getAccessToken(),
           selectedRole: selectedRoleRef.current,
+          userId: meResponse.userId,
         });
       } catch (error) {
         if (error instanceof ApiClientError && error.status === 401) {
@@ -255,8 +439,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setNeedsAccountLink(true);
           setRelationshipsLoaded(true);
         } else {
-          setAccessToken(null);
-          accessTokenRef.current = null;
+          tokens.clear();
           clearPersistedSession();
           setErrorMessage(messageFromError(error));
         }
@@ -265,11 +448,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionHydrated(true);
       }
     },
-    [api, applyMe],
+    [api, applyMe, tokens],
   );
 
   const signOut = useCallback(() => {
-    accessTokenRef.current = null;
+    // Clear push state and unregister this installation before the session is
+    // cleared. The revoke runs on a client that holds the current token and
+    // role, so the request is authenticated whatever order the promises settle
+    // in. Fire-and-forget: sign-out never waits on it and never fails because
+    // of it; the module state is cleared either way.
+    const installationId = pushInstallationRef.current;
+    const accessToken = tokens.getAccessToken();
+    const role = selectedRoleRef.current;
+    stopPushTokenWatchRef.current?.();
+    stopPushTokenWatchRef.current = null;
+    pushInstallationRef.current = null;
+    signOutPushRegistration({
+      installationId,
+      client: accessToken
+        ? createMobileApiClient({
+            getAccessToken: () => accessToken,
+            getSelectedRole: () => role,
+          })
+        : null,
+    });
+
+    tokens.clear();
     selectedRoleRef.current = null;
     setAccessToken(null);
     setSelectedRole(null);
@@ -279,10 +483,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsAccountLink(false);
     setErrorMessage(null);
     setBootstrapping(false);
+    setSessionHydrated(true);
+    restorePhaseRef.current = "done";
+    setRestorePhase("done");
     setPendingNotificationLink(null);
     setPendingDeepLink(null);
     clearPersistedSession();
-  }, []);
+  }, [tokens]);
+  onExpiredRef.current = signOut;
 
   const setActiveRelationship = useCallback(
     (relationship: CoachingRelationship) => {
@@ -315,7 +523,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
   useAppDeepLinks(onDeepLink);
 
-  const route = resolveAppRoute({
+  const resolvedRoute = resolveAppRoute({
     accessToken,
     bootstrapping: bootstrapping || !sessionHydrated,
     me,
@@ -323,6 +531,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     needsAccountLink,
     relationships: relationshipsLoaded ? relationships : null,
   });
+  // Native restore (AB3). While SecureStore and the refresh answer, show the
+  // splash, never sign-in. If the network failed, any route other than "auth"
+  // and "loading" makes AppRouter show its error screen (message + Retry +
+  // Sign out), so the stored session is kept and never replaced by sign-in.
+  const route: AppRoute =
+    restorePhase === "restoring"
+      ? { name: "loading" }
+      : restorePhase === "offline"
+        ? errorMessage
+          ? { name: "unsupported_role" }
+          : { name: "loading" }
+        : resolvedRoute;
 
   const value = useMemo<AuthContextValue>(
     () => ({

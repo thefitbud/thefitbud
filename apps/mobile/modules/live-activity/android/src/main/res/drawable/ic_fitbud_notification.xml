@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Small icon of the workout notification (LA3), the FitBud mark: three filled
+  dots and an open one.
+
+  Android draws a small icon as an alpha silhouette — only the shape matters,
+  every colour is replaced by the shade's — so this is white on transparent
+  and carries no background layer. The launcher icon cannot be used for this:
+  Expo's adaptive icon has an opaque background layer, which the shade would
+  render as a solid blob.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4.2,12m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10,12m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15.8,12m-2.2,0a2.2,2.2 0 1,0 4.4,0a2.2,2.2 0 1,0 -4.4,0" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M21,12m-2,0a2,2 0 1,0 4,0a2,2 0 1,0 -4,0" />
+</vector>

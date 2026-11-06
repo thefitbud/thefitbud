@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The stepper groups and the secondary "Open" button (frame 27-android). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/fitbud_workout_group" />
+    <corners android:radius="20dp" />
+</shape>

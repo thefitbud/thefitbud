@@ -6,7 +6,7 @@ import { chromium } from "@playwright/test";
 const BASE = process.env.TRAINER_WEB_URL ?? "http://127.0.0.1:5173";
 const OUT = join(
   process.cwd(),
-  "../../docs/implementation/screens/trainer-web",
+  process.env.CAPTURE_OUT ?? "../../.captures/trainer-web",
 );
 const EMAIL = "rahul.coach@demo.fitbud.test";
 const PASSWORD = "FitBud-demo-2026";

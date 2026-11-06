@@ -1,4 +1,10 @@
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, exists, gte, inArray, ne, sql } from "drizzle-orm";
+import {
+  addDaysToLocalDate,
+  formatLocalDate,
+  isOpenExceptionStatus,
+  localDateTimeToUtcIso,
+} from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
   checkins,
@@ -12,6 +18,12 @@ import {
   workoutAssignments,
 } from "../db/schema.js";
 import { createId, nowIso } from "../lib/crypto.js";
+import { loadTraineeTimezone } from "./assignment-schedule.js";
+
+/** Every non-terminal exception status (detected, active, acknowledged). */
+export const OPEN_EXCEPTION_STATUSES = exceptions.status.enumValues.filter(
+  (status) => isOpenExceptionStatus(status),
+);
 
 export class RelationshipEndedError extends Error {
   readonly code = "RELATIONSHIP_ENDED" as const;
@@ -35,16 +47,30 @@ export async function assertRelationshipWritable(
   return relationship;
 }
 
-/** Civil date one day before `iso` (UTC calendar), used to close plan horizons. */
-function previousCivilDate(iso: string): string {
-  const day = iso.slice(0, 10);
-  const prior = new Date(`${day}T12:00:00.000Z`);
-  prior.setUTCDate(prior.getUTCDate() - 1);
-  return prior.toISOString().slice(0, 10);
+/**
+ * The trainee's civil "today" at `timestamp`, in the same timezone used to
+ * generate assignment and check-in local dates. Never the UTC date: between
+ * 00:00 and 05:30 IST that is still yesterday, and yesterday is history.
+ */
+async function relationshipLocalToday(
+  db: Db,
+  relationshipId: string,
+  timestamp: string,
+): Promise<{ today: string; timeZone: string }> {
+  const [relationship] = await db
+    .select({ traineeUserId: coachingRelationships.traineeUserId })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, relationshipId))
+    .limit(1);
+  const timeZone = relationship
+    ? await loadTraineeTimezone(db, relationship.traineeUserId)
+    : "UTC";
+  return { today: formatLocalDate(new Date(timestamp), timeZone), timeZone };
 }
 
 /**
- * Ends coaching: closes open exceptions, supersedes today+future workout/meal
+ * Ends coaching (one batch): closes every open exception (detected, active,
+ * acknowledged), supersedes today+future workout/meal
  * assignments, removes unsubmitted check-ins from today onward, suppresses
  * pending reminders/nudges, and closes the effective plan horizon so rolling
  * replenishment cannot recreate a schedule until the trainer re-assigns.
@@ -58,117 +84,153 @@ export async function endCoachingRelationship(
   },
 ): Promise<void> {
   const timestamp = nowIso();
-  await db
-    .update(coachingRelationships)
-    .set({
-      status: "ended",
-      endedAt: timestamp,
-      endedByUserId: input.endedByUserId,
-      endReason: input.reason ?? null,
-      updatedAt: timestamp,
-    })
-    .where(eq(coachingRelationships.id, input.relationshipId));
+  const { today: fromDate, timeZone } = await relationshipLocalToday(
+    db,
+    input.relationshipId,
+    timestamp,
+  );
 
-  await db
+  // Read-only lookups first so every write below can go into one batch.
+  const relationshipPlans = await db
+    .select({ id: plans.id })
+    .from(plans)
+    .where(eq(plans.coachingRelationshipId, input.relationshipId));
+  const planIds = relationshipPlans.map((row) => row.id);
+
+  // EC1 rule 3: ending coaching closes every non-terminal exception (detected,
+  // active, acknowledged), not only active ones. Guarded on this end's
+  // ended_at so a second (racing) end cannot restamp or reopen anything.
+  const closeOpenExceptions = db
     .update(exceptions)
     .set({
       status: "resolved",
       closedReason: "coaching_ended",
+      // Same instant as endedAt, like the other system close (auto-resolve).
+      resolvedAt: timestamp,
       updatedAt: timestamp,
     })
     .where(
       and(
         eq(exceptions.coachingRelationshipId, input.relationshipId),
-        eq(exceptions.status, "active"),
+        inArray(exceptions.status, OPEN_EXCEPTION_STATUSES),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(coachingRelationships)
+            .where(
+              and(
+                eq(coachingRelationships.id, input.relationshipId),
+                eq(coachingRelationships.endedAt, timestamp),
+              ),
+            ),
+        ),
       ),
     );
 
-  const fromDate = timestamp.slice(0, 10);
-  await db
-    .update(workoutAssignments)
-    .set({
-      scheduleStatus: "superseded",
-      supersededAt: timestamp,
-      updatedAt: timestamp,
-    })
-    .where(
-      and(
-        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
-        eq(workoutAssignments.scheduleStatus, "scheduled"),
-        gte(workoutAssignments.localDate, fromDate),
-      ),
-    );
-  await db
-    .update(mealAssignments)
-    .set({
-      scheduleStatus: "superseded",
-      supersededAt: timestamp,
-      updatedAt: timestamp,
-    })
-    .where(
-      and(
-        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
-        eq(mealAssignments.scheduleStatus, "scheduled"),
-        gte(mealAssignments.localDate, fromDate),
-      ),
-    );
-
-  // Draft check-ins have no schedule_status; remove future/today unsubmitted rows
-  // so reminders and the trainee Today surface cannot keep them alive.
-  await db
-    .delete(checkins)
-    .where(
-      and(
-        eq(checkins.coachingRelationshipId, input.relationshipId),
-        eq(checkins.recordStatus, "draft"),
-        gte(checkins.localDate, fromDate),
-      ),
-    );
-
-  await db
-    .update(notifications)
-    .set({ state: "suppressed" })
-    .where(
-      and(
-        eq(notifications.coachingRelationshipId, input.relationshipId),
-        inArray(notifications.state, ["pending", "deferred", "queued"]),
-      ),
-    );
-
-  // Close the effective plan horizon so replenishRollingHorizons creates nothing
-  // after reactivation until the trainer assigns a plan with a new start date.
-  const relationshipPlans = await db
-    .select({ id: plans.id })
-    .from(plans)
-    .where(eq(plans.coachingRelationshipId, input.relationshipId));
-  if (relationshipPlans.length > 0) {
-    const planIds = relationshipPlans.map((row) => row.id);
-    // Midnight UTC on the prior civil day stays on/before that day in all
-    // common trainer timezones (avoids T23:59Z rolling into "today" in IST).
-    const closedTo = `${previousCivilDate(timestamp)}T00:00:00.000Z`;
-    await db
-      .update(planVersions)
+  const writes = [
+    db
+      .update(coachingRelationships)
       .set({
-        effectiveTo: closedTo,
+        status: "ended",
+        endedAt: timestamp,
+        endedByUserId: input.endedByUserId,
+        endReason: input.reason ?? null,
         updatedAt: timestamp,
       })
       .where(
         and(
-          inArray(planVersions.planId, planIds),
-          eq(planVersions.status, "effective"),
+          eq(coachingRelationships.id, input.relationshipId),
+          ne(coachingRelationships.status, "ended"),
         ),
-      );
-  }
-
-  await db
-    .update(reactivationRequests)
-    .set({ status: "cancelled", resolvedAt: timestamp })
-    .where(
-      and(
-        eq(reactivationRequests.relationshipId, input.relationshipId),
-        eq(reactivationRequests.status, "pending"),
       ),
-    );
+    closeOpenExceptions,
+    db
+      .update(workoutAssignments)
+      .set({
+        scheduleStatus: "superseded",
+        supersededAt: timestamp,
+        updatedAt: timestamp,
+      })
+      .where(
+        and(
+          eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+          eq(workoutAssignments.scheduleStatus, "scheduled"),
+          gte(workoutAssignments.localDate, fromDate),
+        ),
+      ),
+    db
+      .update(mealAssignments)
+      .set({
+        scheduleStatus: "superseded",
+        supersededAt: timestamp,
+        updatedAt: timestamp,
+      })
+      .where(
+        and(
+          eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+          eq(mealAssignments.scheduleStatus, "scheduled"),
+          gte(mealAssignments.localDate, fromDate),
+        ),
+      ),
+    // Draft check-ins have no schedule_status; remove future/today unsubmitted rows
+    // so reminders and the trainee Today surface cannot keep them alive.
+    db
+      .delete(checkins)
+      .where(
+        and(
+          eq(checkins.coachingRelationshipId, input.relationshipId),
+          eq(checkins.recordStatus, "draft"),
+          gte(checkins.localDate, fromDate),
+        ),
+      ),
+    db
+      .update(notifications)
+      .set({ state: "suppressed" })
+      .where(
+        and(
+          eq(notifications.coachingRelationshipId, input.relationshipId),
+          inArray(notifications.state, ["pending", "deferred", "queued"]),
+        ),
+      ),
+    db
+      .update(reactivationRequests)
+      .set({ status: "cancelled", resolvedAt: timestamp })
+      .where(
+        and(
+          eq(reactivationRequests.relationshipId, input.relationshipId),
+          eq(reactivationRequests.status, "pending"),
+        ),
+      ),
+  ] as const;
+
+  // Close the effective plan horizon so replenishRollingHorizons creates nothing
+  // after reactivation until the trainer assigns a plan with a new start date.
+  // Local midnight starting the trainee's prior civil day, so the horizon ends
+  // on yesterday in their timezone (never today, never the day before).
+  const closePlanHorizon =
+    planIds.length > 0
+      ? [
+          db
+            .update(planVersions)
+            .set({
+              effectiveTo: localDateTimeToUtcIso(
+                addDaysToLocalDate(fromDate, -1),
+                timeZone,
+              ),
+              updatedAt: timestamp,
+            })
+            .where(
+              and(
+                inArray(planVersions.planId, planIds),
+                eq(planVersions.status, "effective"),
+              ),
+            ),
+        ]
+      : [];
+
+  // One D1 batch = one transaction: the end and the exception closes (and the
+  // rest of the stop-coaching writes) commit together or not at all.
+  await db.batch([...writes, ...closePlanHorizon]);
 }
 
 export async function requestRelationshipReactivation(
@@ -246,7 +308,11 @@ export async function confirmRelationshipReactivation(
     .where(eq(reactivationRequests.id, input.requestId));
 
   // Belt-and-suspenders: nothing scheduled from today until assign.
-  const fromDate = timestamp.slice(0, 10);
+  const { today: fromDate } = await relationshipLocalToday(
+    db,
+    input.relationshipId,
+    timestamp,
+  );
   await db
     .update(workoutAssignments)
     .set({

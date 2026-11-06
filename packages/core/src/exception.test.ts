@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  attentionReviewBucket,
   canAcknowledgeException,
   canActivateException,
   canResolveException,
+  canUndoAcknowledge,
+  restoredStatusAfterUndo,
   exceptionCountsTowardNeedsAttention,
   exceptionKey,
   filterNewExceptionCandidates,
@@ -26,6 +29,27 @@ describe("exception lifecycle", () => {
     expect(canResolveException("acknowledged")).toBe(true);
     expect(canResolveException("active")).toBe(false);
     expect(isOpenExceptionStatus("resolved")).toBe(false);
+    expect(canUndoAcknowledge("acknowledged")).toBe(true);
+    expect(canUndoAcknowledge("active")).toBe(false);
+    expect(canUndoAcknowledge("resolved")).toBe(false);
+    expect(restoredStatusAfterUndo({ activatedAt: null })).toBe("detected");
+    expect(
+      restoredStatusAfterUndo({ activatedAt: "2026-10-01T00:00:00.000Z" }),
+    ).toBe("active");
+  });
+
+  it("keeps a client in Needs you until every open item is acknowledged", () => {
+    expect(attentionReviewBucket(["active", "acknowledged"])).toBe("needs_you");
+    expect(attentionReviewBucket(["detected"])).toBe("needs_you");
+    expect(attentionReviewBucket(["resolved", "active"])).toBe("needs_you");
+    expect(attentionReviewBucket(["acknowledged", "acknowledged"])).toBe(
+      "reviewed",
+    );
+    expect(attentionReviewBucket(["acknowledged", "resolved"])).toBe(
+      "reviewed",
+    );
+    expect(attentionReviewBucket(["resolved"])).toBeNull();
+    expect(attentionReviewBucket([])).toBeNull();
   });
 
   it("builds deterministic candidates from derived signals", () => {

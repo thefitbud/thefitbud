@@ -28,6 +28,7 @@ import { createDb } from "../db/client";
 import { verifyFirebaseIdToken } from "../auth/firebase";
 import {
   createWebSession,
+  createIdentityRequestCache,
   ensureRoleAndProfile,
   findOrCreateUserFromFirebase,
   loadActorByUserId,
@@ -80,6 +81,7 @@ authRoutes.post("/session",
   }
 
   const db = createDb(c.env.DB);
+  const identityCache = createIdentityRequestCache();
   const { userId, created } = await findOrCreateUserFromFirebase(
     db,
     identity,
@@ -90,29 +92,41 @@ authRoutes.post("/session",
   // already trainee-only. Trainee-only accounts (e.g. sneha.review) must never
   // be upgraded by signing into trainer web. Legacy rows with no roles yet
   // still get a trainer profile (dev/session bootstrap).
-  const existingActor = await loadActorByUserId(db, {
-    userId,
-    surface: "trainer_web",
-    authMethod: "session",
-    requestedRole: null,
-  });
+  const existingActor = await loadActorByUserId(
+    db,
+    {
+      userId,
+      surface: "trainer_web",
+      authMethod: "session",
+      requestedRole: null,
+    },
+    identityCache,
+  );
   const permitted = existingActor?.permittedRoles ?? [];
   const isTraineeOnly =
     permitted.includes("trainee") && !permitted.includes("trainer");
   if (created || !isTraineeOnly) {
-    await ensureRoleAndProfile(db, {
-      userId,
-      role: "trainer",
-      displayName: identity.email?.split("@")[0] || "Trainer",
-    });
+    await ensureRoleAndProfile(
+      db,
+      {
+        userId,
+        role: "trainer",
+        displayName: identity.email?.split("@")[0] || "Trainer",
+      },
+      identityCache,
+    );
   }
 
-  const actor = await loadActorByUserId(db, {
-    userId,
-    surface: "trainer_web",
-    authMethod: "session",
-    requestedRole: "trainer",
-  });
+  const actor = await loadActorByUserId(
+    db,
+    {
+      userId,
+      surface: "trainer_web",
+      authMethod: "session",
+      requestedRole: "trainer",
+    },
+    identityCache,
+  );
   if (!actor || actor.selectedRole !== "trainer") {
     return fail(
       c,

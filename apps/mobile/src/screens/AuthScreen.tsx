@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform, View } from "react-native";
 import { useAuth } from "../auth/AuthProvider";
+import { pickSessionRefresh } from "../lib/api";
+import { authErrorCopy, mismatchedResponseCopy } from "../lib/authErrors";
+import { BundleCommitBadge } from "../dev/BundleCommitBadge";
 import { stage1Api } from "../lib/stage1Api";
 import { AcceptInviteScreen } from "./AcceptInviteScreen";
 import { CodeSignInScreen } from "./auth/CodeSignInScreen";
 import { ForgotPasswordScreen } from "./auth/ForgotPasswordScreen";
 import { SignInScreen } from "./auth/SignInScreen";
+import { createCodeVerifier } from "./auth/verifyCodeErrorFlow";
 
 type AuthMode = "password" | "code" | "forgot" | "invite";
 
@@ -25,7 +29,9 @@ export function AuthScreen() {
   const [identifier, setIdentifier] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
-  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "set">("request");
+  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "set">(
+    "request",
+  );
   const [otpProof, setOtpProof] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,12 +43,29 @@ export function AuthScreen() {
   const displayError = localError ?? errorMessage;
 
   const finishAuth = useCallback(
-    async (token: string) => {
+    async (result: { token: string }) => {
       clearError();
       setLocalError(null);
-      await signInWithToken(token);
+      await signInWithToken(result.token, pickSessionRefresh(result));
     },
     [clearError, signInWithToken],
+  );
+
+  // The controller outlives renders; it reads the latest closures through this ref.
+  const latest = useRef({ identifier, s1, finishAuth });
+  latest.current = { identifier, s1, finishAuth };
+  const verifier = useRef(
+    createCodeVerifier({
+      verify: (code: string) =>
+        latest.current.s1.verifyOtp({
+          identifier: latest.current.identifier.trim(),
+          purpose: "login",
+          code,
+        }),
+      finish: async (result) => {
+        if (result.purpose === "login") await latest.current.finishAuth(result);
+      },
+    }),
   );
 
   async function signInPassword(id: string, password: string) {
@@ -54,9 +77,13 @@ export function AuthScreen() {
     setLocalError(null);
     try {
       const result = await s1.login({ identifier: id, password });
-      await finishAuth(result.token);
-    } catch {
-      setLocalError("That mobile number or email and password don't match.");
+      try {
+        await finishAuth(result);
+      } catch (err) {
+        setLocalError(authErrorCopy(err, "session", "signInPassword.finish"));
+      }
+    } catch (err) {
+      setLocalError(authErrorCopy(err, "password-login", "signInPassword"));
     } finally {
       setLoading(false);
     }
@@ -73,8 +100,8 @@ export function AuthScreen() {
       await s1.startOtp({ identifier: identifier.trim(), purpose: "login" });
       setCodeSent(true);
       setResendSeconds(60);
-    } catch {
-      setLocalError("Too many codes requested. Try again in 1 hour or use your password.");
+    } catch (err) {
+      setLocalError(authErrorCopy(err, "code-send", "sendCode"));
     } finally {
       setLoading(false);
     }
@@ -85,21 +112,13 @@ export function AuthScreen() {
       setLocalError("Enter the 6-digit code.");
       return;
     }
+    // Synchronous guard first: a second tap in the same frame must do nothing.
+    if (verifier.current.busy) return;
     setLoading(true);
     setLocalError(null);
     try {
-      const result = await s1.verifyOtp({
-        identifier: identifier.trim(),
-        purpose: "login",
-        code,
-      });
-      if (result.purpose !== "login") {
-        setLocalError("That code didn't work. Check the latest message or tap Resend.");
-        return;
-      }
-      await finishAuth(result.token);
-    } catch {
-      setLocalError("That code didn't work. Check the latest message or tap Resend.");
+      const outcome = await verifier.current.submit(code, identifier.trim());
+      if (outcome.kind === "error") setLocalError(outcome.message);
     } finally {
       setLoading(false);
     }
@@ -112,8 +131,8 @@ export function AuthScreen() {
       await s1.startOtp({ identifier: identifier.trim(), purpose: "reset" });
       setForgotStep("verify");
       setResendSeconds(60);
-    } catch {
-      setLocalError("If an account exists, we've sent a code.");
+    } catch (err) {
+      setLocalError(authErrorCopy(err, "reset-send", "requestReset"));
     } finally {
       setLoading(false);
     }
@@ -128,13 +147,13 @@ export function AuthScreen() {
         code,
       });
       if (result.purpose !== "reset") {
-        setLocalError("That code didn't work. Request a new code.");
+        setLocalError(mismatchedResponseCopy("verifyResetCode.purpose"));
         return;
       }
       setOtpProof(result.resetProof);
       setForgotStep("set");
-    } catch {
-      setLocalError("That code didn't work. Request a new code.");
+    } catch (err) {
+      setLocalError(authErrorCopy(err, "reset-verify", "verifyResetCode"));
     } finally {
       setLoading(false);
     }
@@ -152,10 +171,14 @@ export function AuthScreen() {
           resetProof: otpProof,
           newPassword: password,
         });
-        await finishAuth(login.token);
+        try {
+          await finishAuth(login);
+        } catch (err) {
+          setLocalError(authErrorCopy(err, "session", "setNewPassword.finish"));
+        }
       }
-    } catch {
-      setLocalError("Could not update password. Try again.");
+    } catch (err) {
+      setLocalError(authErrorCopy(err, "reset-set", "setNewPassword"));
     } finally {
       setLoading(false);
     }
@@ -216,26 +239,31 @@ export function AuthScreen() {
   }
 
   return (
-    <SignInScreen
-      loading={loading}
-      error={displayError}
-      onSignIn={signInPassword}
-      onUseCode={() => {
-        setMode("code");
-        clearError();
-        setLocalError(null);
-      }}
-      onHaveInviteCode={() => {
-        setMode("invite");
-        clearError();
-        setLocalError(null);
-      }}
-      onForgotPassword={() => {
-        setMode("forgot");
-        setForgotStep("request");
-        clearError();
-        setLocalError(null);
-      }}
-    />
+    <View style={{ flex: 1 }}>
+      <SignInScreen
+        loading={loading}
+        error={displayError}
+        initialIdentifier={identifier}
+        onIdentifierChange={setIdentifier}
+        onSignIn={signInPassword}
+        onUseCode={() => {
+          setMode("code");
+          clearError();
+          setLocalError(null);
+        }}
+        onHaveInviteCode={() => {
+          setMode("invite");
+          clearError();
+          setLocalError(null);
+        }}
+        onForgotPassword={() => {
+          setMode("forgot");
+          setForgotStep("request");
+          clearError();
+          setLocalError(null);
+        }}
+      />
+      <BundleCommitBadge />
+    </View>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
 import { formatCivilDate, formatRelative, labelFor } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
@@ -15,6 +15,11 @@ import { resolveTraineeTimezone } from "../../lib/trainee-timezone";
 import { TimezoneBadge } from "./TimezoneBadge";
 import { primaryActionFor } from "./primaryAction";
 import type { WorkspaceModal } from "./WorkspaceModals";
+import {
+  CLIENT_WORKSPACE_TABS,
+  clientWorkspaceTabHref,
+  isClientWorkspaceTabActive,
+} from "./workspaceTabs";
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -48,6 +53,7 @@ export function WorkspaceHeader({
 }) {
   const { me } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [, setParams] = useSearchParams();
   const header = workspace.header;
   const ended = header.onboardingStatus === "ended";
@@ -187,10 +193,12 @@ export function WorkspaceHeader({
     navigate(primary.to);
   }
 
+  // Ended relationships: Configure is read-only (CE1) and the reminders
+  // drawer only reports history, so label both as view-only (CE2).
   const overflowItems = [
     {
       id: "configure",
-      label: "Configure coaching",
+      label: ended ? "View coaching setup" : "Configure coaching",
       onSelect: () => navigate(`/clients/${relationshipId}/configure`),
     },
     {
@@ -200,7 +208,9 @@ export function WorkspaceHeader({
     },
     {
       id: "reminders",
-      label: "Reminder settings for this client",
+      label: ended
+        ? "View reminder settings"
+        : "Reminder settings for this client",
       onSelect: () => onOpenModal({ type: "responsiveness" }),
     },
     ...(!ended
@@ -354,49 +364,30 @@ export function WorkspaceHeader({
           </div>
         </div>
         <nav className="wsh-tabs" aria-label="Client sections">
-          <NavLink
-            to={`/clients/${relationshipId}/overview`}
-            className={tabClass}
-            end
-          >
-            Overview
-          </NavLink>
-          <NavLink to={`/clients/${relationshipId}/plan`} className={tabClass}>
-            Plan
-          </NavLink>
-          <NavLink
-            to={`/clients/${relationshipId}/activity`}
-            className={tabClass}
-          >
-            Activity
-          </NavLink>
-          <NavLink
-            to={`/clients/${relationshipId}/progress`}
-            className={tabClass}
-          >
-            Progress
-          </NavLink>
-          <NavLink
-            to={`/clients/${relationshipId}/check-ins`}
-            className={tabClass}
-          >
-            Check-ins
-            {submittedCheckinCount > 0 ? (
-              <span className="tab-badge">{submittedCheckinCount}</span>
-            ) : null}
-          </NavLink>
-          <NavLink
-            to={`/clients/${relationshipId}/history`}
-            className={tabClass}
-          >
-            History
-          </NavLink>
+          {CLIENT_WORKSPACE_TABS.map((tab) => {
+            const active = isClientWorkspaceTabActive(
+              pathname,
+              relationshipId,
+              tab,
+            );
+            return (
+              <Link
+                key={tab.id}
+                to={clientWorkspaceTabHref(relationshipId, tab)}
+                className={active ? "wsh-tab is-active" : "wsh-tab"}
+                aria-current={active ? "page" : undefined}
+              >
+                {tab.label}
+                {"badge" in tab &&
+                tab.badge === "submitted-checkins" &&
+                submittedCheckinCount > 0 ? (
+                  <span className="tab-badge">{submittedCheckinCount}</span>
+                ) : null}
+              </Link>
+            );
+          })}
         </nav>
       </div>
     </header>
   );
-}
-
-function tabClass({ isActive }: { isActive: boolean }) {
-  return isActive ? "wsh-tab is-active" : "wsh-tab";
 }

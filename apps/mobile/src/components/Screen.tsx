@@ -21,6 +21,11 @@ type Props = {
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * `toast` is a floating slot above the tab bar (no bar border) for
+   * snackbars like frame 05 Mark reviewed Undo.
+   */
+  footerVariant?: "bar" | "toast";
   /** `app` matches the trainee design: no product stamp, canvas background. */
   chrome?: "page" | "app";
   /** Auth screens use the Honest Week mark instead of the wordmark. */
@@ -40,6 +45,7 @@ export function Screen({
   subtitle,
   children,
   footer,
+  footerVariant = "bar",
   chrome = "page",
   brandDisplay,
   showHeader = true,
@@ -58,8 +64,11 @@ export function Screen({
         }
       >
         <View
-          // RN types omit landmark roles; Expo web maps this to <main>.
-          accessibilityRole={"main" as "summary"}
+          // `main` is a web/ARIA landmark, not an Android accessibilityRole:
+          // react-native-web renders role="main" as <main>, and on Android the
+          // `role` prop goes through the nullable Role.fromValue, so it is
+          // ignored instead of throwing. See apps/mobile/src/components/accessibilityRole.test.ts.
+          role="main"
           style={styles.main}
         >
           {showHeader ? (
@@ -95,7 +104,15 @@ export function Screen({
           <View style={styles.body}>{children}</View>
         </View>
       </ScrollView>
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
+      {footer ? (
+        <View
+          style={
+            footerVariant === "toast" ? styles.toastFooter : styles.footer
+          }
+        >
+          {footer}
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -151,5 +168,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.lightGrey,
     backgroundColor: colors.background,
+  },
+  toastFooter: {
+    backgroundColor: "transparent",
+    paddingBottom: spacing.md,
+    paddingHorizontal: 16,
+    paddingTop: 0,
   },
 });

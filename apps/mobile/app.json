@@ -1,6 +1,6 @@
 {
-  "name": "FitBud",
-  "slug": "fitbud",
+  "owner": "tech-fitbuds-team",
+  "slug": "thefitbud",
   "version": "0.0.0",
   "orientation": "portrait",
   "userInterfaceStyle": "light",
@@ -13,17 +13,30 @@
   },
   "ios": {
     "supportsTablet": true,
-    "bundleIdentifier": "com.thefitbud.mobile"
+    "appleTeamId": "26257QDTHP",
+    "config": {
+      "usesNonExemptEncryption": false
+    }
   },
   "web": {
     "bundler": "metro"
   },
   "android": {
-    "package": "com.thefitbud.mobile",
     "adaptiveIcon": {
       "foregroundImage": "../../packages/brand/app/adaptive-foreground.png",
       "backgroundColor": "#FAF7F2"
     }
   },
-  "plugins": ["./plugins/withLiveActivity", "expo-dev-client"]
+  "plugins": [
+    "expo-dev-client",
+    "expo-secure-store"
+  ],
+  "updates": {
+    "url": "https://u.expo.dev/ae19f5e7-c839-48a3-8e62-ae9ba2fc86d7"
+  },
+  "extra": {
+    "eas": {
+      "projectId": "ae19f5e7-c839-48a3-8e62-ae9ba2fc86d7"
+    }
+  }
 }

@@ -1,10 +1,14 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -22,7 +26,6 @@ import {
   labelFor,
 } from "@fitbud/core";
 import type {
-  AttentionGroupsResponse,
   CoachAsk,
   ReengagementCandidatesResponse,
   SubscriptionAttentionItem,
@@ -41,12 +44,20 @@ import {
   type ErrorKind,
 } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
+import {
+  issueLine,
+  type AttentionGroup,
+  type AttentionItem,
+} from "../lib/attentionIssueLine";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
+import {
+  isEditableTarget,
+  isDeliberatePointerDown,
+  useRowShortcutGuard,
+} from "../hooks/useRowShortcutGuard";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 
-type AttentionGroup = AttentionGroupsResponse["groups"][number];
-type AttentionItem = AttentionGroup["items"][number];
 type ReengagementCandidate = ReengagementCandidatesResponse["items"][number];
 type ActivityEvent = {
   id: string;
@@ -99,28 +110,6 @@ function formatAttentionAge(ageMinutes: number): string {
   return days === 1 ? "since 1 d" : `since ${days} d`;
 }
 
-function weekdayShortFromCivil(localDate: string): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate);
-  if (!match) return null;
-  const y = Number(match[1]);
-  const m = Number(match[2]);
-  const d = Number(match[3]);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-GB", {
-    weekday: "short",
-    timeZone: "UTC",
-  });
-}
-
-function localDateFromDetails(
-  details: Record<string, unknown> | null | undefined,
-): string | null {
-  if (!details) return null;
-  const value = details.localDate;
-  return typeof value === "string" ? value : null;
-}
-
 function initials(name: string): string {
   return name
     .split(" ")
@@ -133,72 +122,6 @@ function initials(name: string): string {
 function avatarClass(name: string): string {
   const n = name.charCodeAt(0) + (name.charCodeAt(1) || 0);
   return `home-av c${(n % 8) + 1}`;
-}
-
-function issueLine(group: AttentionGroup, primary: AttentionItem): {
-  text: string;
-  more: number;
-  title: string;
-} {
-  const open = group.items.filter(
-    (i) => i.status === "detected" || i.status === "active",
-  );
-  const items = open.length > 0 ? open : group.items;
-  const workouts = items.filter(
-    (i) => i.type === "missed_workout" || i.type === "skipped_workout",
-  );
-  const meals = items.filter(
-    (i) =>
-      i.type === "overdue_meal" ||
-      i.type === "skipped_meal" ||
-      i.type === "meal_logged_later",
-  );
-  const sameType = items.filter((i) => i.type === primary.type);
-  const related =
-    primary.type === "missed_workout" || primary.type === "skipped_workout"
-      ? workouts
-      : primary.type === "overdue_meal" ||
-          primary.type === "skipped_meal" ||
-          primary.type === "meal_logged_later"
-        ? meals
-        : sameType;
-  const weekdays = related
-    .map((i) => localDateFromDetails(i.details))
-    .filter((d): d is string => Boolean(d))
-    .map((d) => weekdayShortFromCivil(d))
-    .filter((d): d is string => Boolean(d));
-  const uniqueWeekdays = [...new Set(weekdays)];
-
-  let text =
-    primary.summary?.trim() || labelFor("exception_type", primary.type);
-
-  const dayList =
-    uniqueWeekdays.length > 0 ? uniqueWeekdays.join(", ") : null;
-  if (
-    related.length >= 2 &&
-    (primary.type === "missed_workout" || primary.type === "skipped_workout")
-  ) {
-    text = dayList
-      ? `Missed ${related.length} workouts (${dayList})`
-      : `Missed ${related.length} workouts`;
-  } else if (
-    related.length >= 2 &&
-    (primary.type === "overdue_meal" ||
-      primary.type === "skipped_meal" ||
-      primary.type === "meal_logged_later")
-  ) {
-    text = dayList
-      ? `Missed ${related.length} meals (${dayList})`
-      : `Missed ${related.length} meals`;
-  } else if (dayList && !/\([A-Z][a-z]{2}/.test(text)) {
-    text = `${text} (${dayList})`;
-  }
-
-  const more = Math.max(0, items.length - 1);
-  const title = items
-    .map((i) => i.summary || labelFor("exception_type", i.type))
-    .join("; ");
-  return { text, more, title };
 }
 
 function askItemLabel(ask: CoachAsk): string {
@@ -265,12 +188,36 @@ export function HomePage() {
   );
   const [showAllAttention, setShowAllAttention] = useState(showAllParam);
   const [reviewedOpen, setReviewedOpen] = useState(false);
-  const [focusIdx, setFocusIdx] = useState(0);
+  // HM5: the selected "Needs attention" row is held by relationshipId (the
+  // row key), not by index, so a poll or a re-sort keeps the same client
+  // selected. null = nothing picked yet; the first row is selected implicitly.
+  const [selectedRid, setSelectedRid] = useState<string | null>(null);
+  // DR1 QA F2: bumped on every exception drawer open (see openException).
+  const [drawerOpenSeq, setDrawerOpenSeq] = useState(0);
   const [toast, setToast] = useState<{
     message: string;
     undo?: () => void;
   } | null>(null);
-  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  // HM4 F1 / HM5: mirror of selectedRid, and a flag that tells the selection
+  // effect not to move focus when the selection followed focus the trainer
+  // already moved (or that the removal hand-off placed itself).
+  const selectedRidRef = useRef<string | null>(null);
+  const skipRowFocusRef = useRef(false);
+  // HM5 R2-2: the row that holds DOM focus, and the row order last rendered,
+  // so a removed focused row can hand focus to its neighbour.
+  const focusedRidRef = useRef<string | null>(null);
+  const prevVisibleIdsRef = useRef<string[]>([]);
+  // HM5 R2-3: pointer type of the last pointerdown in the grid.
+  const lastPointerTypeRef = useRef("");
+  const {
+    onGridFocus,
+    onGridPointerDown,
+    armFromKeyboard,
+    noteDrawerClosed,
+    focusWithoutArming,
+    allowRowShortcut,
+  } = useRowShortcutGuard();
   const undoTimer = useRef<number | null>(null);
 
   // One fetch at a time. A quiet refresh requested while another load is in
@@ -529,8 +476,21 @@ export function HomePage() {
   const visibleOpen = showAllAttention
     ? openGroups
     : openGroups.slice(0, ATTENTION_CAP);
+  const visibleIds = visibleOpen.map((row) => row.group.relationshipId);
+  const visibleKey = visibleIds.join("|");
+  // Index of the selected client in the current order (-1: none on screen).
+  const focusIdx =
+    selectedRid == null ? 0 : visibleIds.indexOf(selectedRid);
+  const rowElAt = (idx: number) => {
+    const rid = visibleIds[idx];
+    return rid ? rowRefs.current.get(rid) : undefined;
+  };
 
   function openException(id: string) {
+    // DR1 QA F2: a quick reopen of the same item can land before the close
+    // commits, so the drawer never remounts; the new token tells it this is
+    // a fresh open.
+    setDrawerOpenSeq((n) => n + 1);
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("exception", id);
@@ -548,14 +508,64 @@ export function HomePage() {
     });
   }
 
-  function closeDrawer() {
+  const closeDrawer = useCallback(() => {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("exception");
       next.delete("ask");
       return next;
     });
-  }
+  }, [setParams]);
+
+  const homeTitleRef = useRef<HTMLHeadingElement>(null);
+
+  const closeDrawerWithFocus = useCallback(() => {
+    noteDrawerClosed();
+    closeDrawer();
+    // Restored focus must not arm the a / n / o row shortcuts (HM4). With no
+    // rows left, focus goes to the page title, not <body> (HM5 QA F2).
+    focusWithoutArming(rowElAt(focusIdx) ?? homeTitleRef.current);
+    // rowElAt reads the current visibleIds (visibleKey).
+  }, [closeDrawer, focusIdx, visibleKey, focusWithoutArming, noteDrawerClosed]);
+
+  // Ask drawer: remember whether the open ask was just answered so the close
+  // handler can skip its (soon to be removed) row and pick a neighbour.
+  const answeredAskIdRef = useRef<string | null>(null);
+
+  const markAskChanged = useCallback(() => {
+    answeredAskIdRef.current = drawerAskId;
+    void load({ quiet: true });
+  }, [drawerAskId, load]);
+
+  const closeAskDrawerWithFocus = useCallback(() => {
+    const askId = drawerAskId;
+    const answered = askId != null && answeredAskIdRef.current === askId;
+    answeredAskIdRef.current = null;
+    noteDrawerClosed();
+    closeDrawer();
+    const visibleIds = coachAsks.slice(0, SECTION_CAP).map((a) => a.id);
+    const idx = askId ? visibleIds.indexOf(askId) : -1;
+    const candidates: string[] = [];
+    if (askId && !answered) candidates.push(askId);
+    if (idx >= 0) {
+      // Neighbours that stay on screen after a refresh.
+      for (const id of [...visibleIds.slice(idx + 1), ...visibleIds.slice(0, idx).reverse()]) {
+        candidates.push(id);
+      }
+    }
+    for (const id of candidates) {
+      const btn = document.querySelector<HTMLButtonElement>(
+        `button[data-ask-answer="${CSS.escape(id)}"]`,
+      );
+      if (btn && !btn.disabled) {
+        btn.focus();
+        return;
+      }
+    }
+    // Fallback: the page title (not a row, so stray typing cannot hit the
+    // Home grid shortcuts).
+    homeTitleRef.current?.focus();
+  }, [closeDrawer, coachAsks, drawerAskId, noteDrawerClosed]);
 
   function showToast(message: string, undo?: () => void) {
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
@@ -622,19 +632,29 @@ export function HomePage() {
   function onGridKey(ev: ReactKeyboardEvent<HTMLDivElement>) {
     const max = visibleOpen.length - 1;
     if (max < 0) return;
+    if (isEditableTarget(ev.target)) return;
     const key = ev.key.toLowerCase();
+    // Arrow / Home / End are deliberate navigation and arm the row shortcuts;
+    // j / k move too but don't arm them (they could be stray typing).
+    if (ev.key.startsWith("Arrow") || key === "home" || key === "end") {
+      armFromKeyboard();
+    }
+    if ((key === "a" || key === "n" || key === "o") && !allowRowShortcut(ev)) {
+      return;
+    }
+    const cur = Math.max(0, focusIdx);
     if (key === "arrowdown" || key === "j") {
       ev.preventDefault();
-      setFocusIdx((i) => Math.min(max, i + 1));
+      selectIdx(Math.min(max, cur + 1));
     } else if (key === "arrowup" || key === "k") {
       ev.preventDefault();
-      setFocusIdx((i) => Math.max(0, i - 1));
+      selectIdx(Math.max(0, cur - 1));
     } else if (key === "home") {
       ev.preventDefault();
-      setFocusIdx(0);
+      selectIdx(0);
     } else if (key === "end") {
       ev.preventDefault();
-      setFocusIdx(max);
+      selectIdx(max);
     } else if (key === "enter") {
       ev.preventDefault();
       const row = visibleOpen[focusIdx];
@@ -660,14 +680,121 @@ export function HomePage() {
         void nudgeClient(row.group.relationshipId, row.primary.id);
       }
     } else if (key === "escape" && drawerExceptionId) {
+      noteDrawerClosed();
       closeDrawer();
-      rowRefs.current[focusIdx]?.focus();
+      focusWithoutArming(rowElAt(focusIdx) ?? homeTitleRef.current);
     }
   }
 
+  /** Keyboard navigation: select the row at idx; the effect focuses it. */
+  function selectIdx(idx: number) {
+    const rid = visibleIds[idx];
+    if (!rid) return;
+    selectedRidRef.current = rid;
+    setSelectedRid(rid);
+  }
+
+  function ridFromTarget(target: EventTarget | null): string | null {
+    if (!target || typeof (target as Element).closest !== "function") {
+      return null;
+    }
+    const rowEl = (target as Element).closest('[role="row"]');
+    if (!rowEl) return null;
+    for (const [rid, el] of rowRefs.current) {
+      if (el === rowEl) return visibleIds.includes(rid) ? rid : null;
+    }
+    return null;
+  }
+
+  // HM4 F1: when focus (click, Tab, Shift+Tab) lands inside a row, that row
+  // becomes the selected one, so a / n / o act on the row that has focus.
+  function selectRowFromTarget(target: EventTarget | null) {
+    const rid = ridFromTarget(target);
+    if (!rid) return;
+    if (rid === selectedRidRef.current) return;
+    selectedRidRef.current = rid;
+    skipRowFocusRef.current = true;
+    setSelectedRid(rid);
+  }
+
+  function onGridFocusIn(ev: ReactFocusEvent<HTMLDivElement>) {
+    focusedRidRef.current = ridFromTarget(ev.target);
+    selectRowFromTarget(ev.target);
+    onGridFocus();
+  }
+
+  function onGridFocusOut(ev: ReactFocusEvent<HTMLDivElement>) {
+    const next = ev.relatedTarget as Node | null;
+    if (next ? !ev.currentTarget.contains(next) : ev.target.isConnected) {
+      // Focus left the grid (a removed row keeps its id for the hand-off).
+      focusedRidRef.current = null;
+    }
+  }
+
+  // HM5 R2-3: only a primary-button mouse / pen press selects and arms on
+  // pointerdown. Right / middle clicks and touches (which may start a scroll)
+  // don't; a touch tap selects and arms when it ends as a click.
+  function onGridPointerDownIn(ev: ReactPointerEvent<HTMLDivElement>) {
+    lastPointerTypeRef.current = ev.pointerType;
+    if (!isDeliberatePointerDown(ev)) return;
+    selectRowFromTarget(ev.target);
+    onGridPointerDown();
+  }
+
+  function onGridClickIn(ev: ReactMouseEvent<HTMLDivElement>) {
+    if (ev.button !== 0 || ev.detail === 0) return; // keyboard-made clicks
+    const native = ev.nativeEvent as MouseEvent & { pointerType?: string };
+    const pointerType = native.pointerType || lastPointerTypeRef.current;
+    if (pointerType !== "touch") return;
+    selectRowFromTarget(ev.target);
+    onGridPointerDown();
+  }
+
   useEffect(() => {
-    rowRefs.current[focusIdx]?.focus();
-  }, [focusIdx]);
+    selectedRidRef.current = selectedRid;
+    if (skipRowFocusRef.current) {
+      // Focus is already inside this row (maybe on its button); keep it there.
+      skipRowFocusRef.current = false;
+      return;
+    }
+    if (selectedRid) rowRefs.current.get(selectedRid)?.focus();
+  }, [selectedRid]);
+
+  // HM5 R2-2: when the selected client leaves the list (acknowledged, resolved
+  // or pushed past the cap), select the next row, or the previous one if it
+  // was last. If it held focus, focus follows (unarmed); with no rows left,
+  // focus goes to the page title. Reorders and insertions change nothing here.
+  useLayoutEffect(() => {
+    const prev = prevVisibleIdsRef.current;
+    prevVisibleIdsRef.current = visibleIds;
+    const rid = selectedRidRef.current;
+    if (rid == null || visibleIds.includes(rid)) return;
+    const at = prev.indexOf(rid);
+    let next: string | null = null;
+    if (at >= 0) {
+      next =
+        prev.slice(at + 1).find((id) => visibleIds.includes(id)) ??
+        [...prev.slice(0, at)].reverse().find((id) => visibleIds.includes(id)) ??
+        null;
+    }
+    if (next == null && visibleIds.length > 0) {
+      next = visibleIds[Math.min(Math.max(at, 0), visibleIds.length - 1)]!;
+    }
+    const active = document.activeElement;
+    const hadFocus =
+      focusedRidRef.current === rid &&
+      (active == null || active === document.body);
+    selectedRidRef.current = next;
+    if (next != null) skipRowFocusRef.current = true;
+    setSelectedRid(next);
+    if (hadFocus) {
+      focusedRidRef.current = next;
+      focusWithoutArming(
+        next != null ? rowRefs.current.get(next) : homeTitleRef.current,
+      );
+    }
+    // Runs when the rendered row order changes; visibleKey encodes visibleIds.
+  }, [visibleKey]);
 
   const attentionCount = openGroups.length;
   const checkinCount = checkins.length;
@@ -712,7 +839,9 @@ export function HomePage() {
             <Sun size={14} strokeWidth={1.75} aria-hidden />
             {todayLabel}
           </div>
-          <h1 className="home-title">Today</h1>
+          <h1 className="home-title" ref={homeTitleRef} tabIndex={-1}>
+            Today
+          </h1>
           {summary ? <p className="home-summary">{summary}</p> : null}
         </div>
         <div className="home-tiles" role="group" aria-label="Filter by">
@@ -869,6 +998,10 @@ export function HomePage() {
                 aria-label="Needs attention"
                 tabIndex={0}
                 onKeyDown={onGridKey}
+                onFocus={onGridFocusIn}
+                onBlur={onGridFocusOut}
+                onPointerDown={onGridPointerDownIn}
+                onClick={onGridClickIn}
               >
                 {visibleOpen.map((row, idx) => {
                   const { group, primary } = row;
@@ -887,7 +1020,8 @@ export function HomePage() {
                       role="row"
                       tabIndex={-1}
                       ref={(el) => {
-                        rowRefs.current[idx] = el;
+                        if (el) rowRefs.current.set(group.relationshipId, el);
+                        else rowRefs.current.delete(group.relationshipId);
                       }}
                       aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}. Review button.`}
                     >
@@ -1045,6 +1179,7 @@ export function HomePage() {
                         variant="tinted"
                         className="button-sm"
                         disabled={!online}
+                        data-ask-answer={ask.id}
                         onClick={() => openAsk(ask.id)}
                       >
                         Mark answered
@@ -1323,11 +1458,10 @@ export function HomePage() {
 
       {drawerExceptionId ? (
         <ExceptionDrawer
+          key={drawerExceptionId}
           exceptionId={drawerExceptionId}
-          onClose={() => {
-            closeDrawer();
-            rowRefs.current[focusIdx]?.focus();
-          }}
+          openSeq={drawerOpenSeq}
+          onClose={closeDrawerWithFocus}
           onChanged={() => void load({ quiet: true })}
         />
       ) : null}
@@ -1341,8 +1475,8 @@ export function HomePage() {
                 "",
             ) ?? "Client"
           }
-          onClose={closeDrawer}
-          onChanged={() => void load({ quiet: true })}
+          onClose={closeAskDrawerWithFocus}
+          onChanged={markAskChanged}
         />
       ) : null}
 

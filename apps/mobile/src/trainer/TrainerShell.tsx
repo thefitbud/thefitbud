@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
@@ -46,13 +46,25 @@ const TABS: Array<{ id: TrainerTab; label: string }> = [
 ];
 
 export function TrainerShell() {
-  const { relationships, api, signOut } = useAuth();
+  const {
+    relationships,
+    api,
+    signOut,
+    pendingNotificationLink,
+    clearPendingNotificationLink,
+    refreshSession,
+  } = useAuth();
   const s1 = stage1Api(api);
   const [tab, setTab] = useState<TrainerTab>("attention");
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [clientsSegment, setClientsSegment] = useState<"clients" | "activity">(
     "clients",
   );
+
+  // Bumped per opened push so screens remount and refetch; the payload is
+  // routing only and never rendered.
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const latestPushRef = useRef(0);
 
   function openClientFromRow(row: ClientDirectoryRow) {
     if (!row.relationshipId) return;
@@ -64,7 +76,7 @@ export function TrainerShell() {
     });
   }
 
-  async function openClientById(relationshipId: string) {
+  async function openClientById(relationshipId: string, push?: number) {
     let displayName = "Client";
     let statusLabelText = "Unknown";
     try {
@@ -82,6 +94,8 @@ export function TrainerShell() {
         statusLabelText = onboardingStatusLabel(relationship.onboardingStatus);
       }
     }
+    // A newer push opened something else while the client list loaded.
+    if (push !== undefined && push !== latestPushRef.current) return;
     setOverlay({
       kind: "client",
       relationshipId,
@@ -97,6 +111,34 @@ export function TrainerShell() {
       relationshipId: item.coachingRelationshipId,
     });
   }
+
+  useEffect(() => {
+    if (!pendingNotificationLink) return;
+    const route = pendingNotificationLink.trainerRoute;
+    if (!route) return; // Not a trainer push; the trainee shell owns those.
+    clearPendingNotificationLink(); // Navigate once per link.
+    const push = ++latestPushRef.current;
+    void refreshSession();
+    setRefreshNonce((n) => n + 1);
+    setClientsSegment("clients");
+    switch (route.kind) {
+      case "checkin":
+        // The review screen reads the relationship from the fetched check-in.
+        setOverlay({
+          kind: "checkin",
+          checkinId: route.checkinId,
+          relationshipId: "",
+        });
+        return;
+      case "client":
+        void openClientById(route.relationshipId, push);
+        return;
+      case "attention":
+        setOverlay(null);
+        setTab("attention");
+        return;
+    }
+  }, [pendingNotificationLink]);
 
   useEffect(() => {
     if (!isCaptureModeEnabled()) return;
@@ -143,6 +185,7 @@ export function TrainerShell() {
   if (overlay?.kind === "exception") {
     return (
       <ExceptionReviewScreen
+        key={refreshNonce}
         exceptionId={overlay.exceptionId}
         onBack={() => setOverlay(null)}
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
@@ -153,6 +196,7 @@ export function TrainerShell() {
   if (overlay?.kind === "client") {
     return (
       <ClientStatusScreen
+        key={refreshNonce}
         relationshipId={overlay.relationshipId}
         displayName={overlay.displayName}
         onboardingStatusLabelText={overlay.onboardingStatusLabelText}
@@ -174,6 +218,7 @@ export function TrainerShell() {
   if (overlay?.kind === "checkin") {
     return (
       <CheckinReviewScreen
+        key={refreshNonce}
         checkinId={overlay.checkinId}
         relationshipId={overlay.relationshipId}
         onBack={() => setOverlay(null)}
@@ -197,6 +242,7 @@ export function TrainerShell() {
       <View style={styles.content}>
         {tab === "attention" ? (
           <AttentionTab
+            key={refreshNonce}
             onReviewException={(exceptionId) =>
               setOverlay({ kind: "exception", exceptionId })
             }
@@ -207,13 +253,14 @@ export function TrainerShell() {
 
         {tab === "clients" ? (
           <ClientsTab
+            key={refreshNonce}
             onOpenClient={openClientFromRow}
             initialSegment={clientsSegment}
           />
         ) : null}
 
         {tab === "checkins" ? (
-          <CheckinsTab onReviewCheckin={openCheckin} />
+          <CheckinsTab key={refreshNonce} onReviewCheckin={openCheckin} />
         ) : null}
 
         {tab === "more" ? (

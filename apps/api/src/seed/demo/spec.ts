@@ -11,7 +11,7 @@ export type DemoAccountSpec = {
 export const DEMO_PASSWORD_PLAINTEXT = "FitBud-demo-2026";
 
 /**
- * Display names match docs/spec/mockups (founder-approved). Emails stay
+ * Display names match the locked frames in docs/design/ (founder-approved). Emails stay
  * state-keyed so seed IDs remain stable.
  */
 export const DEMO_ACCOUNTS: DemoAccountSpec[] = [

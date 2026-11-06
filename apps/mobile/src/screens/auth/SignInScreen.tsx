@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -22,6 +23,7 @@ import { Field } from "../../components/Field";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { isWhatsAppOtpEnabled } from "../../lib/config";
 import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../../lib/support";
+import { legalUrl } from "../../lib/legalLinks";
 
 type Props = {
   loading: boolean;
@@ -31,6 +33,18 @@ type Props = {
   onForgotPassword: () => void;
   onHaveInviteCode?: () => void;
   inviteTrainerName?: string | null;
+  /**
+   * Value already held by AuthScreen. This screen remounts when the mode
+   * changes, so the seed is what comes back from code or reset sign-in.
+   */
+  initialIdentifier?: string;
+  /**
+   * AuthScreen owns the identifier the code and reset screens submit.
+   * Typing stays local until this reports it; without the report, "Sign in
+   * with a code instead" opens an empty field and Send code never requests
+   * an OTP (CU21).
+   */
+  onIdentifierChange?: (value: string) => void;
 };
 
 export function SignInScreen({
@@ -41,9 +55,11 @@ export function SignInScreen({
   onForgotPassword,
   onHaveInviteCode,
   inviteTrainerName,
+  initialIdentifier = "",
+  onIdentifierChange,
 }: Props) {
   const { config } = useConfig();
-  const [identifier, setIdentifier] = useState("");
+  const [identifier, setIdentifier] = useState(initialIdentifier);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const waSoon = !isWhatsAppOtpEnabled(config);
@@ -83,7 +99,10 @@ export function SignInScreen({
           <Field
             label="Mobile number or email"
             value={identifier}
-            onChangeText={setIdentifier}
+            onChangeText={(value) => {
+              setIdentifier(value);
+              onIdentifierChange?.(value);
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
@@ -170,6 +189,30 @@ export function SignInScreen({
           >
             <Text style={styles.link}>Need help?</Text>
           </Pressable>
+
+          <View style={styles.legal}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Privacy policy, opens in your browser"
+              style={styles.legalLink}
+              onPress={() => {
+                void Linking.openURL(legalUrl("/privacy"));
+              }}
+            >
+              <Text style={styles.legalText}>Privacy</Text>
+            </Pressable>
+            <Text style={styles.legalDot}>·</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Terms of use, opens in your browser"
+              style={styles.legalLink}
+              onPress={() => {
+                void Linking.openURL(legalUrl("/terms"));
+              }}
+            >
+              <Text style={styles.legalText}>Terms</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </View>
     </View>
@@ -283,5 +326,29 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
     minHeight: 44,
     justifyContent: "center",
+  },
+  legal: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs,
+    justifyContent: "center",
+    marginTop: spacing.xs,
+  },
+  legalLink: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+  },
+  legalText: {
+    color: colors.midGrey,
+    fontFamily: fontFamilyMedium,
+    fontSize: typeScale.caption,
+    textDecorationLine: "underline",
+  },
+  legalDot: {
+    color: colors.midGrey,
+    fontFamily,
+    fontSize: typeScale.caption,
   },
 });

@@ -1,0 +1,31 @@
+// Local Expo module: the Android half of `LiveActivity` (LA3).
+// It drives the ongoing workout notification of frame 27-android; there is no
+// Live Activity on Android. Local updates only, no push and no network.
+apply plugin: 'com.android.library'
+
+group = 'com.thefitbud.liveactivity'
+version = '0.0.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useDefaultAndroidSdkVersions()
+
+android {
+  namespace "com.thefitbud.liveactivity"
+  defaultConfig {
+    versionCode 1
+    versionName "0.0.0"
+  }
+  sourceSets {
+    main {
+      // The notification itself stays at its documented path,
+      // apps/mobile/targets/android, next to the iOS widget target.
+      java.srcDirs += ["$projectDir/../../../targets/android"]
+    }
+  }
+  lintOptions {
+    abortOnError false
+  }
+}

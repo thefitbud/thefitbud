@@ -21,6 +21,8 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { useAuth } from "../auth/AuthProvider";
 import { localDateInTimezone } from "../lib/dates";
+import type { RestWindow } from "../notifications/liveActivity";
+import { useWorkoutLiveActivity } from "../notifications/liveActivitySession";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import {
@@ -252,6 +254,9 @@ export function ActiveWorkoutScreen({
   const [drafts, setDrafts] = useState<Record<string, SetDraft>>({});
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(DEFAULT_REST_SECONDS);
+  // Lock-screen rest (LA1c): when the current in-app rest ends, for the Live
+  // Activity's own countdown. Follows the in-app timer; it doesn't drive it.
+  const [restWindow, setRestWindow] = useState<RestWindow | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [previousByKey, setPreviousByKey] = useState<Record<string, string>>({});
   const pausedAccumRef = useRef(0);
@@ -296,6 +301,22 @@ export function ActiveWorkoutScreen({
     if (currentExerciseIndex < 0) return [];
     return execution.exercises.slice(currentExerciseIndex + 1);
   }, [currentExerciseIndex, execution.exercises]);
+
+  // iOS Live Activity (LA1b): starts, updates per logged set, ends on finish,
+  // skip or leaving. No-op on Android and web.
+  useWorkoutLiveActivity({
+    execution,
+    workoutName: title,
+    historyByKey: previousByKey,
+    rest: restWindow,
+    // Skip on the lock screen ends the app's rest when the app comes back.
+    onRestSkipped: () => setRestRemaining(null),
+  });
+
+  // The in-app rest ended (expiry, Skip, or the next set): no lock-screen rest.
+  useEffect(() => {
+    if (restRemaining == null || restRemaining <= 0) setRestWindow(null);
+  }, [restRemaining]);
 
   useEffect(() => {
     const deactivate = tryActivateKeepAwake();
@@ -356,6 +377,7 @@ export function ActiveWorkoutScreen({
         : DEFAULT_REST_SECONDS;
     setRestTotal(seconds);
     setRestRemaining(seconds);
+    setRestWindow({ endsAt: Date.now() + seconds * 1000, seconds });
   }
 
   function updateDraft(setId: string, patch: Partial<SetDraft>) {
@@ -682,7 +704,10 @@ export function ActiveWorkoutScreen({
                 accessibilityRole="button"
                 accessibilityLabel="15 seconds less"
                 onPress={() =>
-                  setRestRemaining((v) => Math.max(0, (v ?? 0) - 15))
+                  {
+                    setRestRemaining((v) => Math.max(0, (v ?? 0) - 15));
+                    setRestWindow((w) => (w ? { ...w, endsAt: w.endsAt - 15_000 } : w));
+                  }
                 }
                 style={styles.restCtlBtn}
               >
@@ -694,6 +719,9 @@ export function ActiveWorkoutScreen({
                 onPress={() => {
                   setRestRemaining((v) => (v ?? 0) + 15);
                   setRestTotal((v) => v + 15);
+                  setRestWindow((w) =>
+                    w ? { endsAt: w.endsAt + 15_000, seconds: w.seconds + 15 } : w,
+                  );
                 }}
                 style={styles.restCtlBtn}
               >

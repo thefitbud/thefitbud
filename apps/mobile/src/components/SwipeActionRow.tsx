@@ -1,49 +1,44 @@
 import { useRef, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Check } from "lucide-react-native";
 import { Text } from "./Text";
 import { Swipeable } from "react-native-gesture-handler";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { colors, semanticColors, spacing } from "@fitbud/ui-mobile";
 
 type Props = {
   children: ReactNode;
   onMarkReviewed: () => void;
-  onNudge: () => void;
   markLabel?: string;
-  nudgeLabel?: string;
 };
 
+/**
+ * Swipe left to Mark reviewed (v3 Needs you). Opening the right action
+ * commits; the revealed button is a fallback tap target.
+ */
 export function SwipeActionRow({
   children,
   onMarkReviewed,
-  onNudge,
   markLabel = "Mark reviewed",
-  nudgeLabel = "Nudge",
 }: Props) {
   const swipeRef = useRef<Swipeable>(null);
+  const committed = useRef(false);
 
-  const renderLeft = () => (
-    <Pressable
-      accessibilityRole="button"
-      style={styles.leftAction}
-      onPress={() => {
-        swipeRef.current?.close();
-        onMarkReviewed();
-      }}
-    >
-      <Text style={styles.leftActionText}>{markLabel}</Text>
-    </Pressable>
-  );
+  function commitMarkReviewed() {
+    if (committed.current) return;
+    committed.current = true;
+    swipeRef.current?.close();
+    onMarkReviewed();
+  }
 
   const renderRight = () => (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={markLabel}
       style={styles.rightAction}
-      onPress={() => {
-        swipeRef.current?.close();
-        onNudge();
-      }}
+      onPress={commitMarkReviewed}
     >
-      <Text style={styles.rightActionText}>{nudgeLabel}</Text>
+      <Check color={colors.white} size={22} strokeWidth={2.4} />
+      <Text style={styles.rightActionText}>{markLabel}</Text>
     </Pressable>
   );
 
@@ -56,42 +51,34 @@ export function SwipeActionRow({
       ref={swipeRef}
       friction={2}
       overshootFriction={8}
-      renderLeftActions={renderLeft}
+      rightThreshold={40}
       renderRightActions={renderRight}
+      onSwipeableOpen={(direction) => {
+        if (direction === "right") commitMarkReviewed();
+      }}
+      onSwipeableClose={() => {
+        committed.current = false;
+      }}
     >
       {children}
     </Swipeable>
   );
 }
 
-const ACTION_WIDTH = 112;
+const ACTION_WIDTH = 132;
 
 const styles = StyleSheet.create({
-  leftAction: {
-    alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    justifyContent: "center",
-    marginVertical: spacing.xs,
-    width: ACTION_WIDTH,
-  },
-  leftActionText: {
-    color: colors.indigo,
-    fontSize: 13,
-    fontWeight: "600",
-    paddingHorizontal: spacing.sm,
-    textAlign: "center",
-  },
   rightAction: {
     alignItems: "center",
-    backgroundColor: colors.indigo,
+    backgroundColor: semanticColors.positive.text,
+    gap: 4,
     justifyContent: "center",
-    marginVertical: spacing.xs,
     width: ACTION_WIDTH,
   },
   rightActionText: {
     color: colors.white,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     paddingHorizontal: spacing.sm,
     textAlign: "center",
   },

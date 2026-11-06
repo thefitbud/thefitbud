@@ -8,7 +8,14 @@ import {
   runCommandSync,
 } from "../../api/scripts/lib/run-command.ts";
 
-const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
+// FITBUD_API_PORT moves the e2e API off 8787 (e.g. when a dev API already runs
+// there). The URL is exported so the specs and the Vite proxy use the same API.
+const API_PORT = process.env.FITBUD_API_PORT ?? "8787";
+const API = process.env.FITBUD_API_URL ?? `http://127.0.0.1:${API_PORT}`;
+process.env.FITBUD_API_URL = API;
+// A second wrangler also needs its own inspector port (default 9229 is taken by a dev API).
+const inspectorArgs =
+  API_PORT === "8787" ? [] : ["--inspector-port", String(Number(API_PORT) + 1000)];
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -70,34 +77,42 @@ async function waitForLogin(maxAttempts = 90): Promise<void> {
 }
 
 function stopApiProcesses() {
+  // On the default port, keep the old behaviour (kill every local wrangler/workerd).
+  // On any other port, only kill what listens there, so a dev API on 8787 survives.
+  const killAll = API_PORT === "8787";
   if (process.platform === "win32") {
     spawnSync(
       "powershell",
       [
         "-NoProfile",
         "-Command",
-        "Get-NetTCPConnection -LocalPort 8787 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; taskkill /F /IM workerd.exe 2>$null; Start-Sleep -Seconds 2",
+        `Get-NetTCPConnection -LocalPort ${API_PORT} -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; ${killAll ? "taskkill /F /IM workerd.exe 2>$null; " : ""}Start-Sleep -Seconds 2`,
       ],
       { stdio: "ignore" },
     );
     return;
   }
+  const killPort = `for pid in $(lsof -tiTCP:${API_PORT} -sTCP:LISTEN 2>/dev/null); do kill -9 $pid 2>/dev/null || true; done`;
   spawnSync(
     "bash",
     [
       "-c",
       [
-        "for pid in $(lsof -tiTCP:8787 -sTCP:LISTEN 2>/dev/null); do kill -9 $pid 2>/dev/null || true; done",
-        "pkill -9 -f 'apps/api.*wrangler' 2>/dev/null || true",
-        "pkill -9 -f 'wrangler.dev.src/index.ts' 2>/dev/null || true",
-        "pkill -9 -f 'wrangler.js.dev' 2>/dev/null || true",
-        "pkill -9 -f 'wrangler/bin/wrangler.js' 2>/dev/null || true",
-        "pkill -9 -f 'wrangler-dist/cli.js.dev' 2>/dev/null || true",
-        "pkill -9 -f '@cloudflare/workerd' 2>/dev/null || true",
-        "pkill -9 -f 'workerd serve' 2>/dev/null || true",
-        "fuser -k 8787/tcp 2>/dev/null || true",
+        killPort,
+        ...(killAll
+          ? [
+              "pkill -9 -f 'apps/api.*wrangler' 2>/dev/null || true",
+              "pkill -9 -f 'wrangler.dev.src/index.ts' 2>/dev/null || true",
+              "pkill -9 -f 'wrangler.js.dev' 2>/dev/null || true",
+              "pkill -9 -f 'wrangler/bin/wrangler.js' 2>/dev/null || true",
+              "pkill -9 -f 'wrangler-dist/cli.js.dev' 2>/dev/null || true",
+              "pkill -9 -f '@cloudflare/workerd' 2>/dev/null || true",
+              "pkill -9 -f 'workerd serve' 2>/dev/null || true",
+            ]
+          : []),
+        `fuser -k ${API_PORT}/tcp 2>/dev/null || true`,
         "sleep 3",
-        "for pid in $(lsof -tiTCP:8787 -sTCP:LISTEN 2>/dev/null); do kill -9 $pid 2>/dev/null || true; done",
+        killPort,
         "sleep 1",
       ].join("; "),
     ],
@@ -122,7 +137,8 @@ function startApiDevServer() {
     "--ip",
     "127.0.0.1",
     "--port",
-    "8787",
+    API_PORT,
+    ...inspectorArgs,
   ];
   const logFd = openSync(e2eLog, "a");
   const child = spawn("pnpm", wranglerArgs, {
@@ -157,7 +173,7 @@ export default async function globalSetup() {
       /* ignore */
     }
     execCommandSync(
-      `nohup pnpm exec wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 127.0.0.1 --port 8787 > ${e2eLog} 2>&1 &`,
+      `nohup pnpm exec wrangler dev src/index.ts --local --persist-to .wrangler/state --ip 127.0.0.1 --port ${API_PORT} ${inspectorArgs.join(" ")} > ${e2eLog} 2>&1 &`,
       { cwd: API_ROOT },
     );
   }

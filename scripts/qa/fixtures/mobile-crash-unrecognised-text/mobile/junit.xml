@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="mobile" tests="3" failures="1" time="80.300">
+<testsuite name="mobile" tests="3" failures="1" skipped="0" timestamp="2026-11-03T20:30:12" time="80.300">
+  <testcase name="trainee-today" classname="mobile" time="41.200"/>
+  <testcase name="trainer-home" classname="mobile" time="9.000"><failure message="Failed to run subflow ../common/assert-no-crash.yaml">Failed to run subflow ../common/assert-no-crash.yaml</failure></testcase>
+  <testcase name="trainer-client-status" classname="mobile" time="30.100"/>
+</testsuite>
+</testsuites>

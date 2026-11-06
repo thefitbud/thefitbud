@@ -34,11 +34,11 @@ import {
   users,
 } from "../db/schema";
 import {
-  mapDeviceToken,
   mapNotification,
   mapNotificationPreferences,
   mapReminderRule,
 } from "../domain/mappers";
+import { presentNotifications } from "../domain/notification-client-names.js";
 import {
   parseTrainerCategoriesJson,
   serializeTrainerCategories,
@@ -54,6 +54,7 @@ import {
 import { deriveReminderStatus } from "../domain/reminder-status.js";
 import { createId, nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   optionalAuthMiddleware,
@@ -69,6 +70,26 @@ export const notificationRoutes = new Hono<{
 }>();
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * Device-token row → contract shape. Local to these routes because the shared
+ * `mapDeviceToken` in `domain/mappers.ts` still types `provider` as `"fcm"`
+ * only and that file is outside X4b's `files_owned` (D-W3-2 added `"expo"`).
+ */
+function mapDeviceTokenRow(row: typeof deviceTokens.$inferSelect) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    platform: row.platform,
+    provider: row.provider,
+    status: row.status,
+    token: row.token,
+    installationId: row.installationId,
+    lastSeenAt: row.lastSeenAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
 
 function reminderQueueFromEnv(env: Env): ReminderQueue | null {
   if (!env.REMINDER_QUEUE) return null;
@@ -124,6 +145,23 @@ async function ensurePreferences(db: Db, userId: string, now: string) {
   return created[0]!;
 }
 
+/**
+ * Sentinel value that frees a unique index on `device_tokens` without deleting
+ * the row. X4b parks a superseded `installationId` this way; D-W3-9 parks a
+ * released token.
+ *
+ * It carries the row id so a parked value can be traced back, plus a fresh
+ * random id so every park is a distinct value. The random part is what makes
+ * the write safe, not the prefix: `token` accepts any string of 8 to 4096
+ * characters (`registerDeviceTokenRequestSchema`), so a client is free to post
+ * `revoked:<something>` itself. Without it, parking a row whose token already
+ * equals its own sentinel would be a no-op, the row would keep the token, and
+ * the insert that follows would hit `device_tokens_token_uidx`.
+ */
+function revokedSentinel(rowId: string) {
+  return `revoked:${rowId}:${createId()}`;
+}
+
 notificationRoutes.post(
   "/device-tokens",
   operation({
@@ -153,26 +191,95 @@ notificationRoutes.post(
 
     const db = createDb(c.env.DB);
     const now = nowIso();
-    const existingByToken = await db
+    const tokenRows = await db
       .select()
       .from(deviceTokens)
       .where(eq(deviceTokens.token, parsed.data.token))
       .limit(1);
 
-    if (existingByToken[0] && existingByToken[0].userId !== actor.userId) {
-      return fail(
-        c,
-        403,
-        "DEVICE_TOKEN_OWNED",
-        "This device token is registered to another user.",
-      );
-    }
-
-    if (existingByToken[0]) {
-      const row = existingByToken[0];
+    // D-W3-9: an Expo push token identifies the installation, not the person,
+    // so every FitBud user of one phone reports the same token (in
+    // AUTH_MODE=test the token and the installation id are constants). A
+    // signed-in user registering a token that currently belongs to someone
+    // else means that other user has signed out on this device: always
+    // reassign the token, whether their row is active or revoked. This route
+    // never answers 403 DEVICE_TOKEN_OWNED.
+    const foreignRow =
+      tokenRows[0] && tokenRows[0].userId !== actor.userId
+        ? tokenRows[0]
+        : null;
+    if (foreignRow) {
+      // Release the token's unique index without deleting the row:
+      // `notification_deliveries.device_token_id` references device_tokens
+      // with no ON DELETE clause, so a hard delete would raise a foreign-key
+      // error and destroy the delivery history the receipts job reads. Park
+      // the token on a sentinel and revoke the row. A revoked row is inert:
+      // the sender selects `status = "active"` (domain/reminders.ts), the
+      // receipts job updates by id and `status = "active"`, and responsiveness
+      // reads only the status. The previous user stops getting pushes here.
       await db
         .update(deviceTokens)
         .set({
+          status: "revoked",
+          token: revokedSentinel(foreignRow.id),
+          updatedAt: now,
+        })
+        .where(eq(deviceTokens.id, foreignRow.id));
+    }
+
+    // Once a foreign row has released the token, no row holds it any more, so
+    // the rest of the flow is the plain "token new to this user" path.
+    const existingByToken = foreignRow ? [] : tokenRows;
+
+    const existingByInstallation = await db
+      .select()
+      .from(deviceTokens)
+      .where(
+        and(
+          eq(deviceTokens.userId, actor.userId),
+          eq(deviceTokens.installationId, parsed.data.installationId),
+        ),
+      )
+      .limit(1);
+
+    const ownedByToken = existingByToken[0];
+    const ownedByInstallation = existingByInstallation[0];
+    // The same token reported from another installation of this user (app
+    // reinstalled, stable Expo token): two different rows hold the two unique
+    // keys we need.
+    const movedInstallation =
+      ownedByToken &&
+      ownedByInstallation &&
+      ownedByToken.id !== ownedByInstallation.id
+        ? ownedByInstallation
+        : null;
+    // One row per (user, installation): re-registering replaces the stored
+    // token. On a move we keep the row that already holds this token, because
+    // `notification_deliveries.device_token_id` references it.
+    const target = movedInstallation
+      ? ownedByToken
+      : (ownedByInstallation ?? ownedByToken);
+
+    if (target) {
+      if (movedInstallation) {
+        // Free the (user, installation) unique key without deleting a row:
+        // deliveries reference device tokens with no ON DELETE clause, so a
+        // hard delete would fail and lose the delivery history. The superseded
+        // row is revoked and parked on a sentinel installation id; revoked rows
+        // are never sent to (domain/reminders.ts selects status "active").
+        await db
+          .update(deviceTokens)
+          .set({
+            status: "revoked",
+            installationId: `revoked:${movedInstallation.id}`,
+            updatedAt: now,
+          })
+          .where(eq(deviceTokens.id, movedInstallation.id));
+      }
+      await db
+        .update(deviceTokens)
+        .set({
+          token: parsed.data.token,
           platform: parsed.data.platform,
           provider: parsed.data.provider,
           installationId: parsed.data.installationId,
@@ -180,16 +287,16 @@ notificationRoutes.post(
           lastSeenAt: now,
           updatedAt: now,
         })
-        .where(eq(deviceTokens.id, row.id));
+        .where(eq(deviceTokens.id, target.id));
       const updated = await db
         .select()
         .from(deviceTokens)
-        .where(eq(deviceTokens.id, row.id))
+        .where(eq(deviceTokens.id, target.id))
         .limit(1);
       return ok(
         c,
         registerDeviceTokenResponseSchema.parse({
-          deviceToken: mapDeviceToken(updated[0]!),
+          deviceToken: mapDeviceTokenRow(updated[0]!),
         }),
       );
     }
@@ -215,7 +322,7 @@ notificationRoutes.post(
     return ok(
       c,
       registerDeviceTokenResponseSchema.parse({
-        deviceToken: mapDeviceToken(created[0]!),
+        deviceToken: mapDeviceTokenRow(created[0]!),
       }),
     );
   },
@@ -270,9 +377,18 @@ notificationRoutes.delete(
     }
 
     for (const row of rows) {
+      // Signing out releases the token as well as revoking the row, so the
+      // unique index `device_tokens_token_uidx` is not held by a signed-out
+      // user: the next person to sign in on this device registers the same
+      // Expo token on a row of their own (D-W3-9). The row itself is kept --
+      // never deleted -- so its delivery history stays attributed to this user.
       await db
         .update(deviceTokens)
-        .set({ status: "revoked", updatedAt: now })
+        .set({
+          status: "revoked",
+          token: revokedSentinel(row.id),
+          updatedAt: now,
+        })
         .where(eq(deviceTokens.id, row.id));
     }
 
@@ -603,7 +719,7 @@ notificationRoutes.get(
     return ok(
       c,
       notificationListResponseSchema.parse({
-        items: rows.map(mapNotification),
+        items: await presentNotifications(db, rows),
         nextCursor: null,
       }),
     );
@@ -650,7 +766,8 @@ notificationRoutes.post(
     const result = await evaluateAndEnqueueReminders(db, {
       now: parsed.data.now,
       queue,
-      pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+      pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+      expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
       deliverInline: !queue,
     });
     return ok(c, evaluateRemindersResponseSchema.parse(result));
@@ -683,7 +800,11 @@ notificationRoutes.post(
     if (!updated) {
       return fail(c, 404, "NOTIFICATION_NOT_FOUND", "Notification not found.");
     }
-    return ok(c, notificationSchema.parse(mapNotification(updated)));
+    const [presented] = await presentNotifications(db, [updated]);
+    if (!presented) {
+      return fail(c, 404, "NOTIFICATION_NOT_FOUND", "Notification not found.");
+    }
+    return ok(c, notificationSchema.parse(presented));
   },
 );
 
@@ -840,7 +961,8 @@ notificationRoutes.post(
       activityId: parsed.data.activityId,
       now: c.env.AUTH_MODE === "test" ? parsed.data.now : undefined,
       queue: reminderQueueFromEnv(c.env),
-      pushProviderMode: c.env.PUSH_PROVIDER_MODE === "fcm" ? "fcm" : "test",
+      pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+      expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
       deliverInline: !c.env.REMINDER_QUEUE,
     });
     if (!result.ok) {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="mobile" tests="4" failures="0" time="157.600">
+<testsuite name="mobile" tests="4" failures="0" skipped="0" timestamp="2026-11-03T20:30:12" time="157.600">
+  <testcase name="trainee-today" classname="mobile" time="41.200"/>
+  <testcase name="trainee-workout-log" classname="mobile" time="63.800"/>
+  <testcase name="trainer-home" classname="mobile" time="22.500"/>
+  <testcase name="trainer-client-status" cl

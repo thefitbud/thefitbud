@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1225–1270. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-09 -->
 ### TW-09 · Client overview
@@ -25,8 +25,6 @@
 1. **Purpose.** A one-screen "how is this client doing and what's next".
 2. **Entry.** Roster, Home, search.
 3. **Legacy (do not keep).** `shots/d1440_10_client1_overview.png`, `m390_10_client1_overview.png`. Equal-weight tiles. Raw ISO text "2026-10-07T14:56:05.25Z" and "Window ends 14/10/2026, 00:00:00".
-
-   ![Figma overview (left) vs implemented (right)](../img/sbs_overview.jpg){.shot}
 
 4. **Gaps to close.** No visual priority. Raw timestamps. No weekly consistency. No reminder responsiveness. No asked-coach items. No trainer note.
 5. **Target design.** A two-column grid at ≥1024 (8/4), one column below that.
@@ -68,29 +66,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY + REFERENCE (side by side): left = Figma/Stitch reference for density and hierarchy only (its banned elements, per 00-foundations.md §1.5, must not be built); right = old implemented UI, LEGACY: do not copy** (embedded in the guide section): `sbs_overview.jpg`
-
-  ![sbs_overview.jpg](../img/sbs_overview.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_d1440_10_client1_overview.jpg`
-
-  ![impl_d1440_10_client1_overview.jpg](../img/impl_d1440_10_client1_overview.jpg)
-
-- **LEGACY: shows old UI, do not copy** (cited by the section or by guide Appendix D): `impl_m390_10_client1_overview.jpg`
-
-  ![impl_m390_10_client1_overview.jpg](../img/impl_m390_10_client1_overview.jpg)
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (cited by the section or by guide Appendix D): `figma_trainer_05_client_overview.jpg`
-
-  ![figma_trainer_05_client_overview.jpg](../img/figma_trainer_05_client_overview.jpg)
-
-- **LEGACY + REFERENCE (side by side): left = Figma/Stitch reference for density and hierarchy only (its banned elements, per 00-foundations.md §1.5, must not be built); right = old implemented UI, LEGACY: do not copy** (cited by the section or by guide Appendix D): `sbs_client_detail_stitch.jpg`
-
-  ![sbs_client_detail_stitch.jpg](../img/sbs_client_detail_stitch.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
@@ -131,3 +109,11 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **1440×900** (desktop, Chromium). Save it as `docs/spec/evidence/TW-09.png`. This screen has mobile-web rules, so also save **390×844** as `docs/spec/evidence/TW-09-390.png`. Save extra states as `docs/spec/evidence/TW-09--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+**This week navigation** (mockups 03, 03b; iPad 192):
+- Card header: title ("This week" / "Week 5"), date range, ‹ previous week and › next week (› disabled on the current week), and a *This week* pill when another week is shown. Week 1 is the coaching start; ‹ is disabled before it.
+- Day selection: tapping a day column selects it (outlined). The nutrition line under the counts shows the **selected day** ("Wed 7 Oct · 3 of 4 meals" with kcal and macros) and has its own ‹ › to step one day; it crosses week boundaries and moves the strip.
+- Counts (workouts done, meals logged, check-in) always describe the **selected week**. Default = current week, today selected. Read-only; other cards (Needs attention, Plan, Notes) stay current.

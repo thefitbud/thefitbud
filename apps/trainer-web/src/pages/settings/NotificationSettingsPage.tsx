@@ -36,6 +36,7 @@ export function NotificationSettingsPage() {
   const persistTimer = useRef<number | null>(null);
   const skipPersist = useRef(true);
   const saveGen = useRef(0);
+  const loadGen = useRef(0);
 
   const load = useCallback(async () => {
     if (!online) {
@@ -47,8 +48,13 @@ export function NotificationSettingsPage() {
       return;
     }
     setLoading(true);
+    const gen = ++loadGen.current;
+    const savesAtStart = saveGen.current;
     try {
       const result = await apiClient.getNotificationPreferences();
+      // A newer load or a save since this request started wins; applying this
+      // response would revert the trainer's toggle and persist the old value.
+      if (gen !== loadGen.current || saveGen.current !== savesAtStart) return;
       skipPersist.current = true;
       if (typeof result.pushEnabled === "boolean") {
         setPushEnabled(result.pushEnabled);
@@ -60,6 +66,7 @@ export function NotificationSettingsPage() {
       }
       setError(null);
     } catch (err) {
+      if (gen !== loadGen.current) return;
       const apiErr = err instanceof ApiClientError ? err : null;
       setError({
         message:
@@ -72,10 +79,12 @@ export function NotificationSettingsPage() {
         requestId: apiErr?.requestId ?? null,
       });
     } finally {
-      setLoading(false);
-      window.setTimeout(() => {
-        skipPersist.current = false;
-      }, 0);
+      if (gen === loadGen.current) {
+        setLoading(false);
+        window.setTimeout(() => {
+          skipPersist.current = false;
+        }, 0);
+      }
     }
   }, [online]);
 

@@ -71,4 +71,43 @@ describe("notificationRowTitle", () => {
       title: "Rahul has a note for you",
     });
   });
+
+  it("names the client on trainer inbox and push copy", () => {
+    const cases = [
+      ["trainer_ask_coach", "Priya Shah asked on WhatsApp"],
+      ["trainer_checkin_submitted", "Priya Shah sent their check-in"],
+      ["trainer_intake_submitted", "Priya Shah finished their intake"],
+      ["trainer_renewal", "Priya Shah's renewal is due"],
+      ["trainer_meal_times_changed", "Priya Shah changed meal times"],
+    ] as const;
+    for (const [type, title] of cases) {
+      const row = {
+        ...base,
+        type,
+        notificationType: type,
+        clientDisplayName: "Priya Shah",
+      };
+      expect(notificationRowTitle(row)).toBe(title);
+      expect(notificationRowTitle(row)).not.toMatch(/_/);
+      expect(notificationRowTitle(row)).not.toMatch(/^Client\b/);
+      expect(notificationRowBody(row)).not.toMatch(/_/);
+      expect(
+        notificationRowTitle(
+          { ...row, clientDisplayName: undefined },
+          { clientName: "Priya Shah" },
+        ),
+      ).toBe(title);
+    }
+  });
+
+  it("does not show a raw enum when the client name is missing", () => {
+    const row = {
+      ...base,
+      type: "trainer_meal_times_changed" as const,
+      notificationType: "trainer_meal_times_changed" as const,
+      clientDisplayName: "trainer_meal_times_changed",
+    };
+    expect(notificationRowTitle(row)).toBe("Meal times changed");
+    expect(notificationRowTitle(row)).not.toContain("_");
+  });
 });

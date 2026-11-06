@@ -1645,7 +1645,13 @@ body.is-offline .button-destructive {
   align-items: center;
   justify-content: center;
   position: relative;
-  padding: 2rem 1.5rem 4.5rem;
+  /* One source for the bottom padding and the legal-row pull-up (CU8).
+     17/72 is the BT3f remainder: 4.5rem − 55px = 17px at a 16px root, which
+     is the offset that places the legal row on ds5-web-signin-footer.png.
+     Both stay in rem so a larger root font cannot drift them apart. */
+  --auth-formside-pad-bottom: 4.5rem;
+  --auth-legal-bottom: calc(var(--auth-formside-pad-bottom) * 17 / 72);
+  padding: 2rem 1.5rem var(--auth-formside-pad-bottom);
 }
 
 .auth-fcard {
@@ -1791,13 +1797,18 @@ body.is-offline .button-destructive {
 }
 
 .auth-help {
-  position: absolute;
-  bottom: 32px;
-  left: 0;
-  right: 0;
+  /* Normal flow so the legal footer below it never overlaps (D-W3-15). */
+  margin: 0;
   text-align: center;
   font-size: 13px;
   color: var(--ink-500, #5b616b);
+}
+
+/* 44px touch target for the help link (product rule), without moving the line. */
+.auth-help a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 .auth-alt-links {

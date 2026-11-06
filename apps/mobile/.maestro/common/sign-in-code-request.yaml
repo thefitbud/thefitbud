@@ -1,0 +1,35 @@
+# Subflow (QT3): from a freshly launched app to the code-entry step of the
+# "Sign in with a code" screen, with the code field still EMPTY.
+#
+# Input (env, passed by the caller with runFlow.env):
+#   SIGN_IN_EMAIL  a qa+...@thefitbud.com address, from the runner
+#
+# Takes no screenshot. Callers that want one (auth/sign-in-code.yaml) take it
+# AFTER this subflow, while the code field is still empty (D-QA1-14).
+#
+# The email is typed on the password screen and carried over: AuthScreen holds
+# one `identifier` state for both modes, so the code screen opens pre-filled.
+# Maestro parses every file reached by `runFlow:` as a flow in its own right, so
+# this subflow needs a config section and the `---` separator even though it only
+# ever runs from a caller, and `appId` in that section is required rather than
+# inherited (CU18; the full reasoning is in common/assert-no-crash.yaml). The
+# value is inert for a subflow -- the calling flow's config governs -- and no
+# `tags:` are set, so this file is never collected as a top-level flow.
+appId: com.thefitbud.mobile.staging
+---
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 30000
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${SIGN_IN_EMAIL}
+# Dismiss the keyboard by tapping inert text (works on iOS and Android; Maestro's
+# hideKeyboard cannot dismiss the iOS keyboard here, Z5-5 #241).
+- tapOn: "Your coach's plan for today is waiting\\."
+- tapOn: "Sign in with a code instead"
+- extendedWaitUntil:
+    visible: "Send code"
+    timeout: 10000
+- tapOn: "Send code"
+- extendedWaitUntil:
+    visible: "6-digit code"
+    timeout: 20000

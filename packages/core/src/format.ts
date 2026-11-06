@@ -3,6 +3,7 @@
  * Civil dates: "Thu 15 Oct" (no comma); year only when not current year.
  * Times: "7:30 am" lowercase. Relative times never go negative.
  */
+import { zonedDateTimeFormat } from "./zone.js";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const MONTHS = [
@@ -84,7 +85,7 @@ export function formatClockTime(
   const date =
     typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
   if (Number.isNaN(date.getTime())) return "";
-  const formatter = new Intl.DateTimeFormat("en-IN", {
+  const formatter = zonedDateTimeFormat("en-IN", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
@@ -124,7 +125,7 @@ export function formatInstant(
 ): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  const parts = zonedDateTimeFormat("en-GB", {
     timeZone,
     day: "numeric",
     month: "short",
@@ -153,7 +154,7 @@ export function formatInstant(
 }
 
 function zoneAbbreviation(at: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const parts = zonedDateTimeFormat("en-US", {
     timeZone,
     timeZoneName: "short",
     hour: "2-digit",
@@ -172,7 +173,7 @@ export function formatRelative(
   const then = Date.parse(iso);
   const nowMs = typeof now === "string" ? Date.parse(now) : now.getTime();
   if (Number.isNaN(then) || Number.isNaN(nowMs)) return "";
-  let deltaSec = Math.round((nowMs - then) / 1000);
+  const deltaSec = Math.round((nowMs - then) / 1000);
   if (deltaSec < 0) {
     // Future
     const ahead = -deltaSec;
@@ -207,7 +208,7 @@ export function formatWindow(
 ): string {
   const end = new Date(endIso);
   if (Number.isNaN(end.getTime())) return "";
-  const civil = new Intl.DateTimeFormat("en-CA", {
+  const civil = zonedDateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
     month: "2-digit",
@@ -301,7 +302,7 @@ export function formatTimeDiff(
 }
 
 function timezoneOffsetMinutes(timeZone: string, at: Date): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const parts = zonedDateTimeFormat("en-US", {
     timeZone,
     timeZoneName: "shortOffset",
     hour: "2-digit",

@@ -9,11 +9,26 @@ build
 !.env.example
 coverage
 *.log
+# QA fixtures are inputs, not run output. *.log hid them from `git add`
+# (QT8, QA1; three CU19 ios fixtures needed `git add -f`).
+!scripts/qa/fixtures/**/*.log
 .DS_Store
 apps/mobile/.expo
 apps/mobile/dist
 apps/mobile/ios
 apps/mobile/android
+# Written into the target directory on every expo prebuild, per app variant:
+# the App Group constant (plugins/withLiveActivity.js) and the entitlements
+# file (@bacons/apple-targets). A target's own Info.plist stays tracked.
+apps/mobile/targets/*/GeneratedAppGroup.swift
+apps/mobile/targets/*/generated.entitlements
 apps/mobile/.kotlin
 apps/trainer-web/dist
 apps/api/.wrangler
+# Generated QA seed and reset SQL (apps/api/scripts/qa-seed.ts, qa-reset.ts)
+apps/api/.qa-seed/
+.captures/
+# Local QA runs (scripts/qa/summarize.mjs --in/--out, qa.yml's upload allowlist)
+qa-results/
+qa-report/
+qa-upload/

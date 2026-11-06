@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { signIn } from "./support/session";
 
 const API = process.env.FITBUD_API_URL ?? "http://127.0.0.1:8787";
 const EMAIL = "rahul.coach@demo.fitbud.test";
-const PASSWORD = "FitBud-demo-2026";
 
 function unwrap<T>(json: { data?: T } & T): T {
   return (json.data ?? json) as T;
@@ -16,14 +16,6 @@ async function fetchDevMailCode(to: string): Promise<string> {
   const match = /(\d{6})/.exec(body.items?.[0]?.subject ?? "");
   if (!match) throw new Error("no OTP in dev mail subject");
   return match[1];
-}
-
-async function signInWithPassword(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL("/", { timeout: 30_000 });
 }
 
 async function apiToken(page: Page): Promise<string> {
@@ -56,18 +48,19 @@ test("email OTP sign-in via dev mail sink", async ({ page }) => {
   await page.goto("/sign-in/code");
   await page.getByRole("textbox", { name: /mobile number or email/i }).fill(EMAIL);
   await page.getByRole("button", { name: /^send code$/i }).click();
-  await page.getByRole("textbox", { name: /6-digit code/i }).waitFor({
-    state: "visible",
-    timeout: 20_000,
-  });
+  // The code field is six single-digit boxes in a group named "6-digit code".
+  const boxes = page.getByRole("group", { name: /6-digit code/i }).getByRole("textbox");
+  await expect(boxes).toHaveCount(6, { timeout: 20_000 });
   const code = await fetchDevMailCode(EMAIL);
-  await page.getByRole("textbox", { name: /6-digit code/i }).fill(code);
+  for (let i = 0; i < 6; i += 1) {
+    await boxes.nth(i).fill(code[i]!);
+  }
   await page.getByRole("button", { name: /verify and sign in/i }).click();
   await expect(page).toHaveURL("/");
 });
 
-test("home acknowledge then resolve", async ({ page }) => {
-  await signInWithPassword(page);
+test("home mark reviewed then resolve", async ({ page }) => {
+  await signIn(page);
   const token = await apiToken(page);
   const attention = unwrap<{ groups: Array<{ items: Array<{ id: string; status: string }> }> }>(
     await fetch(`${API}/exceptions/attention?groupBy=relationship`, {
@@ -79,16 +72,34 @@ test("home acknowledge then resolve", async ({ page }) => {
     .find((i) => i.status === "active" || i.status === "detected");
   expect(active?.id).toBeTruthy();
   await page.goto(`/?exception=${active!.id}`);
-  await page.getByRole("button", { name: /acknowledge/i }).click();
+  // v3 panel (frame 02): "Mark reviewed" replaced Acknowledge.
+  await page
+    .getByTestId("screen-TW-05")
+    .getByRole("button", { name: /^mark reviewed$/i })
+    .click();
   await page
     .getByTestId("screen-TW-05")
     .getByRole("button", { name: /^resolve$/i })
     .click();
-  await expect(page.getByTestId("screen-TW-05")).not.toBeVisible({ timeout: 15_000 });
+  // Frame 02 (resolved): the panel stays open with a resolved banner and a
+  // short Undo window; the resolve commits once Undo is gone.
+  const banner = page.getByTestId("exception-resolve-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner.getByRole("button", { name: /^undo$/i })).toBeHidden({
+    timeout: 15_000,
+  });
+  await expect
+    .poll(async () => {
+      const res = await fetch(`${API}/exceptions/${active!.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return unwrap<{ status?: string }>(await res.json()).status;
+    })
+    .toBe("resolved");
 });
 
 test("apply a workout template from the library", async ({ page }) => {
-  await signInWithPassword(page);
+  await signIn(page);
   const aarav = await findClient(page, "aarav");
   const token = await apiToken(page);
   const templates = unwrap<{ items: Array<{ id: string; title: string }> }>(
@@ -125,7 +136,7 @@ test("apply a workout template from the library", async ({ page }) => {
 });
 
 test("share a client-visible note", async ({ page }) => {
-  await signInWithPassword(page);
+  await signIn(page);
   const rohan = await findClient(page, "rohan");
   await page.goto(`/clients/${rohan.relationshipId}/overview`);
   await page.getByTestId("screen-TW-09").waitFor();
@@ -146,7 +157,7 @@ test("share a client-visible note", async ({ page }) => {
 });
 
 test("end coaching then reactivate", async ({ page }) => {
-  await signInWithPassword(page);
+  await signIn(page);
   const farhan = await findClient(page, "farhan");
   const token = await apiToken(page);
   const endRes = await fetch(`${API}/relationships/${farhan.relationshipId}/end`, {

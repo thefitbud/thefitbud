@@ -13,6 +13,7 @@ import { nowIso } from "../lib/crypto.js";
 import { fail, ok } from "../lib/envelope.js";
 import { listMergedMealTimeSlots } from "../domain/meal-time-slots.js";
 import { applyMealTimeOverrideUpdate } from "../domain/meal-times-update.js";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { operation } from "../openapi/document.js";
 import {
@@ -175,11 +176,18 @@ meMealTimeRoutes.put(
           set: { time: override.time, updatedAt: now },
         });
     }
-    await applyMealTimeOverrideUpdate(db, {
-      relationshipId: rel.id,
-      trainerUserId: rel.trainerUserId,
-      now,
-    });
+    await applyMealTimeOverrideUpdate(
+      db,
+      {
+        relationshipId: rel.id,
+        trainerUserId: rel.trainerUserId,
+        now,
+      },
+      {
+        pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+      },
+    );
     const merged = await listMergedMealTimeSlots(db, rel.id);
     return ok(c, mealTimesResponseSchema.parse(merged));
   },

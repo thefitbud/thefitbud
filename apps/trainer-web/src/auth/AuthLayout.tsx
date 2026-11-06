@@ -9,12 +9,15 @@ export function AuthLayout({
   children,
   screenTestId,
   showGlimpse = true,
+  footer,
 }: {
   title: string;
   lead?: string;
   children: ReactNode;
   screenTestId?: string;
   showGlimpse?: boolean;
+  /** Links-only footer rendered below the help line (D-W3-15). */
+  footer?: ReactNode;
 }) {
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
@@ -71,23 +74,67 @@ export function AuthLayout({
       </section>
 
       <section className="auth-formside">
-        <div className="auth-fcard">
-          <div className="auth-mark-tile" aria-hidden="true">
-            <BrandMark size={30} />
-          </div>
-          <h1 className="auth-form-title">{title}</h1>
-          {lead ? <p className="auth-lead">{lead}</p> : null}
-          {children}
-        </div>
-        <p className="auth-help">
-          Trouble signing in?{" "}
-          <a
-            className="link"
-            href={`mailto:${supportEmail}?subject=${encodeURIComponent("FitBud support · Trainer web · TW-01")}`}
+        {/* Column stack: card centred, then help line, then footer, all in normal flow (D-W3-15).
+            The negative bottom margin cancels .auth-formside's bottom padding
+            down to --auth-legal-bottom (the BT3f remainder that matches
+            ds5-web-signin-footer.png). Both values come from that custom
+            property, so the offset scales with the root font (CU8). */}
+        <div
+          className="auth-form-stack"
+          style={{
+            alignSelf: "stretch",
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            marginBottom:
+              "calc(var(--auth-legal-bottom) - var(--auth-formside-pad-bottom))",
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            Need help?
-          </a>
-        </p>
+            <div className="auth-fcard">
+              <div className="auth-mark-tile" aria-hidden="true">
+                <BrandMark size={30} />
+              </div>
+              <h1 className="auth-form-title">{title}</h1>
+              {lead ? <p className="auth-lead">{lead}</p> : null}
+              {children}
+            </div>
+          </div>
+          {/* Z5-16: 0.8125rem is 13px at the default root and follows the
+              user's browser font size. With the legal footer below, the
+              link's 44px target grows upward (text on its bottom edge, tight
+              line height), so the help row sits where
+              ds5-web-signin-footer.png puts it, just above the legal row,
+              without the two targets overlapping. Inline because .auth-help
+              is styled in styles.css, outside this task's files. */}
+          <p
+            className="auth-help"
+            style={
+              footer
+                ? { fontSize: "0.8125rem", lineHeight: 1 }
+                : { fontSize: "0.8125rem" }
+            }
+          >
+            Trouble signing in?{" "}
+            <a
+              className="link"
+              style={footer ? { alignItems: "flex-end" } : undefined}
+              href={`mailto:${supportEmail}?subject=${encodeURIComponent("FitBud support · Trainer web · TW-01")}`}
+            >
+              Need help?
+            </a>
+          </p>
+          {footer}
+        </div>
       </section>
     </main>
   );

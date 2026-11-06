@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 1590–1631. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TW-17 -->
 ### TW-17 · Activity
@@ -25,8 +25,6 @@
 1. **Purpose.** A day-by-day record of what was expected and what happened, plus nudges on specific unresolved items.
 2. **Entry.** Workspace tab, Overview "View all activity", exception source links, and `/go/meal/:id` and `/go/workout/:id` for trainers.
 3. **Legacy (do not keep).** `shots/d1440_10_client1_activity.png`. Server filters work. Some clients have no assignments because of the seed 500. A "generate assignments" button is exposed to the trainer.
-
-   ![Implemented activity](../img/impl_d1440_10_client1_activity.jpg){.shot}
 
 4. **Gaps to close.**
    - A manual "generate" button is a developer affordance. The rolling horizon should be automatic.
@@ -64,13 +62,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **LEGACY: shows old UI, do not copy** (embedded in the guide section): `impl_d1440_10_client1_activity.jpg`
-
-  ![impl_d1440_10_client1_activity.jpg](../img/impl_d1440_10_client1_activity.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 

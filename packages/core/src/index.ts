@@ -98,6 +98,16 @@ export {
   workoutWindowForLocalDate,
 } from "./timezone.js";
 
+export {
+  FALLBACK_DISPLAY_TIME_ZONE,
+  UnsupportedTimeZoneError,
+  clearTimeZoneResolutionCache,
+  deviceTimeZone,
+  resolveIntlTimeZone,
+  timeZoneCandidates,
+  zonedDateTimeFormat,
+} from "./zone.js";
+
 export { IST_TIME_ZONE, istDate, istInstantAt } from "./clock.js";
 export { greetingFor } from "./greeting.js";
 
@@ -170,9 +180,12 @@ export {
   ADHERENCE_EXCEPTION_SEVERITIES,
   ADHERENCE_OPEN_EXCEPTION_STATUSES,
   MVP_EXCEPTION_RULE_VERSION,
+  attentionReviewBucket,
   canAcknowledgeException,
   canActivateException,
   canResolveException,
+  canUndoAcknowledge,
+  restoredStatusAfterUndo,
   exceptionCountsTowardNeedsAttention,
   exceptionKey,
   filterNewExceptionCandidates,
@@ -189,6 +202,7 @@ export {
   workoutActivitySeverity,
   workoutAdherenceCandidate,
   type ActivitySeverity,
+  type AttentionReviewBucket,
   type ExceptionCandidate,
 } from "./exception.js";
 
@@ -322,6 +336,13 @@ export {
   sentenceCaseEnum,
   type LabelNamespace,
 } from "./labels.js";
+export {
+  clientDisplayLabel,
+  isTrainerClientNotificationType,
+  trainerNotificationCopy,
+  type TrainerClientNotificationType,
+} from "./notification-copy.js";
 export { routeForLinkKind, type LinkKind } from "./links.js";
 export { canLog, type LogDecision } from "./late-logging.js";
+export { TEST_OTP_IDENTIFIER_RE } from "./test-otp-identifier.js";
 export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";

@@ -14,15 +14,15 @@ export const DEMO_ANITA_PENDING_INVITE_TOKEN =
 
 export const DEMO_LIBRARY_FOOD_SLUGS = [
   "chapati-roti",
-  "poha",
+  "poha-cooked-dish",
   "idli",
   "sambar",
   "oatmeal-cooked-with-water",
   "scrambled-egg",
-  "safed-chana-curry-chole",
-  "afghani-chicken",
+  "kala-chana-curry",
+  "chicken-curry",
   "rice-boiled-parboiled",
-  "mint-and-peanut-raita",
+  "cucumber-raita",
 ] as const;
 
 export const DEMO_LIBRARY_EXERCISE_SLUGS = [
@@ -44,6 +44,8 @@ export type DemoLibraryFood = {
   slug: string;
   defaultServingId: string;
   item: FoodLibraryItem;
+  /** Servings the library flags plausible = 0 (e.g. odd INDB recipe portions). */
+  implausibleServingIds: string[];
 };
 
 export type DemoLibraryExercise = {
@@ -57,7 +59,7 @@ export const DEMO_DEVIATION_FOOD_SLUGS = [
   "butter-chicken",
   "naan",
   "vegetable-biryani",
-  "pav-bhaji",
+  "egg-curry-anda-curry",
   "plain-dosa",
   "vegetable-samosa",
   "mutton-biryani",
@@ -165,7 +167,7 @@ export function loadDemoLibraryIndex(
     const foodId = String(head[0]);
     const defaultServingId = String(head[2]);
     const servingRows = sqlite.exec(
-      `SELECT id, label, unit, conversion_scaled FROM food_library_servings
+      `SELECT id, label, unit, conversion_scaled, plausible FROM food_library_servings
        WHERE food_library_item_id = '${foodId.replace(/'/g, "''")}' ORDER BY sort_order`,
     );
     const servings = (servingRows[0]?.values ?? []).map((row) => ({
@@ -177,6 +179,9 @@ export function loadDemoLibraryIndex(
     if (servings.length === 0) {
       throw new Error(`Demo seed: food "${slug}" has no servings`);
     }
+    const implausibleServingIds = (servingRows[0]?.values ?? [])
+      .filter((row) => Number(row[4]) === 0)
+      .map((row) => String(row[0]));
     const item: FoodLibraryItem = {
       id: foodId,
       ownership: "global",
@@ -201,6 +206,7 @@ export function loadDemoLibraryIndex(
       slug,
       defaultServingId,
       item,
+      implausibleServingIds,
     };
   }
 
@@ -480,9 +486,9 @@ export function buildStandardPlanContent(
         photoRequired: false,
         required: true,
         items: [
-          food("afghani-chicken", 1),
+          food("chicken-curry", 1.5),
           food("rice-boiled-parboiled", 0.7),
-          food("safed-chana-curry-chole", 0.5),
+          food("kala-chana-curry", 0.5),
         ],
       },
       {
@@ -497,9 +503,9 @@ export function buildStandardPlanContent(
         photoRequired: false,
         required: true,
         items: [
-          food("afghani-chicken", 1),
+          food("chicken-curry", 1.5),
           food("chapati-roti", 2),
-          food("safed-chana-curry-chole", 1),
+          food("kala-chana-curry", 1),
         ],
       },
       {
@@ -513,7 +519,7 @@ export function buildStandardPlanContent(
         instructions: null,
         photoRequired: false,
         required: false,
-        items: [food("mint-and-peanut-raita", 1)],
+        items: [food("cucumber-raita", 1.5)],
       },
     ],
   };

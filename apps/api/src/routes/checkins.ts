@@ -83,7 +83,8 @@ import {
   notifyTraineeNoteShared,
   setTrainerNoteVisibility,
 } from "../domain/trainer-note-share.js";
-import { storeInboxNotification } from "../domain/inbox-notify.js";
+import { pushTrainerInboxEvent, storeInboxNotification } from "../domain/inbox-notify.js";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import {
   findIdempotencyRecord,
   saveIdempotencyRecord,
@@ -1633,7 +1634,10 @@ checkinRoutes.get(
 
     const config = await loadActiveCheckinSchedule(db, relationship.id);
 
-    await detectExceptionsForRelationship(db, relationship.id, now);
+    // Rule 5 (EC1b): reading an ended client's check-in must not detect.
+    if (relationship.status !== "ended") {
+      await detectExceptionsForRelationship(db, relationship.id, now);
+    }
     const activeExceptionRows = await listActiveExceptionsForRelationship(
       db,
       relationship.id,
@@ -2030,6 +2034,23 @@ checkinRoutes.post(
         mapCheckin(refreshed!.checkin, refreshed!.review, now),
       ),
     };
+    // Stored before the idempotency record so a crash in between cannot lose the event on retry:
+    // the dedupe key makes a re-store a no-op and `inserted: false` suppresses a second push.
+    // Trainer inbox event (D-W3-1). Recipient is the relationship's trainer, resolved server-side.
+    const storedTrainerEvent = await storeInboxNotification(db, {
+      recipientUserId: relationship.trainerUserId,
+      relationshipId: relationship.id,
+      notificationType: "trainer_checkin_submitted",
+      domainEntityId: loaded.checkin.id,
+      domainEntityType: "checkin",
+      dedupeKey: `checkin-submitted:${loaded.checkin.id}`,
+    });
+    if (storedTrainerEvent.inserted) {
+      await pushTrainerInboxEvent(db, storedTrainerEvent.notificationId, {
+        pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
+        expoAccessToken: c.env.EXPO_ACCESS_TOKEN,
+      });
+    }
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
       operation: SUBMIT_OPERATION,

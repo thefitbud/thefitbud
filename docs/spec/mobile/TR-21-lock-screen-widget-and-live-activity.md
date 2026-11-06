@@ -13,7 +13,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 3492–3520. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TR-21 -->
 ### TR-21 · Lock-screen widget and Live Activity
@@ -23,8 +23,6 @@
 1. **Purpose.** Glanceable "next up" and one-tap meal confirm without opening the app. A live rest timer during workouts.
 2. **Entry.** Home or lock screen.
 3. **Legacy (do not keep).** Figma `trainee_04_lockscreen_live_activity.png` (it includes "WhatsApp Live Sync" style claims, which are banned).
-
-   ![Figma lock screen / Live Activity (reference)](../img/figma_trainee_04_lockscreen_live_activity.jpg){.phone}
 
 4. **Gaps to close.** Not built. Needs native work.
 5. **Target design.**
@@ -49,17 +47,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (embedded in the guide section): `figma_trainee_04_lockscreen_live_activity.jpg`
-
-  ![figma_trainee_04_lockscreen_live_activity.jpg](../img/figma_trainee_04_lockscreen_live_activity.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Widget tips, aarav.ontrack@demo.fitbud.test): `mobile-qa/TR-21-widget-tips.jpg`
-
-  ![mobile-qa/TR-21-widget-tips.jpg](../img/mobile-qa/TR-21-widget-tips.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
@@ -88,3 +78,13 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **393×852** (iPhone 15 profile, Expo web or a device). Save it as `docs/spec/evidence/TR-21.png`. Save extra states as `docs/spec/evidence/TR-21--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+One workout Live Activity with two states (mockups 27, 27b, 27c; Android equivalent 27-android):
+
+- **Collapsed** (lock screen default): app · session · elapsed, exercise, "Set 2 of 3 · Last: 20 kg × 10", prefilled "22.5 kg × 10" and a round ✓ that logs the set as shown. Hint: "Touch and hold to change kg or reps".
+- **Expanded** (touch and hold the collapsed activity, or the Dynamic Island): the same activity grows to kg and reps steppers (− / +), *Open* and **Log set 2**. Logging returns to collapsed.
+- **Resting** is the collapsed state after a log: "Rest · 0:58", progress bar, next set, *Skip*.
+- Android: the ongoing notification's expanded view is the expanded state; collapsed shows exercise, set and ✓.

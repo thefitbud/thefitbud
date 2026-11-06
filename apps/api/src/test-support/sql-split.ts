@@ -1,51 +1,61 @@
-/** Split SQL into complete statements (same semantics as sqlite3.complete_statement). */
+/**
+ * Split SQL into complete statements (same semantics as sqlite3.complete_statement).
+ *
+ * Scans each line once, carrying quote state across lines, so splitting is linear in
+ * the input size (the full demo seed is ~37 MB with very long multi-line statements).
+ */
 export function splitSqlStatements(sql: string): string[] {
   const statements: string[] = [];
-  let buf = "";
+  let parts: string[] = [];
+  const state: QuoteState = { inSingle: false, inDouble: false };
   for (const line of sql.split(/\r?\n/)) {
-    buf += `${line}\n`;
-    if (isCompleteSqlStatement(buf)) {
-      const trimmed = buf.trim();
+    const chunk = `${line}\n`;
+    parts.push(chunk);
+    if (scanForStatementEnd(chunk, state)) {
+      const trimmed = parts.join("").trim();
       if (trimmed.length > 0) {
         statements.push(trimmed);
       }
-      buf = "";
+      parts = [];
+      state.inSingle = false;
+      state.inDouble = false;
     }
   }
-  const tail = buf.trim();
+  const tail = parts.join("").trim();
   if (tail.length > 0) {
     statements.push(tail);
   }
   return statements;
 }
 
-function isCompleteSqlStatement(buffer: string): boolean {
-  let inSingle = false;
-  let inDouble = false;
-  for (let i = 0; i < buffer.length; i += 1) {
-    const ch = buffer[i];
-    if (inSingle) {
-      if (ch === "'" && buffer[i + 1] === "'") {
+type QuoteState = { inSingle: boolean; inDouble: boolean };
+
+/** Advances quote state over `chunk`; true once a `;` outside quotes is seen. */
+function scanForStatementEnd(chunk: string, state: QuoteState): boolean {
+  for (let i = 0; i < chunk.length; i += 1) {
+    const ch = chunk[i];
+    if (state.inSingle) {
+      if (ch === "'" && chunk[i + 1] === "'") {
         i += 1;
         continue;
       }
       if (ch === "'") {
-        inSingle = false;
+        state.inSingle = false;
       }
       continue;
     }
-    if (inDouble) {
+    if (state.inDouble) {
       if (ch === '"') {
-        inDouble = false;
+        state.inDouble = false;
       }
       continue;
     }
     if (ch === "'") {
-      inSingle = true;
+      state.inSingle = true;
       continue;
     }
     if (ch === '"') {
-      inDouble = true;
+      state.inDouble = true;
       continue;
     }
     if (ch === ";") {

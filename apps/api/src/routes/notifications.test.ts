@@ -17,10 +17,14 @@ import { pushPayloadSchema } from "@fitbud/contracts";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
-import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { routingPayloadForNotification } from "../lib/push-provider.js";
 import { nowIso } from "../lib/crypto.js";
-import type { Env } from "../types.js";
+import { createMemoryDb } from "../test-support/memory-db.js";
+import {
+  createTrainerSession,
+  register,
+  testEnv,
+} from "../test-support/notification-routes.js";
 
 const KOLKATA_TZ = "Asia/Kolkata";
 
@@ -41,53 +45,6 @@ function dubaiWallClockToUtc(localDate: string, hours: number, minutes: number):
   return new Date(utcMs).toISOString();
 }
 
-
-import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
-
-async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
-  const handle = await createSharedMemoryDb();
-  return { db: handle.db, close: handle.close };
-}
-
-function dummyD1(): D1Database {
-  return {
-    prepare() {
-      throw new Error("D1 should not be used when test DB override is set");
-    },
-    dump: async () => new ArrayBuffer(0),
-    batch: async () => [],
-    exec: async () => ({ count: 0, duration: 0 }),
-  } as unknown as D1Database;
-}
-
-function testEnv(): Env {
-  return {
-    DB: dummyD1(),
-    MEDIA: createMemoryR2Bucket(),
-    FIREBASE_PROJECT_ID: "fitbud-local",
-    SESSION_COOKIE_NAME: "fitbud_session",
-    AUTH_MODE: "test",
-    PUSH_PROVIDER_MODE: "test",
-    MEDIA_SIGNING_SECRET: "fitbud-local-file-signing-secret",
-  };
-}
-
-async function createTrainerSession(email: string) {
-  const token = createTestIdToken(`trainer-${email}`, email);
-  const sessionResponse = await app.request(
-    "/auth/session",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: token, timezone: "Asia/Kolkata" }),
-    },
-    testEnv(),
-  );
-  expect(sessionResponse.status).toBe(200);
-  const setCookie = sessionResponse.headers.get("set-cookie");
-  expect(setCookie).toBeTruthy();
-  return { cookie: setCookie!.split(";")[0]! };
-}
 
 async function reachActiveCheckinConfig(suffix: string) {
   const trainer = await createTrainerSession(`push-coach-${suffix}@example.com`);
@@ -259,40 +216,26 @@ describe("notifications and reminders (D4)", () => {
   });
 
   it("returns 401 for unauthenticated device token registration", async () => {
-    const response = await app.request(
-      "/notifications/device-tokens",
+    const response = await register(
+      {},
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-test-token-abcdefgh",
-          installationId: "install-1",
-        }),
+        token: "fcm-test-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-1",
       },
-      testEnv(),
     );
     expect(response.status).toBe(401);
   });
 
   it("registers a device token owned by the authenticated trainee", async () => {
     const { traineeToken } = await reachActiveCheckinConfig("token");
-    const response = await app.request(
-      "/notifications/device-tokens",
+    const response = await register(
+      { bearer: traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-test-token-abcdefgh",
-          installationId: "install-token-1",
-        }),
+        token: "fcm-test-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-token-1",
       },
-      testEnv(),
     );
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
@@ -315,69 +258,79 @@ describe("notifications and reminders (D4)", () => {
     expect(body.data.deviceToken.userId).toBe(meBody.data.userId);
   });
 
-  it("rejects registering another user's device token", async () => {
+  // D-W3-9 (Firoz, 2 Nov 2026) replaced the 403 this case used to assert: a
+  // push token identifies the installation, not the person, so the last user to
+  // sign in on a shared phone takes the token over. Owned end to end by X4k.
+  it("reassigns another user's device token to the user who registers it", async () => {
     const a = await reachActiveCheckinConfig("own-a");
     const b = await reachActiveCheckinConfig("own-b");
 
-    const first = await app.request(
-      "/notifications/device-tokens",
+    const first = await register(
+      { bearer: a.traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${a.traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "android",
-          token: "shared-fcm-token-xyz12345",
-          installationId: "install-a",
-        }),
+        token: "shared-fcm-token-xyz12345",
+        platform: "android",
+        installationId: "install-a",
       },
-      testEnv(),
     );
     expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as {
+      data: { deviceToken: { id: string; userId: string } };
+    };
 
-    const second = await app.request(
-      "/notifications/device-tokens",
+    const second = await register(
+      { bearer: b.traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${b.traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "android",
-          token: "shared-fcm-token-xyz12345",
-          installationId: "install-b",
-        }),
+        token: "shared-fcm-token-xyz12345",
+        platform: "android",
+        installationId: "install-b",
       },
-      testEnv(),
     );
-    expect(second.status).toBe(403);
+    expect(second.status).toBe(200);
+    const secondBody = (await second.json()) as {
+      data: {
+        deviceToken: { id: string; userId: string; token: string; status: string };
+      };
+    };
+    expect(secondBody.data.deviceToken.status).toBe("active");
+    expect(secondBody.data.deviceToken.token).toBe("shared-fcm-token-xyz12345");
+    expect(secondBody.data.deviceToken.userId).not.toBe(
+      firstBody.data.deviceToken.userId,
+    );
+
+    // The second user is the only active holder of the token.
+    const holders = await db
+      .select()
+      .from(schema.deviceTokens)
+      .where(eq(schema.deviceTokens.token, "shared-fcm-token-xyz12345"));
+    expect(holders).toHaveLength(1);
+    expect(holders[0]?.id).toBe(secondBody.data.deviceToken.id);
+    expect(holders[0]?.status).toBe("active");
+
+    // The first user's row is kept (deliveries reference it) but revoked and
+    // released, so it can never be sent to again.
+    const previous = (
+      await db
+        .select()
+        .from(schema.deviceTokens)
+        .where(eq(schema.deviceTokens.id, firstBody.data.deviceToken.id))
+    )[0];
+    expect(previous).toBeDefined();
+    expect(previous?.status).toBe("revoked");
+    expect(previous?.token).not.toBe("shared-fcm-token-xyz12345");
   });
 
   it("evaluates due check-in reminders with dedupe and safe payloads; provider acceptance ≠ completion", async () => {
     const { trainerCookie, traineeToken, relationshipId, today } =
       await reachActiveCheckinConfig("eval");
 
-    await app.request(
-      "/notifications/device-tokens",
+    await register(
+      { bearer: traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-eval-token-abcdefgh",
-          installationId: "install-eval",
-        }),
+        token: "fcm-eval-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-eval",
       },
-      testEnv(),
     );
     await app.request(
       "/notifications/preferences",
@@ -616,22 +569,13 @@ describe("notifications and reminders (D4)", () => {
   it("defers quiet-hour reminders without consuming the delivery key, then delivers the same reminder", async () => {
     const { trainerCookie, traineeToken, relationshipId, today } =
       await reachActiveCheckinConfig("quiet");
-    await app.request(
-      "/notifications/device-tokens",
+    await register(
+      { bearer: traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-quiet-token-abcdefgh",
-          installationId: "install-quiet",
-        }),
+        token: "fcm-quiet-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-quiet",
       },
-      testEnv(),
     );
     await app.request(
       "/notifications/preferences",
@@ -883,22 +827,13 @@ describe("notifications and reminders (D4)", () => {
       await reachActiveCheckinConfig("clocks");
     const localDate = addDaysToLocalDate(formatLocalDate(new Date(), KOLKATA_TZ), 1);
     const weekday = weekdayFromLocalDate(localDate);
-    await app.request(
-      "/notifications/device-tokens",
+    await register(
+      { bearer: traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-clock-token-abcdefgh",
-          installationId: "install-clock",
-        }),
+        token: "fcm-clock-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-clock",
       },
-      testEnv(),
     );
     const plan = await app.request(
       `/plans/relationships/${relationshipId}`,
@@ -1168,22 +1103,13 @@ describe("notifications and reminders (D4)", () => {
   it("dedupes, rate-limits, and preference-checks activity nudges without completing the activity", async () => {
     const { trainerCookie, traineeToken, relationshipId, today } =
       await reachActiveCheckinConfig("nudge");
-    await app.request(
-      "/notifications/device-tokens",
+    await register(
+      { bearer: traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-nudge-token-abcdefgh",
-          installationId: "install-nudge",
-        }),
+        token: "fcm-nudge-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-nudge",
       },
-      testEnv(),
     );
     const ids: string[] = [];
     for (let offset = 0; offset < 4; offset += 1) {
@@ -1363,22 +1289,13 @@ describe("notifications and reminders (D4)", () => {
       .where(eq(schema.checkins.id, quietCheckinId));
     expect(quietCheckin[0]!.recordStatus).toBe("draft");
 
-    await app.request(
-      "/notifications/device-tokens",
+    await register(
+      { bearer: quietTrainee, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${quietTrainee}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-nudge-quiet-token-abc",
-          installationId: "install-nudge-quiet",
-        }),
+        token: "fcm-nudge-quiet-token-abc",
+        platform: "ios",
+        installationId: "install-nudge-quiet",
       },
-      testEnv(),
     );
     await app.request(
       "/notifications/preferences",
@@ -1593,22 +1510,13 @@ describe("§3.6 day-in-life reminder battery", () => {
       createdAt: stamp,
       updatedAt: stamp,
     });
-    await app.request(
-      "/notifications/device-tokens",
+    await register(
+      { bearer: traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-override-token-abcdefgh",
-          installationId: "install-override",
-        }),
+        token: "fcm-override-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-override",
       },
-      testEnv(),
     );
     await app.request(
       "/me/meal-times",
@@ -2247,22 +2155,13 @@ describe("§3.6 day-in-life reminder battery", () => {
   it("caps queued push reminders at five for five meals plus workout and summary", async () => {
     const { trainerCookie, traineeToken, relationshipId, today } =
       await reachActiveCheckinConfig("cap5");
-    await app.request(
-      "/notifications/device-tokens",
+    await register(
+      { bearer: traineeToken, role: "trainee" },
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          platform: "ios",
-          token: "fcm-cap5-token-abcdefgh",
-          installationId: "install-cap5",
-        }),
+        token: "fcm-cap5-token-abcdefgh",
+        platform: "ios",
+        installationId: "install-cap5",
       },
-      testEnv(),
     );
     await app.request(
       "/notifications/preferences",

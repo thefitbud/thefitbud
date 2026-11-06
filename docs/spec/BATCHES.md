@@ -339,7 +339,7 @@ These are listed so agents don't silently pick one side. When your batch touches
 20. sneha.review is trainee-only: fix seed/API so she has no trainer role; trainee-only accounts must never see "Choose mode" or trainer web.
 
 ## Approved visual target (18 Oct, founder-approved)
-docs/spec/mockups/ is the binding visual target (png/ + html/ + DESIGN-NOTES.md). Where a mockup and a screen file differ in layout/styling, the mockup wins; content rules (product rules, banned strings) still apply. Founder picks:
+docs/design/ is the binding visual target (single source of truth since 22 Oct 2026: docs/design/README.md index, mockups/png/ + mockups/html/, DESIGN-NOTES.md, DECISIONS-21OCT.md). Where a mockup and a screen file differ in layout/styling, the mockup wins; content rules (product rules, banned strings) still apply. Founder picks:
 21. Navy sidebar on trainer web (02, not 02c).
 22. Home heading "Today" (no greeting; 02b is rejected).
 23. Keep "Recent activity" feed on Home.

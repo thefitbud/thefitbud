@@ -38,7 +38,12 @@ import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { TodayCheckinCard } from "./CheckinScreen";
-import { TraineeDateNavigator } from "./TraineeDateNavigator";
+import {
+  TraineeDateNavigator,
+  WEEK_UNAVAILABLE_MESSAGE,
+  loadWeekModel,
+  type WeekModelState,
+} from "./TraineeDateNavigator";
 import { confirmMealAssignment, MealSyncError } from "./mealActions";
 import {
   canShowMealLogActions,
@@ -92,8 +97,92 @@ function exerciseCountLabel(count: number): string {
   return count === 1 ? "1 exercise" : `${count} exercises`;
 }
 
-function hasLivePlan(plan: EffectivePlanResponse | null): boolean {
-  return plan?.version != null;
+/**
+ * The trainee's effective plan as an explicit load state (CU22, D-W3b-24;
+ * the fourth `unavailable` member is CU24, D-W3b-27).
+ *
+ * `effectivePlan: EffectivePlanResponse | null` used to carry two different
+ * facts — "not loaded yet" and "no plan published" — and the shell's initial
+ * value was the same `null` a plan-less trainee ends on. The shell's plan
+ * load awaits a full sync pull first, so it always settles after `TodayTab`'s
+ * own day load; every trainee with a published plan therefore saw their real
+ * workout under "<Coach> is preparing your plan" on every cold start.
+ *
+ * This is a discriminated union, not a nullable plan and not a boolean: the
+ * plan is reachable only through the `loaded` member, so `loading` and
+ * `unavailable` cannot be read as `none` (nor any of them as "ready") without
+ * narrowing on `status` first. Keep it that way — a `plan | null` prop
+ * anywhere on this path, or a boolean beside the union, is the same defect
+ * again.
+ */
+export type EffectivePlanState =
+  | { readonly status: "loading" }
+  | { readonly status: "none" }
+  | { readonly status: "loaded"; readonly plan: EffectivePlanResponse }
+  | { readonly status: "unavailable" };
+
+/** The state before the first load settles. Never means "no plan published". */
+export const EFFECTIVE_PLAN_LOADING: EffectivePlanState = { status: "loading" };
+
+/**
+ * The fourth state (CU24, D-W3b-27): the app could not ask, and has nothing
+ * cached to fall back to.
+ *
+ * It is a fourth member of the union rather than a boolean beside it for the
+ * same reason `loading` is a member: a boolean can be read without narrowing,
+ * so it would collapse back into `none` at the first call site that forgets
+ * it — which is the defect CU22 removed. A fetch failure *with* a cached plan
+ * is still `loaded`; this state is only "could not ask and have nothing", not
+ * "could not refresh".
+ */
+export const EFFECTIVE_PLAN_UNAVAILABLE: EffectivePlanState = {
+  status: "unavailable",
+};
+
+/**
+ * What a trainee reads when the plan could not be loaded (CU24, D-W3b-27,
+ * decided by Firoz 4 Nov 2026, verbatim copy).
+ *
+ * Static text: nothing derived from the error reaches the screen, which is
+ * what AGENTS.md's error-message rule requires (D-W3-12, D-W3b-7) and what
+ * D-W3b-30 settled for the sibling cache-write message. The failure's own
+ * detail goes to `reportError` only.
+ *
+ * "try again" is actionable on both screens that render it. On Today the card
+ * carries a Try again control that calls the same handler as pull-to-refresh
+ * (`onRefresh` -> `onRefreshPlan` -> the shell's `loadEffectivePlan`); on the
+ * Workout tab it calls that tab's own `onRefresh` -> `load`, the fetch that
+ * failed. Neither screen promises a retry it cannot perform.
+ */
+export const PLAN_UNAVAILABLE_MESSAGE =
+  "Couldn't load your plan. Check your connection and try again";
+
+/**
+ * Maps a settled plan response (or no response at all) onto the union. A
+ * response without a `version` is a relationship whose trainer has published
+ * nothing yet, which is `none`: the one place that judgement is made.
+ */
+export function effectivePlanStateFor(
+  plan: EffectivePlanResponse | null | undefined,
+): EffectivePlanState {
+  return plan?.version != null ? { status: "loaded", plan } : { status: "none" };
+}
+
+/**
+ * The plan for the one consumer that still takes `EffectivePlanResponse |
+ * null`: `TraineeOverlayHost`, which is outside CU24's `files_owned`, so the
+ * shell narrows for it here instead of leaving it to re-derive readiness from
+ * a nullable. It renders none of the plan-state copy.
+ *
+ * `WorkoutTab` used to be narrowed here too; CU24 (D-W3b-29) moved it onto
+ * the union, because it did re-derive readiness from a nullable — its "No
+ * plan yet" card was gated on an empty assignment list, which is also true
+ * while loading and when the load failed.
+ */
+export function planFromState(
+  state: EffectivePlanState,
+): EffectivePlanResponse | null {
+  return state.status === "loaded" ? state.plan : null;
 }
 
 function mealStatusChip(
@@ -125,7 +214,8 @@ type CoachNote = Awaited<
 
 export function TodayTab({
   relationship,
-  effectivePlan,
+  planState,
+  planCacheError,
   selectedDate,
   onSelectDate,
   onStartWorkout,
@@ -135,7 +225,10 @@ export function TodayTab({
   onOpenOverlay,
 }: {
   relationship: CoachingRelationship;
-  effectivePlan: EffectivePlanResponse | null;
+  /** Three-state, never a nullable plan: see `EffectivePlanState` above. */
+  planState: EffectivePlanState;
+  /** Set when the plan loaded but writing it to the device cache failed. */
+  planCacheError: string | null;
   selectedDate: string;
   onSelectDate: (localDate: string) => void;
   onStartWorkout: () => void;
@@ -161,9 +254,14 @@ export function TodayTab({
   const [error, setError] = useState<string | null>(null);
   const [offlineHint, setOfflineHint] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [weekModel, setWeekModel] = useState<Awaited<
-    ReturnType<typeof s1.getMeWeek>
-  > | null>(null);
+  // Four-state, never a nullable model: see `WeekModelState` (CU23,
+  // D-W3b-25). `getMeWeek(...).catch(() => null)` used to make a failed
+  // `GET /me/week` indistinguishable from "not loaded yet", so the "This
+  // week" rollup silently vanished and the date strip filled its day states
+  // in from the date alone.
+  const [weekState, setWeekState] = useState<WeekModelState>({
+    status: "loading",
+  });
   const [dayTotals, setDayTotals] = useState<Awaited<
     ReturnType<typeof s1.getMeDay>
   > | null>(null);
@@ -192,12 +290,16 @@ export function TodayTab({
             fromDate: selectedDate,
             toDate: selectedDate,
           }),
-          s1.getMeWeek(weekStart).catch(() => null),
+          loadWeekModel(
+            (start) => s1.getMeWeek(start),
+            weekStart,
+            "TodayTab.getMeWeek",
+          ),
           s1.getMeDay(selectedDate).catch(() => null),
           s1.listMeCoachNotes().catch(() => ({ items: [] as CoachNote[] })),
           api.listCheckins(relationship.id).catch(() => ({ items: [] as Checkin[] })),
         ]);
-      setWeekModel(week);
+      setWeekState(week);
       setDayTotals(day);
       setCoachNotes(notes.items.slice(0, 2));
       setWorkout(
@@ -215,6 +317,11 @@ export function TodayTab({
       setWorkout(null);
       setMeals([]);
       setLockStateKnown(false);
+      // The whole day load failed, so there is no week to show either. It
+      // settles on `unavailable` rather than staying `loading` for ever:
+      // "This week" disappearing with no explanation is the same silent
+      // degradation CU23 removes.
+      setWeekState({ status: "unavailable" });
     } finally {
       setLoading(false);
     }
@@ -288,10 +395,9 @@ export function TodayTab({
     }
   }
 
-  const planReady = hasLivePlan(effectivePlan);
   const allDone =
     isToday &&
-    planReady &&
+    planState.status === "loaded" &&
     meals.length > 0 &&
     meals.every((m) => isMealLoggedForCount(m.status)) &&
     (!workout ||
@@ -328,27 +434,79 @@ export function TodayTab({
                 ? "That's everything for today."
                 : greetingFor(displayName, timeZone || "Asia/Kolkata")}
             </Text>
-            <Text style={styles.greetSub}>
-              {allDone
-                ? "Nicely done."
-                : planReady
-                  ? "Here's your day."
-                  : `${coachName} is preparing your plan.`}
-            </Text>
+            {/*
+              Gated on the plan's OWN load state (CU22, D-W3b-24). It used to
+              be gated on nothing but `planReady`, which was false while the
+              plan was still loading, so this line claimed the coach had
+              published nothing whenever it rendered first — which it always
+              did, because the shell's plan load awaits a sync pull and
+              `TodayTab`'s day load does not. While the plan is loading this
+              says nothing at all; the day's own loading card below is the
+              honest signal.
+            */}
+            {planState.status === "loading" ||
+            planState.status === "unavailable" ? null : (
+              <Text style={styles.greetSub}>
+                {allDone
+                  ? "Nicely done."
+                  : planState.status === "loaded"
+                    ? "Here's your day."
+                    : `${coachName} is preparing your plan.`}
+              </Text>
+            )}
           </View>
         ) : null}
 
+        {/*
+          The strip renders this screen's own week state (CU23 review fix).
+          It used to fetch `GET /me/week` a second time for the same week and
+          could never re-fetch, so it kept telling the trainee to pull down —
+          which did nothing for it — while the "This week" card below showed
+          the real rollup. One load, one state, one retry.
+        */}
         <TraineeDateNavigator
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
+          weekState={weekState}
+          day={dayTotals}
         />
 
         {offlineHint ? (
           <Text style={styles.offlineHint}>Saved on phone · showing last sync</Text>
         ) : null}
         {error ? <ErrorBanner message={error} /> : null}
+        {/*
+          The plan was fetched but could not be cached on the device. That is
+          a real failure with its own cause, so it is shown rather than
+          swallowed or disguised as "no plan" (D-W3-12, D-W3-18).
+        */}
+        {planCacheError ? <ErrorBanner message={planCacheError} /> : null}
 
-        {!planReady && !loading ? (
+        {/*
+          The plan could not be loaded and nothing was cached (CU24,
+          D-W3b-27). Before this state existed that case resolved to `none`,
+          so an offline first run told the trainee their coach was preparing a
+          plan when the truth was that the app could not ask. The copy is
+          static and the retry is the same action as pull-to-refresh.
+        */}
+        {planState.status === "unavailable" ? (
+          <View style={styles.card} accessibilityLabel={PLAN_UNAVAILABLE_MESSAGE}>
+            <Text style={styles.cardTitle}>Couldn&apos;t load your plan</Text>
+            <Text style={styles.body}>{PLAN_UNAVAILABLE_MESSAGE}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+              style={styles.retry}
+              onPress={() => {
+                void onRefresh();
+              }}
+            >
+              <Text style={styles.retryLabel}>Try again</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {planState.status === "none" ? (
           <View
             style={styles.card}
             accessibilityLabel="Your coach is preparing your plan"
@@ -376,7 +534,7 @@ export function TodayTab({
           </View>
         ) : null}
 
-        {planReady && hero && !loading ? (
+        {planState.status === "loaded" && hero && !loading ? (
           <View style={styles.hero} accessibilityLabel={nextUpEyebrow(hero)}>
             <Text style={styles.heroEyebrow}>{nextUpEyebrow(hero)}</Text>
             {hero.kind === "meal" ? (
@@ -515,70 +673,82 @@ export function TodayTab({
           </View>
         ) : null}
 
-        <View style={styles.secHead}>
-          <Text style={styles.secTitle}>Today&apos;s workout</Text>
-          {workout ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="See workout"
-              onPress={() =>
-                onOpenOverlay({
-                  screen: "workout_overview",
-                  assignmentId: workout.id,
-                })
-              }
-              style={styles.secLink}
-            >
-              <Text style={styles.secLinkText}>See workout ›</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <View style={styles.card}>
-          {workout ? (
-            <>
-              <View style={styles.woTop}>
-                <StatusChip
-                  label={`${labelFor("workout_assignment_status", workout.status)} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
-                  tone={workoutTone(workout.status)}
-                />
-              </View>
-              <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
-              <Text style={styles.body}>
-                {exerciseCountLabel(workoutExercises.length)}
-                {workoutMins != null ? ` · about ${workoutMins} min` : ""}
-              </Text>
-              {workoutExercises.slice(0, 3).map((ex) => (
-                <Text key={ex.id} style={styles.exRow}>
-                  {ex.name}
-                </Text>
-              ))}
-              {workoutExercises.length > 3 ? (
-                <Text style={styles.body}>
-                  + {workoutExercises.length - 3} more exercises
-                </Text>
-              ) : null}
-              {isToday &&
-              workout.status !== "completed" &&
-              workout.status !== "skipped" ? (
-                <PrimaryButton
-                  label={
-                    workout.status === "in_progress" ||
-                    workout.status === "paused"
-                      ? "Continue workout"
-                      : "Start workout"
+        {/*
+          The workout section is gated on the plan too (CU22, D-W3b-24). It
+          used to render for every trainee, including one whose trainer has
+          published nothing — an empty "Today's workout" card beside "your
+          coach is preparing your plan" — and it is why the Maestro flow's
+          `assertVisible: "Today's workout"` could pass while the plan state
+          was wrong.
+        */}
+        {planState.status === "loaded" ? (
+          <>
+            <View style={styles.secHead}>
+              <Text style={styles.secTitle}>Today&apos;s workout</Text>
+              {workout ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="See workout"
+                  onPress={() =>
+                    onOpenOverlay({
+                      screen: "workout_overview",
+                      assignmentId: workout.id,
+                    })
                   }
-                  onPress={onStartWorkout}
-                />
+                  style={styles.secLink}
+                >
+                  <Text style={styles.secLinkText}>See workout ›</Text>
+                </Pressable>
               ) : null}
-            </>
-          ) : (
-            <Text style={styles.cardTitle}>
-              Rest day. Recovery is part of the plan.
-            </Text>
-          )}
-        </View>
+            </View>
+            <View style={styles.card}>
+              {workout ? (
+                <>
+                  <View style={styles.woTop}>
+                    <StatusChip
+                      label={`${labelFor("workout_assignment_status", workout.status)} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
+                      tone={workoutTone(workout.status)}
+                    />
+                  </View>
+                  <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
+                  <Text style={styles.body}>
+                    {exerciseCountLabel(workoutExercises.length)}
+                    {workoutMins != null ? ` · about ${workoutMins} min` : ""}
+                  </Text>
+                  {workoutExercises.slice(0, 3).map((ex) => (
+                    <Text key={ex.id} style={styles.exRow}>
+                      {ex.name}
+                    </Text>
+                  ))}
+                  {workoutExercises.length > 3 ? (
+                    <Text style={styles.body}>
+                      + {workoutExercises.length - 3} more exercises
+                    </Text>
+                  ) : null}
+                  {isToday &&
+                  workout.status !== "completed" &&
+                  workout.status !== "skipped" ? (
+                    <PrimaryButton
+                      label={
+                        workout.status === "in_progress" ||
+                        workout.status === "paused"
+                          ? "Continue workout"
+                          : "Start workout"
+                      }
+                      onPress={onStartWorkout}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <Text style={styles.cardTitle}>
+                  Rest day. Recovery is part of the plan.
+                </Text>
+              )}
+            </View>
+          </>
+        ) : null}
 
-        {planReady ? (
+        {planState.status === "loaded" ? (
           <>
             <View style={styles.secHead}>
               <Text style={styles.secTitle}>Nutrition</Text>
@@ -656,24 +826,58 @@ export function TodayTab({
 
         <StepsCard />
 
-        {weekModel ? (
+        {/*
+          "This week" renders only from a loaded week read model. On failure
+          the trainee gets the honest unavailable card below with a retry
+          (CU23, D-W3b-25) — never counts or day states invented locally.
+          D-W3b-25's "Weekly view isn't available yet" rehearsal fallback is
+          retired by D-W3b-37; this is the real endpoint's failure state.
+        */}
+        {weekState.status === "loaded" ? (
           <>
             <View style={styles.secHead}>
               <Text style={styles.secTitle}>This week</Text>
             </View>
             <View style={styles.card}>
               <WeeklyConsistency
-                workoutCompleted={weekModel.workouts.completed}
-                workoutAssigned={weekModel.workouts.assigned}
-                mealsLogged={weekModel.meals.logged}
-                mealsAssigned={weekModel.meals.assigned}
-                days={weekModel.days}
+                workoutCompleted={weekState.week.workouts.completed}
+                workoutAssigned={weekState.week.workouts.assigned}
+                mealsLogged={weekState.week.meals.logged}
+                mealsAssigned={weekState.week.meals.assigned}
+                days={weekState.week.days}
                 encouragement={
                   isToday
                     ? "Yesterday got away from you? Today's a fresh start."
                     : null
                 }
               />
+            </View>
+          </>
+        ) : null}
+
+        {weekState.status === "unavailable" ? (
+          <>
+            <View style={styles.secHead}>
+              <Text style={styles.secTitle}>This week</Text>
+            </View>
+            <View style={styles.card} accessibilityLabel={WEEK_UNAVAILABLE_MESSAGE}>
+              <Text style={styles.body}>{WEEK_UNAVAILABLE_MESSAGE}</Text>
+              {/*
+                Distinct from the plan card's "Try again" label so each
+                control names what it reloads: this screen can show both
+                cards at once (CU24's plan state and CU23's week state are
+                independent loads).
+              */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Reload this week"
+                style={styles.retry}
+                onPress={() => {
+                  void onRefresh();
+                }}
+              >
+                <Text style={styles.retryLabel}>Try again</Text>
+              </Pressable>
             </View>
           </>
         ) : null}
@@ -702,7 +906,7 @@ export function TodayTab({
           onOpen={onOpenCheckin}
         />
 
-        {effectivePlan?.version ? (
+        {planState.status === "loaded" ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="View meal plan"
@@ -833,6 +1037,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   secLinkText: {
+    color: colors.indigo,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  retry: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: colors.indigo,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: spacing.lg,
+  },
+  retryLabel: {
     color: colors.indigo,
     fontSize: 15,
     fontWeight: "600",

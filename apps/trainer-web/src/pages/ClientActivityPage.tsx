@@ -500,7 +500,7 @@ export function ClientActivityPage() {
           date={group.date}
           headerSuffix={
             activityType === "meal"
-              ? mealDayHeaderSummary(group.items, mealAssignments)
+              ? mealDayHeaderSummary(group.items)
               : null
           }
           items={group.items}

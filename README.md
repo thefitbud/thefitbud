@@ -77,7 +77,7 @@ The project maintains six focused Confluence pages:
 4. FitBud Technical Architecture and SLOs - system boundaries, services, auth, offline sync, notifications, realtime, and operational targets.
 5. FitBud Conceptual API Contract - API behavior, authorization, sync, notifications, and realtime conventions.
 6. FitBud Conceptual Database Schema - entities, relationships, invariants, ownership, and sync metadata.
-The repository becomes authoritative for implemented contracts, schema, migrations, and commands. Agents.md contains the working rules for both agents and developers.
+The repository becomes authoritative for implemented contracts, schema, migrations, and commands. AGENTS.md contains the working rules for both agents and developers.
 ## Local development
 
 ### Install dependencies and prepare the API
@@ -173,6 +173,16 @@ pnpm api
 - URL: `http://127.0.0.1:8787`
 - OpenAPI UI: `http://127.0.0.1:8787/docs`
 - Dev email sink (OTP codes): `GET http://127.0.0.1:8787/dev/mail`
+
+In an interactive terminal, `pnpm api` prints the size of local request traces at `apps/api/.wrangler/state/v3/observability` and asks what to do before Wrangler starts:
+
+| Answer | Effect |
+| --- | --- |
+| **Enter** / `keep` | Leave the folder and keep recording traces (default). |
+| `fresh` | Delete only that observability folder, then start. |
+| `off` | Start this run with local tracing off. |
+
+`pnpm dev`, CI, and tests are non-interactive and do not ask. They read `FITBUD_LOCAL_TRACES=keep|fresh|off` (default `keep`). Setting that variable also skips the question in an interactive terminal. A traces folder over 500 MB prints a warning that suggests `fresh`. `fresh` does not delete D1, R2, or anything else under `.wrangler/state`.
 
 ### Trainer web (port 5173)
 
@@ -300,4 +310,4 @@ pnpm --filter @fitbud/mobile test
 - Test offline retry and idempotency for sync-capable mutations.
 - Keep notifications and realtime delivery separate from domain state.
 - Update the relevant authoritative document when product or architectural behavior changes.
-See Agents.md for the complete implementation workflow and completion criteria.
+See AGENTS.md for the complete implementation workflow and completion criteria.

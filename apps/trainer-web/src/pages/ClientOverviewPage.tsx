@@ -698,6 +698,7 @@ export function ClientOverviewPage() {
           </div>
           <ResponsivenessPanel
             relationshipId={relationshipId}
+            refreshEpoch={refreshEpoch}
             compact
             gender={header.traineeProfile.gender}
             traineeFirstName={firstName}
@@ -739,11 +740,12 @@ export function ClientOverviewPage() {
           <section className="ov-card ov-side">
             <div className="ov-side-h">
               <h3>Renewal</h3>
+              {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
               <Link
                 className="text-link"
                 to={`/clients/${relationshipId}/configure`}
               >
-                Open settings
+                {ended ? "View coaching setup" : "Open settings"}
               </Link>
             </div>
             <StatusChip kind="renewal" value={header.renewalState} />

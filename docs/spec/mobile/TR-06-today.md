@@ -1,5 +1,7 @@
 # TR-06 · Today
 
+> **Updated 30 Oct 2026:** steps appear as a Steps **chip** on Today (not a ring or a goal-free card), against a target (default 8,000, coach-editable). Steps are MVP.
+
 **ID:** TR-06 · **Name:** Today · **Priority:** P0 (date navigator, workout card, rings, next meal), P1 (coach notes), P2 (steps) · **Route/screen:** `Today` · **Batch:** M-2 (see `../BATCHES.md`)
 
 **Files to touch:**
@@ -15,7 +17,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 2810–2903. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TR-06 -->
 ### TR-06 · Today
@@ -25,8 +27,6 @@
 1. **Purpose.** Answers "what do I do now". It's the daily home (UX §8).
 2. **Entry.** App open, tab, most pushes (summary P-EOD), and widget taps.
 3. **Legacy (do not keep).** Code: a list of today's items, a plan card with "Version N · effective", and Refresh. Figma `screens/trainee_01_today.png` has a strong hero, but also banned elements (streak, 76% ring, hydration, "Active Plan V2").
-
-   ![Figma trainee Today (reference, banned elements to remove)](../img/figma_trainee_01_today.jpg){.phone}
 
 4. **Gaps to close.**
    - The code version: no hierarchy, plan version jargon, no "next up", no weekly consistency, no check-in surfacing, manual Refresh, client-side generation, no date navigation, no nutrition totals.
@@ -116,33 +116,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (embedded in the guide section): `figma_trainee_01_today.jpg`
-
-  ![figma_trainee_01_today.jpg](../img/figma_trainee_01_today.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Today, deepak.dubai@demo.fitbud.test): `mobile-qa/TR-06-today--deepak-dubai.jpg`
-
-  ![mobile-qa/TR-06-today--deepak-dubai.jpg](../img/mobile-qa/TR-06-today--deepak-dubai.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Today, farhan.paused@demo.fitbud.test): `mobile-qa/TR-06-today--farhan-paused.jpg`
-
-  ![mobile-qa/TR-06-today--farhan-paused.jpg](../img/mobile-qa/TR-06-today--farhan-paused.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Today, meera.ack@demo.fitbud.test): `mobile-qa/TR-06-today--meera-ack.jpg`
-
-  ![mobile-qa/TR-06-today--meera-ack.jpg](../img/mobile-qa/TR-06-today--meera-ack.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Today, rohan.slipping@demo.fitbud.test): `mobile-qa/TR-06-today--rohan-slipping.jpg`
-
-  ![mobile-qa/TR-06-today--rohan-slipping.jpg](../img/mobile-qa/TR-06-today--rohan-slipping.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Today, aarav.ontrack@demo.fitbud.test): `mobile-qa/TR-06-today.jpg`
-
-  ![mobile-qa/TR-06-today.jpg](../img/mobile-qa/TR-06-today.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 
@@ -187,3 +163,27 @@ Local stack: web http://localhost:5173 (proxies `/api` to http://127.0.0.1:8787)
 
 **393×852** (iPhone 15 profile, Expo web or a device). Save it as `docs/spec/evidence/TR-06.png`. Save extra states as `docs/spec/evidence/TR-06--<state>.png` (e.g. `--empty`, `--error`, `--offline`).
 
+---
+
+## Design amendment · 21 Oct 2026 (mockups redesign)
+
+Supersedes the order in §5 items 3–10 (user feedback 21 Oct). Mockups (updated 22 Oct): `docs/design/mockups/png/04-trainee-today-{ios,android}-v3-{empty,partial,done,rest,past}.png` (Option B progress card, locked 21 Oct; replaces the concentric-rings card, the old 04/04b/97 frames and the ring-card crop); states 96, 104, 113, 115; banners 29, 29b (those state frames still show the old ring card, so build the card per the v3 frames).
+
+1. **Top bar:** "Today" with the date and ‹ › day navigation (D27 behaviour unchanged: past days read-only except late-loggable items, future days preview), sync icon, bell.
+2. **Progress rings first:** kcal, Protein, Carbs, Fat (logged vs assigned, neutral ring tokens, overflow arc, no %), plus a **Steps** ring only when Health Connect / HealthKit is connected with permission (hidden otherwise). Footer: "2 of 5 meals logged" and *Diet ›*.
+3. **Today's workout card:** name, time, "6 exercises · about 50 min", first exercises, **Start** (straight into TR-11). Done → "· done 7:22 pm" with *View*. Rest day → "Rest day. Recovery is part of the plan."
+4. **Meals list:** one row per meal in time order. The **active meal** is the next unlogged meal whose time is closest to the device time (window −60 min … next meal's time; overdue unlogged meals win). It is the only expanded card: foods, kcal and macros, **Log** (= eaten as planned) and *Something different*. Every other meal is a collapsed row with time, name, short foods, kcal and a status chip: **Logged**, **Logged · changed**, **Skipped**, **Upcoming**, or **Waiting to send** (offline). Tapping a row expands it in place and collapses the previous one.
+5. The dark "Next up" hero card is removed; no single meal may take more than about a quarter of the first screen.
+6. "This week", "From your coach" and the check-in card stay below the meals list (unchanged rules).
+
+### Revision · 21 Oct 2026 (round 2; supersedes items 1–3 above)
+1. **Week strip** below the title: Mon–Sun chips with date and status dot, today selected, past days tappable (read-only except late-loggable items, with a "Viewing Fri 16 Oct · read-only" banner), ‹ › and swipe for earlier weeks. Mockup 04b shows a past day.
+2. **Rings:** concentric, kcal outer then protein, carbs, fat, steps innermost (only when connected), on the left; legend on the right, one row per ring: colour dot, label, done / goal ("460 / 1,850 kcal"). No %.
+3. **Workout card** is the highlight: navy filled card with white text and a full-width **Start workout** button; done and rest-day variants keep the same card.
+
+
+### Amendment · visual polish round 3 (21 Oct 2026)
+- Rings: concentric rings 164pt across, ordered from outer to inner: kcal, protein, carbs, fat, steps (steps only when connected). Each ring has its own hue, with a track tinted to match. The centre shows kcal left, or kcal eaten once the goal is reached.
+- Legend rows: label, value / goal (tabular figures), and a mini bar in the ring's hue. No percentages.
+- Week strip: Mon–Sun pills. The selected day is filled. A completion dot shows green when all done and amber when partial. Swiping or the chevrons change the week; next week is disabled beyond today. The date is shown once. The title reads "Today", or the date when a past day is selected.
+- The workout card is the screen's highlight (navy). It has no separate section header.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="web" tests="3" failures="1" time="14.000">
+<testsuite name="web" tests="3" failures="1" skipped="0" timestamp="2026-11-03T20:30:12" time="14.000">
+  <testcase name="trainer signs in" classname="web" time="4.200"/>
+  <testcase name="clients list loads" classname="e2e-staging/clients.spec.ts" time="3.100"><failure message="expect(locator).toBeVisible() failed: getByRole(heading, name: Clients)">expect(locator).toBeVisible() failed: getByRole(heading, name: Clients)</failure></testcase>
+  <testcase name="check-in review" classname="web" time="6.700"/>
+</testsuite>
+</testsuites>

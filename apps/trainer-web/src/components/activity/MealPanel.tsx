@@ -1,7 +1,8 @@
 import type { MealAssignment } from "@fitbud/contracts";
-import { formatClockTime } from "@fitbud/core";
+import { formatClockTime, formatKcal } from "@fitbud/core";
 import { LinkedMedia } from "../LinkedMedia";
 import { Button } from "../Button";
+import { planEnergyKcal } from "./activityUtils";
 
 function macroCell(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -21,20 +22,9 @@ export function MealPanel({
   const plannedItems = assignment.prescription.items ?? [];
   const loggedItems = compliance?.loggedItems ?? [];
   const loggedTotals = compliance?.loggedTotals;
-  const planTotals = plannedItems.reduce((sum, row) => {
-    if ("calculated" in row && row.calculated?.energyKcalScaled != null) {
-      return sum + row.calculated.energyKcalScaled;
-    }
-    if ("calories" in row && typeof row.calories === "number") {
-      return sum + row.calories;
-    }
-    return sum;
-  }, 0);
-
+  const planKcal = planEnergyKcal(plannedItems);
   const energyDelta =
-    loggedTotals?.energyKcal != null && planTotals != null
-      ? loggedTotals.energyKcal - planTotals
-      : null;
+    loggedTotals?.energyKcal != null ? loggedTotals.energyKcal - planKcal : null;
 
   return (
     <div className="activity-panel" data-testid="meal-panel">
@@ -63,7 +53,7 @@ export function MealPanel({
           </ul>
         )}
         <p className="activity-panel-totals">
-          Plan ≥ {planTotals != null ? `${planTotals} kcal` : "—"}
+          Plan ≥ {formatKcal(planKcal)}
         </p>
       </section>
 

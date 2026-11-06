@@ -34,6 +34,17 @@
   letter-spacing: -0.02em;
 }
 
+/* The h1 takes programmatic focus (tabIndex -1) as the ask-drawer fallback.
+   Use the app's focus ring for keyboard focus only. */
+h1.home-title:focus {
+  outline: none;
+}
+
+h1.home-title:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
 .home-summary {
   margin: 4px 0 0;
   font-size: 14px;
@@ -613,6 +624,39 @@
   gap: 8px;
   font-size: 13px;
   color: var(--ink-700, #25262b);
+}
+
+/* Trainer resolve confirmation (frames 02 / 132). */
+.drawer-resolve-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--semantic-positive-fill, #ecfdf5);
+  color: var(--semantic-positive-text, #047857);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.drawer-resolve-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-resolve-undo {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--semantic-positive-text, #047857);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 2px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .drawer-outcomes {

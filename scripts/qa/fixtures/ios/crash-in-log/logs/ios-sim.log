@@ -1,0 +1,5 @@
+2026-11-04 20:30:14.112 Df FitBudStaging: Running "main"
+2026-11-04 20:30:19.447 Er FitBudStaging: RangeError: Incorrect timeZone information provided
+2026-11-04 20:30:19.448 Er FitBudStaging:   at formatLocalDate (address at index.ios.bundle:1:884201)
+2026-11-04 20:30:19.449 Er FitBudStaging:   at AttentionTab (address at index.ios.bundle:1:1120447)
+2026-11-04 20:30:19.502 Df FitBudStaging: today loaded

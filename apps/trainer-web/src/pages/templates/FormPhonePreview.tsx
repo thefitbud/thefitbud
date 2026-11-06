@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { OnboardingFieldDefinition } from "@fitbud/contracts";
 import { checkinFieldTypeLabel } from "./checkinBuilder";
-import { fieldTypeLabel } from "./onboardingBuilder";
 
 type PreviewField = {
   id: string;
@@ -175,12 +174,4 @@ export function FormPhonePreview({
       </div>
     </aside>
   );
-}
-
-function fieldTypeLabelSafe(type: string): string {
-  try {
-    return fieldTypeLabel(type as never);
-  } catch {
-    return type.replace(/_/g, " ");
-  }
 }

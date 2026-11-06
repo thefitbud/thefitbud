@@ -24,7 +24,7 @@ import {
   Search,
   Users,
 } from "lucide-react";
-import { formatPersonName } from "@fitbud/core";
+import { formatPersonName, trainerNotificationCopy } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { useConfig } from "../lib/config";
 import { apiClient } from "../lib/api";
@@ -187,16 +187,28 @@ export function AppShell({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       try {
-        const asks = (await stage1Api.listCoachAsks({
-          status: "open",
-        })) as { items: Array<{ id: string; relationshipId: string }> };
-        const inbox = await apiClient.listTrainerCheckinInbox();
+        const [asks, inbox, directory] = await Promise.all([
+          stage1Api.listCoachAsks({
+            status: "open",
+          }) as Promise<{ items: Array<{ id: string; relationshipId: string }> }>,
+          apiClient.listTrainerCheckinInbox(),
+          apiClient.listClients({ limit: 100 }).catch(() => ({ items: [] })),
+        ]);
         if (cancelled) return;
+        const names = new Map<string, string>();
+        for (const client of directory.items) {
+          if (client.relationshipId && client.traineeDisplayName.trim()) {
+            names.set(client.relationshipId, client.traineeDisplayName);
+          }
+        }
         const items: Array<{ id: string; title: string; href: string }> = [];
         for (const ask of asks.items.slice(0, 5)) {
           items.push({
             id: `ask-${ask.id}`,
-            title: "Asked you on WhatsApp",
+            title: trainerNotificationCopy(
+              "trainer_ask_coach",
+              names.get(ask.relationshipId),
+            ).title,
             href: `/?ask=${ask.id}`,
           });
         }
@@ -205,7 +217,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           .slice(0, 5)) {
           items.push({
             id: `ci-${row.checkin.id}`,
-            title: "Check-in submitted",
+            title: trainerNotificationCopy(
+              "trainer_checkin_submitted",
+              names.get(row.coachingRelationshipId) ?? row.traineeDisplayName,
+            ).title,
             href: `/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`,
           });
         }

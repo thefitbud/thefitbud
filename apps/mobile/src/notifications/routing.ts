@@ -7,6 +7,15 @@ import {
 import { notificationInboxRoute, routeTargetFromPushPayload } from "@fitbud/core";
 import type { ResolvedAppRoute } from "../navigation/linking";
 
+/**
+ * Where a trainer push opens. The payload carries ids only; the shell refetches
+ * before showing anything.
+ */
+export type TrainerNotificationRoute =
+  | { kind: "checkin"; checkinId: string }
+  | { kind: "client"; relationshipId: string }
+  | { kind: "attention" };
+
 export type NotificationDeepLink = {
   tab: "workout" | "diet" | "today" | "progress" | "more";
   domainEntityType: PushPayload["domainEntityType"];
@@ -14,6 +23,8 @@ export type NotificationDeepLink = {
   /** Exact in-app route for TR-23 (preferred over tab alone). */
   route: ResolvedAppRoute;
   path: string;
+  /** Set only for trainer notification types; trainee types never carry one. */
+  trainerRoute?: TrainerNotificationRoute | null;
   /** Payload is routing only — callers must refetch authoritative state. */
   refetchRequired: true;
 };
@@ -61,6 +72,35 @@ function exactRouteFromPayload(payload: PushPayload): ResolvedAppRoute {
   }
 }
 
+/**
+ * Trainer types open trainer screens. An id of the wrong entity type is not
+ * trusted as a client or check-in id; it falls back to the attention list.
+ */
+function trainerRouteFromPayload(
+  payload: PushPayload,
+): TrainerNotificationRoute | null {
+  if (!TRAINER_NOTIFICATION_TYPES.includes(payload.notificationType)) {
+    return null;
+  }
+  const id = payload.domainEntityId;
+  switch (payload.notificationType) {
+    case "trainer_checkin_submitted":
+      return payload.domainEntityType === "checkin"
+        ? { kind: "checkin", checkinId: id }
+        : { kind: "attention" };
+    case "trainer_intake_submitted":
+    case "trainer_meal_times_changed":
+      return payload.domainEntityType === "coaching_relationship"
+        ? { kind: "client", relationshipId: id }
+        : { kind: "attention" };
+    case "trainer_ask_coach":
+      // Asks are shown and answered under the Attention tab's Asked filter.
+      return { kind: "attention" };
+    default:
+      return { kind: "attention" };
+  }
+}
+
 function tabFromRoute(route: ResolvedAppRoute): NotificationDeepLink["tab"] {
   switch (route.type) {
     case "workout_overview":
@@ -93,6 +133,7 @@ export function deepLinkFromNotificationPayload(
     domainEntityId: legacy.domainEntityId,
     route,
     path: notificationInboxRoute(parsed.data),
+    trainerRoute: trainerRouteFromPayload(parsed.data),
     refetchRequired: true,
   };
 }
@@ -120,6 +161,23 @@ export const TRAINEE_NOTIFICATION_TYPES: NotificationType[] = [
   "trainer_note_shared",
   "reactivation_requested",
 ];
+
+/** Trainer-facing push types that open a trainer screen (D-W3-1). */
+export const TRAINER_NOTIFICATION_TYPES: NotificationType[] = [
+  "trainer_ask_coach",
+  "trainer_checkin_submitted",
+  "trainer_intake_submitted",
+  "trainer_meal_times_changed",
+];
+
+/** Which role may route a push of this type; null = not routed from a tap. */
+export function notificationAudience(
+  type: NotificationType,
+): "trainee" | "trainer" | null {
+  if (TRAINEE_NOTIFICATION_TYPES.includes(type)) return "trainee";
+  if (TRAINER_NOTIFICATION_TYPES.includes(type)) return "trainer";
+  return null;
+}
 
 /** Stable synthetic installation id for local AUTH_MODE=test registration. */
 export function localInstallationId(): string {

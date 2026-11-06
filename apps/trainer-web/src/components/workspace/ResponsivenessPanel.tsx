@@ -31,10 +31,7 @@ function labelTitle(
   }
 }
 
-function summaryCounts(
-  data: ResponsivenessResponse,
-  pronoun: string,
-): string {
+function summaryCounts(data: ResponsivenessResponse): string {
   const { sent, opened, loggedAfter, loggedBefore } = data.counts;
   switch (data.label) {
     case "logs_on_own":
@@ -65,9 +62,11 @@ export function quietHoursText(
 
 export function compactHeadline(
   data: ResponsivenessResponse,
+  // Kept so callers (ExceptionDrawer, out of scope for H2) still compile; drop it with that file.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   pronoun: string,
 ): string {
-  return `${labelTitle(data.label)} · ${summaryCounts(data, pronoun)}`;
+  return `${labelTitle(data.label)} · ${summaryCounts(data)}`;
 }
 
 function formatOpened(value: number | null | undefined): string {
@@ -117,12 +116,15 @@ export function ResponsivenessPanel({
   gender,
   traineeFirstName = "Client",
   clientWhatsappE164,
+  refreshEpoch = 0,
 }: {
   relationshipId: string;
   compact?: boolean;
   gender?: string | null;
   traineeFirstName?: string;
   clientWhatsappE164?: string | null;
+  /** Workspace refresh counter: the panel refetches on a refresh, keeping its data on screen. */
+  refreshEpoch?: number;
 }) {
   const pronoun = possessivePronoun(gender);
   const [data, setData] = useState<ResponsivenessResponse | null>(null);
@@ -133,7 +135,9 @@ export function ResponsivenessPanel({
     void stage1Api
       .getResponsiveness(relationshipId, 14)
       .then((value) => {
-        if (!cancelled) setData(value);
+        if (cancelled) return;
+        setData(value);
+        setError(null);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -143,9 +147,10 @@ export function ResponsivenessPanel({
     return () => {
       cancelled = true;
     };
-  }, [relationshipId]);
+  }, [relationshipId, refreshEpoch]);
 
-  if (error) {
+  // A failed background refresh keeps the data already on screen.
+  if (error && !data) {
     return (
       <p className="form-error" role="alert">
         {error}
@@ -189,7 +194,7 @@ export function ResponsivenessPanel({
     <div className="responsiveness-panel">
       <p className="responsiveness-summary">
         <strong>{labelTitle(data.label)}</strong>
-        <span className="muted"> · {summaryCounts(data, pronoun)}</span>
+        <span className="muted"> · {summaryCounts(data)}</span>
       </p>
       {data.label === "notifications_off" ? (
         <p className="muted">

@@ -1,0 +1,77 @@
+---
+id: BT2
+title: Worker crash reporting with Sentry
+batch: W4
+depends_on: [OB2, QT2]
+lane: api-ops
+files_owned:
+  - apps/api/package.json
+  - apps/api/qa-smoke/**  # lint fixes only (D-QA1-15, folded from W3b CU10)
+  - apps/api/src/lib/sentry.ts
+  - apps/api/src/lib/sentry.test.ts
+  - apps/api/src/index.ts  # export wrapper only
+  - apps/api/src/types.ts  # SENTRY_DSN, SENTRY_ENVIRONMENT, QA_TEST_OTP_* only
+  - apps/api/src/auth/test-otp.ts  # drop TestOtpEnv (D-W4-10); move TEST_OTP_IDENTIFIER_RE out (D-W3b-9)
+  - packages/core/src/test-otp-identifier.ts  # new home for TEST_OTP_IDENTIFIER_RE (D-W3b-9)
+  - packages/core/src/index.ts  # export only (D-W3b-9)
+  - apps/trainer-web/package.json  # typecheck script only (D-W3b-9)
+  - apps/trainer-web/e2e-staging/tsconfig.json  # new (D-W3b-9)
+  - apps/trainer-web/e2e-staging/00-host-guard.spec.ts  # import path only (D-W3b-9)
+  - apps/api/src/middleware/runtime-guard.ts  # TestOtpEnv -> Env only
+  - apps/api/src/routes/auth-login.test-otp.test.ts  # TestOtpEnv -> Env only
+  - apps/api/wrangler.toml  # SENTRY_ENVIRONMENT var per env only
+  - pnpm-lock.yaml  # shared with BT2b under the W4.md lockfile rule
+frames: []
+model: sonnet
+size: S
+---
+
+## Outcome
+On staging and production, unhandled errors in the API Worker's fetch, scheduled and queue handlers reach Sentry with release and environment tags, and no personal or health data leaves the Worker.
+
+## Context
+- v14 BT2 (Worker half; the mobile half is BT2b because backend and UI never share a spec). D-W4-1: Sentry, staging and production only.
+- `@sentry/cloudflare` with `withSentry` around the exported handler (`apps/api/src/index.ts:278-322`); `nodejs_compat` is already on (`apps/api/wrangler.toml:15`).
+- DSN storage: D-W4-5 (decided by Firoz, 1 Nov 2026): Worker secret `SENTRY_DSN` per env (as in v14 CF2 step 8), not a toml var. With no DSN set (local, tests) Sentry is off.
+- Tracing: D-W4-6 (decided by Firoz, 1 Nov 2026): errors only (`tracesSampleRate: 0`).
+- After OB2 (W2), which owns logging in `index.ts`.
+- **D-W4-10** (decided by Firoz, 3 Nov 2026): BT2 also pays two QA1 debts in the files it owns. QT1 typed its env fields locally because BT2 owned `types.ts` (QT1.md, D-QA1-1). QT2 is invoked without a package script because BT2 owns `package.json` (QT2.md). Depends on QT2 (PR #157) for the script paths.
+
+## Gap list
+- No Sentry package or init in `apps/api` (`apps/api/package.json`, `apps/api/src/index.ts:278-322`).
+- `apps/api/src/types.ts`: no `SENTRY_DSN` / `SENTRY_ENVIRONMENT` in `Env`.
+- `apps/api/src/auth/test-otp.ts:29` declares `TestOtpEnv = Env & { QA_TEST_OTP_ENABLED?; QA_TEST_OTP_CODE? }`, cast in `middleware/runtime-guard.ts:53` and `routes/auth-login.test-otp.test.ts:22,71,88`.
+- `apps/api/package.json` has no script for QT2's `scripts/qa-seed.ts` / `scripts/qa-reset.ts`.
+- `apps/trainer-web/e2e-staging/00-host-guard.spec.ts:15` imports `TEST_OTP_IDENTIFIER_RE` from `../../api/src/auth/test-otp.js`, a cross-app source import; it drags `apps/api/src/types.ts` in and fails on four Workers globals, which is why `e2e-staging/**` is not typechecked (D-W3b-9).
+
+## Acceptance criteria
+- [ ] `withSentry` wraps fetch, scheduled and queue; enabled only when `SENTRY_DSN` is set and `SENTRY_ENVIRONMENT` is `staging` or `production`.
+- [ ] `beforeSend` in `lib/sentry.ts` drops request bodies, cookies, `Authorization` and query strings, and removes emails, names, notes and any health fields from `extra`/`contexts`; `sendDefaultPii: false`.
+- [ ] `release` = the deploy's git SHA passed by the deploy script var if present, else unset; `environment` from `SENTRY_ENVIRONMENT`.
+- [ ] Handled errors (4xx, `fail()` responses) are not reported.
+- [ ] Local and tests never call Sentry.
+- [ ] `Env` has `QA_TEST_OTP_ENABLED?: string` and `QA_TEST_OTP_CODE?: string`. `TestOtpEnv` no longer exists (`rg TestOtpEnv apps/api` is empty), and QT1's tests pass unchanged in behaviour.
+- [ ] `pnpm --filter @fitbud/api qa:seed -- --reference-date 2026-11-02` and `qa:reset` run QT2's scripts locally (`node --experimental-strip-types`), write only to `apps/api/.qa-seed/`, and run no remote command.
+- [ ] `apps/api/package.json` `lint` also covers `qa-smoke` (`eslint src scripts qa-smoke --max-warnings=0`), per D-QA1-15; lint errors it finds are fixed in `apps/api/qa-smoke/**` without changing assertions. Folded in from W3b (CU10, decided 3 Nov 2026) because BT2 owns `apps/api/package.json`.
+- [ ] **Folded in from W3b CU10 (D-W3b-9, Firoz, 3 Nov 2026).** `TEST_OTP_IDENTIFIER_RE` moves out of `apps/api/src/auth/test-otp.ts` into `packages/core` and both consumers import it from there, so no app imports another app's source (AGENTS.md: "Apps depend on packages, never on another app's source"). `packages/core` must stay free of Cloudflare and any other provider, so move the pattern alone — not `Env`, not `TestOtpEnv`.
+- [ ] **Folded in from W3b CU10 (D-W3b-9).** `apps/trainer-web` typechecks `e2e-staging/**`: `apps/trainer-web/e2e-staging/tsconfig.json` exists with `types` left **unset** (CU10 measured: `"types": ["node"]` fails with `TS2688`, `"types": []` yields 40 errors, unset yields 4 — all four being the Workers globals this criterion removes), and `apps/trainer-web`'s `typecheck` script adds `tsc -p e2e-staging/tsconfig.json`. **No new dependency may be added to `apps/trainer-web` for this** — in particular not `@cloudflare/workers-types`, which D-W3b-9 rejected; if one is needed, the relocation above is incomplete.
+- [ ] The drift test at `apps/trainer-web/e2e-staging/00-host-guard.spec.ts:228` still fails when the committed QA emails and the shared `TEST_OTP_IDENTIFIER_RE` disagree. Prove it by mutating one committed email locally (do not commit) and showing the test goes red — the test exists only to catch that drift, so a relocation that quietly breaks it is worse than leaving the import.
+- [ ] Note for whoever does this: node types reach `e2e-staging` only incidentally, via `@types/qrcode`'s `/// <reference types="node" />` with `@types/node` beside it in pnpm's store. CU10 documented that in a tsconfig comment rather than relying on it silently; keep the comment.
+
+## Out of scope
+- Mobile (BT2b). Source-map upload for the Worker (post-beta). Alerts and dashboards (Firoz, manual).
+- Product rules (CLAUDE.md, never break): only the trainer resolves an exception (no auto-resolve); no auto-send (WhatsApp is a wa.me prefill); no percentages or streaks; payments are tracking only; ended clients are read-only on server and UI.
+- Working rules (CLAUDE.md): never run remote or deploy commands; no secrets in code, logs or commits (only `.example` env files and the demo seed); one task, one branch `claude/<ID>-<slug>`, one PR `<ID>: <summary>` off the latest `main`; update by merging `main`, never rebase or force-push.
+
+## Tests to add
+- `apps/api/src/lib/sentry.test.ts` (new): scrubber removes each sensitive field; no DSN → disabled; `development` env → disabled.
+- Checks to run: `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm test`.
+
+## Visual check
+- Non-UI: no screenshot. Firoz sends one test error on staging (BT5 step 7).
+
+## Stop conditions
+- A frame or decision is missing or ambiguous, or a decision this spec relies on is still marked **Open** in `docs/specs/batches/W4.md`.
+- A file outside `files_owned` must change.
+- The spec leaves open a decision that changes product behavior, scope, architecture, auth or data.
+- The task would need a remote command (`wrangler deploy`, `wrangler d1 … --remote`, `seed --remote`, `eas build`, `eas submit`), a secret, production data or a deploy.

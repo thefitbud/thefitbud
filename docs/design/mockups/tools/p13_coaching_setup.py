@@ -1,0 +1,41 @@
+# Plan › Coaching setup (TW-11) without basic details or subscription (those moved to Client settings, 22 Oct).
+# 148 new client draft · 149 active, Expectations editing (targets only; old flag-rules version kept as 149-…-ref) · IP-07 hybrid client, Coaching mode section
+from cw import *
+X='''.acc{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;flex:1;min-height:0;display:flex;flex-direction:column}
+.ai{border-top:1px solid var(--border)}.ai:first-child{border-top:0}.ai .ah{display:grid;grid-template-columns:24px 190px 1fr auto;gap:12px;align-items:center;min-height:52px;padding:0 18px;font-size:14px}.ai .ah b{color:var(--navy);font-weight:600;font-size:15px}.ai .ah span.s{color:var(--ink-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai .abd{padding:14px 18px 18px 54px;display:flex;flex-direction:column;gap:12px}
+.ai.open .ah{background:var(--lavender-50)}
+.ft{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--border);background:#fff;margin-top:auto}
+.ptr{display:flex;gap:10px;align-items:center;background:var(--info-bg);border:1px solid var(--info-line);color:var(--info);border-radius:12px;padding:8px 8px 8px 12px;font-size:13px}.ptr a{margin-left:auto;font-weight:700;min-height:40px;display:flex;align-items:center;padding:0 10px}
+.mode{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.mode a{border:1px solid var(--border-strong);border-radius:14px;padding:12px 14px;font-size:13px;color:var(--ink-500);min-height:84px}.mode a b{display:flex;gap:6px;align-items:center;color:var(--navy);font-size:14px;font-weight:600;margin-bottom:4px}.mode a.on{border-color:var(--indigo);background:var(--lavender-50);box-shadow:inset 0 0 0 1px var(--indigo)}
+.et{width:100%;border-collapse:collapse;font-size:14px}.et th{text-align:left;font-size:12px;color:var(--ink-500);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border)}.et td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}.et td b{color:var(--navy);font-weight:600}
+.stp2{display:inline-flex;align-items:center;gap:8px;height:40px;border:1px solid var(--border-strong);border-radius:10px;padding:0 10px;font-weight:600;color:var(--navy)}
+'''
+DONE='<span class="chip pos">'+ic("check",12,w=2.4)+'Done</span>';TODO='<span class="chip neu">To do</span>';EDIT='<span class="chip sel">'+ic("edit",12)+'Editing</span>'
+def ai(title,summ,chip,body=None):
+    op=body is not None
+    return f'<div class="ai {"open" if op else ""}"><div class="ah"><span>{ic("down" if op else "right",16)}</span><b>{title}</b><span class="s">{summ}</span>{chip}</div>{f"<div class=abd>{body}</div>" if op else ""}</div>'
+def wf(l,v,hp=''): return f'<div class="wf"><label>{l}</label><div class="in">{v}</div>{f"<span class=hp>{hp}</span>" if hp else ""}</div>'
+def ptr(n): return f'<div class="ptr">{ic("user",15)}Name, phone, age and subscription{" and package" if n=="Neha" else ""} moved to Client settings. Coaching setup is only about how you coach {n}.<a>Open client settings {ic("right",14)}</a></div>'
+def bar(right): return f'<div class="row"><div class="seg2"><a>{ic("clip",15)}&nbsp;Plans</a><a class="on">Coaching setup</a></div><span class="sp"></span><span class="sm muted">{right}</span></div>'
+def page_(k,right,n,items,foot,extra=''):
+    return wpage(k,bar(right)+ptr(n)+f'<div class="acc"><div style="flex:1;min-height:0;overflow:hidden">{items}</div><div class="ft">{foot}</div></div>','Plan',extra=X+extra,count=0 if k=='vikram' else 1)
+# 148 Vikram, new client draft
+goal=wf('Goal · shown to Vikram','Run a under-4-hour marathon at Tata Mumbai Marathon, Jan 2027','58 of 120')+wf('Detailed goal · private','First full marathon. Ran 21 km in 1 h 58 min in Aug. Wants strength work to protect his right knee (old ITB pain). Travels Mon–Tue for work, so long runs on Sunday only.','Only you see this.')
+start='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+wf('Start weight','74.2 <span class=muted>kg</span>','From intake · Mon 12 Oct')+wf('Diet preference','Vegetarian + eggs'+ic("down",15).replace('class="ic"','class="ic" style="margin-left:auto"'))+'</div>'
+items=ai('Goal','Run a under-4-hour marathon in Mumbai, Jan 2027',DONE,goal)+ai('Starting point','74.2 kg · vegetarian + eggs',DONE,start)+ai('Expectations','Workouts, meals, weight trend',TODO)+ai('Check-ins','Cadence, window and form',TODO)+ai('Tracking','Weight weekly · progress photos · session effort',DONE)+ai('Automatic reminders','On for workouts and meals · off for check-ins',DONE)
+foot=f'<span class="chip neu">{ic("edit",12)}Draft</span><span class="sm muted">2 sections left: Expectations, Check-ins</span><span class="sp"></span><a class="btn o sm">Save draft</a><a class="btn dis sm" aria-disabled="true">Activate</a>'
+save('148-trainer-web-configure-v3-web',page_('vikram','Draft saved 9:42 am','Vikram',items,foot))
+# 149 Rohan active, Expectations editing (targets only)
+rows=[('Workouts','<span class="stp2">4 a week '+ic("down",14)+'</span>','Log within 24 h of the planned time'),('Meals logged','<span class="stp2">at least 22 of 28 '+ic("down",14)+'</span>','A week · 4 meals a day'),('Check-in','<span class="stp2">Weekly · Fri '+ic("down",14)+'</span>','48 h window · Weekly check-in form'),('Weight trend','<span class="stp2">−0.3 to −0.7 kg '+ic("down",14)+'</span>','A week · weigh-in on Fridays'),('Steps','<span class="chip neu">Coming soon</span>','Counts only when Rohan connects Apple Health')]
+exp='<table class="et"><tr><th style="width:170px">Expectation</th><th style="width:240px">Target</th><th>Details</th></tr>'+''.join(f'<tr><td><b>{a}</b></td><td>{b}</td><td class="muted">{c}</td></tr>' for a,b,c in rows)+'</table><p class="xs muted">Targets are counts, never a % score. Changes apply from tomorrow.</p>'
+items=ai('Goal','Lose 6 kg by March · detailed goal added',DONE)+ai('Starting point','88.5 kg on Mon 24 Aug · vegetarian',DONE)+ai('Expectations','4 workouts a week · 22 of 28 meals · weekly check-in Fri · −0.3 to −0.7 kg a week',EDIT,exp)+ai('Check-ins','Weekly · Fri · 48 h window · Weekly check-in form',DONE)+ai('Tracking','Weight weekly · progress photos · session effort',DONE)+ai('Automatic reminders','On for workouts and meals · off for check-ins',DONE)
+foot=f'<span class="chip pos">Active · v3</span><span class="sm muted">Saving creates v4 from tomorrow, Mon 19 Oct. v3 stays active until then.</span><span class="sp"></span><a class="btn o sm">Discard</a><a class="btn p sm">Save as v4</a>'
+save('149-trainer-web-configure-active-v3-web',page_('rohan','Active since Mon 5 Oct · v3','Rohan',items,foot))
+# IP-07 Neha (hybrid): Coaching mode section open
+mode=f'''<div class="mode"><a>{"<b>"+ic("video",16)+"Online</b>"}Plans, check-ins and chat in the app. No in-person sessions.</a><a class="on"><b>{ic("link",16)}Hybrid</b>App coaching plus in-person sessions. She logs other days herself.</a><a><b>{ic("pin",16)}In person</b>Every workout is a session you log. Meals and check-ins stay in the app.</a></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">{wf("Usual place","Gold's Gym Andheri"+ic("down",15).replace('class="ic"','class="ic" style="margin-left:auto"'))}{wf("Usual slot","Tue and Thu · 6:00 pm · 60 min")}{wf("Group","None")}</div>
+<p class="xs muted">Sessions show up in Sessions and on Neha\'s Today. Her package and session count are in Client settings › Subscription & package.</p>'''
+items=ai('Goal','Lose 4 kg · detailed goal added',DONE)+ai('Coaching mode','Hybrid · Gold\'s Gym Andheri · Tue and Thu 6:00 pm',EDIT,mode)+ai('Starting point','66.0 kg on Mon 13 Jul · non-vegetarian',DONE)+ai('Expectations','3 app workouts + 2 sessions a week · 20 of 28 meals',DONE)+ai('Check-ins','Weekly · Sun · 48 h window',DONE)+ai('Tracking','Weight weekly · progress photos',DONE)+ai('Automatic reminders','On for workouts and meals',DONE)
+foot=f'<span class="chip pos">Active · v2</span><span class="sm muted">Saving creates v3 from tomorrow.</span><span class="sp"></span><a class="btn o sm">Discard</a><a class="btn p sm">Save as v3</a>'
+save('IP-07-trainer-web-coaching-setup-mode-v3-web',page_('neha','Active since Mon 7 Sep · v2','Neha',items,foot))

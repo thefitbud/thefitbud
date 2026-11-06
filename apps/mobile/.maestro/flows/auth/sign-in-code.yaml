@@ -1,0 +1,81 @@
+appId: com.thefitbud.mobile.staging
+name: Sign in with a code
+tags:
+  - auth
+  - trainee
+  - smoke
+  - full
+---
+# Code sign-in and the QT9 double-tap check, as the on-track trainee.
+#
+# Env from the runner: QA_ONTRACK_EMAIL, QA_OTP_CODE.
+#
+# D-QA1-14: two screenshots only. One BEFORE the code is typed, one AFTER
+# sign-in. There is deliberately no takeScreenshot between inputText of the code
+# and the signed-in home. Do not add one.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 30000
+- takeScreenshot: auth-sign-in-code__start
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    file: ../../common/sign-in-code-request.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- assertVisible: "Verify and sign in"
+- takeScreenshot: auth-sign-in-code__code-requested
+- runFlow: ../../common/assert-no-crash.yaml
+
+# --- no screenshots from here until the signed-in home (D-QA1-14) ---
+- tapOn:
+    below: "6-digit code"
+- inputText: ${QA_OTP_CODE}
+- tapOn:
+    text: "Sent to .*"
+    optional: true
+# QT9: a double tap on Verify must produce one sign-in and no error. The first
+# tap starts the request; the second lands while it is in flight (or after the
+# screen has already changed, where it must do nothing).
+- tapOn:
+    text: "Verify and sign in"
+    repeat: 2
+    delay: 100
+    optional: true
+- extendedWaitUntil:
+    visible: "Today's workout|Needs you|Choose mode"
+    timeout: 30000
+    optional: true
+- runFlow:
+    when:
+      visible: "6-digit code"
+    commands:
+      # Still on the code screen: wipe the field so the failure screenshot
+      # Maestro takes next cannot show the code.
+      - tapOn:
+          below: "6-digit code"
+          optional: true
+      - eraseText:
+          charactersToErase: 12
+          optional: true
+      - tapOn:
+          text: "Sent to .*"
+          optional: true
+- extendedWaitUntil:
+    visible: "Today's workout|Needs you|Choose mode"
+    timeout: 5000
+# --- signed in; screenshots allowed again ---
+
+# One sign-in, no error: none of the QT9 messages, and not bounced back to sign-in.
+- assertNotVisible: ".*That code didn't work.*"
+- assertNotVisible: ".*Too many tries.*"
+- assertNotVisible: ".*Couldn't reach FitBud.*"
+- assertNotVisible: ".*we couldn't finish signing you in.*"
+- assertNotVisible: "Verify and sign in"
+- assertVisible: "Today's workout"
+- takeScreenshot: auth-sign-in-code__signed-in
+- runFlow: ../../common/assert-no-crash.yaml

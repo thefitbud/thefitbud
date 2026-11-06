@@ -15,7 +15,7 @@
 
 ## (b) Guide section (verbatim)
 
-> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2, lines 3214–3262. Changes: the misleading "Status" label is dropped, two subsections are renamed, and image paths point to `../img/`. Nothing else is changed.
+> **Read every line of this section.** Item 3, **"Legacy (do not keep)"**, describes the OLD UI that you must **REPLACE**. Never preserve or restyle it. Item 4, **"Gaps to close"**, lists what's wrong. The target is item 5 onward. Copied from FitBud UI/UX Implementation Guide v1.2 (retired 30 Oct 2026; this file is now the source). Changes: the misleading "Status" label is dropped, two subsections are renamed. Old image embeds were removed on 30 Oct 2026; the visual target is the locked frames in `docs/design/` (see section (c)). Nothing else is changed.
 
 <!-- BEGIN VERBATIM TR-14 -->
 ### TR-14 · Check-in
@@ -27,8 +27,6 @@
 3. **Legacy (do not keep).**
    - Code: three hard-coded fields.
    - Figma `trainee_02_checkin.png` includes sleep and HRV and a "Priority Trainer Queue" (both banned).
-
-   ![Figma check-in (reference; remove sleep/HRV and the priority promise)](../img/figma_trainee_02_checkin.jpg){.phone}
 
 4. **Gaps to close.** Ignores the check-in templates (decision E). No progress through sections. No prefill.
 5. **Target design.**
@@ -71,17 +69,9 @@
 
 ---
 
-## (c) Reference images
+## (c) Design frames
 
-Open **every** image below before you write code. LEGACY images show what to remove. REFERENCE images show the target or inspiration.
-
-- **REFERENCE: target/inspiration (Figma). Remove every banned element listed in this section and in §1.5** (embedded in the guide section): `figma_trainee_02_checkin.jpg`
-
-  ![figma_trainee_02_checkin.jpg](../img/figma_trainee_02_checkin.jpg)
-
-- **LEGACY: 18 Oct QA capture of the current build at 7f74108 (iPhone 15 profile), do not copy** (Check-in, aarav.ontrack@demo.fitbud.test): `mobile-qa/TR-14-check-in.jpg`
-
-  ![mobile-qa/TR-14-check-in.jpg](../img/mobile-qa/TR-14-check-in.jpg)
+The old Figma reference images and 18 Oct build captures were removed on 30 Oct 2026. The only visual target is the locked frames in [`docs/design/`](../../design/README.md): find this screen's frames in the README's screen index and build to them. Where text in (b) describes layout that a locked frame changes, the frame wins; content rules in [01-product-rules](../01-product-rules.md) and [banned-strings.json](../banned-strings.json) still apply. If a screen or state has no locked frame, stop and ask for design; never invent it.
 
 ## (d) Acceptance checks (verifiable)
 

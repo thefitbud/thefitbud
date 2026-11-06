@@ -1,9 +1,42 @@
 import { createTestIdToken } from "./firebase.js";
+import { exchangeCustomToken } from "./token-exchange.js";
 import type { Env } from "../types.js";
 
 export type AuthTokenResult =
-  | { token: string; tokenKind: "test_id_token" | "firebase_custom_token" }
-  | { error: "AUTH_PROVIDER_NOT_CONFIGURED" };
+  | { token: string; tokenKind: "test_id_token" }
+  | {
+      token: string;
+      tokenKind: "firebase_id_token";
+      refreshToken: string;
+      expiresIn: number;
+    }
+  | { error: "AUTH_PROVIDER_NOT_CONFIGURED" | "AUTH_EXCHANGE_FAILED" };
+
+export type MintedAuthToken = Exclude<AuthTokenResult, { error: string }>;
+export type AuthTokenError = Extract<AuthTokenResult, { error: string }>["error"];
+
+/** Response fields for a minted token; test tokens keep the `{ token, tokenKind }` shape. */
+export function sessionTokenFields(token: MintedAuthToken) {
+  return token.tokenKind === "firebase_id_token"
+    ? {
+        token: token.token,
+        tokenKind: token.tokenKind,
+        refreshToken: token.refreshToken,
+        expiresIn: token.expiresIn,
+      }
+    : { token: token.token, tokenKind: token.tokenKind };
+}
+
+/** HTTP status for a mint failure: Google refusing the exchange is 401, missing config is 503. */
+export function authTokenErrorStatus(error: AuthTokenError): 401 | 503 {
+  return error === "AUTH_EXCHANGE_FAILED" ? 401 : 503;
+}
+
+/**
+ * Test mode returns the unsigned test token. Firebase mode signs a custom token
+ * with the service account and exchanges it server-side for an ID token, so the
+ * client receives a bearer the API can verify (AU1) plus a refresh token.
+ */
 
 export async function mintAuthToken(
   env: Env,
@@ -17,9 +50,30 @@ export async function mintAuthToken(
     };
   }
   const json = env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!json) {
+  const apiKey = env.FIREBASE_WEB_API_KEY;
+  if (!json || !apiKey) {
     return { error: "AUTH_PROVIDER_NOT_CONFIGURED" };
   }
+  const customToken = await signCustomToken(json, input);
+  if (!customToken) {
+    return { error: "AUTH_PROVIDER_NOT_CONFIGURED" };
+  }
+  const exchanged = await exchangeCustomToken(apiKey, customToken);
+  if (!exchanged.ok) {
+    return { error: "AUTH_EXCHANGE_FAILED" };
+  }
+  return {
+    token: exchanged.idToken,
+    tokenKind: "firebase_id_token",
+    refreshToken: exchanged.refreshToken,
+    expiresIn: exchanged.expiresIn,
+  };
+}
+
+async function signCustomToken(
+  json: string,
+  input: { firebaseUid: string; email?: string },
+): Promise<string | null> {
   try {
     const serviceAccount = JSON.parse(json) as {
       client_email: string;
@@ -51,10 +105,9 @@ export async function mintAuthToken(
       key,
       new TextEncoder().encode(signingInput),
     );
-    const token = `${signingInput}.${base64UrlBytes(new Uint8Array(signature))}`;
-    return { token, tokenKind: "firebase_custom_token" };
+    return `${signingInput}.${base64UrlBytes(new Uint8Array(signature))}`;
   } catch {
-    return { error: "AUTH_PROVIDER_NOT_CONFIGURED" };
+    return null;
   }
 }
 

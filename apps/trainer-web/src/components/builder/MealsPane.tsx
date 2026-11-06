@@ -21,7 +21,6 @@ import {
   moveMeal,
   removeFoodItem,
   removeMeal,
-  sortedByOrder,
   sortedMealsByTime,
   updateFoodItem,
   updateMeal,

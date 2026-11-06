@@ -22,6 +22,7 @@ import {
   users,
 } from "../db/schema";
 import {
+  createIdentityRequestCache,
   ensureRoleAndProfile,
   findOrCreateUserFromFirebase,
   loadActorByUserId,
@@ -40,7 +41,8 @@ import {
   normalizeEmail,
 } from "../domain/mappers";
 import { inviteEmailBody, inviteEmailSubject } from "../emails/invite.js";
-import { sendSystemEmail } from "../lib/email.js";
+import { isEmailDeliveryFailure, sendSystemEmail } from "../lib/email.js";
+import { writeStructuredLog } from "../lib/log.js";
 import { trainerProfiles, userIdentities } from "../db/schema";
 import { verifyPurposeProof } from "../auth/proof.js";
 import {
@@ -49,7 +51,11 @@ import {
   validatePasswordPlaintext,
 } from "../auth/password.js";
 import { identifierHash } from "../auth/identifiers.js";
-import { mintAuthToken } from "../auth/custom-token.js";
+import {
+  authTokenErrorStatus,
+  mintAuthToken,
+  sessionTokenFields,
+} from "../auth/custom-token.js";
 import { acceptInvitationWithTokenResponseSchema } from "@fitbud/contracts";
 import { buildPage, decodeCursor } from "../lib/cursor";
 import {
@@ -74,6 +80,21 @@ import type { Env, Variables } from "../types";
 
 const INVITE_CREATE_OPERATION = "invitation.create";
 const DEFAULT_INVITE_DAYS = 14;
+
+/**
+ * Byte-identical to the checks in `routes/auth.ts` and `routes/notifications.ts`,
+ * which are the other two paths that write `users.timezone`. Kept local because
+ * neither of those files exports it and neither is this task's to change; the
+ * right home is one shared helper (see this PR's follow-up note).
+ */
+function isValidIanaTimezone(zone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const invitationRoutes = new Hono<{
   Bindings: Env;
@@ -270,16 +291,35 @@ invitationRoutes.post(
       .limit(1);
     const trainerName = trainerProfile?.displayName ?? "Your coach";
     if (parsed.data.sendEmail) {
-      await sendSystemEmail(c.env, db, {
-        to: recipientEmail,
-        template: "invite",
-        subject: inviteEmailSubject(trainerName),
-        text: inviteEmailBody(inviteUrl, trainerName),
-      });
-      await db
-        .update(clientInvitations)
-        .set({ emailSentAt: timestamp, updatedAt: timestamp })
-        .where(eq(clientInvitations.id, invitationId));
+      // The invitation already exists: if the email fails, still return it with
+      // its link (emailSentAt stays null) so the trainer can share it, instead of
+      // an error that strands it behind INVITE_PENDING.
+      let emailSent = true;
+      try {
+        await sendSystemEmail(c.env, db, {
+          to: recipientEmail,
+          template: "invite",
+          subject: inviteEmailSubject(trainerName),
+          text: inviteEmailBody(inviteUrl, trainerName),
+        });
+      } catch (err) {
+        if (!isEmailDeliveryFailure(err)) throw err;
+        emailSent = false;
+        writeStructuredLog({
+          level: "warn",
+          message: "Email send failed",
+          requestId: c.get("requestId"),
+          operation: "invitations.create",
+          errorName: err.name,
+          errorCode: err.code,
+        });
+      }
+      if (emailSent) {
+        await db
+          .update(clientInvitations)
+          .set({ emailSentAt: timestamp, updatedAt: timestamp })
+          .where(eq(clientInvitations.id, invitationId));
+      }
     }
     const data = createInvitationResponseSchema.parse({
       ...mapInvitation(row),
@@ -614,6 +654,19 @@ invitationRoutes.post("/accept",
     });
   }
 
+  // `users.timezone` is `NOT NULL DEFAULT 'UTC'` and every reminder decision is
+  // derived in it, so an unresolvable zone makes a trainee's reminders
+  // undecidable. The two other write paths (`PUT /me/trainer-profile`,
+  // `PUT /notifications/preferences`) already check this; this one wrote the
+  // request value straight through, and `timezone` is only `z.string().min(1)
+  // .max(64)` in the contract. Checked here, before all four reads of it below.
+  if (
+    parsed.data.timezone !== undefined &&
+    !isValidIanaTimezone(parsed.data.timezone)
+  ) {
+    return fail(c, 400, "INVALID_TIMEZONE", "Timezone is not a valid IANA zone.");
+  }
+
   const db = createDb(c.env.DB);
   const tokenHash = await sha256Hex(parsed.data.token);
   const invitations = await db
@@ -723,13 +776,19 @@ invitationRoutes.post("/accept",
       email: invitation.recipientEmail,
     });
     if ("error" in token) {
-      return fail(c, 503, token.error, "Authentication provider is not configured.");
+      return fail(
+        c,
+        authTokenErrorStatus(token.error),
+        token.error,
+        token.error === "AUTH_EXCHANGE_FAILED"
+          ? "Sign-in could not be completed. Try again."
+          : "Authentication provider is not configured.",
+      );
     }
     return ok(
       c,
       acceptInvitationWithTokenResponseSchema.parse({
-        token: token.token,
-        tokenKind: token.tokenKind,
+        ...sessionTokenFields(token),
         userId,
         relationshipId,
       }),
@@ -824,11 +883,16 @@ invitationRoutes.post("/accept",
     identity.email?.split("@")[0] ??
     "Trainee";
 
-  await ensureRoleAndProfile(db, {
-    userId,
-    role: "trainee",
-    displayName,
-  });
+  const identityCache = createIdentityRequestCache();
+  await ensureRoleAndProfile(
+    db,
+    {
+      userId,
+      role: "trainee",
+      displayName,
+    },
+    identityCache,
+  );
 
   if (parsed.data.timezone) {
     await db
@@ -888,12 +952,16 @@ invitationRoutes.post("/accept",
   )[0]!;
 
   // Load actor so subsequent bearer calls succeed for this Firebase UID.
-  await loadActorByUserId(db, {
-    userId,
-    surface: "mobile",
-    authMethod: "bearer",
-    requestedRole: "trainee",
-  });
+  await loadActorByUserId(
+    db,
+    {
+      userId,
+      surface: "mobile",
+      authMethod: "bearer",
+      requestedRole: "trainee",
+    },
+    identityCache,
+  );
 
   const onboardingStatus = await onboardingStatusForRelationship(db, relationship);
   return ok(

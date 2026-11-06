@@ -108,15 +108,25 @@ export function createD1Database(sqlite: DatabaseSync): D1Database {
       return prepareBound(stmt);
     },
     async batch<T extends D1PreparedStatement[]>(statements: T) {
+      // D1 runs a batch as one SQL transaction: if any statement fails the
+      // whole sequence rolls back. Mirror that so tests can prove atomicity.
       const results: D1Result[] = [];
-      for (const statement of statements) {
-        const runResult = await (statement as BoundStatement).run();
-        results.push({
-          success: runResult.success,
-          meta: runResult.meta,
-          results: [],
-        });
+      sqlite.exec("SAVEPOINT d1_batch");
+      try {
+        for (const statement of statements) {
+          const runResult = await (statement as BoundStatement).run();
+          results.push({
+            success: runResult.success,
+            meta: runResult.meta,
+            results: [],
+          });
+        }
+      } catch (error) {
+        sqlite.exec("ROLLBACK TO d1_batch");
+        sqlite.exec("RELEASE d1_batch");
+        throw error;
       }
+      sqlite.exec("RELEASE d1_batch");
       return results;
     },
     async exec(query: string) {

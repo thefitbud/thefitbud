@@ -1,0 +1,262 @@
+<!doctype html><html lang="en-IN"><head><meta charset="utf-8"><title>FitBud · Rohan Mehta</title><link rel="stylesheet" href="tokens.css">
+<style>
+  .wsh { background: #fff; border-bottom: 1px solid var(--border); }
+  .wsh-in { max-width: 1200px; padding: 22px 32px 0; }
+  .r1 { display: flex; align-items: flex-start; gap: 14px; }
+  .r1 .av.lg { width: 48px; height: 48px; font-size: 17px; }
+  .r1 .id { flex: 1; min-width: 0; }
+  .r1 .nm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 6px; margin-top: 6px; font-size: 13px; line-height: 18px; color: var(--ink-500); }
+  .meta > * + *::before { content: ""; display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: var(--ink-400); margin: 0 6px 0 0; vertical-align: middle; }
+  .meta > .chip::before { display: none; }
+  .meta > .chip { margin-left: 2px; }
+  .meta a { color: var(--indigo); font-weight: 600; }
+  .acts { display: flex; align-items: center; gap: 8px; padding-top: 6px; }
+  .tabs { display: flex; gap: 24px; margin-top: 20px; }
+  .tabs a { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 44px; font-size: 14px; font-weight: 500; color: var(--ink-500); }
+  .tabs a.on { color: var(--navy); font-weight: 600; }
+  .tabs a.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--indigo); }
+  .tabs .tc { min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--lavender); color: var(--indigo); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .g84 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .pad { padding: 0 20px 20px; }
+  /* attention card */
+  .att { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-top: 1px solid var(--border); }
+  .att .ico { width: 40px; height: 40px; border-radius: 12px; background: var(--crit-bg); color: var(--crit); display: flex; align-items: center; justify-content: center; flex: none; }
+  .att .ico svg.ic { width: 20px; height: 20px; }
+  .att .tx { flex: 1; min-width: 0; }
+  .att .tx b { display: block; font-size: 15px; line-height: 22px; font-weight: 600; color: var(--navy); }
+  .att .tx span { font-size: 13px; color: var(--ink-500); }
+  .card.accent { border-left: 3px solid var(--crit); }
+  /* week strip */
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 4px 16px 16px; }
+  .day { border-radius: 12px; padding: 10px 8px 12px; text-align: center; border: 1px solid transparent; }
+  .day.today { background: var(--lavender-50); border-color: #DCD5FF; }
+  .day .dn { font-size: 12px; font-weight: 600; color: var(--ink-500); }
+  .day .dd { font-size: 15px; font-weight: 700; color: var(--navy); margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .day.today .dn { color: var(--indigo); }
+  .wk { width: 34px; height: 34px; margin: 10px auto 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .wk svg.ic { width: 16px; height: 16px; stroke-width: 2.25; }
+  .wk.done { background: var(--navy); color: #fff; }
+  .wk.miss { border: 1.5px solid var(--crit); color: var(--crit); background: #fff; }
+  .wk.rest { color: var(--ink-400); }
+  .wk.rest::before { content: ""; width: 12px; height: 2px; border-radius: 2px; background: var(--ink-200); }
+  .wk.future { border: 1.5px dashed var(--border-strong); color: var(--ink-400); }
+  .wl { font-size: 12px; line-height: 16px; color: var(--ink-700); font-weight: 500; white-space: nowrap; }
+  .wl.m { color: var(--ink-500); }
+  .meals { display: flex; justify-content: center; gap: 3px; margin-top: 10px; }
+  .meals i { width: 9px; height: 9px; border-radius: 3px; background: var(--ring-kcal); }
+  .meals i.no { background: #fff; box-shadow: inset 0 0 0 1.5px var(--border-strong); }
+  .meals i.later { background: var(--ink-200); }
+  .ml { font-size: 11px; color: var(--ink-500); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); }
+  .stat { padding: 14px 20px; }
+  .stat + .stat { border-left: 1px solid var(--border); }
+  .stat .v { font-size: 18px; line-height: 24px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .stat .v small { font-size: 14px; font-weight: 500; color: var(--ink-500); letter-spacing: 0; }
+  .stat .l { font-size: 12px; color: var(--ink-500); font-weight: 500; margin-top: 2px; }
+  .nut { display: flex; align-items: center; gap: 22px; padding: 14px 20px 16px; border-top: 1px solid var(--border); background: #FCFCFE; border-radius: 0 0 16px 16px; }
+  .nut .lbl { font-size: 13px; font-weight: 600; color: var(--navy); width: 120px; }
+  .nut .lbl span { display: block; font-size: 12px; font-weight: 500; color: var(--ink-500); }
+  .mini { display: flex; align-items: center; gap: 8px; }
+  .mini svg { width: 30px; height: 30px; transform: rotate(-90deg); }
+  .mini b { display: block; font-size: 13px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .mini span { display: block; font-size: 11px; color: var(--ink-500); font-weight: 500; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-500); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+  /* activity */
+  .act { display: grid; grid-template-columns: 36px 1fr auto 96px; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--border); }
+  .act .ai { width: 36px; height: 36px; border-radius: 10px; background: var(--page-web); color: var(--ink-500); display: flex; align-items: center; justify-content: center; }
+  .act .ai svg.ic { width: 18px; height: 18px; }
+  .act b { display: block; font-size: 14px; font-weight: 600; color: var(--navy); }
+  .act span.s { display: block; font-size: 13px; color: var(--ink-500); }
+  .act .when { text-align: right; font-size: 13px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
+  /* side cards */
+  .sc { padding: 16px 18px; }
+  .sc-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .sc-h h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-500); letter-spacing: 0.01em; }
+  .sc-h h3 svg.ic { width: 16px; height: 16px; }
+  .sc .big { font-size: 15px; line-height: 22px; font-weight: 600; color: var(--navy); }
+  .sc .sub { font-size: 13px; line-height: 18px; color: var(--ink-500); margin-top: 2px; }
+  .kv { display: flex; justify-content: space-between; font-size: 13px; padding: 7px 0; border-top: 1px dashed var(--border); color: var(--ink-500); }
+  .kv b { color: var(--ink-700); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .wt { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .wt .n { font-size: 24px; line-height: 28px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .wt .n small { font-size: 14px; font-weight: 600; color: var(--ink-500); }
+  .notecard { padding: 12px 0; border-top: 1px solid var(--border); }
+  .notecard p { font-size: 13px; line-height: 19px; color: var(--ink-700); }
+  .notecard .nm { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ink-500); }
+  .chip.xs { height: 20px; font-size: 11px; padding: 0 7px 0 6px; }
+  .chip.xs svg.ic { width: 12px; height: 12px; }
+  .wnav{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .card-h .t-cap{white-space:nowrap}
+  .legend span{white-space:nowrap}
+  .legend{gap:10px!important;font-size:11.5px}
+  .wnav a.nb{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--ink-700);background:#fff}
+  .wnav a.nb svg.ic{width:16px;height:16px}
+  .wnav a.nb.dis{opacity:.4}
+  .wnav .pill{height:30px;padding:0 10px;border-radius:8px;background:var(--sel-bg);color:var(--indigo);font-size:13px;font-weight:600;display:flex;align-items:center}
+  .day.sel{outline:2px solid var(--indigo);outline-offset:-2px;border-radius:12px}
+  .nut .dnav{display:flex;align-items:center;gap:4px;margin-left:auto}
+  .nut .dnav a{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--ink-700)}
+  .nut .dnav a svg.ic{width:14px;height:14px}
+  .nut .dnav a.dis{opacity:.4}
+</style></head>
+<body>
+<div class="shell">
+  <aside class="side" aria-label="Primary">
+  <div class="brand"><img src="assets/mark-white.svg" alt=""><b>FitBud</b></div>
+  <nav class="nav">
+    <a class="" href="#" aria-current="page"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home<span class="badge">11</span></a>
+    <a class="on" href="#"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></svg>Clients</a>
+    <a class="" href="#"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>Check-ins<span class="badge">2</span></a>
+    <a class="" href="#"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></svg>Templates</a>
+    <a class="" href="#"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>More</a>
+  </nav>
+  <div class="grow"></div>
+  <div class="foot">
+    <div class="nav"><a href="mailto:tech@thefitbud.com"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/><circle cx="12" cy="12" r="4"/></svg>Help</a></div>
+    <a class="me" href="#"><span class="av">RV</span><span class="who-t"><b>Rahul Verma</b><span>Trainer</span></span></a>
+  </div>
+</aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><span class="dim">Clients</span><span class="sep"><svg class="ic" style="width:14px;height:14px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>Rohan Mehta</div>
+      <div class="search"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Search clients<span class="kbd">⌘K</span></div>
+      <button class="bell" aria-label="Notifications, 3 unread"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg></button>
+    </header>
+
+    <section class="wsh">
+      <div class="wsh-in">
+        <div class="r1">
+          <span class="av lg c3">RM</span>
+          <div class="id">
+            <div class="nm">
+              <h1 class="t-h1">Rohan Mehta</h1>
+              <span class="chip neu"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="m16 19 2 2 4-4"/></svg>Active</span>
+              <span class="chip attn"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Needs attention</span>
+            </div>
+            <div class="meta">
+              <span>Lose 6 kg</span>
+              <a href="#">Fat loss · Phase 2</a>
+              <span>Week 6</span>
+              <span>Next check-in Fri 23 Oct</span>
+              <span>29 · Male</span>
+              <span class="chip attn xs"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M8 13h.01"/><path d="M12 13h.01"/><path d="M16 13h.01"/><path d="M8 17h.01"/><path d="M12 17h.01"/><path d="M16 17h.01"/></svg>Renewal expired · Thu 15 Oct</span>
+            </div>
+          </div>
+          <div class="acts">
+            <button class="btn btn-secondary"><svg class="wa-glyph" viewBox="0 0 24 24" aria-hidden="true"><path fill="#25D366" d="M12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.9 0-3.18-1.24-6.16-3.48-8.41A11.82 11.82 0 0 0 12.05 0Z"/><path fill="#fff" d="M12.05 21.79h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.83 9.83 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88Z"/><path fill="#25D366" d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.47-2.39-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.88 1.21 3.07.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.41-.08-.13-.28-.2-.57-.35Z"/></svg>Message on WhatsApp</button>
+            <button class="btn btn-primary">Review issue</button>
+            <button class="btn-icon bordered" aria-label="More actions"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+          </div>
+        </div>
+        <nav class="tabs" role="tablist">
+          <a class="on" href="#" role="tab" aria-selected="true">Overview</a>
+          <a href="#" role="tab">Plan</a>
+          <a href="#" role="tab">Activity</a>
+          <a href="#" role="tab">Progress</a>
+          <a href="#" role="tab">Check-ins <span class="tc">1</span></a>
+          <a href="#" role="tab">History</a>
+        </nav>
+      </div>
+    </section>
+
+    <main class="content" style="padding-top:24px">
+      <div class="g84">
+        <div class="col">
+          <!-- Needs attention: one open item -->
+          <section class="card">
+            <div class="card-h"><div class="ttl"><h2 class="t-h3">Needs attention</h2></div><span class="t-cap muted">Most severe open item</span></div>
+            <div class="att">
+              <span class="ico"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z"/><path d="m2.5 21.5 1.4-1.4"/><path d="m20.1 3.9 1.4-1.4"/><path d="M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z"/><path d="m9.6 14.4 4.8-4.8"/></svg></span>
+              <div class="tx"><b>Missed workout · Tue 13 Oct</b><span>Lower body A was planned for 7:00 pm and wasn't logged. Open 5 d, not reviewed yet.</span></div>
+              <span class="chip crit"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/></svg>Critical</span>
+              <button class="btn btn-soft">Review</button>
+            </div>
+          </section>
+
+          <!-- This week -->
+          <section class="card">
+            <div class="card-h">
+              <div style="display:flex;align-items:center;gap:12px"><div><h2 class="t-h3">This week</h2><div class="t-cap muted" style="margin-top:2px">Mon 12 Oct – Sun 18 Oct · week 6</div></div><div class="wnav" aria-label="Week"><a class="nb" href="#" aria-label="Previous week"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a><a class="nb dis" href="#" aria-label="Next week" aria-disabled="true"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a></div></div>
+              <div class="legend"><span><i style="background:var(--navy);border-radius:50%"></i>Workout done</span><span><i style="background:#fff;box-shadow:inset 0 0 0 1.5px var(--crit);border-radius:50%"></i>Missed</span><span><i style="background:var(--ring-kcal)"></i>Meal logged</span><span><i style="background:#fff;box-shadow:inset 0 0 0 1.5px var(--border-strong)"></i>Not logged</span></div>
+            </div>
+            <div class="week">
+              <div class="day"><div class="dn">Mon</div><div class="dd">12</div><div class="wk done"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div><div class="wl">Upper A</div><div class="meals"><i></i><i></i><i></i><i></i></div><div class="ml">4 of 4</div></div>
+              <div class="day"><div class="dn">Tue</div><div class="dd">13</div><div class="wk miss"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></div><div class="wl">Lower A</div><div class="meals"><i></i><i></i><i class="no"></i><i></i></div><div class="ml">3 of 4</div></div>
+              <div class="day"><div class="dn">Wed</div><div class="dd">14</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i></i><i></i><i class="no"></i></div><div class="ml">3 of 4</div></div>
+              <div class="day"><div class="dn">Thu</div><div class="dd">15</div><div class="wk miss"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></div><div class="wl">Upper B</div><div class="meals"><i></i><i class="no"></i><i></i><i class="no"></i></div><div class="ml">2 of 4</div></div>
+              <div class="day"><div class="dn">Fri</div><div class="dd">16</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i class="no"></i><i></i><i class="no"></i></div><div class="ml">2 of 4</div></div>
+              <div class="day"><div class="dn">Sat</div><div class="dd">17</div><div class="wk done"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div><div class="wl">Lower B</div><div class="meals"><i></i><i></i><i class="no"></i><i></i></div><div class="ml">3 of 4</div></div>
+              <div class="day today sel" aria-selected="true"><div class="dn">Today</div><div class="dd">18</div><div class="wk rest"></div><div class="wl m">Rest</div><div class="meals"><i></i><i class="later"></i><i class="later"></i><i class="later"></i></div><div class="ml">1 of 1 so far</div></div>
+            </div>
+            <div class="stats">
+              <div class="stat"><div class="v">2 <small>of 4</small></div><div class="l">Workouts done</div></div>
+              <div class="stat"><div class="v">18 <small>of 25</small></div><div class="l">Meals logged so far</div></div>
+              <div class="stat"><div class="v">Fri</div><div class="l">Check-in submitted</div></div>
+            </div>
+            <div class="nut">
+              <div class="lbl">Today · Sun 18 Oct<span>Nutrition logged so far</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-kcal)" stroke-width="5" stroke-linecap="round" stroke-dasharray="18.5 88"/></svg><span><b>410 / 1,950</b>kcal</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-protein)" stroke-width="5" stroke-linecap="round" stroke-dasharray="15.5 88"/></svg><span><b>22 / 125 g</b>Protein</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-carbs)" stroke-width="5" stroke-linecap="round" stroke-dasharray="21.3 88"/></svg><span><b>52 / 215 g</b>Carbs</span></div>
+              <div class="mini"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-track)" stroke-width="5"/><circle cx="18" cy="18" r="14" fill="none" stroke="var(--ring-fat)" stroke-width="5" stroke-linecap="round" stroke-dasharray="17 88"/></svg><span><b>12 / 62 g</b>Fat</span></div>
+            <div class="dnav" aria-label="Day"><a href="#" aria-label="Previous day, Sat 17 Oct"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a><a class="dis" href="#" aria-label="Next day" aria-disabled="true"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></a></div></div>
+          </section>
+
+          <!-- Recent activity -->
+          <section class="card">
+            <div class="card-h"><h2 class="t-h3">Recent activity</h2><a class="link t-sm" href="#">View all activity</a></div>
+            <div class="act"><span class="ai"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></span><div><b>Breakfast · logged as planned</b><span class="s">Vegetable poha, 1 plate · curd, 1 katori · 410 kcal</span></div><span class="chip pos"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/></svg>Logged</span><span class="when" title="Sun 18 Oct, 8:20 am">1 h ago</span></div>
+            <div class="act"><span class="ai"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z"/><path d="m2.5 21.5 1.4-1.4"/><path d="m20.1 3.9 1.4-1.4"/><path d="M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z"/><path d="m9.6 14.4 4.8-4.8"/></svg></span><div><b>Lower body B · done</b><span class="s">6 of 6 exercises · 52 min · finished 7:52 pm</span></div><span class="chip pos"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/></svg>Done</span><span class="when" title="Sat 17 Oct, 7:52 pm">yesterday</span></div>
+            <div class="act"><span class="ai"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></span><div><b>Dinner · something different</b><span class="s">Rajma, 1 katori · 2 roti · salad · 540 kcal</span></div><span class="chip neu"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Changed</span><span class="when" title="Sat 17 Oct, 9:05 pm">yesterday</span></div>
+            <div class="act"><span class="ai"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span><div><b>Weekly check-in · submitted</b><span class="s">Weight 86.4 kg · 3 photos added · 6 answers</span></div><span class="chip info"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>Submitted</span><span class="when" title="Fri 16 Oct, 9:30 pm">2 d ago</span></div>
+            <div class="act"><span class="ai"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></span><div><b>Lunch · Fri 16 Oct</b><span class="s">Planned for 1:00 pm · no log</span></div><span class="chip attn"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Not logged</span><span class="when" title="Fri 16 Oct, 1:00 pm">2 d ago</span></div>
+          </section>
+        </div>
+
+        <div class="col">
+          <section class="card sc">
+            <div class="sc-h"><h3><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>Check-in</h3><a class="link t-sm" href="#">Open</a></div>
+            <div class="big">Weekly check-in</div>
+            <div class="sub">Submitted Fri 16 Oct, 9:30 pm · waiting for your review</div>
+            <div class="kv" style="margin-top:10px"><span>Next</span><b>Fri 23 Oct</b></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></svg>Plan</h3><a class="link t-sm" href="#">Open plan</a></div>
+            <div class="big">Fat loss · Phase 2</div>
+            <div class="sub">Effective since Mon 5 Oct · Version 3</div>
+            <div class="kv" style="margin-top:10px"><span>Workouts</span><b>4 a week</b></div>
+            <div class="kv"><span>Meals</span><b>4 a day · 1,950 kcal</b></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/></svg>Reminders</h3><a class="link t-sm" href="#">Details</a></div>
+            <div class="big">Responds to 3 of 9 reminders</div>
+            <div class="sub">This week · push on, quiet hours 10:00 pm – 7:00 am</div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"/><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"/><path d="M7 21h10"/></svg>Progress</h3><a class="link t-sm" href="#">View</a></div>
+            <div class="wt">
+              <div><div class="n">86.4 <small>kg</small></div><div class="sub">−2.1 kg since Mon 7 Sep</div></div>
+              <svg width="132" height="44" viewBox="0 0 132 44" aria-label="Weight trend, 7 weigh-ins"><polyline fill="none" stroke="var(--indigo)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="4,6 24,11 44,14 64,18 84,27 104,29 128,38"/><circle cx="128" cy="38" r="3.5" fill="var(--indigo)" stroke="#fff" stroke-width="2"/></svg>
+            </div>
+            <div class="kv" style="margin-top:10px"><span>Last weigh-in</span><b>Fri 16 Oct</b></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M8 13h.01"/><path d="M12 13h.01"/><path d="M16 13h.01"/><path d="M8 17h.01"/><path d="M12 17h.01"/><path d="M16 17h.01"/></svg>Renewal</h3><a class="link t-sm" href="#">Open settings</a></div>
+            <div style="display:flex;align-items:center;gap:10px"><span class="chip attn"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Expired</span><span class="t-sm muted">Ended Thu 15 Oct</span></div>
+          </section>
+          <section class="card sc">
+            <div class="sc-h"><h3><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></svg>Coach notes</h3><a class="link t-sm" href="#">Add note</a></div>
+            <div class="notecard" style="border-top:0;padding-top:0"><p>Knee felt sore on walking lunges. Swapped to step-ups until the next check-in.</p><div class="nm"><span class="chip neu xs"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Private</span>Tue 13 Oct</div></div>
+            <div class="notecard"><p>Breakfasts were spot on last week. Keep the 20-minute evening walk going on rest days.</p><div class="nm"><span class="chip info xs"><svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>Visible to client</span>Mon 12 Oct</div></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body></html>

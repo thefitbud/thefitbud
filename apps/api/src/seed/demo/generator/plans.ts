@@ -3,7 +3,7 @@ import { materializePlanContent } from "@fitbud/core";
 import type { PlanContent } from "@fitbud/contracts";
 import { addDaysFromLocalDate, demoUuid } from "../ids.js";
 import type { DemoLibraryIndex } from "../personas.js";
-import { buildTemplateContent } from "./content.js";
+import { buildTemplateContent, type QuantityClamp } from "./content.js";
 import type { PersonaConfig } from "./personas.js";
 import type { SeedRows } from "./sql.js";
 
@@ -18,6 +18,8 @@ export type ChainVersion = {
   workout: string | null;
   diet: string | null;
   reason: string;
+  /** Food amounts this version's dietScale pushed past the 100-unit limit (capped). */
+  quantityClamps: QuantityClamp[];
 };
 
 /**
@@ -43,11 +45,13 @@ export function buildPlanChain(input: {
     const toDate = next ? addDaysFromLocalDate(input.refDate, next.fromDay - 1) : null;
     const reachesWindow = toDate === null || toDate >= input.windowStart;
     const fixed = input.legacyWindow && reachesWindow;
+    const quantityClamps: QuantityClamp[] = [];
     const content = materializePlanContent(
       buildTemplateContent(input.lib, {
         workout: step.workout,
         diet: step.diet,
         dietScale: step.dietScale,
+        onClamp: (clamp) => quantityClamps.push(clamp),
         loadScale: step.loadScale,
         loads: cfg.loads,
         fixedIds: input.legacyWindow,
@@ -68,6 +72,7 @@ export function buildPlanChain(input: {
       workout: step.workout,
       diet: step.diet,
       reason: step.reason,
+      quantityClamps,
     };
   });
 }

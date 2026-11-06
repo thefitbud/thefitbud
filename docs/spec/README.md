@@ -1,6 +1,6 @@
 # FitBud UI/UX spec pack: READ THIS FIRST
 
-This pack turns the *FitBud UI/UX Implementation Guide v1.2* (5,086 lines) into **one file per screen** (70 screens: 35 trainer web, 9 trainer mobile, 26 trainee mobile) plus shared files and a batch plan. Every guide section is copied **verbatim**.
+This pack turns the *FitBud UI/UX Implementation Guide v1.2* (5,086 lines; the guide itself was retired on 30 Oct 2026 and this pack is now the source) into **one file per screen** (70 screens: 35 trainer web, 9 trainer mobile, 26 trainee mobile) plus shared files and a batch plan. Every guide section is copied **verbatim**.
 
 ## Why this exists
 
@@ -9,9 +9,7 @@ Last time, agents read about 40% of the guide, never opened the images, patched 
 ## Rules for agents (non-negotiable)
 
 1. **Read `00-foundations.md` and `01-product-rules.md` first, IN FULL.** Then read **only the files for your batch** (see `BATCHES.md`), **IN FULL**, every line including tables, code blocks and the "Observed in 18 Oct QA" list. Also read the shared files each screen file lists under "Read first".
-2. **Open every image** linked in your screen files (`img/`).
-   - **LEGACY** images (`impl_*`, the right half of `sbs_*`, and `mobile-qa/*`) show the old UI that must go.
-   - **REFERENCE** images (`figma_*`, `ref_*`, and the left half of `sbs_*`) show the target or inspiration, minus the banned elements.
+2. **Open the locked frames for your screens** in [`docs/design/`](../design/README.md) (screen index in its README). They are the only visual target (locked 28 Oct 2026). The old `img/` Figma references and legacy captures were removed on 30 Oct 2026. If a screen or state has no locked frame, stop and ask for design; never invent it.
 3. **"Legacy (do not keep)" sections describe old UI that you must REPLACE.** Don't restyle it, keep it, or patch it toward the target. Where a file says "old code exists", that code is legacy: rebuild the screen from the target design. (The guide's "Status: Implemented" labels were removed on purpose, because they misled the last agents.)
 4. **Batch 0 first.** No screen batch starts before Batch 0 (API/seed fixes, `packages/core` labels and formatter, tokens, Satoshi, Button/StatusChip/overflow, pull-to-refresh Screen, banned-strings test) is merged.
 5. **Never edit anything under `docs/spec/`** (screen files, shared files, `banned-strings.json`). The only exception is adding your evidence files to `docs/spec/evidence/`. If the spec is unclear, contradictory or wrong, **flag it in your report** under "Spec questions" and carry on with the rest.
