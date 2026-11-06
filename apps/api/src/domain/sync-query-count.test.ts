@@ -18,6 +18,7 @@ import type { MemoryDbHandle } from "../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../test-support/seeded-db.js";
 import {
   appendChangeLog,
+  bootstrapChangeLogForTrainee,
   decodeSyncCursor,
   encodeSyncCursor,
   listTraineeRelationshipIds,
@@ -173,14 +174,14 @@ async function referencePull(
   db: Db,
   input: { traineeUserId: string; cursor: string | null; limit: number },
 ): Promise<Awaited<ReturnType<typeof pullChangesForTrainee>>> {
+  const afterSeq = decodeSyncCursor(input.cursor);
+  if (afterSeq < 0) {
+    return { changes: [], nextCursor: null, hasMore: false, invalidCursor: true };
+  }
   const relationshipIds = await listTraineeRelationshipIds(db, input.traineeUserId);
   await referenceBootstrap(db, input.traineeUserId, relationshipIds);
   if (relationshipIds.length === 0) {
     return { changes: [], nextCursor: null, hasMore: false, invalidCursor: false };
-  }
-  const afterSeq = decodeSyncCursor(input.cursor);
-  if (afterSeq < 0) {
-    return { changes: [], nextCursor: null, hasMore: false, invalidCursor: true };
   }
   const rows = await db
     .select()
@@ -367,6 +368,65 @@ async function countQueries<T>(handle: MemoryDbHandle, run: () => Promise<T>) {
   handle.queryCounter.reset();
   const result = await run();
   return { result, count: handle.queryCounter.count };
+}
+
+/**
+ * Wraps `db` so `hook` runs when the bootstrap builds its change-log
+ * INSERT … SELECT, i.e. after the "never pulled" check and the reads, just
+ * before the write. Returns how many such inserts were built.
+ */
+function onBootstrapInsert(db: Db, hook: () => void): { db: Db; built: () => number } {
+  let built = 0;
+  const wrapped = new Proxy(db, {
+    get(target, prop) {
+      if (prop === "insert") {
+        return (table: Parameters<Db["insert"]>[0]) => {
+          const builder = target.insert(table);
+          return new Proxy(builder, {
+            get(b, p) {
+              if (p === "select") {
+                return (...args: Parameters<typeof b.select>) => {
+                  built += 1;
+                  hook();
+                  return b.select(...args);
+                };
+              }
+              const value = Reflect.get(b, p, b) as unknown;
+              return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(b) : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, prop, target) as unknown;
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+  return { db: wrapped, built: () => built };
+}
+
+function changeLogStats(handle: MemoryDbHandle, traineeUserId: string) {
+  const row = handle.sqlite.exec(
+    `select count(*), count(distinct entity_type || ':' || record_id), count(distinct sequence)
+       from change_log where trainee_user_id = '${traineeUserId}'`,
+  )[0]!.values[0]!;
+  return { rows: Number(row[0]), records: Number(row[1]), sequences: Number(row[2]) };
+}
+
+/** Offline-capable records the bootstrap must cover for the trainee (one relationship). */
+function bootstrapRecordCount(handle: MemoryDbHandle, traineeUserId: string): number {
+  return Number(
+    scalar(
+      handle,
+      `select 1
+          + (select count(*) from workout_assignments where coaching_relationship_id = r.id)
+          + (select count(*) from workout_executions where coaching_relationship_id = r.id)
+          + (select count(*) from meal_assignments where coaching_relationship_id = r.id)
+          + (select count(*) from meal_compliance where coaching_relationship_id = r.id)
+          + (select count(*) from checkins where coaching_relationship_id = r.id)
+          + (select count(*) from measurements where coaching_relationship_id = r.id)
+       from coaching_relationships r where r.trainee_user_id = '${traineeUserId}'`,
+    ),
+  );
 }
 
 describe("sync pull query count (Z6-21)", () => {
@@ -589,5 +649,76 @@ describe("sync pull query count (Z6-21)", () => {
 
     // Byte-for-byte: compare the serialized responses, not just deep equality.
     expect(JSON.stringify(batched)).toBe(JSON.stringify(reference));
+  }, SLOW_TEST_MS);
+
+  it("keeps the full bootstrap when another change-log write lands between the check and the insert", async () => {
+    const handle = await openDb();
+    const expected = bootstrapRecordCount(handle, SIDDHARTH);
+    expect(expected).toBeGreaterThan(2000); // two insert chunks, so the batch path runs
+    const relId = scalar(handle, `select id from coaching_relationships where trainee_user_id = '${SIDDHARTH}'`);
+    const checkin = scalar(
+      handle,
+      `select id from checkins where coaching_relationship_id = '${relId}' order by id limit 1`,
+    );
+    let interleaved = false;
+    const wrapped = onBootstrapInsert(handle.db, () => {
+      if (interleaved) return;
+      interleaved = true;
+      // A sync push for one of the trainee's check-ins commits its change-log
+      // row while the bootstrap is in flight (same shape as appendChangeLog).
+      handle.sqlite.run(
+        `insert into change_log (id, sequence, entity_type, record_id, change_kind, server_version,
+           coaching_relationship_id, trainee_user_id, changed_at)
+         values ('interleaved-push', (select coalesce(max(sequence), 0) + 1 from change_log),
+           'checkin', ?, 'upsert', 2, ?, ?, ?)`,
+        [checkin, relId, SIDDHARTH, FIXED_NOW],
+      );
+    });
+
+    await bootstrapChangeLogForTrainee(wrapped.db, SIDDHARTH, [relId]);
+
+    expect(interleaved).toBe(true);
+    expect(wrapped.built()).toBe(2);
+    // Every record has exactly one row: the pushed check-in keeps its own row
+    // and nothing is lost or duplicated.
+    expect(changeLogStats(handle, SIDDHARTH)).toEqual({
+      rows: expected,
+      records: expected,
+      sequences: expected,
+    });
+    const pushedSeq = Number(scalar(handle, `select sequence from change_log where id = 'interleaved-push'`));
+    const minBootstrapSeq = Number(
+      scalar(handle, `select min(sequence) from change_log where trainee_user_id = '${SIDDHARTH}' and id <> 'interleaved-push'`),
+    );
+    expect(pushedSeq).toBeLessThan(minBootstrapSeq);
+
+    // And the trainee's pull delivers every record.
+    const { pages } = await drain(pullChangesForTrainee, handle.db, SIDDHARTH);
+    const pulled = pages.flatMap((page) => page.changes);
+    expect(pulled).toHaveLength(expected);
+    expect(pulled.every((change) => change.payload !== null)).toBe(true);
+  }, SLOW_TEST_MS);
+
+  it("two concurrent first pulls lose no rows and write no duplicates", async () => {
+    const handle = await openDb();
+    const expected = bootstrapRecordCount(handle, SIDDHARTH);
+    const wrapped = onBootstrapInsert(handle.db, () => undefined);
+
+    const [a, b] = await Promise.all([
+      pullChangesForTrainee(wrapped.db, { traineeUserId: SIDDHARTH, cursor: null, limit: PAGE }),
+      pullChangesForTrainee(wrapped.db, { traineeUserId: SIDDHARTH, cursor: null, limit: PAGE }),
+    ]);
+
+    // Both requests passed the "never pulled" check and built their inserts
+    // (two chunks each), so the race really ran.
+    expect(wrapped.built()).toBe(4);
+    expect(changeLogStats(handle, SIDDHARTH)).toEqual({
+      rows: expected,
+      records: expected,
+      sequences: expected,
+    });
+    expect(a.changes.length + b.changes.length).toBeGreaterThan(0);
+    const { pages } = await drain(pullChangesForTrainee, handle.db, SIDDHARTH);
+    expect(pages.flatMap((page) => page.changes)).toHaveLength(expected);
   }, SLOW_TEST_MS);
 });

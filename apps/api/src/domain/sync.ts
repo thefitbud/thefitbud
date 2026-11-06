@@ -475,39 +475,43 @@ type BootstrapRow = [
  * Rows per bootstrap INSERT. The whole chunk is bound as one JSON parameter
  * (~120 bytes a row, so ~240 KB a chunk), well under D1's 2 MB value limit and
  * clear of its 100-bound-parameter limit. The demo seed's busiest trainee
- * (~3,500 records) needs two statements.
+ * (~2,200 records) needs two statements.
  */
 const BOOTSTRAP_INSERT_CHUNK = 2000;
 
-function bootstrapInsert(
-  db: Db,
-  traineeUserId: string,
-  chunk: BootstrapRow[],
-  rowsBefore: number,
-) {
-  // Sequences continue from the current maximum in array order (json_each
-  // `key` is the 0-based index), so the log order equals the read order.
-  // The guard makes the chunk a no-op if another request bootstrapped this
-  // trainee in the meantime (count differs from what this run has written).
+function bootstrapInsert(db: Db, traineeUserId: string, chunk: BootstrapRow[]) {
+  // Per-row guard: a row is written only if the trainee's change log has no
+  // row yet for that (entity_type, record_id). A push, publish or log that
+  // lands between the "never pulled" check and this insert keeps its own row
+  // and every other record is still bootstrapped (nothing is lost), and a
+  // concurrent bootstrap of the same trainee adds no duplicates. The trainee's
+  // existing (entity_type, record_id) pairs are read once into a temporary
+  // index (row-value NOT IN subquery; both columns are NOT NULL), so the guard
+  // is one pass over the trainee's rows, not one scan per inserted row.
+  //
+  // Sequences continue from the current maximum in read order (json_each
+  // `key` is the 0-based index), numbering only the rows actually written.
   // Column order follows the table definition (drizzle insert-select):
   // id, sequence, entity_type, record_id, change_kind, server_version,
   // coaching_relationship_id, trainee_user_id, changed_at.
   return db.insert(changeLog).select(sql`
     select
-      json_extract(value, '$[0]'),
-      (select coalesce(max(${changeLog.sequence}), 0) from ${changeLog}) + key + 1,
-      json_extract(value, '$[1]'),
-      json_extract(value, '$[2]'),
+      json_extract(rows.value, '$[0]'),
+      (select coalesce(max(${changeLog.sequence}), 0) from ${changeLog})
+        + row_number() over (order by rows.key),
+      json_extract(rows.value, '$[1]'),
+      json_extract(rows.value, '$[2]'),
       'upsert',
-      json_extract(value, '$[3]'),
-      json_extract(value, '$[4]'),
+      json_extract(rows.value, '$[3]'),
+      json_extract(rows.value, '$[4]'),
       ${traineeUserId},
-      json_extract(value, '$[5]')
-    from json_each(${JSON.stringify(chunk)})
-    where (
-      select count(*) from ${changeLog}
+      json_extract(rows.value, '$[5]')
+    from json_each(${JSON.stringify(chunk)}) as rows
+    where (json_extract(rows.value, '$[1]'), json_extract(rows.value, '$[2]')) not in (
+      select ${changeLog.entityType}, ${changeLog.recordId}
+      from ${changeLog}
       where ${changeLog.traineeUserId} = ${traineeUserId}
-    ) = ${rowsBefore}
+    )
   `);
 }
 
@@ -660,7 +664,6 @@ export async function bootstrapChangeLogForTrainee(
         db,
         traineeUserId,
         pending.slice(start, start + BOOTSTRAP_INSERT_CHUNK),
-        start,
       ),
     );
   }
