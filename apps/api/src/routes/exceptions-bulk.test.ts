@@ -15,6 +15,30 @@ import {
 } from "../domain/exception-bulk.js";
 
 /**
+ * Race hook: runs once, right after the bulk route has read the selected rows
+ * and before it writes, so a test can commit another request in between (the
+ * domain module's own re-read after the batch is not affected).
+ */
+const raceHook = vi.hoisted(() => ({ fn: null as null | (() => Promise<void>) }));
+vi.mock("../domain/exception-bulk.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../domain/exception-bulk.js")>();
+  return {
+    ...actual,
+    loadRelationshipExceptions: async (
+      ...args: Parameters<typeof actual.loadRelationshipExceptions>
+    ) => {
+      const rows = await actual.loadRelationshipExceptions(...args);
+      const fn = raceHook.fn;
+      if (fn) {
+        raceHook.fn = null;
+        await fn();
+      }
+      return rows;
+    },
+  };
+});
+
+/**
  * Z6-10 (SPB, D11): bulk Resolve for one client's compatible exceptions with a
  * 5 s undo. Real relationships are created through the production invite,
  * onboarding and configuration routes; exceptions are persisted rows on them.
@@ -412,21 +436,39 @@ describe("Z6-10 bulk resolve and undo", () => {
     const newActions = after.actions.filter(
       (a) => !before.actions.some((b) => b.id === a.id),
     );
-    expect(newActions).toHaveLength(4);
-    for (const action of newActions) {
+    const resolveActions = newActions.filter((a) => a.action === "resolve");
+    expect(resolveActions).toHaveLength(4);
+    for (const action of resolveActions) {
       expect(resolvedIds.has(action.exceptionId)).toBe(true);
       expect(action).toMatchObject({
-        action: "resolve",
         note: "Spoke on Monday call",
         trainerUserId,
         createdAt: body.data.resolvedAt,
       });
+    }
+    // D-W6-15: items not yet reviewed also get the Mark reviewed rows; the item
+    // that was already reviewed does not get a second review.
+    const unreviewed = [rows.activeWorkout.id, rows.detectedMeal.id, rows.overdueCheckin.id].sort();
+    const reviewActions = newActions.filter((a) => a.action === "acknowledge");
+    expect(reviewActions.map((a) => a.exceptionId).sort()).toEqual(unreviewed);
+    for (const action of reviewActions) {
+      expect(action).toMatchObject({ note: null, trainerUserId, createdAt: body.data.resolvedAt });
+    }
+    expect(newActions).toHaveLength(7);
+    for (const id of unreviewed) {
+      expect(after.exceptions.find((r) => r.id === id)!.acknowledgedAt).toBe(body.data.resolvedAt);
     }
     const newInterventions = after.interventions.filter(
       (a) => !before.interventions.some((b) => b.id === a.id),
     );
     expect(newInterventions.filter((i) => i.kind === "resolve")).toHaveLength(4);
     expect(newInterventions.filter((i) => i.kind === "note")).toHaveLength(4);
+    const reviewInterventions = newInterventions.filter((i) => i.kind === "acknowledge");
+    expect(reviewInterventions.map((i) => i.exceptionId).sort()).toEqual(unreviewed);
+    expect(
+      reviewInterventions.find((i) => i.exceptionId === rows.activeWorkout.id)!.summary,
+    ).toBe("Acknowledged: Missed workout");
+    expect(newInterventions).toHaveLength(11);
     expect(
       newInterventions.every(
         (i) => i.coachingRelationshipId === relationshipId && resolvedIds.has(i.exceptionId!),
@@ -439,7 +481,7 @@ describe("Z6-10 bulk resolve and undo", () => {
     ).toBe("Resolved (talked): Missed workout");
   });
 
-  it("without a note writes only the resolve intervention per item", async () => {
+  it("without a note writes no note intervention (review + resolve rows only)", async () => {
     const { trainer, relationshipId, rows } = await seedClient("nonote");
     const response = await post(
       "/exceptions/bulk/resolve",
@@ -453,7 +495,12 @@ describe("Z6-10 bulk resolve and undo", () => {
     );
     expect(response.status).toBe(200);
     const after = await snapshot([relationshipId]);
-    expect(after.interventions.map((i) => i.kind).sort()).toEqual(["resolve", "resolve"]);
+    expect(after.interventions.map((i) => i.kind).sort()).toEqual([
+      "acknowledge",
+      "acknowledge",
+      "resolve",
+      "resolve",
+    ]);
     expect(after.actions.every((a) => a.note === null)).toBe(true);
   });
 
@@ -665,6 +712,252 @@ describe("Z6-10 bulk resolve and undo", () => {
       expect(noKey.status).toBe(400);
       const bad = await post("/exceptions/bulk/undo", trainer, { bulkId: "x" }, "undo-bad-1");
       expect(bad.status).toBe(400);
+    });
+  });
+
+  describe("races and partial undo", () => {
+    afterEach(() => {
+      raceHook.fn = null;
+    });
+
+    async function singleReview(trainer: Record<string, string>, id: string, key: string) {
+      const acked = await post(`/exceptions/${id}/acknowledge`, trainer, { note: null }, `${key}-ack`);
+      expect(acked.status).toBe(200);
+    }
+
+    async function singleResolve(trainer: Record<string, string>, id: string, key: string) {
+      await singleReview(trainer, id, key);
+      const resolved = await post(
+        `/exceptions/${id}/resolve`,
+        trainer,
+        { outcome: "no_action" },
+        `${key}-resolve`,
+      );
+      expect(resolved.status).toBe(200);
+    }
+
+    it("an item resolved singly between the read and the batch gets no bulk rows and is reported already_resolved; undo restores exactly", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("race");
+      const t0 = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      const before = await snapshot([relationshipId]);
+      let reviewedElsewhereAt = "";
+      raceHook.fn = async () => {
+        vi.setSystemTime(t0 + 1_000);
+        // Another tab resolves one item and marks another reviewed.
+        await singleResolve(trainer, rows.activeWorkout.id, "race-single");
+        await singleReview(trainer, rows.detectedMeal.id, "race-review");
+        reviewedElsewhereAt = new Date(t0 + 1_000).toISOString();
+        vi.setSystemTime(t0 + 2_000);
+      };
+      const afterSingle = async () => snapshot([relationshipId]);
+
+      const request = {
+        relationshipId,
+        exceptionIds: [rows.activeWorkout.id, rows.detectedMeal.id, rows.overdueCheckin.id],
+        outcome: "talked",
+        note: "Weekly call",
+      };
+      const response = await post("/exceptions/bulk/resolve", trainer, request, "race-bulk");
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as ResolveBody;
+      expect(raceHook.fn).toBeNull();
+      expect(body.data.items).toEqual([
+        { id: rows.activeWorkout.id, status: "skipped", reason: "already_resolved" },
+        { id: rows.detectedMeal.id, status: "resolved" },
+        { id: rows.overdueCheckin.id, status: "resolved" },
+      ]);
+      expect(body.data.resolvedCount).toBe(2);
+      expect(body.data.skippedCount).toBe(1);
+      const bulkAt = body.data.resolvedAt!;
+      expect(bulkAt).toBe(new Date(t0 + 2_000).toISOString());
+
+      const after = await afterSingle();
+      // The singly resolved item keeps only the single resolve's rows.
+      const raced = after.exceptions.find((r) => r.id === rows.activeWorkout.id)!;
+      expect(raced.resolutionOutcome).toBe("no_action");
+      expect(raced.resolvedAt).not.toBe(bulkAt);
+      expect(after.actions.filter((a) => a.exceptionId === rows.activeWorkout.id).map((a) => a.action).sort()).toEqual([
+        "acknowledge",
+        "resolve",
+      ]);
+      expect(
+        after.actions.filter((a) => a.exceptionId === rows.activeWorkout.id && a.createdAt === bulkAt),
+      ).toEqual([]);
+      expect(
+        after.interventions.filter((i) => i.exceptionId === rows.activeWorkout.id && i.createdAt === bulkAt),
+      ).toEqual([]);
+      // The item reviewed elsewhere keeps that review time and gets no second review.
+      const reviewed = after.exceptions.find((r) => r.id === rows.detectedMeal.id)!;
+      expect(reviewed.status).toBe("resolved");
+      expect(reviewed.acknowledgedAt).toBe(reviewedElsewhereAt);
+      expect(
+        after.actions.filter((a) => a.exceptionId === rows.detectedMeal.id).map((a) => a.action).sort(),
+      ).toEqual(["acknowledge", "resolve"]);
+      expect(
+        after.actions.find((a) => a.exceptionId === rows.detectedMeal.id && a.action === "acknowledge")!
+          .createdAt,
+      ).toBe(reviewedElsewhereAt);
+      // The untouched item is reviewed + resolved by the bulk.
+      expect(
+        after.actions.filter((a) => a.exceptionId === rows.overdueCheckin.id).map((a) => a.action).sort(),
+      ).toEqual(["acknowledge", "resolve"]);
+
+      // A replay returns the corrected result.
+      const replay = await post("/exceptions/bulk/resolve", trainer, request, "race-bulk");
+      expect(await replay.json()).toEqual(body);
+
+      // Undo restores what the bulk changed and nothing else.
+      vi.setSystemTime(t0 + 4_000);
+      const undo = await post("/exceptions/bulk/undo", trainer, { bulkId: body.data.bulkId }, "race-undo");
+      expect(undo.status).toBe(200);
+      const undoBody = (await undo.json()) as {
+        data: { restoredCount: number; items: Array<{ id: string; status: string }> };
+      };
+      expect(undoBody.data.items).toEqual([
+        { id: rows.detectedMeal.id, status: "acknowledged" },
+        { id: rows.overdueCheckin.id, status: "active" },
+      ]);
+      const undone = await snapshot([relationshipId]);
+      const reviewedRow = undone.exceptions.find((r) => r.id === rows.detectedMeal.id)!;
+      expect(reviewedRow).toMatchObject({
+        status: "acknowledged",
+        acknowledgedAt: reviewedElsewhereAt,
+        resolvedAt: null,
+        resolutionOutcome: null,
+        resolutionNote: null,
+        closedReason: null,
+      });
+      const checkinRow = undone.exceptions.find((r) => r.id === rows.overdueCheckin.id)!;
+      const checkinBefore = before.exceptions.find((r) => r.id === rows.overdueCheckin.id)!;
+      expect({ ...checkinRow, updatedAt: null }).toEqual({ ...checkinBefore, updatedAt: null });
+      expect(undone.exceptions.find((r) => r.id === rows.activeWorkout.id)).toEqual(raced);
+      // Only the bulk's rows were removed: the single requests' rows remain.
+      const bulkRows = (list: Array<{ createdAt: string }>) => list.filter((r) => r.createdAt === bulkAt);
+      expect(bulkRows(undone.actions)).toEqual([]);
+      expect(bulkRows(undone.interventions)).toEqual([]);
+      expect(undone.actions.filter((a) => a.createdAt !== bulkAt)).toEqual(
+        after.actions.filter((a) => a.createdAt !== bulkAt),
+      );
+    });
+
+    it("when every item was resolved elsewhere first, nothing is written and there is nothing to undo", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("raceall");
+      const t0 = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      raceHook.fn = async () => {
+        vi.setSystemTime(t0 + 1_000);
+        await singleResolve(trainer, rows.activeWorkout.id, "raceall-single");
+        vi.setSystemTime(t0 + 2_000);
+      };
+      const response = await post(
+        "/exceptions/bulk/resolve",
+        trainer,
+        { relationshipId, exceptionIds: [rows.activeWorkout.id], outcome: "talked" },
+        "raceall-bulk",
+      );
+      const body = (await response.json()) as ResolveBody;
+      expect(body.data).toMatchObject({
+        bulkId: null,
+        resolvedCount: 0,
+        resolvedAt: null,
+        undoExpiresAt: null,
+        items: [{ id: rows.activeWorkout.id, status: "skipped", reason: "already_resolved" }],
+      });
+      const after = await snapshot([relationshipId]);
+      expect(after.actions.filter((a) => a.createdAt === new Date(t0 + 2_000).toISOString())).toEqual([]);
+      const stateRows = await db
+        .select()
+        .from(schema.idempotencyRecords)
+        .where(eq(schema.idempotencyRecords.operation, "exception.bulk_resolve.state"));
+      expect(stateRows).toEqual([]);
+    });
+
+    it("undo restores only the items still carrying this bulk's resolution and keeps the rows of the rest", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("partial");
+      vi.useFakeTimers({ toFake: ["Date"], now: Date.now() });
+      const resolved = await post(
+        "/exceptions/bulk/resolve",
+        trainer,
+        {
+          relationshipId,
+          exceptionIds: [rows.activeWorkout.id, rows.detectedMeal.id],
+          outcome: "talked",
+        },
+        "partial-bulk",
+      );
+      const { data } = (await resolved.json()) as ResolveBody;
+      // One item changed in between (a later resolution elsewhere).
+      const laterAt = new Date(Date.now() + 1_000).toISOString();
+      await db
+        .update(schema.exceptions)
+        .set({ resolvedAt: laterAt, updatedAt: laterAt })
+        .where(eq(schema.exceptions.id, rows.detectedMeal.id));
+      const beforeUndo = await snapshot([relationshipId]);
+      vi.setSystemTime(Date.now() + 2_000);
+
+      const undo = await post("/exceptions/bulk/undo", trainer, { bulkId: data.bulkId }, "partial-undo");
+      expect(undo.status).toBe(200);
+      const body = (await undo.json()) as {
+        data: { restoredCount: number; items: Array<{ id: string; status: string }> };
+      };
+      expect(body.data.restoredCount).toBe(1);
+      expect(body.data.items).toEqual([{ id: rows.activeWorkout.id, status: "active" }]);
+      const after = await snapshot([relationshipId]);
+      expect(after.exceptions.find((r) => r.id === rows.detectedMeal.id)).toEqual(
+        beforeUndo.exceptions.find((r) => r.id === rows.detectedMeal.id),
+      );
+      const keep = (list: Array<{ exceptionId: string | null }>) =>
+        list.filter((r) => r.exceptionId === rows.detectedMeal.id);
+      expect(keep(after.actions)).toEqual(keep(beforeUndo.actions));
+      expect(keep(after.interventions)).toEqual(keep(beforeUndo.interventions));
+      expect(keep(after.actions)).toHaveLength(2);
+      expect(after.actions.filter((a) => a.exceptionId === rows.activeWorkout.id)).toEqual([]);
+      expect(after.interventions.filter((i) => i.exceptionId === rows.activeWorkout.id)).toEqual([]);
+      const active = after.exceptions.find((r) => r.id === rows.activeWorkout.id)!;
+      expect(active).toMatchObject({ status: "active", acknowledgedAt: null, resolvedAt: null });
+    });
+
+    it("the same Idempotency-Key from another trainer does not replay the first trainer's result", async () => {
+      const first = await seedClient("keya", "bulk-coach-keya@example.com");
+      const second = await reachActive("bulk-coach-keyb@example.com", "keyb");
+      const theirs = exceptionRow(second.relationshipId, id(60), {
+        type: "missed_workout",
+        status: "active",
+      });
+      await db.insert(schema.exceptions).values(theirs);
+
+      const a = await post(
+        "/exceptions/bulk/resolve",
+        first.trainer,
+        { relationshipId: first.relationshipId, exceptionIds: [first.rows.activeWorkout.id], outcome: "talked" },
+        "shared-key",
+      );
+      expect(a.status).toBe(200);
+      const aBody = (await a.json()) as ResolveBody;
+
+      const b = await post(
+        "/exceptions/bulk/resolve",
+        second.trainer,
+        { relationshipId: second.relationshipId, exceptionIds: [theirs.id], outcome: "no_action" },
+        "shared-key",
+      );
+      expect(b.status).toBe(200);
+      const bBody = (await b.json()) as ResolveBody;
+      expect(bBody.data.relationshipId).toBe(second.relationshipId);
+      expect(bBody.data.bulkId).not.toBe(aBody.data.bulkId);
+      expect(bBody.data.items).toEqual([{ id: theirs.id, status: "resolved" }]);
+      const [row] = await db.select().from(schema.exceptions).where(eq(schema.exceptions.id, theirs.id));
+      expect(row!.resolutionOutcome).toBe("no_action");
+
+      // And trainer B sending A's request under the shared key gets B's own answer (404), not A's replay.
+      const bAsA = await post(
+        "/exceptions/bulk/resolve",
+        second.trainer,
+        { relationshipId: first.relationshipId, exceptionIds: [first.rows.activeWorkout.id], outcome: "talked" },
+        "shared-key-2",
+      );
+      expect(bAsA.status).toBe(404);
     });
   });
 
