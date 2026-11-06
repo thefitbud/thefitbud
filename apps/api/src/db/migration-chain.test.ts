@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "../auth/password.js";
 import { resolveSetLoad } from "../domain/load-parser.js";
@@ -9,6 +10,14 @@ import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { assertNoForeignKeyViolations } from "../test-support/foreign-key-check.js";
 import { createMemoryDb, yieldToEventLoop } from "../test-support/memory-db.js";
+import {
+  logEditEvents,
+  mealCompliance,
+  measurements,
+  notificationPreferences,
+  notifications,
+  workoutExecutions,
+} from "./schema.js";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 
@@ -186,6 +195,30 @@ const DAILY_STEPS_COLUMNS = [
   "synced_at",
 ];
 
+/** Columns 0039 (Z6-18) appends to workout_executions, meal_compliance and measurements. */
+const LOG_AUTHORSHIP_COLUMNS = [
+  "logged_by_role",
+  "logged_by_user_id",
+  "last_edited_by_role",
+  "last_edited_by_user_id",
+  "last_edited_at",
+];
+
+/** log_edit_events columns in table order (0039, Z6-18). */
+const LOG_EDIT_EVENTS_COLUMNS = [
+  "id",
+  "coaching_relationship_id",
+  "trainee_user_id",
+  "actor_user_id",
+  "actor_role",
+  "entity_type",
+  "entity_id",
+  "action",
+  "before_json",
+  "after_json",
+  "created_at",
+];
+
 /** Column names that would let a payment table hold a collection or a session count (D-W6-5). */
 const NOT_TRACKING_ONLY =
   /session|gateway|invoice|transaction|razorpay|stripe|checkout|refund|order|link|receipt|card|vpa|upi_id|collect|remaining|used|included|reference/i;
@@ -231,7 +264,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0038 in order after 0029, with 0038 last", async () => {
+  it("places 0030 to 0039 in order after 0029, with 0039 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -247,7 +280,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 7]).toBe("0036_payment_tracking");
     expect(tags[previous + 8]).toBe("0037_daily_steps");
     expect(tags[previous + 9]).toBe("0038_archived_account_state");
-    expect(tags.at(-1)).toBe("0038_archived_account_state");
+    expect(tags[previous + 10]).toBe("0039_log_authorship");
+    expect(tags.at(-1)).toBe("0039_log_authorship");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -258,6 +292,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 7]?.idx).toBe(36);
     expect(journal[previous + 8]?.idx).toBe(37);
     expect(journal[previous + 9]?.idx).toBe(38);
+    expect(journal[previous + 10]?.idx).toBe(39);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -270,7 +305,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 7]).toBe("0036_payment_tracking.sql");
     expect(files[previousFile + 8]).toBe("0037_daily_steps.sql");
     expect(files[previousFile + 9]).toBe("0038_archived_account_state.sql");
-    expect(files.at(-1)).toBe("0038_archived_account_state.sql");
+    expect(files[previousFile + 10]).toBe("0039_log_authorship.sql");
+    expect(files.at(-1)).toBe("0039_log_authorship.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -770,6 +806,7 @@ describe("migration chain and seeds", () => {
           ...countsBefore,
           payment_records: 0,
           daily_steps: 0,
+          log_edit_events: 0,
         });
         assertNoForeignKeyViolations(handle.sqlite);
         expect(handle.sqlite.exec(subscriptionSql)[0]?.values ?? []).toEqual(subscriptionsBefore);
@@ -994,7 +1031,11 @@ describe("migration chain and seeds", () => {
         handle.applyMigrationsFrom("0037_daily_steps.sql");
         await yieldToEventLoop();
 
-        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, daily_steps: 0 });
+        expect(tableRowCounts(handle.sqlite)).toEqual({
+          ...countsBefore,
+          daily_steps: 0,
+          log_edit_events: 0,
+        });
         assertNoForeignKeyViolations(handle.sqlite);
         expect(handle.sqlite.exec(configurationSql)[0]?.values ?? []).toEqual(configurationsBefore);
         const targets = handle.sqlite.exec(
@@ -1177,7 +1218,7 @@ describe("migration chain and seeds", () => {
         handle.applyMigrationsFrom("0038_archived_account_state.sql");
         await yieldToEventLoop();
 
-        expect(tableRowCounts(handle.sqlite)).toEqual(countsBefore);
+        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, log_edit_events: 0 });
         assertNoForeignKeyViolations(handle.sqlite);
         expect(handle.sqlite.exec(usersSql)[0]?.values ?? []).toEqual(usersBefore);
         expect(
@@ -1186,6 +1227,396 @@ describe("migration chain and seeds", () => {
           )[0]?.values,
         ).toEqual([["active", null, null]]);
         expect(indexColumns(handle.sqlite, "users_purge_after_idx")).toEqual(["purge_after"]);
+      } finally {
+        handle.close();
+      }
+    },
+    120_000,
+  );
+
+  it("keeps 0039 additive: no table rebuild, drop or backfill", () => {
+    const sqlText = readFileSync(join(drizzleDir, "0039_log_authorship.sql"), "utf8");
+    const code = sqlText.replace(/^--.*$/gm, "");
+    expect(code).not.toMatch(/DROP\s+(TABLE|INDEX)|\bUPDATE\b|\bDELETE\b(?! CASCADE)|\bINSERT\b|RENAME|PRAGMA/i);
+    expect(code).not.toMatch(/CREATE TABLE `?__new/i);
+    expect([...code.matchAll(/CREATE TABLE `([a-z_]+)`/g)].map((m) => m[1])).toEqual([
+      "log_edit_events",
+    ]);
+    const added = [...code.matchAll(/ALTER TABLE `([a-z_]+)` ADD COLUMN `([a-z_]+)`/g)].map(
+      (m) => `${m[1]}.${m[2]}`,
+    );
+    expect(added).toEqual([
+      ...["workout_executions", "meal_compliance", "measurements"].flatMap((table) =>
+        LOG_AUTHORSHIP_COLUMNS.map((column) => `${table}.${column}`),
+      ),
+      "notification_preferences.coach_log_updates",
+    ]);
+    // notification_type has no CHECK, so the new type needs no constraint change.
+    expect(code).not.toMatch(/notification_type/);
+  });
+
+  it("records 0039 in the drizzle snapshot chain after 0038", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0038_snapshot.json"), "utf8"),
+    ) as { id: string };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0039_snapshot.json"), "utf8"),
+    ) as {
+      id: string;
+      prevId: string;
+      tables: Record<
+        string,
+        {
+          columns: Record<string, { type: string; notNull: boolean; default?: unknown }>;
+          indexes: Record<string, { columns: string[]; isUnique: boolean }>;
+          foreignKeys: Record<string, { tableTo: string; onDelete: string }>;
+          checkConstraints: Record<string, { value: string }>;
+        }
+      >;
+    };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    for (const table of ["workout_executions", "meal_compliance", "measurements"]) {
+      const entry = snapshot.tables[table]!;
+      expect(entry.columns.logged_by_role).toMatchObject({
+        type: "text",
+        notNull: true,
+        default: "'trainee'",
+      });
+      expect(entry.columns.last_edited_by_role).toMatchObject({ type: "text", notNull: false });
+      expect(entry.foreignKeys[`${table}_logged_by_user_id_users_id_fk`]).toMatchObject({
+        tableTo: "users",
+        onDelete: "no action",
+      });
+      expect(entry.foreignKeys[`${table}_last_edited_by_user_id_users_id_fk`]).toMatchObject({
+        tableTo: "users",
+        onDelete: "no action",
+      });
+      expect(Object.keys(entry.checkConstraints).sort()).toEqual([
+        `${table}_last_edited_by_role_chk`,
+        `${table}_logged_by_role_chk`,
+      ]);
+    }
+    expect(
+      snapshot.tables.notification_preferences!.columns.coach_log_updates,
+    ).toMatchObject({ type: "integer", notNull: true, default: true });
+    const events = snapshot.tables.log_edit_events!;
+    expect(Object.keys(events.columns)).toEqual(LOG_EDIT_EVENTS_COLUMNS);
+    expect(events.indexes.log_edit_events_relationship_created_idx).toMatchObject({
+      columns: ["coaching_relationship_id", "created_at"],
+      isUnique: false,
+    });
+    expect(
+      Object.values(events.foreignKeys).map((fk) => `${fk.tableTo}:${fk.onDelete}`).sort(),
+    ).toEqual(["coaching_relationships:cascade", "users:no action", "users:no action"]);
+    expect(Object.keys(events.checkConstraints).sort()).toEqual([
+      "log_edit_events_action_chk",
+      "log_edit_events_actor_role_chk",
+      "log_edit_events_before_json_chk",
+      "log_edit_events_entity_type_chk",
+    ]);
+  });
+
+  it("matches schema.ts: the new columns, table, index and defaults are in the migrated database", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      const byName = <T extends { name: string }>(rows: T[]) =>
+        [...rows].sort((a, b) => (a.name < b.name ? -1 : 1));
+      const described = (table: string) =>
+        (
+          handle.sqlite.exec(
+            `SELECT name, "notnull", dflt_value FROM pragma_table_info('${table}')`,
+          )[0]?.values ?? []
+        ).map((row) => ({ name: String(row[0]), notNull: row[1] === 1, dflt: row[2] }));
+      const fromSchema = (table: Parameters<typeof getTableConfig>[0]) =>
+        getTableConfig(table).columns.map((column) => ({
+          name: column.name,
+          notNull: column.notNull,
+        }));
+      const tables = [
+        ["workout_executions", workoutExecutions],
+        ["meal_compliance", mealCompliance],
+        ["measurements", measurements],
+        ["notification_preferences", notificationPreferences],
+        ["log_edit_events", logEditEvents],
+      ] as const;
+      for (const [name, table] of tables) {
+        expect(
+          byName(
+            described(name).map(({ name: column, notNull }) => ({ name: column, notNull })),
+          ),
+          name,
+        ).toEqual(byName(fromSchema(table)));
+      }
+      for (const table of ["workout_executions", "meal_compliance", "measurements"]) {
+        const columns = tableColumns(handle.sqlite, table);
+        expect(columns.slice(-LOG_AUTHORSHIP_COLUMNS.length), table).toEqual(
+          LOG_AUTHORSHIP_COLUMNS,
+        );
+        expect(described(table).find((c) => c.name === "logged_by_role")).toMatchObject({
+          notNull: true,
+          dflt: "'trainee'",
+        });
+      }
+      expect(
+        described("notification_preferences").find((c) => c.name === "coach_log_updates"),
+      ).toMatchObject({ notNull: true, dflt: "1" });
+      expect(tableColumns(handle.sqlite, "log_edit_events")).toEqual(LOG_EDIT_EVENTS_COLUMNS);
+      expect(indexColumns(handle.sqlite, "log_edit_events_relationship_created_idx")).toEqual([
+        "coaching_relationship_id",
+        "created_at",
+      ]);
+      const foreignKeys = (
+        handle.sqlite.exec(
+          "SELECT \"from\", \"table\", on_delete FROM pragma_foreign_key_list('log_edit_events') ORDER BY \"from\"",
+        )[0]?.values ?? []
+      ).map((row) => row.map(String));
+      expect(foreignKeys).toEqual([
+        ["actor_user_id", "users", "NO ACTION"],
+        ["coaching_relationship_id", "coaching_relationships", "CASCADE"],
+        ["trainee_user_id", "users", "NO ACTION"],
+      ]);
+      // schema.ts and SQL agree on the notification type list's new member.
+      const types = getTableConfig(notifications).columns.find(
+        (column) => column.name === "notification_type",
+      )!.enumValues;
+      expect(types).toContain("coach_log_updated");
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it("defaults new log rows to trainee-logged, rejects unknown roles, and defaults coach updates on", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      insertPaymentFixtures(handle.sqlite);
+      const at = "2026-11-02T05:00:00.000Z";
+      const insertMeasurement = (id: string, extra = "", values: unknown[] = []) =>
+        handle.sqlite.run(
+          `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, created_at, updated_at${extra ? `, ${extra.split("=")[0]}` : ""}) VALUES (?, 'rel-asha', 'trainee-asha', 'body_weight_kg', 71.5, 'kg', ?, 'trainee_entry', ?, ?${extra ? ", ?" : ""})`,
+          [id, at, at, at, ...values],
+        );
+      insertMeasurement("m-default");
+      insertMeasurement("m-coach", "logged_by_role=?", ["coach"]);
+      expect(
+        handle.sqlite.exec(
+          "SELECT id, logged_by_role, logged_by_user_id, last_edited_by_role, last_edited_by_user_id, last_edited_at FROM measurements ORDER BY id",
+        )[0]?.values,
+      ).toEqual([
+        ["m-coach", "coach", null, null, null, null],
+        ["m-default", "trainee", null, null, null, null],
+      ]);
+      expect(() =>
+        handle.sqlite.run("UPDATE measurements SET logged_by_role = 'admin' WHERE id = 'm-default'"),
+      ).toThrow(/CHECK constraint failed/);
+      expect(() =>
+        handle.sqlite.run("UPDATE measurements SET logged_by_role = NULL WHERE id = 'm-default'"),
+      ).toThrow(/NOT NULL constraint failed/);
+      expect(() =>
+        handle.sqlite.run(
+          "UPDATE measurements SET last_edited_by_role = 'admin' WHERE id = 'm-default'",
+        ),
+      ).toThrow(/CHECK constraint failed/);
+      handle.sqlite.run(
+        "UPDATE measurements SET last_edited_by_role = 'coach', last_edited_by_user_id = 'trainer-rahul', last_edited_at = ? WHERE id = 'm-default'",
+        [at],
+      );
+      expect(() =>
+        handle.sqlite.run(
+          "UPDATE measurements SET last_edited_by_user_id = 'user-missing' WHERE id = 'm-default'",
+        ),
+      ).toThrow(/FOREIGN KEY constraint failed/);
+
+      // The same CHECKs guard workout and meal rows (inserted with FKs off: only the
+      // role columns are under test).
+      const loose = await createMemoryDb({ foreignKeys: false });
+      try {
+        loose.sqlite.run(
+          "INSERT INTO workout_executions (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, status, started_at, created_at, updated_at) VALUES ('w1', 'a', 'r', 'p', 't', 'completed', ?, ?, ?)",
+          [at, at, at],
+        );
+        loose.sqlite.run(
+          "INSERT INTO meal_compliance (id, assignment_id, coaching_relationship_id, plan_version_id, trainee_user_id, outcome, logged_at, created_at, updated_at) VALUES ('c1', 'a', 'r', 'p', 't', 'confirmed', ?, ?, ?)",
+          [at, at, at],
+        );
+        for (const [table, id] of [
+          ["workout_executions", "w1"],
+          ["meal_compliance", "c1"],
+        ] as const) {
+          expect(
+            loose.sqlite.exec(`SELECT logged_by_role FROM ${table} WHERE id = '${id}'`)[0]?.values,
+          ).toEqual([["trainee"]]);
+          expect(() =>
+            loose.sqlite.run(`UPDATE ${table} SET logged_by_role = 'admin' WHERE id = '${id}'`),
+          ).toThrow(/CHECK constraint failed/);
+          expect(() =>
+            loose.sqlite.run(
+              `UPDATE ${table} SET last_edited_by_role = 'admin' WHERE id = '${id}'`,
+            ),
+          ).toThrow(/CHECK constraint failed/);
+          loose.sqlite.run(
+            `UPDATE ${table} SET last_edited_by_role = 'coach' WHERE id = '${id}'`,
+          );
+        }
+      } finally {
+        loose.close();
+      }
+
+      // A new preference row names no coach_log_updates and reads on.
+      handle.sqlite.run(
+        "INSERT INTO notification_preferences (user_id, created_at, updated_at) VALUES ('trainee-asha', ?, ?)",
+        [at, at],
+      );
+      expect(
+        handle.sqlite.exec(
+          "SELECT coach_log_updates, typeof(coach_log_updates) FROM notification_preferences",
+        )[0]?.values,
+      ).toEqual([[1, "integer"]]);
+      assertNoForeignKeyViolations(handle.sqlite);
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it("stores log edit events with before and after, checks their enums, and cascades with the relationship", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      insertPaymentFixtures(handle.sqlite);
+      const at = "2026-11-02T05:00:00.000Z";
+      const insertEvent = (
+        id: string,
+        overrides: Partial<Record<string, string | null>> = {},
+      ) => {
+        const row: Record<string, string | null> = {
+          id,
+          coaching_relationship_id: "rel-asha",
+          trainee_user_id: "trainee-asha",
+          actor_user_id: "trainer-rahul",
+          actor_role: "coach",
+          entity_type: "measurement",
+          entity_id: "m-1",
+          action: "edit",
+          before_json: '{"value":71.5}',
+          after_json: '{"value":70.9}',
+          created_at: at,
+          ...overrides,
+        };
+        const columns = Object.keys(row);
+        handle.sqlite.run(
+          `INSERT INTO log_edit_events (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+          columns.map((column) => row[column]),
+        );
+      };
+      insertEvent("ev-edit");
+      insertEvent("ev-create", { action: "create", before_json: null, entity_type: "workout_execution" });
+      insertEvent("ev-other", { coaching_relationship_id: "rel-vikram", trainee_user_id: "trainee-vikram" });
+      for (const entity of ["workout_execution", "meal_compliance", "measurement"]) {
+        insertEvent(`ev-${entity}`, { entity_type: entity });
+      }
+      insertEvent("ev-trainee", { actor_role: "trainee", actor_user_id: "trainee-asha" });
+
+      const rejected: Array<[string, Record<string, string | null>]> = [
+        ["actor role", { actor_role: "admin" }],
+        ["entity type", { entity_type: "checkin" }],
+        ["action", { action: "delete" }],
+        ["edit without before", { action: "edit", before_json: null }],
+        ["create with before", { action: "create", before_json: "{}" }],
+      ];
+      rejected.forEach(([label, overrides], index) => {
+        expect(() => insertEvent(`ev-bad-${index}`, overrides), label).toThrow(
+          /CHECK constraint failed/,
+        );
+      });
+      expect(() => insertEvent("ev-null-after", { after_json: null })).toThrow(
+        /NOT NULL constraint failed/,
+      );
+      expect(() => insertEvent("ev-no-rel", { coaching_relationship_id: "rel-missing" })).toThrow(
+        /FOREIGN KEY constraint failed/,
+      );
+      expect(() => insertEvent("ev-no-actor", { actor_user_id: "user-missing" })).toThrow(
+        /FOREIGN KEY constraint failed/,
+      );
+
+      // Removing a relationship, as the demo wipe and the QA reset do, takes its
+      // events with it and leaves the other client's.
+      handle.sqlite.run("DELETE FROM subscription_versions WHERE coaching_relationship_id = 'rel-asha'");
+      handle.sqlite.run("DELETE FROM coaching_relationships WHERE id = 'rel-asha'");
+      expect(
+        (handle.sqlite.exec("SELECT id FROM log_edit_events ORDER BY id")[0]?.values ?? []).map(
+          (row) => String(row[0]),
+        ),
+      ).toEqual(["ev-other"]);
+      assertNoForeignKeyViolations(handle.sqlite);
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it(
+    "applies 0039 to a seeded database: every entry reads trainee-logged, coach updates on, row counts unchanged, foreign keys clean",
+    async () => {
+      const handle = await createMemoryDb({
+        foreignKeys: true,
+        librarySeed: true,
+        through: "0038_archived_account_state.sql",
+      });
+      try {
+        expect(tableColumns(handle.sqlite, "measurements")).not.toContain("logged_by_role");
+        const passwordHash = await hashPassword("FitBud-demo-2026");
+        handle.sqlite.exec(
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+            }),
+          ),
+        );
+        await yieldToEventLoop();
+        const logTables = ["workout_executions", "meal_compliance", "measurements"];
+        const contentSql = (table: string) =>
+          `SELECT * FROM ${table} ORDER BY id`;
+        const before = Object.fromEntries(
+          logTables.map((table) => [table, handle.sqlite.exec(contentSql(table))[0]?.values ?? []]),
+        );
+        for (const table of logTables) {
+          expect(before[table]!.length, table).toBeGreaterThan(0);
+        }
+        const preferencesBefore =
+          handle.sqlite.exec("SELECT * FROM notification_preferences ORDER BY user_id")[0]?.values ?? [];
+        expect(preferencesBefore.length).toBeGreaterThan(0);
+        const countsBefore = tableRowCounts(handle.sqlite);
+        expect(countsBefore.log_edit_events).toBeUndefined();
+
+        handle.applyMigrationsFrom("0039_log_authorship.sql");
+        await yieldToEventLoop();
+
+        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, log_edit_events: 0 });
+        assertNoForeignKeyViolations(handle.sqlite);
+        for (const table of logTables) {
+          expect(
+            handle.sqlite.exec(
+              `SELECT DISTINCT logged_by_role, logged_by_user_id, last_edited_by_role, last_edited_by_user_id, last_edited_at FROM ${table}`,
+            )[0]?.values,
+            table,
+          ).toEqual([["trainee", null, null, null, null]]);
+          // Old columns are untouched: the row prefix equals the pre-migration row.
+          const width = before[table]![0]!.length;
+          const after = (handle.sqlite.exec(contentSql(table))[0]?.values ?? []).map((row) =>
+            row.slice(0, width),
+          );
+          expect(after, table).toEqual(before[table]);
+        }
+        expect(
+          handle.sqlite.exec(
+            "SELECT DISTINCT coach_log_updates, typeof(coach_log_updates) FROM notification_preferences",
+          )[0]?.values,
+        ).toEqual([[1, "integer"]]);
+        const preferencesAfter = (
+          handle.sqlite.exec("SELECT * FROM notification_preferences ORDER BY user_id")[0]?.values ?? []
+        ).map((row) => row.slice(0, -1));
+        expect(preferencesAfter).toEqual(preferencesBefore);
       } finally {
         handle.close();
       }
