@@ -3,6 +3,7 @@ import type { LoggedFoodItem } from "@fitbud/contracts";
 import { canLog, scaleMacro, sumMacros } from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
+  coachingRelationships,
   exceptions,
   foodLibraryItems,
   foodLibraryServings,
@@ -14,6 +15,8 @@ import { createId, nowIso } from "../lib/crypto.js";
 import {
   LOG_TIME_ERROR_CODES,
   assertLogTimeWithinBounds,
+  isInEndedPeriod,
+  type LogTimeRejection,
 } from "./log-time-bounds.js";
 
 export async function assertMealLogAllowed(
@@ -30,7 +33,8 @@ export async function assertMealLogAllowed(
   },
 ): Promise<
   | { ok: true; loggedLate: boolean; loggedAfterResolve: boolean }
-  | { ok: false; code: string; reason: string; status?: 422 }
+  | { ok: false; code: string; reason: LogTimeRejection; status: 422 }
+  | { ok: false; code: string; reason: string; status?: undefined }
 > {
   const [assignment] = await db
     .select()
@@ -39,6 +43,28 @@ export async function assertMealLogAllowed(
     .limit(1);
   if (!assignment) {
     return { ok: false, code: "ASSIGNMENT_NOT_FOUND", reason: "not_found" };
+  }
+  // EC1 rule 1: after a reactivation, nothing dated in the frozen period may
+  // be logged, so exceptions closed at the end can never be reopened or fed.
+  const [relationship] = await db
+    .select({ reactivatedAt: coachingRelationships.reactivatedAt })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, input.relationshipId))
+    .limit(1);
+  if (
+    isInEndedPeriod({
+      reactivatedAt: relationship?.reactivatedAt ?? null,
+      loggedAt: input.clientLoggedAt ?? input.nowIso,
+      localDate: assignment.localDate,
+      timeZone: input.traineeTimezone,
+    })
+  ) {
+    return {
+      ok: false,
+      code: LOG_TIME_ERROR_CODES.ended_period,
+      reason: "ended_period",
+      status: 422,
+    };
   }
   const bounds = assertLogTimeWithinBounds({
     clientLoggedAt: input.clientLoggedAt ?? input.nowIso,

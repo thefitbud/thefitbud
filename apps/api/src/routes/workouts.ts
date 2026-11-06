@@ -58,6 +58,7 @@ import {
   LOG_TIME_ERROR_CODES,
   LOG_TIME_ERROR_MESSAGES,
   assertLogTimeWithinBounds,
+  isInEndedPeriod,
 } from "../domain/log-time-bounds.js";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import type { AppContext } from "../lib/envelope";
@@ -122,6 +123,37 @@ async function loadAccessibleRelationship(
   const row = rows[0];
   if (!row || !canAccessRelationship(actor, row)) return null;
   return row;
+}
+
+/**
+ * EC1 rule 1: after a reactivation, a workout dated before the reactivation
+ * day, or a session started before the reactivation, belongs to the frozen
+ * ended period and cannot be started, skipped or continued.
+ */
+async function workoutInEndedPeriod(
+  db: Db,
+  input: {
+    relationship: { reactivatedAt: string | null; traineeUserId: string };
+    localDate: string;
+    loggedAt: string;
+  },
+): Promise<boolean> {
+  if (!input.relationship.reactivatedAt) return false;
+  return isInEndedPeriod({
+    reactivatedAt: input.relationship.reactivatedAt,
+    loggedAt: input.loggedAt,
+    localDate: input.localDate,
+    timeZone: await loadTraineeTimezone(db, input.relationship.traineeUserId),
+  });
+}
+
+function endedPeriodError(c: AppContext) {
+  return fail(
+    c,
+    422,
+    LOG_TIME_ERROR_CODES.ended_period,
+    LOG_TIME_ERROR_MESSAGES.ended_period,
+  );
 }
 
 async function loadEffectivePlanVersion(db: Db, relationshipId: string) {
@@ -683,6 +715,15 @@ workoutRoutes.post(
     if (!writableStart.ok) return writableStart.response;
 
     const now = nowIso();
+    if (
+      await workoutInEndedPeriod(db, {
+        relationship,
+        localDate: loaded.assignment.localDate,
+        loggedAt: now,
+      })
+    ) {
+      return endedPeriodError(c);
+    }
     const assignmentStatus = mapWorkoutAssignment(
       loaded.assignment,
       loaded.execution,
@@ -869,27 +910,54 @@ async function requireTraineeOwnedOpenExecution(
     }
     throw error;
   }
+  if (relationship.reactivatedAt) {
+    const [assignment] = await db
+      .select({ localDate: workoutAssignments.localDate })
+      .from(workoutAssignments)
+      .where(eq(workoutAssignments.id, bundle.execution.assignmentId))
+      .limit(1);
+    if (
+      assignment &&
+      (await workoutInEndedPeriod(db, {
+        relationship,
+        localDate: assignment.localDate,
+        loggedAt: bundle.execution.startedAt,
+      }))
+    ) {
+      return { errorStatus: "ended_period" as const };
+    }
+  }
   return { actor, db, bundle, relationship } as const;
 }
 
+type OwnershipFailure =
+  | "unauthenticated"
+  | "not_found"
+  | "ended"
+  | "ended_period";
+
 function isOwnershipFailure(
   loaded: {
-    errorStatus?: "unauthenticated" | "not_found" | "ended";
+    errorStatus?: OwnershipFailure;
   },
 ): loaded is {
-  errorStatus: "unauthenticated" | "not_found" | "ended";
+  errorStatus: OwnershipFailure;
 } {
   return (
     loaded.errorStatus === "unauthenticated" ||
     loaded.errorStatus === "not_found" ||
-    loaded.errorStatus === "ended"
+    loaded.errorStatus === "ended" ||
+    loaded.errorStatus === "ended_period"
   );
 }
 
 function ownershipError(
   c: AppContext,
-  loaded: { errorStatus: "unauthenticated" | "not_found" | "ended" },
+  loaded: { errorStatus: OwnershipFailure },
 ) {
+  if (loaded.errorStatus === "ended_period") {
+    return endedPeriodError(c);
+  }
   if (loaded.errorStatus === "unauthenticated") {
     return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
   }
@@ -1415,6 +1483,16 @@ workoutRoutes.post(
       relationship.id,
     );
     if (!writableSkip.ok) return writableSkip.response;
+
+    if (
+      await workoutInEndedPeriod(db, {
+        relationship,
+        localDate: loaded.assignment.localDate,
+        loggedAt: loaded.execution?.startedAt ?? nowIso(),
+      })
+    ) {
+      return endedPeriodError(c);
+    }
 
     if (loaded.execution && isOpenWorkoutExecution(loaded.execution.status)) {
       if (!canSkipOpenWorkoutExecution(loaded.execution.status)) {
