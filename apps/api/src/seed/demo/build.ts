@@ -96,6 +96,7 @@ DELETE FROM media_assets;
 DELETE FROM plan_assignment_policies;
 DELETE FROM plan_versions;
 DELETE FROM plans;
+DELETE FROM payment_records;
 DELETE FROM subscription_versions;
 DELETE FROM tracking_requirements;
 DELETE FROM nutrition_expectations;
