@@ -1,5 +1,6 @@
 import { createTestIdToken } from "./firebase.js";
 import { exchangeCustomToken } from "./token-exchange.js";
+import { nowIso } from "../lib/crypto.js";
 import type { Env } from "../types.js";
 
 export type AuthTokenResult =
@@ -45,7 +46,12 @@ export async function mintAuthToken(
   const mode = env.AUTH_MODE === "firebase" ? "firebase" : "test";
   if (mode === "test") {
     return {
-      token: createTestIdToken(input.firebaseUid, input.email),
+      // The sign-in time is now, like a real Firebase ID token's auth_time.
+      token: createTestIdToken(
+        input.firebaseUid,
+        input.email,
+        Math.floor(Date.parse(nowIso()) / 1000),
+      ),
       tokenKind: "test_id_token",
     };
   }
