@@ -324,6 +324,12 @@ progressRoutes.post(
       checkinId: null as string | null,
       mediaAssetId: parsed.data.mediaAssetId ?? null,
       recordVersion: 0,
+      // Z6-18 authorship columns at their column defaults; Z6-19 sets them (type fix only).
+      loggedByRole: "trainee" as const,
+      loggedByUserId: null,
+      lastEditedByRole: null,
+      lastEditedByUserId: null,
+      lastEditedAt: null,
       createdAt: now,
       updatedAt: now,
     };

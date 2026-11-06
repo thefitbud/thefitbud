@@ -747,6 +747,14 @@ export const workoutExecutions = sqliteTable(
     clientLoggedAt: text("client_logged_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** Who created the entry (Z6-18, D-P2-21 R1): a coach-made entry is read-only to the trainee. */
+    loggedByRole: text("logged_by_role", { enum: ["trainee", "coach"] })
+      .notNull()
+      .default("trainee"),
+    loggedByUserId: text("logged_by_user_id").references(() => users.id),
+    lastEditedByRole: text("last_edited_by_role", { enum: ["trainee", "coach"] }),
+    lastEditedByUserId: text("last_edited_by_user_id").references(() => users.id),
+    lastEditedAt: text("last_edited_at"),
   },
   (table) => [
     uniqueIndex("workout_executions_assignment_uidx").on(table.assignmentId),
@@ -758,6 +766,11 @@ export const workoutExecutions = sqliteTable(
       table.completedAt,
     ),
     index("workout_executions_trainee_idx").on(table.traineeUserId),
+    check("workout_executions_logged_by_role_chk", sql`${table.loggedByRole} IN ('trainee', 'coach')`),
+    check(
+      "workout_executions_last_edited_by_role_chk",
+      sql`${table.lastEditedByRole} IS NULL OR ${table.lastEditedByRole} IN ('trainee', 'coach')`,
+    ),
   ],
 );
 
@@ -927,6 +940,14 @@ export const mealCompliance = sqliteTable(
     clientLoggedAt: text("client_logged_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** Who created the entry (Z6-18, D-P2-21 R1): a coach-made entry is read-only to the trainee. */
+    loggedByRole: text("logged_by_role", { enum: ["trainee", "coach"] })
+      .notNull()
+      .default("trainee"),
+    loggedByUserId: text("logged_by_user_id").references(() => users.id),
+    lastEditedByRole: text("last_edited_by_role", { enum: ["trainee", "coach"] }),
+    lastEditedByUserId: text("last_edited_by_user_id").references(() => users.id),
+    lastEditedAt: text("last_edited_at"),
   },
   (table) => [
     uniqueIndex("meal_compliance_assignment_uidx").on(table.assignmentId),
@@ -940,6 +961,11 @@ export const mealCompliance = sqliteTable(
       table.localDate,
     ),
     index("meal_compliance_trainee_idx").on(table.traineeUserId),
+    check("meal_compliance_logged_by_role_chk", sql`${table.loggedByRole} IN ('trainee', 'coach')`),
+    check(
+      "meal_compliance_last_edited_by_role_chk",
+      sql`${table.lastEditedByRole} IS NULL OR ${table.lastEditedByRole} IN ('trainee', 'coach')`,
+    ),
   ],
 );
 
@@ -1278,6 +1304,14 @@ export const measurements = sqliteTable(
     recordVersion: integer("record_version").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** Who created the entry (Z6-18, D-P2-21 R1): a coach-made entry is read-only to the trainee. */
+    loggedByRole: text("logged_by_role", { enum: ["trainee", "coach"] })
+      .notNull()
+      .default("trainee"),
+    loggedByUserId: text("logged_by_user_id").references(() => users.id),
+    lastEditedByRole: text("last_edited_by_role", { enum: ["trainee", "coach"] }),
+    lastEditedByUserId: text("last_edited_by_user_id").references(() => users.id),
+    lastEditedAt: text("last_edited_at"),
   },
   (table) => [
     index("measurements_relationship_observed_idx").on(
@@ -1286,6 +1320,58 @@ export const measurements = sqliteTable(
     ),
     index("measurements_trainee_idx").on(table.traineeUserId),
     index("measurements_checkin_idx").on(table.checkinId),
+    check("measurements_logged_by_role_chk", sql`${table.loggedByRole} IN ('trainee', 'coach')`),
+    check(
+      "measurements_last_edited_by_role_chk",
+      sql`${table.lastEditedByRole} IS NULL OR ${table.lastEditedByRole} IN ('trainee', 'coach')`,
+    ),
+  ],
+);
+
+/**
+ * Audit trail of trainer creates and edits of a client's log entries (Z6-18, D-P2-21 R4).
+ * The relationship owns the rows (ON DELETE CASCADE), so wiping or purging a relationship
+ * needs no separate delete. entity_id points at one of three tables, so it has no foreign key.
+ */
+export const logEditEvents = sqliteTable(
+  "log_edit_events",
+  {
+    id: text("id").primaryKey(),
+    coachingRelationshipId: text("coaching_relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+    traineeUserId: text("trainee_user_id")
+      .notNull()
+      .references(() => users.id),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => users.id),
+    actorRole: text("actor_role", { enum: ["trainee", "coach"] }).notNull(),
+    entityType: text("entity_type", {
+      enum: ["workout_execution", "meal_compliance", "measurement"],
+    }).notNull(),
+    entityId: text("entity_id").notNull(),
+    action: text("action", { enum: ["create", "edit"] }).notNull(),
+    /** NULL exactly when action is 'create'. */
+    beforeJson: text("before_json"),
+    afterJson: text("after_json").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("log_edit_events_relationship_created_idx").on(
+      table.coachingRelationshipId,
+      table.createdAt,
+    ),
+    check("log_edit_events_actor_role_chk", sql`${table.actorRole} IN ('trainee', 'coach')`),
+    check(
+      "log_edit_events_entity_type_chk",
+      sql`${table.entityType} IN ('workout_execution', 'meal_compliance', 'measurement')`,
+    ),
+    check("log_edit_events_action_chk", sql`${table.action} IN ('create', 'edit')`),
+    check(
+      "log_edit_events_before_json_chk",
+      sql`(${table.action} = 'create') = (${table.beforeJson} IS NULL)`,
+    ),
   ],
 );
 
@@ -1466,6 +1552,10 @@ export const notificationPreferences = sqliteTable(
     trainerCategoriesJson: text("trainer_categories_json").notNull().default("[]"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /** "Coach updates to my logs" (Z6-18, D-P2-21 R5); on by default for everyone. */
+    coachLogUpdates: integer("coach_log_updates", { mode: "boolean" })
+      .notNull()
+      .default(true),
   },
 );
 
