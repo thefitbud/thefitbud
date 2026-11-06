@@ -10,6 +10,7 @@ import {
 } from "./jobs/reminders";
 import { handleScheduledPushReceipts } from "./jobs/push-receipts";
 import { handleScheduledReplenishment } from "./jobs/replenishment";
+import { runAccountPurge } from "./jobs/account-purge";
 import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
 import { fail, ok } from "./lib/envelope";
@@ -23,7 +24,12 @@ import { authRoutes, meRoutes } from "./routes/auth";
 import { checkinFormTemplateRoutes } from "./routes/checkin-forms";
 import { checkinRoutes } from "./routes/checkins";
 import { configurationRoutes } from "./routes/configurations";
+import { accountRoutes } from "./routes/account";
+import { clientSettingsRoutes } from "./routes/client-settings";
 import { exceptionRoutes } from "./routes/exceptions";
+import { exceptionsBulkRoutes } from "./routes/exceptions-bulk";
+import { stepsRoutes } from "./routes/steps";
+import { strengthRoutes } from "./routes/strength";
 import { fileRoutes } from "./routes/files";
 import { invitationRoutes } from "./routes/invitations";
 import { inviteLandingRoutes } from "./routes/invite-landing";
@@ -109,7 +115,13 @@ app.route("/workouts", workoutRoutes);
 app.route("/meals", mealRoutes);
 app.route("/checkins/form-templates", checkinFormTemplateRoutes);
 app.route("/checkins", checkinRoutes);
+// W6 scaffolds (Z5-4). /exceptions/bulk must stay before /exceptions.
+app.route("/exceptions/bulk", exceptionsBulkRoutes);
 app.route("/exceptions", exceptionRoutes);
+app.route("/strength", strengthRoutes);
+app.route("/client-settings", clientSettingsRoutes);
+app.route("/steps", stepsRoutes);
+app.route("/account", accountRoutes);
 app.route("/progress", progressRoutes);
 app.route("/history", historyRoutes);
 app.route("/workspaces", workspaceRoutes);
@@ -292,7 +304,14 @@ const worker = {
     await runScheduledJobs([
       ["cron.reminders", () => handleScheduledReminders(env, at)],
       ["cron.replenishment", () => handleScheduledReplenishment(env, at)],
-      ["cron.coach_ask", () => runCoachAskMaintenance(createDb(env.DB))],
+      [
+        "cron.coach_ask",
+        async () => {
+          await runCoachAskMaintenance(createDb(env.DB));
+          // Z5-4 scaffold; Z6-17 fills in the job (see jobs/account-purge.ts).
+          await runAccountPurge(env, at);
+        },
+      ],
       // Last, so a slow receipts call never delays the jobs above.
       ["cron.push_receipts", () => handleScheduledPushReceipts(env, at)],
     ]);

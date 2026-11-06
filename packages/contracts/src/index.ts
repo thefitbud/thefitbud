@@ -791,3 +791,11 @@ export {
   type ResponsivenessCategories,
   type ReengagementCandidatesResponse,
 } from "./read-models.js";
+
+// W6 module scaffolds (Z5-4): each W6 lane fills in its own file.
+export * from "./strength.js";
+export * from "./checkin-form-v2.js";
+export * from "./client-settings.js";
+export * from "./steps.js";
+export * from "./exception-bulk.js";
+export * from "./account.js";

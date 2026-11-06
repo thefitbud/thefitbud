@@ -2469,3 +2469,15 @@ export class FitBudApiClient {
 
 import { installStage1ClientMethods } from "./stage1-augment.js";
 installStage1ClientMethods(FitBudApiClient);
+import { installStrengthClientMethods } from "./strength-augment.js";
+installStrengthClientMethods(FitBudApiClient);
+import { installCheckinFormV2ClientMethods } from "./checkin-form-v2-augment.js";
+installCheckinFormV2ClientMethods(FitBudApiClient);
+import { installClientSettingsClientMethods } from "./client-settings-augment.js";
+installClientSettingsClientMethods(FitBudApiClient);
+import { installStepsClientMethods } from "./steps-augment.js";
+installStepsClientMethods(FitBudApiClient);
+import { installExceptionBulkClientMethods } from "./exception-bulk-augment.js";
+installExceptionBulkClientMethods(FitBudApiClient);
+import { installAccountClientMethods } from "./account-augment.js";
+installAccountClientMethods(FitBudApiClient);
