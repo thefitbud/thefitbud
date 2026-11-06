@@ -302,7 +302,7 @@ export function buildScrubber(values: PersonValues): Scrubber | null {
   for (const parts of names) {
     const pattern = parts.map(escapeRegExp).join("\\s+");
     rules.push([
-      new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, "giu"),
+      new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${pattern}(?![\\p{L}\\p{M}\\p{N}])`, "giu"),
       DELETED_USER_NAME,
     ]);
   }

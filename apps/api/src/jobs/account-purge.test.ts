@@ -1254,6 +1254,14 @@ describe("free-text scrubber (D-W6-39)", () => {
     }
   });
 
+  it("treats combining marks as part of a word, so an Indic name never matches inside another word", () => {
+    const indic = buildScrubber({ emails: [], mobile: null, names: ["राम"] })!;
+    expect(indic.rewrite("राम ने कहा")).toBe("Deleted user ने कहा");
+    for (const kept of ["रामायण", "श्रीराम", "रामू"]) {
+      expect(indic.rewrite(kept)).toBe(kept);
+    }
+  });
+
   it("replaces the phone as stored and in national form with or without spaces or dashes, not inside longer numbers", () => {
     for (const phone of ["+919812345678", "919812345678", "9812345678", "98123 45678", "98123-45678", "+91 98123 45678", "+91-98123-45678"]) {
       expect(scrubber.rewrite(`call ${phone} now`)).toBe("call [removed] now");
