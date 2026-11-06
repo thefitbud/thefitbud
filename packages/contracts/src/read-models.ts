@@ -6,6 +6,7 @@ import { localDateSchema } from "./workout.js";
 export const weekDayStateSchema = z.enum([
   "done",
   "partial",
+  "due",
   "missed",
   "rest",
   "future",

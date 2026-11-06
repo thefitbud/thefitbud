@@ -7,7 +7,7 @@ export type DateNavigatorDay = {
   localDate: string;
   weekdayLabel: string;
   dayLabel: string;
-  state: "done" | "partial" | "open" | "rest" | "future" | "unknown";
+  state: "done" | "partial" | "due" | "open" | "rest" | "future" | "unknown";
 };
 
 type Props = {
@@ -24,6 +24,10 @@ function dotColor(state: DateNavigatorDay["state"]): string {
       return colors.success;
     case "partial":
       return colors.warning;
+    case "due":
+      // Planned today, nothing logged yet: neutral and open, never the
+      // partial colour (D-W6-10).
+      return colors.darkGrey;
     case "open":
       return colors.indigo;
     case "rest":
@@ -44,6 +48,8 @@ function stateLabel(state: DateNavigatorDay["state"]): string {
       return "done";
     case "partial":
       return "partial";
+    case "due":
+      return "to do";
     case "open":
       return "open";
     case "rest":

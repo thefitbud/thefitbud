@@ -277,6 +277,13 @@ describe("labels", () => {
     );
   });
 
+  it("labels the unlogged-today day state in plain language (D-W6-10)", () => {
+    expect(LABELS.week_day_state.due).toBeTruthy();
+    expect(LABELS.week_day_state.due).not.toBe("due");
+    expect(LABELS.week_day_state.due).not.toBe("Due");
+    expect(labelFor("week_day_state", "due")).toBe("To do");
+  });
+
   it("exposes a non-empty catalogue", () => {
     expect(allLabelEntries().length).toBeGreaterThan(80);
   });
