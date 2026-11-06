@@ -121,6 +121,21 @@ function setLoadRows(sqlite: SqliteLike): SetLoadRow[] {
   }));
 }
 
+/**
+ * Drops `DELETE FROM <table>;` statements for tables a later migration creates, so the
+ * current demo seed (whose wipe lists every table) still loads on a partly migrated DB.
+ */
+function withoutDeletesFromMissingTables(sqlite: SqliteLike, seedSql: string): string {
+  const existing = new Set(
+    (
+      sqlite.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []
+    ).map((row) => String(row[0])),
+  );
+  return seedSql.replace(/^DELETE FROM ([a-z_0-9]+);[ \t]*$/gm, (statement, table: string) =>
+    existing.has(table) ? statement : "",
+  );
+}
+
 function tableRowCounts(sqlite: SqliteLike): Record<string, number> {
   const tables =
     sqlite.exec(
@@ -159,6 +174,16 @@ const PAYMENT_RECORD_COLUMNS = [
   "created_by",
   "created_at",
   "updated_at",
+];
+
+/** daily_steps columns in table order (0037, Z6-4). */
+const DAILY_STEPS_COLUMNS = [
+  "id",
+  "coaching_relationship_id",
+  "local_date",
+  "steps",
+  "source",
+  "synced_at",
 ];
 
 /** Column names that would let a payment table hold a collection or a session count (D-W6-5). */
@@ -206,7 +231,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0036 in order after 0029, with 0036 last", async () => {
+  it("places 0030 to 0037 in order after 0029, with 0037 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -220,7 +245,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 5]).toBe("0034_remove_configured_status");
     expect(tags[previous + 6]).toBe("0035_numeric_set_load");
     expect(tags[previous + 7]).toBe("0036_payment_tracking");
-    expect(tags.at(-1)).toBe("0036_payment_tracking");
+    expect(tags[previous + 8]).toBe("0037_daily_steps");
+    expect(tags.at(-1)).toBe("0037_daily_steps");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -229,6 +255,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 5]?.idx).toBe(34);
     expect(journal[previous + 6]?.idx).toBe(35);
     expect(journal[previous + 7]?.idx).toBe(36);
+    expect(journal[previous + 8]?.idx).toBe(37);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -239,7 +266,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 5]).toBe("0034_remove_configured_status.sql");
     expect(files[previousFile + 6]).toBe("0035_numeric_set_load.sql");
     expect(files[previousFile + 7]).toBe("0036_payment_tracking.sql");
-    expect(files.at(-1)).toBe("0036_payment_tracking.sql");
+    expect(files[previousFile + 8]).toBe("0037_daily_steps.sql");
+    expect(files.at(-1)).toBe("0037_daily_steps.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -715,11 +743,14 @@ describe("migration chain and seeds", () => {
         const passwordHash = await hashPassword("FitBud-demo-2026");
         const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
         handle.sqlite.exec(
-          buildDemoSeedSql({
-            referenceInstant: new Date().toISOString(),
-            passwordHash,
-            libraryIndex,
-          }),
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex,
+            }),
+          ),
         );
         await yieldToEventLoop();
         const subscriptionSql =
@@ -732,7 +763,11 @@ describe("migration chain and seeds", () => {
         handle.applyMigrationsFrom("0036_payment_tracking.sql");
         await yieldToEventLoop();
 
-        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, payment_records: 0 });
+        expect(tableRowCounts(handle.sqlite)).toEqual({
+          ...countsBefore,
+          payment_records: 0,
+          daily_steps: 0,
+        });
         assertNoForeignKeyViolations(handle.sqlite);
         expect(handle.sqlite.exec(subscriptionSql)[0]?.values ?? []).toEqual(subscriptionsBefore);
         const invented =
@@ -763,6 +798,222 @@ describe("migration chain and seeds", () => {
         insertPayment("pay-seeded", relationshipId);
         expect(() => insertPayment("pay-cross", String(otherRelationship))).toThrow(
           /FOREIGN KEY constraint failed/,
+        );
+        assertNoForeignKeyViolations(handle.sqlite);
+      } finally {
+        handle.close();
+      }
+    },
+    120_000,
+  );
+
+  it("loads a seed that wipes a later table onto a database migrated only part way", async () => {
+    const handle = await createMemoryDb({
+      foreignKeys: true,
+      through: "0035_numeric_set_load.sql",
+    });
+    try {
+      expect(tableColumns(handle.sqlite, "payment_records")).toEqual([]);
+      const seedSql =
+        "DELETE FROM payment_records;\nDELETE FROM daily_steps;\nDELETE FROM coaching_relationships;\n";
+      expect(() => handle.sqlite.exec(seedSql)).toThrow(/no such table/);
+      const filtered = withoutDeletesFromMissingTables(handle.sqlite, seedSql);
+      expect(filtered).not.toContain("payment_records");
+      expect(filtered).not.toContain("daily_steps");
+      expect(filtered).toContain("DELETE FROM coaching_relationships;");
+      expect(() => handle.sqlite.exec(filtered)).not.toThrow();
+      // Once the table exists the statement is kept.
+      handle.applyMigrationsFrom("0036_payment_tracking.sql");
+      expect(withoutDeletesFromMissingTables(handle.sqlite, seedSql)).toContain(
+        "DELETE FROM payment_records;",
+      );
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it("keeps 0037 additive: no table rebuild, drop or backfill", () => {
+    const stepsSql = readFileSync(join(drizzleDir, "0037_daily_steps.sql"), "utf8");
+    expect(stepsSql).not.toMatch(/DROP\s+(TABLE|INDEX)/i);
+    expect(stepsSql.replace(/^--.*$/gm, "").replace(/ON DELETE CASCADE/g, "")).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bINSERT\b|RENAME/i);
+    expect(stepsSql).not.toMatch(/CREATE TABLE `?__new/i);
+    expect([...stepsSql.matchAll(/CREATE TABLE `([a-z_]+)`/g)].map((m) => m[1])).toEqual([
+      "daily_steps",
+    ]);
+    expect(
+      [...stepsSql.matchAll(/ALTER TABLE `([a-z_]+)` ADD COLUMN `([a-z_]+)`/g)].map(
+        (m) => `${m[1]}.${m[2]}`,
+      ),
+    ).toEqual(["coaching_configurations.steps_target"]);
+  });
+
+  it("records 0037 in the drizzle snapshot chain after 0036", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0036_snapshot.json"), "utf8"),
+    ) as { id: string };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0037_snapshot.json"), "utf8"),
+    ) as {
+      id: string;
+      prevId: string;
+      tables: Record<
+        string,
+        {
+          columns: Record<string, { type: string; notNull: boolean; default?: number }>;
+          indexes: Record<string, { columns: string[]; isUnique: boolean }>;
+          foreignKeys: Record<string, { tableTo: string; onDelete: string }>;
+          checkConstraints: Record<string, { value: string }>;
+        }
+      >;
+    };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    expect(snapshot.tables.coaching_configurations!.columns.steps_target).toMatchObject({
+      type: "integer",
+      notNull: true,
+      default: 8000,
+    });
+    const steps = snapshot.tables.daily_steps!;
+    expect(Object.keys(steps.columns)).toEqual(DAILY_STEPS_COLUMNS);
+    expect(steps.indexes.daily_steps_relationship_date_uidx).toMatchObject({
+      columns: ["coaching_relationship_id", "local_date"],
+      isUnique: true,
+    });
+    expect(Object.values(steps.foreignKeys)).toMatchObject([
+      { tableTo: "coaching_relationships", onDelete: "cascade" },
+    ]);
+    expect(Object.keys(steps.checkConstraints).sort()).toEqual([
+      "daily_steps_local_date_chk",
+      "daily_steps_source_chk",
+      "daily_steps_steps_chk",
+    ]);
+  });
+
+  it("stores one row of steps per client per day, bounded, from a known source, and cascades with the relationship", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      expect(tableColumns(handle.sqlite, "daily_steps")).toEqual(DAILY_STEPS_COLUMNS);
+      expect(indexColumns(handle.sqlite, "daily_steps_relationship_date_uidx")).toEqual([
+        "coaching_relationship_id",
+        "local_date",
+      ]);
+      insertPaymentFixtures(handle.sqlite);
+      const at = "2026-10-21T05:00:00.000Z";
+      const insertSteps = (
+        id: string,
+        relationship: string,
+        localDate: string,
+        steps: number | string,
+        source: string,
+      ) =>
+        handle.sqlite.run(
+          "INSERT INTO daily_steps (id, coaching_relationship_id, local_date, steps, source, synced_at) VALUES (?, ?, ?, ?, ?, ?)",
+          [id, relationship, localDate, steps, source, at],
+        );
+
+      insertSteps("st-1", "rel-asha", "2026-10-20", 8000, "apple_health");
+      insertSteps("st-2", "rel-asha", "2026-10-21", 0, "health_connect");
+      insertSteps("st-3", "rel-asha", "2026-10-22", 200_000, "manual");
+      // The same civil day is allowed for a different client.
+      insertSteps("st-4", "rel-vikram", "2026-10-20", 5200, "apple_health");
+
+      // One row per client per day, whatever the source or count.
+      expect(() => insertSteps("st-dup", "rel-asha", "2026-10-20", 9000, "manual")).toThrow(
+        /UNIQUE constraint failed/,
+      );
+      const rejected: Array<[string, number | string, string]> = [
+        ["2026-10-23", -1, "manual"],
+        ["2026-10-23", 200_001, "manual"],
+        ["2026-10-23", 8000.5, "manual"],
+        ["2026-10-23", "lots", "manual"],
+        ["2026-10-23", 8000, "fitbit"],
+        ["2026-10-23", 8000, "Manual"],
+        ["2026-10-23", 8000, ""],
+        ["Fri 23 Oct", 8000, "manual"],
+        ["2026-10-23T00:00:00.000Z", 8000, "manual"],
+      ];
+      rejected.forEach(([localDate, steps, source], index) => {
+        expect(
+          () => insertSteps(`st-bad-${index}`, "rel-asha", localDate, steps, source),
+          JSON.stringify([localDate, steps, source]),
+        ).toThrow(/CHECK constraint failed/);
+      });
+      expect(() => insertSteps("st-orphan", "rel-missing", "2026-10-20", 1, "manual")).toThrow(
+        /FOREIGN KEY constraint failed/,
+      );
+
+      // A relationship holding step rows can still be removed, as the demo wipe and the
+      // QA reset do: its steps go with it and the other client's stay.
+      handle.sqlite.run("DELETE FROM subscription_versions WHERE coaching_relationship_id = 'rel-asha'");
+      handle.sqlite.run("DELETE FROM coaching_relationships WHERE id = 'rel-asha'");
+      expect(
+        (handle.sqlite.exec("SELECT id FROM daily_steps ORDER BY id")[0]?.values ?? []).map((r) =>
+          String(r[0]),
+        ),
+      ).toEqual(["st-4"]);
+      assertNoForeignKeyViolations(handle.sqlite);
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it(
+    "applies 0037 to a seeded database: every configuration reads 8000, row counts unchanged",
+    async () => {
+      const handle = await createMemoryDb({
+        foreignKeys: true,
+        librarySeed: true,
+        through: "0036_payment_tracking.sql",
+      });
+      try {
+        expect(tableColumns(handle.sqlite, "coaching_configurations")).not.toContain(
+          "steps_target",
+        );
+        const passwordHash = await hashPassword("FitBud-demo-2026");
+        handle.sqlite.exec(
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+            }),
+          ),
+        );
+        await yieldToEventLoop();
+        const configurationSql =
+          "SELECT id, coaching_relationship_id, status, version_number, goal_short, updated_at FROM coaching_configurations ORDER BY id";
+        const configurationsBefore = handle.sqlite.exec(configurationSql)[0]?.values ?? [];
+        expect(configurationsBefore.length).toBeGreaterThan(0);
+        const countsBefore = tableRowCounts(handle.sqlite);
+        expect(countsBefore.daily_steps).toBeUndefined();
+
+        handle.applyMigrationsFrom("0037_daily_steps.sql");
+        await yieldToEventLoop();
+
+        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, daily_steps: 0 });
+        assertNoForeignKeyViolations(handle.sqlite);
+        expect(handle.sqlite.exec(configurationSql)[0]?.values ?? []).toEqual(configurationsBefore);
+        const targets = handle.sqlite.exec(
+          "SELECT DISTINCT steps_target, typeof(steps_target) FROM coaching_configurations",
+        )[0]?.values;
+        expect(targets).toEqual([[8000, "integer"]]);
+
+        // A new configuration that names no target also reads 8000.
+        const relationshipId = String(configurationsBefore[0]![1]);
+        handle.sqlite.run(
+          "INSERT INTO coaching_configurations (id, coaching_relationship_id, status, version_number, created_at, updated_at) VALUES ('cfg-new', ?, 'superseded', 99, '2026-11-01T05:00:00.000Z', '2026-11-01T05:00:00.000Z')",
+          [relationshipId],
+        );
+        expect(
+          handle.sqlite.exec("SELECT steps_target FROM coaching_configurations WHERE id = 'cfg-new'")[0]
+            ?.values[0]?.[0],
+        ).toBe(8000);
+
+        // A seeded relationship takes step rows, and a row is removable with no fallout.
+        handle.sqlite.run(
+          "INSERT INTO daily_steps (id, coaching_relationship_id, local_date, steps, source, synced_at) VALUES ('st-seeded', ?, '2026-11-01', 7000, 'manual', '2026-11-01T05:00:00.000Z')",
+          [relationshipId],
         );
         assertNoForeignKeyViolations(handle.sqlite);
       } finally {
@@ -886,11 +1137,14 @@ describe("migration chain and seeds", () => {
         const passwordHash = await hashPassword("FitBud-demo-2026");
         const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
         handle.sqlite.exec(
-          buildDemoSeedSql({
-            referenceInstant: new Date().toISOString(),
-            passwordHash,
-            libraryIndex,
-          }),
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex,
+            }),
+          ),
         );
         await yieldToEventLoop();
         const seeded = setLoadRows(handle.sqlite);

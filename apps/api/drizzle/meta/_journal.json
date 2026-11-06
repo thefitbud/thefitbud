@@ -257,5 +257,12 @@
     "when": 1730476800000,
     "tag": "0036_payment_tracking",
     "breakpoints": true
+  },
+  {
+    "idx": 37,
+    "version": "7",
+    "when": 1730563200000,
+    "tag": "0037_daily_steps",
+    "breakpoints": true
   }
 ]

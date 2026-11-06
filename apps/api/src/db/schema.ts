@@ -310,6 +310,8 @@ export const coachingConfigurations = sqliteTable(
     goalShort: text("goal_short"),
     goalDescription: text("goal_description"),
     notes: text("notes"),
+    /** Daily steps target for this client; trainer-editable (Z6-4, v13 B4a). */
+    stepsTarget: integer("steps_target").notNull().default(8000),
     configuredAt: text("configured_at"),
     activatedAt: text("activated_at"),
     createdAt: text("created_at").notNull(),
@@ -443,6 +445,47 @@ export const paymentRecords = sqliteTable(
     check(
       "payment_records_method_chk",
       sql`${table.method} IS NULL OR ${table.method} IN ('cash', 'upi', 'bank')`,
+    ),
+  ],
+);
+
+/**
+ * One row per client per trainee-local day of steps read from the phone's health
+ * store (Z6-4, v13 B4a). A projection: the device is the source, this is the copy
+ * trainers read. Cascades with the relationship, like the other per-relationship
+ * rows that only mean something beside it.
+ */
+export const dailySteps = sqliteTable(
+  "daily_steps",
+  {
+    id: text("id").primaryKey(),
+    coachingRelationshipId: text("coaching_relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id, { onDelete: "cascade" }),
+    /** Civil date (YYYY-MM-DD) in the trainee's timezone. */
+    localDate: text("local_date").notNull(),
+    steps: integer("steps").notNull(),
+    source: text("source", {
+      enum: ["apple_health", "health_connect", "manual"],
+    }).notNull(),
+    syncedAt: text("synced_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("daily_steps_relationship_date_uidx").on(
+      table.coachingRelationshipId,
+      table.localDate,
+    ),
+    check(
+      "daily_steps_steps_chk",
+      sql`typeof(${table.steps}) = 'integer' AND ${table.steps} BETWEEN 0 AND 200000`,
+    ),
+    check(
+      "daily_steps_local_date_chk",
+      sql`${table.localDate} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check(
+      "daily_steps_source_chk",
+      sql`${table.source} IN ('apple_health', 'health_connect', 'manual')`,
     ),
   ],
 );
