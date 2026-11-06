@@ -41,6 +41,8 @@ const FIRST_PULL_BUDGET = 50;
 /** Before Z6-21, a later pull of a 50-row page took ~107 queries. */
 const LATER_PULL_BUDGET = 107;
 const PAGE = 50;
+/** The reference (per-record) path makes thousands of queries by design; allow for a loaded CI box. */
+const SLOW_TEST_MS = 60_000;
 
 type GlobalWithNow = typeof globalThis & { FITBUD_NOW?: string };
 
@@ -418,7 +420,7 @@ describe("sync pull query count (Z6-21)", () => {
     expect(counts[500]!.batched).toBe(counts[50]!.batched);
     // The per-record path this replaces grew with the record count.
     expect(counts[500]!.reference).toBeGreaterThan(counts[50]!.reference + 400);
-  });
+  }, SLOW_TEST_MS);
 
   it("first and later pulls for the busiest demo trainee stay within budget", async () => {
     const handle = await openDb();
@@ -484,7 +486,7 @@ describe("sync pull query count (Z6-21)", () => {
     expect(first.count).toBeLessThanOrEqual(FIRST_PULL_BUDGET);
     expect(second.count).toBeLessThanOrEqual(LATER_PULL_BUDGET);
     expect(second.count).toBeLessThanOrEqual(refSecond.count);
-  });
+  }, SLOW_TEST_MS);
 
   it("returns exactly what the per-record path returned: records, cursors, ordering, tombstones", async () => {
     const batchedDb = await openDb();
@@ -587,5 +589,5 @@ describe("sync pull query count (Z6-21)", () => {
 
     // Byte-for-byte: compare the serialized responses, not just deep equality.
     expect(JSON.stringify(batched)).toBe(JSON.stringify(reference));
-  });
+  }, SLOW_TEST_MS);
 });
