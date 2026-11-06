@@ -918,7 +918,7 @@ describe("coaching configuration", () => {
       },
       testEnv(),
     );
-    expect(activate.status).toBe(422);
+    expect(activate.status).toBe(409);
     const body = await activate.json();
     expect(body).toMatchObject({
       error: {

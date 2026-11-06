@@ -158,7 +158,7 @@ async function reachActive(ctx: Ctx, suffix: string) {
     "POST",
     `/configurations/relationships/${relationshipId}/activate`,
     `tse-act-${suffix}`,
-    { expectedVersion: 2 },
+    { expectedVersion: 1 },
   );
 }
 

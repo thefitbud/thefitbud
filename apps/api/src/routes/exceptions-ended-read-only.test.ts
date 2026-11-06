@@ -166,7 +166,7 @@ async function reachActive(suffix: string) {
   const activated = await post(
     `/configurations/relationships/${relationshipId}/activate`,
     trainer,
-    { expectedVersion: 2 },
+    { expectedVersion: 1 },
     `act-ec1b-${suffix}`,
   );
   expect(activated.status).toBe(200);
