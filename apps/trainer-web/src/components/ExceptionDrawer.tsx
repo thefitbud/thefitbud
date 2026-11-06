@@ -143,7 +143,9 @@ function loggedLine(detail: ExceptionDetail): string {
   }
   if (detail.type === "meal_deviation") {
     const kind = detailString(details, "deviationKind");
-    return kind ? `Logged: Changed · ${kind}` : "Logged: Changed";
+    return kind
+      ? `Logged: Changed · ${labelFor("meal_deviation_kind", kind)}`
+      : "Logged: Changed";
   }
   if (
     detail.type === "meal_logged_later" ||

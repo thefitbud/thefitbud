@@ -269,6 +269,7 @@ const LABELS = {
     draft: "Draft",
     scheduled: "Scheduled",
     published: "Published",
+    effective: "Effective",
     superseded: "Superseded",
     archived: "Archived",
   },
@@ -371,8 +372,12 @@ const LABELS = {
   },
   notification_state: {
     pending: "Pending",
+    queued: "Queued",
     delivered: "Delivered",
+    read: "Read",
     failed: "Failed",
+    suppressed: "Suppressed",
+    deferred: "Deferred",
     cancelled: "Cancelled",
   },
   responsiveness_label: {
@@ -380,6 +385,12 @@ const LABELS = {
     inconsistent: "Inconsistent",
     ignoring: "Ignoring",
     unknown: "Unknown",
+    logs_on_own: "Logs on own",
+    responds: "Responds to reminders",
+    often_misses: "Often misses reminders",
+    reminders_paused: "Reminders paused",
+    notifications_off: "Notifications off",
+    not_enough_data: "Not enough data",
   },
 
   // Roles / misc
@@ -401,6 +412,10 @@ const LABELS = {
     egg: "Egg",
     vegan: "Vegan",
     unknown: "Unknown",
+    raw_ingredient: "Raw",
+    generic_food: "Generic",
+    prepared_food: "Prepared",
+    branded_product: "Branded",
   },
   exercise_difficulty: {
     beginner: "Beginner",
@@ -412,6 +427,7 @@ const LABELS = {
     archived: "Archived",
   },
   renewal_state: {
+    current: "Current",
     upcoming: "Upcoming",
     due: "Due",
     expired: "Expired",

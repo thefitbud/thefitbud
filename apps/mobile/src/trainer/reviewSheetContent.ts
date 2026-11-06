@@ -148,7 +148,7 @@ export function reviewSheetLoggedLine(input: {
   }
   if (input.type === "meal_deviation") {
     return input.deviationKind
-      ? `Changed · ${input.deviationKind}`
+      ? `Changed · ${labelFor("meal_deviation_kind", input.deviationKind)}`
       : "Changed";
   }
   if (input.type === "meal_logged_later") {

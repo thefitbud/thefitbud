@@ -1,5 +1,6 @@
 import type { MealAssignment } from "@fitbud/contracts";
 import type { WorkspaceActivityItem } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import { LinkedMedia } from "../LinkedMedia";
 import { Button } from "../Button";
 import { StatusChip } from "../StatusChip";
@@ -61,12 +62,14 @@ export function ActivityRow({
         ? workoutChipLabel(item.state)
         : undefined;
 
+  const rawDetail = item.type === "meal" ? mealDetailLine(mealAssignment) : "";
+  // mealDetailLine falls back to the deviation kind with underscores swapped
+  // for spaces ("portion adjustment"); show the shared label instead (Z5-3).
+  const deviationKind = mealAssignment?.compliance?.deviationKind;
   const detail =
-    item.type === "meal"
-      ? mealDetailLine(mealAssignment)
-      : item.type === "workout"
-        ? ""
-        : "";
+    deviationKind && rawDetail === deviationKind.replaceAll("_", " ")
+      ? labelFor("meal_deviation_kind", deviationKind)
+      : rawDetail;
 
   const photoId =
     item.type === "meal" ? mealAssignment?.compliance?.mediaAssetId : null;
