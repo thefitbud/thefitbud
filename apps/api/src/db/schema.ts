@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -345,6 +346,15 @@ export const subscriptionVersions = sqliteTable(
     startsOn: text("starts_on").notNull(),
     renewsOn: text("renews_on").notNull(),
     createdAt: text("created_at").notNull(),
+    // Tracking only (D-W6-5): what the client pays, never a collection. NULL on
+    // rows written before 0036; no amount is invented for them.
+    amountPaise: integer("amount_paise"),
+    subscriptionType: text("subscription_type", {
+      enum: ["weekly", "monthly", "quarterly", "yearly", "custom"],
+    }),
+    coachingMode: text("coaching_mode", {
+      enum: ["online", "in_person", "hybrid"],
+    }),
   },
   (table) => [
     uniqueIndex("subscription_versions_relationship_version_uidx").on(
@@ -353,6 +363,86 @@ export const subscriptionVersions = sqliteTable(
     ),
     index("subscription_versions_relationship_idx").on(
       table.coachingRelationshipId,
+    ),
+    // Parent key for the same-relationship foreign key on payment_records.
+    uniqueIndex("subscription_versions_relationship_id_uidx").on(
+      table.coachingRelationshipId,
+      table.id,
+    ),
+    check(
+      "subscription_versions_amount_paise_chk",
+      sql`${table.amountPaise} IS NULL OR (typeof(${table.amountPaise}) = 'integer' AND ${table.amountPaise} >= 0)`,
+    ),
+    check(
+      "subscription_versions_subscription_type_chk",
+      sql`${table.subscriptionType} IS NULL OR ${table.subscriptionType} IN ('weekly', 'monthly', 'quarterly', 'yearly', 'custom')`,
+    ),
+    check(
+      "subscription_versions_coaching_mode_chk",
+      sql`${table.coachingMode} IS NULL OR ${table.coachingMode} IN ('online', 'in_person', 'hybrid')`,
+    ),
+  ],
+);
+
+/**
+ * Payments the trainer tracks against a subscription version. Tracking only
+ * (D-W6-5): no gateway, invoice, transaction or session-count fields. The
+ * subscription version must belong to the same relationship.
+ */
+export const paymentRecords = sqliteTable(
+  "payment_records",
+  {
+    id: text("id").primaryKey(),
+    coachingRelationshipId: text("coaching_relationship_id")
+      .notNull()
+      .references(() => coachingRelationships.id),
+    subscriptionVersionId: text("subscription_version_id").notNull(),
+    amountPaise: integer("amount_paise").notNull(),
+    /** Civil date (YYYY-MM-DD) in the trainer's timezone. */
+    dueOn: text("due_on").notNull(),
+    /** Civil date (YYYY-MM-DD); set exactly when the status is paid. */
+    paidOn: text("paid_on"),
+    status: text("status", { enum: ["paid", "unpaid"] }).notNull(),
+    method: text("method", { enum: ["cash", "upi", "bank"] }),
+    note: text("note"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "payment_records_subscription_version_fk",
+      columns: [table.coachingRelationshipId, table.subscriptionVersionId],
+      foreignColumns: [
+        subscriptionVersions.coachingRelationshipId,
+        subscriptionVersions.id,
+      ],
+    }),
+    index("payment_records_relationship_due_idx").on(
+      table.coachingRelationshipId,
+      table.dueOn,
+    ),
+    check(
+      "payment_records_amount_paise_chk",
+      sql`typeof(${table.amountPaise}) = 'integer' AND ${table.amountPaise} > 0`,
+    ),
+    check(
+      "payment_records_due_on_chk",
+      sql`${table.dueOn} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check(
+      "payment_records_paid_on_chk",
+      sql`${table.paidOn} IS NULL OR ${table.paidOn} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`,
+    ),
+    check(
+      "payment_records_status_chk",
+      sql`(${table.status} = 'paid' AND ${table.paidOn} IS NOT NULL) OR (${table.status} = 'unpaid' AND ${table.paidOn} IS NULL AND ${table.method} IS NULL)`,
+    ),
+    check(
+      "payment_records_method_chk",
+      sql`${table.method} IS NULL OR ${table.method} IN ('cash', 'upi', 'bank')`,
     ),
   ],
 );
