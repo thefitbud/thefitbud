@@ -42,7 +42,6 @@ function testEnv(): Env {
 }
 
 const MOUNTS = [
-  "/strength",
   "/client-settings",
   "/steps",
   "/account",
