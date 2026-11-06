@@ -172,6 +172,17 @@ export const QA_TABLE_PLAN: readonly QaTablePlan[] = [
     parents: [{ column: "coaching_relationship_id", table: "coaching_relationships" }],
   },
   {
+    // Z6-8 (D-W6-22, D-W6-24): payment records the trainer tracks. No cascade, so
+    // the reset must delete them before their subscription version and relationship.
+    table: "payment_records",
+    pk: ["id"],
+    userColumns: ["created_by"],
+    parents: [
+      { column: "coaching_relationship_id", table: "coaching_relationships" },
+      { column: "subscription_version_id", table: "subscription_versions" },
+    ],
+  },
+  {
     table: "onboarding_form_responses",
     pk: ["id"],
     userColumns: ["trainee_user_id"],
