@@ -16,12 +16,13 @@ import { render, screen } from "../../test/render";
 import { WebDateHeading, webDayStateLabel } from "./WebTraineeChrome";
 
 const TIME_ZONE = "Asia/Kolkata";
-const STATES = ["done", "partial", "open", "rest", "future", "unknown"] as const;
+const STATES = ["done", "partial", "open", "rest", "future", "unknown", "due"] as const;
 
 /** What a screen reader says for each strip state. */
 const SPOKEN: Record<DateNavigatorDay["state"], string> = {
   done: "Done",
   partial: "Partial",
+  due: "To do",
   open: "Missed",
   rest: "Rest",
   future: "Upcoming",
@@ -132,5 +133,11 @@ describe("WebDateHeading dot colours", () => {
     expect(colourFor("partial")).toBe(rgba(colors.warning));
     expect(colourFor("open")).toBe(rgba(colors.indigo));
     expect(colourFor("rest")).toBe(rgba(colors.lightGrey));
+  });
+
+  it("paints due neutral dark grey, never the partial colour (D-W6-10)", () => {
+    renderStrip();
+    expect(colourFor("due")).toBe(rgba(colors.darkGrey));
+    expect(colourFor("due")).not.toBe(colourFor("partial"));
   });
 });

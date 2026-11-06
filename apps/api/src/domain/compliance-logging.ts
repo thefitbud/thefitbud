@@ -11,6 +11,10 @@ import {
 } from "../db/schema.js";
 import { resolveLibraryId } from "./library-redirects.js";
 import { createId, nowIso } from "../lib/crypto.js";
+import {
+  LOG_TIME_ERROR_CODES,
+  assertLogTimeWithinBounds,
+} from "./log-time-bounds.js";
 
 export async function assertMealLogAllowed(
   db: Db,
@@ -26,7 +30,7 @@ export async function assertMealLogAllowed(
   },
 ): Promise<
   | { ok: true; loggedLate: boolean; loggedAfterResolve: boolean }
-  | { ok: false; code: string; reason: string }
+  | { ok: false; code: string; reason: string; status?: 422 }
 > {
   const [assignment] = await db
     .select()
@@ -35,6 +39,19 @@ export async function assertMealLogAllowed(
     .limit(1);
   if (!assignment) {
     return { ok: false, code: "ASSIGNMENT_NOT_FOUND", reason: "not_found" };
+  }
+  const bounds = assertLogTimeWithinBounds({
+    clientLoggedAt: input.clientLoggedAt ?? input.nowIso,
+    windowStart: assignment.windowStartsAt,
+    now: input.nowIso,
+  });
+  if (!bounds.ok) {
+    return {
+      ok: false,
+      code: LOG_TIME_ERROR_CODES[bounds.reason],
+      reason: bounds.reason,
+      status: 422,
+    };
   }
   const prescription = JSON.parse(assignment.mealPrescriptionJson) as {
     required?: boolean;
