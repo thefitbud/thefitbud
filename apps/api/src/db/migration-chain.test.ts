@@ -145,8 +145,68 @@ function tableColumns(
   return rows.map((row) => String(row[0]));
 }
 
+/** payment_records columns in table order (0036, Z6-3). */
+const PAYMENT_RECORD_COLUMNS = [
+  "id",
+  "coaching_relationship_id",
+  "subscription_version_id",
+  "amount_paise",
+  "due_on",
+  "paid_on",
+  "status",
+  "method",
+  "note",
+  "created_by",
+  "created_at",
+  "updated_at",
+];
+
+/** Column names that would let a payment table hold a collection or a session count (D-W6-5). */
+const NOT_TRACKING_ONLY =
+  /session|gateway|invoice|transaction|razorpay|stripe|checkout|refund|order|link|receipt|card|vpa|upi_id|collect|remaining|used|included|reference/i;
+
+type SubscriptionPaymentFields = {
+  amount: number | string | null;
+  type: string | null;
+  mode: string | null;
+};
+
+type PaymentRow = {
+  relationship: string;
+  subscriptionVersion: string;
+  amount: number;
+  dueOn: string;
+  paidOn: string | null;
+  status: string;
+  method: string | null;
+};
+
+/** One trainer coaching two trainees, each with one subscription version (pre-0036 columns only). */
+function insertPaymentFixtures(sqlite: SqliteLike): void {
+  const at = "2026-10-01T04:30:00.000Z";
+  for (const id of ["trainer-rahul", "trainee-asha", "trainee-vikram"]) {
+    sqlite.run(
+      "INSERT INTO users (id, firebase_uid, account_state, timezone, created_at, updated_at) VALUES (?, ?, 'active', 'Asia/Kolkata', ?, ?)",
+      [id, `firebase-${id}`, at, at],
+    );
+  }
+  for (const [relationship, trainee] of [
+    ["rel-asha", "trainee-asha"],
+    ["rel-vikram", "trainee-vikram"],
+  ] as const) {
+    sqlite.run(
+      "INSERT INTO coaching_relationships (id, trainer_user_id, trainee_user_id, status, started_at, created_at, updated_at) VALUES (?, 'trainer-rahul', ?, 'active', ?, ?, ?)",
+      [relationship, trainee, at, at, at],
+    );
+    sqlite.run(
+      "INSERT INTO subscription_versions (id, coaching_relationship_id, version_number, plan_name, payment_frequency, starts_on, renews_on, created_at) VALUES (?, ?, 1, 'Fat loss 12 weeks', 'monthly', '2026-10-01', '2026-11-01', ?)",
+      [relationship.replace("rel-", "sv-"), relationship, at],
+    );
+  }
+}
+
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0035 in order after 0029, with 0035 last", async () => {
+  it("places 0030 to 0036 in order after 0029, with 0036 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -159,7 +219,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 4]).toBe("0033_reminder_attempt_marker");
     expect(tags[previous + 5]).toBe("0034_remove_configured_status");
     expect(tags[previous + 6]).toBe("0035_numeric_set_load");
-    expect(tags.at(-1)).toBe("0035_numeric_set_load");
+    expect(tags[previous + 7]).toBe("0036_payment_tracking");
+    expect(tags.at(-1)).toBe("0036_payment_tracking");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -167,6 +228,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 4]?.idx).toBe(33);
     expect(journal[previous + 5]?.idx).toBe(34);
     expect(journal[previous + 6]?.idx).toBe(35);
+    expect(journal[previous + 7]?.idx).toBe(36);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -176,7 +238,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 4]).toBe("0033_reminder_attempt_marker.sql");
     expect(files[previousFile + 5]).toBe("0034_remove_configured_status.sql");
     expect(files[previousFile + 6]).toBe("0035_numeric_set_load.sql");
-    expect(files.at(-1)).toBe("0035_numeric_set_load.sql");
+    expect(files[previousFile + 7]).toBe("0036_payment_tracking.sql");
+    expect(files.at(-1)).toBe("0036_payment_tracking.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -414,6 +477,300 @@ describe("migration chain and seeds", () => {
       "'bodyweight_plus'",
     );
   });
+
+  it("keeps 0036 additive: no table rebuild, drop or backfill", () => {
+    const paymentSql = readFileSync(join(drizzleDir, "0036_payment_tracking.sql"), "utf8");
+    expect(paymentSql).not.toMatch(/DROP\s+(TABLE|INDEX)/i);
+    expect(paymentSql).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bINSERT\b|RENAME/i);
+    expect(paymentSql).not.toMatch(/CREATE TABLE `?__new/i);
+    const created = [...paymentSql.matchAll(/CREATE TABLE `([a-z_]+)`/g)].map((m) => m[1]);
+    expect(created).toEqual(["payment_records"]);
+    const altered = [...paymentSql.matchAll(/ALTER TABLE `([a-z_]+)` ADD COLUMN `([a-z_]+)`/g)].map(
+      (m) => `${m[1]}.${m[2]}`,
+    );
+    expect(altered).toEqual([
+      "subscription_versions.amount_paise",
+      "subscription_versions.subscription_type",
+      "subscription_versions.coaching_mode",
+    ]);
+  });
+
+  it("records 0036 in the drizzle snapshot chain after 0035", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0035_snapshot.json"), "utf8"),
+    ) as { id: string };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0036_snapshot.json"), "utf8"),
+    ) as {
+      id: string;
+      prevId: string;
+      tables: Record<
+        string,
+        {
+          columns: Record<string, { type: string; notNull: boolean }>;
+          indexes: Record<string, { columns: string[]; isUnique: boolean }>;
+          foreignKeys: Record<string, { tableTo: string; columnsFrom: string[]; columnsTo: string[] }>;
+          checkConstraints: Record<string, { value: string }>;
+        }
+      >;
+    };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    const subscriptions = snapshot.tables.subscription_versions!;
+    expect(subscriptions.columns.amount_paise).toMatchObject({ type: "integer", notNull: false });
+    expect(subscriptions.columns.subscription_type).toMatchObject({ type: "text", notNull: false });
+    expect(subscriptions.columns.coaching_mode).toMatchObject({ type: "text", notNull: false });
+    expect(Object.keys(subscriptions.checkConstraints).sort()).toEqual([
+      "subscription_versions_amount_paise_chk",
+      "subscription_versions_coaching_mode_chk",
+      "subscription_versions_subscription_type_chk",
+    ]);
+    expect(subscriptions.indexes.subscription_versions_relationship_id_uidx).toMatchObject({
+      columns: ["coaching_relationship_id", "id"],
+      isUnique: true,
+    });
+    const payments = snapshot.tables.payment_records!;
+    expect(Object.keys(payments.columns)).toEqual(PAYMENT_RECORD_COLUMNS);
+    expect(payments.indexes.payment_records_relationship_due_idx).toMatchObject({
+      columns: ["coaching_relationship_id", "due_on"],
+      isUnique: false,
+    });
+    expect(payments.foreignKeys.payment_records_subscription_version_fk).toMatchObject({
+      tableTo: "subscription_versions",
+      columnsFrom: ["coaching_relationship_id", "subscription_version_id"],
+      columnsTo: ["coaching_relationship_id", "id"],
+    });
+    expect(Object.keys(payments.checkConstraints).sort()).toEqual([
+      "payment_records_amount_paise_chk",
+      "payment_records_due_on_chk",
+      "payment_records_method_chk",
+      "payment_records_paid_on_chk",
+      "payment_records_status_chk",
+    ]);
+  });
+
+  it("adds tracking-only subscription fields and payment records whose CHECKs reject invalid values", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      expect(tableColumns(handle.sqlite, "subscription_versions")).toEqual([
+        "id",
+        "coaching_relationship_id",
+        "version_number",
+        "plan_name",
+        "payment_frequency",
+        "starts_on",
+        "renews_on",
+        "created_at",
+        "amount_paise",
+        "subscription_type",
+        "coaching_mode",
+      ]);
+      expect(tableColumns(handle.sqlite, "payment_records")).toEqual(PAYMENT_RECORD_COLUMNS);
+      // D-W6-5: nothing can hold a session count, gateway reference, invoice or collection.
+      for (const table of ["subscription_versions", "payment_records"]) {
+        for (const column of tableColumns(handle.sqlite, table)) {
+          expect(column, `${table}.${column}`).not.toMatch(NOT_TRACKING_ONLY);
+        }
+      }
+      expect(indexColumns(handle.sqlite, "payment_records_relationship_due_idx")).toEqual([
+        "coaching_relationship_id",
+        "due_on",
+      ]);
+      expect(indexColumns(handle.sqlite, "subscription_versions_relationship_id_uidx")).toEqual([
+        "coaching_relationship_id",
+        "id",
+      ]);
+      const fks = (
+        handle.sqlite.exec(
+          `SELECT "table", "from", "to" FROM pragma_foreign_key_list('payment_records') ORDER BY id, seq`,
+        )[0]?.values ?? []
+      ).map((row) => row.map(String).join(":"));
+      expect(fks.sort()).toEqual(
+        [
+          "coaching_relationships:coaching_relationship_id:id",
+          "subscription_versions:coaching_relationship_id:coaching_relationship_id",
+          "subscription_versions:subscription_version_id:id",
+          "users:created_by:id",
+        ].sort(),
+      );
+
+      insertPaymentFixtures(handle.sqlite);
+      const insertSubscription = (id: string, values: SubscriptionPaymentFields) => {
+        handle.sqlite.run(
+          `INSERT INTO subscription_versions (
+            id, coaching_relationship_id, version_number, plan_name, payment_frequency,
+            starts_on, renews_on, created_at, amount_paise, subscription_type, coaching_mode
+          ) VALUES (?, 'rel-asha', ?, 'Strength 12 weeks', 'monthly', '2026-10-01', '2026-11-01', '2026-10-01T04:30:00.000Z', ?, ?, ?)`,
+          [id, Number(id.replace(/\D/g, "")) + 10, values.amount, values.type, values.mode],
+        );
+      };
+      // Valid: all NULL (pre-0036 shape), each allowed type and mode, zero for a free plan.
+      insertSubscription("sub-1", { amount: null, type: null, mode: null });
+      insertSubscription("sub-2", { amount: 450_000, type: "custom", mode: "in_person" });
+      insertSubscription("sub-3", { amount: 0, type: "yearly", mode: "hybrid" });
+      insertSubscription("sub-4", { amount: 120_000, type: "weekly", mode: "online" });
+      insertSubscription("sub-5", { amount: 300_000, type: "quarterly", mode: null });
+      const rejectedSubscriptions: SubscriptionPaymentFields[] = [
+        { amount: -1, type: null, mode: null },
+        { amount: 4500.5, type: null, mode: null },
+        { amount: "4500 rupees", type: null, mode: null },
+        { amount: null, type: "per_session", mode: null },
+        { amount: null, type: "Monthly", mode: null },
+        { amount: null, type: "", mode: null },
+        { amount: null, type: null, mode: "remote" },
+        { amount: null, type: null, mode: "in-person" },
+      ];
+      rejectedSubscriptions.forEach((values, index) => {
+        expect(
+          () => insertSubscription(`sub-bad-${index + 20}`, values),
+          JSON.stringify(values),
+        ).toThrow(/CHECK constraint failed/);
+      });
+
+      const insertPayment = (id: string, overrides: Partial<PaymentRow> = {}) => {
+        const row: PaymentRow = {
+          relationship: "rel-asha",
+          subscriptionVersion: "sv-asha",
+          amount: 450_000,
+          dueOn: "2026-11-01",
+          paidOn: null,
+          status: "unpaid",
+          method: null,
+          ...overrides,
+        };
+        handle.sqlite.run(
+          `INSERT INTO payment_records (
+            id, coaching_relationship_id, subscription_version_id, amount_paise, due_on,
+            paid_on, status, method, note, created_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'trainer-rahul', '2026-10-21T05:00:00.000Z', '2026-10-21T05:00:00.000Z')`,
+          [
+            id,
+            row.relationship,
+            row.subscriptionVersion,
+            row.amount,
+            row.dueOn,
+            row.paidOn,
+            row.status,
+            row.method,
+          ],
+        );
+      };
+      insertPayment("pay-unpaid");
+      insertPayment("pay-cash", { status: "paid", paidOn: "2026-10-30", method: "cash" });
+      insertPayment("pay-upi", { status: "paid", paidOn: "2026-10-31", method: "upi" });
+      insertPayment("pay-bank", { status: "paid", paidOn: "2026-11-01", method: "bank" });
+      insertPayment("pay-no-method", { status: "paid", paidOn: "2026-11-02" });
+      const rejectedPayments: Array<[Partial<PaymentRow>, RegExp]> = [
+        [{ status: "pending" }, /CHECK constraint failed/],
+        [{ status: "paid" }, /CHECK constraint failed/],
+        [{ status: "unpaid", paidOn: "2026-10-30" }, /CHECK constraint failed/],
+        [{ status: "unpaid", method: "cash" }, /CHECK constraint failed/],
+        [{ status: "paid", paidOn: "2026-10-30", method: "card" }, /CHECK constraint failed/],
+        [{ status: "paid", paidOn: "2026-10-30", method: "razorpay" }, /CHECK constraint failed/],
+        [{ status: "paid", paidOn: "30 Oct 2026", method: "upi" }, /CHECK constraint failed/],
+        [{ amount: 0 }, /CHECK constraint failed/],
+        [{ amount: -45_000 }, /CHECK constraint failed/],
+        [{ amount: 4500.5 }, /CHECK constraint failed/],
+        [{ dueOn: "Sun 1 Nov" }, /CHECK constraint failed/],
+        [{ dueOn: "2026-11-01T00:00:00.000Z" }, /CHECK constraint failed/],
+        // The subscription version must belong to the same relationship.
+        [{ subscriptionVersion: "sv-vikram" }, /FOREIGN KEY constraint failed/],
+        [{ subscriptionVersion: "sv-missing" }, /FOREIGN KEY constraint failed/],
+        [{ relationship: "rel-vikram" }, /FOREIGN KEY constraint failed/],
+      ];
+      rejectedPayments.forEach(([overrides, error], index) => {
+        let thrown: unknown;
+        try {
+          insertPayment(`pay-bad-${index}`, overrides);
+        } catch (caught) {
+          thrown = caught;
+        }
+        expect(thrown, JSON.stringify(overrides)).toBeInstanceOf(Error);
+        expect(String(thrown), JSON.stringify(overrides)).toMatch(error);
+      });
+      const kept =
+        handle.sqlite.exec("SELECT id FROM payment_records ORDER BY id")[0]?.values ?? [];
+      expect(kept.map((row) => String(row[0]))).toEqual([
+        "pay-bank",
+        "pay-cash",
+        "pay-no-method",
+        "pay-unpaid",
+        "pay-upi",
+      ]);
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it(
+    "applies 0036 to a seeded database with row counts unchanged and no invented amounts",
+    async () => {
+      const handle = await createMemoryDb({
+        foreignKeys: true,
+        librarySeed: true,
+        through: "0035_numeric_set_load.sql",
+      });
+      try {
+        expect(tableColumns(handle.sqlite, "subscription_versions")).not.toContain("amount_paise");
+        const passwordHash = await hashPassword("FitBud-demo-2026");
+        const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
+        handle.sqlite.exec(
+          buildDemoSeedSql({
+            referenceInstant: new Date().toISOString(),
+            passwordHash,
+            libraryIndex,
+          }),
+        );
+        await yieldToEventLoop();
+        const subscriptionSql =
+          "SELECT id, coaching_relationship_id, version_number, plan_name, payment_frequency, starts_on, renews_on, created_at FROM subscription_versions ORDER BY id";
+        const subscriptionsBefore = handle.sqlite.exec(subscriptionSql)[0]?.values ?? [];
+        expect(subscriptionsBefore.length).toBeGreaterThan(0);
+        const countsBefore = tableRowCounts(handle.sqlite);
+        expect(countsBefore.payment_records).toBeUndefined();
+
+        handle.applyMigrationsFrom("0036_payment_tracking.sql");
+        await yieldToEventLoop();
+
+        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, payment_records: 0 });
+        assertNoForeignKeyViolations(handle.sqlite);
+        expect(handle.sqlite.exec(subscriptionSql)[0]?.values ?? []).toEqual(subscriptionsBefore);
+        const invented =
+          handle.sqlite.exec(
+            "SELECT id FROM subscription_versions WHERE amount_paise IS NOT NULL OR subscription_type IS NOT NULL OR coaching_mode IS NOT NULL",
+          )[0]?.values ?? [];
+        expect(invented).toEqual([]);
+
+        // A seeded subscription version takes a payment only on its own relationship.
+        const [versionId, relationshipId] = subscriptionsBefore[0]!.map(String) as [string, string];
+        const trainerId = String(
+          handle.sqlite.exec(
+            `SELECT trainer_user_id FROM coaching_relationships WHERE id = '${relationshipId}'`,
+          )[0]?.values[0]?.[0],
+        );
+        const otherRelationship = handle.sqlite.exec(
+          `SELECT id FROM coaching_relationships WHERE id <> '${relationshipId}' LIMIT 1`,
+        )[0]?.values[0]?.[0];
+        expect(otherRelationship).toBeDefined();
+        const insertPayment = (id: string, relationship: string) =>
+          handle.sqlite.run(
+            `INSERT INTO payment_records (
+              id, coaching_relationship_id, subscription_version_id, amount_paise, due_on,
+              paid_on, status, method, note, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, 250000, '2026-11-01', '2026-11-01', 'paid', 'upi', NULL, ?, '2026-11-01T05:00:00.000Z', '2026-11-01T05:00:00.000Z')`,
+            [id, relationship, versionId, trainerId],
+          );
+        insertPayment("pay-seeded", relationshipId);
+        expect(() => insertPayment("pay-cross", String(otherRelationship))).toThrow(
+          /FOREIGN KEY constraint failed/,
+        );
+        assertNoForeignKeyViolations(handle.sqlite);
+      } finally {
+        handle.close();
+      }
+    },
+    120_000,
+  );
 
   it("backfills numeric set loads exactly like the load parser when 0035 applies", async () => {
     const handle = await createMemoryDb({
