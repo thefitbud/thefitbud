@@ -264,5 +264,12 @@
     "when": 1730563200000,
     "tag": "0037_daily_steps",
     "breakpoints": true
+  },
+  {
+    "idx": 38,
+    "version": "7",
+    "when": 1730649600000,
+    "tag": "0038_archived_account_state",
+    "breakpoints": true
   }
 ]
