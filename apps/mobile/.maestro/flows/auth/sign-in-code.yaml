@@ -15,6 +15,7 @@ tags:
 # and the signed-in home. Do not add one.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - extendedWaitUntil:

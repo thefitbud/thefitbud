@@ -18,53 +18,100 @@
 #
 # Secrets are referenced by name only and never echoed: QA_TEST_OTP_CODE,
 # FITBUD_QA_PASSWORD, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID. EXPO_TOKEN is not
-# used (D-QA1-8). The only remote write is `seed-reset`, which runs on `schedule` or
-# `workflow_dispatch` from `main` only, inside the `staging-qa` environment (D-QA1-9).
+# used (D-QA1-8). The only remote writes are the four `seed-<suite>` jobs, which run on
+# `schedule` or `workflow_dispatch` from `main` only, inside the `staging-qa`
+# environment (D-QA1-9).
 #
-# One staging writer at a time (D-QA1-7) is enforced per job, not per workflow: the
-# jobs that touch the shared staging QA accounts (`seed-reset`, `api-smoke`,
-# `web-staging`, `android`, `ios`) each hold the `qa-staging` concurrency group and are
-# chained so only one of them runs at a time, while `changes`, `qa-scripts`, `unit` and
-# `report` stay outside it. `ios` is sequenced after `android` for that reason: both drive the
-# same QA accounts, and the group alone would not keep them apart if they could start
-# together.
+# One persona set per suite (D-W5-14, Z5-7). `api` (the API smoke), `web`, `android`
+# and `ios` each sign in as their own QA accounts (apps/api/src/seed/qa/accounts.ts) and
+# each has its own seed job, `seed-<suite>`, which resets and reseeds that suite's
+# accounts only (`qa-reset.ts --suite <suite>`, `qa-seed.ts --suite <suite>`). No suite
+# can change what another suite reads, so the suites no longer queue behind each other:
+# the old chain (one `qa-staging` group held in turn by seed-reset, api-smoke,
+# web-staging, android and ios) is gone, and the four suites run side by side.
 #
-# Queue eviction: SURFACED, NOT PREVENTED (D-W3b-26, the task D-W3b-6 asked for).
+# One writer per QA world at a time is still enforced, per suite: `seed-<suite>` and the
+# suite's own job hold `qa-staging-<suite>`, and the suite job `needs:` its seed job. Two
+# runs of the SAME suite (a nightly and a PR smoke, or two PR smokes) still drive the
+# same accounts, so the group stays for exactly that. `changes`, `qa-scripts`, `unit` and
+# `report` stay outside every group.
 #
-# `cancel-in-progress: false` keeps only ONE pending entry per concurrency group, so a
-# third arrival cancels the older pending one. Observed, not theoretical: `android` was
-# cancelled while pending on run 41783371236, and `ios` — the last link, so the most
-# exposed (D-W3b-34) — on run 41784737040.
+# Staging queue for android and ios: QUEUE, NOT EVICT (Z5-24, W4 gap G22; replaces the
+# "surfaced, not prevented" stance of D-W3b-26 for these two suites).
 #
-# Each link of the chain claims `qa-staging` separately, so one run re-queues up to five
-# times and every re-queue is a fresh chance to be evicted by another run. The three
-# obvious ways to shorten that chain were examined and all three are worse:
+# The problem. `cancel-in-progress: false` keeps only ONE pending entry per concurrency
+# group, so a third arrival cancels the older pending one. That is a documented platform
+# property with no workflow-level knob. Observed, not theoretical: `android` was
+# cancelled while pending on run 41783371236, and `ios` on run 41784737040 (D-W3b-34);
+# in W5 every push to one mobile PR cancelled another PR's waiting android/ios run. A
+# cancel sent to an in-progress macOS `ios` job is also not honoured mid-xcodebuild, so
+# a stale run can hold the group until its 120-minute timeout.
 #
-#   * Moving the group to the workflow level does not reduce arrivals (a run still
-#     claims once at a time, because `needs:` already serialises the claims within a
-#     run), and it drags `changes`, `unit`, `report` and the REQUIRED `qa-scripts`
-#     check into the queue — forbidden by D-W3b-1 and by the paragraph below.
-#   * A single gate job holding the group with the writers chained behind it by
-#     `needs:` releases the group when the gate job ENDS, which is before any writer
-#     starts. Two runs' gates would then complete in turn and their writers would
-#     overlap on the shared seed. That breaks D-QA1-7, the invariant the group exists
-#     for, so it is not an option at any price.
-#   * Refusing to start when another staging run is in flight converts an eviction
-#     into an immediate hard failure, needs the Actions API and a token this workflow
-#     deliberately does not have (`permissions: contents: read`), and still races.
+# The fix. Each Maestro suite has a `queue-<suite>` job (ubuntu, a few seconds of work
+# plus waiting) that runs before `seed-<suite>` and the suite job, which both `needs:` it.
+# It waits, polling the Actions API read-only, until no run AHEAD of it in the queue still
+# has its `<suite>` job unfinished; then it ends and the seed and suite jobs follow.
 #
-# One pending entry per group is a documented platform property with no workflow-level
-# knob, so nothing expressible in this file can make the group hold two. What this file
-# does instead is make an eviction READ as an eviction: `report` is outside the group
-# and `if: always()`, so it still runs, and its "Evicted, not failed" step annotates
-# any staging job whose result is `cancelled`. The run's conclusion is untouched — the
-# evicted suite produces no results, summarize.mjs reports it `not-run` and the run
-# `partial`, which is never a pass. Re-dispatch stays deliberate and by hand.
+#   * Order. A run's place is the moment its `queue-<suite>` job started (ties: job id).
+#     Every run computes the same total order, so two runs can never both pass, or both
+#     wait for, each other. A queue job that has not started yet has no place: it will
+#     start later, so it waits for us. "Re-run all jobs", or re-running `queue-<suite>`
+#     (which re-runs its dependents), starts a new queue job, so that run goes to the
+#     back.
+#   * Partial re-runs. "Re-run failed jobs" or "Re-run this job" on `seed-<suite>` or
+#     `<suite>` does NOT re-run `queue-<suite>`: GitHub carries its old success over.
+#     So `queue-<suite>` outputs the `github.run_attempt` it ran in, and `seed-<suite>`
+#     and `<suite>` run only when it equals their own attempt. Otherwise they are
+#     skipped (never entering `qa-staging-<suite>`), and `report` puts an error in the
+#     run summary saying to re-run all jobs or `queue-<suite>`; the suite reports
+#     `not-run`, so the run is `partial`, never a pass.
+#   * Cost. The script lists the open runs ahead of it once (after a 30 s settle, so a
+#     queue job that started just before ours already reads as started), then each
+#     minute re-reads only the OLDEST run still ahead (two API calls), since nothing
+#     behind it can start first. Before passing it lists every open run once more, so a
+#     run that came back with its old place while we waited is still waited for. Rate
+#     limits, primary or secondary (403 with `retry-after`), are waited out.
+#   * What "ahead and unfinished" means: that run is not completed, its queue job started
+#     before ours, and its `<suite>` job is not completed. The suite job comes after the
+#     seed job, so "the suite job is completed" covers the run's whole hold on the suite.
+#     A cancel that is not honoured simply keeps the holder unfinished, and we wait.
+#   * Fail safe. An API error never counts as a clear queue: the script keeps waiting
+#     and, at QA_QUEUE_MAX_MINUTES (330, under the job's 340-minute timeout), fails the
+#     queue job with an annotation. The suite is then skipped, reports `not-run`, and
+#     the run `partial` — visible, never a silent pass, and never an overlap.
+#   * Superseding. The queue job's own concurrency group is keyed per pull request with
+#     `cancel-in-progress: true` on pull requests, so a newer push to the SAME pull
+#     request replaces that pull request's own waiting run (no point testing a stale
+#     commit). Every other run's group is its own run id. So the only cancellation left
+#     is a PR replacing itself, and no run can cancel another PR's or main's run.
+#   * The `qa-staging-<suite>` groups stay as a backstop and keep `cancel-in-progress:
+#     false`. Behind the queue at most one run is ever inside them at a time (its seed
+#     job, then its suite job), so they never hold a pending entry to evict.
 #
-# Still open, and not this file's to decide: per-suite QA personas would remove the
-# shared-seed contention outright and with it the group, and running one platform
-# rather than two on the advisory PR smoke would halve PR arrivals — but D-QA1-10 asks
-# for both platforms, so that is the owner's call.
+# How this differs from the three options rejected earlier (D-W3b-26):
+#
+#   * Moving the group to the workflow level: still not done, for the same reasons (it
+#     reduces no arrivals and drags `changes`, `unit`, `report` and the REQUIRED
+#     `qa-scripts` check into the queue, forbidden by D-W3b-1).
+#   * A gate job holding the group while the writers run behind it: rejected because
+#     the group is released when the gate ENDS, before the writers start. The queue job
+#     holds nothing. Later runs wait for an earlier run's SUITE job to complete, not for
+#     its queue job, so the gap between a queue job ending and its writers starting is
+#     covered.
+#   * Refusing to start when another run is in flight: rejected because it turned an
+#     eviction into a hard failure, needed an Actions token and still raced. The queue
+#     WAITS instead of failing; its token is `actions: read` on the two queue jobs only
+#     (no write scope anywhere, no checkout, the rest of the workflow keeps `contents:
+#     read`); and the race is closed by the total order above, not by timing.
+#
+# The api and web suites keep the plain `qa-staging-api` / `qa-staging-web` groups:
+# only nightly and dispatched runs from main use them, so they see few arrivals. Their
+# eviction stays surfaced, not prevented: `report` is outside every group and `if:
+# always()`, its "Evicted, not failed" step annotates any of their jobs that ended
+# `cancelled`, summarize.mjs reports that suite `not-run` and the run `partial`, and the
+# "Build the QA report" step then exits 3, so the run's conclusion is a failure, never a
+# pass (Z5-6). Re-dispatch stays deliberate and by hand. The "Staging queue" step in
+# `report` writes how android and ios took their turn into the run summary every time.
 #
 # `qa-scripts` is a required check on main (D-W3b-1) and a job inside a concurrency
 # group can be left Pending, or cancelled when a newer run queues, so a required
@@ -220,22 +267,521 @@ jobs:
       - name: Report builder tests
         run: node --test "scripts/qa/**/*.test.mjs"
 
-  # The only remote write in this repository's CI. Applies QT2's reset then its seed to
-  # fitbud-staging, in that order, scoped to the three QA user ids (D-QA1-3).
-  seed-reset:
-    name: seed-reset
+  # The staging queue for the Maestro suites: queue, not evict (Z5-24). See "Staging
+  # queue" at the top of this file. `queue-android` and `queue-ios` are the same apart
+  # from the suite name; scripts/qa/staging-queue.test.mjs checks the two scripts are
+  # identical and runs the script against a fake GitHub API.
+  queue-android:
+    name: queue-android
+    needs: changes
+    # Exactly when the android suite will run (the android job's own gate, minus its seed).
+    if: >-
+      ${{ (needs.changes.outputs.staging == 'true'
+           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android'))
+          || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true') }}
+    runs-on: ubuntu-latest
+    # The script gives up at QA_QUEUE_MAX_MINUTES, before this, so it can say why.
+    timeout-minutes: 340
+    # Read the Actions API to see the queue; nothing else, and no checkout.
+    permissions:
+      actions: read
+    # The attempt this turn was taken in. "Re-run failed jobs" and "Re-run this job" on
+    # seed-android or android carry this job's old success over without running it again,
+    # so both of them refuse to run unless this equals their own github.run_attempt.
+    outputs:
+      attempt: ${{ github.run_attempt }}
+    # Keyed per pull request: a newer push to the SAME pull request replaces that pull
+    # request's own waiting run here, and nothing else. Every other run has a group of
+    # its own (the run id), so no run can cancel another run's place in the queue.
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('qa-queue-android-pr-{0}', github.event.pull_request.number) || format('qa-queue-android-run-{0}', github.run_id) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Wait for earlier runs of the android suite
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_QUEUE_SUITE: android
+          QA_QUEUE_POLL_SECONDS: "60"
+          QA_QUEUE_SETTLE_SECONDS: "30"
+          QA_QUEUE_MAX_MINUTES: "330"
+        run: |
+          node --input-type=module <<'QA_QUEUE_JS'
+          import { appendFileSync } from "node:fs";
+
+          const env = process.env;
+          const API = (env.GITHUB_API_URL || "https://api.github.com").replace(/\/$/, "");
+          const REPO = env.GITHUB_REPOSITORY;
+          const RUN_ID = String(env.GITHUB_RUN_ID);
+          const SUITE = env.QA_QUEUE_SUITE;
+          const QUEUE_JOB = `queue-${SUITE}`;
+          const POLL_MS = Number(env.QA_QUEUE_POLL_SECONDS || "60") * 1000;
+          // Pause before the first full listing, so a queue job that started just before ours
+          // already reads as started in the API (it reads as `queued` for a moment).
+          const SETTLE_MS = Number(env.QA_QUEUE_SETTLE_SECONDS || "30") * 1000;
+          const MAX_MS = Number(env.QA_QUEUE_MAX_MINUTES || "330") * 60 * 1000;
+          // Every status a run that has not finished can have.
+          const OPEN = ["in_progress", "queued", "waiting", "pending", "requested"];
+
+          // A failure that waiting cannot fix (no permission, this run's own queue job missing).
+          class Fatal extends Error {}
+
+          function summary(lines) {
+            if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n\n`);
+          }
+
+          async function get(path) {
+            let res;
+            try {
+              res = await fetch(API + path, {
+                headers: {
+                  authorization: `Bearer ${env.GH_TOKEN}`,
+                  accept: "application/vnd.github+json",
+                  "x-github-api-version": "2022-11-28",
+                },
+              });
+            } catch (error) {
+              throw new Error(`no answer from the GitHub API on ${path} (${error.name})`);
+            }
+            if (res.ok) return res.json();
+            const message = `the GitHub API answered ${res.status} on ${path}`;
+            const body = await res.text().catch(() => "");
+            const retryAfter = Number(res.headers.get("retry-after"));
+            // Rate limits, primary or secondary, and server errors pass with time: wait them out.
+            const limited =
+              res.status === 429 ||
+              res.headers.get("x-ratelimit-remaining") === "0" ||
+              (res.status === 403 && ((Number.isFinite(retryAfter) && retryAfter > 0) || /secondary rate limit/i.test(body)));
+            const error = res.status >= 500 || limited ? new Error(message) : new Fatal(message);
+            error.status = res.status;
+            if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterMs = retryAfter * 1000;
+            throw error;
+          }
+
+          async function pages(path, field) {
+            const all = [];
+            for (let page = 1; ; page += 1) {
+              const body = await get(`${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`);
+              const items = body[field] ?? [];
+              all.push(...items);
+              if (items.length < 100) return all;
+            }
+          }
+
+          const jobsOf = (runId) => pages(`/repos/${REPO}/actions/runs/${runId}/jobs?filter=latest`, "jobs");
+
+          // A run's place in the queue is the moment its queue job STARTED, ties broken by job
+          // id. A queue job that has not started has no place yet: it will start after ours, so
+          // it waits for us, not we for it. Re-running the workflow, or queue-<suite>, starts a
+          // new queue job, so that run goes to the back. Every run computes the same order, so
+          // two runs can never both wait for, or both pass, each other.
+          function placeOf(job) {
+            if (!job || job.status === "queued" || job.conclusion === "skipped" || !job.started_at) return null;
+            return [Date.parse(job.started_at), Number(job.id)];
+          }
+          const isAhead = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+
+          // The run's place if it is ahead of this one and has not finished its suite job,
+          // otherwise null.
+          function holdingPlace(run, jobs, mine) {
+            if (run.status === "completed") return null;
+            const place = placeOf(jobs.find((job) => job.name === QUEUE_JOB));
+            if (!place || !isAhead(place, mine)) return null;
+            const suiteJob = jobs.find((job) => job.name === SUITE);
+            return suiteJob && suiteJob.status === "completed" ? null : place;
+          }
+
+          const label = (run) => {
+            const pr = run.pull_requests?.[0]?.number;
+            return `run #${run.run_number} (${pr ? `PR #${pr}` : run.event})`;
+          };
+
+          // Every open run of this workflow that holds the suite ahead of us, oldest first.
+          async function listHolders(workflowId, mine) {
+            const open = new Map();
+            for (const status of OPEN) {
+              for (const run of await pages(`/repos/${REPO}/actions/workflows/${workflowId}/runs?status=${status}`, "workflow_runs")) {
+                if (String(run.id) !== RUN_ID) open.set(String(run.id), run);
+              }
+            }
+            const found = [];
+            for (const [id, run] of open) {
+              const place = holdingPlace(run, await jobsOf(id), mine);
+              if (place) found.push({ id, run, place });
+            }
+            return found.sort((a, b) => (isAhead(a.place, b.place) ? -1 : 1));
+          }
+
+          if (!env.GH_TOKEN || !REPO || !SUITE || !env.GITHUB_RUN_ID) {
+            console.log("::error title=Staging queue misconfigured::GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID and QA_QUEUE_SUITE must all be set.");
+            process.exit(1);
+          }
+
+          const started = Date.now();
+          const minutes = () => Math.round((Date.now() - started) / 60000);
+          let mine = null;
+          let workflowId = null;
+          // Runs ahead of this one that still hold the suite, oldest first. Each poll re-reads
+          // only the OLDEST (two API calls), because nothing behind it can start before it ends.
+          // That keeps every waiting run at a constant cost per poll however long the queue is.
+          // The full listing runs once at the start and once more before passing, so a run that
+          // came back while we waited (a re-run that kept its old place) is still waited for.
+          let holders = null;
+          const waitedFor = new Map();
+
+          for (;;) {
+            let pause = POLL_MS;
+            try {
+              if (!mine) {
+                const self = await get(`/repos/${REPO}/actions/runs/${RUN_ID}`);
+                const place = placeOf((await jobsOf(RUN_ID)).find((job) => job.name === QUEUE_JOB));
+                if (!place) throw new Fatal(`this run has no started ${QUEUE_JOB} job to take a place in the queue`);
+                workflowId = self.workflow_id;
+                mine = place;
+                await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+              }
+              if (!holders) holders = await listHolders(workflowId, mine);
+              while (holders.length > 0) {
+                const oldest = holders[0];
+                let run;
+                try {
+                  run = await get(`/repos/${REPO}/actions/runs/${oldest.id}`);
+                } catch (error) {
+                  // A deleted run holds nothing.
+                  if (error.status !== 404) throw error;
+                  holders.shift();
+                  continue;
+                }
+                waitedFor.set(oldest.id, label(run));
+                if (holdingPlace(run, run.status === "completed" ? [] : await jobsOf(oldest.id), mine)) break;
+                holders.shift();
+              }
+              if (holders.length === 0) {
+                // Before passing, look again at every open run, not just the ones listed first.
+                holders = await listHolders(workflowId, mine);
+                for (const holder of holders) waitedFor.set(holder.id, label(holder.run));
+              }
+              if (holders.length === 0) {
+                const behind = [...waitedFor.values()];
+                const line =
+                  behind.length === 0
+                    ? `No earlier run held the ${SUITE} suite's QA accounts, so the ${SUITE} job starts at once.`
+                    : `Waited ${minutes()} min for ${behind.join(", ")} to finish its ${SUITE} job, then took the ${SUITE} suite's QA accounts.`;
+                console.log(line);
+                summary([
+                  `### ${SUITE} staging queue`,
+                  "",
+                  line,
+                  "",
+                  `Runs take the ${SUITE} suite's QA accounts one at a time, in the order their \`${QUEUE_JOB}\` job started. A newer run waits here and never cancels an older run's ${SUITE} job (Z5-24). Only a newer push to the same pull request replaces that pull request's own waiting run.`,
+                ]);
+                process.exit(0);
+              }
+              console.log(`Waiting (${minutes()} min so far) for ${label(holders[0].run)} to finish its ${SUITE} job (${holders.length} run(s) ahead).`);
+            } catch (error) {
+              if (error instanceof Fatal) {
+                console.log(`::error title=Staging queue failed::${error.message}. The ${SUITE} suite did not run, so it reports not-run and this run partial.`);
+                summary([`### ${SUITE} staging queue`, "", `Could not read the queue: ${error.message}. The ${SUITE} suite did not run.`]);
+                process.exit(1);
+              }
+              // Never pass on an error: an unreadable queue counts as a busy one.
+              console.log(`::warning title=Staging queue unreadable::${error.message}. Still waiting; an error never counts as a clear queue.`);
+              if (error.retryAfterMs) pause = Math.max(POLL_MS, error.retryAfterMs);
+            }
+            const left = MAX_MS - (Date.now() - started);
+            if (left <= 0) {
+              const holding = holders && holders.length > 0 ? holders.map((holder) => label(holder.run)).join(", ") : "a queue it could not read";
+              console.log(`::error title=Staging queue timed out::Waited ${minutes()} min for ${holding}. The ${SUITE} suite did not run, so it reports not-run and this run partial. Re-run this job once that run has finished.`);
+              summary([
+                `### ${SUITE} staging queue`,
+                "",
+                `Gave up after ${minutes()} min waiting for ${holding}. The ${SUITE} suite did not run. It was not evicted, and this is not a failure of the code under test.`,
+              ]);
+              process.exit(1);
+            }
+            // A long retry-after is honoured up to the give-up time, then polled once more.
+            await new Promise((resolve) => setTimeout(resolve, Math.min(pause, left)));
+          }
+          QA_QUEUE_JS
+
+  queue-ios:
+    name: queue-ios
+    needs: changes
+    # Exactly when the ios suite will run (the ios job's own gate, minus its seed).
+    if: >-
+      ${{ (needs.changes.outputs.staging == 'true'
+           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios'))
+          || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true') }}
+    runs-on: ubuntu-latest
+    # The script gives up at QA_QUEUE_MAX_MINUTES, before this, so it can say why.
+    timeout-minutes: 340
+    # Read the Actions API to see the queue; nothing else, and no checkout.
+    permissions:
+      actions: read
+    # The attempt this turn was taken in. "Re-run failed jobs" and "Re-run this job" on
+    # seed-ios or ios carry this job's old success over without running it again,
+    # so both of them refuse to run unless this equals their own github.run_attempt.
+    outputs:
+      attempt: ${{ github.run_attempt }}
+    # Keyed per pull request: a newer push to the SAME pull request replaces that pull
+    # request's own waiting run here, and nothing else. Every other run has a group of
+    # its own (the run id), so no run can cancel another run's place in the queue.
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('qa-queue-ios-pr-{0}', github.event.pull_request.number) || format('qa-queue-ios-run-{0}', github.run_id) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Wait for earlier runs of the ios suite
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_QUEUE_SUITE: ios
+          QA_QUEUE_POLL_SECONDS: "60"
+          QA_QUEUE_SETTLE_SECONDS: "30"
+          QA_QUEUE_MAX_MINUTES: "330"
+        run: |
+          node --input-type=module <<'QA_QUEUE_JS'
+          import { appendFileSync } from "node:fs";
+
+          const env = process.env;
+          const API = (env.GITHUB_API_URL || "https://api.github.com").replace(/\/$/, "");
+          const REPO = env.GITHUB_REPOSITORY;
+          const RUN_ID = String(env.GITHUB_RUN_ID);
+          const SUITE = env.QA_QUEUE_SUITE;
+          const QUEUE_JOB = `queue-${SUITE}`;
+          const POLL_MS = Number(env.QA_QUEUE_POLL_SECONDS || "60") * 1000;
+          // Pause before the first full listing, so a queue job that started just before ours
+          // already reads as started in the API (it reads as `queued` for a moment).
+          const SETTLE_MS = Number(env.QA_QUEUE_SETTLE_SECONDS || "30") * 1000;
+          const MAX_MS = Number(env.QA_QUEUE_MAX_MINUTES || "330") * 60 * 1000;
+          // Every status a run that has not finished can have.
+          const OPEN = ["in_progress", "queued", "waiting", "pending", "requested"];
+
+          // A failure that waiting cannot fix (no permission, this run's own queue job missing).
+          class Fatal extends Error {}
+
+          function summary(lines) {
+            if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n\n`);
+          }
+
+          async function get(path) {
+            let res;
+            try {
+              res = await fetch(API + path, {
+                headers: {
+                  authorization: `Bearer ${env.GH_TOKEN}`,
+                  accept: "application/vnd.github+json",
+                  "x-github-api-version": "2022-11-28",
+                },
+              });
+            } catch (error) {
+              throw new Error(`no answer from the GitHub API on ${path} (${error.name})`);
+            }
+            if (res.ok) return res.json();
+            const message = `the GitHub API answered ${res.status} on ${path}`;
+            const body = await res.text().catch(() => "");
+            const retryAfter = Number(res.headers.get("retry-after"));
+            // Rate limits, primary or secondary, and server errors pass with time: wait them out.
+            const limited =
+              res.status === 429 ||
+              res.headers.get("x-ratelimit-remaining") === "0" ||
+              (res.status === 403 && ((Number.isFinite(retryAfter) && retryAfter > 0) || /secondary rate limit/i.test(body)));
+            const error = res.status >= 500 || limited ? new Error(message) : new Fatal(message);
+            error.status = res.status;
+            if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterMs = retryAfter * 1000;
+            throw error;
+          }
+
+          async function pages(path, field) {
+            const all = [];
+            for (let page = 1; ; page += 1) {
+              const body = await get(`${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`);
+              const items = body[field] ?? [];
+              all.push(...items);
+              if (items.length < 100) return all;
+            }
+          }
+
+          const jobsOf = (runId) => pages(`/repos/${REPO}/actions/runs/${runId}/jobs?filter=latest`, "jobs");
+
+          // A run's place in the queue is the moment its queue job STARTED, ties broken by job
+          // id. A queue job that has not started has no place yet: it will start after ours, so
+          // it waits for us, not we for it. Re-running the workflow, or queue-<suite>, starts a
+          // new queue job, so that run goes to the back. Every run computes the same order, so
+          // two runs can never both wait for, or both pass, each other.
+          function placeOf(job) {
+            if (!job || job.status === "queued" || job.conclusion === "skipped" || !job.started_at) return null;
+            return [Date.parse(job.started_at), Number(job.id)];
+          }
+          const isAhead = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+
+          // The run's place if it is ahead of this one and has not finished its suite job,
+          // otherwise null.
+          function holdingPlace(run, jobs, mine) {
+            if (run.status === "completed") return null;
+            const place = placeOf(jobs.find((job) => job.name === QUEUE_JOB));
+            if (!place || !isAhead(place, mine)) return null;
+            const suiteJob = jobs.find((job) => job.name === SUITE);
+            return suiteJob && suiteJob.status === "completed" ? null : place;
+          }
+
+          const label = (run) => {
+            const pr = run.pull_requests?.[0]?.number;
+            return `run #${run.run_number} (${pr ? `PR #${pr}` : run.event})`;
+          };
+
+          // Every open run of this workflow that holds the suite ahead of us, oldest first.
+          async function listHolders(workflowId, mine) {
+            const open = new Map();
+            for (const status of OPEN) {
+              for (const run of await pages(`/repos/${REPO}/actions/workflows/${workflowId}/runs?status=${status}`, "workflow_runs")) {
+                if (String(run.id) !== RUN_ID) open.set(String(run.id), run);
+              }
+            }
+            const found = [];
+            for (const [id, run] of open) {
+              const place = holdingPlace(run, await jobsOf(id), mine);
+              if (place) found.push({ id, run, place });
+            }
+            return found.sort((a, b) => (isAhead(a.place, b.place) ? -1 : 1));
+          }
+
+          if (!env.GH_TOKEN || !REPO || !SUITE || !env.GITHUB_RUN_ID) {
+            console.log("::error title=Staging queue misconfigured::GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID and QA_QUEUE_SUITE must all be set.");
+            process.exit(1);
+          }
+
+          const started = Date.now();
+          const minutes = () => Math.round((Date.now() - started) / 60000);
+          let mine = null;
+          let workflowId = null;
+          // Runs ahead of this one that still hold the suite, oldest first. Each poll re-reads
+          // only the OLDEST (two API calls), because nothing behind it can start before it ends.
+          // That keeps every waiting run at a constant cost per poll however long the queue is.
+          // The full listing runs once at the start and once more before passing, so a run that
+          // came back while we waited (a re-run that kept its old place) is still waited for.
+          let holders = null;
+          const waitedFor = new Map();
+
+          for (;;) {
+            let pause = POLL_MS;
+            try {
+              if (!mine) {
+                const self = await get(`/repos/${REPO}/actions/runs/${RUN_ID}`);
+                const place = placeOf((await jobsOf(RUN_ID)).find((job) => job.name === QUEUE_JOB));
+                if (!place) throw new Fatal(`this run has no started ${QUEUE_JOB} job to take a place in the queue`);
+                workflowId = self.workflow_id;
+                mine = place;
+                await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+              }
+              if (!holders) holders = await listHolders(workflowId, mine);
+              while (holders.length > 0) {
+                const oldest = holders[0];
+                let run;
+                try {
+                  run = await get(`/repos/${REPO}/actions/runs/${oldest.id}`);
+                } catch (error) {
+                  // A deleted run holds nothing.
+                  if (error.status !== 404) throw error;
+                  holders.shift();
+                  continue;
+                }
+                waitedFor.set(oldest.id, label(run));
+                if (holdingPlace(run, run.status === "completed" ? [] : await jobsOf(oldest.id), mine)) break;
+                holders.shift();
+              }
+              if (holders.length === 0) {
+                // Before passing, look again at every open run, not just the ones listed first.
+                holders = await listHolders(workflowId, mine);
+                for (const holder of holders) waitedFor.set(holder.id, label(holder.run));
+              }
+              if (holders.length === 0) {
+                const behind = [...waitedFor.values()];
+                const line =
+                  behind.length === 0
+                    ? `No earlier run held the ${SUITE} suite's QA accounts, so the ${SUITE} job starts at once.`
+                    : `Waited ${minutes()} min for ${behind.join(", ")} to finish its ${SUITE} job, then took the ${SUITE} suite's QA accounts.`;
+                console.log(line);
+                summary([
+                  `### ${SUITE} staging queue`,
+                  "",
+                  line,
+                  "",
+                  `Runs take the ${SUITE} suite's QA accounts one at a time, in the order their \`${QUEUE_JOB}\` job started. A newer run waits here and never cancels an older run's ${SUITE} job (Z5-24). Only a newer push to the same pull request replaces that pull request's own waiting run.`,
+                ]);
+                process.exit(0);
+              }
+              console.log(`Waiting (${minutes()} min so far) for ${label(holders[0].run)} to finish its ${SUITE} job (${holders.length} run(s) ahead).`);
+            } catch (error) {
+              if (error instanceof Fatal) {
+                console.log(`::error title=Staging queue failed::${error.message}. The ${SUITE} suite did not run, so it reports not-run and this run partial.`);
+                summary([`### ${SUITE} staging queue`, "", `Could not read the queue: ${error.message}. The ${SUITE} suite did not run.`]);
+                process.exit(1);
+              }
+              // Never pass on an error: an unreadable queue counts as a busy one.
+              console.log(`::warning title=Staging queue unreadable::${error.message}. Still waiting; an error never counts as a clear queue.`);
+              if (error.retryAfterMs) pause = Math.max(POLL_MS, error.retryAfterMs);
+            }
+            const left = MAX_MS - (Date.now() - started);
+            if (left <= 0) {
+              const holding = holders && holders.length > 0 ? holders.map((holder) => label(holder.run)).join(", ") : "a queue it could not read";
+              console.log(`::error title=Staging queue timed out::Waited ${minutes()} min for ${holding}. The ${SUITE} suite did not run, so it reports not-run and this run partial. Re-run this job once that run has finished.`);
+              summary([
+                `### ${SUITE} staging queue`,
+                "",
+                `Gave up after ${minutes()} min waiting for ${holding}. The ${SUITE} suite did not run. It was not evicted, and this is not a failure of the code under test.`,
+              ]);
+              process.exit(1);
+            }
+            // A long retry-after is honoured up to the give-up time, then polled once more.
+            await new Promise((resolve) => setTimeout(resolve, Math.min(pause, left)));
+          }
+          QA_QUEUE_JS
+
+  # The only remote writes in this repository's CI: one job per QA suite (D-W5-14).
+  # Each applies QT2's reset then its seed to fitbud-staging, in that order, scoped to
+  # that suite's QA user ids only (`--suite`), so it never touches another suite's
+  # accounts. The four jobs are the same apart from the suite name; a change to one is a
+  # change to all four (apps/api/scripts/qa-seed-suites.test.ts checks the wiring).
+  #
+  # ONE D1 IMPORT AT A TIME (Z5-7b). Every `wrangler d1 execute --remote --file` is a D1
+  # import, and a D1 database accepts only one import at a time; a second one is refused
+  # with "Currently processing a long-running import. Cannot start another import until
+  # that completes or times out." (run 42079586761: seed-ios lost that race to the other
+  # three seeds, which all started together). Two guards, pinned by
+  # scripts/qa/seed-serial.test.mjs:
+  #
+  #   * Within a run, deterministically: the seeds are a chain, seed-api -> seed-web ->
+  #     seed-android -> seed-ios, each `needs:` the one before. Each later link is gated
+  #     with `!cancelled()`, not the default success(), so a seed that was SKIPPED (its
+  #     suite not selected, or a partial re-run's queue-attempt check), FAILED or was
+  #     CANCELLED earlier in the chain never takes a later suite's seed with it: a broken
+  #     api seed must not cost ios its seed. Only a cancelled run stops the chain. Every
+  #     link keeps all of its own gates (main only, `staging-qa`, its suite, and for
+  #     android and ios its queue job's success and attempt), so the chain only orders
+  #     the imports; it never runs a seed its own gates would not. The cost: seed-ios
+  #     (and so ios) can wait for queue-android's turn; the mobile queues never wait for
+  #     api or web.
+  #   * Across runs (a nightly overlapping a dispatch seeds different suites, so their
+  #     groups do not exclude each other): d1_execute retries an import ONLY when wrangler
+  #     reports exactly that message, 6 attempts with 15/30/60/120/240 s between them.
+  #     A refused import never started, so retrying it applies nothing twice. Any other
+  #     error fails at once, as before.
+  seed-api:
+    name: seed-api
     needs: changes
     # Never on a pull request, and only from main. Both are asserted here, not inferred.
-    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.changes.outputs.staging == 'true' }}
+    if: >-
+      ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'api') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging-qa
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-api
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: api
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -289,24 +835,404 @@ jobs:
       # QT2's scripts only write files; they refuse --remote themselves. tsx, not
       # node --experimental-strip-types: the scripts import .js specifiers that bare
       # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
-      - name: Generate the reset and seed SQL
+      - name: Generate the api suite's reset and seed SQL
         env:
           FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
         run: |
-          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts
-          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
 
       # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
       # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
-      - name: Apply the reset, then the seed, to fitbud-staging
+      - name: Apply the api suite's reset, then its seed, to fitbud-staging
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file .qa-seed/qa-reset.sql
-          pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
-            --env staging --remote --yes --file .qa-seed/qa-seed.sql
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+
+  seed-web:
+    name: seed-web
+    # After seed-api, whatever its result: one D1 import at a time (Z5-7b, see seed-api).
+    needs: [changes, seed-api]
+    # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    if: >-
+      ${{ !cancelled() && needs.changes.result == 'success'
+          && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-qa
+    # One writer per QA world at a time; see the note at the top of this file.
+    concurrency:
+      group: qa-staging-web
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Require the seed secrets
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these in the staging-qa environment (QA1 manual steps 3 and 4):$missing"
+            exit 1
+          fi
+          echo "Both seed secrets and the Cloudflare credentials are present."
+
+      # QT2's scripts only write files; they refuse --remote themselves. tsx, not
+      # node --experimental-strip-types: the scripts import .js specifiers that bare
+      # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
+      - name: Generate the web suite's reset and seed SQL
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
+
+      # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
+      # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
+      - name: Apply the web suite's reset, then its seed, to fitbud-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+
+  seed-android:
+    name: seed-android
+    # After its turn in the staging queue (queue-android), like the android job, and after
+    # seed-web whatever its result: one D1 import at a time (Z5-7b, see seed-api).
+    needs: [changes, queue-android, seed-web]
+    # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    # `!cancelled()` drops the default success(), so the queue job's success is checked
+    # explicitly: without its turn the seed must not run.
+    if: >-
+      ${{ !cancelled() && needs.changes.result == 'success' && needs.queue-android.result == 'success'
+          && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android')
+          && needs.queue-android.outputs.attempt == format('{0}', github.run_attempt) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-qa
+    # One writer per QA world at a time; see the note at the top of this file.
+    concurrency:
+      group: qa-staging-android
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: android
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Require the seed secrets
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these in the staging-qa environment (QA1 manual steps 3 and 4):$missing"
+            exit 1
+          fi
+          echo "Both seed secrets and the Cloudflare credentials are present."
+
+      # QT2's scripts only write files; they refuse --remote themselves. tsx, not
+      # node --experimental-strip-types: the scripts import .js specifiers that bare
+      # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
+      - name: Generate the android suite's reset and seed SQL
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
+
+      # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
+      # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
+      - name: Apply the android suite's reset, then its seed, to fitbud-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
+
+  seed-ios:
+    name: seed-ios
+    # After its turn in the staging queue (queue-ios), like the ios job, and after
+    # seed-android whatever its result: one D1 import at a time (Z5-7b, see seed-api).
+    needs: [changes, queue-ios, seed-android]
+    # Never on a pull request, and only from main. Both are asserted here, not inferred.
+    # `!cancelled()` drops the default success(), so the queue job's success is checked
+    # explicitly: without its turn the seed must not run.
+    if: >-
+      ${{ !cancelled() && needs.changes.result == 'success' && needs.queue-ios.result == 'success'
+          && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+          && needs.changes.outputs.staging == 'true'
+          && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios')
+          && needs.queue-ios.outputs.attempt == format('{0}', github.run_attempt) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-qa
+    # One writer per QA world at a time; see the note at the top of this file.
+    concurrency:
+      group: qa-staging-ios
+      cancel-in-progress: false
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      QA_SEED_SUITE: ios
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Require the seed secrets
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "${FITBUD_QA_PASSWORD:-}" ] || missing="$missing FITBUD_QA_PASSWORD"
+          [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=QA secrets missing::Set these in the staging-qa environment (QA1 manual steps 3 and 4):$missing"
+            exit 1
+          fi
+          echo "Both seed secrets and the Cloudflare credentials are present."
+
+      # QT2's scripts only write files; they refuse --remote themselves. tsx, not
+      # node --experimental-strip-types: the scripts import .js specifiers that bare
+      # type stripping cannot resolve (ERR_MODULE_NOT_FOUND).
+      - name: Generate the ios suite's reset and seed SQL
+        env:
+          FITBUD_QA_PASSWORD: ${{ secrets.FITBUD_QA_PASSWORD }}
+        run: |
+          pnpm --filter @fitbud/api exec tsx scripts/qa-reset.ts --suite "$QA_SEED_SUITE"
+          pnpm --filter @fitbud/api exec tsx scripts/qa-seed.ts --suite "$QA_SEED_SUITE"
+
+      # Reset first, then seed. The seed is ~5 MB over ~175 statements, with inserts
+      # byte-capped by QT2 after a SQLITE_TOOBIG failure, so it applies as one file.
+      - name: Apply the ios suite's reset, then its seed, to fitbud-staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # BEGIN d1-import-retry (Z5-7b; the same in every seed job, see seed-api)
+          d1_execute() {
+            local attempt=1 delay=15 out status
+            while :; do
+              if out="$(pnpm --filter @fitbud/api exec wrangler d1 execute fitbud-staging \
+                --env staging --remote --yes "$@" 2>&1)"; then
+                printf '%s\n' "$out"
+                return 0
+              else
+                status=$?
+              fi
+              printf '%s\n' "$out"
+              if ! grep -qF 'Currently processing a long-running import' <<<"$out"; then
+                return "$status"
+              fi
+              if [ "$attempt" -ge 6 ]; then
+                echo "::error title=D1 import still busy::Another import on fitbud-staging was still running after 6 attempts. Re-run this job once it has finished."
+                return "$status"
+              fi
+              echo "::warning title=D1 import busy::Another import on fitbud-staging is still running (attempt $attempt of 6); retrying in ${delay}s."
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+          # END d1-import-retry
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-reset.sql"
+          d1_execute --file ".qa-seed/$QA_SEED_SUITE/qa-seed.sql"
 
   # The repository's own unit run, as the `unit` suite of the QA report
   # (docs/runbooks/qa-nightly.md). `pnpm test` is turbo-driven and writes no JUnit, so
@@ -397,18 +1323,20 @@ jobs:
           path: qa-upload
           retention-days: 14
 
+  # Signs in as the `api` suite's QA accounts only (apps/api/qa-smoke/expectations.ts
+  # reads `suites.api`), so it waits for its own seed and nothing else (D-W5-14).
   api-smoke:
     name: api-smoke
-    needs: [changes, seed-reset]
+    needs: [changes, seed-api]
     if: >-
       ${{ always() && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'api')
-          && needs.seed-reset.result == 'success' }}
+          && needs.seed-api.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-api
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -490,19 +1418,19 @@ jobs:
 
   web-staging:
     name: web-staging
-    # `api-smoke` is a dependency for ordering only: the `if:` below is unchanged and
-    # still starts with always(), so this job runs whatever api-smoke concluded. The
-    # edge exists so the two never hold the staging accounts at the same moment.
-    needs: [changes, seed-reset, api-smoke]
+    # Signs in as the `web` suite's QA accounts only (e2e-staging/support/env.ts reads
+    # `suites.web`), so it no longer waits for api-smoke: the two never share an
+    # account (D-W5-14).
+    needs: [changes, seed-web]
     if: >-
       ${{ always() && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web')
-          && needs.seed-reset.result == 'success' }}
+          && needs.seed-web.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-web
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -592,25 +1520,29 @@ jobs:
 
   android:
     name: android
-    # `api-smoke` and `web-staging` are dependencies for ordering only: the `if:` below
-    # is unchanged and still starts with always(), so this job runs whatever they
-    # concluded (on a pull request both are skipped, as before).
-    needs: [changes, seed-reset, api-smoke, web-staging]
+    # Signs in as the `android` suite's QA accounts only (D-W5-14; see "Point the
+    # Maestro runner" below), so it no longer waits for api-smoke or web-staging. On a
+    # pull request seed-android is skipped and the PR smoke uses the accounts the last
+    # nightly or dispatched run seeded, as before.
+    needs: [changes, queue-android, seed-android]
     if: >-
       ${{ always()
-          && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
+          && needs.queue-android.result == 'success'
+          && needs.queue-android.outputs.attempt == format('{0}', github.run_attempt)
+          && (needs.seed-android.result == 'success' || needs.seed-android.result == 'skipped')
           && ((needs.changes.outputs.staging == 'true'
                && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'android'))
               || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-android
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
       QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
+      QA_SEED_SUITE: android
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -741,6 +1673,31 @@ jobs:
           disable-animations: false
           script: echo "AVD created"
 
+      # D-W5-14: this job signs in as the `android` suite's QA accounts, never another
+      # suite's. scripts/qa/run-maestro.sh reads the account emails from
+      # apps/api/src/seed/qa/expectations.json as `.accounts[] | select(.key == ...)`,
+      # but that file is keyed by suite (`suites.<name>.accounts`); its top-level
+      # `accounts` is only a default copy for those scripts. This step rewrites the
+      # runner's checkout of the file (never the repository) to this suite's entry, and
+      # fails unless every email it leaves is `qa+android-...`, so the job cannot run on
+      # another suite's accounts whatever the default copy holds. Follow-up: once
+      # run-maestro*.sh read `suites[$QA_SEED_SUITE]` themselves, drop this step.
+      - name: Point the Maestro runner at the android personas
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          exp=apps/api/src/seed/qa/expectations.json
+          jq --arg s "$QA_SEED_SUITE" \
+            'if (.suites[$s].accounts | length) > 0 then {referenceDate, suite: $s, accounts: .suites[$s].accounts} else error("expectations.json has no \($s) suite") end' \
+            "$exp" > "$RUNNER_TEMP/suite-expectations.json"
+          total=$(jq '.accounts | length' "$RUNNER_TEMP/suite-expectations.json")
+          foreign=$(jq -r --arg s "$QA_SEED_SUITE" '[.accounts[].email | select(startswith("qa+\($s)-") | not)] | length' "$RUNNER_TEMP/suite-expectations.json")
+          if [ "$total" -lt 3 ] || [ "$foreign" -ne 0 ]; then
+            echo "::error title=Wrong QA personas::expected only qa+$QA_SEED_SUITE-... accounts for the $QA_SEED_SUITE suite (D-W5-14); got $total accounts, $foreign from another suite."
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/suite-expectations.json" "$exp"
+          echo "Maestro will sign in as the $QA_SEED_SUITE suite's $total QA accounts."
+
       # Emulator flakiness on hosted runners is accepted (D-QA1-8): there is no EAS or
       # Maestro Cloud fallback. A failure here is a real failure of the run.
       - name: Maestro suite
@@ -800,26 +1757,28 @@ jobs:
   # loudly here instead of quietly testing something else.
   ios:
     name: ios
-    # `android` is a dependency for ordering, not for its result: both jobs drive the
-    # same staging QA accounts, and the `qa-staging` group alone would not keep them
-    # apart if they could start at the same time. The `if:` below starts with always()
-    # so this job runs whatever `android` concluded.
-    needs: [changes, seed-reset, api-smoke, web-staging, android]
+    # No longer sequenced after `android`: the two used to drive the same QA accounts,
+    # and now each signs in as its own suite's (D-W5-14: android and ios do not share,
+    # so one platform's logs cannot change the other's Today). They run side by side.
+    needs: [changes, queue-ios, seed-ios]
     if: >-
       ${{ always()
-          && (needs.seed-reset.result == 'success' || needs.seed-reset.result == 'skipped')
+          && needs.queue-ios.result == 'success'
+          && needs.queue-ios.outputs.attempt == format('{0}', github.run_attempt)
+          && (needs.seed-ios.result == 'success' || needs.seed-ios.result == 'skipped')
           && ((needs.changes.outputs.staging == 'true'
                && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'ios'))
               || (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true')) }}
     runs-on: macos-15
     timeout-minutes: 120
-    # One staging writer at a time (D-QA1-7); see the note at the top of this file.
+    # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
-      group: qa-staging
+      group: qa-staging-ios
       cancel-in-progress: false
     env:
       TURBO_TELEMETRY_DISABLED: "1"
       QA_MAESTRO_TAG: ${{ needs.changes.outputs.tag }}
+      QA_SEED_SUITE: ios
       # Pinned Xcode, simulator device type and runtime. All three are on the
       # macos-15 arm64 image; the steps below print what the image has and fail with
       # a message naming the missing one rather than an opaque simctl error.
@@ -1047,6 +2006,26 @@ jobs:
         if: ${{ steps.guard.outputs.secrets == 'true' }}
         run: maestro --version
 
+      # D-W5-14: as in `android`, rewrite the runner's checkout of expectations.json to
+      # this suite's entry so scripts/qa/run-maestro-ios.sh signs in as the `ios`
+      # suite's QA accounts and nobody else's. Follow-up: drop this step once
+      # run-maestro*.sh read `suites[$QA_SEED_SUITE]` themselves.
+      - name: Point the Maestro runner at the ios personas
+        if: ${{ steps.guard.outputs.secrets == 'true' }}
+        run: |
+          exp=apps/api/src/seed/qa/expectations.json
+          jq --arg s "$QA_SEED_SUITE" \
+            'if (.suites[$s].accounts | length) > 0 then {referenceDate, suite: $s, accounts: .suites[$s].accounts} else error("expectations.json has no \($s) suite") end' \
+            "$exp" > "$RUNNER_TEMP/suite-expectations.json"
+          total=$(jq '.accounts | length' "$RUNNER_TEMP/suite-expectations.json")
+          foreign=$(jq -r --arg s "$QA_SEED_SUITE" '[.accounts[].email | select(startswith("qa+\($s)-") | not)] | length' "$RUNNER_TEMP/suite-expectations.json")
+          if [ "$total" -lt 3 ] || [ "$foreign" -ne 0 ]; then
+            echo "::error title=Wrong QA personas::expected only qa+$QA_SEED_SUITE-... accounts for the $QA_SEED_SUITE suite (D-W5-14); got $total accounts, $foreign from another suite."
+            exit 1
+          fi
+          cp "$RUNNER_TEMP/suite-expectations.json" "$exp"
+          echo "Maestro will sign in as the $QA_SEED_SUITE suite's $total QA accounts."
+
       # Simulator flakiness on hosted runners is accepted (D-QA1-8, D-W3b-14): there
       # is no EAS or Maestro Cloud fallback. A failure here is a real failure of the
       # run.
@@ -1090,13 +2069,20 @@ jobs:
   # `ios` share that gate, so either one having run is enough.
   report:
     name: report
-    needs: [changes, qa-scripts, seed-reset, unit, api-smoke, web-staging, android, ios]
-    if: ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped' || needs.ios.result != 'skipped') }}
+    needs: [changes, qa-scripts, queue-android, queue-ios, seed-api, seed-web, seed-android, seed-ios, unit, api-smoke, web-staging, android, ios]
+    # The queue terms: a partial re-run that skipped android and ios at their queue
+    # check, or a queue job that gave up, must still report and say why (see the
+    # "Staging queue" step).
+    if: >-
+      ${{ always() && (github.event_name != 'pull_request' || needs.android.result != 'skipped' || needs.ios.result != 'skipped'
+          || (needs.queue-android.result == 'success' && needs.queue-android.outputs.attempt != format('{0}', github.run_attempt))
+          || (needs.queue-ios.result == 'success' && needs.queue-ios.outputs.attempt != format('{0}', github.run_attempt))
+          || needs.queue-android.result == 'failure' || needs.queue-ios.result == 'failure') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       # Evicted, not failed (D-W3b-26). A staging job cancelled while PENDING was
-      # evicted from the `qa-staging` queue by newer arrivals, not broken by this
+      # evicted from its `qa-staging-<suite>` queue by newer arrivals, not broken by this
       # commit: GitHub keeps one pending entry per group and a third arrival cancels
       # the older one. Without this step the only signal is a grey `cancelled` next to
       # four greens, which reads as a failure of the run and has repeatedly been
@@ -1122,9 +2108,9 @@ jobs:
         if: always()
         env:
           # Derived from this job's own `needs:` rather than from a second hardcoded
-          # list of job names, so a sixth staging writer added to the group and to
+          # list of job names, so a new staging writer added to a group and to
           # `needs:` is covered here with no further edit. Only the jobs OUTSIDE
-          # `qa-staging` are named, and that list fails in the safe direction: a new
+          # every `qa-staging-<suite>` group are named, and that list fails in the safe direction: a new
           # non-group job nobody adds to it produces one spurious warning, which is
           # visible, where a stale list of writers would have produced silence.
           NEEDS: ${{ toJSON(needs) }}
@@ -1134,6 +2120,9 @@ jobs:
           stale=""
           for job in $(printf '%s' "$NEEDS" | jq -r 'keys[]'); do
             case " $NOT_IN_GROUP " in *" $job "*) continue ;; esac
+            # The queue jobs sit in per-pull-request groups, not qa-staging-<suite>;
+            # the "Staging queue" step below speaks for them.
+            case "$job" in queue-*) continue ;; esac
             result=$(printf '%s' "$NEEDS" | jq -r --arg j "$job" '.[$j].result // ""')
             # An absent result matches no comparison below, so without this guard the
             # check would simply stop speaking for that job, and do it in silence.
@@ -1154,13 +2143,13 @@ jobs:
             fi
             exit 0
           fi
-          echo "::warning title=Staging job cancelled, not failed::Cancelled rather than failed:$cancelled. On the qa-staging group that is almost always queue eviction: GitHub keeps one pending entry per concurrency group (D-W3b-26), so a newer run displaces the older pending one. A cancellation requested by hand looks the same from here. Either way their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
+          echo "::warning title=Staging job cancelled, not failed::Cancelled rather than failed:$cancelled. On the qa-staging-<suite> groups that is almost always queue eviction: GitHub keeps one pending entry per concurrency group (D-W3b-26), so a newer run displaces the older pending one. A cancellation requested by hand looks the same from here. Either way their suites report as not-run and this run as partial, never a pass. Re-dispatch this workflow from main when the queue is clear."
           {
             echo "## Cancelled, not failed"
             echo
-            echo "Cancelled on \`qa-staging\`:$cancelled"
+            echo "Cancelled on the \`qa-staging-<suite>\` groups:$cancelled"
             echo
-            echo "These jobs were **not broken by this commit**. On this group a"
+            echo "These jobs were **not broken by this commit**. On these groups a"
             echo "cancellation is almost always queue eviction:"
             echo "\`cancel-in-progress: false\` keeps only one pending entry per"
             echo "concurrency group, so a newer run displaces the older pending one"
@@ -1171,7 +2160,73 @@ jobs:
             echo "\`not-run\` and this run as \`partial\`. That is **not a pass**."
             echo "Re-dispatch this workflow from \`main\` once no other staging run"
             echo "is in flight."
+            echo
+            echo "android and ios no longer queue this way: they wait their turn in"
+            echo "\`queue-<suite>\` (see \"Staging queue\" below), and a partial re-run that"
+            echo "skips that turn is refused rather than queued, so behind the queue their"
+            echo "\`qa-staging-<suite>\` group never holds a second pending entry. A cancelled"
+            echo "seed-android, android, seed-ios or ios job was therefore most likely"
+            echo "cancelled by hand (a newer push to the same pull request cancels only its"
+            echo "waiting \`queue-<suite>\` job)."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Queue, not evict (Z5-24). Says in the run summary, every time, how the android
+      # and ios suites took their turn, so a run that waited reads as having waited and
+      # a superseded or timed-out one never reads as broken. Advisory like the step
+      # above: summarize.mjs still reports a suite that did not run as `not-run` and the
+      # run as `partial`. Each queue job's own summary says whom it waited for, and how long.
+      - name: Staging queue
+        if: always()
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          warnings=""
+          errors=""
+          {
+            echo "## Staging queue (android, ios)"
+            echo
+            echo "Runs of the same Maestro suite take that suite's staging QA accounts one at"
+            echo "a time, in the order their \`queue-<suite>\` job started. A newer run, from"
+            echo "any pull request or from \`main\`, **waits** for an older one: it no longer"
+            echo "cancels another run's android or ios job (queue, not evict; Z5-24). Only a"
+            echo "newer push to the same pull request replaces that pull request's own waiting run."
+            echo
+            for suite in android ios; do
+              result=$(printf '%s' "$NEEDS" | jq -r --arg j "queue-$suite" '.[$j].result // ""')
+              attempt=$(printf '%s' "$NEEDS" | jq -r --arg j "queue-$suite" '.[$j].outputs.attempt // ""')
+              # "Re-run failed jobs" / "Re-run this job" carry queue-<suite>'s old success
+              # over. seed-<suite> and <suite> then refuse to run without a turn.
+              if [ "$result" = "success" ] && [ "$attempt" != "$RUN_ATTEMPT" ]; then
+                result="stale-turn"
+              fi
+              case "$result" in
+                stale-turn)
+                  line="did NOT run: this attempt ($RUN_ATTEMPT) re-ran jobs without re-running queue-$suite (its turn was taken in attempt $attempt), so seed-$suite and $suite skipped rather than skip the queue. Re-run all jobs, or re-run queue-$suite (which re-runs its dependents)."
+                  errors="$errors|$suite skipped: re-run the whole workflow::$line" ;;
+                success) line="took its turn, then ran (the queue job's summary says whom it waited for)." ;;
+                skipped) line="not asked for in this run." ;;
+                cancelled)
+                  line="superseded while it waited: a newer push to the same pull request replaced this run (or someone cancelled it by hand). Not broken by this commit; the newer run reports."
+                  warnings="$warnings|$suite superseded, not failed::$line" ;;
+                failure)
+                  line="gave up waiting for an earlier run (or could not read the queue); see the queue-$suite job. The suite did not run, so it reports not-run."
+                  warnings="$warnings|$suite did not get its turn::$line" ;;
+                *) line="no result (\"$result\"); read the queue-$suite job." ;;
+              esac
+              echo "- \`$suite\`: $line"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Annotations go to the log, after the summary block (whose output is redirected).
+          printf '%s\n' "$warnings" | tr '|' '\n' | while IFS= read -r w; do
+            if [ -n "$w" ]; then echo "::warning title=$w"; fi
+          done
+          # An error, not a failed step: the report steps below must still run, and the
+          # skipped suite then reports not-run, so "Build the QA report" exits 3.
+          printf '%s\n' "$errors" | tr '|' '\n' | while IFS= read -r e; do
+            if [ -n "$e" ]; then echo "::error title=$e"; fi
+          done
+          exit 0
 
       - name: Checkout
         uses: actions/checkout@v7
