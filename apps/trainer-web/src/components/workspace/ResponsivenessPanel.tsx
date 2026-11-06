@@ -6,6 +6,7 @@ import type {
 import {
   formatCivilDate,
   formatHhMmTime,
+  labelFor,
   possessivePronoun,
 } from "@fitbud/core";
 import { stage1Api } from "../../lib/stage1-api";
@@ -15,20 +16,7 @@ import { LoadingBlock } from "../StatePanels";
 function labelTitle(
   label: ResponsivenessResponse["label"],
 ): string {
-  switch (label) {
-    case "logs_on_own":
-      return "Logs on own";
-    case "responds":
-      return "Responds to reminders";
-    case "often_misses":
-      return "Often misses reminders";
-    case "reminders_paused":
-      return "Reminders paused";
-    case "notifications_off":
-      return "Notifications off";
-    case "not_enough_data":
-      return "Not enough data";
-  }
+  return labelFor("responsiveness_label", label);
 }
 
 function summaryCounts(data: ResponsivenessResponse): string {

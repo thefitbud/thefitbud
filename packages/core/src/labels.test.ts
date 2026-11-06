@@ -22,6 +22,7 @@ import {
   exerciseExecutionStatusSchema,
   foodClassificationSchema,
   historyItemKindSchema,
+  interventionKindSchema,
   invitationStatusSchema,
   libraryItemStatusSchema,
   mealAssignmentStatusSchema,
@@ -31,6 +32,7 @@ import {
   mealTypeSchema,
   measurementSourceSchema,
   measurementTypeSchema,
+  mediaAssetStatusSchema,
   mediaTypeSchema,
   notificationStateSchema,
   notificationTypeSchema,
@@ -57,13 +59,15 @@ import {
   allLabelEntries,
   enumLabel,
   labelFor,
+  LABELS,
   type LabelNamespace,
 } from "./labels.js";
 
-describe("labels", () => {
-  it("covers every value of every mapped contract enum", () => {
-    const schemas: Array<{ name: LabelNamespace; values: readonly string[] }> =
-      [
+/** Every label namespace that mirrors a contract enum, with that enum's values. */
+const CONTRACT_ENUM_NAMESPACES: Array<{
+  name: LabelNamespace;
+  values: readonly string[];
+}> = [
         { name: "adherence_state", values: adherenceStateSchema.options },
         { name: "onboarding_status", values: onboardingStatusSchema.options },
         {
@@ -212,7 +216,19 @@ describe("labels", () => {
           values: libraryItemStatusSchema.options,
         },
         { name: "renewal_state", values: renewalStateSchema.options },
+        {
+          name: "intervention_kind",
+          values: interventionKindSchema.options,
+        },
+        {
+          name: "media_asset_status",
+          values: mediaAssetStatusSchema.options,
+        },
       ];
+
+describe("labels", () => {
+  it("covers every value of every mapped contract enum", () => {
+    const schemas = CONTRACT_ENUM_NAMESPACES;
 
     for (const { name, values } of schemas) {
       for (const value of values) {
@@ -222,6 +238,31 @@ describe("labels", () => {
         expect(label[0], `${name}.${value}`).toBe(label[0]?.toUpperCase());
       }
     }
+  });
+
+  it("has an explicit entry for every contract enum value, not the sentence-case fallback", () => {
+    const missing: string[] = [];
+    for (const { name, values } of CONTRACT_ENUM_NAMESPACES) {
+      const map = LABELS[name] as Record<string, string>;
+      for (const value of values) {
+        if (!map[value]) missing.push(`${name}.${value}`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("only open-vocabulary namespaces lack a contract enum", () => {
+    const withEnum = new Set(CONTRACT_ENUM_NAMESPACES.map((n) => n.name));
+    const without = (Object.keys(LABELS) as LabelNamespace[])
+      .filter((name) => !withEnum.has(name))
+      .sort();
+    // Contracts type these as plain strings, or they are UI-derived chips.
+    expect(without).toEqual([
+      "body_part",
+      "client_chip",
+      "coach_ask_topic",
+      "equipment",
+    ]);
   });
 
   it("maps snake_case topics and body parts", () => {
