@@ -243,5 +243,12 @@
     "when": 1730304000000,
     "tag": "0034_remove_configured_status",
     "breakpoints": true
+  },
+  {
+    "idx": 35,
+    "version": "7",
+    "when": 1730390400000,
+    "tag": "0035_numeric_set_load",
+    "breakpoints": true
   }
 ]
