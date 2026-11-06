@@ -94,6 +94,28 @@ function sampleMealContent(photoRequired = false) {
   };
 }
 
+/** Breakfast, lunch and dinner, so one day can hold confirm, skip and deviate. */
+function threeMealContent() {
+  const base = sampleMealContent();
+  return {
+    ...base,
+    mealPrescriptions: [
+      ...base.mealPrescriptions,
+      {
+        id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        order: 3,
+        name: "Dinner",
+        mealType: "dinner",
+        applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+        localTime: "20:00",
+        scheduleHint: "Evening",
+        instructions: "Roti and sabzi",
+        photoRequired: false,
+      },
+    ],
+  };
+}
+
 async function reachEffectiveMealPlan(
   suffix: string,
   options: {
@@ -376,7 +398,7 @@ describe("meal assignment and compliance", () => {
 
   it("runs confirm → deviate → skip; trainer compliance matches", async () => {
     const { trainerCookie, traineeToken, relationshipId, today, toDate } =
-      await reachEffectiveMealPlan("loop");
+      await reachEffectiveMealPlan("loop", { content: threeMealContent() });
 
     const listed = await app.request(
       `/meals/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${today}`,
@@ -394,7 +416,7 @@ describe("meal assignment and compliance", () => {
         items: Array<{ id: string; status: string; mealName: string }>;
       };
     };
-    expect(listBody.data.items.length).toBe(2);
+    expect(listBody.data.items.length).toBe(3);
     expect(listBody.data.items.every((item) => item.status === "pending")).toBe(
       true,
     );
@@ -461,24 +483,11 @@ describe("meal assignment and compliance", () => {
     );
     expect(skipped.status).toBe(200);
 
-    const tomorrowListed = await app.request(
-      `/meals/relationships/${relationshipId}/assignments?fromDate=${toDate}&toDate=${toDate}`,
-      {
-        headers: {
-          Authorization: `Bearer ${traineeToken}`,
-          "x-fitbud-role": "trainee",
-        },
-      },
-      testEnv(),
-    );
-    const tomorrowBody = (await tomorrowListed.json()) as {
-      data: { items: Array<{ id: string; mealName: string }> };
-    };
-    const tomorrowBreakfast = tomorrowBody.data.items.find(
-      (item) => item.mealName === "Breakfast",
+    const dinner = listBody.data.items.find(
+      (item) => item.mealName === "Dinner",
     )!;
     const deviate = await app.request(
-      `/meals/assignments/${tomorrowBreakfast.id}/deviate`,
+      `/meals/assignments/${dinner.id}/deviate`,
       {
         method: "POST",
         headers: {
@@ -515,6 +524,148 @@ describe("meal assignment and compliance", () => {
     expect(complianceBody.data.totals.confirmed).toBe(1);
     expect(complianceBody.data.totals.skipped).toBe(1);
     expect(complianceBody.data.totals.modified).toBe(1);
+  });
+
+  describe("log-time bounds (EC1 rule 2)", () => {
+    async function setup(suffix: string) {
+      const plan = await reachEffectiveMealPlan(suffix, {
+        content: threeMealContent(),
+      });
+      const listed = await app.request(
+        `/meals/relationships/${plan.relationshipId}/assignments?fromDate=${plan.today}&toDate=${plan.toDate}`,
+        {
+          headers: {
+            Authorization: `Bearer ${plan.traineeToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      const items = (
+        (await listed.json()) as {
+          data: {
+            items: Array<{
+              id: string;
+              mealName: string;
+              localDate: string;
+              windowStartsAt: string;
+            }>;
+          };
+        }
+      ).data.items;
+      const meal = (name: string, localDate = plan.today) =>
+        items.find((i) => i.mealName === name && i.localDate === localDate)!;
+      const deviate = (
+        assignmentId: string,
+        key: string,
+        clientLoggedAt?: string,
+      ) =>
+        app.request(
+          `/meals/assignments/${assignmentId}/deviate`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": key,
+            },
+            body: JSON.stringify({
+              deviationKind: "restaurant",
+              notes: "Ordered grilled chicken",
+              ...(clientLoggedAt ? { clientLoggedAt } : {}),
+            }),
+          },
+          testEnv(),
+        );
+      const confirm = (assignmentId: string, key: string) =>
+        app.request(
+          `/meals/assignments/${assignmentId}/confirm`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": key,
+            },
+            body: JSON.stringify({}),
+          },
+          testEnv(),
+        );
+      return { plan, meal, deviate, confirm };
+    }
+
+    const MIN = 60 * 1000;
+
+    it("rejects a log more than 5 minutes in the future and accepts one within drift", async () => {
+      const { meal, deviate } = await setup("lt-future");
+      const breakfast = meal("Breakfast");
+      const tooFar = await deviate(
+        breakfast.id,
+        "lt-future-1",
+        new Date(Date.now() + 6 * MIN).toISOString(),
+      );
+      expect(tooFar.status).toBe(422);
+      expect(
+        ((await tooFar.json()) as { error: { code: string } }).error.code,
+      ).toBe("LOG_TIME_IN_FUTURE");
+
+      const withinDrift = await deviate(
+        breakfast.id,
+        "lt-future-2",
+        new Date(Date.now() + 4 * MIN).toISOString(),
+      );
+      expect(withinDrift.status).toBe(200);
+    });
+
+    it("rejects a log before the meal window starts and accepts exactly at the start", async () => {
+      const { meal, deviate } = await setup("lt-before");
+      const lunch = meal("Lunch");
+      const early = await deviate(
+        lunch.id,
+        "lt-before-1",
+        new Date(Date.parse(lunch.windowStartsAt) - 1000).toISOString(),
+      );
+      expect(early.status).toBe(422);
+      expect(
+        ((await early.json()) as { error: { code: string } }).error.code,
+      ).toBe("LOG_TIME_BEFORE_WINDOW");
+
+      const atStart = await deviate(lunch.id, "lt-before-2", lunch.windowStartsAt);
+      expect(atStart.status).toBe(200);
+    });
+
+    it("rejects confirming tomorrow's meal before its window opens", async () => {
+      const { plan, meal, confirm } = await setup("lt-tomorrow");
+      const tomorrowBreakfast = meal("Breakfast", plan.toDate);
+      const response = await confirm(tomorrowBreakfast.id, "lt-tomorrow-1");
+      expect(response.status).toBe(422);
+      expect(
+        ((await response.json()) as { error: { code: string } }).error.code,
+      ).toBe("LOG_TIME_BEFORE_WINDOW");
+      const stored = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, tomorrowBreakfast.id));
+      expect(stored).toEqual([]);
+    });
+
+    it("accepts a delayed offline delivery judged on when the log was made", async () => {
+      const { meal, deviate } = await setup("lt-offline");
+      const dinner = meal("Dinner");
+      // Made partway through today's window; the server receives it now, well
+      // after it was made.
+      const start = Date.parse(dinner.windowStartsAt);
+      const madeAt = new Date(start + (Date.now() - start) / 2).toISOString();
+      const delivered = await deviate(dinner.id, "lt-offline-1", madeAt);
+      expect(delivered.status).toBe(200);
+      const [row] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, dinner.id));
+      expect(row?.clientLoggedAt).toBe(madeAt);
+    });
   });
 
   it("requires photo intent when configured; allows confirm without photo when not required", async () => {

@@ -12,6 +12,7 @@ import {
   workoutAdherenceCandidate,
   type ExceptionCandidate,
 } from "@fitbud/core";
+import { resolveSetLoad } from "../../../domain/load-parser.js";
 import { addDaysFromLocalDate, demoUuid, localDayStartIso } from "../ids.js";
 import type { DemoLibraryIndex } from "../personas.js";
 import { DEMO_DEVIATION_FOOD_SLUGS } from "../personas.js";
@@ -445,6 +446,9 @@ export function simulateActivity(ctx: ActivityContext, opts: {
                   const kg = baseKg == null ? null : Math.min(baseKg * 1.15, baseKg * (0.9 + 0.0125 * Math.floor(sessions / 3) + 0.05));
                   const lastSet = setIndex === exercise.setTargets.length - 1;
                   const reps = target.reps == null ? null : Math.max(1, target.reps + workoutRng.int(lastSet ? -2 : -1, 2));
+                  const actualLoadLabel = kg == null ? target.loadLabel : kgLabel(kg);
+                  // Numeric load columns from the labels, same parser as migration 0035 (Z6-1, D-W6-14).
+                  const load = resolveSetLoad({ prescribedLoadLabel: target.loadLabel, actualLoadLabel });
                   rows.add("set_executions", {
                     id: demoUuid("set-execution", exExecId, target.id),
                     exercise_execution_id: exExecId,
@@ -454,7 +458,10 @@ export function simulateActivity(ctx: ActivityContext, opts: {
                     prescribed_reps: target.reps,
                     prescribed_load_label: target.loadLabel,
                     actual_reps: reps,
-                    actual_load_label: kg == null ? target.loadLabel : kgLabel(kg),
+                    actual_load_label: actualLoadLabel,
+                    prescribed_load_kg: load.prescribedLoadKg,
+                    actual_load_kg: load.actualLoadKg,
+                    load_kind: load.loadKind,
                     // Inside the session: a set never finishes after the workout did (QS5).
                     completed_at: iso(Math.min(startedMs + (exIndex * 4 + setIndex + 1) * 3 * 60_000, completedMs)),
                     created_at: iso(startedMs),
