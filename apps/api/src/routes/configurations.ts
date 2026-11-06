@@ -1,7 +1,7 @@
 import {
   operation,
 } from "../openapi/document";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   activateConfigurationRequestSchema,
@@ -13,10 +13,10 @@ import {
 import {
   canActivateConfiguration,
   canCreateConfigurationVersion,
+  canDiscardConfiguration,
   canEditCoachingConfiguration,
-  canMarkConfigurationConfigured,
   canSaveConfigurationDraft,
-  hasGoalShort,
+  missingConfigurationSections,
   resolveConfigurationDraftExpectations,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
@@ -28,6 +28,10 @@ import {
   trackingRequirements,
   workoutExpectations,
 } from "../db/schema";
+import {
+  planActivationSchedule,
+  type ScheduleWrite,
+} from "../domain/assignment-schedule";
 import { onboardingStatusForRelationship } from "../domain/client-status";
 import { mapCoachingConfiguration } from "../domain/mappers";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
@@ -49,6 +53,33 @@ const ACTIVATE_OPERATION = "configuration.activate";
 const NEW_VERSION_OPERATION = "configuration.new_version";
 const COPY_DRAFT_OPERATION = "configuration.copy_draft";
 
+/**
+ * A batch statement that aborts the whole D1 batch unless `condition` holds
+ * when it runs. It writes NULL into the NOT NULL `trainer_user_id` of this
+ * relationship's row (which always exists) only when the condition is false;
+ * otherwise it matches no row and changes nothing. drizzle's D1 batch takes
+ * query builders only, so this is an UPDATE rather than a raw RAISE.
+ */
+function failBatchUnless(
+  db: Db,
+  relationshipId: string,
+  condition: ReturnType<typeof sql>,
+) {
+  return db
+    .update(coachingRelationships)
+    .set({ trainerUserId: sql`null` })
+    .where(
+      and(
+        eq(coachingRelationships.id, relationshipId),
+        sql`not (${condition})`,
+      ),
+    );
+}
+
+function isOpenConfigurationStatus(status: string): boolean {
+  return status === "draft";
+}
+
 export const configurationRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
@@ -59,9 +90,7 @@ type Db = ReturnType<typeof createDb>;
 function pickReadableConfiguration<T extends { status: string; versionNumber: number }>(
   rows: T[],
 ): T | null {
-  const open = rows.find(
-    (row) => row.status === "draft" || row.status === "configured",
-  );
+  const open = rows.find((row) => isOpenConfigurationStatus(row.status));
   if (open) return open;
   const active = rows.find((row) => row.status === "active");
   if (active) return active;
@@ -508,12 +537,197 @@ configurationRoutes.put(
   },
 );
 
+configurationRoutes.delete(
+  "/relationships/:relationshipId/draft",
+  operation({
+    tag: "Configurations",
+    summary: "Discard the open configuration draft (vN+1 or first draft).",
+    description:
+      "Deletes the open draft and its expectation rows in one batch. When an active version remains, it is returned (and GET returns it again); otherwise null. Active and superseded versions cannot be discarded (409 CONFIGURATION_NOT_DRAFT). Optional `expectedVersion` query: the draft's recordVersion the trainer last saw (409 CONFIGURATION_VERSION_CONFLICT when it changed).",
+    roles: ["trainer"],
+    response: coachingConfigurationSchema.nullable(),
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const relationshipId = c.req.param("relationshipId");
+    const db = createDb(c.env.DB);
+    const ownership = await loadRelationshipForTrainer(db, relationshipId, actor);
+    if (ownership.kind === "missing" || ownership.kind === "forbidden") {
+      return fail(
+        c,
+        404,
+        "RELATIONSHIP_NOT_FOUND",
+        "Coaching relationship not found.",
+      );
+    }
+    const writable = await requireWritableRelationship(
+      c,
+      db,
+      ownership.relationship.id,
+    );
+    if (!writable.ok) return writable.response;
+
+    const expectedVersionParam = c.req.query("expectedVersion");
+    let expectedVersion: number | null = null;
+    if (expectedVersionParam !== undefined) {
+      if (!/^\d+$/.test(expectedVersionParam)) {
+        return fail(
+          c,
+          400,
+          "INVALID_REQUEST",
+          "expectedVersion must be a whole number.",
+        );
+      }
+      expectedVersion = Number(expectedVersionParam);
+    }
+
+    const rows = await listConfigurations(db, relationshipId);
+    const open = rows.find((row) => canDiscardConfiguration(row.status));
+    if (!open) {
+      if (rows.length > 0) {
+        return fail(
+          c,
+          409,
+          "CONFIGURATION_NOT_DRAFT",
+          "Only a draft configuration can be discarded.",
+        );
+      }
+      return fail(
+        c,
+        404,
+        "CONFIGURATION_NOT_FOUND",
+        "There is no configuration draft to discard.",
+      );
+    }
+    if (expectedVersion !== null && open.recordVersion !== expectedVersion) {
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_VERSION_CONFLICT",
+        "Configuration was changed after this version was loaded.",
+        { expectedVersion, currentVersion: open.recordVersion },
+      );
+    }
+
+    // One batch: the draft and its expectation rows go together or not at all.
+    // Each child delete is scoped to a draft row so a stale id can never
+    // remove an active or superseded version's rows.
+    const draftScope = sql`exists (
+      select 1 from coaching_configurations
+      where id = ${open.id} and status = 'draft'
+    )`;
+    try {
+      await db.batch([
+        // First: fail the batch unless the row is still this draft at the
+        // version read above (a concurrent activate, save or discard).
+        failBatchUnless(
+          db,
+          relationshipId,
+          sql`exists (
+            select 1 from coaching_configurations
+            where id = ${open.id}
+              and status = 'draft'
+              and record_version = ${open.recordVersion}
+          )`,
+        ),
+        db
+          .delete(workoutExpectations)
+          .where(
+            and(
+              eq(workoutExpectations.coachingConfigurationId, open.id),
+              draftScope,
+            ),
+          ),
+        db
+          .delete(nutritionExpectations)
+          .where(
+            and(
+              eq(nutritionExpectations.coachingConfigurationId, open.id),
+              draftScope,
+            ),
+          ),
+        db
+          .delete(checkinSchedules)
+          .where(
+            and(eq(checkinSchedules.coachingConfigurationId, open.id), draftScope),
+          ),
+        db
+          .delete(trackingRequirements)
+          .where(
+            and(
+              eq(trackingRequirements.coachingConfigurationId, open.id),
+              draftScope,
+            ),
+          ),
+        db
+          .delete(coachingConfigurations)
+          .where(
+            and(
+              eq(coachingConfigurations.id, open.id),
+              eq(coachingConfigurations.status, "draft"),
+            ),
+          ),
+      ]);
+    } catch (error) {
+      const [current] = await db
+        .select()
+        .from(coachingConfigurations)
+        .where(eq(coachingConfigurations.id, open.id));
+      if (
+        current?.status === "draft" &&
+        current.recordVersion === open.recordVersion
+      ) {
+        // Nothing raced us: a real failure. The batch rolled back; surface it.
+        throw error;
+      }
+      if (!current) {
+        return fail(
+          c,
+          404,
+          "CONFIGURATION_NOT_FOUND",
+          "There is no configuration draft to discard.",
+        );
+      }
+      if (current.status !== "draft") {
+        return fail(
+          c,
+          409,
+          "CONFIGURATION_NOT_DRAFT",
+          "Only a draft configuration can be discarded.",
+        );
+      }
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_VERSION_CONFLICT",
+        "Configuration was changed after this version was loaded.",
+        {
+          expectedVersion: open.recordVersion,
+          currentVersion: current.recordVersion,
+        },
+      );
+    }
+
+    const remaining = await loadConfigurationBundle(db, relationshipId);
+    return ok(c, remaining ? parseMappedConfiguration(remaining) : null);
+  },
+);
+
 configurationRoutes.post(
   "/relationships/:relationshipId/configure",
   operation({
     tag: "Configurations",
-    summary: "Configurations operation for POST /configurations/relationships/:relationshipId/configure.",
-    description: "Configurations operation for POST /configurations/relationships/:relationshipId/configure.",
+    summary:
+      "Deprecated no-op. Returns the current draft; use Activate instead.",
+    description:
+      "Deprecated. The configured status was removed (D12). This endpoint returns the current open draft unchanged so older clients keep working. Call POST …/activate to go live.",
     roles: ["trainer"],
     idempotency: true,
     body: configureConfigurationRequestSchema,
@@ -580,15 +794,7 @@ configurationRoutes.post(
     }
 
     const ownership = await loadRelationshipForTrainer(db, relationshipId, actor);
-    if (ownership.kind === "missing") {
-      return fail(
-        c,
-        404,
-        "RELATIONSHIP_NOT_FOUND",
-        "Coaching relationship not found.",
-      );
-    }
-    if (ownership.kind === "forbidden") {
+    if (ownership.kind === "missing" || ownership.kind === "forbidden") {
       return fail(
         c,
         404,
@@ -618,46 +824,12 @@ configurationRoutes.post(
     }
 
     const bundle = await loadConfigurationBundle(db, relationshipId);
-    if (!bundle) {
+    if (!bundle || !isOpenConfigurationStatus(bundle.configuration.status)) {
       return fail(
         c,
         404,
         "CONFIGURATION_NOT_FOUND",
-        "Save a configuration draft before marking it configured.",
-      );
-    }
-
-    if (bundle.configuration.status === "configured") {
-      const data = parseMappedConfiguration(bundle);
-      const responseBody = { data };
-      await saveIdempotencyRecord(db, {
-        actorUserId: actor.userId,
-        operation: CONFIGURE_OPERATION,
-        idempotencyKey,
-        requestFingerprint: fingerprint,
-        responseStatus: 200,
-        responseBody,
-        expiresAt: addDaysIso(7),
-      });
-      return ok(c, data);
-    }
-
-    if (bundle.configuration.status === "active") {
-      return fail(
-        c,
-        409,
-        "CONFIGURATION_ALREADY_ACTIVE",
-        "Active configuration cannot be marked configured again.",
-      );
-    }
-
-    if (!canMarkConfigurationConfigured(bundle.configuration.status)) {
-      return fail(
-        c,
-        409,
-        "UNSUPPORTED_TRANSITION",
-        "Configuration cannot be marked configured in the current state.",
-        { status: bundle.configuration.status },
+        "Save a configuration draft before calling configure.",
       );
     }
 
@@ -674,33 +846,7 @@ configurationRoutes.post(
       );
     }
 
-    if (!hasGoalShort(bundle.configuration.goalShort)) {
-      return fail(
-        c,
-        422,
-        "CONFIGURATION_INCOMPLETE",
-        "A short goal is required before configuration can be completed.",
-      );
-    }
-
-    const timestamp = nowIso();
-    await db
-      .update(coachingConfigurations)
-      .set({
-        status: "configured",
-        configuredAt: timestamp,
-        recordVersion: bundle.configuration.recordVersion + 1,
-        updatedAt: timestamp,
-      })
-      .where(
-        and(
-          eq(coachingConfigurations.id, bundle.configuration.id),
-          eq(coachingConfigurations.recordVersion, parsed.data.expectedVersion),
-        ),
-      );
-
-    const updated = await loadConfigurationBundle(db, relationshipId);
-    const data = parseMappedConfiguration(updated!);
+    const data = parseMappedConfiguration(bundle);
     const responseBody = { data };
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
@@ -719,8 +865,10 @@ configurationRoutes.post(
   "/relationships/:relationshipId/activate",
   operation({
     tag: "Configurations",
-    summary: "Configurations operation for POST /configurations/relationships/:relationshipId/activate.",
-    description: "Configurations operation for POST /configurations/relationships/:relationshipId/activate.",
+    summary:
+      "Activate a configuration draft (first setup or Save as vN+1).",
+    description:
+      "Activates a draft in one step (D12: no configured status). Missing required sections (D17: goal, expectations, check-ins, tracking) return 409 CONFIGURATION_INCOMPLETE with details.missingSections. Superseding the previous active version, activating the draft and writing the assignment schedule run in one D1 batch, so a failure leaves the draft and the previous version unchanged. First activation starts the schedule today; Save as vN+1 goes live now and its new targets apply from tomorrow in the trainee's timezone (D12b option a).",
     roles: ["trainer"],
     idempotency: true,
     body: activateConfigurationRequestSchema,
@@ -787,15 +935,7 @@ configurationRoutes.post(
     }
 
     const ownership = await loadRelationshipForTrainer(db, relationshipId, actor);
-    if (ownership.kind === "missing") {
-      return fail(
-        c,
-        404,
-        "RELATIONSHIP_NOT_FOUND",
-        "Coaching relationship not found.",
-      );
-    }
-    if (ownership.kind === "forbidden") {
+    if (ownership.kind === "missing" || ownership.kind === "forbidden") {
       return fail(
         c,
         404,
@@ -830,7 +970,7 @@ configurationRoutes.post(
         c,
         404,
         "CONFIGURATION_NOT_FOUND",
-        "Configuration must be drafted and configured before activation.",
+        "Save a configuration draft before activation.",
       );
     }
 
@@ -854,7 +994,7 @@ configurationRoutes.post(
         c,
         409,
         "UNSUPPORTED_TRANSITION",
-        "Configuration must be marked configured before activation.",
+        "Only a draft configuration can be activated.",
         { status: bundle.configuration.status },
       );
     }
@@ -872,12 +1012,21 @@ configurationRoutes.post(
       );
     }
 
-    if (!hasGoalShort(bundle.configuration.goalShort)) {
+    const mapped = parseMappedConfiguration(bundle);
+    const missingSections = missingConfigurationSections({
+      goalShort: mapped.goalShort,
+      workout: mapped.workout,
+      nutrition: mapped.nutrition,
+      checkin: mapped.checkin,
+      tracking: mapped.tracking,
+    });
+    if (missingSections.length > 0) {
       return fail(
         c,
-        422,
+        409,
         "CONFIGURATION_INCOMPLETE",
-        "A short goal is required before activation.",
+        "Complete every required section before activating.",
+        { missingSections },
       );
     }
 
@@ -886,33 +1035,115 @@ configurationRoutes.post(
     const previousActive = rows.find(
       (row) => row.status === "active" && row.id !== bundle.configuration.id,
     );
-    if (previousActive) {
-      await db
-        .update(coachingConfigurations)
-        .set({
-          status: "superseded",
-          updatedAt: timestamp,
-        })
-        .where(eq(coachingConfigurations.id, previousActive.id));
-    }
+    const expectedVersion = parsed.data.expectedVersion;
+    const draftId = bundle.configuration.id;
+    const draftStillAtExpectedVersion = sql`exists (
+      select 1 from coaching_configurations
+      where id = ${draftId}
+        and status = 'draft'
+        and record_version = ${expectedVersion}
+    )`;
 
-    await db
+    const supersedePrevious = previousActive
+      ? [
+          db
+            .update(coachingConfigurations)
+            .set({
+              status: "superseded",
+              updatedAt: timestamp,
+            })
+            .where(
+              and(
+                eq(coachingConfigurations.id, previousActive.id),
+                eq(coachingConfigurations.status, "active"),
+                draftStillAtExpectedVersion,
+              ),
+            ),
+        ]
+      : [];
+
+    const activateUpdate = db
       .update(coachingConfigurations)
       .set({
         status: "active",
         activatedAt: timestamp,
-        recordVersion: bundle.configuration.recordVersion + 1,
+        recordVersion: expectedVersion + 1,
         updatedAt: timestamp,
       })
       .where(
         and(
-          eq(coachingConfigurations.id, bundle.configuration.id),
-          eq(coachingConfigurations.recordVersion, parsed.data.expectedVersion),
+          eq(coachingConfigurations.id, draftId),
+          eq(coachingConfigurations.recordVersion, expectedVersion),
+          eq(coachingConfigurations.status, "draft"),
         ),
       );
 
-    const updated = await loadConfigurationBundle(db, relationshipId);
-    const data = parseMappedConfiguration(updated!);
+    // Fails the whole batch unless the draft is now active at the new
+    // version (a concurrent save, discard or activate makes the activation
+    // above match nothing). The schedule below is then never written for a
+    // configuration that did not go live.
+    const requireActivated = failBatchUnless(
+      db,
+      relationshipId,
+      sql`exists (
+        select 1 from coaching_configurations
+        where id = ${draftId}
+          and status = 'active'
+          and record_version = ${expectedVersion + 1}
+      )`,
+    );
+
+    const schedule = await planActivationSchedule(db, {
+      relationshipId,
+      traineeUserId: ownership.relationship.traineeUserId,
+      now: timestamp,
+      replacesActiveVersion: Boolean(previousActive),
+      expectations: {
+        completionWindowHours: mapped.workout.completionWindowHours,
+        nutrition: {
+          confirmationWindowHours: mapped.nutrition.confirmationWindowHours,
+          photoRequirement: mapped.nutrition.photoRequirement,
+        },
+      },
+    });
+
+    // One D1 batch = one transaction: supersede vN, activate the draft and
+    // write the schedule commit together or not at all.
+    const writes: [ScheduleWrite, ...ScheduleWrite[]] = [
+      ...supersedePrevious,
+      activateUpdate,
+      requireActivated,
+      ...schedule.statements,
+    ] as [ScheduleWrite, ...ScheduleWrite[]];
+    try {
+      await db.batch(writes);
+    } catch (error) {
+      const current = await loadConfigurationBundle(db, relationshipId, draftId);
+      const draftUnchanged =
+        current?.configuration.status === "draft" &&
+        current.configuration.recordVersion === expectedVersion;
+      if (draftUnchanged) {
+        // Nothing raced us: a real failure. The batch rolled back; surface it.
+        throw error;
+      }
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_VERSION_CONFLICT",
+        "Configuration was changed after this version was loaded.",
+        {
+          expectedVersion,
+          currentVersion: current?.configuration.recordVersion ?? null,
+        },
+      );
+    }
+
+    const updated = await loadConfigurationBundle(db, relationshipId, draftId);
+    if (!updated) {
+      throw new Error("Activated configuration could not be reloaded.");
+    }
+
+    const data = parseMappedConfiguration(updated);
     const responseBody = { data };
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
@@ -1030,9 +1261,7 @@ configurationRoutes.post(
 
     const rows = await listConfigurations(db, relationshipId);
     const active = rows.find((row) => row.status === "active") ?? null;
-    const open = rows.find(
-      (row) => row.status === "draft" || row.status === "configured",
-    );
+    const open = rows.find((row) => isOpenConfigurationStatus(row.status));
     if (
       !canCreateConfigurationVersion({
         hasActive: Boolean(active),
@@ -1154,9 +1383,7 @@ function pickCopySource<T extends { status: string; versionNumber: number }>(
 ): T | null {
   const active = rows.find((row) => row.status === "active");
   if (active) return active;
-  const open = rows.find(
-    (row) => row.status === "draft" || row.status === "configured",
-  );
+  const open = rows.find((row) => isOpenConfigurationStatus(row.status));
   if (open) return open;
   return (
     [...rows].sort((left, right) => right.versionNumber - left.versionNumber)[0] ??
@@ -1283,9 +1510,7 @@ configurationRoutes.post(
     }
 
     const targetRows = await listConfigurations(db, relationshipId);
-    const open = targetRows.find(
-      (row) => row.status === "draft" || row.status === "configured",
-    );
+    const open = targetRows.find((row) => isOpenConfigurationStatus(row.status));
     if (open) {
       return fail(
         c,

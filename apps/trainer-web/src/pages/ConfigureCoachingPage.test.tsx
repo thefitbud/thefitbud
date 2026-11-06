@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 
 const REL_ID = "55555555-5555-4555-8555-555555555555";
@@ -56,17 +56,17 @@ vi.mock("../lib/config", () => ({
 
 import { ConfigureCoachingPage } from "./ConfigureCoachingPage";
 
-type ConfigStatus = "draft" | "configured" | "active";
+type ConfigStatus = "draft" | "active";
 type Onboarding = "ended" | "active" | "coaching_ready";
 
-function configuration(status: ConfigStatus) {
+function configuration(status: ConfigStatus, goalShort: string | null = "Postpartum strength return") {
   return {
     id: "66666666-6666-4666-8666-666666666666",
     coachingRelationshipId: REL_ID,
     status,
     versionNumber: 1,
     recordVersion: 3,
-    goalShort: "Postpartum strength return",
+    goalShort,
     goalDescription: "Rebuild core and lower-body strength.",
     notes: null,
     workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
@@ -88,8 +88,12 @@ function configuration(status: ConfigStatus) {
   };
 }
 
-function renderPage(onboardingStatus: Onboarding, status: ConfigStatus) {
-  api.getCoachingConfiguration.mockResolvedValue(configuration(status));
+function renderPage(
+  onboardingStatus: Onboarding,
+  status: ConfigStatus,
+  config = configuration(status),
+) {
+  api.getCoachingConfiguration.mockResolvedValue(config);
   const context = {
     workspace: {
       header: {
@@ -257,6 +261,74 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
     expect(container.textContent).not.toContain("This version is active");
     expect(container.textContent).not.toContain("has ended");
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Mark configured" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Activate" })).toBeTruthy();
+  });
+});
+
+describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
+  it("a draft with a short goal offers Save draft and Activate, never Mark configured", async () => {
+    renderPage("active", "draft");
+    await screen.findByText("Configure coaching");
+    expect(screen.queryByRole("button", { name: "Mark configured" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
+    const activate = screen.getByRole("button", { name: "Activate" });
+    expect((activate as HTMLButtonElement).disabled).toBe(false);
+    expect(activate.className).toContain("primary");
+  });
+
+  it("a draft without a short goal offers Save draft only", async () => {
+    renderPage("active", "draft", configuration("draft", null));
+    await screen.findByText("Configure coaching");
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Activate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mark configured" })).toBeNull();
+  });
+
+  it("Activate saves the form then activates in one step, without the configure call", async () => {
+    const draft = configuration("draft");
+    const saved = { ...draft, recordVersion: 4 };
+    api.saveConfigurationDraft.mockResolvedValue(saved);
+    api.activateConfiguration.mockResolvedValue({
+      ...saved,
+      status: "active",
+      recordVersion: 5,
+      activatedAt: "2026-07-07T04:00:00.000Z",
+    });
+    renderPage("active", "draft", draft);
+    await screen.findByText("Configure coaching");
+    fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    await waitFor(() => expect(api.activateConfiguration).toHaveBeenCalledTimes(1));
+    expect(api.saveConfigurationDraft).toHaveBeenCalledTimes(1);
+    expect(api.saveConfigurationDraft.mock.calls[0]![1]).toMatchObject({
+      expectedVersion: 3,
+    });
+    expect(api.activateConfiguration.mock.calls[0]![0]).toBe(REL_ID);
+    expect(api.activateConfiguration.mock.calls[0]![1]).toEqual({ expectedVersion: 4 });
+    expect(api.saveConfigurationDraft.mock.invocationCallOrder[0]!).toBeLessThan(
+      api.activateConfiguration.mock.invocationCallOrder[0]!,
+    );
+    expect(api.configureConfiguration).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "Configuration is active. Publish a plan so the trainee can start.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("a new version reads as the one-step flow", async () => {
+    api.createConfigurationVersion.mockResolvedValue({
+      ...configuration("draft"),
+      versionNumber: 2,
+      recordVersion: 0,
+    });
+    renderPage("active", "active");
+    await screen.findByText("Configure coaching");
+    fireEvent.click(screen.getByRole("button", { name: "Create new version" }));
+    expect(
+      await screen.findByText(
+        "New draft version created. Activate it to go live. New targets start tomorrow.",
+      ),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Edit and activate when ready");
   });
 });

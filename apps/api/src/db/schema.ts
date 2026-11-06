@@ -300,7 +300,7 @@ export const coachingConfigurations = sqliteTable(
       .notNull()
       .references(() => coachingRelationships.id),
     status: text("status", {
-      enum: ["draft", "configured", "active", "superseded"],
+      enum: ["draft", "active", "superseded"],
     })
       .notNull()
       .default("draft"),
@@ -324,7 +324,7 @@ export const coachingConfigurations = sqliteTable(
       .where(sql`${table.status} = 'active'`),
     uniqueIndex("coaching_configurations_one_open_uidx")
       .on(table.coachingRelationshipId)
-      .where(sql`${table.status} in ('draft', 'configured')`),
+      .where(sql`${table.status} = 'draft'`),
     index("coaching_configurations_status_idx").on(table.status),
   ],
 );

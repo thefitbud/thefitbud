@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { and, asc, eq } from "drizzle-orm";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
@@ -7,10 +8,22 @@ import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 
 
 
-import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+import {
+  createMemoryDb as createSharedMemoryDb,
+  type SqlJsCompatDatabase,
+} from "../test-support/memory-db.js";
+import * as schema from "../db/schema.js";
+import { coachingConfigurationStatusSchema } from "@fitbud/contracts";
+import { allLabelEntries } from "@fitbud/core";
+
+/** Raw SQLite of the current test DB, for injecting failures with triggers. */
+let currentSqlite: SqlJsCompatDatabase | null = null;
+let currentDb: Db | null = null;
 
 async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
   const handle = await createSharedMemoryDb();
+  currentSqlite = handle.sqlite;
+  currentDb = handle.db;
   return { db: handle.db, close: handle.close };
 }
 
@@ -150,6 +163,169 @@ async function reachCoachingReady(suffix: string) {
   };
 }
 
+type TestDb = Db;
+
+function trainerJson(cookie: string, idempotencyKey?: string) {
+  return {
+    Cookie: cookie,
+    "Content-Type": "application/json",
+    ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+  };
+}
+
+async function saveDraft(
+  cookie: string,
+  relationshipId: string,
+  body: Record<string, unknown>,
+) {
+  const response = await app.request(
+    `/configurations/relationships/${relationshipId}/draft`,
+    { method: "PUT", headers: trainerJson(cookie), body: JSON.stringify(body) },
+    testEnv(),
+  );
+  expect([200, 201]).toContain(response.status);
+  return ((await response.json()) as {
+    data: { id: string; recordVersion: number; versionNumber: number };
+  }).data;
+}
+
+async function activateConfiguration(
+  cookie: string,
+  relationshipId: string,
+  expectedVersion: number,
+  idempotencyKey: string,
+) {
+  return app.request(
+    `/configurations/relationships/${relationshipId}/activate`,
+    {
+      method: "POST",
+      headers: trainerJson(cookie, idempotencyKey),
+      body: JSON.stringify({ expectedVersion }),
+    },
+    testEnv(),
+  );
+}
+
+async function openNextVersion(
+  cookie: string,
+  relationshipId: string,
+  expectedVersion: number,
+  idempotencyKey: string,
+) {
+  const response = await app.request(
+    `/configurations/relationships/${relationshipId}/versions`,
+    {
+      method: "POST",
+      headers: trainerJson(cookie, idempotencyKey),
+      body: JSON.stringify({ expectedVersion }),
+    },
+    testEnv(),
+  );
+  expect(response.status).toBe(201);
+  return ((await response.json()) as {
+    data: { id: string; recordVersion: number; versionNumber: number };
+  }).data;
+}
+
+/** A plan with a workout on every weekday and one daily meal, published now. */
+async function publishDailyPlan(cookie: string, relationshipId: string, key: string) {
+  const plan = await app.request(
+    `/plans/relationships/${relationshipId}`,
+    {
+      method: "POST",
+      headers: trainerJson(cookie, `plan-${key}`),
+      body: JSON.stringify({
+        title: "Daily foundation",
+        content: {
+          workoutDays: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            id: `3333333${weekday}-3333-4333-8333-33333333333${weekday}`,
+            order: weekday + 1,
+            name: `Day ${weekday + 1}`,
+            weekday,
+            exercises: [],
+          })),
+          mealPrescriptions: [
+            {
+              id: "44444444-4444-4444-8444-444444444444",
+              order: 1,
+              name: "Breakfast",
+              mealType: "breakfast",
+              applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+              localTime: "08:00",
+              scheduleHint: "Morning",
+              instructions: null,
+              photoRequired: false,
+            },
+          ],
+        },
+      }),
+    },
+    testEnv(),
+  );
+  expect(plan.status).toBe(201);
+  const planBody = (await plan.json()) as {
+    data: { plan: { id: string }; version: { id: string; recordVersion: number } };
+  };
+  const published = await app.request(
+    `/plans/${planBody.data.plan.id}/versions/${planBody.data.version.id}/publish`,
+    {
+      method: "POST",
+      headers: trainerJson(cookie, `publish-${key}`),
+      body: JSON.stringify({
+        expectedRecordVersion: planBody.data.version.recordVersion,
+        mode: "immediate",
+      }),
+    },
+    testEnv(),
+  );
+  expect(published.status).toBe(200);
+}
+
+async function configurationRows(db: TestDb, relationshipId: string) {
+  return db
+    .select()
+    .from(schema.coachingConfigurations)
+    .where(eq(schema.coachingConfigurations.coachingRelationshipId, relationshipId))
+    .orderBy(asc(schema.coachingConfigurations.versionNumber));
+}
+
+async function workoutRows(db: TestDb, relationshipId: string) {
+  return db
+    .select()
+    .from(schema.workoutAssignments)
+    .where(
+      and(
+        eq(schema.workoutAssignments.coachingRelationshipId, relationshipId),
+        eq(schema.workoutAssignments.scheduleStatus, "scheduled"),
+      ),
+    )
+    .orderBy(asc(schema.workoutAssignments.localDate));
+}
+
+async function mealRows(db: TestDb, relationshipId: string) {
+  return db
+    .select()
+    .from(schema.mealAssignments)
+    .where(
+      and(
+        eq(schema.mealAssignments.coachingRelationshipId, relationshipId),
+        eq(schema.mealAssignments.scheduleStatus, "scheduled"),
+      ),
+    )
+    .orderBy(asc(schema.mealAssignments.localDate));
+}
+
+async function setTraineeTimezone(db: TestDb, relationshipId: string, timezone: string) {
+  const [relationship] = await db
+    .select()
+    .from(schema.coachingRelationships)
+    .where(eq(schema.coachingRelationships.id, relationshipId));
+  await db
+    .update(schema.users)
+    .set({ timezone })
+    .where(eq(schema.users.id, relationship!.traineeUserId));
+}
+
 const draftBody = {
   expectedVersion: 0,
   goalShort: "Build strength",
@@ -191,7 +367,7 @@ describe("coaching configuration", () => {
     expect(response.status).toBe(401);
   });
 
-  it("walks Draft → Configured → Active and rejects edits after activate", async () => {
+  it("walks Draft → Active directly and rejects edits after activate", async () => {
     const { trainerCookie, traineeToken, relationshipId } =
       await reachCoachingReady("c1");
 
@@ -223,12 +399,14 @@ describe("coaching configuration", () => {
         recordVersion: number;
         versionNumber: number;
         workout: { sessionsPerWeek: number };
+        missingSections: string[];
       };
     };
     expect(draftParsed.data.status).toBe("draft");
     expect(draftParsed.data.recordVersion).toBe(1);
     expect(draftParsed.data.versionNumber).toBe(1);
     expect(draftParsed.data.workout.sessionsPerWeek).toBe(4);
+    expect(draftParsed.data.missingSections).toEqual([]);
 
     const traineeRead = await app.request(
       `/configurations/relationships/${relationshipId}`,
@@ -241,6 +419,10 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(traineeRead.status).toBe(200);
+    const traineeBody = (await traineeRead.json()) as {
+      data: { missingSections: string[] };
+    };
+    expect(traineeBody.data.missingSections).toEqual([]);
 
     const configure = await app.request(
       `/configurations/relationships/${relationshipId}/configure`,
@@ -259,8 +441,9 @@ describe("coaching configuration", () => {
     const configured = (await configure.json()) as {
       data: { status: string; recordVersion: number; configuredAt: string | null };
     };
-    expect(configured.data.status).toBe("configured");
-    expect(configured.data.configuredAt).toBeTruthy();
+    expect(configured.data.status).toBe("draft");
+    expect(configured.data.recordVersion).toBe(1);
+    expect(configured.data.configuredAt).toBeNull();
 
     const activate = await app.request(
       `/configurations/relationships/${relationshipId}/activate`,
@@ -277,9 +460,10 @@ describe("coaching configuration", () => {
     );
     expect(activate.status).toBe(200);
     const activated = (await activate.json()) as {
-      data: { status: string; recordVersion: number };
+      data: { status: string; recordVersion: number; missingSections: string[] };
     };
     expect(activated.data.status).toBe("active");
+    expect(activated.data.missingSections).toEqual([]);
 
     const locked = await app.request(
       `/configurations/relationships/${relationshipId}/draft`,
@@ -302,7 +486,82 @@ describe("coaching configuration", () => {
     expect(lockedBody.error.code).toBe("CONFIGURATION_NOT_EDITABLE");
   });
 
-  it("rejects configure and activate until a short goal is saved", async () => {
+  it("never accepts or returns the retired configured status (D12)", async () => {
+    expect(coachingConfigurationStatusSchema.options).toEqual([
+      "draft",
+      "active",
+      "superseded",
+    ]);
+    expect(coachingConfigurationStatusSchema.safeParse("configured").success).toBe(false);
+    expect(
+      allLabelEntries()
+        .filter((entry) => entry.namespace === "coaching_configuration_status")
+        .map((entry) => entry.value),
+    ).toEqual(["draft", "active", "superseded"]);
+
+    const { trainerCookie, traineeToken, relationshipId } =
+      await reachCoachingReady("no-configured");
+
+    const saved = await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: { Cookie: trainerCookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...draftBody, status: "configured" }),
+      },
+      testEnv(),
+    );
+    expect(saved.status).toBe(201);
+    const savedText = await saved.text();
+    expect(savedText).not.toContain('"configured"');
+    const savedBody = JSON.parse(savedText) as {
+      data: { status: string; recordVersion: number };
+    };
+    expect(savedBody.data.status).toBe("draft");
+
+    const configure = await app.request(
+      `/configurations/relationships/${relationshipId}/configure`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "configure-no-configured",
+        },
+        body: JSON.stringify({ expectedVersion: savedBody.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(configure.status).toBe(200);
+    expect(await configure.text()).not.toContain('"configured"');
+
+    const reads: Array<{ headers: Record<string, string> }> = [
+      { headers: { Cookie: trainerCookie } },
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+    ];
+    for (const init of reads) {
+      const read = await app.request(
+        `/configurations/relationships/${relationshipId}`,
+        init,
+        testEnv(),
+      );
+      expect(read.status).toBe(200);
+      const text = await read.text();
+      expect(text).not.toContain('"configured"');
+      const body = JSON.parse(text) as {
+        data: { status: string; configuredAt: string | null };
+      };
+      expect(body.data.status).toBe("draft");
+      expect(body.data.configuredAt).toBeNull();
+    }
+  });
+
+  it("returns missingSections on GET and rejects activate until a short goal is saved", async () => {
     const { trainerCookie, relationshipId } = await reachCoachingReady("goal");
     const saved = await app.request(
       `/configurations/relationships/${relationshipId}/draft`,
@@ -321,7 +580,22 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(saved.status).toBe(201);
-    const draft = (await saved.json()) as { data: { recordVersion: number } };
+    const draft = (await saved.json()) as {
+      data: { recordVersion: number; missingSections: string[] };
+    };
+    expect(draft.data.missingSections).toEqual(["goal"]);
+
+    const get = await app.request(
+      `/configurations/relationships/${relationshipId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(get.status).toBe(200);
+    const getBody = (await get.json()) as {
+      data: { missingSections: string[] };
+    };
+    expect(getBody.data.missingSections).toEqual(["goal"]);
+
     const configure = await app.request(
       `/configurations/relationships/${relationshipId}/configure`,
       {
@@ -335,9 +609,33 @@ describe("coaching configuration", () => {
       },
       testEnv(),
     );
-    expect(configure.status).toBe(422);
-    const configureBody = (await configure.json()) as { error: { code: string } };
-    expect(configureBody.error.code).toBe("CONFIGURATION_INCOMPLETE");
+    expect(configure.status).toBe(200);
+    const configureBody = (await configure.json()) as {
+      data: { status: string; recordVersion: number; missingSections: string[] };
+    };
+    expect(configureBody.data.status).toBe("draft");
+    expect(configureBody.data.recordVersion).toBe(draft.data.recordVersion);
+    expect(configureBody.data.missingSections).toEqual(["goal"]);
+
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-missing-goal",
+        },
+        body: JSON.stringify({ expectedVersion: draft.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(409);
+    const activateBody = (await activate.json()) as {
+      error: { code: string; details: { missingSections: string[] } };
+    };
+    expect(activateBody.error.code).toBe("CONFIGURATION_INCOMPLETE");
+    expect(activateBody.error.details.missingSections).toEqual(["goal"]);
   });
 
   it("isolates configuration across trainers", async () => {
@@ -637,5 +935,872 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(presets.status).toBe(404);
+  });
+
+  it("rolls back activate on version conflict and keeps the previous active row", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("conflict");
+    const draft = await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(draftBody),
+      },
+      testEnv(),
+    );
+    expect(draft.status).toBe(201);
+    const first = (await draft.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-conflict-v1",
+        },
+        body: JSON.stringify({ expectedVersion: first.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(200);
+    const active = (await activate.json()) as {
+      data: { id: string; recordVersion: number; status: string };
+    };
+    expect(active.data.status).toBe("active");
+
+    const opened = await app.request(
+      `/configurations/relationships/${relationshipId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "versions-conflict-1",
+        },
+        body: JSON.stringify({ expectedVersion: active.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(opened.status).toBe(201);
+    const next = (await opened.json()) as {
+      data: { id: string; recordVersion: number; versionNumber: number };
+    };
+    expect(next.data.versionNumber).toBe(2);
+
+    const stale = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-stale-version",
+        },
+        body: JSON.stringify({ expectedVersion: 0 }),
+      },
+      testEnv(),
+    );
+    expect(stale.status).toBe(409);
+    const staleBody = (await stale.json()) as { error: { code: string } };
+    expect(staleBody.error.code).toBe("CONFIGURATION_VERSION_CONFLICT");
+
+    const after = await app.request(
+      `/configurations/relationships/${relationshipId}`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const afterBody = (await after.json()) as {
+      data: { id: string; status: string; versionNumber: number };
+    };
+    expect(afterBody.data.status).toBe("draft");
+    expect(afterBody.data.id).toBe(next.data.id);
+    expect(afterBody.data.versionNumber).toBe(2);
+  });
+
+  it("discards an open vN+1 draft and returns the active configuration", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("discard");
+    await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(draftBody),
+      },
+      testEnv(),
+    );
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-for-discard",
+        },
+        body: JSON.stringify({ expectedVersion: 1 }),
+      },
+      testEnv(),
+    );
+    const active = (await activate.json()) as {
+      data: { id: string; recordVersion: number };
+    };
+    const opened = await app.request(
+      `/configurations/relationships/${relationshipId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "versions-for-discard",
+        },
+        body: JSON.stringify({ expectedVersion: active.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(opened.status).toBe(201);
+    const draft = (await opened.json()) as { data: { id: string } };
+    expect(draft.data.id).not.toBe(active.data.id);
+
+    const discarded = await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "DELETE",
+        headers: { Cookie: trainerCookie },
+      },
+      testEnv(),
+    );
+    expect(discarded.status).toBe(200);
+    const discardedBody = (await discarded.json()) as {
+      data: { id: string; status: string; versionNumber: number };
+    };
+    expect(discardedBody.data.id).toBe(active.data.id);
+    expect(discardedBody.data.status).toBe("active");
+    expect(discardedBody.data.versionNumber).toBe(1);
+  });
+
+  it("materialises assignments immediately after activate when a plan is published", async () => {
+    const { trainerCookie, relationshipId } = await reachCoachingReady("schedule");
+    await app.request(
+      `/configurations/relationships/${relationshipId}/draft`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(draftBody),
+      },
+      testEnv(),
+    );
+
+    const plan = await app.request(
+      `/plans/relationships/${relationshipId}`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "plan-before-activate",
+        },
+        body: JSON.stringify({
+          title: "Foundation",
+          content: {
+            workoutDays: [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                order: 1,
+                name: "Day A",
+                weekday: 1,
+                exercises: [],
+              },
+            ],
+            mealPrescriptions: [
+              {
+                id: "22222222-2222-4222-8222-222222222222",
+                order: 1,
+                name: "Breakfast",
+                mealType: "breakfast",
+                applicableWeekdays: [0, 1, 2, 3, 4, 5, 6],
+                localTime: "08:00",
+                scheduleHint: "Morning",
+                instructions: null,
+                photoRequired: false,
+              },
+            ],
+          },
+        }),
+      },
+      testEnv(),
+    );
+    expect(plan.status).toBe(201);
+    const planBody = (await plan.json()) as {
+      data: {
+        plan: { id: string };
+        version: { id: string; recordVersion: number };
+      };
+    };
+    const published = await app.request(
+      `/plans/${planBody.data.plan.id}/versions/${planBody.data.version.id}/publish`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "pub-before-activate",
+        },
+        body: JSON.stringify({
+          expectedRecordVersion: planBody.data.version.recordVersion,
+          mode: "immediate",
+        }),
+      },
+      testEnv(),
+    );
+    expect(published.status).toBe(200);
+
+    const before = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=2020-01-01&toDate=2099-01-01`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    const beforeBody = (await before.json()) as { data: { items: unknown[] } };
+    expect(beforeBody.data.items).toHaveLength(0);
+
+    const activate = await app.request(
+      `/configurations/relationships/${relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "activate-with-plan",
+        },
+        body: JSON.stringify({ expectedVersion: 1 }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(200);
+
+    const workouts = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=2020-01-01&toDate=2099-01-01`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(workouts.status).toBe(200);
+    const workoutBody = (await workouts.json()) as { data: { items: unknown[] } };
+    expect(workoutBody.data.items.length).toBeGreaterThan(0);
+
+    const meals = await app.request(
+      `/meals/relationships/${relationshipId}/assignments?fromDate=2020-01-01&toDate=2099-01-01`,
+      { headers: { Cookie: trainerCookie } },
+      testEnv(),
+    );
+    expect(meals.status).toBe(200);
+    const mealBody = (await meals.json()) as { data: { items: unknown[] } };
+    expect(mealBody.data.items.length).toBeGreaterThan(0);
+  });
+
+  it("activates a draft and writes its schedule in one batch: an injected failure leaves the draft unchanged", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("atomic-first");
+    const draft = await saveDraft(trainerCookie, relationshipId, draftBody);
+    await publishDailyPlan(trainerCookie, relationshipId, "atomic-first");
+    expect(await workoutRows(db, relationshipId)).toHaveLength(0);
+    const configsBefore = await configurationRows(db, relationshipId);
+
+    // Meal inserts are the last statements of the batch, after the status
+    // change and the workout inserts: all of them must roll back.
+    currentSqlite!.run(
+      "CREATE TRIGGER z52_fail_meal_insert BEFORE INSERT ON meal_assignments BEGIN SELECT RAISE(ABORT, 'z52 injected failure'); END",
+    );
+    const failed = await activateConfiguration(
+      trainerCookie,
+      relationshipId,
+      draft.recordVersion,
+      "activate-atomic-first",
+    );
+    currentSqlite!.run("DROP TRIGGER z52_fail_meal_insert");
+    expect(failed.status).toBe(500);
+    expect(await configurationRows(db, relationshipId)).toEqual(configsBefore);
+    expect(configsBefore.map((row) => row.status)).toEqual(["draft"]);
+    expect(await workoutRows(db, relationshipId)).toHaveLength(0);
+    expect(await mealRows(db, relationshipId)).toHaveLength(0);
+
+    // Nothing was recorded for the failed attempt: the same retry succeeds.
+    const retried = await activateConfiguration(
+      trainerCookie,
+      relationshipId,
+      draft.recordVersion,
+      "activate-atomic-first",
+    );
+    expect(retried.status).toBe(200);
+    const configsAfter = await configurationRows(db, relationshipId);
+    expect(configsAfter.map((row) => [row.status, row.recordVersion])).toEqual([
+      ["active", draft.recordVersion + 1],
+    ]);
+    // First activation: the schedule starts today (7-day horizon).
+    expect(await workoutRows(db, relationshipId)).toHaveLength(7);
+    expect(await mealRows(db, relationshipId)).toHaveLength(7);
+  });
+
+  it("Save as vN+1 rolls back with the schedule: vN stays active and vN+1 stays a draft", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("atomic-next");
+    await publishDailyPlan(trainerCookie, relationshipId, "atomic-next");
+    const v1 = await saveDraft(trainerCookie, relationshipId, draftBody);
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v1.recordVersion, "act-next-v1"))
+        .status,
+    ).toBe(200);
+    const active = (await configurationRows(db, relationshipId))[0]!;
+    const opened = await openNextVersion(
+      trainerCookie,
+      relationshipId,
+      active.recordVersion,
+      "versions-atomic-next",
+    );
+    const v2 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      expectedVersion: opened.recordVersion,
+      workout: { sessionsPerWeek: 4, completionWindowHours: 48 },
+    });
+    const configsBefore = await configurationRows(db, relationshipId);
+    const workoutsBefore = await workoutRows(db, relationshipId);
+    expect(workoutsBefore.length).toBeGreaterThan(1);
+
+    // Re-timing tomorrow's rows is the last part of the batch.
+    currentSqlite!.run(
+      "CREATE TRIGGER z52_fail_retime BEFORE UPDATE OF window_ends_at ON workout_assignments BEGIN SELECT RAISE(ABORT, 'z52 injected failure'); END",
+    );
+    const failed = await activateConfiguration(
+      trainerCookie,
+      relationshipId,
+      v2.recordVersion,
+      "act-next-v2",
+    );
+    currentSqlite!.run("DROP TRIGGER z52_fail_retime");
+    expect(failed.status).toBe(500);
+    expect(await configurationRows(db, relationshipId)).toEqual(configsBefore);
+    expect(configsBefore.map((row) => row.status)).toEqual(["active", "draft"]);
+    expect(await workoutRows(db, relationshipId)).toEqual(workoutsBefore);
+
+    const retried = await activateConfiguration(
+      trainerCookie,
+      relationshipId,
+      v2.recordVersion,
+      "act-next-v2",
+    );
+    expect(retried.status).toBe(200);
+    expect((await configurationRows(db, relationshipId)).map((row) => row.status)).toEqual([
+      "superseded",
+      "active",
+    ]);
+  });
+
+  it("returns 409 and writes no schedule when the draft changes between read and batch", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("race");
+    await publishDailyPlan(trainerCookie, relationshipId, "race");
+    const v1 = await saveDraft(trainerCookie, relationshipId, draftBody);
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v1.recordVersion, "race-v1"))
+        .status,
+    ).toBe(200);
+    const active = (await configurationRows(db, relationshipId))[0]!;
+    const opened = await openNextVersion(
+      trainerCookie,
+      relationshipId,
+      active.recordVersion,
+      "race-versions",
+    );
+    const v2 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      expectedVersion: opened.recordVersion,
+      workout: { sessionsPerWeek: 4, completionWindowHours: 48 },
+    });
+    const workoutsBefore = await workoutRows(db, relationshipId);
+    const [relationshipBefore] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+
+    // Another tab saves the draft after this request read it but before its
+    // batch runs.
+    const realBatch = db.batch.bind(db);
+    const spy = vi.spyOn(db, "batch").mockImplementationOnce(async (statements) => {
+      await db
+        .update(schema.coachingConfigurations)
+        .set({ recordVersion: v2.recordVersion + 1 })
+        .where(eq(schema.coachingConfigurations.id, v2.id));
+      return realBatch(statements);
+    });
+    try {
+      const response = await activateConfiguration(
+        trainerCookie,
+        relationshipId,
+        v2.recordVersion,
+        "race-v2",
+      );
+      expect(response.status).toBe(409);
+      expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+        "CONFIGURATION_VERSION_CONFLICT",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(
+      (await configurationRows(db, relationshipId)).map((row) => [row.status, row.recordVersion]),
+    ).toEqual([
+      ["active", active.recordVersion],
+      ["draft", v2.recordVersion + 1],
+    ]);
+    expect(await workoutRows(db, relationshipId)).toEqual(workoutsBefore);
+    // The batch guard's write was rolled back with everything else.
+    const [relationship] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    expect(relationship!.trainerUserId).toBe(relationshipBefore!.trainerUserId);
+    expect(relationship!.trainerUserId).toBeTruthy();
+  });
+
+  it("Save as vN+1 applies a photo-only change from tomorrow", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("photo-only");
+    await publishDailyPlan(trainerCookie, relationshipId, "photo-only");
+    const nutrition = { mealsPerDay: 3, confirmationWindowHours: 6 };
+    const v1 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      nutrition: { ...nutrition, photoRequirement: "none" },
+    });
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v1.recordVersion, "photo-v1"))
+        .status,
+    ).toBe(200);
+    const before = await mealRows(db, relationshipId);
+    expect(before.map((row) => row.photoRequired)).toEqual(before.map(() => false));
+    const v1Row = (await configurationRows(db, relationshipId))[0]!;
+    const opened = await openNextVersion(
+      trainerCookie,
+      relationshipId,
+      v1Row.recordVersion,
+      "photo-versions",
+    );
+    const v2 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      expectedVersion: opened.recordVersion,
+      nutrition: { ...nutrition, photoRequirement: "all_meals" },
+    });
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v2.recordVersion, "photo-v2"))
+        .status,
+    ).toBe(200);
+    const after = await mealRows(db, relationshipId);
+    // Windows are unchanged; only the photo requirement moves, from tomorrow.
+    expect(after.map((row) => row.windowEndsAt)).toEqual(before.map((row) => row.windowEndsAt));
+    expect(after.map((row) => row.photoRequired)).toEqual(
+      after.map((_, index) => index > 0),
+    );
+  });
+
+  it("Save as vN+1 keeps the window and photo rule of rows already logged", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("logged-keep");
+    await publishDailyPlan(trainerCookie, relationshipId, "logged-keep");
+    const v1 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      workout: { sessionsPerWeek: 4, completionWindowHours: 24 },
+      nutrition: { mealsPerDay: 3, confirmationWindowHours: 6, photoRequirement: "none" },
+    });
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v1.recordVersion, "logged-v1"))
+        .status,
+    ).toBe(200);
+    const workoutsBefore = await workoutRows(db, relationshipId);
+    const mealsBefore = await mealRows(db, relationshipId);
+    expect(workoutsBefore).toHaveLength(7);
+    expect(mealsBefore).toHaveLength(7);
+    const [relationship] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+
+    // The trainee already started the workout two days out and confirmed the
+    // meal three days out (both after tomorrow).
+    const loggedWorkout = workoutsBefore[2]!;
+    const loggedMeal = mealsBefore[3]!;
+    const loggedAt = new Date().toISOString();
+    await db.insert(schema.workoutExecutions).values({
+      id: "77777777-7777-4777-8777-777777777771",
+      assignmentId: loggedWorkout.id,
+      coachingRelationshipId: relationshipId,
+      planVersionId: loggedWorkout.planVersionId,
+      traineeUserId: relationship!.traineeUserId,
+      status: "started",
+      startedAt: loggedAt,
+      createdAt: loggedAt,
+      updatedAt: loggedAt,
+    });
+    await db.insert(schema.mealCompliance).values({
+      id: "77777777-7777-4777-8777-777777777772",
+      assignmentId: loggedMeal.id,
+      coachingRelationshipId: relationshipId,
+      planVersionId: loggedMeal.planVersionId,
+      traineeUserId: relationship!.traineeUserId,
+      outcome: "confirmed",
+      loggedAt,
+      localDate: loggedMeal.localDate,
+      photoRequired: false,
+      createdAt: loggedAt,
+      updatedAt: loggedAt,
+    });
+
+    const v1Row = (await configurationRows(db, relationshipId))[0]!;
+    const opened = await openNextVersion(
+      trainerCookie,
+      relationshipId,
+      v1Row.recordVersion,
+      "logged-versions",
+    );
+    const v2 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      expectedVersion: opened.recordVersion,
+      workout: { sessionsPerWeek: 4, completionWindowHours: 48 },
+      nutrition: { mealsPerDay: 3, confirmationWindowHours: 12, photoRequirement: "all_meals" },
+    });
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v2.recordVersion, "logged-v2"))
+        .status,
+    ).toBe(200);
+
+    const workouts = await workoutRows(db, relationshipId);
+    const meals = await mealRows(db, relationshipId);
+    const workoutById = new Map(workouts.map((row) => [row.id, row]));
+    const mealById = new Map(meals.map((row) => [row.id, row]));
+    // Logged rows keep vN's values exactly.
+    expect(workoutById.get(loggedWorkout.id)).toEqual(loggedWorkout);
+    expect(mealById.get(loggedMeal.id)).toEqual(loggedMeal);
+    // Unlogged rows from tomorrow move to vN+1's values.
+    const tomorrowWorkout = workoutById.get(workoutsBefore[1]!.id)!;
+    expect(tomorrowWorkout.windowStartsAt).toBe(workoutsBefore[1]!.windowStartsAt);
+    expect(Date.parse(tomorrowWorkout.windowEndsAt) - Date.parse(tomorrowWorkout.windowStartsAt)).toBe(
+      48 * 60 * 60 * 1000,
+    );
+    const tomorrowMeal = mealById.get(mealsBefore[1]!.id)!;
+    expect(Date.parse(tomorrowMeal.windowEndsAt) - Date.parse(tomorrowMeal.windowStartsAt)).toBe(
+      12 * 60 * 60 * 1000,
+    );
+    expect(tomorrowMeal.photoRequired).toBe(true);
+    expect(loggedMeal.photoRequired).toBe(false);
+  });
+
+  it("guards discard: owner trainer only, and refused on an ended client", async () => {
+    const db = currentDb!;
+    const { trainerCookie, traineeToken, relationshipId } =
+      await reachCoachingReady("discard-auth");
+    const draft = await saveDraft(trainerCookie, relationshipId, draftBody);
+    const before = await configurationRows(db, relationshipId);
+    expect(before.map((row) => row.id)).toEqual([draft.id]);
+    const discardAs = (headers: Record<string, string>) =>
+      app.request(
+        `/configurations/relationships/${relationshipId}/draft`,
+        { method: "DELETE", headers },
+        testEnv(),
+      );
+
+    const other = await createTrainerSession("config-coach-discard-other@example.com");
+    const wrongTrainer = await discardAs({ Cookie: other.cookie });
+    expect(wrongTrainer.status).toBe(404);
+    expect(((await wrongTrainer.json()) as { error: { code: string } }).error.code).toBe(
+      "RELATIONSHIP_NOT_FOUND",
+    );
+    expect(await configurationRows(db, relationshipId)).toEqual(before);
+
+    const trainee = await discardAs({
+      Authorization: `Bearer ${traineeToken}`,
+      "x-fitbud-role": "trainee",
+    });
+    expect(trainee.status).toBe(403);
+    expect(((await trainee.json()) as { error: { code: string } }).error.code).toBe(
+      "FORBIDDEN_ROLE",
+    );
+    expect(await configurationRows(db, relationshipId)).toEqual(before);
+
+    const ended = await app.request(
+      `/relationships/${relationshipId}/end`,
+      {
+        method: "POST",
+        headers: trainerJson(trainerCookie, "discard-auth-end"),
+        body: JSON.stringify({ reason: "paused" }),
+      },
+      testEnv(),
+    );
+    expect(ended.status).toBe(200);
+    const onEnded = await discardAs({ Cookie: trainerCookie });
+    expect(onEnded.status).toBe(409);
+    expect(((await onEnded.json()) as { error: { code: string } }).error.code).toBe(
+      "RELATIONSHIP_ENDED",
+    );
+    expect(await configurationRows(db, relationshipId)).toEqual(before);
+  });
+
+  it("discard returns 409 and deletes nothing when the draft is activated between read and batch", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("discard-race");
+    const draft = await saveDraft(trainerCookie, relationshipId, draftBody);
+
+    // Another tab activates the draft after discard read it but before its
+    // batch runs.
+    const realBatch = db.batch.bind(db);
+    const spy = vi.spyOn(db, "batch").mockImplementationOnce(async (statements) => {
+      await db
+        .update(schema.coachingConfigurations)
+        .set({ status: "active", recordVersion: draft.recordVersion + 1 })
+        .where(eq(schema.coachingConfigurations.id, draft.id));
+      return realBatch(statements);
+    });
+    let response: Response;
+    try {
+      response = await app.request(
+        `/configurations/relationships/${relationshipId}/draft?expectedVersion=${draft.recordVersion}`,
+        { method: "DELETE", headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      "CONFIGURATION_NOT_DRAFT",
+    );
+    const rows = await configurationRows(db, relationshipId);
+    expect(rows.map((row) => [row.id, row.status])).toEqual([[draft.id, "active"]]);
+    for (const table of [
+      schema.workoutExpectations,
+      schema.nutritionExpectations,
+      schema.checkinSchedules,
+      schema.trackingRequirements,
+    ]) {
+      const children = await db
+        .select()
+        .from(table)
+        .where(eq(table.coachingConfigurationId, draft.id));
+      expect(children).toHaveLength(1);
+    }
+  });
+
+  it("returns 409 naming the missing D17 section and leaves the draft as it was", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("missing-409");
+    const draft = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      goalShort: null,
+    });
+    // Saved drafts always carry valid expectations (the contract rejects
+    // anything else), so the goal is the section a real draft can miss; the
+    // other sections' rules are covered in packages/core configuration.test.
+    const before = await configurationRows(db, relationshipId);
+
+    const response = await activateConfiguration(
+      trainerCookie,
+      relationshipId,
+      draft.recordVersion,
+      "activate-missing-409",
+    );
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as {
+      error: { code: string; message: string; details: { missingSections: string[] } };
+    };
+    expect(body.error.code).toBe("CONFIGURATION_INCOMPLETE");
+    expect(body.error.details.missingSections).toEqual(["goal"]);
+    expect(await configurationRows(db, relationshipId)).toEqual(before);
+  });
+
+  it("discards a first draft, and refuses to discard when only active or superseded versions remain", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("discard-409");
+    const discard = (query = "") =>
+      app.request(
+        `/configurations/relationships/${relationshipId}/draft${query}`,
+        { method: "DELETE", headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+
+    const first = await saveDraft(trainerCookie, relationshipId, draftBody);
+    // A stale version never discards a draft changed elsewhere.
+    const stale = await discard(`?expectedVersion=${first.recordVersion + 1}`);
+    expect(stale.status).toBe(409);
+    expect(((await stale.json()) as { error: { code: string } }).error.code).toBe(
+      "CONFIGURATION_VERSION_CONFLICT",
+    );
+    expect(await configurationRows(db, relationshipId)).toHaveLength(1);
+
+    const removed = await discard(`?expectedVersion=${first.recordVersion}`);
+    expect(removed.status).toBe(200);
+    expect(((await removed.json()) as { data: unknown }).data).toBeNull();
+    expect(await configurationRows(db, relationshipId)).toEqual([]);
+    for (const table of [
+      schema.workoutExpectations,
+      schema.nutritionExpectations,
+      schema.checkinSchedules,
+      schema.trackingRequirements,
+    ]) {
+      const children = await db
+        .select()
+        .from(table)
+        .where(eq(table.coachingConfigurationId, first.id));
+      expect(children).toEqual([]);
+    }
+    const none = await discard();
+    expect(none.status).toBe(404);
+
+    // v1 active → v2 active (v1 superseded): nothing is a draft any more.
+    const v1 = await saveDraft(trainerCookie, relationshipId, draftBody);
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v1.recordVersion, "discard-v1"))
+        .status,
+    ).toBe(200);
+    const activeOnly = await discard();
+    expect(activeOnly.status).toBe(409);
+    expect(((await activeOnly.json()) as { error: { code: string } }).error.code).toBe(
+      "CONFIGURATION_NOT_DRAFT",
+    );
+    const v1Row = (await configurationRows(db, relationshipId))[0]!;
+    const opened = await openNextVersion(
+      trainerCookie,
+      relationshipId,
+      v1Row.recordVersion,
+      "discard-versions",
+    );
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, opened.recordVersion, "discard-v2"))
+        .status,
+    ).toBe(200);
+    const history = await configurationRows(db, relationshipId);
+    expect(history.map((row) => row.status)).toEqual(["superseded", "active"]);
+    const refused = await discard();
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+      "CONFIGURATION_NOT_DRAFT",
+    );
+    expect(await configurationRows(db, relationshipId)).toEqual(history);
+  });
+
+  it("Save as vN+1 goes live now and its targets apply from tomorrow in the trainee's timezone", async () => {
+    // Mon 9 Nov 2026, 20:00 UTC = Tue 10 Nov, 01:30 in Asia/Kolkata. A UTC
+    // reading would call 10 Nov "tomorrow"; for the trainee it is today.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-09T20:00:00.000Z") });
+    try {
+      const db = currentDb!;
+      const { trainerCookie, relationshipId } = await reachCoachingReady("tomorrow-tz");
+      await setTraineeTimezone(db, relationshipId, "Asia/Kolkata");
+      await publishDailyPlan(trainerCookie, relationshipId, "tomorrow-tz");
+      const v1 = await saveDraft(trainerCookie, relationshipId, {
+        ...draftBody,
+        workout: { sessionsPerWeek: 4, completionWindowHours: 24 },
+        nutrition: { mealsPerDay: 3, confirmationWindowHours: 6, photoRequirement: "none" },
+      });
+      expect(
+        (await activateConfiguration(trainerCookie, relationshipId, v1.recordVersion, "tz-v1"))
+          .status,
+      ).toBe(200);
+
+      // IST midnight of D is (D - 1) 18:30 UTC.
+      const istMidnight = (localDate: string) =>
+        new Date(
+          Date.parse(`${localDate}T00:00:00.000Z`) - 5.5 * 60 * 60 * 1000,
+        ).toISOString();
+      const plusHours = (iso: string, hours: number) =>
+        new Date(Date.parse(iso) + hours * 60 * 60 * 1000).toISOString();
+      const horizon = [
+        "2026-11-10",
+        "2026-11-11",
+        "2026-11-12",
+        "2026-11-13",
+        "2026-11-14",
+        "2026-11-15",
+        "2026-11-16",
+      ];
+      const v1Workouts = await workoutRows(db, relationshipId);
+      expect(v1Workouts.map((row) => row.localDate)).toEqual(horizon);
+      expect(v1Workouts[1]!.windowEndsAt).toBe(plusHours(istMidnight("2026-11-11"), 24));
+
+      const v1Row = (await configurationRows(db, relationshipId))[0]!;
+      const opened = await openNextVersion(
+        trainerCookie,
+        relationshipId,
+        v1Row.recordVersion,
+        "tz-versions",
+      );
+      expect(opened.versionNumber).toBe(2);
+      const v2 = await saveDraft(trainerCookie, relationshipId, {
+        ...draftBody,
+        expectedVersion: opened.recordVersion,
+        workout: { sessionsPerWeek: 4, completionWindowHours: 48 },
+        nutrition: { mealsPerDay: 3, confirmationWindowHours: 12, photoRequirement: "all_meals" },
+      });
+      const activated = await activateConfiguration(
+        trainerCookie,
+        relationshipId,
+        v2.recordVersion,
+        "tz-v2",
+      );
+      expect(activated.status).toBe(200);
+      const activatedBody = (await activated.json()) as {
+        data: { id: string; status: string; versionNumber: number };
+      };
+      expect(activatedBody.data).toMatchObject({ status: "active", versionNumber: 2 });
+
+      // vN+1 is live immediately and vN is superseded.
+      const configs = await configurationRows(db, relationshipId);
+      expect(configs.map((row) => [row.versionNumber, row.status])).toEqual([
+        [1, "superseded"],
+        [2, "active"],
+      ]);
+      expect(configs[1]!.activatedAt).toBe("2026-11-09T20:00:00.000Z");
+
+      const workouts = await workoutRows(db, relationshipId);
+      const meals = await mealRows(db, relationshipId);
+      // No duplicate rows: the same 7 days, re-timed in place.
+      expect(workouts.map((row) => row.localDate)).toEqual(horizon);
+      expect(meals.map((row) => row.localDate)).toEqual(horizon);
+      expect(workouts.map((row) => row.id)).toEqual(v1Workouts.map((row) => row.id));
+
+      // Today (Tue 10 Nov in the trainee's zone) keeps v1's targets.
+      expect(workouts[0]).toMatchObject({
+        localDate: "2026-11-10",
+        windowStartsAt: istMidnight("2026-11-10"),
+        windowEndsAt: plusHours(istMidnight("2026-11-10"), 24),
+      });
+      expect(meals[0]).toMatchObject({
+        localDate: "2026-11-10",
+        windowEndsAt: plusHours(istMidnight("2026-11-10"), 6),
+        photoRequired: false,
+      });
+      // From tomorrow, v2's targets.
+      for (const [index, localDate] of horizon.entries()) {
+        if (index === 0) continue;
+        expect(workouts[index]).toMatchObject({
+          localDate,
+          windowStartsAt: istMidnight(localDate),
+          windowEndsAt: plusHours(istMidnight(localDate), 48),
+        });
+        expect(meals[index]).toMatchObject({
+          localDate,
+          windowEndsAt: plusHours(istMidnight(localDate), 12),
+          photoRequired: true,
+        });
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -34,13 +34,16 @@ export {
 
 export {
   COACHING_CONFIGURATION_DEFAULTS,
+  CONFIGURATION_SECTION_IDS,
   canActivateConfiguration,
   canCreateConfigurationVersion,
   canEditCoachingConfiguration,
-  canMarkConfigurationConfigured,
+  canDiscardConfiguration,
   canSaveConfigurationDraft,
   hasGoalShort,
+  missingConfigurationSections,
   resolveConfigurationDraftExpectations,
+  type ConfigurationSectionId,
 } from "./configuration.js";
 
 export {

@@ -801,8 +801,8 @@ describe("coaching configuration", () => {
     const configuredBody = (await incomplete.json()) as {
       data: { status: string; recordVersion: number; configuredAt: string | null };
     };
-    expect(configuredBody.data.status).toBe("configured");
-    expect(configuredBody.data.configuredAt).toBeTruthy();
+    expect(configuredBody.data.status).toBe("draft");
+    expect(configuredBody.data.configuredAt).toBeNull();
 
     const activate = await app.request(
       `/configurations/relationships/${owner.relationshipId}/activate`,
@@ -857,7 +857,7 @@ describe("coaching configuration", () => {
     expect(editActive.status).toBe(409);
   });
 
-  it("rejects configure without primary goal", async () => {
+  it("rejects activate without primary goal and leaves configure as a no-op", async () => {
     const owner = await readyRelationship(
       "config-goal@example.com",
       "config-goal-trainee@example.com",
@@ -880,7 +880,10 @@ describe("coaching configuration", () => {
       testEnv(),
     );
     expect(draft.status).toBe(201);
-    const draftBody = (await draft.json()) as { data: { recordVersion: number } };
+    const draftBody = (await draft.json()) as {
+      data: { recordVersion: number; missingSections: string[] };
+    };
+    expect(draftBody.data.missingSections).toEqual(["goal"]);
 
     const configure = await app.request(
       `/configurations/relationships/${owner.relationshipId}/configure`,
@@ -895,10 +898,33 @@ describe("coaching configuration", () => {
       },
       testEnv(),
     );
-    expect(configure.status).toBe(422);
-    const body = await configure.json();
+    expect(configure.status).toBe(200);
+    const configureBody = (await configure.json()) as {
+      data: { status: string; recordVersion: number };
+    };
+    expect(configureBody.data.status).toBe("draft");
+    expect(configureBody.data.recordVersion).toBe(draftBody.data.recordVersion);
+
+    const activate = await app.request(
+      `/configurations/relationships/${owner.relationshipId}/activate`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: owner.trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "act-no-goal",
+        },
+        body: JSON.stringify({ expectedVersion: draftBody.data.recordVersion }),
+      },
+      testEnv(),
+    );
+    expect(activate.status).toBe(409);
+    const body = await activate.json();
     expect(body).toMatchObject({
-      error: { code: "CONFIGURATION_INCOMPLETE" },
+      error: {
+        code: "CONFIGURATION_INCOMPLETE",
+        details: { missingSections: ["goal"] },
+      },
     });
   });
 });

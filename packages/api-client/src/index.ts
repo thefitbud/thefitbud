@@ -839,6 +839,25 @@ export class FitBudApiClient {
     );
   }
 
+  /**
+   * Discards the open draft. Resolves to the active version that remains, or
+   * null when there is none. Pass the draft's recordVersion so a draft changed
+   * elsewhere is not discarded (409 CONFIGURATION_VERSION_CONFLICT).
+   */
+  async discardConfigurationDraft(
+    relationshipId: string,
+    input?: { expectedVersion: number },
+  ): Promise<CoachingConfiguration | null> {
+    const query =
+      input === undefined ? "" : `?expectedVersion=${input.expectedVersion}`;
+    return this.request(
+      "DELETE",
+      `/configurations/relationships/${relationshipId}/draft${query}`,
+      coachingConfigurationSchema.nullable(),
+      { auth: true },
+    );
+  }
+
   async listPlans(
     relationshipId: string,
     query?: {

@@ -4,9 +4,10 @@ import {
   canActivateConfiguration,
   canCreateConfigurationVersion,
   canEditCoachingConfiguration,
-  canMarkConfigurationConfigured,
+  canDiscardConfiguration,
   canSaveConfigurationDraft,
   hasGoalShort,
+  missingConfigurationSections,
   resolveConfigurationDraftExpectations,
 } from "./configuration.js";
 
@@ -34,17 +35,23 @@ describe("coaching configuration transitions", () => {
   it("allows draft saves until activation", () => {
     expect(canSaveConfigurationDraft(null)).toBe(true);
     expect(canSaveConfigurationDraft("draft")).toBe(true);
-    expect(canSaveConfigurationDraft("configured")).toBe(true);
+    // D12 retired the configured status: it is not a state that can be saved.
+    expect(canSaveConfigurationDraft("configured" as never)).toBe(false);
     expect(canSaveConfigurationDraft("active")).toBe(false);
     expect(canSaveConfigurationDraft("superseded")).toBe(false);
   });
 
-  it("gates configure and activate transitions", () => {
-    expect(canMarkConfigurationConfigured("draft")).toBe(true);
-    expect(canMarkConfigurationConfigured("configured")).toBe(false);
-    expect(canActivateConfiguration("configured")).toBe(true);
-    expect(canActivateConfiguration("draft")).toBe(false);
+  it("activates straight from draft (D12: no configured step)", () => {
+    expect(canActivateConfiguration("draft")).toBe(true);
+    expect(canActivateConfiguration("configured" as never)).toBe(false);
     expect(canActivateConfiguration("active")).toBe(false);
+    expect(canActivateConfiguration("superseded")).toBe(false);
+  });
+
+  it("discards only a draft; active and superseded versions are kept", () => {
+    expect(canDiscardConfiguration("draft")).toBe(true);
+    expect(canDiscardConfiguration("active")).toBe(false);
+    expect(canDiscardConfiguration("superseded")).toBe(false);
   });
 
   it("fills a new draft from the trainer-web defaults", () => {
@@ -84,5 +91,60 @@ describe("coaching configuration transitions", () => {
     expect(hasGoalShort("Build strength")).toBe(true);
     expect(hasGoalShort("  ")).toBe(false);
     expect(hasGoalShort(null)).toBe(false);
+  });
+
+  it("lists missing activate sections", () => {
+    expect(
+      missingConfigurationSections({
+        goalShort: null,
+        workout: null,
+        nutrition: null,
+        checkin: null,
+        tracking: null,
+      }),
+    ).toEqual(["goal", "expectations", "checkins", "tracking"]);
+
+    expect(
+      missingConfigurationSections({
+        goalShort: "Build strength",
+        ...COACHING_CONFIGURATION_DEFAULTS,
+      }),
+    ).toEqual([]);
+
+    expect(
+      missingConfigurationSections({
+        goalShort: "  ",
+        ...COACHING_CONFIGURATION_DEFAULTS,
+      }),
+    ).toEqual(["goal"]);
+  });
+
+  it("names each D17 section a draft still misses", () => {
+    const ready = { goalShort: "Build strength", ...COACHING_CONFIGURATION_DEFAULTS };
+    // Expectations needs both workouts and meals.
+    expect(
+      missingConfigurationSections({
+        ...ready,
+        workout: { sessionsPerWeek: 0, completionWindowHours: 24 },
+      }),
+    ).toEqual(["expectations"]);
+    expect(
+      missingConfigurationSections({
+        ...ready,
+        nutrition: { ...ready.nutrition, confirmationWindowHours: 49 },
+      }),
+    ).toEqual(["expectations"]);
+    expect(
+      missingConfigurationSections({
+        ...ready,
+        checkin: { ...ready.checkin, dueWindowHours: 0 },
+      }),
+    ).toEqual(["checkins"]);
+    expect(
+      missingConfigurationSections({ ...ready, tracking: null }),
+    ).toEqual(["tracking"]);
+    expect(
+      missingConfigurationSections({ ...ready, goalShort: null, checkin: null }),
+    ).toEqual(["goal", "checkins"]);
   });
 });

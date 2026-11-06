@@ -207,7 +207,7 @@ async function reachCoachingReady(suffix: string) {
         "Content-Type": "application/json",
         "Idempotency-Key": `act-matrix-${suffix}`,
       },
-      body: JSON.stringify({ expectedVersion: 2 }),
+      body: JSON.stringify({ expectedVersion: 1 }),
     },
     testEnv(),
   );
@@ -268,6 +268,12 @@ describe("authorization matrix", () => {
   afterEach(() => {
     setTestDbOverride(null);
     closeDb();
+  });
+
+  const discardDraft = (): RequestSpec => ({
+    domain: "configurations",
+    method: "DELETE",
+    path: `/configurations/relationships/${owned.relationshipId}/draft`,
   });
 
   const relationshipScopedReads = (): RequestSpec[] => {
@@ -335,6 +341,7 @@ describe("authorization matrix", () => {
         path: `/realtime/relationships/${UNKNOWN_RELATIONSHIP}/connection`,
       },
       ...relationshipScopedReads(),
+      discardDraft(),
     ];
 
     for (const spec of cases) {
@@ -361,8 +368,16 @@ describe("authorization matrix", () => {
     }
   });
 
+  it("isolates trainer ownership on configuration draft discard (wrong trainer → 404)", async () => {
+    const response = await requestAs(discardDraft(), { cookie: otherTrainerCookie });
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("RELATIONSHIP_NOT_FOUND");
+  });
+
   it("rejects trainee role on trainer-only list surfaces (403)", async () => {
     const cases: RequestSpec[] = [
+      discardDraft(),
       { domain: "invitations", path: "/invitations" },
       { domain: "templates", path: "/templates" },
       { domain: "exceptions", path: "/exceptions/attention" },
