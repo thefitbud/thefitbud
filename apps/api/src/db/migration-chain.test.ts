@@ -121,6 +121,21 @@ function setLoadRows(sqlite: SqliteLike): SetLoadRow[] {
   }));
 }
 
+/**
+ * Drops `DELETE FROM <table>;` statements for tables a later migration creates, so the
+ * current demo seed (whose wipe lists every table) still loads on a partly migrated DB.
+ */
+function withoutDeletesFromMissingTables(sqlite: SqliteLike, seedSql: string): string {
+  const existing = new Set(
+    (
+      sqlite.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []
+    ).map((row) => String(row[0])),
+  );
+  return seedSql.replace(/^DELETE FROM ([a-z_0-9]+);[ \t]*$/gm, (statement, table: string) =>
+    existing.has(table) ? statement : "",
+  );
+}
+
 function tableRowCounts(sqlite: SqliteLike): Record<string, number> {
   const tables =
     sqlite.exec(
@@ -728,11 +743,14 @@ describe("migration chain and seeds", () => {
         const passwordHash = await hashPassword("FitBud-demo-2026");
         const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
         handle.sqlite.exec(
-          buildDemoSeedSql({
-            referenceInstant: new Date().toISOString(),
-            passwordHash,
-            libraryIndex,
-          }),
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex,
+            }),
+          ),
         );
         await yieldToEventLoop();
         const subscriptionSql =
@@ -788,6 +806,31 @@ describe("migration chain and seeds", () => {
     },
     120_000,
   );
+
+  it("loads a seed that wipes a later table onto a database migrated only part way", async () => {
+    const handle = await createMemoryDb({
+      foreignKeys: true,
+      through: "0035_numeric_set_load.sql",
+    });
+    try {
+      expect(tableColumns(handle.sqlite, "payment_records")).toEqual([]);
+      const seedSql =
+        "DELETE FROM payment_records;\nDELETE FROM daily_steps;\nDELETE FROM coaching_relationships;\n";
+      expect(() => handle.sqlite.exec(seedSql)).toThrow(/no such table/);
+      const filtered = withoutDeletesFromMissingTables(handle.sqlite, seedSql);
+      expect(filtered).not.toContain("payment_records");
+      expect(filtered).not.toContain("daily_steps");
+      expect(filtered).toContain("DELETE FROM coaching_relationships;");
+      expect(() => handle.sqlite.exec(filtered)).not.toThrow();
+      // Once the table exists the statement is kept.
+      handle.applyMigrationsFrom("0036_payment_tracking.sql");
+      expect(withoutDeletesFromMissingTables(handle.sqlite, seedSql)).toContain(
+        "DELETE FROM payment_records;",
+      );
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
 
   it("keeps 0037 additive: no table rebuild, drop or backfill", () => {
     const stepsSql = readFileSync(join(drizzleDir, "0037_daily_steps.sql"), "utf8");
@@ -928,11 +971,14 @@ describe("migration chain and seeds", () => {
         );
         const passwordHash = await hashPassword("FitBud-demo-2026");
         handle.sqlite.exec(
-          buildDemoSeedSql({
-            referenceInstant: new Date().toISOString(),
-            passwordHash,
-            libraryIndex: loadDemoLibraryIndex(handle.sqlite),
-          }),
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+            }),
+          ),
         );
         await yieldToEventLoop();
         const configurationSql =
@@ -1091,11 +1137,14 @@ describe("migration chain and seeds", () => {
         const passwordHash = await hashPassword("FitBud-demo-2026");
         const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
         handle.sqlite.exec(
-          buildDemoSeedSql({
-            referenceInstant: new Date().toISOString(),
-            passwordHash,
-            libraryIndex,
-          }),
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex,
+            }),
+          ),
         );
         await yieldToEventLoop();
         const seeded = setLoadRows(handle.sqlite);
