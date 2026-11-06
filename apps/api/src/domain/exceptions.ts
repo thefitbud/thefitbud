@@ -28,6 +28,7 @@ import {
 } from "../db/schema";
 import { loadTraineeTimezone } from "./assignment-schedule";
 import { createId, nowIso } from "../lib/crypto";
+import { reactivationLocalDate } from "./log-time-bounds";
 import { selectInChunks } from "../lib/in-array-chunks";
 
 type Db = ReturnType<typeof createDb>;
@@ -81,9 +82,18 @@ async function collectCandidatesForRelationship(
   relationshipId: string,
   now: string,
   timeZone = "Asia/Kolkata",
+  reactivatedAt: string | null = null,
 ): Promise<ExceptionCandidate[]> {
   const candidates: ExceptionCandidate[] = [];
-  const windowStart = detectionWindowStartLocalDate(now, timeZone);
+  // EC1 rule 1: after a reactivation, facts dated before the reactivation day
+  // belong to the frozen ended period. They are never evaluated again, so no
+  // exception is created, reopened or moved for them.
+  const lookbackStart = detectionWindowStartLocalDate(now, timeZone);
+  const frozenBefore = reactivatedAt
+    ? reactivationLocalDate(reactivatedAt, timeZone)
+    : null;
+  const windowStart =
+    frozenBefore && frozenBefore > lookbackStart ? frozenBefore : lookbackStart;
 
   const workoutRows = await db
     .select({
@@ -205,6 +215,7 @@ export async function evaluateRelationshipExceptions(
     .select({
       traineeUserId: coachingRelationships.traineeUserId,
       status: coachingRelationships.status,
+      reactivatedAt: coachingRelationships.reactivatedAt,
     })
     .from(coachingRelationships)
     .where(eq(coachingRelationships.id, relationshipId))
@@ -234,6 +245,7 @@ export async function evaluateRelationshipExceptions(
     relationshipId,
     now,
     timeZone,
+    relationship[0]?.reactivatedAt ?? null,
   );
   const candidateKeys = new Set(candidates.map((candidate) => exceptionKey(candidate)));
   const candidatesBySource = new Map<string, ExceptionCandidate[]>();
