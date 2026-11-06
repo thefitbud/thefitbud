@@ -140,6 +140,25 @@ describe("coach log updates (Z6-19, D-W6-33)", () => {
     expect(notificationRowBody(edited)).toBe("Your coach updated one of your workouts.");
   });
 
+  it("uses the meal and measurement wording from D-W6-33 (Z6-20)", () => {
+    const meal = (action: string) => coachRow(`coach_log_updated:${action}:meal_compliance:${eventId}`);
+    expect(notificationRowTitle(meal("create"))).toBe("Logged by your coach");
+    expect(notificationRowBody(meal("create"))).toBe("Your coach logged a meal for you.");
+    expect(notificationRowTitle(meal("edit"))).toBe("Edited by your coach");
+    expect(notificationRowBody(meal("edit"))).toBe("Your coach updated one of your meals.");
+
+    const measurement = (action: string) =>
+      coachRow(`coach_log_updated:${action}:measurement:${eventId}`);
+    expect(notificationRowTitle(measurement("create"))).toBe("Logged by your coach");
+    expect(notificationRowBody(measurement("create"))).toBe(
+      "Your coach logged a measurement for you.",
+    );
+    expect(notificationRowTitle(measurement("edit"))).toBe("Edited by your coach");
+    expect(notificationRowBody(measurement("edit"))).toBe(
+      "Your coach updated one of your measurements.",
+    );
+  });
+
   it("falls back to the plain label for a key it does not know", () => {
     const unknown = coachRow(`coach_log_updated:delete:workout_execution:${eventId}`);
     expect(notificationRowTitle(unknown)).toBe("Update from your coach");

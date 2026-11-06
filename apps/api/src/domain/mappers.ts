@@ -769,6 +769,8 @@ export function mapMealCompliance(row: MealComplianceRow): MealCompliance {
           },
         }
       : {}),
+    loggedByRole: row.loggedByRole,
+    lastEditedByRole: row.lastEditedByRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -1054,6 +1056,8 @@ export function mapMeasurement(row: MeasurementRow): Measurement {
     checkinId: row.checkinId,
     mediaAssetId: row.mediaAssetId,
     recordVersion: row.recordVersion,
+    loggedByRole: row.loggedByRole,
+    lastEditedByRole: row.lastEditedByRole,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

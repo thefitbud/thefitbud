@@ -1,5 +1,5 @@
 /**
- * Trainer log and edit of a client's log entries (Z6-19, PLAN-v2 D-P2-21,
+ * Trainer log and edit of a client's log entries (Z6-19, Z6-20, PLAN-v2 D-P2-21,
  * D-W6-IP R1–R5, D-W6-32, D-W6-33). Shared with Z6-20 (meals, measurements).
  *
  * `recordCoachLogChange` is the one place a trainer create or edit is
@@ -22,7 +22,7 @@ import {
   type CoachLogAction,
   type CoachLogEntityType,
 } from "@fitbud/contracts";
-import { formatCivilDate } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
   logEditEvents,
@@ -48,7 +48,10 @@ export type CoachLogEntity = {
   /** The entry's record version after the change (sync change log). */
   serverVersion: number;
   /** Where the trainee's notification opens. */
-  routing: { domainEntityType: "workout_assignment"; domainEntityId: string };
+  routing: {
+    domainEntityType: "workout_assignment" | "meal_assignment" | "coaching_relationship";
+    domainEntityId: string;
+  };
 };
 
 export type CoachLogNotificationOutcome =
@@ -237,24 +240,183 @@ function parseJson(text: string | null): unknown {
   }
 }
 
+/** What `log_edit_events` keeps for a meal entry (before and after; Z6-20). */
+export type MealLogSnapshot = {
+  localDate: string;
+  mealName: string;
+  outcome: string;
+  deviationKind: string | null;
+  notes: string | null;
+  /** The client's logged food list (parsed), so a before/after pair is complete. */
+  items: unknown[] | null;
+  /** Scaled macro totals as stored (null when unknown). */
+  macros: {
+    kcalScaled: number | null;
+    proteinScaled: number | null;
+    carbsScaled: number | null;
+    fatScaled: number | null;
+  };
+};
+
+function parseItems(itemsJson: string | null): unknown[] | null {
+  if (!itemsJson) return null;
+  try {
+    const parsed = JSON.parse(itemsJson) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    // An unreadable list is recorded as absent; the row itself is untouched.
+    return null;
+  }
+}
+
+export function mealLogSnapshot(input: {
+  assignment: { localDate: string; mealName: string };
+  compliance: {
+    outcome: string;
+    deviationKind: string | null;
+    notes: string | null;
+    itemsJson: string | null;
+    kcalScaled: number | null;
+    proteinScaled: number | null;
+    carbsScaled: number | null;
+    fatScaled: number | null;
+  };
+}): MealLogSnapshot {
+  return {
+    localDate: input.assignment.localDate,
+    mealName: input.assignment.mealName,
+    outcome: input.compliance.outcome,
+    deviationKind: input.compliance.deviationKind,
+    notes: input.compliance.notes,
+    items: parseItems(input.compliance.itemsJson),
+    macros: {
+      kcalScaled: input.compliance.kcalScaled,
+      proteinScaled: input.compliance.proteinScaled,
+      carbsScaled: input.compliance.carbsScaled,
+      fatScaled: input.compliance.fatScaled,
+    },
+  };
+}
+
+function isMealSnapshot(value: unknown): value is MealLogSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<MealLogSnapshot>;
+  return (
+    typeof candidate.localDate === "string" &&
+    typeof candidate.mealName === "string" &&
+    typeof candidate.outcome === "string"
+  );
+}
+
+/** Short "before → after" lines for one meal edit. */
+export function mealChangeLines(before: MealLogSnapshot, after: MealLogSnapshot): string[] {
+  const lines: string[] = [];
+  if (before.outcome !== after.outcome) {
+    lines.push(
+      `${labelFor("meal_compliance_outcome", before.outcome)} → ${labelFor("meal_compliance_outcome", after.outcome)}`,
+    );
+  }
+  if (before.deviationKind !== after.deviationKind) {
+    lines.push(
+      `Change: ${labelFor("meal_deviation_kind", before.deviationKind) || "none"} → ${labelFor("meal_deviation_kind", after.deviationKind) || "none"}`,
+    );
+  }
+  if (before.notes !== after.notes) lines.push("Note changed");
+  return lines;
+}
+
+/** What `log_edit_events` keeps for a measurement (before and after; Z6-20). */
+export type MeasurementLogSnapshot = {
+  /** The trainee's civil day of `observedAt`, for the feed line. */
+  localDate: string;
+  type: string;
+  value: number;
+  unit: string;
+  observedAt: string;
+};
+
+export function measurementLogSnapshot(input: {
+  localDate: string;
+  measurement: { type: string; value: number; unit: string; observedAt: string };
+}): MeasurementLogSnapshot {
+  return {
+    localDate: input.localDate,
+    type: input.measurement.type,
+    value: input.measurement.value,
+    unit: input.measurement.unit,
+    observedAt: input.measurement.observedAt,
+  };
+}
+
+function isMeasurementSnapshot(value: unknown): value is MeasurementLogSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<MeasurementLogSnapshot>;
+  return (
+    typeof candidate.localDate === "string" &&
+    typeof candidate.type === "string" &&
+    typeof candidate.value === "number" &&
+    typeof candidate.unit === "string"
+  );
+}
+
+/** Short "before → after" lines for one measurement edit. */
+export function measurementChangeLines(
+  before: MeasurementLogSnapshot,
+  after: MeasurementLogSnapshot,
+): string[] {
+  const lines: string[] = [];
+  if (before.value !== after.value || before.unit !== after.unit) {
+    lines.push(`${before.value} ${before.unit} → ${after.value} ${after.unit}`);
+  }
+  if (before.localDate !== after.localDate) {
+    lines.push(`Date: ${formatCivilDate(before.localDate)} → ${formatCivilDate(after.localDate)}`);
+  } else if (before.observedAt !== after.observedAt) {
+    lines.push("Time changed");
+  }
+  return lines;
+}
+
 /**
  * Activity-feed line for one `log_edit_events` row (R4): actor, entity, date
- * and a short before → after summary. Workouts only for now (Z6-20 adds
- * meals and measurements).
+ * and a short before → after summary, for workouts, meals and measurements.
  */
 export function describeCoachLogEvent(
   row: { action: string; entityType: string; beforeJson: string | null; afterJson: string },
   actorName: string,
 ): { type: "coach_logged" | "coach_edited"; subtype: string; summary: string } {
-  const type = row.action === "create" ? "coach_logged" : "coach_edited";
+  const type: "coach_logged" | "coach_edited" =
+    row.action === "create" ? "coach_logged" : "coach_edited";
   const verb = row.action === "create" ? "logged" : "edited";
   const after = parseJson(row.afterJson);
+  const before = row.action === "create" ? null : parseJson(row.beforeJson);
+  const withLines = (head: string, subtype: string, lines: string[]) => {
+    if (lines.length === 0) return { type, subtype, summary: head };
+    const more = lines.length > 1 ? ` (+${lines.length - 1} more)` : "";
+    return { type, subtype, summary: `${head}: ${lines[0]}${more}` };
+  };
+  if (row.entityType === "meal_compliance" && isMealSnapshot(after)) {
+    const head = `${actorName} ${verb} ${after.mealName} for ${formatCivilDate(after.localDate)}`;
+    if (row.action === "create") {
+      return withLines(head, "Meal", [labelFor("meal_compliance_outcome", after.outcome)]);
+    }
+    return withLines(head, "Meal", isMealSnapshot(before) ? mealChangeLines(before, after) : []);
+  }
+  if (row.entityType === "measurement" && isMeasurementSnapshot(after)) {
+    const head = `${actorName} ${verb} ${labelFor("measurement_type", after.type).toLowerCase()} for ${formatCivilDate(after.localDate)}`;
+    if (row.action === "create") {
+      return withLines(head, "Measurement", [`${after.value} ${after.unit}`]);
+    }
+    return withLines(
+      head,
+      "Measurement",
+      isMeasurementSnapshot(before) ? measurementChangeLines(before, after) : [],
+    );
+  }
   if (row.entityType !== "workout_execution" || !isWorkoutSnapshot(after)) {
     return { type, subtype: "Log", summary: `${actorName} ${verb} a log` };
   }
   const head = `${actorName} ${verb} ${after.workoutDayName} for ${formatCivilDate(after.localDate)}`;
   if (row.action === "create") return { type, subtype: "Workout", summary: head };
-  const before = parseJson(row.beforeJson);
   const lines = isWorkoutSnapshot(before) ? workoutChangeLines(before, after) : [];
   if (lines.length === 0) return { type, subtype: "Workout", summary: head };
   const more = lines.length > 1 ? ` (+${lines.length - 1} more)` : "";

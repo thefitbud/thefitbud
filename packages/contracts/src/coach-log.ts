@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isoDateTimeSchema, uuidSchema } from "./identity.js";
+import { mealComplianceOutcomeSchema, mealDeviationKindSchema } from "./meal.js";
 
 /** Z5-4 scaffold marker, still asserted by `w6-scaffold.test.ts`. */
 export type W6CoachLogContract = Record<string, never>;
@@ -113,12 +114,16 @@ export type CoachEditWorkoutRequest = z.infer<typeof coachEditWorkoutRequestSche
  * covers a create and an edit; which one it was rides in the key (as the daily
  * summary carries its date), so the push payload stays routing only. The
  * mobile inbox reads it back with `parseCoachLogDedupeKey` for Firoz's copy
- * (D-W6-33). Z6-20 adds the meal and measurement entity types.
+ * (D-W6-33). Z6-20 added the meal and measurement entity types.
  */
 export const COACH_LOG_ACTIONS = ["create", "edit"] as const;
 export type CoachLogAction = (typeof COACH_LOG_ACTIONS)[number];
 
-export const COACH_LOG_ENTITY_TYPES = ["workout_execution"] as const;
+export const COACH_LOG_ENTITY_TYPES = [
+  "workout_execution",
+  "meal_compliance",
+  "measurement",
+] as const;
 export type CoachLogEntityType = (typeof COACH_LOG_ENTITY_TYPES)[number];
 
 const COACH_LOG_KEY_PREFIX = "coach_log_updated";
@@ -145,3 +150,64 @@ export function parseCoachLogDedupeKey(
   if (!knownAction || !knownEntity) return null;
   return { action: knownAction, entityType: knownEntity };
 }
+
+/**
+ * Trainer log and edit of a client's meal entry (Z6-20, PLAN-v2 D-P2-21,
+ * D-W6-IP R1–R5). Lives here, not in `meal.ts`, so it is exported by this
+ * file's existing `export *`. The response is `mealComplianceSchema`.
+ */
+
+
+/**
+ * `PUT /meals/compliance/:assignmentId/:date` (trainer, Idempotency-Key).
+ * Creates the meal entry for that day, or replaces the outcome, deviation and
+ * note of an existing one. The date must equal the meal's own day and be
+ * within the last 7 days and not in the future (422 BACKDATE_LIMIT).
+ * `recordVersion` is required when an entry exists (stale: 409
+ * VERSION_CONFLICT) and must be left out for a first log.
+ */
+export const coachLogMealRequestSchema = z
+  .object({
+    outcome: mealComplianceOutcomeSchema,
+    /** `logged_foods` only keeps the client's own food list; a trainer cannot author one. */
+    deviationKind: mealDeviationKindSchema.nullable().optional(),
+    notes: z.string().trim().max(500).nullable().optional(),
+    recordVersion: z.number().int().nonnegative().optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.outcome === "modified" && !body.deviationKind) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deviationKind"],
+        message: "A changed meal needs a deviation kind.",
+      });
+    }
+    if (body.outcome !== "modified" && body.deviationKind) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deviationKind"],
+        message: "Only a changed meal has a deviation kind.",
+      });
+    }
+  });
+export type CoachLogMealRequest = z.infer<typeof coachLogMealRequestSchema>;
+
+/**
+ * `PATCH /progress/measurements/:measurementId` (trainer). Changes the value,
+ * unit or time of a measurement dated within the last 7 days. `recordVersion`
+ * is the version the trainer edited (stale: 409 VERSION_CONFLICT). A trainer
+ * creates one with the existing measurement POST.
+ */
+export const coachEditMeasurementRequestSchema = z
+  .object({
+    recordVersion: z.number().int().nonnegative(),
+    value: z.number().finite().positive().max(1000).optional(),
+    unit: z.string().trim().min(1).max(32).optional(),
+    observedAt: isoDateTimeSchema.optional(),
+  })
+  .refine(
+    (body) =>
+      body.value !== undefined || body.unit !== undefined || body.observedAt !== undefined,
+    { message: "Send at least one change." },
+  );
+export type CoachEditMeasurementRequest = z.infer<typeof coachEditMeasurementRequestSchema>;
