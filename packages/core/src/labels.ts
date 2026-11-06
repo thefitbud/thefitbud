@@ -269,7 +269,7 @@ const LABELS = {
     draft: "Draft",
     scheduled: "Scheduled",
     published: "Published",
-    effective: "Effective",
+    effective: "Active",
     superseded: "Superseded",
     archived: "Archived",
   },
@@ -401,6 +401,7 @@ const LABELS = {
   week_day_state: {
     done: "Done",
     partial: "Partial",
+    due: "To do",
     missed: "Missed",
     rest: "Rest",
     future: "Upcoming",

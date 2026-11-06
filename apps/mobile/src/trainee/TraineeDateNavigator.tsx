@@ -131,6 +131,8 @@ function mapWeekState(state: WeekDayState): DateNavigatorDay["state"] {
       return "done";
     case "partial":
       return "partial";
+    case "due":
+      return "due";
     case "missed":
       return "open";
     case "rest":

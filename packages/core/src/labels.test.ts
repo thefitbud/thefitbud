@@ -277,7 +277,27 @@ describe("labels", () => {
     );
   });
 
+  it("labels the unlogged-today day state in plain language (D-W6-10)", () => {
+    expect(LABELS.week_day_state.due).toBeTruthy();
+    expect(LABELS.week_day_state.due).not.toBe("due");
+    expect(LABELS.week_day_state.due).not.toBe("Due");
+    expect(labelFor("week_day_state", "due")).toBe("To do");
+  });
+
   it("exposes a non-empty catalogue", () => {
     expect(allLabelEntries().length).toBeGreaterThan(80);
+  });
+
+  it("shows a live plan version as Active, never Effective (D-W6-11)", () => {
+    expect(labelFor("plan_version_status", "effective")).toBe("Active");
+    const statusLabels = Object.values(LABELS.plan_version_status);
+    expect(statusLabels).not.toContain("Effective");
+    expect(statusLabels.some((label) => /^Effective/.test(label))).toBe(false);
+  });
+
+  it("leaves date phrases such as Effective since unchanged", () => {
+    const phrase = "Effective since";
+    expect(`${phrase} Wed 21 Oct`).toBe("Effective since Wed 21 Oct");
+    expect(Object.values(LABELS.plan_version_status)).not.toContain(phrase);
   });
 });

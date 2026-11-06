@@ -74,6 +74,8 @@ function workoutCircleState(
   if (day.state === "done") return "done";
   if (day.state === "missed") return "missed";
   if (day.state === "future") return "future";
+  // Unlogged today: the open circle, as unlogged-today `partial` showed (D-W6-10).
+  if (day.state === "due") return "future";
   if (day.state === "partial") return day.date === today ? "future" : "rest";
   return "rest";
 }
