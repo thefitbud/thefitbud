@@ -304,14 +304,9 @@ const worker = {
     await runScheduledJobs([
       ["cron.reminders", () => handleScheduledReminders(env, at)],
       ["cron.replenishment", () => handleScheduledReplenishment(env, at)],
-      [
-        "cron.coach_ask",
-        async () => {
-          await runCoachAskMaintenance(createDb(env.DB));
-          // Z5-4 scaffold; Z6-17 fills in the job (see jobs/account-purge.ts).
-          await runAccountPurge(env, at);
-        },
-      ],
+      ["cron.coach_ask", () => runCoachAskMaintenance(createDb(env.DB))],
+      // Z5-4 scaffold; Z6-17 fills in the job (see jobs/account-purge.ts).
+      ["cron.account_purge", () => runAccountPurge(env, at)],
       // Last, so a slow receipts call never delays the jobs above.
       ["cron.push_receipts", () => handleScheduledPushReceipts(env, at)],
     ]);
