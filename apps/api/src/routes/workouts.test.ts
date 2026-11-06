@@ -417,10 +417,15 @@ describe("workout assignment and execution", () => {
       data: {
         id: string;
         status: string;
+        loggedByRole?: string;
+        lastEditedByRole?: string | null;
         exercises: Array<{ sets: Array<{ id: string }> }>;
       };
     };
     expect(startedBody.data.status).toBe("started");
+    // Z6-19 (R1): a workout the trainee logs reads as theirs, not edited by the coach.
+    expect(startedBody.data.loggedByRole).toBe("trainee");
+    expect(startedBody.data.lastEditedByRole).toBeNull();
     const executionId = startedBody.data.id;
     const setIds = startedBody.data.exercises[0]!.sets.map((set) => set.id);
 

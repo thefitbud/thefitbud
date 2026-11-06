@@ -97,6 +97,14 @@ export const workoutExecutionSchema = z.object({
   completedAt: isoDateTimeSchema.nullable(),
   sessionRpe: z.number().min(1).max(10).nullable(),
   requireSessionRpe: z.boolean(),
+  /**
+   * Who logged the entry (Z6-19, R1): `coach` entries are read-only to the
+   * trainee ("Logged by your coach"). The API always sends it (REST reads and
+   * sync pull payloads, D-W6-36); optional so older clients' fixtures parse.
+   */
+  loggedByRole: z.enum(["trainee", "coach"]).optional(),
+  /** Set when a coach edited the entry ("Edited by your coach"). */
+  lastEditedByRole: z.enum(["trainee", "coach"]).nullable().optional(),
   exercises: z.array(exerciseExecutionSchema),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,

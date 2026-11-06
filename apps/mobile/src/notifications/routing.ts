@@ -53,6 +53,12 @@ function exactRouteFromPayload(payload: PushPayload): ResolvedAppRoute {
         return { type: "meal", assignmentId: payload.domainEntityId };
       }
       return { type: "tab", tab: "today" };
+    case "coach_log_updated":
+      // Z6-19 (D-W6-33): opens the workout the coach logged or edited.
+      if (payload.domainEntityType === "workout_assignment") {
+        return { type: "workout_overview", assignmentId: payload.domainEntityId };
+      }
+      return { type: "tab", tab: "today" };
     case "trainer_note_shared":
       return { type: "note", noteId: payload.domainEntityId };
     case "reactivation_requested":
@@ -160,6 +166,7 @@ export const TRAINEE_NOTIFICATION_TYPES: NotificationType[] = [
   "relationship_ended",
   "trainer_note_shared",
   "reactivation_requested",
+  "coach_log_updated",
 ];
 
 /** Trainer-facing push types that open a trainer screen (D-W3-1). */

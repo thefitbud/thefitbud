@@ -359,6 +359,7 @@ const LABELS = {
     trainer_renewal: "Renewal",
     trainer_meal_times_changed: "Meal times changed",
     admin_whatsapp_budget: "WhatsApp budget",
+    coach_log_updated: "Update from your coach",
   },
   reminder_type: {
     workout_reminder: "Workout reminder",
