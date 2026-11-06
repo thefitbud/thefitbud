@@ -250,5 +250,12 @@
     "when": 1730390400000,
     "tag": "0035_numeric_set_load",
     "breakpoints": true
+  },
+  {
+    "idx": 36,
+    "version": "7",
+    "when": 1730476800000,
+    "tag": "0036_payment_tracking",
+    "breakpoints": true
   }
 ]
