@@ -22,7 +22,7 @@
  * source other than these predicates: the reset changes nothing at all when no QA
  * row is present, and leaves every non-QA row untouched beside the demo world.
  *
- * The schema declares 132 foreign-key columns, 19 of them `ON DELETE CASCADE` and none
+ * The schema declares 141 foreign-key columns, 20 of them `ON DELETE CASCADE` and none
  * `ON DELETE SET NULL` (`PRAGMA foreign_key_list`, migrations in `drizzle/`).
  * They are why the order matters, and they are also safe for the reset: every
  * cascading child of a table in this plan is itself in this plan, so a cascade from
@@ -128,6 +128,16 @@ export const QA_TABLE_PLAN: readonly QaTablePlan[] = [
     // Reset only; the row cascades with its relationship.
     table: "daily_steps",
     pk: ["id"],
+    resetOnly: true,
+    parents: [{ column: "coaching_relationship_id", table: "coaching_relationships" }],
+  },
+  {
+    // Audit rows for trainer creates and edits of a client's logs (Z6-18): written
+    // by the API only, never emitted by the demo seed. Reset only; the row cascades
+    // with its relationship, and both user columns are QA ids when the row is ours.
+    table: "log_edit_events",
+    pk: ["id"],
+    userColumns: ["trainee_user_id", "actor_user_id"],
     resetOnly: true,
     parents: [{ column: "coaching_relationship_id", table: "coaching_relationships" }],
   },

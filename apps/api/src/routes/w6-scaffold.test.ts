@@ -41,9 +41,8 @@ function testEnv(): Env {
   };
 }
 
-const MOUNTS = [
-  "/steps",
-] as const;
+// Every W6 scaffold router has been replaced by its task (D-W6-15).
+const MOUNTS: readonly string[] = [];
 
 async function expectNotImplemented(response: Response) {
   expect(response.status).toBe(404);

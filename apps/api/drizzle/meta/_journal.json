@@ -271,5 +271,12 @@
     "when": 1730649600000,
     "tag": "0038_archived_account_state",
     "breakpoints": true
+  },
+  {
+    "idx": 39,
+    "version": "7",
+    "when": 1730736000000,
+    "tag": "0039_log_authorship",
+    "breakpoints": true
   }
 ]
