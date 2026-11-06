@@ -43,7 +43,6 @@ function testEnv(): Env {
 
 const MOUNTS = [
   "/steps",
-  "/account",
 ] as const;
 
 async function expectNotImplemented(response: Response) {
