@@ -91,7 +91,7 @@ export CI=1
 EXPECTED_BUNDLE_ID="com.thefitbud.mobile.staging"
 
 echo "build-ios-sim: variant=$APP_VARIANT api=$EXPO_PUBLIC_API_BASE_URL configuration=$CONFIGURATION"
-echo "build-ios-sim: xcode $(xcodebuild -version | head -n 1) at $(xcode-select -p)"
+echo "build-ios-sim: xcode $(xcodebuild -version | sed -n 1p) at $(xcode-select -p)"
 
 prebuild_args=(prebuild --platform ios --no-install)
 if [ "${QA_PREBUILD_CLEAN:-1}" = "1" ]; then
@@ -110,7 +110,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/ios-build-helpers.sh"
 echo "build-ios-sim: pod install"
 (cd "$IOS_DIR" && pod_install_with_retry) || die "pod install failed."
 
-WORKSPACE="$(find "$IOS_DIR" -maxdepth 1 -name '*.xcworkspace' -type d | sort | head -n 1)"
+WORKSPACE="$(find "$IOS_DIR" -maxdepth 1 -name '*.xcworkspace' -type d | sort | sed -n 1p)"
 [ -n "$WORKSPACE" ] || die "no .xcworkspace under apps/mobile/ios after pod install."
 
 # Discover the scheme rather than hardcoding it: it is derived from the app name in
@@ -122,7 +122,7 @@ else
   [ -n "$SCHEMES" ] || die "xcodebuild -list reported no schemes for $(basename "$WORKSPACE")."
   # Pods and the Live Activity target (LA1) also appear as schemes; the app scheme is
   # the one matching the Xcode project directory name.
-  PROJECT_NAME="$(basename "$(find "$IOS_DIR" -maxdepth 1 -name '*.xcodeproj' -type d | sort | head -n 1)" .xcodeproj)"
+  PROJECT_NAME="$(basename "$(find "$IOS_DIR" -maxdepth 1 -name '*.xcodeproj' -type d | sort | sed -n 1p)" .xcodeproj)"
   SCHEME="$(printf '%s\n' "$SCHEMES" | grep -Fx "$PROJECT_NAME" || true)"
   [ -n "$SCHEME" ] || die "none of the schemes [$(printf '%s' "$SCHEMES" | tr '\n' ' ')] matches the project name \"$PROJECT_NAME\"; set QA_IOS_SCHEME."
 fi
@@ -162,7 +162,7 @@ xcodebuild \
   build
 
 PRODUCTS="$DERIVED/Build/Products/$CONFIGURATION-iphonesimulator"
-APP_SRC="$(find "$PRODUCTS" -maxdepth 1 -name '*.app' -type d | sort | head -n 1)"
+APP_SRC="$(find "$PRODUCTS" -maxdepth 1 -name '*.app' -type d | sort | sed -n 1p)"
 [ -n "$APP_SRC" ] || die "no .app under $PRODUCTS after the build."
 
 rm -rf "$APP_DIR"
