@@ -1624,6 +1624,9 @@ export const notifications = sqliteTable(
         "trainer_renewal",
         "trainer_meal_times_changed",
         "admin_whatsapp_budget",
+        // Z6-19 (D-W6-30, D-W6-32): a trainer created or edited one of the trainee's logs.
+        // No DB CHECK on this column, so no migration.
+        "coach_log_updated",
       ],
     }).notNull(),
     domainEntityType: text("domain_entity_type", {

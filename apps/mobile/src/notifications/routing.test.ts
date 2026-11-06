@@ -174,3 +174,29 @@ describe("notification routing", () => {
     });
   });
 });
+
+describe("coach log updates routing (Z6-19, D-W6-33)", () => {
+  it("opens the workout the coach logged or edited, for the trainee only", () => {
+    const link = deepLinkFromNotificationPayload({
+      ...base,
+      notificationType: "coach_log_updated",
+      domainEntityType: "workout_assignment",
+    });
+    expect(link).toMatchObject({
+      tab: "workout",
+      route: { type: "workout_overview", assignmentId: base.domainEntityId },
+      refetchRequired: true,
+    });
+    expect(link?.trainerRoute ?? null).toBeNull();
+    expect(notificationAudience("coach_log_updated")).toBe("trainee");
+  });
+
+  it("does not trust a non-workout entity id as an assignment", () => {
+    const link = deepLinkFromNotificationPayload({
+      ...base,
+      notificationType: "coach_log_updated",
+      domainEntityType: "coaching_relationship",
+    });
+    expect(link?.route).toEqual({ type: "tab", tab: "today" });
+  });
+});
