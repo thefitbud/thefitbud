@@ -2,7 +2,7 @@
  * Firebase identity verification.
  *
  * AUTH_MODE=test (local / unit tests) accepts structured unsigned tokens:
- *   test.<base64url({ "uid": "...", "email"?: "..." })>
+ *   test.<base64url({ "uid": "...", "email"?: "...", "auth_time"?: <epoch s> })>
  *
  * AUTH_MODE=firebase verifies a real Firebase ID token: RS256 only, signed by a
  * key in Google's securetoken JWKS, `iss` and `aud` bound to FIREBASE_PROJECT_ID,
@@ -35,6 +35,12 @@ export function setFirebaseJwksForTests(jwks: JWTVerifyGetKey | null): void {
 export type VerifiedFirebaseIdentity = {
   uid: string;
   email?: string;
+  /**
+   * When the user last signed in (Firebase `auth_time`, epoch seconds). A refreshed
+   * ID token keeps the original sign-in time. Undefined when a test token has none.
+   * Fresh-proof checks (account deletion, D-W6-31) read it.
+   */
+  authTime?: number;
 };
 
 export async function verifyFirebaseIdToken(
@@ -80,6 +86,7 @@ async function verifyRealIdToken(
     return {
       uid: payload.sub,
       email: typeof payload.email === "string" ? payload.email : undefined,
+      authTime,
     };
   } catch {
     return null;
@@ -94,22 +101,42 @@ function verifyTestToken(idToken: string): VerifiedFirebaseIdentity | null {
   try {
     const payloadPart = idToken.slice("test.".length);
     const json = new TextDecoder().decode(base64UrlToBytes(payloadPart));
-    const payload = JSON.parse(json) as { uid?: unknown; email?: unknown };
+    const payload = JSON.parse(json) as {
+      uid?: unknown;
+      email?: unknown;
+      auth_time?: unknown;
+    };
     if (typeof payload.uid !== "string" || payload.uid.length === 0) {
       return null;
     }
     return {
       uid: payload.uid,
       email: typeof payload.email === "string" ? payload.email : undefined,
+      authTime:
+        typeof payload.auth_time === "number" && Number.isFinite(payload.auth_time)
+          ? payload.auth_time
+          : undefined,
     };
   } catch {
     return null;
   }
 }
 
-/** Build a test identity token for unit/auth tests. */
-export function createTestIdToken(uid: string, email?: string): string {
-  const payload = JSON.stringify({ uid, ...(email ? { email } : {}) });
+/**
+ * Build a test identity token for unit/auth tests. `authTime` (epoch seconds) is
+ * the sign-in time; sign-in routes set it to now (custom-token.ts), and tests
+ * that do not pass it get a token with no sign-in time (never fresh proof).
+ */
+export function createTestIdToken(
+  uid: string,
+  email?: string,
+  authTime?: number,
+): string {
+  const payload = JSON.stringify({
+    uid,
+    ...(email ? { email } : {}),
+    ...(authTime !== undefined ? { auth_time: authTime } : {}),
+  });
   return `test.${bytesToBase64Url(new TextEncoder().encode(payload))}`;
 }
 

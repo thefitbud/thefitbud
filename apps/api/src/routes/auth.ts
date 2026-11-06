@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   traineeProfileSchema,
@@ -9,6 +9,7 @@ import {
   traineeProfiles,
   trainerProfiles,
   userIdentities,
+  userRoles,
   users,
 } from "../db/schema";
 import {
@@ -87,6 +88,41 @@ authRoutes.post("/session",
     identity,
     parsed.data.timezone ?? "UTC",
   );
+
+  // An archived account (Z6-14, D-W6-31) gets a session so the trainer can bring
+  // it back on the web; the middleware then lets it reach only the account
+  // status and reactivation routes. Nothing is provisioned on an archived account.
+  if (!created) {
+    const [account] = await db
+      .select({ accountState: users.accountState })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (account?.accountState === "archived") {
+      const [trainerRole] = await db
+        .select({ id: userRoles.id })
+        .from(userRoles)
+        .where(and(eq(userRoles.userId, userId), eq(userRoles.role, "trainer")))
+        .limit(1);
+      if (!trainerRole) {
+        return fail(
+          c,
+          403,
+          "FORBIDDEN_ROLE",
+          "Trainer web sessions require the trainer role.",
+        );
+      }
+      const session = await createWebSession(db, userId);
+      setCookie(c, c.env.SESSION_COOKIE_NAME || "fitbud_session", session.token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Lax",
+        path: "/",
+        expires: new Date(session.expiresAt),
+      });
+      return ok(c, { userId, expiresAt: session.expiresAt });
+    }
+  }
 
   // Provision trainer for new accounts and for existing users who are not
   // already trainee-only. Trainee-only accounts (e.g. sneha.review) must never

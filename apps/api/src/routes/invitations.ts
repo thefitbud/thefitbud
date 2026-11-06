@@ -28,6 +28,7 @@ import {
   loadActorByUserId,
 } from "../auth/identity";
 import { verifyFirebaseIdToken } from "../auth/firebase";
+import { isArchivedAccount } from "../domain/account-deletion";
 import {
   deriveOnboardingStatusForRelationships,
   onboardingStatusForRelationship,
@@ -224,6 +225,17 @@ invitationRoutes.post(
         "INVITE_PENDING",
         "A pending invite already exists for this email.",
         { invitationId: pendingSameEmail.id },
+      );
+    }
+
+    // An archived account cannot be invited (Z6-14, D-W6-31). The message says
+    // no more than that; it does not reveal that the account exists or why.
+    if (await isArchivedAccount(db, { emailNorm: recipientEmail })) {
+      return fail(
+        c,
+        409,
+        "RECIPIENT_UNAVAILABLE",
+        "This person can't be invited right now.",
       );
     }
 
@@ -632,6 +644,16 @@ invitationRoutes.get(
   },
 );
 
+/** Static 409 when either side of an invitation is an archived account (Z6-14). */
+function invitationUnavailable(c: Parameters<typeof fail>[0]) {
+  return fail(
+    c,
+    409,
+    "INVITATION_UNAVAILABLE",
+    "This invitation can't be accepted right now.",
+  );
+}
+
 /**
  * Accept an invitation. Creates/links the FitBud user from the Firebase bearer
  * token when the trainee does not yet exist.
@@ -713,6 +735,14 @@ invitationRoutes.post("/accept",
     const emailHash = await identifierHash(invitation.recipientEmail.toLowerCase());
     if (emailHash !== verified.identifierHash) {
       return fail(c, 401, "OTP_PROOF_INVALID", "Invite verification failed.");
+    }
+    if (
+      (await isArchivedAccount(db, {
+        emailNorm: invitation.recipientEmail.toLowerCase(),
+      })) ||
+      (await isArchivedAccount(db, { userId: invitation.trainerUserId }))
+    ) {
+      return invitationUnavailable(c);
     }
     const firebaseUid = `invite-${invitation.id}`;
     const identity = { uid: firebaseUid, email: invitation.recipientEmail };
@@ -812,6 +842,15 @@ invitationRoutes.post("/accept",
   });
   if (!identity) {
     return fail(c, 401, "INVALID_TOKEN", "Firebase identity token was rejected.");
+  }
+
+  // This route checks the bearer itself (no auth middleware), so it refuses an
+  // archived account here, and an invitation from an archived trainer (D-W6-31).
+  if (
+    (await isArchivedAccount(db, { firebaseUid: identity.uid })) ||
+    (await isArchivedAccount(db, { userId: invitation.trainerUserId }))
+  ) {
+    return invitationUnavailable(c);
   }
 
   if (invitation.status === "accepted" && acceptedRelationship) {

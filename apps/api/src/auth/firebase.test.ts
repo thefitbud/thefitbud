@@ -70,10 +70,13 @@ afterAll(() => {
 
 describe("verifyFirebaseIdToken (firebase mode)", () => {
   it("accepts a correctly signed token for the configured project", async () => {
-    const token = await sign(validClaims());
+    const claims = validClaims();
+    const token = await sign(claims);
     await expect(verifyFirebaseIdToken(token, firebaseMode)).resolves.toEqual({
       uid: "firebase-uid-coach",
       email: "coach@example.com",
+      // The sign-in time is exposed for fresh-proof checks (Z6-14, D-W6-31).
+      authTime: claims.auth_time,
     });
   });
 
@@ -83,6 +86,7 @@ describe("verifyFirebaseIdToken (firebase mode)", () => {
     await expect(verifyFirebaseIdToken(await sign(claims), firebaseMode)).resolves.toEqual({
       uid: "firebase-uid-coach",
       email: undefined,
+      authTime: claims.auth_time,
     });
   });
 
@@ -205,6 +209,17 @@ describe("verifyFirebaseIdToken (test mode)", () => {
     ).resolves.toEqual({ uid: "firebase-uid-1", email: "trainer@example.com" });
   });
 
+  it("carries an optional sign-in time in test tokens", async () => {
+    const token = createTestIdToken("firebase-uid-1", "trainer@example.com", 1_790_000_000);
+    await expect(
+      verifyFirebaseIdToken(token, { projectId: "fitbud-local", authMode: "test" }),
+    ).resolves.toEqual({
+      uid: "firebase-uid-1",
+      email: "trainer@example.com",
+      authTime: 1_790_000_000,
+    });
+  });
+
   it("does not accept a real ID token as a test token", async () => {
     const token = await sign(validClaims());
     await expect(
@@ -263,6 +278,28 @@ describe("protected routes with AUTH_MODE=firebase", () => {
   it("serves /me for a verified token", async () => {
     const response = await getMe(await sign(validClaims()));
     expect(response.status).toBe(200);
+  });
+
+  it("uses the token's auth_time as the sign-in time for account deletion (Z6-14)", async () => {
+    const deleteWith = async (authTime: number) =>
+      app.request(
+        "/account/deletion",
+        {
+          method: "POST",
+          headers: {
+            // A refreshed token: issued now, signed in at auth_time.
+            Authorization: `Bearer ${await sign({ ...validClaims(), auth_time: authTime })}`,
+          },
+        },
+        firebaseEnv(),
+      );
+    const stale = await deleteWith(nowSeconds() - 10 * 60);
+    expect(stale.status).toBe(403);
+    expect(((await stale.json()) as { error: { code: string } }).error.code).toBe(
+      "RECENT_SIGN_IN_REQUIRED",
+    );
+    const fresh = await deleteWith(nowSeconds() - 120);
+    expect(fresh.status).toBe(200);
   });
 
   it.each([
