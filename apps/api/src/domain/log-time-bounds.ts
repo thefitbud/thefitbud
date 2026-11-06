@@ -1,4 +1,4 @@
-import { formatLocalDate } from "@fitbud/core";
+import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
 
 /** EC1 rule 2: how far ahead of the server clock a client-stated log time may be. */
 export const LOG_TIME_FUTURE_DRIFT_MS = 5 * 60 * 1000;
@@ -72,6 +72,43 @@ export function reactivationLocalDate(
 ): string {
   return formatLocalDate(new Date(reactivatedAt), timeZone);
 }
+
+/** R2 (D-P2-21): a trainer logs or edits entries dated within this many days back. */
+export const COACH_LOG_WINDOW_DAYS = 7;
+
+/**
+ * R2 (D-P2-21, Z6-19): trainers skip the Z6-11 window bounds above, but every
+ * date of the entry must be within the last 7 days and not in the future.
+ *
+ * - `localDates` are civil days in the trainee's timezone (the assignment's day).
+ * - `instants` (the performed time) may be at most the same 5-minute drift
+ *   ahead of the server clock, and their civil day is checked as well.
+ * - "Within the last 7 days" is from today minus 7 days through today, in the
+ *   trainee's timezone, so last Wednesday's workout can still be fixed on
+ *   Wednesday.
+ */
+export function isWithinCoachLogWindow(input: {
+  localDates: readonly string[];
+  instants: readonly string[];
+  now: string;
+  timeZone: string;
+}): boolean {
+  const nowMs = Date.parse(input.now);
+  const today = formatLocalDate(new Date(nowMs), input.timeZone);
+  const earliest = addDaysToLocalDate(today, -COACH_LOG_WINDOW_DAYS);
+  const days = [...input.localDates];
+  for (const instant of input.instants) {
+    const ms = Date.parse(instant);
+    if (!Number.isFinite(ms) || ms > nowMs + LOG_TIME_FUTURE_DRIFT_MS) return false;
+    days.push(formatLocalDate(new Date(ms), input.timeZone));
+  }
+  return days.every((day) => day >= earliest && day <= today);
+}
+
+export const COACH_LOG_BACKDATE_ERROR = {
+  code: "BACKDATE_LIMIT",
+  message: "A trainer log must be dated within the last 7 days and not in the future.",
+} as const;
 
 export const LOG_TIME_ERROR_CODES = {
   future: "LOG_TIME_IN_FUTURE",

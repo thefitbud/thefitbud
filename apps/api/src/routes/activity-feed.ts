@@ -1,16 +1,19 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { NUTRIENT_SCALE, activityFeedResponseSchema } from "@fitbud/contracts";
-import { formatCivilDate, labelFor } from "@fitbud/core";
+import { formatCivilDate, formatPersonName, labelFor } from "@fitbud/core";
 import { createDb } from "../db/client.js";
 import {
   checkins,
   coachAsks,
   coachingRelationships,
+  logEditEvents,
   mealCompliance,
+  trainerProfiles,
   traineeProfiles,
   workoutExecutions,
 } from "../db/schema.js";
+import { describeCoachLogEvent } from "../domain/coach-log.js";
 import { buildPage } from "../lib/cursor.js";
 import { fail, ok } from "../lib/envelope.js";
 import { operation } from "../openapi/document.js";
@@ -149,6 +152,37 @@ activityFeedRoutes.get(
         occurredAt: row.lastAskedAt,
         traineeLocalTime: null,
         summary: `Coach ask: ${topicLabel}`,
+      });
+    }
+    // R4 (Z6-19): one event per trainer create or edit, from the audit table.
+    const coachChanges = await db
+      .select()
+      .from(logEditEvents)
+      .where(inArray(logEditEvents.coachingRelationshipId, relIds))
+      .orderBy(desc(logEditEvents.createdAt))
+      .limit(50);
+    const actorIds = [...new Set(coachChanges.map((row) => row.actorUserId))];
+    const actorNames = new Map(
+      actorIds.length === 0
+        ? []
+        : (
+            await db
+              .select({ userId: trainerProfiles.userId, displayName: trainerProfiles.displayName })
+              .from(trainerProfiles)
+              .where(inArray(trainerProfiles.userId, actorIds))
+          ).map((row) => [row.userId, formatPersonName(row.displayName)]),
+    );
+    for (const row of coachChanges) {
+      const described = describeCoachLogEvent(row, actorNames.get(row.actorUserId) || "Coach");
+      events.push({
+        id: `log_edit:${row.id}`,
+        relationshipId: row.coachingRelationshipId,
+        traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
+        type: described.type,
+        subtype: described.subtype,
+        occurredAt: row.createdAt,
+        traineeLocalTime: null,
+        summary: described.summary,
       });
     }
     events.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));

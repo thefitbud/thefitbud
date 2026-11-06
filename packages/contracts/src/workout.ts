@@ -97,6 +97,14 @@ export const workoutExecutionSchema = z.object({
   completedAt: isoDateTimeSchema.nullable(),
   sessionRpe: z.number().min(1).max(10).nullable(),
   requireSessionRpe: z.boolean(),
+  /**
+   * Who logged the entry (Z6-19, R1): `coach` entries are read-only to the
+   * trainee ("Logged by your coach"). Optional while the sync payload mapper
+   * does not carry it yet; the workouts routes always send it.
+   */
+  loggedByRole: z.enum(["trainee", "coach"]).optional(),
+  /** Set when a coach edited the entry ("Edited by your coach"). */
+  lastEditedByRole: z.enum(["trainee", "coach"]).nullable().optional(),
   exercises: z.array(exerciseExecutionSchema),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,

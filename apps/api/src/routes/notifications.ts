@@ -655,6 +655,7 @@ notificationRoutes.put(
         locale:
           parsed.data.locale === undefined ? current.locale : parsed.data.locale,
         trainerCategoriesJson: serializeTrainerCategories(nextTrainerCategories),
+        coachLogUpdates: parsed.data.coachLogUpdates ?? current.coachLogUpdates,
         preferredWorkoutTime:
           parsed.data.preferredWorkoutTime === undefined
             ? current.preferredWorkoutTime

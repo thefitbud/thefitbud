@@ -84,6 +84,8 @@ export const notificationTypeSchema = z.enum([
   "trainer_renewal",
   "trainer_meal_times_changed",
   "admin_whatsapp_budget",
+  /** Trainee: the coach created or edited one of their logs (Z6-19, D-P2-21 R5). */
+  "coach_log_updated",
 ]);
 export type NotificationType = z.infer<typeof notificationTypeSchema>;
 
@@ -129,6 +131,11 @@ export const notificationPreferencesSchema = z.object({
   traineeTimezone: z.string().min(1).max(64).nullable(),
   locale: z.string().min(2).max(16).nullable(),
   trainerCategories: trainerCategoriesSchema,
+  /**
+   * "Coach updates to my logs" (Z6-19, D-P2-21 R5, D-W6-32): push the trainee
+   * when their coach creates or edits one of their logs. On by default.
+   */
+  coachLogUpdates: z.boolean().default(true),
   preferredWorkoutTime: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -180,6 +187,7 @@ export const updateNotificationPreferencesRequestSchema = z.object({
     .nullable()
     .optional(),
   trainerCategories: trainerCategoriesSchema.partial().optional(),
+  coachLogUpdates: z.boolean().optional(),
   preferredWorkoutTime: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
