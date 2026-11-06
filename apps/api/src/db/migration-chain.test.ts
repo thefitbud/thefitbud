@@ -146,7 +146,7 @@ function tableColumns(
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0035 in order after 0029, with 0035 last", async () => {
+  it("places 0030 to 0036 in order after 0029, with 0036 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -159,7 +159,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 4]).toBe("0033_reminder_attempt_marker");
     expect(tags[previous + 5]).toBe("0034_remove_configured_status");
     expect(tags[previous + 6]).toBe("0035_numeric_set_load");
-    expect(tags.at(-1)).toBe("0035_numeric_set_load");
+    expect(tags[previous + 7]).toBe("0036_checkin_form_v2");
+    expect(tags.at(-1)).toBe("0036_checkin_form_v2");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -167,6 +168,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 4]?.idx).toBe(33);
     expect(journal[previous + 5]?.idx).toBe(34);
     expect(journal[previous + 6]?.idx).toBe(35);
+    expect(journal[previous + 7]?.idx).toBe(36);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -176,7 +178,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 4]).toBe("0033_reminder_attempt_marker.sql");
     expect(files[previousFile + 5]).toBe("0034_remove_configured_status.sql");
     expect(files[previousFile + 6]).toBe("0035_numeric_set_load.sql");
-    expect(files.at(-1)).toBe("0035_numeric_set_load.sql");
+    expect(files[previousFile + 7]).toBe("0036_checkin_form_v2.sql");
+    expect(files.at(-1)).toBe("0036_checkin_form_v2.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -413,6 +416,99 @@ describe("migration chain and seeds", () => {
     expect(sets.checkConstraints.set_executions_load_kind_chk?.value).toContain(
       "'bodyweight_plus'",
     );
+  });
+
+  it("records 0036 in the drizzle snapshot chain after 0035 with no schema change", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0035_snapshot.json"), "utf8"),
+    ) as { id: string; tables: unknown };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0036_snapshot.json"), "utf8"),
+    ) as { id: string; prevId: string; tables: unknown };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    expect(snapshot.tables).toEqual(previous.tables);
+  });
+
+  it("inserts global check-in form v2 insert-only when 0036 applies (Z6-2)", async () => {
+    const V1_ID = "c1000001-0000-4000-8000-000000000011";
+    const V2_ID = "c1000001-0000-4000-8000-000000000012";
+    const handle = await createMemoryDb({
+      foreignKeys: false,
+      through: "0035_numeric_set_load.sql",
+    });
+    try {
+      const versionRows = () =>
+        handle.sqlite.exec(
+          "SELECT id, template_id, key, version, scope, trainer_user_id, schema_json, created_at FROM checkin_form_versions ORDER BY version",
+        )[0]?.values ?? [];
+      const before = versionRows();
+      expect(before).toHaveLength(1);
+      expect(before[0]![0]).toBe(V1_ID);
+      // A past check-in pinned to v1 must stay on v1.
+      handle.sqlite.run(
+        `INSERT INTO checkins (
+           id, coaching_relationship_id, local_date, window_starts_at, window_ends_at,
+           record_status, record_version, definition_version, checkin_form_version_id,
+           created_at, updated_at
+         ) VALUES (
+           'past-checkin', 'rel-1', '2026-10-20', '2026-10-20T02:30:00.000Z', '2026-10-21T02:30:00.000Z',
+           'draft', 0, 1, '${V1_ID}', '2026-10-20T02:30:00.000Z', '2026-10-20T02:30:00.000Z'
+         )`,
+      );
+      const countsBefore = tableRowCounts(handle.sqlite);
+
+      handle.applyMigrationsFrom("0036_checkin_form_v2.sql");
+
+      const after = versionRows();
+      expect(after).toHaveLength(2);
+      expect(after[0]).toEqual(before[0]); // v1 byte-for-byte untouched
+      const v2 = after[1]!;
+      expect(v2.slice(0, 6)).toEqual([
+        V2_ID,
+        "c1000001-0000-4000-8000-000000000001",
+        "mvp",
+        2,
+        "global",
+        null,
+      ]);
+      const fields = (JSON.parse(String(v2[6])) as { fields: Array<Record<string, unknown>> })
+        .fields;
+      expect(fields.map((f) => f.key)).toEqual([
+        "weight", "waist", "hips", "chest", "arm", "thigh",
+        "photo_front", "photo_side", "photo_back",
+        "energy", "sleep_quality", "stress", "hunger", "notes",
+      ]);
+      for (const field of fields) {
+        expect(field.id).toBe(field.key);
+        expect(field.required).toBe(false);
+      }
+      // Row counts: only checkin_form_versions grew, by one.
+      const countsAfter = tableRowCounts(handle.sqlite);
+      expect(countsAfter).toEqual({
+        ...countsBefore,
+        checkin_form_versions: countsBefore.checkin_form_versions! + 1,
+      });
+      const pinned = handle.sqlite.exec(
+        "SELECT checkin_form_version_id FROM checkins WHERE id = 'past-checkin'",
+      )[0]?.values[0]?.[0];
+      expect(pinned).toBe(V1_ID);
+      // The insert-only trigger still rejects updates and 0036 never updates v1.
+      expect(() =>
+        handle.sqlite.run(
+          `UPDATE checkin_form_versions SET schema_json = '{}' WHERE id = '${V1_ID}'`,
+        ),
+      ).toThrow(/insert-only/);
+      expect(() =>
+        handle.sqlite.run(
+          `UPDATE checkin_form_versions SET schema_json = '{}' WHERE id = '${V2_ID}'`,
+        ),
+      ).toThrow(/insert-only/);
+      const sql = readFileSync(join(drizzleDir, "0036_checkin_form_v2.sql"), "utf8");
+      expect(sql).not.toMatch(/\bUPDATE\b|\bDELETE\b|\bDROP\b|\bALTER\b/i);
+    } finally {
+      handle.close();
+    }
   });
 
   it("backfills numeric set loads exactly like the load parser when 0035 applies", async () => {

@@ -27,6 +27,7 @@ import {
   type CheckinDraftAnswers,
 } from "@fitbud/contracts";
 import {
+  DEFAULT_CHECKIN_FORM_VERSION_ID,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
   addDaysToLocalDate,
   canRecordCheckinReview,
@@ -203,6 +204,17 @@ function serializeAnswers(
   return JSON.stringify(answers);
 }
 
+/**
+ * A later assignment continues on the previous check-in's pinned version, except
+ * the legacy global v1: those fall through to the default (v2). Trainer-specific
+ * versions keep carrying forward (D-W6-17).
+ */
+function carriedFormVersionId(previousVersionId: string | null | undefined) {
+  return previousVersionId && previousVersionId !== GLOBAL_CHECKIN_FORM_VERSION_ID
+    ? previousVersionId
+    : null;
+}
+
 async function resolveCheckinFormPin(
   db: Db,
   input: {
@@ -217,7 +229,7 @@ async function resolveCheckinFormPin(
   const versionId =
     input.requestedVersionId ??
     input.fallbackVersionId ??
-    GLOBAL_CHECKIN_FORM_VERSION_ID;
+    DEFAULT_CHECKIN_FORM_VERSION_ID;
   const rows = await db
     .select()
     .from(checkinFormVersions)
@@ -597,7 +609,7 @@ checkinRoutes.post(
         .from(checkins)
         .where(eq(checkins.id, parsed.data.fromCheckinId))
         .limit(1);
-      if (source[0]) fallbackVersionId = source[0].formVersionId;
+      if (source[0]) fallbackVersionId = carriedFormVersionId(source[0].formVersionId);
     }
     const formPin = await resolveCheckinFormPin(db, {
       trainerUserId: actor.userId,
@@ -883,8 +895,7 @@ checkinRoutes.post(
           actor.selectedRole === "trainer" ? actor.userId : null,
         fallbackVersionId:
           config.schedule.preferredCheckinFormVersionId ??
-          latest[0]?.checkinFormVersionId ??
-          null,
+          carriedFormVersionId(latest[0]?.checkinFormVersionId),
       });
       if (!formPin.ok) {
         return fail(c, formPin.status, formPin.code, formPin.message);
