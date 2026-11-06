@@ -16,14 +16,29 @@ export const users = sqliteTable(
   {
     id: text("id").primaryKey(),
     firebaseUid: text("firebase_uid").notNull(),
-    accountState: text("account_state", { enum: ["active", "disabled"] })
+    accountState: text("account_state", { enum: ["active", "disabled", "archived"] })
       .notNull()
       .default("active"),
     timezone: text("timezone").notNull().default("UTC"),
+    /** ISO UTC; set exactly when account_state is 'archived' (Z6-16, D-W6-7). */
+    archivedAt: text("archived_at"),
+    /** ISO UTC; the daily purge removes archived accounts past this instant. */
+    purgeAfter: text("purge_after"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("users_firebase_uid_uidx").on(table.firebaseUid)],
+  (table) => [
+    uniqueIndex("users_firebase_uid_uidx").on(table.firebaseUid),
+    index("users_purge_after_idx").on(table.purgeAfter),
+    check(
+      "users_archived_at_chk",
+      sql`(${table.accountState} = 'archived') = (${table.archivedAt} IS NOT NULL)`,
+    ),
+    check(
+      "users_purge_after_chk",
+      sql`(${table.accountState} = 'archived') = (${table.purgeAfter} IS NOT NULL)`,
+    ),
+  ],
 );
 
 export const userRoles = sqliteTable(

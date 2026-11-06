@@ -231,7 +231,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0037 in order after 0029, with 0037 last", async () => {
+  it("places 0030 to 0038 in order after 0029, with 0038 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -246,7 +246,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 6]).toBe("0035_numeric_set_load");
     expect(tags[previous + 7]).toBe("0036_payment_tracking");
     expect(tags[previous + 8]).toBe("0037_daily_steps");
-    expect(tags.at(-1)).toBe("0037_daily_steps");
+    expect(tags[previous + 9]).toBe("0038_archived_account_state");
+    expect(tags.at(-1)).toBe("0038_archived_account_state");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -256,6 +257,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 6]?.idx).toBe(35);
     expect(journal[previous + 7]?.idx).toBe(36);
     expect(journal[previous + 8]?.idx).toBe(37);
+    expect(journal[previous + 9]?.idx).toBe(38);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -267,7 +269,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 6]).toBe("0035_numeric_set_load.sql");
     expect(files[previousFile + 7]).toBe("0036_payment_tracking.sql");
     expect(files[previousFile + 8]).toBe("0037_daily_steps.sql");
-    expect(files.at(-1)).toBe("0037_daily_steps.sql");
+    expect(files[previousFile + 9]).toBe("0038_archived_account_state.sql");
+    expect(files.at(-1)).toBe("0038_archived_account_state.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -1016,6 +1019,173 @@ describe("migration chain and seeds", () => {
           [relationshipId],
         );
         assertNoForeignKeyViolations(handle.sqlite);
+      } finally {
+        handle.close();
+      }
+    },
+    120_000,
+  );
+
+  it("keeps 0038 additive: no table rebuild, drop or backfill", () => {
+    const archiveSql = readFileSync(join(drizzleDir, "0038_archived_account_state.sql"), "utf8");
+    const code = archiveSql.replace(/^--.*$/gm, "");
+    expect(code).not.toMatch(/DROP\s+(TABLE|INDEX)|\bUPDATE\b|\bDELETE\b|\bINSERT\b|RENAME|PRAGMA/i);
+    expect(code).not.toMatch(/CREATE TABLE/i);
+    expect(
+      [...code.matchAll(/ALTER TABLE `([a-z_]+)` ADD COLUMN `([a-z_]+)`/g)].map(
+        (m) => `${m[1]}.${m[2]}`,
+      ),
+    ).toEqual(["users.archived_at", "users.purge_after"]);
+  });
+
+  it("records 0038 in the drizzle snapshot chain after 0037", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0037_snapshot.json"), "utf8"),
+    ) as { id: string };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0038_snapshot.json"), "utf8"),
+    ) as {
+      id: string;
+      prevId: string;
+      tables: Record<
+        string,
+        {
+          columns: Record<string, { type: string; notNull: boolean }>;
+          indexes: Record<string, { columns: string[]; isUnique: boolean }>;
+          checkConstraints: Record<string, { value: string }>;
+        }
+      >;
+    };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    const users = snapshot.tables.users!;
+    expect(users.columns.archived_at).toMatchObject({ type: "text", notNull: false });
+    expect(users.columns.purge_after).toMatchObject({ type: "text", notNull: false });
+    expect(users.indexes.users_purge_after_idx).toMatchObject({
+      columns: ["purge_after"],
+      isUnique: false,
+    });
+    expect(Object.keys(users.checkConstraints).sort()).toEqual([
+      "users_archived_at_chk",
+      "users_purge_after_chk",
+    ]);
+  });
+
+  it("accepts archived accounts with both dates and rejects every other combination", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      expect(tableColumns(handle.sqlite, "users")).toEqual([
+        "id",
+        "firebase_uid",
+        "account_state",
+        "timezone",
+        "created_at",
+        "updated_at",
+        "archived_at",
+        "purge_after",
+      ]);
+      expect(indexColumns(handle.sqlite, "users_purge_after_idx")).toEqual(["purge_after"]);
+      const at = "2026-11-01T05:00:00.000Z";
+      const purge = "2027-05-01T05:00:00.000Z";
+      const insertUser = (
+        id: string,
+        state: string,
+        archivedAt: string | null,
+        purgeAfter: string | null,
+      ) =>
+        handle.sqlite.run(
+          "INSERT INTO users (id, firebase_uid, account_state, timezone, created_at, updated_at, archived_at, purge_after) VALUES (?, ?, ?, 'Asia/Kolkata', ?, ?, ?, ?)",
+          [id, `firebase-${id}`, state, at, at, archivedAt, purgeAfter],
+        );
+
+      insertUser("u-active", "active", null, null);
+      insertUser("u-disabled", "disabled", null, null);
+      insertUser("u-archived", "archived", at, purge);
+      expect(
+        (handle.sqlite.exec("SELECT id, account_state, archived_at, purge_after FROM users ORDER BY id")[0]
+          ?.values ?? []),
+      ).toEqual([
+        ["u-active", "active", null, null],
+        ["u-archived", "archived", at, purge],
+        ["u-disabled", "disabled", null, null],
+      ]);
+
+      const rejected: Array<[string, string | null, string | null]> = [
+        ["archived", null, null],
+        ["archived", at, null],
+        ["archived", null, purge],
+        ["active", at, purge],
+        ["active", at, null],
+        ["active", null, purge],
+        ["disabled", at, purge],
+      ];
+      rejected.forEach(([state, archivedAt, purgeAfter], index) => {
+        expect(
+          () => insertUser(`u-bad-${index}`, state, archivedAt, purgeAfter),
+          JSON.stringify([state, archivedAt, purgeAfter]),
+        ).toThrow(/CHECK constraint failed/);
+      });
+
+      // Archiving and reactivating move the state and both dates together.
+      expect(() =>
+        handle.sqlite.run("UPDATE users SET account_state = 'archived' WHERE id = 'u-active'"),
+      ).toThrow(/CHECK constraint failed/);
+      handle.sqlite.run(
+        "UPDATE users SET account_state = 'archived', archived_at = ?, purge_after = ? WHERE id = 'u-active'",
+        [at, purge],
+      );
+      expect(() =>
+        handle.sqlite.run("UPDATE users SET account_state = 'active' WHERE id = 'u-active'"),
+      ).toThrow(/CHECK constraint failed/);
+      handle.sqlite.run(
+        "UPDATE users SET account_state = 'active', archived_at = NULL, purge_after = NULL WHERE id = 'u-active'",
+      );
+      assertNoForeignKeyViolations(handle.sqlite);
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it(
+    "applies 0038 to a seeded database: every user stays active with NULL dates, row counts unchanged, foreign keys clean",
+    async () => {
+      const handle = await createMemoryDb({
+        foreignKeys: true,
+        librarySeed: true,
+        through: "0037_daily_steps.sql",
+      });
+      try {
+        expect(tableColumns(handle.sqlite, "users")).not.toContain("archived_at");
+        const passwordHash = await hashPassword("FitBud-demo-2026");
+        handle.sqlite.exec(
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+            }),
+          ),
+        );
+        await yieldToEventLoop();
+        const usersSql =
+          "SELECT id, firebase_uid, account_state, timezone, created_at, updated_at FROM users ORDER BY id";
+        const usersBefore = handle.sqlite.exec(usersSql)[0]?.values ?? [];
+        expect(usersBefore.length).toBeGreaterThan(0);
+        const countsBefore = tableRowCounts(handle.sqlite);
+
+        handle.applyMigrationsFrom("0038_archived_account_state.sql");
+        await yieldToEventLoop();
+
+        expect(tableRowCounts(handle.sqlite)).toEqual(countsBefore);
+        assertNoForeignKeyViolations(handle.sqlite);
+        expect(handle.sqlite.exec(usersSql)[0]?.values ?? []).toEqual(usersBefore);
+        expect(
+          handle.sqlite.exec(
+            "SELECT DISTINCT account_state, archived_at, purge_after FROM users",
+          )[0]?.values,
+        ).toEqual([["active", null, null]]);
+        expect(indexColumns(handle.sqlite, "users_purge_after_idx")).toEqual(["purge_after"]);
       } finally {
         handle.close();
       }
