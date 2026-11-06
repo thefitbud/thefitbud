@@ -1361,6 +1361,45 @@ describe("coaching configuration", () => {
     expect(await workoutRows(db, relationshipId)).toEqual(workoutsBefore);
   });
 
+  it("Save as vN+1 applies a photo-only change from tomorrow", async () => {
+    const db = currentDb!;
+    const { trainerCookie, relationshipId } = await reachCoachingReady("photo-only");
+    await publishDailyPlan(trainerCookie, relationshipId, "photo-only");
+    const nutrition = { mealsPerDay: 3, confirmationWindowHours: 6 };
+    const v1 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      nutrition: { ...nutrition, photoRequirement: "none" },
+    });
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v1.recordVersion, "photo-v1"))
+        .status,
+    ).toBe(200);
+    const before = await mealRows(db, relationshipId);
+    expect(before.map((row) => row.photoRequired)).toEqual(before.map(() => false));
+    const v1Row = (await configurationRows(db, relationshipId))[0]!;
+    const opened = await openNextVersion(
+      trainerCookie,
+      relationshipId,
+      v1Row.recordVersion,
+      "photo-versions",
+    );
+    const v2 = await saveDraft(trainerCookie, relationshipId, {
+      ...draftBody,
+      expectedVersion: opened.recordVersion,
+      nutrition: { ...nutrition, photoRequirement: "all_meals" },
+    });
+    expect(
+      (await activateConfiguration(trainerCookie, relationshipId, v2.recordVersion, "photo-v2"))
+        .status,
+    ).toBe(200);
+    const after = await mealRows(db, relationshipId);
+    // Windows are unchanged; only the photo requirement moves, from tomorrow.
+    expect(after.map((row) => row.windowEndsAt)).toEqual(before.map((row) => row.windowEndsAt));
+    expect(after.map((row) => row.photoRequired)).toEqual(
+      after.map((_, index) => index > 0),
+    );
+  });
+
   it("returns 409 naming the missing D17 section and leaves the draft as it was", async () => {
     const db = currentDb!;
     const { trainerCookie, relationshipId } = await reachCoachingReady("missing-409");
