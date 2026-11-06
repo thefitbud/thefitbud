@@ -317,3 +317,169 @@ test("the smoke-path auth flows dismiss the keyboard with a tap, not hideKeyboar
     assert.match(src, dismiss, `${rel} dismisses the keyboard by tapping inert text`);
   }
 });
+
+// Z5-5b. The flows below are the iOS fixes for causes 8 and 9 (job 127176024926)
+// and the full-tag hideKeyboard steps #241 left behind.
+const maestroDir = path.join(repo, "apps/mobile/.maestro");
+
+function maestroFiles(dir = maestroDir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...maestroFiles(full));
+    else if (entry.name.endsWith(".yaml")) out.push(full);
+  }
+  return out.sort();
+}
+
+// Maestro matches a text selector against the whole string (Regex.matches), so
+// the YAML pattern is anchored the same way here. A YAML "\\" is one backslash.
+function yamlRegex(quoted) {
+  return new RegExp(`^(?:${quoted.replace(/\\\\/g, "\\")})$`);
+}
+
+// Cause 8: on iOS the "Forgot password?" Pressable is exposed only by its
+// accessibilityLabel, which has no "?", so the password button's `below:`
+// anchor never matched there.
+test("the password button's anchor matches the Forgot password label on iOS and the text on Android", () => {
+  const flow = fs.readFileSync(path.join(maestroDir, "common/sign-in-password.yaml"), "utf8");
+  const step = flow.match(/- tapOn:\n\s+text: "Sign in"\n\s+below: "([^"\n]+)"/);
+  assert.ok(step, "the password subflow taps the Sign in button below an anchor");
+  const anchor = yamlRegex(step[1]);
+  const screen = fs.readFileSync(
+    path.join(repo, "apps/mobile/src/screens/auth/SignInScreen.tsx"),
+    "utf8",
+  );
+  const link = screen.match(
+    /accessibilityLabel="([^"]+)"\s+onPress=\{onForgotPassword\}[\s\S]*?<Text[^>]*>([^<]+)<\/Text>/,
+  );
+  assert.ok(link, "SignInScreen has the Forgot password link");
+  const [, label, text] = link;
+  assert.match(label, anchor, `iOS exposes the accessibilityLabel "${label}"`);
+  assert.match(text, anchor, `Android also exposes the text "${text}"`);
+  assert.doesNotMatch("Sign in with a code instead", anchor);
+});
+
+// Cause 9: Maestro's clearState does not clear the iOS simulator keychain, where
+// SecureStore keeps the session, so a flow after a signed-in flow opened signed in.
+test("every launch that clears the app state also clears the keychain", () => {
+  let launches = 0;
+  for (const file of maestroFiles(path.join(maestroDir, "flows"))) {
+    const src = fs.readFileSync(file, "utf8");
+    const blocks = src.match(/^- launchApp:\n(?:[ \t]+.*\n)+/gm) ?? [];
+    for (const block of blocks) {
+      if (!/^\s+clearState: true$/m.test(block)) continue;
+      launches += 1;
+      assert.match(
+        block,
+        /^\s+clearKeychain: true$/m,
+        `${path.relative(repo, file)}: launchApp clears the state but not the keychain`,
+      );
+    }
+  }
+  assert.ok(launches >= 14, `expected every flow's launch, found ${launches}`);
+  const manual = fs.readFileSync(path.join(maestroDir, "session-persists.yaml"), "utf8");
+  const clearState = manual.indexOf("\n- clearState\n");
+  const clearKeychain = manual.indexOf("\n- clearKeychain\n");
+  assert.ok(
+    clearKeychain > 0 && clearKeychain < clearState,
+    "session-persists.yaml clears the keychain before it starts",
+  );
+});
+
+// The full-tag flows #241 left on hideKeyboard. Each now taps a plain Text inside
+// a keyboardShouldPersistTaps="handled" ScrollView on its screen.
+test("no flow dismisses the keyboard with hideKeyboard; the full-tag flows tap inert text", () => {
+  for (const file of maestroFiles()) {
+    const src = fs.readFileSync(file, "utf8");
+    assert.doesNotMatch(src, /^\s*- hideKeyboard/m, `${path.relative(repo, file)} still uses hideKeyboard`);
+  }
+  const src = (rel) => fs.readFileSync(path.join(repo, rel), "utf8");
+  const cases = [
+    {
+      flow: "flows/trainer/notes-more.yaml",
+      after: '- inputText: "QA nightly note. Safe to delete."',
+      tap: "Coach notes",
+      screen: "apps/mobile/src/trainer/ClientStatusScreen.tsx",
+      text: /<Text style=\{styles\.section\}>Coach notes<\/Text>/,
+    },
+    {
+      flow: "flows/trainee/checkin.yaml",
+      after: '- inputText: "Solid week, one session missed."',
+      tap: "Weekly check-in",
+      screen: "apps/mobile/src/trainee/CheckinScreen.tsx",
+      text: /<Text style=\{styles\.topTitle\}>Weekly check-in<\/Text>/,
+    },
+    {
+      flow: "flows/trainee/meal-log.yaml",
+      after: '- inputText: "dal"',
+      tap: "Results",
+      screen: "apps/mobile/src/trainee/FoodSearchScreen.tsx",
+      text: /keyboardShouldPersistTaps="handled"[\s\S]*<Text style=\{styles\.sml\}>Results<\/Text>/,
+    },
+  ];
+  assert.match(
+    src("apps/mobile/src/components/Screen.tsx"),
+    /<ScrollView[\s\S]*?keyboardShouldPersistTaps="handled"/,
+  );
+  for (const c of cases) {
+    const flow = fs.readFileSync(path.join(maestroDir, c.flow), "utf8");
+    const at = flow.indexOf(`${c.after}\n`);
+    assert.ok(at >= 0, `${c.flow} types into the field`);
+    const next = flow
+      .slice(at + c.after.length + 1)
+      .split("\n")
+      .find((line) => !line.startsWith("#"));
+    assert.equal(next, `- tapOn: "${c.tap}"`, `${c.flow} dismisses the keyboard with a tap on "${c.tap}"`);
+    const screen = src(c.screen);
+    assert.match(screen, c.text, `"${c.tap}" is a plain Text on ${c.screen}`);
+    assert.match(screen, /<Screen\b/, `${c.screen} renders inside Screen's handled ScrollView`);
+  }
+});
+
+// Cause 10 (job 127261380352): a client row is one Pressable with no
+// accessibilityLabel, so iOS exposes it as one element labelled with all of its
+// text. On the client list the name is matched inside that label; on the client
+// status screen, where the name is a plain Text header, it stays exact.
+test("the client-list steps match the client name inside the row's iOS label", () => {
+  const tab = fs.readFileSync(path.join(repo, "apps/mobile/src/trainer/ClientsTab.tsx"), "utf8");
+  const row = tab.match(/<Pressable\s+key=\{row\.key\}[^>]*>/);
+  assert.ok(row, "ClientsTab renders each client row as a Pressable");
+  assert.doesNotMatch(row[0], /accessibilityLabel/, "the row has no label of its own");
+  assert.match(tab, /<Text style=\{styles\.name\}>\{formatPersonName\(row\.name\)\}<\/Text>/);
+
+  const clients = fs.readFileSync(path.join(maestroDir, "flows/trainer/clients.yaml"), "utf8");
+  const list = clients.slice(clients.indexOf('- tapOn: "Clients"'), clients.indexOf('visible: "This week"'));
+  assert.match(list, /visible: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+  assert.match(list, /- assertVisible: "\.\*\$\{QA_ONTRACK_NAME\}\.\*"/);
+  assert.match(list, /- tapOn: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+  assert.doesNotMatch(list, /(visible|assertVisible|tapOn): \$\{QA_/, "no exact name selector on the list");
+  // Every check on the list still runs: wait, the second client, screenshot.
+  assert.match(list, /- takeScreenshot: trainer-clients__list/);
+  const status = clients.slice(clients.indexOf('visible: "This week"'));
+  assert.match(status, /- assertVisible: \$\{QA_SLIPPING_NAME\}\n/, "the status header stays an exact match");
+  assert.match(
+    fs.readFileSync(path.join(repo, "apps/mobile/src/trainer/ClientStatusScreen.tsx"), "utf8"),
+    /<Text style=\{styles\.h1\}>\{name\}<\/Text>/,
+  );
+
+  const notes = fs.readFileSync(path.join(maestroDir, "flows/trainer/notes-more.yaml"), "utf8");
+  const notesList = notes.slice(notes.indexOf('- tapOn: "Clients"'), notes.indexOf('visible: "This week"'));
+  assert.match(notesList, /visible: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+  assert.match(notesList, /- tapOn: "\.\*\$\{QA_SLIPPING_NAME\}\.\*"/);
+});
+
+// Cause 11 (job 127261380352): each step on trainee Today takes about ten times
+// as long on iOS, so a 20 s scroll limit allowed about one look-and-swipe.
+test("the Today scrolls below the workout card allow 120 s on iOS", () => {
+  const today = fs.readFileSync(path.join(maestroDir, "flows/trainee/today.yaml"), "utf8");
+  const steps = [...today.matchAll(/- scrollUntilVisible:\n\s+element: ("[^"\n]+")\n\s+timeout: (\d+)/g)];
+  const byElement = Object.fromEntries(steps.map((m) => [m[1], Number(m[2])]));
+  for (const element of ['"Nutrition"', '"Meals"', '".*${QA_TODAY_MEAL_NAME}.*"']) {
+    assert.ok(element in byElement, `today.yaml scrolls to ${element}`);
+    assert.ok(byElement[element] >= 120000, `${element}: ${byElement[element]} ms`);
+  }
+  // The scrolls stay in order, and nothing that checks the screen was dropped.
+  assert.ok(today.indexOf('element: "Nutrition"') < today.indexOf('element: "Meals"'));
+  assert.match(today, /- assertNotVisible: "No meals planned today\\\\\."/);
+});

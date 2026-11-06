@@ -12,6 +12,7 @@ tags:
 # Writes a check-in review; the nightly reset restores it (D-QA1-7).
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
