@@ -1622,7 +1622,6 @@ export const notifications = sqliteTable(
         "trainer_intake_submitted",
         "trainer_critical_digest",
         "trainer_renewal",
-        "coach_log_updated",
         "trainer_meal_times_changed",
         "admin_whatsapp_budget",
       ],

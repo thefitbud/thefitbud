@@ -7,8 +7,8 @@
 -- SQLite cannot add a table CHECK with ALTER, so each role column carries a named
 -- column CHECK. The user columns reference users with the default NO ACTION (a
 -- nullable REFERENCES column is allowed by ADD COLUMN because its default is NULL).
--- notifications.notification_type has no CHECK (its values live in schema.ts only),
--- so adding 'coach_log_updated' needs no constraint change.
+-- notifications.notification_type has no CHECK (its values live in schema.ts only);
+-- the coach_log_updated value is added with its sender in Z6-19 (D-W6-30).
 
 ALTER TABLE `workout_executions` ADD COLUMN `logged_by_role` text NOT NULL DEFAULT 'trainee'
   CONSTRAINT `workout_executions_logged_by_role_chk` CHECK (`logged_by_role` IN ('trainee', 'coach'));

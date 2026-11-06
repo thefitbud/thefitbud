@@ -15,7 +15,6 @@ import {
   mealCompliance,
   measurements,
   notificationPreferences,
-  notifications,
   workoutExecutions,
 } from "./schema.js";
 
@@ -1376,11 +1375,6 @@ describe("migration chain and seeds", () => {
         ["coaching_relationship_id", "coaching_relationships", "CASCADE"],
         ["trainee_user_id", "users", "NO ACTION"],
       ]);
-      // schema.ts and SQL agree on the notification type list's new member.
-      const types = getTableConfig(notifications).columns.find(
-        (column) => column.name === "notification_type",
-      )!.enumValues;
-      expect(types).toContain("coach_log_updated");
     } finally {
       handle.close();
     }

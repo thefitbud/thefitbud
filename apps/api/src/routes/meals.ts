@@ -952,6 +952,11 @@ async function recordCompliance(
     loggedLate: logGuard.loggedLate,
     loggedAfterResolve: logGuard.loggedAfterResolve,
     clientLoggedAt: input.clientLoggedAt ?? null,
+    loggedByRole: "trainee" as const,
+    loggedByUserId: null,
+    lastEditedByRole: null,
+    lastEditedByUserId: null,
+    lastEditedAt: null,
     createdAt: now,
     updatedAt: now,
   };
