@@ -825,7 +825,7 @@ describe("notifications and reminders (D4)", () => {
   it("applies meal and workout clocks, suppresses logged items, and summarizes the day", async () => {
     const { trainerCookie, traineeToken, relationshipId } =
       await reachActiveCheckinConfig("clocks");
-    const localDate = addDaysToLocalDate(formatLocalDate(new Date(), KOLKATA_TZ), 1);
+    const localDate = formatLocalDate(new Date(), KOLKATA_TZ);
     const weekday = weekdayFromLocalDate(localDate);
     await register(
       { bearer: traineeToken, role: "trainee" },

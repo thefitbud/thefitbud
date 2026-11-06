@@ -19,6 +19,8 @@ function dayDot(state: WeekDayState): string {
       return colors.success;
     case "partial":
       return colors.warning;
+    case "due":
+      return colors.darkGrey;
     case "missed":
       return colors.error;
     case "rest":

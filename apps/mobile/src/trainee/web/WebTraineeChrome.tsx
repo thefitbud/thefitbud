@@ -24,6 +24,8 @@ function dotColor(state: DateNavigatorDay["state"]): string {
       return colors.success;
     case "partial":
       return colors.warning;
+    case "due":
+      return colors.darkGrey;
     case "open":
       return colors.indigo;
     case "rest":
@@ -48,6 +50,8 @@ export function webDayStateLabel(state: DateNavigatorDay["state"]): string {
       return labelFor("week_day_state", "done");
     case "partial":
       return labelFor("week_day_state", "partial");
+    case "due":
+      return labelFor("week_day_state", "due");
     case "open":
       return labelFor("week_day_state", "missed");
     case "rest":

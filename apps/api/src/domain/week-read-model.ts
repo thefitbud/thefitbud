@@ -134,8 +134,8 @@ export type WeekDayWorkout = {
 };
 
 /**
- * The only derivation of a day's `done` / `partial` / `missed` / `rest` /
- * `future` state (BT9, D-W4-14). `buildWeekReadModel` calls it for each day
+ * The only derivation of a day's `done` / `partial` / `due` / `missed` /
+ * `rest` / `future` state (BT9, D-W4-14). `buildWeekReadModel` calls it for each day
  * of the week, and `GET /me/day/:date` calls it for the requested date.
  * There is no other day-state rule: a state that is not produced here is
  * not a state FitBud shows.
@@ -171,17 +171,22 @@ export function deriveWeekDayFromWorkouts(input: {
     (status) =>
       status === "completed" || status === "modified" || status === "skipped",
   );
-  const anyDone = woStatuses.some(
+  const anyClosed = woStatuses.some(
     (status) =>
       status === "completed" || status === "modified" || status === "skipped",
   );
+  const anyStarted = woStatuses.some(
+    (status) => status === "in_progress" || status === "paused",
+  );
   const allMissed = woStatuses.every((status) => status === "missed");
   if (allDone) return { state: "done", workoutLabel };
-  if (allMissed || (!anyDone && date < today)) {
-    return { state: "missed", workoutLabel };
-  }
-  if (anyDone) return { state: "partial", workoutLabel };
-  return { state: date < today ? "missed" : "partial", workoutLabel };
+  // Real progress (something closed, or a workout started) is `partial`,
+  // today or in the past (D-W6-10 rules 3 and 5).
+  if (anyClosed || anyStarted) return { state: "partial", workoutLabel };
+  // Nothing logged. A past day, or a day whose every window has closed, is
+  // `missed`; an open today is `due` (rules 1 and 4).
+  if (allMissed || date < today) return { state: "missed", workoutLabel };
+  return { state: "due", workoutLabel };
 }
 
 export async function buildWeekReadModel(

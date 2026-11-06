@@ -140,6 +140,7 @@ const labels = {
 const SPOKEN: Record<WeekDayState, string> = {
   done: "done",
   partial: "partial",
+  due: "to do",
   missed: "open",
   rest: "rest",
   future: "future",

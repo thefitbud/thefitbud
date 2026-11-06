@@ -401,6 +401,7 @@ const LABELS = {
   week_day_state: {
     done: "Done",
     partial: "Partial",
+    due: "To do",
     missed: "Missed",
     rest: "Rest",
     future: "Upcoming",
