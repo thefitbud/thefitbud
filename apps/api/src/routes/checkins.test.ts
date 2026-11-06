@@ -3,10 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   GLOBAL_CHECKIN_FORM_FIELDS,
   GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
-  GLOBAL_CHECKIN_FORM_V2_FIELDS,
-  GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
-  addDaysToLocalDate,
   formatLocalDate,
 } from "@fitbud/core";
 import * as schema from "../db/schema.js";
@@ -335,11 +332,10 @@ describe("check-in loop", () => {
         };
       };
     };
-    // New assignments pin global v2 (Z6-2, D-W6-17).
     expect(scheduledBody.data.checkin.checkinFormVersionId).toBe(
-      GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
     );
-    expect(scheduledBody.data.checkin.definitionVersion).toBe(2);
+    expect(scheduledBody.data.checkin.definitionVersion).toBe(1);
     expect(["due", "scheduled", "overdue"]).toContain(
       scheduledBody.data.checkin.status,
     );
@@ -461,15 +457,13 @@ describe("check-in loop", () => {
     expect(contextBody.data.checkin.status).toBe("submitted");
     expect(contextBody.data.checkin.answers.wellbeing).toBe("Strong week");
     expect(contextBody.data.checkin.checkinFormVersionId).toBe(
-      GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
     );
-    expect(contextBody.data.pinnedForm.id).toBe(
-      GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
-    );
+    expect(contextBody.data.pinnedForm.id).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID);
     expect(contextBody.data.pinnedForm.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "weight",
+          id: "body_weight",
           type: "measurement",
           measurementType: "body_weight_kg",
         }),
@@ -736,21 +730,13 @@ describe("check-in loop", () => {
     const globalAfterBody = (await globalAfter.json()) as {
       data: { versions: Array<{ id: string; fields: unknown[] }> };
     };
-    // Global v1 is untouched; v2 is the only other global version.
+    // Global v1 is untouched; migration 0036's v2 is the only other version.
     expect(globalAfterBody.data.versions).toHaveLength(2);
+    expect(globalAfterBody.data.versions[0]?.id).toBe(
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
+    );
     expect(globalAfterBody.data.versions[0]?.fields).toEqual(
       GLOBAL_CHECKIN_FORM_FIELDS,
-    );
-    expect(globalAfterBody.data.versions[1]?.id).toBe(
-      GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
-    );
-    // The response schema strips `key` until Z6-6 types it; id equals key.
-    expect(globalAfterBody.data.versions[1]?.fields).toEqual(
-      GLOBAL_CHECKIN_FORM_V2_FIELDS.map((field) => {
-        const copy: Record<string, unknown> = { ...field };
-        delete copy.key;
-        return copy;
-      }),
     );
 
     const scheduled = await app.request(
@@ -861,55 +847,5 @@ describe("check-in loop", () => {
       data: { checkin: { checkinFormVersionId: string } };
     };
     expect(nextBody.data.checkin.checkinFormVersionId).toBe(pinnedVersionId);
-
-    // A check-in explicitly pinned to the legacy global v1 stays on v1, but the
-    // assignment that follows it uses the default, global v2 (Z6-2).
-    const legacyDate = addDaysToLocalDate(today, 90);
-    const legacy = await app.request(
-      `/checkins/relationships/${relationshipId}/schedule-next`,
-      {
-        method: "POST",
-        headers: {
-          Cookie: trainerCookie,
-          "Content-Type": "application/json",
-          "Idempotency-Key": "schedule-legacy-v1",
-        },
-        body: JSON.stringify({
-          localDate: legacyDate,
-          checkinFormVersionId: GLOBAL_CHECKIN_FORM_VERSION_ID,
-        }),
-      },
-      testEnv(),
-    );
-    expect(legacy.status).toBe(200);
-    const legacyBody = (await legacy.json()) as {
-      data: { checkin: { id: string; checkinFormVersionId: string } };
-    };
-    expect(legacyBody.data.checkin.checkinFormVersionId).toBe(
-      GLOBAL_CHECKIN_FORM_VERSION_ID,
-    );
-    const afterLegacy = await app.request(
-      `/checkins/relationships/${relationshipId}/schedule-next`,
-      {
-        method: "POST",
-        headers: {
-          Cookie: trainerCookie,
-          "Content-Type": "application/json",
-          "Idempotency-Key": "schedule-after-v1",
-        },
-        body: JSON.stringify({
-          fromCheckinId: legacyBody.data.checkin.id,
-          localDate: addDaysToLocalDate(legacyDate, 7),
-        }),
-      },
-      testEnv(),
-    );
-    expect(afterLegacy.status).toBe(200);
-    const afterLegacyBody = (await afterLegacy.json()) as {
-      data: { checkin: { checkinFormVersionId: string } };
-    };
-    expect(afterLegacyBody.data.checkin.checkinFormVersionId).toBe(
-      GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
-    );
   });
 });

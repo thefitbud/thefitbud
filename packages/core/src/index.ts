@@ -112,7 +112,6 @@ export { IST_TIME_ZONE, istDate, istInstantAt } from "./clock.js";
 export { greetingFor } from "./greeting.js";
 
 export {
-  DEFAULT_CHECKIN_FORM_VERSION_ID,
   GLOBAL_CHECKIN_FORM_V2_DEFINITION_JSON,
   GLOBAL_CHECKIN_FORM_V2_FIELDS,
   GLOBAL_CHECKIN_FORM_V2_VERSION_ID,

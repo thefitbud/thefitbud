@@ -18,14 +18,11 @@ export const GLOBAL_CHECKIN_FORM_VERSION_ID =
   "c1000001-0000-4000-8000-000000000011";
 
 /**
- * Global check-in form v2 (migration 0036, D-W6-17). New assignments pin this
- * version; the v1 constants above stay for history.
+ * Global check-in form v2 (migration 0036, D-W6-17). Inserted but not yet the
+ * default: new assignments keep pinning v1 until Z6-2b (D-W6-18).
  */
 export const GLOBAL_CHECKIN_FORM_V2_VERSION_ID =
   "c1000001-0000-4000-8000-000000000012";
-/** Version a new check-in assignment pins when no schedule version is set. */
-export const DEFAULT_CHECKIN_FORM_VERSION_ID =
-  GLOBAL_CHECKIN_FORM_V2_VERSION_ID;
 
 /** Step 1 measurements/photos; step 2–3 reflection (mockup 14). */
 export const GLOBAL_CHECKIN_FORM_FIELDS: CheckinFieldDefinition[] = [

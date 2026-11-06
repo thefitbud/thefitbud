@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
   addDaysToLocalDate,
   formatLocalDate,
   weekdayFromLocalDate,
@@ -725,7 +725,7 @@ describe("invitation through ended relationship", () => {
     );
     expect(scheduledCheckin.status, JSON.stringify(scheduledCheckin.body)).toBe(200);
     expect(responseData(scheduledCheckin.body).checkin.checkinFormVersionId).toBe(
-      GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
     );
     const checkin = responseData(scheduledCheckin.body).checkin as {
       id: string;
@@ -762,7 +762,7 @@ describe("invitation through ended relationship", () => {
       pinnedForm: { id: string };
       checkin: { answers: { wellbeing: string }; recordStatus: string };
     };
-    expect(reviewData.pinnedForm.id).toBe(GLOBAL_CHECKIN_FORM_V2_VERSION_ID);
+    expect(reviewData.pinnedForm.id).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID);
     expect(reviewData.checkin.answers.wellbeing).toBe(
       "Energy is steady and sleep was fine.",
     );
