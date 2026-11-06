@@ -42,7 +42,6 @@ function testEnv(): Env {
 }
 
 const MOUNTS = [
-  "/steps",
   "/account",
 ] as const;
 
