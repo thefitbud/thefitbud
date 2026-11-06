@@ -44,7 +44,6 @@ function testEnv(): Env {
 const MOUNTS = [
   "/client-settings",
   "/steps",
-  "/exceptions/bulk",
   "/account",
 ] as const;
 
@@ -116,15 +115,28 @@ describe("W6 scaffold mounts", () => {
     });
   }
 
-  it("/exceptions/bulk is matched before /exceptions, and the existing exceptions router is unchanged", async () => {
+  it("/exceptions/bulk/resolve reaches the real bulk router (Z6-10, D-W6-15), and the existing exceptions router is unchanged", async () => {
     const cookie = await trainerCookie();
-    await expectNotImplemented(
-      await app.request(
-        "/exceptions/bulk/resolve",
-        { method: "POST", headers: { Cookie: cookie } },
-        testEnv(),
-      ),
+    // Unauthenticated: the bulk router's own auth answers 401, not the scaffold.
+    const anonBulk = await app.request(
+      "/exceptions/bulk/resolve",
+      { method: "POST" },
+      testEnv(),
     );
+    expect(anonBulk.status).toBe(401);
+    // Signed in without a body: the bulk router's validation answers, so the path
+    // is matched before /exceptions/:exceptionId.
+    const bulk = await app.request(
+      "/exceptions/bulk/resolve",
+      { method: "POST", headers: { Cookie: cookie } },
+      testEnv(),
+    );
+    expect(bulk.status).toBe(400);
+    const bulkBody = (await bulk.json()) as {
+      error: { code: string; message: string };
+    };
+    expect(bulkBody.error.code).toBe("INVALID_REQUEST");
+    expect(bulkBody.error.message).toBe("Invalid bulk resolve request.");
 
     // The existing exceptions router answers /exceptions/:id with its own auth and
     // lookup errors: unauthenticated callers get 401, a trainer gets a domain error
@@ -190,10 +202,9 @@ describe("W6 scaffold exports resolve", () => {
       contracts.W6CheckinFormV2Contract,
       contracts.W6ClientSettingsContract,
       contracts.W6StepsContract,
-      contracts.W6ExceptionBulkContract,
       contracts.W6AccountContract,
       contracts.W6CoachLogContract,
-    ] = [{}, {}, {}, {}, {}, {}, {}];
-    expect(placeholders).toHaveLength(7);
+    ] = [{}, {}, {}, {}, {}, {}];
+    expect(placeholders).toHaveLength(6);
   });
 });
