@@ -1284,6 +1284,19 @@ mealRoutes.put(
     ) {
       return fail(c, 400, "INVALID_REQUEST", "There is no food list to keep.");
     }
+    // D-W6-40: a client's logged food list is never erased. On such an entry the
+    // trainer may change only the note.
+    if (
+      before?.deviationKind === "logged_foods" &&
+      (body.outcome !== "modified" || nextDeviationKind !== "logged_foods")
+    ) {
+      return fail(
+        c,
+        409,
+        "FOOD_LIST_READ_ONLY",
+        "This meal has the client's food list, so only its note can be changed.",
+      );
+    }
     if (!before && body.recordVersion !== undefined) {
       return coachMealVersionConflict(c);
     }

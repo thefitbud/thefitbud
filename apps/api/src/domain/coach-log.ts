@@ -247,11 +247,40 @@ export type MealLogSnapshot = {
   outcome: string;
   deviationKind: string | null;
   notes: string | null;
+  /** The client's logged food list (parsed), so a before/after pair is complete. */
+  items: unknown[] | null;
+  /** Scaled macro totals as stored (null when unknown). */
+  macros: {
+    kcalScaled: number | null;
+    proteinScaled: number | null;
+    carbsScaled: number | null;
+    fatScaled: number | null;
+  };
 };
+
+function parseItems(itemsJson: string | null): unknown[] | null {
+  if (!itemsJson) return null;
+  try {
+    const parsed = JSON.parse(itemsJson) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    // An unreadable list is recorded as absent; the row itself is untouched.
+    return null;
+  }
+}
 
 export function mealLogSnapshot(input: {
   assignment: { localDate: string; mealName: string };
-  compliance: { outcome: string; deviationKind: string | null; notes: string | null };
+  compliance: {
+    outcome: string;
+    deviationKind: string | null;
+    notes: string | null;
+    itemsJson: string | null;
+    kcalScaled: number | null;
+    proteinScaled: number | null;
+    carbsScaled: number | null;
+    fatScaled: number | null;
+  };
 }): MealLogSnapshot {
   return {
     localDate: input.assignment.localDate,
@@ -259,6 +288,13 @@ export function mealLogSnapshot(input: {
     outcome: input.compliance.outcome,
     deviationKind: input.compliance.deviationKind,
     notes: input.compliance.notes,
+    items: parseItems(input.compliance.itemsJson),
+    macros: {
+      kcalScaled: input.compliance.kcalScaled,
+      proteinScaled: input.compliance.proteinScaled,
+      carbsScaled: input.compliance.carbsScaled,
+      fatScaled: input.compliance.fatScaled,
+    },
   };
 }
 

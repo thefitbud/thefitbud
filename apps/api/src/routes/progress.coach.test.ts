@@ -642,4 +642,26 @@ describe("trainer logs and edits a client's measurement (Z6-20)", () => {
     const open = await postMeasurement(weight(72));
     expect(open.status).toBe(200);
   });
+
+  it("D-W6-40: a frozen measurement cannot be edited by moving its date to now", async () => {
+    const observedAt = new Date(Date.parse(THURSDAY) - 3 * DAY).toISOString();
+    const created = await postMeasurement(weight(72, { observedAt }));
+    expect(created.status).toBe(200);
+    await db
+      .update(schema.coachingRelationships)
+      .set({ reactivatedAt: new Date(Date.parse(THURSDAY) - 1 * DAY + HOUR).toISOString() })
+      .where(eq(schema.coachingRelationships.id, f.relationshipId));
+    const moved = await patchMeasurement(created.body.data.id, {
+      recordVersion: 0,
+      observedAt: new Date().toISOString(),
+    });
+    expect(moved.status).toBe(422);
+    expect(moved.body.error?.code).toBe("ENDED_PERIOD");
+    const [row] = await db
+      .select()
+      .from(schema.measurements)
+      .where(eq(schema.measurements.id, created.body.data.id));
+    expect(row).toMatchObject({ observedAt, value: 72, recordVersion: 0 });
+    expect(await auditRows(created.body.data.id)).toHaveLength(1);
+  });
 });

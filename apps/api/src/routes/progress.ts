@@ -580,11 +580,19 @@ progressRoutes.patch(
       return fail(c, 422, COACH_LOG_BACKDATE_ERROR.code, COACH_LOG_BACKDATE_ERROR.message);
     }
     const nextLocalDate = formatLocalDate(new Date(nextObservedAt), timeZone);
+    // D-W6-20, D-W6-40: the entry as it is now and as it would be must both be
+    // outside the frozen period, so moving the date cannot unfreeze it.
     if (
       isInEndedPeriod({
         reactivatedAt: relationship.reactivatedAt,
         loggedAt: nextObservedAt,
         localDate: nextLocalDate,
+        timeZone,
+      }) ||
+      isInEndedPeriod({
+        reactivatedAt: relationship.reactivatedAt,
+        loggedAt: measurement.observedAt,
+        localDate: formatLocalDate(new Date(measurement.observedAt), timeZone),
         timeZone,
       })
     ) {

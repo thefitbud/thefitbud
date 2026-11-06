@@ -388,6 +388,8 @@ describe("trainer logs and edits a client's meal entry (Z6-20)", () => {
       outcome: "modified",
       deviationKind: "substitute",
       notes: "Had poha instead",
+      items: null,
+      macros: { kcalScaled: null, proteinScaled: null, carbsScaled: null, fatScaled: null },
     });
 
     // The trainee reads the same state, with the label source.
@@ -598,7 +600,17 @@ describe("trainer logs and edits a client's meal entry (Z6-20)", () => {
     expect(edit.body.data.loggedItems).toHaveLength(1);
     const audit = await auditRows(deviated.body.data.id);
     expect(audit.map((a) => a.action)).toEqual(["edit"]);
-    expect(JSON.parse(audit[0]!.beforeJson!)).toMatchObject({ notes: "Office lunch" });
+    // D-W6-40: both audit snapshots carry the client's food list and macros.
+    const beforeSnap = JSON.parse(audit[0]!.beforeJson!);
+    const afterSnap = JSON.parse(audit[0]!.afterJson);
+    expect(beforeSnap).toMatchObject({ notes: "Office lunch", deviationKind: "logged_foods" });
+    expect(afterSnap).toMatchObject({ notes: "Office lunch (checked with client)" });
+    for (const snap of [beforeSnap, afterSnap]) {
+      expect(snap.items).toHaveLength(1);
+      expect(snap.items[0].name).toBe("Paneer wrap");
+      expect(snap.macros.kcalScaled).toBeGreaterThan(0);
+    }
+    expect(afterSnap.macros).toEqual(beforeSnap.macros);
 
     // The trainee still cannot change it (already recorded), and it is not R1-locked.
     const again = await call(`/meals/assignments/${f.mondayLunch.id}/skip`, {
@@ -609,11 +621,28 @@ describe("trainer logs and edits a client's meal entry (Z6-20)", () => {
     expect(again.status).toBe(409);
     expect(again.body.error?.code).not.toBe("COACH_LOGGED_READ_ONLY");
 
-    // Replacing a changed meal with a confirmed one drops the client's food list.
-    const replaced = await putMeal(f.mondayLunch, { outcome: "skipped", recordVersion: 1 });
-    expect(replaced.status).toBe(200);
-    expect(replaced.body.data.loggedItems).toBeUndefined();
-    expect(replaced.body.data.loggedTotals).toBeUndefined();
+    // D-W6-40: the client's food list is never erased. Changing the outcome or the
+    // deviation of such an entry is refused and writes nothing.
+    for (const body of [
+      { outcome: "skipped", recordVersion: 1 },
+      { outcome: "confirmed", recordVersion: 1 },
+      { outcome: "modified", deviationKind: "other", recordVersion: 1 },
+    ]) {
+      const refused = await putMeal(f.mondayLunch, body);
+      expect(refused.status).toBe(409);
+      expect(refused.body.error).toMatchObject({
+        code: "FOOD_LIST_READ_ONLY",
+        message: "This meal has the client's food list, so only its note can be changed.",
+      });
+    }
+    const [stored] = await db
+      .select()
+      .from(schema.mealCompliance)
+      .where(eq(schema.mealCompliance.id, deviated.body.data.id));
+    expect(stored).toMatchObject({ outcome: "modified", deviationKind: "logged_foods", recordVersion: 1 });
+    expect(JSON.parse(stored!.itemsJson!)).toHaveLength(1);
+    expect(stored!.kcalScaled).toBeGreaterThan(0);
+    expect(await auditRows(deviated.body.data.id)).toHaveLength(1);
   });
 
   it("R2: dates outside the last 7 days or in the future return 422 BACKDATE_LIMIT, and the date must match the meal", async () => {
