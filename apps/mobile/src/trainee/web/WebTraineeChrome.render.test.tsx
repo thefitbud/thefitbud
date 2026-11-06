@@ -134,4 +134,10 @@ describe("WebDateHeading dot colours", () => {
     expect(colourFor("open")).toBe(rgba(colors.indigo));
     expect(colourFor("rest")).toBe(rgba(colors.lightGrey));
   });
+
+  it("paints due neutral dark grey, never the partial colour (D-W6-10)", () => {
+    renderStrip();
+    expect(colourFor("due")).toBe(rgba(colors.darkGrey));
+    expect(colourFor("due")).not.toBe(colourFor("partial"));
+  });
 });

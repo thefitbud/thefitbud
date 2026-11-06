@@ -95,6 +95,27 @@ describe("deriveWeekDayFromWorkouts (D-W6-10)", () => {
     ).toBe("partial");
   });
 
+  it("a past day with a paused workout is partial", () => {
+    expect(stateOf(PAST, [wo("Legs A", "paused", CLOSED_WINDOW)])).toBe(
+      "partial",
+    );
+  });
+
+  it("today with a paused workout is partial", () => {
+    expect(stateOf(TODAY, [wo("Upper A", "paused", OPEN_WINDOW)])).toBe(
+      "partial",
+    );
+  });
+
+  it("a past day with one started and one skipped workout is partial, not done", () => {
+    expect(
+      stateOf(PAST, [
+        wo("Legs A", "started", CLOSED_WINDOW),
+        wo("Mobility", "skipped", CLOSED_WINDOW),
+      ]),
+    ).toBe("partial");
+  });
+
   it("no assignments today is rest, and after today is future", () => {
     expect(stateOf(TODAY, [])).toBe("rest");
     expect(stateOf("2026-10-15", [])).toBe("future");

@@ -7,7 +7,11 @@
  * (D-W4-17).
  */
 import { describe, expect, it } from "vitest";
-import { DateNavigator, type DateNavigatorDay } from "@fitbud/ui-mobile";
+import {
+  colors,
+  DateNavigator,
+  type DateNavigatorDay,
+} from "@fitbud/ui-mobile";
 import { render, screen } from "../test/render";
 
 const STATES = ["done", "partial", "due", "open", "rest", "future", "unknown"] as const;
@@ -36,5 +40,40 @@ describe("DateNavigator accessible names", () => {
     expect(
       screen.getByRole("button", { name: `Wed ${12 + index}, ${state === "due" ? "to do" : state}` }),
     ).toBeTruthy();
+  });
+});
+
+/** react-native-web writes a hex colour inline as `rgba(r, g, b, 1.00)`. */
+function rgba(hex: string): string {
+  const n = Number.parseInt(hex.replace("#", ""), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, 1.00)`;
+}
+
+function dotColourOf(button: HTMLElement): string {
+  for (const node of button.querySelectorAll("div")) {
+    const bg = (node as HTMLElement).style.backgroundColor;
+    if (bg) return bg;
+  }
+  return "";
+}
+
+describe("DateNavigator dot colours", () => {
+  it("paints due neutral dark grey, never the partial colour (D-W6-10)", () => {
+    render(
+      <DateNavigator
+        days={[day("due", 0), day("partial", 1)]}
+        selectedDate="2026-10-12"
+        todayDate="2026-10-12"
+        onSelect={() => {}}
+        onToday={() => {}}
+      />,
+    );
+    const due = dotColourOf(screen.getByRole("button", { name: "Wed 12, to do" }));
+    const partial = dotColourOf(
+      screen.getByRole("button", { name: "Wed 13, partial" }),
+    );
+    expect(due).toBe(rgba(colors.darkGrey));
+    expect(partial).toBe(rgba(colors.warning));
+    expect(due).not.toBe(partial);
   });
 });
