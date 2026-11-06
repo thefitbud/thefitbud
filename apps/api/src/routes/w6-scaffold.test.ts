@@ -153,11 +153,21 @@ describe("W6 scaffold mounts", () => {
   });
 });
 
-describe("W6 account-purge stub", () => {
-  it("runAccountPurge does nothing", async () => {
-    await expect(
-      runAccountPurge(testEnv(), new Date()),
-    ).resolves.toBeUndefined();
+describe("W6 account purge wiring", () => {
+  // Z6-17 replaced the Z5-4 stub (D-W6-15); its behaviour is tested in jobs/account-purge.test.ts.
+  it("runAccountPurge purges nothing when no archived account is due", async () => {
+    const memory = await createMemoryDb();
+    setTestDbOverride(memory.db);
+    try {
+      await expect(runAccountPurge(testEnv(), new Date())).resolves.toEqual({
+        selected: 0,
+        purged: 0,
+        failed: 0,
+      });
+    } finally {
+      setTestDbOverride(null);
+      memory.close();
+    }
   });
 
   it("scheduled() calls runAccountPurge once with the env and the scheduled time", async () => {
