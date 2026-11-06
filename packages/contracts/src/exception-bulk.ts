@@ -7,12 +7,6 @@ import {
 } from "./exception.js";
 
 /**
- * Z5-4 placeholder type, kept so the scaffold export check still compiles.
- * The real schemas are below.
- */
-export type W6ExceptionBulkContract = Record<string, never>;
-
-/**
  * D11 (locked): bulk only for compatible coaching-configuration exceptions,
  * that is missed workout, missed meal and missed log. Everything else
  * (meal changes, and anything that is not an exception at all such as
