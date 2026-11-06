@@ -69,27 +69,6 @@ const FOOD_CLASSIFICATIONS: FoodClassification[] = [
   "branded_product",
 ];
 
-function classificationLabel(value: FoodClassification): string {
-  switch (value) {
-    case "raw_ingredient":
-      return "Raw";
-    case "generic_food":
-      return "Generic";
-    case "prepared_food":
-      return "Prepared";
-    case "branded_product":
-      return "Branded";
-    default: {
-      const _exhaustive: never = value;
-      return _exhaustive;
-    }
-  }
-}
-
-function basisLabel(value: NutritionBasis): string {
-  return value === "per_100_g" ? "per 100 g" : "per 100 ml";
-}
-
 function scaledDisplay(value: number | null): string {
   if (value == null) return "—";
   const whole = value / NUTRIENT_SCALE;
@@ -890,11 +869,11 @@ function FoodLibrary() {
                   </td>
                   <td data-label="Classification">
                     {item.classification
-                      ? classificationLabel(item.classification)
+                      ? labelFor("food_classification", item.classification)
                       : "—"}
                   </td>
                   <td data-label="Basis">
-                    {item.basis ? basisLabel(item.basis) : "—"}
+                    {item.basis ? labelFor("nutrition_basis", item.basis) : "—"}
                   </td>
                   <td data-label="kcal">
                     {scaledDisplay(item.energyKcalScaled)}
@@ -1030,7 +1009,7 @@ function FoodLibrary() {
               >
                 {FOOD_CLASSIFICATIONS.map((value) => (
                   <option key={value} value={value}>
-                    {classificationLabel(value)}
+                    {labelFor("food_classification", value)}
                   </option>
                 ))}
               </select>
