@@ -160,6 +160,18 @@ export const completeSetRequestSchema = z.object({
   /** Omit or null to keep prescribed values (no re-entry). */
   actualReps: z.number().int().min(1).max(100).nullable().optional(),
   actualLoadLabel: z.string().trim().max(80).nullable().optional(),
+  /**
+   * Numeric load in kg (Z6-15, D-W6-21). When sent it wins over the label
+   * and the stored label is formatted from it ("40 kg").
+   */
+  actualLoadKg: z
+    .number()
+    .min(0)
+    .max(500)
+    .refine((kg) => Math.abs(kg * 100 - Math.round(kg * 100)) < 1e-6, {
+      message: "At most 2 decimals.",
+    })
+    .optional(),
 });
 export type CompleteSetRequest = z.infer<typeof completeSetRequestSchema>;
 

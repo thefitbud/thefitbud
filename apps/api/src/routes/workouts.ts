@@ -49,6 +49,7 @@ import {
   parsePlanContentJson,
   parseWorkoutDayJson,
 } from "../domain/mappers";
+import { resolveSetLoad } from "../domain/load-parser.js";
 import {
   insertWorkoutAssignments,
   loadTraineeTimezone,
@@ -842,6 +843,10 @@ workoutRoutes.post(
           prescribedLoadLabel: setTarget.loadLabel,
           actualReps: null,
           actualLoadLabel: null,
+          ...resolveSetLoad({
+            prescribedLoadLabel: setTarget.loadLabel,
+            actualLoadLabel: null,
+          }),
           completedAt: null,
           createdAt: now,
           updatedAt: now,
@@ -1139,16 +1144,43 @@ workoutRoutes.post(
       parsed.data.actualReps === undefined
         ? setRow.prescribedReps
         : parsed.data.actualReps;
+    const numericKg = parsed.data.actualLoadKg;
     const actualLoadLabel =
-      parsed.data.actualLoadLabel === undefined
-        ? setRow.prescribedLoadLabel
-        : parsed.data.actualLoadLabel;
+      numericKg !== undefined
+        ? `${numericKg} kg`
+        : parsed.data.actualLoadLabel === undefined
+          ? setRow.prescribedLoadLabel
+          : parsed.data.actualLoadLabel;
 
+    // Numeric columns (Z6-15): a numeric kg wins over the label; else parse the label.
+    const labelLoad = resolveSetLoad({
+      prescribedLoadLabel: setRow.prescribedLoadLabel,
+      actualLoadLabel,
+    });
+    const loadColumns =
+      numericKg !== undefined
+        ? {
+            prescribedLoadKg: labelLoad.prescribedLoadKg,
+            actualLoadKg: numericKg,
+            loadKind: "kg" as const,
+          }
+        : labelLoad;
+
+    // A numeric load equal to the prescribed kg load is not a change.
+    const sameAsPrescribed =
+      numericKg !== undefined &&
+      labelLoad.prescribedLoadKg === numericKg &&
+      resolveSetLoad({
+        prescribedLoadLabel: setRow.prescribedLoadLabel,
+        actualLoadLabel: null,
+      }).loadKind === "kg";
     const modified = setCompletionIsModified({
       prescribedReps: setRow.prescribedReps,
       prescribedLoadLabel: setRow.prescribedLoadLabel,
       actualReps,
-      actualLoadLabel,
+      actualLoadLabel: sameAsPrescribed
+        ? setRow.prescribedLoadLabel
+        : actualLoadLabel,
     });
 
     const now = nowIso();
@@ -1158,6 +1190,7 @@ workoutRoutes.post(
         status: modified ? "modified" : "completed",
         actualReps,
         actualLoadLabel,
+        ...loadColumns,
         completedAt: now,
         updatedAt: now,
       })
@@ -1243,6 +1276,10 @@ workoutRoutes.post(
       .update(setExecutions)
       .set({
         status: "skipped",
+        ...resolveSetLoad({
+          prescribedLoadLabel: setRow.prescribedLoadLabel,
+          actualLoadLabel: setRow.actualLoadLabel,
+        }),
         completedAt: now,
         updatedAt: now,
       })
