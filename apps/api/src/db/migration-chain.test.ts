@@ -519,13 +519,12 @@ describe("migration chain and seeds", () => {
   });
 
   it(
-    "backfills the demo seed's set loads when 0035 applies, with row counts unchanged",
+    "backfills seeded set loads exactly as the demo seed writes them, with row counts unchanged",
     async () => {
-      const handle = await createMemoryDb({
-        foreignKeys: true,
-        librarySeed: true,
-        through: "0034_remove_configured_status.sql",
-      });
+      // The demo seed now writes the 0035 columns itself (D-W6-14), so it cannot be loaded
+      // before 0035. Seed on the full chain, blank the load columns back to the column
+      // defaults (the state of every pre-0035 row), then run 0035's backfill statements.
+      const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
       try {
         const passwordHash = await hashPassword("FitBud-demo-2026");
         const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
@@ -537,16 +536,30 @@ describe("migration chain and seeds", () => {
           }),
         );
         await yieldToEventLoop();
+        const seeded = setLoadRows(handle.sqlite);
+        expect(seeded.length).toBeGreaterThan(0);
+        handle.sqlite.run(
+          "UPDATE set_executions SET prescribed_load_kg = NULL, actual_load_kg = NULL, load_kind = 'text'",
+        );
         const countsBefore = tableRowCounts(handle.sqlite);
-        expect(countsBefore.set_executions).toBeGreaterThan(0);
 
-        handle.applyMigrationsFrom("0035_numeric_set_load.sql");
+        const backfillSql = readFileSync(
+          join(drizzleDir, "0035_numeric_set_load.sql"),
+          "utf8",
+        )
+          // The test adapter splits on ";" without reading comments, so drop comment lines too.
+          .replace(/^--.*\n/gm, "")
+          .replace(/^ALTER TABLE[^;]*;\n/gm, "");
+        expect(backfillSql).not.toMatch(/ALTER TABLE/);
+        handle.sqlite.exec(backfillSql);
         await yieldToEventLoop();
 
         expect(tableRowCounts(handle.sqlite)).toEqual(countsBefore);
         assertNoForeignKeyViolations(handle.sqlite);
 
         const rows = setLoadRows(handle.sqlite);
+        // The migration backfill and the seed's own write agree row for row.
+        expect(rows).toEqual(seeded);
         expect(rows).toHaveLength(countsBefore.set_executions!);
         const kgLabel = /^(\d+(?:\.\d+)?) kg$/;
         let kgLabels = 0;
