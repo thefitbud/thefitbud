@@ -311,6 +311,52 @@ describe("archiveAccount and reactivateAccount on persisted data", () => {
     expect(relationships.every((row) => row.status === "ended")).toBe(true);
   });
 
+  it("keeps the first archive time when two deletes run at once (D-W6-35)", async () => {
+    const trainer = await trainerCookie("twice.coach@example.com");
+    const userId = trainer.userId;
+    await addDeviceToken(db, userId, "twice");
+
+    // Both calls pass every check, then their archive batches run one after the other.
+    const realBatch = db.batch.bind(db);
+    let arrived = 0;
+    let release!: () => void;
+    const bothArrived = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let chain: Promise<unknown> = Promise.resolve();
+    vi.spyOn(db, "batch").mockImplementation((async (queries: Parameters<typeof db.batch>[0]) => {
+      arrived += 1;
+      if (arrived === 2) release();
+      await bothArrived;
+      const run = chain.then(() => realBatch(queries));
+      chain = run.catch(() => undefined);
+      return run;
+    }) as unknown as typeof db.batch);
+
+    const first = new Date().toISOString();
+    const second = new Date(Date.parse(first) + 7_000).toISOString();
+    const results = await Promise.all([
+      archiveAccount(db, { userId, now: first }),
+      archiveAccount(db, { userId, now: second }),
+    ]);
+    expect(arrived).toBe(2);
+    expect(results).toEqual([
+      { kind: "archived", archivedAt: first, purgeAfter: addCalendarMonthsUtc(first, 6) },
+      { kind: "not_active" },
+    ]);
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.id, userId));
+    expect(row).toMatchObject({
+      accountState: "archived",
+      archivedAt: first,
+      purgeAfter: addCalendarMonthsUtc(first, 6),
+    });
+    const sessions = await db
+      .select()
+      .from(schema.webSessions)
+      .where(eq(schema.webSessions.userId, userId));
+    expect(sessions.every((session) => session.revokedAt === first)).toBe(true);
+  });
+
   it("reactivates only an archived account before its purge date", async () => {
     const trainer = await trainerCookie("reactivate.coach@example.com");
     const archivedAt = new Date().toISOString();

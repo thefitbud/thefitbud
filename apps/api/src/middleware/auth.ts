@@ -21,13 +21,15 @@ function parseRequestedRole(headerValue: string | undefined): Role | null {
 }
 
 /**
- * The only routes an archived account reaches (Z6-14, D-W6-7): its status and
- * the reactivation confirm. Every other route that resolves an actor answers
- * 403 ACCOUNT_ARCHIVED with `purgeAfter`.
+ * The only routes an archived account reaches (Z6-14, D-W6-7): its status, the
+ * reactivation confirm and web sign-out (D-W6-35, so an archived browser's
+ * cookie session can be revoked). Every other route that resolves an actor
+ * answers 403 ACCOUNT_ARCHIVED with `purgeAfter`.
  */
 const ARCHIVED_ACTOR_ROUTES = new Set([
   "GET /account/status",
   "POST /account/reactivation",
+  "DELETE /auth/session",
 ]);
 
 function archivedActorMayReach(c: AuthContext): boolean {
@@ -228,8 +230,13 @@ export const requireAuthMiddleware = createMiddleware<{
     return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
   }
   if (actor.accountState === "archived") {
-    // Only the status and reactivation routes see an archived actor, and they
-    // do not use this middleware; refuse it here too in case one ever does.
+    // Only the allowlisted routes see an archived actor, which carries no roles.
+    // Sign-out uses this middleware, so it passes here; any other route is
+    // refused here too in case an archived actor ever reaches it.
+    if (archivedActorMayReach(c)) {
+      await next();
+      return;
+    }
     const archived = await loadArchivedUser(createDb(c.env.DB), {
       userId: actor.userId,
     });

@@ -655,6 +655,184 @@ describe("account deletion, archived access and reactivation (Z6-14)", () => {
     expect((await call("/me", { headers: trainer.headers })).status).toBe(200);
   });
 
+  /** Trainer ends coaching, then asks the trainee to come back (D-W6-35 setup). */
+  async function endAndRequestReactivation(
+    trainer: { headers: Record<string, string> },
+    relationshipId: string,
+  ) {
+    const ended = await call(`/relationships/${relationshipId}/end`, {
+      method: "POST",
+      headers: trainer.headers,
+      body: {},
+    });
+    expect(ended.status).toBe(200);
+    const requested = await call(`/relationships/${relationshipId}/reactivate`, {
+      method: "POST",
+      headers: trainer.headers,
+      body: {},
+    });
+    expect(requested.status).toBe(200);
+    expect(requested.body.data).toMatchObject({ status: "pending" });
+    return requested.body.data!.requestId as string;
+  }
+
+  async function expectNoReactivation(
+    relationshipId: string,
+    requestId: string,
+    archivedAt: string,
+    traineeHeaders: Record<string, string>,
+  ) {
+    const [request] = await db
+      .select()
+      .from(schema.reactivationRequests)
+      .where(eq(schema.reactivationRequests.id, requestId));
+    expect(request!.status).toBe("cancelled");
+    expect(request!.resolvedAt).toBe(archivedAt);
+
+    const confirmed = await call(`/relationships/${relationshipId}/reactivate/confirm`, {
+      method: "POST",
+      headers: traineeHeaders,
+    });
+    expect(confirmed.status).toBe(404);
+    expect(confirmed.body.error).toMatchObject({
+      code: "REACTIVATION_NOT_FOUND",
+      message: "No pending reactivation request.",
+    });
+    const [relationship] = await db
+      .select()
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    expect(relationship!.status).toBe("ended");
+  }
+
+  it("cancels a pending reactivation request when the trainer deletes their account (D-W6-35)", async () => {
+    const trainer = await trainerSession("farah.coach@example.com");
+    const trainee = await coachedTrainee(db, trainer, "trainergone");
+    const requestId = await endAndRequestReactivation(trainer, trainee.relationshipId);
+
+    const deleted = await call("/account/deletion", { method: "POST", headers: trainer.headers });
+    expect(deleted.status).toBe(200);
+    const { archivedAt } = deleted.body.data as { archivedAt: string };
+
+    await expectNoReactivation(
+      trainee.relationshipId,
+      requestId,
+      archivedAt,
+      await signIn(trainee.email),
+    );
+  });
+
+  it("cancels a pending reactivation request when the trainee deletes their account, even after they bring it back (D-W6-35)", async () => {
+    const trainer = await trainerSession("gautam.coach@example.com");
+    const trainee = await coachedTrainee(db, trainer, "traineegone");
+    const requestId = await endAndRequestReactivation(trainer, trainee.relationshipId);
+
+    const deleted = await call("/account/deletion", {
+      method: "POST",
+      headers: await signIn(trainee.email),
+    });
+    expect(deleted.status).toBe(200);
+    const { archivedAt } = deleted.body.data as { archivedAt: string };
+
+    const headers = await signIn(trainee.email);
+    expect((await call("/account/reactivation", { method: "POST", headers })).status).toBe(200);
+    await expectNoReactivation(trainee.relationshipId, requestId, archivedAt, headers);
+  });
+
+  it("lets an archived web user sign out, revoking the cookie session, and nothing else (D-W6-35)", async () => {
+    const trainer = await trainerSession("hema.coach@example.com");
+    await call("/account/deletion", { method: "POST", headers: trainer.headers });
+    const again = await trainerSession("hema.coach@example.com");
+
+    const blocked = await call("/clients", { headers: again.headers });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error!.code).toBe("ACCOUNT_ARCHIVED");
+
+    const signedOut = await app.request(
+      "/auth/session",
+      { method: "DELETE", headers: again.headers },
+      testEnv(),
+    );
+    expect(signedOut.status).toBe(200);
+    expect(await signedOut.json()).toMatchObject({ data: { ended: true } });
+    expect(signedOut.headers.get("set-cookie")).toMatch(/fitbud_session=;/);
+    const sessions = await db
+      .select()
+      .from(schema.webSessions)
+      .where(eq(schema.webSessions.userId, trainer.userId));
+    expect(sessions.length).toBeGreaterThan(0);
+    expect(sessions.every((session) => session.revokedAt !== null)).toBe(true);
+    // The revoked cookie no longer resolves an actor.
+    expect((await call("/account/status", { headers: again.headers })).status).toBe(401);
+
+    // Only the exact method and path are allowed: everything else stays 403.
+    const third = await trainerSession("hema.coach@example.com");
+    for (const result of [
+      await call("/me", { headers: third.headers }),
+      await call("/clients", { headers: third.headers }),
+      await call("/account/deletion", { method: "POST", headers: third.headers }),
+      await call("/invitations", {
+        method: "POST",
+        headers: { ...third.headers, "Idempotency-Key": "archived-signout-invite" },
+        body: { recipientEmail: "someone.new@example.com" },
+      }),
+    ]) {
+      expect(result.status).toBe(403);
+      expect(result.body.error!.code).toBe("ACCOUNT_ARCHIVED");
+    }
+  });
+
+  it("archives once when two deletes arrive together: one 200, one 403, dates not restamped (D-W6-35)", async () => {
+    const trainer = await trainerSession("ishaan.coach@example.com");
+    // Hold each archive batch until both requests have reached it, then run them
+    // one after the other, as D1 would.
+    const realBatch = db.batch.bind(db);
+    let arrived = 0;
+    let release!: () => void;
+    const bothArrived = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let chain: Promise<unknown> = Promise.resolve();
+    vi.spyOn(db, "batch").mockImplementation((async (queries: Parameters<typeof db.batch>[0]) => {
+      arrived += 1;
+      if (arrived === 2) release();
+      await bothArrived;
+      const run = chain.then(() => realBatch(queries));
+      chain = run.catch(() => undefined);
+      return run;
+    }) as unknown as typeof db.batch);
+    const lines: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    });
+
+    const results = await Promise.all([
+      call("/account/deletion", { method: "POST", headers: trainer.headers }),
+      call("/account/deletion", { method: "POST", headers: trainer.headers }),
+    ]);
+    expect(arrived).toBe(2);
+    const statuses = results.map((result) => result.status).sort();
+    expect(statuses).toEqual([200, 403]);
+    const winner = results.find((result) => result.status === 200)!;
+    const loser = results.find((result) => result.status === 403)!;
+    const { archivedAt, purgeAfter } = winner.body.data as {
+      archivedAt: string;
+      purgeAfter: string;
+    };
+    // The static archived body only: no internal error, ids or request data.
+    expect(loser.body.error).toEqual({
+      code: "ACCOUNT_ARCHIVED",
+      message: "This account is deleted. Sign in again and bring it back to continue.",
+      details: { accountState: "archived", purgeAfter },
+      requestId: expect.any(String),
+    });
+    const user = await userRow(db, trainer.userId);
+    expect(user.accountState).toBe("archived");
+    expect(user.archivedAt).toBe(archivedAt);
+    expect(user.purgeAfter).toBe(purgeAfter);
+    expect(lines).toEqual([]);
+  });
+
   it("logs no personal data while deleting and reactivating", async () => {
     const lines: string[] = [];
     for (const method of ["log", "info", "warn", "error", "debug"] as const) {

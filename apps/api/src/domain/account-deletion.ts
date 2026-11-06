@@ -3,6 +3,7 @@ import type { Db } from "../db/client.js";
 import {
   coachingRelationships,
   deviceTokens,
+  reactivationRequests,
   userIdentities,
   users,
   webSessions,
@@ -143,7 +144,8 @@ export type ArchiveAccountResult =
  *    the existing `endCoachingRelationship` (exceptions close with
  *    `coaching_ended`, schedules and reminders stop);
  * 3. one batch archives the account (only while it is active and has no active
- *    relationship) and revokes its web sessions and device tokens. Device tokens
+ *    relationship), revokes its web sessions and device tokens and cancels
+ *    pending reactivation requests on its relationships (D-W6-35). Device tokens
  *    are revoked, not deleted: `notification_deliveries` references them.
  *
  * Retry-safe: a crash after step 2 leaves the relationships ended and the
@@ -220,6 +222,7 @@ export async function archiveAccount(
         ),
       revokeAllWebSessions(db, input.userId, archivedAt, archivedByThisCall),
       revokeAllDeviceTokens(db, input.userId, archivedAt, archivedByThisCall),
+      cancelPendingReactivations(db, input.userId, archivedAt, archivedByThisCall),
     ]);
 
     const after = await loadAccountState(db, input.userId);
@@ -263,6 +266,43 @@ export function revokeAllDeviceTokens(
     .set({ status: "revoked", updatedAt: now })
     .where(
       and(eq(deviceTokens.userId, userId), eq(deviceTokens.status, "active"), guard),
+    );
+}
+
+/**
+ * Cancels every pending reactivation request on a relationship where the user is
+ * trainer or trainee (D-W6-35), the same way ending coaching does, so an
+ * archived account never regains an active relationship through a request sent
+ * before the deletion.
+ */
+export function cancelPendingReactivations(
+  db: Db,
+  userId: string,
+  now: string,
+  guard: SQL,
+) {
+  return db
+    .update(reactivationRequests)
+    .set({ status: "cancelled", resolvedAt: now })
+    .where(
+      and(
+        eq(reactivationRequests.status, "pending"),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(coachingRelationships)
+            .where(
+              and(
+                eq(coachingRelationships.id, reactivationRequests.relationshipId),
+                or(
+                  eq(coachingRelationships.trainerUserId, userId),
+                  eq(coachingRelationships.traineeUserId, userId),
+                ),
+              ),
+            ),
+        ),
+        guard,
+      ),
     );
 }
 
