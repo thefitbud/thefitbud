@@ -828,9 +828,7 @@ async function recordCompliance(
       c,
       422,
       logGuard.code,
-      logGuard.reason === "future"
-        ? LOG_TIME_ERROR_MESSAGES.future
-        : LOG_TIME_ERROR_MESSAGES.before_window,
+      LOG_TIME_ERROR_MESSAGES[logGuard.reason],
     );
   }
   if (!logGuard.ok) {
