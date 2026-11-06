@@ -654,12 +654,29 @@ export const setExecutions = sqliteTable(
     prescribedLoadLabel: text("prescribed_load_label"),
     actualReps: integer("actual_reps"),
     actualLoadLabel: text("actual_load_label"),
+    /**
+     * Numeric loads parsed from the labels (Z6-1, `domain/load-parser.ts`).
+     * The labels stay the display source; these columns feed strength charts.
+     * kg is null unless the label states a weight ("40 kg", "90 lb", "BW+10").
+     */
+    prescribedLoadKg: real("prescribed_load_kg"),
+    actualLoadKg: real("actual_load_kg"),
+    /** Kind of the set's load: from the actual label once logged, else the prescribed one. */
+    loadKind: text("load_kind", {
+      enum: ["kg", "bodyweight", "bodyweight_plus", "text"],
+    })
+      .notNull()
+      .default("text"),
     completedAt: text("completed_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
     index("set_executions_exercise_idx").on(table.exerciseExecutionId),
+    check(
+      "set_executions_load_kind_chk",
+      sql`${table.loadKind} IN ('kg', 'bodyweight', 'bodyweight_plus', 'text')`,
+    ),
   ],
 );
 
