@@ -227,9 +227,19 @@ describe("scheduled() (OB2)", () => {
       ["cron.completed", "cron.reminders"],
       ["cron.completed", "cron.replenishment"],
       ["cron.completed", "cron.coach_ask"],
+      ["cron.completed", "cron.account_purge"],
       ["cron.completed", "cron.push_receipts"],
     ]);
     for (const line of cron) expect(typeof line.latencyMs).toBe("number");
+  });
+
+  it("the account-purge job runs and logs on its own when coach_ask fails (Z5-4)", async () => {
+    jobs.coachAsk.mockRejectedValueOnce(new TypeError(SECRET_MESSAGE));
+    await expect(worker.scheduled(controller, env("staging"))).rejects.toBeInstanceOf(TypeError);
+    const cron = logLines().filter((l) => String(l.message).startsWith("cron."));
+    expect(cron).toContainEqual(
+      expect.objectContaining({ message: "cron.completed", operation: "cron.account_purge" }),
+    );
   });
 
   it("a failing job does not stop the next ones; it is logged safely and rethrown at the end", async () => {
@@ -254,6 +264,7 @@ describe("scheduled() (OB2)", () => {
       }),
       expect.objectContaining({ message: "cron.completed", operation: "cron.replenishment" }),
       expect.objectContaining({ message: "cron.failed", operation: "cron.coach_ask", errorName: "TypeError" }),
+      expect.objectContaining({ message: "cron.completed", operation: "cron.account_purge" }),
       expect.objectContaining({ message: "cron.completed", operation: "cron.push_receipts" }),
     ]);
     expectNothingSensitive();
