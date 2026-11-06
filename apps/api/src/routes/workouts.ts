@@ -243,34 +243,9 @@ async function loadExecutionBundle(db: Db, executionId: string) {
 }
 
 type ExecutionBundle = NonNullable<Awaited<ReturnType<typeof loadExecutionBundle>>>;
-type WorkoutExecutionRow = typeof workoutExecutions.$inferSelect;
-
-/** R1 (Z6-19): who logged and who last edited the entry, on every workouts read. */
-function executionAuthorship(row: WorkoutExecutionRow) {
-  return {
-    loggedByRole: row.loggedByRole,
-    lastEditedByRole: row.lastEditedByRole,
-  };
-}
 
 function mapExecution(bundle: ExecutionBundle) {
-  return {
-    ...mapWorkoutExecution(bundle.execution, bundle.exercises, bundle.sets),
-    ...executionAuthorship(bundle.execution),
-  };
-}
-
-function mapAssignment(
-  assignment: typeof workoutAssignments.$inferSelect,
-  execution: WorkoutExecutionRow | null,
-  now: string,
-) {
-  const mapped = mapWorkoutAssignment(assignment, execution, now);
-  if (!execution || !mapped.execution) return mapped;
-  return {
-    ...mapped,
-    execution: { ...mapped.execution, ...executionAuthorship(execution) },
-  };
+  return mapWorkoutExecution(bundle.execution, bundle.exercises, bundle.sets);
 }
 
 /**
@@ -604,7 +579,7 @@ workoutRoutes.get(
       c,
       workoutAssignmentListResponseSchema.parse({
         items: rows.map((row) =>
-          mapAssignment(row.assignment, row.execution ?? null, now),
+          mapWorkoutAssignment(row.assignment, row.execution ?? null, now),
         ),
         nextCursor: null,
       }),
@@ -750,7 +725,7 @@ workoutRoutes.get(
     return ok(
       c,
       workoutAssignmentSchema.parse(
-        mapAssignment(loaded.assignment, loaded.execution, nowIso()),
+        mapWorkoutAssignment(loaded.assignment, loaded.execution, nowIso()),
       ),
     );
   },

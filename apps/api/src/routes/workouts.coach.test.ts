@@ -392,9 +392,66 @@ describe("trainer logs and edits a client's workout (Z6-19)", () => {
 
     const pull = await call(`/sync/pull?cursor=${encodeURIComponent(cursor)}`, { headers: f.trainee });
     expect(pull.status).toBe(200);
-    const change = (pull.body.data.changes as Array<{ entityType: string; recordId: string; payload: { status: string } }>)
+    type Change = { entityType: string; recordId: string; payload: Record<string, unknown> };
+    const change = (pull.body.data.changes as Change[])
       .find((c) => c.entityType === "workout_execution" && c.recordId === execution.id);
-    expect(change?.payload).toMatchObject({ id: execution.id, status: "modified" });
+    // D-W6-36: the sync payload carries authorship for the trainee's labels.
+    expect(change?.payload).toMatchObject({
+      id: execution.id,
+      status: "modified",
+      loggedByRole: "coach",
+      lastEditedByRole: null,
+    });
+
+    // After a coach edit, the next pull shows it as edited by the coach.
+    const afterCreate: string = pull.body.data.nextCursor;
+    const edit = await editWorkout(execution.id, {
+      recordVersion: 0,
+      sets: [{ setExecutionId: sets[1].id, status: "completed", actualLoadKg: 65 }],
+    });
+    expect(edit.status).toBe(200);
+    const pullAfterEdit = await call(`/sync/pull?cursor=${encodeURIComponent(afterCreate)}`, {
+      headers: f.trainee,
+    });
+    const edited = (pullAfterEdit.body.data.changes as Change[])
+      .find((c) => c.entityType === "workout_execution" && c.recordId === execution.id);
+    expect(edited?.payload).toMatchObject({
+      id: execution.id,
+      recordVersion: 1,
+      loggedByRole: "coach",
+      lastEditedByRole: "coach",
+    });
+  });
+
+  it("sync pull shows a trainee-logged workout the coach edited as the trainee's, edited by the coach", async () => {
+    at(MONDAY);
+    const firstPull = await call("/sync/pull", { headers: f.trainee });
+    const started = await call(`/workouts/assignments/${f.thisMonday.id}/start`, {
+      method: "POST",
+      headers: { ...f.trainee, "Idempotency-Key": "sync-start" },
+    });
+    const completed = await call(`/workouts/executions/${started.body.data.id}/complete`, {
+      method: "POST",
+      headers: { ...f.trainee, "Idempotency-Key": "sync-complete" },
+      body: {},
+    });
+    expect(completed.status).toBe(200);
+    at(Date.parse(MONDAY) + DAY);
+    const edit = await editWorkout(started.body.data.id, {
+      recordVersion: completed.body.data.recordVersion,
+      sets: [{ setExecutionId: completed.body.data.exercises[0].sets[0].id, status: "completed" }],
+    });
+    expect(edit.status).toBe(200);
+    const pull = await call(
+      `/sync/pull?cursor=${encodeURIComponent(firstPull.body.data.nextCursor as string)}`,
+      { headers: f.trainee },
+    );
+    const changes = (pull.body.data.changes as Array<{ entityType: string; recordId: string; payload: Record<string, unknown> }>)
+      .filter((c) => c.entityType === "workout_execution" && c.recordId === started.body.data.id);
+    expect(changes.at(-1)?.payload).toMatchObject({
+      loggedByRole: "trainee",
+      lastEditedByRole: "coach",
+    });
   });
 
   it("a retried log returns the stored response and adherence counts the workout once", async () => {
