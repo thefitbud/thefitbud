@@ -50,6 +50,7 @@ import {
   assertMealLogAllowed,
   buildLoggedFoodsCompliance,
 } from "../domain/compliance-logging.js";
+import { LOG_TIME_ERROR_MESSAGES } from "../domain/log-time-bounds.js";
 import { appendChangeLog } from "../domain/sync";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok, type AppContext } from "../lib/envelope";
@@ -822,6 +823,16 @@ async function recordCompliance(
     nowIso: now,
     alreadyLogged: Boolean(loaded.compliance),
   });
+  if (!logGuard.ok && logGuard.status === 422) {
+    return fail(
+      c,
+      422,
+      logGuard.code,
+      logGuard.reason === "future"
+        ? LOG_TIME_ERROR_MESSAGES.future
+        : LOG_TIME_ERROR_MESSAGES.before_window,
+    );
+  }
   if (!logGuard.ok) {
     return fail(c, 409, logGuard.code, "This meal cannot be logged.", {
       reason: logGuard.reason,
