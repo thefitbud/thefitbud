@@ -54,9 +54,16 @@ function exactRouteFromPayload(payload: PushPayload): ResolvedAppRoute {
       }
       return { type: "tab", tab: "today" };
     case "coach_log_updated":
-      // Z6-19 (D-W6-33): opens the workout the coach logged or edited.
+      // Z6-19 / Z6-20 (D-W6-33, D-W6-38): opens the workout or the meal day the
+      // coach logged or edited, or Progress for a measurement.
       if (payload.domainEntityType === "workout_assignment") {
         return { type: "workout_overview", assignmentId: payload.domainEntityId };
+      }
+      if (payload.domainEntityType === "meal_assignment") {
+        return { type: "meal", assignmentId: payload.domainEntityId };
+      }
+      if (payload.domainEntityType === "coaching_relationship") {
+        return { type: "tab", tab: "progress" };
       }
       return { type: "tab", tab: "today" };
     case "trainer_note_shared":
@@ -117,6 +124,8 @@ function tabFromRoute(route: ResolvedAppRoute): NotificationDeepLink["tab"] {
       return "diet";
     case "reminders":
       return "more";
+    case "tab":
+      return route.tab;
     default:
       return "today";
   }

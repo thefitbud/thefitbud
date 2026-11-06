@@ -19,6 +19,9 @@ import {
   type LogTimeRejection,
 } from "./log-time-bounds.js";
 
+/** Stable code for a trainee write on a coach-created entry (R1; 409). */
+export const COACH_LOGGED_READ_ONLY_CODE = "COACH_LOGGED_READ_ONLY";
+
 export async function assertMealLogAllowed(
   db: Db,
   input: {
@@ -30,6 +33,8 @@ export async function assertMealLogAllowed(
     clientLoggedAt?: string;
     nowIso: string;
     alreadyLogged: boolean;
+    /** R1 (Z6-20): who wrote the existing entry, when there is one. */
+    existingLoggedByRole?: "trainee" | "coach" | null;
   },
 ): Promise<
   | { ok: true; loggedLate: boolean; loggedAfterResolve: boolean }
@@ -43,6 +48,10 @@ export async function assertMealLogAllowed(
     .limit(1);
   if (!assignment) {
     return { ok: false, code: "ASSIGNMENT_NOT_FOUND", reason: "not_found" };
+  }
+  // R1 (D-P2-21, Z6-20): an entry the coach created is read-only to the trainee.
+  if (input.existingLoggedByRole === "coach") {
+    return { ok: false, code: COACH_LOGGED_READ_ONLY_CODE, reason: "coach_logged" };
   }
   // EC1 rule 1: after a reactivation, nothing dated in the frozen period may
   // be logged, so exceptions closed at the end can never be reopened or fed.

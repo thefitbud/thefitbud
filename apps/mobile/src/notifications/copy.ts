@@ -1,5 +1,6 @@
 import {
   parseCoachLogDedupeKey,
+  type CoachLogEntityType,
   type Notification,
   type NotificationType,
 } from "@fitbud/contracts";
@@ -94,17 +95,24 @@ export function coachLogCopy(notification: Pick<Notification, "dedupeKey">): {
   if (parsed?.action === "create") {
     return {
       title: "Logged by your coach",
-      body: "Your coach logged a workout for you.",
+      body: `Your coach logged ${COACH_LOG_THING[parsed.entityType].one} for you.`,
     };
   }
   if (parsed?.action === "edit") {
     return {
       title: "Edited by your coach",
-      body: "Your coach updated one of your workouts.",
+      body: `Your coach updated one of your ${COACH_LOG_THING[parsed.entityType].many}.`,
     };
   }
   return { title: labelFor("notification_type", "coach_log_updated"), body: "" };
 }
+
+/** What the coach logged or edited, by entity type (D-W6-33; Z6-20 added meals and measurements). */
+const COACH_LOG_THING: Record<CoachLogEntityType, { one: string; many: string }> = {
+  workout_execution: { one: "a workout", many: "workouts" },
+  meal_compliance: { one: "a meal", many: "meals" },
+  measurement: { one: "a measurement", many: "measurements" },
+};
 
 export function inAppMealBannerCopy(mealLabel: string): { title: string } {
   return { title: `${mealLabel} isn't logged yet` };

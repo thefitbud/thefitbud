@@ -191,11 +191,34 @@ describe("coach log updates routing (Z6-19, D-W6-33)", () => {
     expect(notificationAudience("coach_log_updated")).toBe("trainee");
   });
 
-  it("does not trust a non-workout entity id as an assignment", () => {
+  it("opens the meal day the coach logged or edited (Z6-20, D-W6-38)", () => {
+    const link = deepLinkFromNotificationPayload({
+      ...base,
+      notificationType: "coach_log_updated",
+      domainEntityType: "meal_assignment",
+    });
+    expect(link).toMatchObject({
+      tab: "diet",
+      route: { type: "meal", assignmentId: base.domainEntityId },
+      refetchRequired: true,
+    });
+  });
+
+  it("opens Progress for a measurement the coach logged or edited (Z6-20, D-W6-38)", () => {
     const link = deepLinkFromNotificationPayload({
       ...base,
       notificationType: "coach_log_updated",
       domainEntityType: "coaching_relationship",
+    });
+    expect(link?.route).toEqual({ type: "tab", tab: "progress" });
+    expect(link?.tab).toBe("progress");
+  });
+
+  it("does not trust a check-in entity id as an assignment", () => {
+    const link = deepLinkFromNotificationPayload({
+      ...base,
+      notificationType: "coach_log_updated",
+      domainEntityType: "checkin",
     });
     expect(link?.route).toEqual({ type: "tab", tab: "today" });
   });
