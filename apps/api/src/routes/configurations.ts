@@ -53,6 +53,29 @@ const ACTIVATE_OPERATION = "configuration.activate";
 const NEW_VERSION_OPERATION = "configuration.new_version";
 const COPY_DRAFT_OPERATION = "configuration.copy_draft";
 
+/**
+ * A batch statement that aborts the whole D1 batch unless `condition` holds
+ * when it runs. It writes NULL into the NOT NULL `trainer_user_id` of this
+ * relationship's row (which always exists) only when the condition is false;
+ * otherwise it matches no row and changes nothing. drizzle's D1 batch takes
+ * query builders only, so this is an UPDATE rather than a raw RAISE.
+ */
+function failBatchUnless(
+  db: Db,
+  relationshipId: string,
+  condition: ReturnType<typeof sql>,
+) {
+  return db
+    .update(coachingRelationships)
+    .set({ trainerUserId: sql`null` })
+    .where(
+      and(
+        eq(coachingRelationships.id, relationshipId),
+        sql`not (${condition})`,
+      ),
+    );
+}
+
 function isOpenConfigurationStatus(status: string): boolean {
   return status === "draft";
 }
@@ -600,45 +623,97 @@ configurationRoutes.delete(
       select 1 from coaching_configurations
       where id = ${open.id} and status = 'draft'
     )`;
-    await db.batch([
-      db
-        .delete(workoutExpectations)
-        .where(
-          and(
-            eq(workoutExpectations.coachingConfigurationId, open.id),
-            draftScope,
+    try {
+      await db.batch([
+        // First: fail the batch unless the row is still this draft at the
+        // version read above (a concurrent activate, save or discard).
+        failBatchUnless(
+          db,
+          relationshipId,
+          sql`exists (
+            select 1 from coaching_configurations
+            where id = ${open.id}
+              and status = 'draft'
+              and record_version = ${open.recordVersion}
+          )`,
+        ),
+        db
+          .delete(workoutExpectations)
+          .where(
+            and(
+              eq(workoutExpectations.coachingConfigurationId, open.id),
+              draftScope,
+            ),
           ),
-        ),
-      db
-        .delete(nutritionExpectations)
-        .where(
-          and(
-            eq(nutritionExpectations.coachingConfigurationId, open.id),
-            draftScope,
+        db
+          .delete(nutritionExpectations)
+          .where(
+            and(
+              eq(nutritionExpectations.coachingConfigurationId, open.id),
+              draftScope,
+            ),
           ),
-        ),
-      db
-        .delete(checkinSchedules)
-        .where(
-          and(eq(checkinSchedules.coachingConfigurationId, open.id), draftScope),
-        ),
-      db
-        .delete(trackingRequirements)
-        .where(
-          and(
-            eq(trackingRequirements.coachingConfigurationId, open.id),
-            draftScope,
+        db
+          .delete(checkinSchedules)
+          .where(
+            and(eq(checkinSchedules.coachingConfigurationId, open.id), draftScope),
           ),
-        ),
-      db
-        .delete(coachingConfigurations)
-        .where(
-          and(
-            eq(coachingConfigurations.id, open.id),
-            eq(coachingConfigurations.status, "draft"),
+        db
+          .delete(trackingRequirements)
+          .where(
+            and(
+              eq(trackingRequirements.coachingConfigurationId, open.id),
+              draftScope,
+            ),
           ),
-        ),
-    ]);
+        db
+          .delete(coachingConfigurations)
+          .where(
+            and(
+              eq(coachingConfigurations.id, open.id),
+              eq(coachingConfigurations.status, "draft"),
+            ),
+          ),
+      ]);
+    } catch (error) {
+      const [current] = await db
+        .select()
+        .from(coachingConfigurations)
+        .where(eq(coachingConfigurations.id, open.id));
+      if (
+        current?.status === "draft" &&
+        current.recordVersion === open.recordVersion
+      ) {
+        // Nothing raced us: a real failure. The batch rolled back; surface it.
+        throw error;
+      }
+      if (!current) {
+        return fail(
+          c,
+          404,
+          "CONFIGURATION_NOT_FOUND",
+          "There is no configuration draft to discard.",
+        );
+      }
+      if (current.status !== "draft") {
+        return fail(
+          c,
+          409,
+          "CONFIGURATION_NOT_DRAFT",
+          "Only a draft configuration can be discarded.",
+        );
+      }
+      return fail(
+        c,
+        409,
+        "CONFIGURATION_VERSION_CONFLICT",
+        "Configuration was changed after this version was loaded.",
+        {
+          expectedVersion: open.recordVersion,
+          currentVersion: current.recordVersion,
+        },
+      );
+    }
 
     const remaining = await loadConfigurationBundle(db, relationshipId);
     return ok(c, remaining ? parseMappedConfiguration(remaining) : null);
@@ -1004,25 +1079,19 @@ configurationRoutes.post(
       );
 
     // Fails the whole batch unless the draft is now active at the new
-    // version. It writes NULL into a NOT NULL column of this relationship's
-    // row (which always exists), but only when the activation above matched
-    // nothing (a concurrent save, discard or activate); otherwise it matches
-    // no row and changes nothing. The schedule below is then never written
-    // for a configuration that did not go live.
-    const requireActivated = db
-      .update(coachingRelationships)
-      .set({ trainerUserId: sql`null` })
-      .where(
-        and(
-          eq(coachingRelationships.id, relationshipId),
-          sql`not exists (
-            select 1 from coaching_configurations
-            where id = ${draftId}
-              and status = 'active'
-              and record_version = ${expectedVersion + 1}
-          )`,
-        ),
-      );
+    // version (a concurrent save, discard or activate makes the activation
+    // above match nothing). The schedule below is then never written for a
+    // configuration that did not go live.
+    const requireActivated = failBatchUnless(
+      db,
+      relationshipId,
+      sql`exists (
+        select 1 from coaching_configurations
+        where id = ${draftId}
+          and status = 'active'
+          and record_version = ${expectedVersion + 1}
+      )`,
+    );
 
     const schedule = await planActivationSchedule(db, {
       relationshipId,
