@@ -127,8 +127,14 @@ describe("W6 scaffold mounts", () => {
       ),
     );
 
+    // The existing exceptions router answers /exceptions/:id with its own auth and
+    // lookup errors: unauthenticated callers get 401, a trainer gets a domain error
+    // that is not the scaffold's.
+    const uuid = "00000000-0000-4000-8000-000000000000";
+    const anonExisting = await app.request(`/exceptions/${uuid}`, {}, testEnv());
+    expect(anonExisting.status).toBe(401);
     const existing = await app.request(
-      "/exceptions/00000000-0000-4000-8000-000000000000",
+      `/exceptions/${uuid}`,
       { headers: { Cookie: cookie } },
       testEnv(),
     );
@@ -187,7 +193,8 @@ describe("W6 scaffold exports resolve", () => {
       contracts.W6StepsContract,
       contracts.W6ExceptionBulkContract,
       contracts.W6AccountContract,
-    ] = [{}, {}, {}, {}, {}, {}];
-    expect(placeholders).toHaveLength(6);
+      contracts.W6CoachLogContract,
+    ] = [{}, {}, {}, {}, {}, {}, {}];
+    expect(placeholders).toHaveLength(7);
   });
 });

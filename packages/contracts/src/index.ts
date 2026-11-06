@@ -799,3 +799,4 @@ export * from "./client-settings.js";
 export * from "./steps.js";
 export * from "./exception-bulk.js";
 export * from "./account.js";
+export * from "./coach-log.js";

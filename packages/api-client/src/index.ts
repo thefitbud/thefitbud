@@ -2481,3 +2481,5 @@ import { installExceptionBulkClientMethods } from "./exception-bulk-augment.js";
 installExceptionBulkClientMethods(FitBudApiClient);
 import { installAccountClientMethods } from "./account-augment.js";
 installAccountClientMethods(FitBudApiClient);
+import { installWorkoutsClientMethods } from "./workouts-augment.js";
+installWorkoutsClientMethods(FitBudApiClient);
