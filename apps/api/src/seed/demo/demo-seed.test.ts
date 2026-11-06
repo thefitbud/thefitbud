@@ -729,6 +729,36 @@ describe("demo seed", () => {
       expect(one(`SELECT COUNT(*) FROM coaching_relationships WHERE trainer_user_id = '${demoUuid("user", "nova.coach@demo.fitbud.test")}'`)).toBe(0);
     });
 
+    it("fills the numeric load columns for every seeded set from its labels (Z6-1)", () => {
+      const rows = q(
+        "SELECT id, prescribed_load_label, actual_load_label, prescribed_load_kg, actual_load_kg, load_kind FROM set_executions",
+      );
+      expect(rows.length).toBeGreaterThan(0);
+      const kgLabel = /^(\d+(?:\.\d+)?) kg$/;
+      let kgLabels = 0;
+      const kinds = new Set<string>();
+      for (const [id, prescribedLabel, actualLabel, prescribedKg, actualKg, kind] of rows) {
+        kinds.add(String(kind));
+        const prescribed = kgLabel.exec(String(prescribedLabel ?? ""));
+        const actual = kgLabel.exec(String(actualLabel ?? ""));
+        if (prescribed) {
+          kgLabels += 1;
+          expect(prescribedKg, String(id)).toBe(Number(prescribed[1]));
+        }
+        if (actual) {
+          kgLabels += 1;
+          expect(actualKg, String(id)).toBe(Number(actual[1]));
+          expect(kind, String(id)).toBe("kg");
+        }
+        if (!prescribed) expect(prescribedKg, String(id)).toBeNull();
+        if (!actual) expect(actualKg, String(id)).toBeNull();
+        if (String(actualLabel) === "Bodyweight") expect(kind, String(id)).toBe("bodyweight");
+      }
+      expect(kgLabels).toBeGreaterThan(0);
+      expect(kinds.has("kg")).toBe(true);
+      expect(kinds.has("bodyweight")).toBe(true);
+    });
+
     it("leaves photos empty", () => {
       expect(one("SELECT COUNT(*) FROM media_assets")).toBe(0);
       expect(one("SELECT COUNT(*) FROM meal_compliance WHERE media_asset_id IS NOT NULL")).toBe(0);
