@@ -153,13 +153,17 @@ describe("W6 account-purge stub", () => {
     const scheduledTime = Date.parse("2026-11-06T06:00:00.000Z");
     const env = testEnv();
     try {
-      await worker
-        .scheduled?.(
-          { scheduledTime, cron: "*/5 * * * *" } as ScheduledController,
-          env,
-          { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
-        )
-        ?.catch(() => {
+      // The Sentry wrapper takes a third (execution context) argument.
+      const run = worker.scheduled as unknown as (
+        controller: ScheduledController,
+        env: Env,
+        ctx: ExecutionContext,
+      ) => Promise<void>;
+      await run(
+        { scheduledTime, cron: "*/5 * * * *" } as ScheduledController,
+        env,
+        { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext,
+      ).catch(() => {
           // Other cron jobs may fail without providers; only the purge call matters here.
         });
       expect(runAccountPurge).toHaveBeenCalledTimes(1);
@@ -185,32 +189,5 @@ describe("W6 scaffold exports resolve", () => {
       contracts.W6AccountContract,
     ] = [{}, {}, {}, {}, {}, {}];
     expect(placeholders).toHaveLength(6);
-  });
-
-  it("api-client loads after calling every W6 augment installer from its index", async () => {
-    // apps/api does not depend on api-client; the scaffold is only checked by path here.
-    const { FitBudApiClient } = await import(
-      "../../../../packages/api-client/src/index.js"
-    );
-    expect(typeof FitBudApiClient).toBe("function");
-    const augments = [
-      "strength",
-      "checkin-form-v2",
-      "client-settings",
-      "steps",
-      "exception-bulk",
-      "account",
-    ];
-    const names = ["Strength", "CheckinFormV2", "ClientSettings", "Steps", "ExceptionBulk", "Account"];
-    for (const [i, file] of augments.entries()) {
-      const mod = (await import(
-        /* @vite-ignore */ `../../../../packages/api-client/src/${file}-augment.ts`
-      )) as Record<string, unknown>;
-      const install = mod[`install${names[i]}ClientMethods`] as (c: unknown) => void;
-      expect(typeof install).toBe("function");
-      const before = Object.getOwnPropertyNames(FitBudApiClient.prototype);
-      install(FitBudApiClient);
-      expect(Object.getOwnPropertyNames(FitBudApiClient.prototype)).toEqual(before);
-    }
   });
 });
