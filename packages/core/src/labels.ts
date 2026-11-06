@@ -269,7 +269,7 @@ const LABELS = {
     draft: "Draft",
     scheduled: "Scheduled",
     published: "Published",
-    effective: "Effective",
+    effective: "Active",
     superseded: "Superseded",
     archived: "Archived",
   },
