@@ -16,12 +16,13 @@ import { render, screen } from "../../test/render";
 import { WebDateHeading, webDayStateLabel } from "./WebTraineeChrome";
 
 const TIME_ZONE = "Asia/Kolkata";
-const STATES = ["done", "partial", "open", "rest", "future", "unknown"] as const;
+const STATES = ["done", "partial", "open", "rest", "future", "unknown", "due"] as const;
 
 /** What a screen reader says for each strip state. */
 const SPOKEN: Record<DateNavigatorDay["state"], string> = {
   done: "Done",
   partial: "Partial",
+  due: "To do",
   open: "Missed",
   rest: "Rest",
   future: "Upcoming",

@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { DateNavigator, type DateNavigatorDay } from "@fitbud/ui-mobile";
 import { render, screen } from "../test/render";
 
-const STATES = ["done", "partial", "open", "rest", "future", "unknown"] as const;
+const STATES = ["done", "partial", "due", "open", "rest", "future", "unknown"] as const;
 
 function day(state: DateNavigatorDay["state"], index: number): DateNavigatorDay {
   return {
@@ -34,7 +34,7 @@ describe("DateNavigator accessible names", () => {
       />,
     );
     expect(
-      screen.getByRole("button", { name: `Wed ${12 + index}, ${state}` }),
+      screen.getByRole("button", { name: `Wed ${12 + index}, ${state === "due" ? "to do" : state}` }),
     ).toBeTruthy();
   });
 });
