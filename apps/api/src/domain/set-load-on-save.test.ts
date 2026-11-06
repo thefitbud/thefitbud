@@ -332,6 +332,8 @@ function traineeHeaders(token: string, extra: Record<string, string> = {}) {
   };
 }
 
+import { parseLoadLabel } from "./load-parser.js";
+
 describe("set load columns on save (Z6-15)", () => {
   let db: Db;
   let closeDb: () => void;
@@ -460,6 +462,20 @@ describe("set load columns on save (Z6-15)", () => {
     expect(zero.loadKind).toBe("kg");
   });
 
+  it.each([
+    ["0.1+0.2", "a", 0.1 + 0.2, 0.3, "0.3 kg"],
+    ["20+2*1.1", "b", 20 + 2 * 1.1, 22.2, "22.2 kg"],
+    ["40.000000001", "c", 40.000000001, 40, "40 kg"],
+  ])("rounds a float-artefact load to hundredths (%s)", async (_n, tag, input, kg, label) => {
+    const w = await startWorkout(`round-${tag}`);
+    expect((await completeSet(w, w.setIds[0]!, { actualLoadKg: input })).status).toBe(200);
+    const row = await setRow(w.setIds[0]!);
+    expect(row.actualLoadKg).toBe(kg);
+    expect(row.actualLoadLabel).toBe(label);
+    expect(row.loadKind).toBe("kg");
+    expect(parseLoadLabel(row.actualLoadLabel)).toEqual({ kind: "kg", kg: row.actualLoadKg });
+  });
+
   it("a numeric load equal to the prescribed kg is not a modification", async () => {
     const w = await startWorkout("numeq");
     expect((await completeSet(w, w.setIds[0]!, { actualLoadKg: 60 })).status).toBe(200);
@@ -484,7 +500,7 @@ describe("set load columns on save (Z6-15)", () => {
     expect(row.actualLoadKg).toBeNull();
   });
 
-  it("skip keeps the labels and resolves the kind from the prescribed label", async () => {
+  it("skip keeps the start-time labels and columns", async () => {
     const w = await startWorkout("skip");
     const res = await app.request(
       `/workouts/executions/${w.executionId}/sets/${w.setIds[0]!}/skip`,

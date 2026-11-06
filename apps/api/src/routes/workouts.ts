@@ -1144,7 +1144,11 @@ workoutRoutes.post(
       parsed.data.actualReps === undefined
         ? setRow.prescribedReps
         : parsed.data.actualReps;
-    const numericKg = parsed.data.actualLoadKg;
+    // Round to hundredths so the label and column carry no float artefacts.
+    const numericKg =
+      parsed.data.actualLoadKg === undefined
+        ? undefined
+        : Math.round(parsed.data.actualLoadKg * 100) / 100;
     const actualLoadLabel =
       numericKg !== undefined
         ? `${numericKg} kg`
@@ -1275,11 +1279,8 @@ workoutRoutes.post(
     await db
       .update(setExecutions)
       .set({
+        // Load columns stay as written at workout start (the row is pending, Z6-15).
         status: "skipped",
-        ...resolveSetLoad({
-          prescribedLoadLabel: setRow.prescribedLoadLabel,
-          actualLoadLabel: setRow.actualLoadLabel,
-        }),
         completedAt: now,
         updatedAt: now,
       })
