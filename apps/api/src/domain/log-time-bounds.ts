@@ -1,0 +1,44 @@
+/** EC1 rule 2: how far ahead of the server clock a client-stated log time may be. */
+export const LOG_TIME_FUTURE_DRIFT_MS = 5 * 60 * 1000;
+
+export type LogTimeBoundsResult =
+  | { ok: true }
+  | { ok: false; reason: "future" | "before_window" };
+
+/**
+ * Checks the instant a log was made against the item's window start.
+ *
+ * - `clientLoggedAt` after `now` + 5 min is `future` (clock drift allowance).
+ * - `clientLoggedAt` before `windowStart` is `before_window`; exactly at the
+ *   start is accepted.
+ *
+ * Only the future bound uses the server clock. The lower bound compares the
+ * time the log was made, never the time the server received it, so a queued
+ * offline log that was valid when made still passes when delivered late.
+ */
+export function assertLogTimeWithinBounds(input: {
+  clientLoggedAt: string;
+  windowStart: string;
+  now: string;
+}): LogTimeBoundsResult {
+  const logged = Date.parse(input.clientLoggedAt);
+  const start = Date.parse(input.windowStart);
+  const now = Date.parse(input.now);
+  if (logged > now + LOG_TIME_FUTURE_DRIFT_MS) {
+    return { ok: false, reason: "future" };
+  }
+  if (logged < start) {
+    return { ok: false, reason: "before_window" };
+  }
+  return { ok: true };
+}
+
+export const LOG_TIME_ERROR_CODES = {
+  future: "LOG_TIME_IN_FUTURE",
+  before_window: "LOG_TIME_BEFORE_WINDOW",
+} as const;
+
+export const LOG_TIME_ERROR_MESSAGES = {
+  future: "The log time is in the future.",
+  before_window: "The log time is before this item's window opened.",
+} as const;

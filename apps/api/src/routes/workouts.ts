@@ -54,6 +54,11 @@ import {
   loadTraineeTimezone,
   resolveGenerationRange,
 } from "../domain/assignment-schedule";
+import {
+  LOG_TIME_ERROR_CODES,
+  LOG_TIME_ERROR_MESSAGES,
+  assertLogTimeWithinBounds,
+} from "../domain/log-time-bounds.js";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import type { AppContext } from "../lib/envelope";
 import { fail, ok } from "../lib/envelope";
@@ -713,6 +718,21 @@ workoutRoutes.post(
         409,
         "WORKOUT_ALREADY_FINISHED",
         "This assignment already has a finished execution.",
+      );
+    }
+
+    // Workout requests carry no client time, so the instant is the server's.
+    const startBounds = assertLogTimeWithinBounds({
+      clientLoggedAt: now,
+      windowStart: loaded.assignment.windowStartsAt,
+      now,
+    });
+    if (!startBounds.ok) {
+      return fail(
+        c,
+        422,
+        LOG_TIME_ERROR_CODES[startBounds.reason],
+        LOG_TIME_ERROR_MESSAGES[startBounds.reason],
       );
     }
 

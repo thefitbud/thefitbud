@@ -132,6 +132,20 @@ describe("navigatorDaysFor", () => {
     expect(byDate.get(DATES[6])).toBe("future");
   });
 
+  it("keeps an unlogged today as its own due state, not partial (D-W6-10)", () => {
+    const state: WeekModelState = {
+      status: "loaded",
+      week: week([
+        { date: DATES[2], state: "due" },
+        { date: DATES[1], state: "partial" },
+      ]),
+    };
+    const days = navigatorDaysFor({ weekState: state, dates: DATES, ...labels });
+    const byDate = new Map(days.map((d) => [d.localDate, d.state]));
+    expect(byDate.get(DATES[2])).toBe("due");
+    expect(byDate.get(DATES[1])).toBe("partial");
+  });
+
   it("claims nothing about a past day when the week is unavailable", () => {
     const days = navigatorDaysFor({
       weekState: { status: "unavailable" },

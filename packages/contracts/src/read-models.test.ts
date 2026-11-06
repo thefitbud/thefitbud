@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { meDayResponseSchema } from "./read-models.js";
+import { meDayResponseSchema, weekDayStateSchema } from "./read-models.js";
 
 /**
  * Two real UUID assignment ids, listed in an order that is not
@@ -56,5 +56,11 @@ describe("meDayResponseSchema", () => {
         },
       }),
     ).toThrow();
+  });
+});
+
+describe("weekDayStateSchema", () => {
+  it("accepts due, the unlogged-today state (D-W6-10)", () => {
+    expect(weekDayStateSchema.parse("due")).toBe("due");
   });
 });
