@@ -2,6 +2,7 @@ import { and, asc, eq, lte, or, sql, type SQL } from "drizzle-orm";
 import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core";
 import { createDb, type Db } from "../db/client.js";
 import {
+  clientInvitations,
   mediaAssets,
   traineeProfiles,
   trainerProfiles,
@@ -11,6 +12,7 @@ import {
 import { identifierHash, normalizeIdentifier } from "../auth/identifiers.js";
 import { mediaKey } from "../lib/media-key.js";
 import { writeStructuredLog } from "../lib/log.js";
+import { runtimeMisconfigurations } from "../middleware/runtime-guard.js";
 import type { Env } from "../types.js";
 
 /**
@@ -24,8 +26,8 @@ import type { Env } from "../types.js";
  *    missing object is fine; keys are never authorization).
  * 2. Firebase: delete the Firebase Auth user through the Admin REST API with
  *    the service account already configured for sign-in (no new secret). A
- *    user Firebase no longer has counts as deleted. Skipped in test auth mode,
- *    where no Firebase project exists.
+ *    user Firebase no longer has counts as deleted. Skipped only when
+ *    ENVIRONMENT is local or unset, where no Firebase project exists (D-W6-39).
  * 3. D1: one batch, which D1 runs as a single transaction, deletes the
  *    person's own rows, anonymises the rows other users' records need and
  *    finally turns the users row into an anonymous `disabled` row with both
@@ -38,6 +40,10 @@ import type { Env } from "../types.js";
  * starts that user again from step 1. Every statement of step 3 is guarded on
  * the account still being archived and due, so a run that races another one,
  * or a user that is no longer due, changes nothing.
+ *
+ * The job refuses to run (logs RUNTIME_MISCONFIGURED, writes nothing) when the
+ * runtime configuration is invalid: `scheduled()` does not pass through the
+ * fetch runtime guard (D-W6-39).
  *
  * Logs carry only the user id (an opaque UUID), counts and static codes, never
  * an email, phone number, name, Firebase uid or object key.
@@ -71,7 +77,7 @@ export type AccountPurgeResult = {
 
 type DueUser = { id: string; firebaseUid: string };
 
-type PersonValues = {
+export type PersonValues = {
   /** Email exactly as stored on the identity, and its normalised form. */
   emails: string[];
   mobile: string | null;
@@ -86,6 +92,16 @@ class PurgeStepError extends Error {
 }
 
 export async function runAccountPurge(env: Env, now: Date): Promise<AccountPurgeResult> {
+  if (runtimeMisconfigurations(env).length > 0) {
+    // Same check as the fetch runtime guard; only the static code is logged.
+    writeStructuredLog({
+      level: "error",
+      message: "account.purge_refused",
+      operation: "cron.account_purge",
+      errorCode: "RUNTIME_MISCONFIGURED",
+    });
+    throw new PurgeStepError("RUNTIME_MISCONFIGURED");
+  }
   const db = createDb(env.DB);
   const nowIso = now.toISOString();
   const due = await selectDueUsers(db, nowIso);
@@ -204,7 +220,11 @@ async function loadPersonValues(db: Db, userId: string): Promise<PersonValues> {
     .where(eq(traineeProfiles.userId, userId))
     .limit(1);
   const emails = unique([identity?.email, identity?.emailNorm, identity?.email?.toLowerCase()]);
-  const names = unique([trainer?.name, trainee?.name]).filter(
+  const invited = await db
+    .select({ name: clientInvitations.recipientDisplayName })
+    .from(clientInvitations)
+    .where(eq(clientInvitations.acceptedUserId, userId));
+  const names = unique([trainer?.name, trainee?.name, ...invited.map((row) => row.name)]).filter(
     (name) => name !== DELETED_USER_NAME,
   );
   return { emails, mobile: identity?.mobile?.trim() || null, names };
@@ -216,35 +236,162 @@ function unique(values: Array<string | null | undefined>): string[] {
 
 /**
  * Free text kept for the other party (and written by either side) in the
- * person's relationships. The person's email and phone are replaced inside it
- * with `[removed]`; the text itself stays, because it is the other party's
- * coaching history. Names are not replaced inside free text (a short name would
- * also match unrelated words); the name is shown from the profile, which
- * becomes "Deleted user".
+ * person's relationships. The text stays, because it is the other party's
+ * coaching history, but inside it (D-W6-39):
+ * - the person's email (any letter case) becomes `[removed]`;
+ * - their phone, as stored (E.164) or in the national form with or without
+ *   spaces or dashes ("98123 12345", "98123-12345", "9812312345"), becomes
+ *   `[removed]`;
+ * - their full display name, as a whole name in any letter case (never part of
+ *   another word), becomes "Deleted user".
+ * JSON columns are parsed and only their string values are rewritten, so the
+ * JSON stays valid.
  */
 const RELATIONSHIP_FREE_TEXT: ReadonlyArray<{
   table: string;
   column: string;
-  relationshipColumn: string;
+  /** Column that ties the row to a relationship, or `exception` for exception_actions. */
+  scope: string;
 }> = [
-  { table: "onboarding_form_responses", column: "answers_json", relationshipColumn: "coaching_relationship_id" },
-  { table: "checkins", column: "answers_json", relationshipColumn: "coaching_relationship_id" },
-  { table: "progress_entries", column: "title", relationshipColumn: "coaching_relationship_id" },
-  { table: "progress_entries", column: "body", relationshipColumn: "coaching_relationship_id" },
-  { table: "meal_compliance", column: "notes", relationshipColumn: "coaching_relationship_id" },
-  { table: "trainer_notes", column: "body", relationshipColumn: "coaching_relationship_id" },
-  { table: "checkin_reviews", column: "notes", relationshipColumn: "coaching_relationship_id" },
-  { table: "interventions", column: "summary", relationshipColumn: "coaching_relationship_id" },
-  { table: "coaching_configurations", column: "notes", relationshipColumn: "coaching_relationship_id" },
-  { table: "coaching_configurations", column: "goal_short", relationshipColumn: "coaching_relationship_id" },
-  { table: "coaching_configurations", column: "goal_description", relationshipColumn: "coaching_relationship_id" },
-  { table: "coaching_relationships", column: "end_reason", relationshipColumn: "id" },
-  { table: "exceptions", column: "summary", relationshipColumn: "coaching_relationship_id" },
-  { table: "exceptions", column: "details_json", relationshipColumn: "coaching_relationship_id" },
-  { table: "exceptions", column: "resolution_note", relationshipColumn: "coaching_relationship_id" },
-  { table: "log_edit_events", column: "before_json", relationshipColumn: "coaching_relationship_id" },
-  { table: "log_edit_events", column: "after_json", relationshipColumn: "coaching_relationship_id" },
+  { table: "onboarding_form_responses", column: "answers_json", scope: "coaching_relationship_id" },
+  { table: "checkins", column: "answers_json", scope: "coaching_relationship_id" },
+  { table: "progress_entries", column: "title", scope: "coaching_relationship_id" },
+  { table: "progress_entries", column: "body", scope: "coaching_relationship_id" },
+  { table: "meal_compliance", column: "notes", scope: "coaching_relationship_id" },
+  { table: "trainer_notes", column: "body", scope: "coaching_relationship_id" },
+  { table: "checkin_reviews", column: "notes", scope: "coaching_relationship_id" },
+  { table: "interventions", column: "summary", scope: "coaching_relationship_id" },
+  { table: "coaching_configurations", column: "notes", scope: "coaching_relationship_id" },
+  { table: "coaching_configurations", column: "goal_short", scope: "coaching_relationship_id" },
+  { table: "coaching_configurations", column: "goal_description", scope: "coaching_relationship_id" },
+  { table: "coaching_relationships", column: "end_reason", scope: "id" },
+  { table: "exceptions", column: "summary", scope: "coaching_relationship_id" },
+  { table: "exceptions", column: "details_json", scope: "coaching_relationship_id" },
+  { table: "exceptions", column: "resolution_note", scope: "coaching_relationship_id" },
+  { table: "exception_actions", column: "note", scope: "exception" },
+  { table: "log_edit_events", column: "before_json", scope: "coaching_relationship_id" },
+  { table: "log_edit_events", column: "after_json", scope: "coaching_relationship_id" },
 ];
+
+export type Scrubber = { rewrite(text: string): string; prefilter(column: SQL): SQL };
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The national number: the last 10 digits of the stored E.164 phone. */
+function nationalDigits(mobile: string | null): { national: string; country: string } | null {
+  const digits = mobile?.replace(/\D/g, "") ?? "";
+  if (digits.length < 10) return null;
+  return { national: digits.slice(-10), country: digits.slice(0, -10) };
+}
+
+export function buildScrubber(values: PersonValues): Scrubber | null {
+  const rules: Array<[RegExp, string]> = [];
+  const emails = unique(values.emails.map((email) => email.toLowerCase()));
+  for (const email of emails) {
+    rules.push([new RegExp(escapeRegExp(email), "giu"), REMOVED_TEXT]);
+  }
+  const phone = nationalDigits(values.mobile);
+  if (phone) {
+    const national = phone.national.split("").join("[\\s-]?");
+    const country = phone.country ? `(?:\\+?${phone.country}[\\s-]?)?` : "";
+    rules.push([new RegExp(`(?<![\\d+])${country}${national}(?!\\d)`, "gu"), REMOVED_TEXT]);
+  }
+  const names = values.names.map((name) => name.trim().split(/\s+/u)).filter((parts) => parts.length > 0);
+  for (const parts of names) {
+    const pattern = parts.map(escapeRegExp).join("\\s+");
+    rules.push([
+      new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, "giu"),
+      DELETED_USER_NAME,
+    ]);
+  }
+  if (rules.length === 0) return null;
+  const firstTokens = unique(names.map((parts) => parts[0]!.toLowerCase()));
+  return {
+    rewrite(text) {
+      let out = text;
+      for (const [pattern, replacement] of rules) out = out.replace(pattern, replacement);
+      return out;
+    },
+    // A cheap SQL superset of the rows the rules can match; the rules decide.
+    prefilter(column) {
+      const checks: SQL[] = [
+        ...emails.map((email) => sql`instr(lower(${column}), ${email}) > 0`),
+        ...firstTokens.map((token) => sql`instr(lower(${column}), ${token}) > 0`),
+      ];
+      if (phone) {
+        checks.push(sql`instr(replace(replace(${column}, ' ', ''), '-', ''), ${phone.national}) > 0`);
+      }
+      return sql.join(checks, sql` OR `);
+    },
+  };
+}
+
+/** Rewrites a stored value; JSON is parsed and only its string values change. */
+export function scrubStoredText(raw: string, scrubber: Scrubber): string {
+  const head = raw.trimStart()[0];
+  if (head === "{" || head === "[" || head === '"') {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      const walk = (value: unknown): unknown => {
+        if (typeof value === "string") return scrubber.rewrite(value);
+        if (Array.isArray(value)) return value.map(walk);
+        if (value && typeof value === "object") {
+          return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, walk(nested)]),
+          );
+        }
+        return value;
+      };
+      const before = JSON.stringify(parsed);
+      const after = JSON.stringify(walk(parsed));
+      return after === before ? raw : after;
+    } catch {
+      // Not JSON: plain text below.
+    }
+  }
+  return scrubber.rewrite(raw);
+}
+
+/**
+ * Reads the free-text rows that mention the person and returns one guarded
+ * update per changed row, run inside the step 3 batch. The relationships are
+ * ended, so these rows are read-only; the `= old value` check still makes a
+ * concurrent edit win over the scrub instead of being overwritten.
+ */
+async function freeTextScrubStatements(
+  client: D1Database,
+  scrubber: Scrubber,
+  personRelationships: SQL,
+  guard: SQL,
+): Promise<SQL[]> {
+  const statements: SQL[] = [];
+  for (const target of RELATIONSHIP_FREE_TEXT) {
+    const table = sql.raw(`"${target.table}"`);
+    const column = sql.raw(`"${target.column}"`);
+    const scope =
+      target.scope === "exception"
+        ? sql`exception_id IN (SELECT e.id FROM exceptions e WHERE e.coaching_relationship_id IN (${personRelationships}))`
+        : sql`${sql.raw(`"${target.scope}"`)} IN (${personRelationships})`;
+    const query = dialect.sqlToQuery(
+      sql`SELECT id, ${column} AS value FROM ${table} WHERE ${scope} AND ${column} IS NOT NULL AND (${scrubber.prefilter(column)})`,
+    );
+    const { results } = await client
+      .prepare(query.sql)
+      .bind(...query.params)
+      .all<{ id: string; value: string }>();
+    for (const row of results ?? []) {
+      const next = scrubStoredText(row.value, scrubber);
+      if (next !== row.value) {
+        statements.push(
+          sql`UPDATE ${table} SET ${column} = ${next} WHERE id = ${row.id} AND ${column} = ${row.value} AND ${guard}`,
+        );
+      }
+    }
+  }
+  return statements;
+}
 
 /**
  * Step 3: one D1 batch (one transaction). Statements run in foreign-key order
@@ -260,8 +407,12 @@ async function purgeRows(
   const guard = sql`EXISTS (SELECT 1 FROM users g WHERE g.id = ${userId} AND g.account_state = 'archived' AND g.purge_after <= ${nowIso})`;
   const personRelationships = sql`SELECT r.id FROM coaching_relationships r WHERE r.trainer_user_id = ${userId} OR r.trainee_user_id = ${userId}`;
   const media = personMediaIds(userId);
-  const contacts = [...values.emails, ...(values.mobile ? [values.mobile] : [])];
+  const national = nationalDigits(values.mobile)?.national;
+  const contacts = unique([...values.emails, values.mobile, national]);
   const otpHashes = await otpIdentifierHashes(values);
+  const client = (db as Db & { $client?: D1Database }).$client;
+  if (!client) throw new PurgeStepError("ACCOUNT_PURGE_DB_UNAVAILABLE");
+  const scrubber = buildScrubber(values);
 
   const statements: SQL[] = [
     // Media: clear the references, then the rows (objects went in step 1).
@@ -318,15 +469,8 @@ async function purgeRows(
       WHERE user_id = ${userId} AND ${guard}`,
   ];
 
-  if (contacts.length > 0) {
-    for (const target of RELATIONSHIP_FREE_TEXT) {
-      statements.push(scrubStatement(target, contacts, personRelationships, guard));
-    }
-    statements.push(
-      sql`UPDATE exception_actions SET note = ${replaceAll(sql.raw("note"), contacts)}
-        WHERE exception_id IN (SELECT e.id FROM exceptions e WHERE e.coaching_relationship_id IN (${personRelationships}))
-        AND (${containsAny(sql.raw("note"), contacts)}) AND ${guard}`,
-    );
+  if (scrubber) {
+    statements.push(...(await freeTextScrubStatements(client, scrubber, personRelationships, guard)));
   }
 
   // Other actors' retry receipts that echo the person's contact details or
@@ -370,8 +514,6 @@ async function purgeRows(
   );
 
   // D1 runs a batch as one transaction: all of these statements apply, or none.
-  const client = (db as Db & { $client?: D1Database }).$client;
-  if (!client) throw new PurgeStepError("ACCOUNT_PURGE_DB_UNAVAILABLE");
   const results = await client.batch(
     statements.map((statement) => {
       const query = dialect.sqlToQuery(statement);
@@ -382,31 +524,12 @@ async function purgeRows(
   return (last?.meta?.changes ?? 0) === 1;
 }
 
+/** Case-insensitive substring match against any needle. */
 function containsAny(column: SQL, needles: string[]): SQL {
   return sql.join(
-    needles.map((needle) => sql`instr(${column}, ${needle}) > 0`),
+    needles.map((needle) => sql`instr(lower(${column}), ${needle.toLowerCase()}) > 0`),
     sql` OR `,
   );
-}
-
-function replaceAll(column: SQL, needles: string[]): SQL {
-  let expression = column;
-  for (const needle of needles) {
-    expression = sql`replace(${expression}, ${needle}, ${REMOVED_TEXT})`;
-  }
-  return expression;
-}
-
-function scrubStatement(
-  target: (typeof RELATIONSHIP_FREE_TEXT)[number],
-  contacts: string[],
-  personRelationships: SQL,
-  guard: SQL,
-): SQL {
-  const column = sql.raw(`"${target.column}"`);
-  return sql`UPDATE ${sql.raw(`"${target.table}"`)} SET ${column} = ${replaceAll(column, contacts)}
-    WHERE ${sql.raw(`"${target.relationshipColumn}"`)} IN (${personRelationships})
-    AND (${containsAny(column, contacts)}) AND ${guard}`;
 }
 
 /** `auth_otps.identifier_hash` values for the person's email and phone (sign-in codes). */
@@ -425,8 +548,9 @@ async function otpIdentifierHashes(values: PersonValues): Promise<string[]> {
 type FirebaseAdmin = { deleteUser(firebaseUid: string): Promise<void> };
 
 function createFirebaseAdmin(env: Env): FirebaseAdmin {
-  if (env.AUTH_MODE !== "firebase") {
-    // Test auth (local only, enforced by the runtime guard) has no Firebase users.
+  if (!env.ENVIRONMENT || env.ENVIRONMENT === "local") {
+    // Local development has no Firebase project (test auth). Every other
+    // environment must delete the Firebase user (D-W6-39).
     return { deleteUser: async () => {} };
   }
   let accessToken: Promise<string> | null = null;

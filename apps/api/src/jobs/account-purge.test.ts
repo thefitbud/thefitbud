@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { formatLocalDate } from "@fitbud/core";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
@@ -21,7 +22,9 @@ import {
   DELETED_USER_EMAIL,
   DELETED_USER_NAME,
   REMOVED_TEXT,
+  buildScrubber,
   runAccountPurge,
+  scrubStoredText,
 } from "./account-purge.js";
 
 /**
@@ -68,6 +71,17 @@ function testEnv(overrides: Partial<Env> = {}): Env {
     EMAIL_PROVIDER: "dev_sink",
     ...overrides,
   } as Env;
+}
+
+/** A correctly configured staging Worker (passes the runtime guard): Firebase deletion runs. */
+function deployedEnv(overrides: Partial<Env> = {}): Env {
+  return testEnv({
+    ENVIRONMENT: "staging",
+    AUTH_MODE: "firebase",
+    PUSH_PROVIDER_MODE: "expo",
+    EMAIL_PROVIDER: "disabled",
+    ...overrides,
+  });
 }
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -633,6 +647,182 @@ describe("account purge (Z6-17)", () => {
     assertNoForeignKeyViolations(s);
   });
 
+  it("scrubs the email, phone (stored and national forms) and full name from every kept free-text column; JSON stays valid (D-W6-39)", async () => {
+    const trainer = await trainerSession("vikas.coach@example.com");
+    const other = await trainerSession("sana.coach@example.com");
+    const person = await coachedTrainee(db, trainer, "mehra");
+    const national = person.mobile.slice(-10);
+    const spaced = `${national.slice(0, 5)} ${national.slice(5)}`;
+    const dashed = `${national.slice(0, 5)}-${national.slice(5)}`;
+    const shout = person.email.toUpperCase();
+    const lowerName = person.name.toLowerCase();
+    const mention = `${person.name} (${shout}) asked to be called on ${spaced}, ${dashed}, ${national} or ${person.mobile}`;
+
+    // Another trainer's invitation to the person's email, never accepted.
+    const otherInvite = await call("/invitations", {
+      method: "POST",
+      headers: { ...other.headers, "Idempotency-Key": key("inv") },
+      body: { recipientEmail: shout, recipientDisplayName: person.name, recipientWhatsapp: person.mobile },
+    });
+    expect(otherInvite.status).toBe(200);
+
+    // A coach note through the route.
+    const note = await call(`/checkins/relationships/${person.relationshipId}/notes`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("note") },
+      body: { body: `Spoke to ${lowerName}: ${mention}.` },
+    });
+    expect(note.status).toBe(200);
+
+    // A check-in with answers and a review, through the routes.
+    const configured = await call(`/configurations/relationships/${person.relationshipId}/draft`, {
+      method: "PUT",
+      headers: trainer.headers,
+      body: {
+        expectedVersion: 0,
+        goalShort: "Lose 6 kg",
+        workout: { sessionsPerWeek: 3, completionWindowHours: 24 },
+        nutrition: { mealsPerDay: 3, confirmationWindowHours: 24, photoRequirement: "none" },
+        checkin: { cadence: "weekly", dueWindowHours: 48 },
+        tracking: { requireBodyWeight: false, requireProgressPhotos: false, requireSessionRpe: false },
+      },
+    });
+    expect([200, 201]).toContain(configured.status);
+    const activated = await call(`/configurations/relationships/${person.relationshipId}/configure`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("cfg") },
+      body: { expectedVersion: 1 },
+    });
+    expect(activated.status).toBe(200);
+    const live = await call(`/configurations/relationships/${person.relationshipId}/activate`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("act") },
+      body: { expectedVersion: 1 },
+    });
+    expect(live.status).toBe(200);
+    const scheduled = await call(`/checkins/relationships/${person.relationshipId}/schedule`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("sched") },
+      body: { localDate: formatLocalDate(new Date(), "Asia/Kolkata") },
+    });
+    expect(scheduled.status, JSON.stringify(scheduled.body)).toBe(200);
+    const checkin = (scheduled.body.data as { checkin: { id: string; recordVersion: number } }).checkin;
+    const submitted = await call(`/checkins/${checkin.id}/submit`, {
+      method: "POST",
+      headers: { ...bearer(person.uid, person.emailNorm), "Idempotency-Key": key("submit") },
+      body: {
+        expectedVersion: checkin.recordVersion,
+        answers: { wellbeing: `Good. "Quoted" ${mention}`, notes: `Sign it ${person.name}`, bodyWeightKg: 70.8 },
+      },
+    });
+    expect(submitted.status).toBe(200);
+    const reviewed = await call(`/checkins/${checkin.id}/review`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("rev") },
+      body: { outcome: "acknowledged", notes: `Thanks ${person.name}, will call ${dashed}` },
+    });
+    expect(reviewed.status).toBe(200);
+
+    // An exception with details and an action note, and log history JSON.
+    const at = new Date().toISOString();
+    const exceptionId = crypto.randomUUID();
+    await db.insert(schema.exceptions).values({
+      id: exceptionId,
+      coachingRelationshipId: person.relationshipId,
+      type: "missed_workout",
+      status: "acknowledged",
+      ruleVersion: "mvp.v2",
+      sourceEntityType: "workout_assignment",
+      sourceEntityId: crypto.randomUUID(),
+      summary: "Missed Tuesday's workout",
+      detailsJson: JSON.stringify({ context: mention, nested: [{ who: lowerName }] }),
+      detectedAt: at,
+      activatedAt: at,
+      acknowledgedAt: at,
+      resolvedAt: null,
+      resolutionOutcome: null,
+      resolutionNote: `Messaged ${national}`,
+      closedReason: null,
+      sourceLoggedLateAt: null,
+      createdAt: at,
+      updatedAt: at,
+      severity: "attention",
+    });
+    await db.insert(schema.exceptionActions).values({
+      id: crypto.randomUUID(),
+      exceptionId,
+      trainerUserId: trainer.userId,
+      action: "acknowledge",
+      note: `${person.name} travelling, ${shout}`,
+      createdAt: at,
+    });
+    const logEventId = crypto.randomUUID();
+    await db.insert(schema.logEditEvents).values({
+      id: logEventId,
+      coachingRelationshipId: person.relationshipId,
+      traineeUserId: person.userId,
+      actorUserId: trainer.userId,
+      actorRole: "coach",
+      entityType: "measurement",
+      entityId: crypto.randomUUID(),
+      action: "edit",
+      beforeJson: JSON.stringify({ value: 71.2, note: `per ${person.name}` }),
+      afterJson: JSON.stringify({ value: 71.0, note: `call ${spaced} / ${person.email}` }),
+      createdAt: at,
+    });
+
+    const purgeAfter = await deleteAccount(await signIn(person.email));
+    expect(await runAccountPurge(testEnv(), plusMs(purgeAfter, 0))).toEqual({ selected: 1, purged: 1, failed: 0 });
+
+    const s = handle.sqlite;
+    const one = (query: string) => String(s.exec(query)[0]?.values[0]?.[0] ?? "");
+    const scrubbedMention = `${DELETED_USER_NAME} (${REMOVED_TEXT}) asked to be called on ${REMOVED_TEXT}, ${REMOVED_TEXT}, ${REMOVED_TEXT} or ${REMOVED_TEXT}`;
+    expect(one(`SELECT body FROM trainer_notes WHERE body LIKE 'Spoke to%'`)).toBe(
+      `Spoke to ${DELETED_USER_NAME}: ${scrubbedMention}.`,
+    );
+    const answers = JSON.parse(one(`SELECT answers_json FROM checkins WHERE id = '${checkin.id}'`)) as Record<string, unknown>;
+    expect(answers).toMatchObject({
+      wellbeing: `Good. "Quoted" ${scrubbedMention}`,
+      notes: `Sign it ${DELETED_USER_NAME}`,
+      bodyWeightKg: 70.8,
+    });
+    expect(one(`SELECT notes FROM checkin_reviews WHERE checkin_id = '${checkin.id}'`)).toBe(
+      `Thanks ${DELETED_USER_NAME}, will call ${REMOVED_TEXT}`,
+    );
+    expect(JSON.parse(one(`SELECT details_json FROM exceptions WHERE id = '${exceptionId}'`))).toEqual({
+      context: scrubbedMention,
+      nested: [{ who: DELETED_USER_NAME }],
+    });
+    expect(one(`SELECT resolution_note FROM exceptions WHERE id = '${exceptionId}'`)).toBe(`Messaged ${REMOVED_TEXT}`);
+    expect(one(`SELECT note FROM exception_actions WHERE exception_id = '${exceptionId}'`)).toBe(
+      `${DELETED_USER_NAME} travelling, ${REMOVED_TEXT}`,
+    );
+    expect(JSON.parse(one(`SELECT before_json FROM log_edit_events WHERE id = '${logEventId}'`))).toEqual({
+      value: 71.2,
+      note: `per ${DELETED_USER_NAME}`,
+    });
+    expect(JSON.parse(one(`SELECT after_json FROM log_edit_events WHERE id = '${logEventId}'`))).toEqual({
+      value: 71.0,
+      note: `call ${REMOVED_TEXT} / ${REMOVED_TEXT}`,
+    });
+    // The other trainer's invitation: anonymised and revoked.
+    const [invitation] = await db
+      .select()
+      .from(schema.clientInvitations)
+      .where(eq(schema.clientInvitations.trainerUserId, other.userId));
+    expect(invitation).toMatchObject({
+      status: "revoked",
+      recipientEmail: DELETED_USER_EMAIL,
+      recipientDisplayName: DELETED_USER_NAME,
+      recipientWhatsappE164: null,
+    });
+
+    expect(
+      scanAllText(s, [person.email, person.emailNorm, person.mobile, person.mobile.slice(1), national, spaced, dashed, person.name]),
+    ).toEqual([]);
+    assertNoForeignKeyViolations(s);
+  });
+
   it("selects only archived accounts past purge_after, oldest first, a batch at a time", async () => {
     const active = await trainerSession("active.coach@example.com");
     const notDue = await trainerSession("later.coach@example.com");
@@ -761,8 +951,7 @@ describe("account purge (Z6-17)", () => {
       const { person, at } = await archivedTrainee("fbase");
       const second = await archivedTrainee("fbtwo");
       const serviceAccount = await testServiceAccount();
-      const firebaseEnv = testEnv({
-        AUTH_MODE: "firebase",
+      const firebaseEnv = deployedEnv({
         FIREBASE_PROJECT_ID: "fitbud-staging-test",
         FIREBASE_SERVICE_ACCOUNT_JSON: serviceAccount,
       });
@@ -837,15 +1026,65 @@ describe("account purge (Z6-17)", () => {
         ),
       );
       await expect(
-        runAccountPurge(testEnv({ AUTH_MODE: "firebase", FIREBASE_SERVICE_ACCOUNT_JSON: undefined }), at),
+        runAccountPurge(deployedEnv({ FIREBASE_SERVICE_ACCOUNT_JSON: undefined }), at),
       ).rejects.toThrow("ACCOUNT_PURGE_FAILED");
       expectUntouched(person);
 
       const result = await runAccountPurge(
-        testEnv({ AUTH_MODE: "firebase", FIREBASE_SERVICE_ACCOUNT_JSON: await testServiceAccount() }),
+        deployedEnv({ FIREBASE_SERVICE_ACCOUNT_JSON: await testServiceAccount() }),
         at,
       );
       expect(result).toEqual({ selected: 1, purged: 1, failed: 0 });
+    });
+
+    it("skips Firebase only when ENVIRONMENT is local or unset, and refuses to run on a misconfigured Worker", async () => {
+      const { person, at } = await archivedTrainee("envguard");
+      const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      // A deployed environment still on test auth (scheduled() skips the fetch
+      // runtime guard): nothing is deleted anywhere, a static code is logged.
+      for (const env of [
+        deployedEnv({ AUTH_MODE: "test" }),
+        deployedEnv({ ENVIRONMENT: "production", EMAIL_PROVIDER: "dev_sink" }),
+      ]) {
+        const logs = captureLogs();
+        try {
+          await expect(runAccountPurge(env, at)).rejects.toThrow("RUNTIME_MISCONFIGURED");
+        } finally {
+          logs.restore();
+        }
+        expect(logs.lines.some((line) => line.includes("account.purge_refused") && line.includes("RUNTIME_MISCONFIGURED"))).toBe(true);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expectUntouched(person);
+      }
+      const [asset] = await db
+        .select()
+        .from(schema.mediaAssets)
+        .where(eq(schema.mediaAssets.uploaderUserId, person.userId));
+      expect(await media.head(mediaKey(testEnv(), asset!.objectKey))).not.toBeNull();
+
+      // A preview Worker is not guarded but is not local either: Firebase must
+      // run, even on test auth (here it has no service account, so it fails).
+      const preview = captureLogs();
+      try {
+        await expect(
+          runAccountPurge(testEnv({ ENVIRONMENT: "preview", AUTH_MODE: "test" }), at),
+        ).rejects.toThrow("ACCOUNT_PURGE_FAILED");
+      } finally {
+        preview.restore();
+      }
+      expect(preview.lines.some((line) => line.includes("FIREBASE_ADMIN_NOT_CONFIGURED"))).toBe(true);
+      expectUntouched(person);
+
+      // Local and unset environments have no Firebase project: no call at all,
+      // whatever AUTH_MODE says.
+      expect(await runAccountPurge(testEnv({ ENVIRONMENT: undefined, AUTH_MODE: "firebase" }), at)).toEqual({
+        selected: 1,
+        purged: 1,
+        failed: 0,
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it("changes nothing in D1 when the account stops being due between selection and the batch", async () => {
@@ -1000,3 +1239,46 @@ async function testServiceAccount(): Promise<string> {
     private_key: pem,
   });
 }
+
+describe("free-text scrubber (D-W6-39)", () => {
+  const scrubber = buildScrubber({
+    emails: ["Priya.Mehra@Example.com", "priya.mehra@example.com"],
+    mobile: "+919812345678",
+    names: ["Priya Mehra"],
+  })!;
+
+  it("replaces the whole name in any case, never part of another word", () => {
+    expect(scrubber.rewrite("PRIYA MEHRA and priya  mehra said hi")).toBe("Deleted user and Deleted user said hi");
+    for (const kept of ["Priya Mehrasingh", "Supriya Mehra", "Priya", "Mehra", "Priyanka Mehra"]) {
+      expect(scrubber.rewrite(kept)).toBe(kept);
+    }
+  });
+
+  it("replaces the phone as stored and in national form with or without spaces or dashes, not inside longer numbers", () => {
+    for (const phone of ["+919812345678", "919812345678", "9812345678", "98123 45678", "98123-45678", "+91 98123 45678", "+91-98123-45678"]) {
+      expect(scrubber.rewrite(`call ${phone} now`)).toBe("call [removed] now");
+    }
+    for (const kept of ["19812345678", "98123456789", "order 1234"]) {
+      expect(scrubber.rewrite(kept)).toBe(kept);
+    }
+  });
+
+  it("replaces the email in any case", () => {
+    expect(scrubber.rewrite("mail PRIYA.MEHRA@EXAMPLE.COM today")).toBe("mail [removed] today");
+  });
+
+  it("rewrites only string values inside JSON, which still parses", () => {
+    const raw = JSON.stringify({ "Priya Mehra": 'She said "hi" \\ Priya Mehra', list: ["98123 45678", 3], n: null });
+    const out = scrubStoredText(raw, scrubber);
+    expect(JSON.parse(out)).toEqual({
+      "Priya Mehra": 'She said "hi" \\ Deleted user',
+      list: ["[removed]", 3],
+      n: null,
+    });
+    // Unchanged JSON keeps its exact stored text.
+    const untouched = '{ "a": "nothing here" }';
+    expect(scrubStoredText(untouched, scrubber)).toBe(untouched);
+    // Not JSON: treated as text.
+    expect(scrubStoredText("{ broken Priya Mehra", scrubber)).toBe("{ broken Deleted user");
+  });
+});
