@@ -18,6 +18,7 @@ tags:
 # Trainer: straight to the attention inbox.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
@@ -33,6 +34,7 @@ tags:
 # Trainee: straight to Today.
 - launchApp:
     clearState: true
+    clearKeychain: true
     permissions:
       all: allow
 - runFlow:
