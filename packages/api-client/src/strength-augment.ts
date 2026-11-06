@@ -1,9 +1,34 @@
+import {
+  strengthReadModelSchema,
+  type StrengthQuery,
+  type StrengthReadModel,
+} from "@fitbud/contracts";
 import type { FitBudApiClient } from "./index.js";
 
-// W6 Z6-5: scaffold from Z5-4. The owning W6 task adds its client methods here.
+declare module "./index.js" {
+  interface FitBudApiClient {
+    getStrength(
+      relationshipId: string,
+      query?: Partial<StrengthQuery>,
+    ): Promise<StrengthReadModel>;
+  }
+}
+
 export function installStrengthClientMethods(
   Client: new (...args: never[]) => FitBudApiClient,
 ): void {
-  // Intentionally empty until the W6 task fills it in.
-  void Client;
+  const proto = Client.prototype as FitBudApiClient;
+  proto.getStrength = async function getStrength(relationshipId, query) {
+    const params = new URLSearchParams();
+    if (query?.range) params.set("range", query.range);
+    if (query?.from) params.set("from", query.from);
+    if (query?.to) params.set("to", query.to);
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return this.request(
+      "GET",
+      `/strength/relationships/${encodeURIComponent(relationshipId)}${suffix}`,
+      strengthReadModelSchema,
+      { auth: true },
+    );
+  };
 }
