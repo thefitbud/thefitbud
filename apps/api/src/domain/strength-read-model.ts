@@ -206,12 +206,19 @@ export function buildStrengthReadModel(
 
   for (const set of raw.sets) {
     if (!inWindow(set.localDate)) continue;
-    const chartable =
-      set.actualLoadKg !== null &&
-      Number.isFinite(set.actualLoadKg) &&
-      CHARTABLE_KINDS.has(set.loadKind);
-    if (!chartable) {
+    if (set.loadKind === "text") {
+      // Load logged as free text ("RPE 8", "red band"): shown as "not charted".
       notChartedSets += 1;
+      continue;
+    }
+    // Plain `bodyweight` sets are neither charted nor counted (charting them by reps
+    // needs a contract decision). A `kg` / `bodyweight_plus` row without a kg value is
+    // inconsistent data (Z6-1 always fills it), so it is left out of both as well.
+    if (
+      !CHARTABLE_KINDS.has(set.loadKind) ||
+      set.actualLoadKg === null ||
+      !Number.isFinite(set.actualLoadKg)
+    ) {
       continue;
     }
     let entry = byExercise.get(set.exerciseId);

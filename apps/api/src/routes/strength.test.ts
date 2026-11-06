@@ -368,9 +368,10 @@ describe("GET /strength/relationships/:relationshipId", () => {
       },
       { exerciseId: PULL, name: "Pull-up", points: [pt("2026-10-12", 10, 8)] },
     ]);
-    // "heavy" (text) and "BW" (no added load) could not be charted; the pending and
+    // Only "heavy" (kind text) is counted. "BW" (plain bodyweight) is neither charted nor
+    // counted; the pending and
     // skipped sets were never logged.
-    expect(explicit.notCharted).toEqual({ sets: 2 });
+    expect(explicit.notCharted).toEqual({ sets: 1 });
   });
 
   it("counts finished workouts per Monday week, filling empty weeks, started and skipped excluded", async () => {
@@ -401,7 +402,7 @@ describe("GET /strength/relationships/:relationshipId", () => {
       { weekStart: "2026-10-05", count: 0 },
       { weekStart: "2026-10-12", count: 2 },
     ]);
-    expect(body.notCharted).toEqual({ sets: 2 });
+    expect(body.notCharted).toEqual({ sets: 1 });
   });
 
   it("all: starts at the first workout week and includes the oldest set", async () => {
@@ -423,7 +424,29 @@ describe("GET /strength/relationships/:relationshipId", () => {
       [PULL, [pt("2026-10-12", 10, 8)]],
     ]);
     expect(body.workoutsPerWeek).toEqual([{ weekStart: "2026-10-12", count: 1 }]);
-    expect(body.notCharted).toEqual({ sets: 2 });
+    expect(body.notCharted).toEqual({ sets: 1 });
+  });
+
+  it("plain bodyweight sets are neither charted nor counted as not charted", async () => {
+    const client = await reachCoachingReady("bw");
+    const plan = await seedPlan(db, client.relationshipId);
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-12",
+      status: "completed",
+      exercises: [
+        {
+          exerciseId: PULL,
+          name: "Pull-up",
+          sets: [
+            { label: "BW", kg: null, kind: "bodyweight", reps: 12 },
+            { label: "BW", kg: null, kind: "bodyweight", reps: 10 },
+          ],
+        },
+      ],
+    });
+    const body = await model(client, "?range=all");
+    expect(body.exercises).toEqual([]);
+    expect(body.notCharted).toEqual({ sets: 0 });
   });
 
   it("another client's sets never appear", async () => {

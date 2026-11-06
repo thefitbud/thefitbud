@@ -268,7 +268,7 @@ describe("GET /strength/relationships/:relationshipId authorization", () => {
       ...client.trainee,
       "x-fitbud-role": "trainer",
     });
-    expect([401, 403]).toContain(asWrongRole.status);
+    expect(asWrongRole.status).toBe(403);
     expect(asWrongRole.body.data).toBeUndefined();
   });
 
