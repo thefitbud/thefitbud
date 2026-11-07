@@ -27,6 +27,7 @@ import {
   type CheckinDraftAnswers,
 } from "@fitbud/contracts";
 import {
+  GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
   addDaysToLocalDate,
   canRecordCheckinReview,
@@ -201,6 +202,21 @@ function serializeAnswers(
 ): string | null {
   if (!answers) return null;
   return JSON.stringify(answers);
+}
+
+/**
+ * The form version a successor check-in continues from a previous check-in
+ * when the schedule has no preference. A previous check-in on global v1 moves
+ * to the current global default (v2); a trainer-owned version keeps
+ * continuing. The previous check-in itself is never repinned (Z6-2).
+ */
+function carryForwardFormVersionId(
+  previousVersionId: string | null | undefined,
+): string | null {
+  if (!previousVersionId) return null;
+  return previousVersionId === GLOBAL_CHECKIN_FORM_V1_VERSION_ID
+    ? GLOBAL_CHECKIN_FORM_VERSION_ID
+    : previousVersionId;
 }
 
 async function resolveCheckinFormPin(
@@ -597,7 +613,9 @@ checkinRoutes.post(
         .from(checkins)
         .where(eq(checkins.id, parsed.data.fromCheckinId))
         .limit(1);
-      if (source[0]) fallbackVersionId = source[0].formVersionId;
+      if (source[0]) {
+        fallbackVersionId = carryForwardFormVersionId(source[0].formVersionId);
+      }
     }
     const formPin = await resolveCheckinFormPin(db, {
       trainerUserId: actor.userId,
@@ -883,8 +901,7 @@ checkinRoutes.post(
           actor.selectedRole === "trainer" ? actor.userId : null,
         fallbackVersionId:
           config.schedule.preferredCheckinFormVersionId ??
-          latest[0]?.checkinFormVersionId ??
-          null,
+          carryForwardFormVersionId(latest[0]?.checkinFormVersionId),
       });
       if (!formPin.ok) {
         return fail(c, formPin.status, formPin.code, formPin.message);

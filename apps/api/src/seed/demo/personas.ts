@@ -525,7 +525,11 @@ export function buildStandardPlanContent(
   };
 }
 
-/** Pinned to the global form version. Do not insert a second global version. */
+/**
+ * Global form v1: the version every seeded past and draft check-in is pinned
+ * to. Migration 0041 adds v2 as the default for new check-ins; the seed does
+ * not insert global versions itself.
+ */
 export const DEMO_CHECKIN_FORM_VERSION_ID =
   "c1000001-0000-4000-8000-000000000011";
 
