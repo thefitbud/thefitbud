@@ -17,8 +17,24 @@ export const MVP_CHECKIN_DEFINITION_VERSION = 1;
 /** Seeded global weekly check-in. Migration 0019 inserts these ids. */
 export const GLOBAL_CHECKIN_FORM_TEMPLATE_ID =
   "c1000001-0000-4000-8000-000000000001";
-export const GLOBAL_CHECKIN_FORM_VERSION_ID =
+/** Global check-in form v1 (migration 0019/0029). History stays pinned to it. */
+export const GLOBAL_CHECKIN_FORM_V1_VERSION_ID =
   "c1000001-0000-4000-8000-000000000011";
+
+/**
+ * Global check-in form v2 (migration 0041, D-W6-17): standard `key` on every
+ * question, all optional.
+ */
+export const GLOBAL_CHECKIN_FORM_V2_VERSION_ID =
+  "c1000001-0000-4000-8000-000000000012";
+
+/**
+ * The global form version new assignments use (D-W6-18, D-W6-34). The API
+ * fallback pin, the fork route and web Configure all read this one constant,
+ * so flipping it moves them together. Existing check-ins keep the version they
+ * were pinned to (v1 for everything created before migration 0041).
+ */
+export const GLOBAL_CHECKIN_FORM_VERSION_ID = GLOBAL_CHECKIN_FORM_V2_VERSION_ID;
 
 /** Step 1 measurements/photos; step 2–3 reflection (mockup 14). */
 export const GLOBAL_CHECKIN_FORM_FIELDS: CheckinFieldDefinition[] = [
@@ -76,6 +92,30 @@ export const GLOBAL_CHECKIN_FORM_FIELDS: CheckinFieldDefinition[] = [
 /** JSON for checkin_form_versions.definition_json (seed + migration drift). */
 export const GLOBAL_CHECKIN_FORM_DEFINITION_JSON = JSON.stringify({
   fields: GLOBAL_CHECKIN_FORM_FIELDS,
+});
+
+/** Standard v2 questions. `key` equals `id`; all optional (D-W6-17). */
+export const GLOBAL_CHECKIN_FORM_V2_FIELDS: Array<
+  CheckinFieldDefinition & { key: string }
+> = [
+  { key: "weight", id: "weight", label: "Body weight", type: "measurement", measurementType: "body_weight_kg", required: false },
+  { key: "waist", id: "waist", label: "Waist", type: "measurement", measurementType: "waist_cm", required: false },
+  { key: "hips", id: "hips", label: "Hips", type: "measurement", measurementType: "hip_cm", required: false },
+  { key: "chest", id: "chest", label: "Chest", type: "measurement", measurementType: "chest_cm", required: false },
+  { key: "arm", id: "arm", label: "Arm", type: "measurement", measurementType: "other", unit: "cm", required: false },
+  { key: "thigh", id: "thigh", label: "Thigh", type: "measurement", measurementType: "other", unit: "cm", required: false },
+  { key: "photo_front", id: "photo_front", label: "Front", type: "photo_intent", photoSlot: "front", required: false },
+  { key: "photo_side", id: "photo_side", label: "Side", type: "photo_intent", photoSlot: "side", required: false },
+  { key: "photo_back", id: "photo_back", label: "Back", type: "photo_intent", photoSlot: "back", required: false },
+  { key: "energy", id: "energy", label: "Energy", type: "scale_1_5", required: false },
+  { key: "sleep_quality", id: "sleep_quality", label: "Sleep quality", type: "scale_1_5", required: false },
+  { key: "stress", id: "stress", label: "Stress", type: "scale_1_5", required: false },
+  { key: "hunger", id: "hunger", label: "Hunger", type: "scale_1_5", required: false },
+  { key: "notes", id: "notes", label: "Notes", type: "long_text", required: false, maxLength: 2000 },
+];
+
+export const GLOBAL_CHECKIN_FORM_V2_DEFINITION_JSON = JSON.stringify({
+  fields: GLOBAL_CHECKIN_FORM_V2_FIELDS,
 });
 
 const REQUIRED_DRAFT_KEYS = ["wellbeing"] as const;

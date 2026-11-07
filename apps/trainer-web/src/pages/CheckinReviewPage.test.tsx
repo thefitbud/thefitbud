@@ -180,3 +180,91 @@ describe("CheckinReviewPage on a workspace refresh", () => {
     expect(screen.getByRole("button", { name: "Edit review" })).toBeTruthy();
   });
 });
+
+describe("CheckinReviewPage answers (Z6-2c)", () => {
+  const v2Fields = [
+    { id: "q-weight", key: "weight", label: "Weight", type: "measurement", measurementType: "body_weight_kg", required: false },
+    { id: "q-waist", key: "waist", label: "Waist", type: "measurement", measurementType: "waist_cm", required: false },
+    { id: "q-arm", key: "arm", label: "Arm", type: "measurement", measurementType: "other", unit: "cm", required: false },
+    { id: "q-front", key: "photo_front", label: "Front", type: "photo_intent", photoSlot: "front", required: false },
+    { id: "q-energy", key: "energy", label: "Energy", type: "scale_1_5", required: false },
+    { id: "q-sleep", key: "sleep_quality", label: "Sleep quality", type: "scale_1_5", required: false },
+    { id: "q-notes", key: "notes", label: "Notes", type: "long_text", required: false },
+    { id: "q-custom", label: "Any aches or pains?", type: "short_text", required: false },
+  ] as const;
+
+  function v2Context(answers: CheckinReviewContext["checkin"]["answers"]) {
+    const context = reviewContext(false);
+    context.checkin.answers = answers;
+    context.pinnedForm = {
+      ...context.pinnedForm,
+      version: 2,
+      fields: v2Fields as unknown as CheckinReviewContext["pinnedForm"]["fields"],
+    };
+    return context;
+  }
+
+  function answerList() {
+    const heading = screen.getByRole("heading", { name: "Answers" });
+    const dl = heading.closest("section")!.querySelector("dl");
+    return Array.from(dl?.querySelectorAll("div") ?? []).map((row) => [
+      row.querySelector("dt")!.textContent,
+      row.querySelector("dd")!.textContent,
+    ]);
+  }
+
+  it("lists only answered questions in form order, with units", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(
+      v2Context({
+        fieldAnswers: {
+          "q-custom": "Left knee, mild",
+          "q-sleep": 3,
+          "q-arm": 31.5,
+          "q-waist": 82,
+          "q-front": "noted",
+          "q-energy": 4,
+        },
+      }),
+    );
+    render(pageTree(0));
+    await screen.findByRole("heading", { name: "Answers" });
+    expect(answerList()).toEqual([
+      ["Waist", "82 cm"],
+      ["Arm", "31.5 cm"],
+      ["Front", "Photo noted"],
+      ["Energy", "4"],
+      ["Sleep quality", "3"],
+      ["Any aches or pains?", "Left knee, mild"],
+    ]);
+  });
+
+  it("waist never shows the weight value, and no wellbeing row without that question", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(
+      v2Context({ bodyWeightKg: 86.4, fieldAnswers: { "q-energy": 2 } }),
+    );
+    render(pageTree(0));
+    await screen.findByRole("heading", { name: "Answers" });
+    const rows = answerList();
+    expect(rows).toEqual([
+      ["Weight", "86.4 kg"],
+      ["Energy", "2"],
+    ]);
+    expect(rows.some(([label]) => /wellbeing|waist/i.test(label ?? ""))).toBe(false);
+  });
+
+  it("a v1 form still shows the typed wellbeing under its own label", async () => {
+    const context = reviewContext(false);
+    context.pinnedForm = {
+      ...context.pinnedForm,
+      fields: [
+        { id: "wellbeing", label: "Wellbeing", type: "short_text", required: true },
+        { id: "notes", label: "Notes", type: "long_text", required: false },
+      ],
+    };
+    context.checkin.answers = { wellbeing: "Slept badly", notes: null };
+    api.getCheckinReviewContext.mockResolvedValue(context);
+    render(pageTree(0));
+    await screen.findByRole("heading", { name: "Answers" });
+    expect(answerList()).toEqual([["Wellbeing", "Slept badly"]]);
+  });
+});

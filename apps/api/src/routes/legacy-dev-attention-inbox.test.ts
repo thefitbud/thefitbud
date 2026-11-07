@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const drizzleDir = join(dirname(fileURLToPath(import.meta.url)), "../../drizzle");
 import { afterEach, describe, expect, it } from "vitest";
-import { GLOBAL_CHECKIN_FORM_VERSION_ID } from "@fitbud/core";
+import { GLOBAL_CHECKIN_FORM_V1_VERSION_ID } from "@fitbud/core";
 import { app } from "../index.js";
 import { setTestDbOverride } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
@@ -174,7 +174,7 @@ describe("legacy dev rows after check-in form and exception severity migrations"
     const pinned = sqlite.exec(
       `SELECT checkin_form_version_id FROM checkins WHERE id = '${SUBMITTED_CHECKIN_ID}'`,
     );
-    expect(pinned[0]?.values[0]?.[0]).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID);
+    expect(pinned[0]?.values[0]?.[0]).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
     const severities = sqlite.exec(
       "SELECT type, severity FROM exceptions ORDER BY type",
     );
@@ -221,7 +221,7 @@ describe("legacy dev rows after check-in form and exception severity migrations"
       (item) => item.checkin.id === SUBMITTED_CHECKIN_ID,
     );
     expect(submitted?.checkin.checkinFormVersionId).toBe(
-      GLOBAL_CHECKIN_FORM_VERSION_ID,
+      GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
     );
     expect(submitted?.checkin.status).toBe("submitted");
     expect(submitted?.checkin.answers?.bodyWeightKg).toBe(61.8);
