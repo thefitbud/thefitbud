@@ -337,9 +337,9 @@ describe("progress metrics by question key (Z6-7)", () => {
       expect(dates(response.body)).toEqual(["2026-08-14", "2026-10-08", "2026-10-09", "2026-11-05"]);
     });
 
-    it("all returns every point, oldest first, with no resolved dates", async () => {
+    it("all returns every point up to today, oldest first, with no start date", async () => {
       const response = await metrics("?keys=weight&range=all");
-      expect(response.body.data).toMatchObject({ range: "all", from: null, to: null });
+      expect(response.body.data).toMatchObject({ range: "all", from: null, to: "2026-11-05" });
       expect(dates(response.body)).toEqual([
         "2026-01-05",
         "2026-08-13",
@@ -347,7 +347,6 @@ describe("progress metrics by question key (Z6-7)", () => {
         "2026-10-08",
         "2026-10-09",
         "2026-11-05",
-        "2026-11-06",
       ]);
     });
 
@@ -406,6 +405,49 @@ describe("progress metrics by question key (Z6-7)", () => {
       expect(response.body.data.series[0].points).toEqual([
         { localDate: "2026-10-27", value: 72.4, checkinId: null },
         { localDate: "2026-10-28", value: 71.5, checkinId },
+      ]);
+    });
+
+    async function submitLate(checkinId: string, answers: Record<string, unknown>) {
+      // Submitted Friday 23 Oct, two days after the check-in's own date (Wed 21 Oct).
+      vi.setSystemTime(new Date("2026-10-23T06:00:00.000Z"));
+      const response = await call(`/checkins/${checkinId}/submit`, {
+        method: "POST",
+        headers: { ...f.trainee, "Idempotency-Key": `submit-${checkinId}` },
+        body: { expectedVersion: 0, answers },
+      });
+      vi.setSystemTime(new Date(THURSDAY));
+      expect(response.status).toBe(200);
+    }
+
+    it("a late-submitted check-in is one point on its own date, not a second on the submit day", async () => {
+      const checkinId = await addCheckin("2026-10-21", {}, { status: "draft" });
+      await submitLate(checkinId, {
+        wellbeing: "OK",
+        fieldAnswers: { weight: 71.5, waist: 84.0 },
+      });
+      // Production code linked a measurement per answer, stamped with the submit time.
+      const linked = await db
+        .select()
+        .from(schema.measurements)
+        .where(eq(schema.measurements.checkinId, checkinId));
+      expect(linked.length).toBeGreaterThan(0);
+      expect(linked.every((row) => row.observedAt.startsWith("2026-10-23"))).toBe(true);
+
+      const response = await metrics("?keys=weight,waist&range=all");
+      expect(response.body.data.series).toEqual([
+        { key: "weight", unit: "kg", points: [{ localDate: "2026-10-21", value: 71.5, checkinId }] },
+        { key: "waist", unit: "cm", points: [{ localDate: "2026-10-21", value: 84, checkinId }] },
+      ]);
+    });
+
+    it("a linked measurement with no keyed answer is dated by its check-in, never by the submit day", async () => {
+      // v1 form (no keys): the answer is not read by key, only the linked measurement exists.
+      const checkinId = await addCheckin("2026-10-21", {}, { status: "draft", formVersionId: GLOBAL_V1_VERSION_ID });
+      await submitLate(checkinId, { wellbeing: "OK", bodyWeightKg: 70.4 });
+      const response = await metrics("?keys=weight&range=all");
+      expect(response.body.data.series[0].points).toEqual([
+        { localDate: "2026-10-21", value: 70.4, checkinId },
       ]);
     });
 

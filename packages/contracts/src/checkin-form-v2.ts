@@ -113,7 +113,7 @@ export type ProgressMetricSeries = z.infer<typeof progressMetricSeriesSchema>;
 export const progressMetricsResponseSchema = z.object({
   relationshipId: z.string().uuid(),
   range: progressMetricRangeSchema,
-  /** Resolved local dates in the trainee's stored timezone; null for range=all. */
+  /** Resolved local dates in the trainee's stored timezone; `from` is null for range=all, which ends today. */
   from: localDateSchema.nullable(),
   to: localDateSchema.nullable(),
   timezone: z.string().min(1),

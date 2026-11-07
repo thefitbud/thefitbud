@@ -4,7 +4,7 @@
  * check-in was pinned to) and from stored measurements, merged by local date.
  * The check-in wins a day both have. Values only: no trend, change or percentage.
  */
-import { and, asc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   PROGRESS_METRIC_KEYS,
   checkinDraftAnswersSchema,
@@ -53,14 +53,14 @@ export function isProgressMetricKey(value: string): value is ProgressMetricKey {
 
 export type MetricsWindow = { from: string | null; to: string | null };
 
-/** Resolved local-date window, inclusive. `from` and `to` are null for "all". */
+/** Resolved local-date window, inclusive. "all" has no start and ends today; nothing future is returned. */
 export function resolveMetricsWindow(input: {
   range: ProgressMetricRange;
   from?: string;
   to?: string;
   today: string;
 }): MetricsWindow {
-  if (input.range === "all") return { from: null, to: null };
+  if (input.range === "all") return { from: null, to: input.today };
   if (input.range === "custom") {
     return { from: input.from ?? null, to: input.to ?? null };
   }
@@ -91,12 +91,12 @@ export async function loadProgressMetricSeries(
     .filter(([, key]) => key && wanted.has(key))
     .map(([type]) => type);
 
+  // All submitted check-ins, cut by window in code: a linked measurement is dated by its
+  // check-in, which may sit outside the window the measurement's own timestamp falls in.
   const checkinConditions = [
     eq(checkins.coachingRelationshipId, relationshipId),
     eq(checkins.recordStatus, "submitted"),
   ];
-  if (window.from) checkinConditions.push(gte(checkins.localDate, window.from));
-  if (window.to) checkinConditions.push(lt(checkins.localDate, addDaysToLocalDate(window.to, 1)));
 
   const checkinRows = await db
     .select({
@@ -152,13 +152,6 @@ export async function loadProgressMetricSeries(
             and(
               eq(measurements.coachingRelationshipId, relationshipId),
               inArray(measurements.type, measurementTypes as never),
-              // Padded by a day each side: the exact cut is made on the local date below.
-              ...(window.from
-                ? [gte(measurements.observedAt, `${addDaysToLocalDate(window.from, -1)}T00:00:00.000Z`)]
-                : []),
-              ...(window.to
-                ? [lt(measurements.observedAt, `${addDaysToLocalDate(window.to, 2)}T00:00:00.000Z`)]
-                : []),
             ),
           )
           .orderBy(asc(measurements.observedAt));
@@ -166,20 +159,11 @@ export async function loadProgressMetricSeries(
   const byKey = new Map<ProgressMetricKey, Map<string, ProgressMetricPoint>>();
   for (const key of keys) byKey.set(key, new Map());
 
-  // Stored measurements first; the latest reading of a local date wins among them.
-  for (const row of measurementRows) {
-    const key = MEASUREMENT_TYPE_KEY[row.type];
-    if (!key) continue;
-    const localDate = formatLocalDate(new Date(row.observedAt), timezone);
-    if (!inWindow(localDate, window)) continue;
-    byKey.get(key)?.set(localDate, {
-      localDate,
-      value: row.value,
-      checkinId: row.checkinId ?? null,
-    });
-  }
-
-  // Check-in answers overwrite the same local date.
+  // Check-in answers by the check-in's own local date. The measurement linked at submit
+  // time is stamped with the submit time (possibly days later), so it is dated by its
+  // check-in below and the answer then wins that same date: one point, not two.
+  const checkinLocalDate = new Map(checkinRows.map((row) => [row.id, row.localDate]));
+  const answerPoints: Array<{ key: ProgressMetricKey; point: ProgressMetricPoint }> = [];
   for (const row of checkinRows) {
     if (!row.answersJson) continue;
     const fieldKeys = keyedFields.get(row.formVersionId);
@@ -196,12 +180,32 @@ export async function loadProgressMetricSeries(
       let value: unknown = answers.fieldAnswers?.[fieldId];
       if (value === undefined && key === "weight") value = answers.bodyWeightKg ?? undefined;
       if (value === undefined || !validateCheckinAnswer(key, value).ok) continue;
-      byKey.get(key)?.set(row.localDate, {
-        localDate: row.localDate,
-        value: value as number,
-        checkinId: row.id,
+      answerPoints.push({
+        key,
+        point: { localDate: row.localDate, value: value as number, checkinId: row.id },
       });
     }
+  }
+
+  // Stored measurements. One linked to a submitted check-in is dated by that check-in's
+  // local date, never by its submit time; the latest reading of a date wins among them.
+  for (const row of measurementRows) {
+    const key = MEASUREMENT_TYPE_KEY[row.type];
+    if (!key) continue;
+    const linkedDate = row.checkinId ? checkinLocalDate.get(row.checkinId) : undefined;
+    const localDate = linkedDate ?? formatLocalDate(new Date(row.observedAt), timezone);
+    if (!inWindow(localDate, window)) continue;
+    byKey.get(key)?.set(localDate, {
+      localDate,
+      value: row.value,
+      checkinId: row.checkinId ?? null,
+    });
+  }
+
+  // A check-in answer wins the local date it shares with a measurement.
+  for (const { key, point } of answerPoints) {
+    if (!inWindow(point.localDate, window)) continue;
+    byKey.get(key)?.set(point.localDate, point);
   }
 
   return keys.map((key) => ({
