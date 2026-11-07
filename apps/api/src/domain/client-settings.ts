@@ -12,6 +12,11 @@
  * - Every write is stored together with its idempotency receipt in one D1 batch,
  *   so a retry replays the first answer and never writes twice.
  *
+ * - Basic details (Z6-8b, D-W6-42): the trainer-owned client name and contact
+ *   phone live on the coaching relationship only. This module never writes
+ *   `user_identities` (the client's sign-in identifier) or `trainee_profiles`
+ *   (the client's own name); `GET` returns both sets of values unmerged.
+ *
  * Nothing in this module logs: names, phone numbers and notes stay out of logs.
  */
 import { and, desc, eq } from "drizzle-orm";
@@ -48,6 +53,7 @@ type PaymentRow = typeof paymentRecords.$inferSelect;
 export const CLIENT_SETTINGS_SUBSCRIPTION_OPERATION = "client_settings.subscription.put";
 export const CLIENT_SETTINGS_PAYMENT_CREATE_OPERATION = "client_settings.payment.create";
 export const CLIENT_SETTINGS_PAYMENT_UPDATE_OPERATION = "client_settings.payment.update";
+export const CLIENT_SETTINGS_BASICS_OPERATION = "client_settings.basics.patch";
 
 const RECEIPT_TTL_DAYS = 7;
 
@@ -157,6 +163,8 @@ export async function loadClientSettings(
     basics: {
       displayName: profile[0]?.displayName ?? "",
       phoneE164: identity[0]?.mobileE164 ?? null,
+      clientDisplayName: relationship.clientDisplayName ?? null,
+      contactPhoneE164: relationship.contactPhoneE164 ?? null,
     },
     subscription: subscription ? presentSubscription(subscription, today) : null,
     payments: payments.map(presentPayment),
@@ -381,6 +389,50 @@ export async function updatePaymentRecord(
     receiptInsert(db, {
       actorUserId: context.actorUserId,
       operation: CLIENT_SETTINGS_PAYMENT_UPDATE_OPERATION,
+      keyHash,
+      fingerprint: context.fingerprint,
+      status: 200,
+      body,
+      now: context.now,
+    }),
+  ]);
+  return { status: 200, body };
+}
+
+/** The trainer-owned basics after a PATCH: each value is the new one or the stored one. */
+export type ClientBasicsValues = Pick<RelationshipRow, "clientDisplayName" | "contactPhoneE164">;
+
+/**
+ * Z6-8b: stores the trainer-owned client name and contact phone on the
+ * relationship, with the receipt, in one batch. Only these two columns of
+ * `coaching_relationships` change: `updated_at` is left alone because nothing
+ * the client sees changed, and no other table is written.
+ */
+export async function saveClientBasics(
+  db: Db,
+  relationship: RelationshipRow,
+  next: ClientBasicsValues,
+  context: WriteContext,
+): Promise<{ status: 200; body: { data: ClientSettingsResponse } }> {
+  const updated: RelationshipRow = { ...relationship, ...next };
+  const body = { data: await loadClientSettings(db, updated, context.now) };
+  const keyHash = await sha256Hex(context.idempotencyKey);
+  await db.batch([
+    db
+      .update(coachingRelationships)
+      .set({
+        clientDisplayName: next.clientDisplayName,
+        contactPhoneE164: next.contactPhoneE164,
+      })
+      .where(
+        and(
+          eq(coachingRelationships.id, relationship.id),
+          eq(coachingRelationships.trainerUserId, relationship.trainerUserId),
+        ),
+      ),
+    receiptInsert(db, {
+      actorUserId: context.actorUserId,
+      operation: CLIENT_SETTINGS_BASICS_OPERATION,
       keyHash,
       fingerprint: context.fingerprint,
       status: 200,

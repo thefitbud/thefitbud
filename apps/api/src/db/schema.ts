@@ -193,6 +193,18 @@ export const coachingRelationships = sqliteTable(
     reactivatedAt: text("reactivated_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    /**
+     * Z6-8b (D-W6-42): the name this trainer knows the client by, set by the
+     * trainer for this relationship only. NULL means not set. Never copied to
+     * `trainee_profiles.display_name` and never shown to the trainee.
+     */
+    clientDisplayName: text("client_display_name"),
+    /**
+     * Z6-8b (D-W6-42): a contact phone the trainer keeps for this client, as
+     * `+<digits>`. NULL means not set. Separate from the sign-in identifier
+     * (`user_identities.mobile_e164`), which this column never changes.
+     */
+    contactPhoneE164: text("contact_phone_e164"),
   },
   (table) => [
     uniqueIndex("coaching_relationships_trainer_trainee_uidx").on(
@@ -201,6 +213,14 @@ export const coachingRelationships = sqliteTable(
     ),
     index("coaching_relationships_trainer_idx").on(table.trainerUserId),
     index("coaching_relationships_trainee_idx").on(table.traineeUserId),
+    check(
+      "coaching_relationships_client_display_name_chk",
+      sql`${table.clientDisplayName} IS NULL OR (length(${table.clientDisplayName}) BETWEEN 1 AND 120 AND trim(${table.clientDisplayName}) = ${table.clientDisplayName})`,
+    ),
+    check(
+      "coaching_relationships_contact_phone_e164_chk",
+      sql`${table.contactPhoneE164} IS NULL OR (length(${table.contactPhoneE164}) BETWEEN 11 AND 16 AND substr(${table.contactPhoneE164}, 1, 1) = '+' AND substr(${table.contactPhoneE164}, 2) NOT GLOB '*[^0-9]*')`,
+    ),
   ],
 );
 
