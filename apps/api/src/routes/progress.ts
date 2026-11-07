@@ -11,6 +11,8 @@ import {
   measurementSchema,
   progressEntryListResponseSchema,
   progressEntrySchema,
+  progressMetricsQuerySchema,
+  progressMetricsResponseSchema,
   progressSummarySchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
@@ -27,6 +29,10 @@ import {
 } from "../domain/mappers";
 import { formatLocalDate } from "@fitbud/core";
 import { loadTraineeTimezone } from "../domain/assignment-schedule";
+import {
+  loadProgressMetricSeries,
+  resolveMetricsWindow,
+} from "../domain/progress-metrics";
 import { COACH_LOGGED_READ_ONLY_CODE } from "../domain/compliance-logging.js";
 import { measurementLogSnapshot, recordCoachLogChange } from "../domain/coach-log.js";
 import {
@@ -232,6 +238,118 @@ progressRoutes.get(
       measurementListResponseSchema.parse({
         items: rows.map(mapMeasurement),
         nextCursor: null,
+      }),
+    );
+  },
+);
+
+progressRoutes.get(
+  "/relationships/:relationshipId/metrics",
+  operation({
+    tag: "Progress",
+    summary: "Numeric progress series by question key for one client.",
+    description:
+      "Series for one or two standard question keys over 4 weeks, 12 weeks, all time or a custom local-date range. Values only, oldest first, one point per local date in the client's stored timezone. A check-in answer wins a day it shares with a stored measurement. Ended relationships stay readable.",
+    roles: ["trainer", "trainee"],
+    parameters: [
+      {
+        name: "keys",
+        in: "query",
+        required: true,
+        description:
+          "One or two comma-separated keys: weight, waist, hips, chest, arm, thigh, energy, sleep_quality, stress, hunger.",
+        schema: { type: "string" },
+      },
+      {
+        name: "range",
+        in: "query",
+        description: "4w, 12w (default), all or custom.",
+        schema: { type: "string", enum: ["4w", "12w", "all", "custom"] },
+      },
+      {
+        name: "from",
+        in: "query",
+        description: "Local date YYYY-MM-DD, required with range=custom.",
+        schema: { type: "string" },
+      },
+      {
+        name: "to",
+        in: "query",
+        description: "Local date YYYY-MM-DD, required with range=custom, not before from.",
+        schema: { type: "string" },
+      },
+    ],
+    response: progressMetricsResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer", "trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const db = createDb(c.env.DB);
+    const relationshipId = c.req.param("relationshipId");
+    const relationship = await loadAccessibleRelationship(db, relationshipId, actor);
+    if (!relationship) {
+      if (actor.selectedRole === "trainer") {
+        // Another trainer's client is 403; an unknown id stays 404.
+        const [other] = await db
+          .select({ id: coachingRelationships.id })
+          .from(coachingRelationships)
+          .where(eq(coachingRelationships.id, relationshipId))
+          .limit(1);
+        if (other) {
+          return fail(c, 403, "FORBIDDEN", "You cannot view progress for this client.");
+        }
+      }
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+
+    const parsed = progressMetricsQuerySchema.safeParse({
+      keys: (c.req.query("keys") ?? "")
+        .split(",")
+        .map((key) => key.trim())
+        .filter((key) => key.length > 0),
+      range: c.req.query("range") || undefined,
+      from: c.req.query("from") || undefined,
+      to: c.req.query("to") || undefined,
+    });
+    if (!parsed.success) {
+      return fail(c, 422, "INVALID_REQUEST", "Invalid progress metrics query.", {
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path,
+          code: issue.code,
+        })),
+      });
+    }
+    const query = parsed.data;
+
+    const timezone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const window = resolveMetricsWindow({
+      range: query.range,
+      from: query.from,
+      to: query.to,
+      today: formatLocalDate(new Date(), timezone),
+    });
+    const series = await loadProgressMetricSeries(db, {
+      relationshipId: relationship.id,
+      keys: query.keys,
+      window,
+      timezone,
+    });
+
+    return ok(
+      c,
+      progressMetricsResponseSchema.parse({
+        relationshipId: relationship.id,
+        range: query.range,
+        from: window.from,
+        to: window.to,
+        timezone,
+        series,
       }),
     );
   },
