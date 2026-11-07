@@ -418,6 +418,64 @@ describe("check-in form standard keys", () => {
     expect(res.status).toBe(422);
   });
 
+  it("rejects an out-of-range top-level bodyWeightKg on a keyed form and writes no measurement", async () => {
+    const res = await submitWith("legacywt", [weightField], {}, { bodyWeightKg: 450 });
+    expect(res.status).toBe(422);
+    expect(
+      ((await res.json()) as { error: { code: string } }).error.code,
+    ).toBe("CHECKIN_ANSWER_INVALID");
+    const rows = await db.select().from(schema.measurements);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("accepts a valid top-level bodyWeightKg on a keyed form and links it", async () => {
+    const res = await submitWith("legacywtok", [weightField], {}, { bodyWeightKg: 72.4 });
+    expect(res.status).toBe(200);
+    const rows = await db.select().from(schema.measurements);
+    expect(rows.map((r) => r.value)).toEqual([72.4]);
+  });
+
+  it("submits a required keyed photo answered with a photo-intent object", async () => {
+    const res = await submitWith(
+      "photoobj",
+      [{ ...photoFront, required: true }],
+      { photo_front: { notedAt: new Date().toISOString(), contentType: "image/jpeg" } },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects photo_front on a side slot and arm without a cm unit", async () => {
+    const { trainerCookie } = await reachActiveCheckinConfig("keyslotunit");
+    const slot = await createForm(
+      trainerCookie,
+      [{ ...photoFront, photoSlot: "side" }],
+      "keys-slot",
+    );
+    expect(slot.status).toBe(422);
+    expect(
+      ((await slot.json()) as { error: { code: string; details: { key: string } } }).error,
+    ).toMatchObject({ code: "CHECKIN_KEY_MISMATCH", details: { key: "photo_front" } });
+
+    const armField = key("arm", "measurement", { measurementType: "other" });
+    const noUnit = await createForm(trainerCookie, [armField], "keys-arm-nounit");
+    expect(noUnit.status).toBe(422);
+    expect(
+      ((await noUnit.json()) as { error: { code: string } }).error.code,
+    ).toBe("CHECKIN_KEY_MISMATCH");
+    const inches = await createForm(
+      trainerCookie,
+      [{ ...armField, unit: "in" }],
+      "keys-arm-in",
+    );
+    expect(inches.status).toBe(422);
+    const ok = await createForm(
+      trainerCookie,
+      [{ ...armField, unit: "cm" }, { ...armField, id: "thigh", key: "thigh", unit: "cm" }],
+      "keys-arm-cm",
+    );
+    expect(ok.status).toBe(201);
+  });
+
   it("does not validate a custom question's answer by key", async () => {
     const res = await submitWith(
       "customfree",

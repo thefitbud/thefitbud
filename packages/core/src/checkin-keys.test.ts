@@ -97,6 +97,19 @@ describe("standard check-in keys", () => {
     expect(invalidCheckinKeyedAnswers(GLOBAL_CHECKIN_FORM_FIELDS, { fieldAnswers: { waist: 5 } })).toEqual([]);
   });
 
+  it("accepts a photo-intent object as a photo answer", () => {
+    expect(
+      validateCheckinAnswer("photo_side", { notedAt: "2026-11-07T05:00:00.000Z", contentType: "image/jpeg" }).ok,
+    ).toBe(true);
+    expect(validateCheckinAnswer("photo_side", { contentType: "image/jpeg" }).ok).toBe(false);
+  });
+
+  it("reads the legacy top-level weight like linking does", () => {
+    expect(invalidCheckinKeyedAnswers([weight], { bodyWeightKg: 450 })).toEqual(["weight"]);
+    expect(invalidCheckinKeyedAnswers([weight], { bodyWeightKg: 72 })).toEqual([]);
+    expect(invalidCheckinKeyedAnswers([weight], { bodyWeightKg: 450, fieldAnswers: { weight: 72 } })).toEqual([]);
+  });
+
   it("flags only invalid keyed answers and ignores absent ones", () => {
     expect(
       invalidCheckinKeyedAnswers([weight, energy], { fieldAnswers: { weight: 10, energy: 4 } }),

@@ -1,5 +1,6 @@
 import {
   CHECKIN_STANDARD_KEYS,
+  checkinPhotoIntentSchema,
   type CheckinDraftAnswers,
   type CheckinFieldDefinition,
   type CheckinStandardKey,
@@ -63,9 +64,13 @@ export function validateCheckinAnswer(
         ? { ok: true }
         : { ok: false };
     case "photo":
-      return typeof value === "string" &&
-        value.length > 0 &&
-        value.length <= 200
+      // A file id (what mobile sends today) or the contract's photo-intent object.
+      if (typeof value === "string") {
+        return value.length > 0 && value.length <= 200
+          ? { ok: true }
+          : { ok: false };
+      }
+      return checkinPhotoIntentSchema.safeParse(value).success
         ? { ok: true }
         : { ok: false };
     case "notes":
@@ -134,7 +139,13 @@ export function invalidCheckinKeyedAnswers(
   const invalid: CheckinStandardKey[] = [];
   for (const field of fields) {
     if (!field.key) continue;
-    const value = answers?.fieldAnswers?.[field.id];
+    // Same resolution as linking (answerForCheckinField): the keyed answer
+    // first, then the legacy top-level answer that is stored for that question.
+    let value: unknown = answers?.fieldAnswers?.[field.id];
+    if (value === undefined && field.key === "weight") {
+      value = answers?.bodyWeightKg;
+    }
+    if (value === undefined && field.key === "notes") value = answers?.notes;
     if (value === undefined || value === null) continue;
     if (!validateCheckinAnswer(field.key, value).ok) invalid.push(field.key);
   }
