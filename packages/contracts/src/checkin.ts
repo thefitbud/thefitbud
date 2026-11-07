@@ -132,7 +132,11 @@ const checkinFieldAnswerSchema = z.union([
 ]);
 
 export const checkinAnswersSchema = z.object({
-  wellbeing: z.string().trim().min(1).max(1000),
+  /**
+   * Legacy v1 answer. Optional in the contract: whether it is required comes
+   * from the pinned form's `required` fields (Z6-2b, D-W6-42). Non-blank when sent.
+   */
+  wellbeing: z.string().trim().min(1).max(1000).optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
   bodyWeightKg: z.number().positive().max(500).nullable().optional(),
   photoIntent: checkinPhotoIntentSchema.nullable().optional(),
