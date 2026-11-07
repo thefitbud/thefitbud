@@ -34,11 +34,11 @@ import {
   canSubmitCheckin,
   canTrainerReadCheckinFormTemplate,
   checkinWindowForLocalDate,
-  defaultUnitForMeasurementType,
   deriveMealAssignmentStatus,
   deriveWorkoutAssignmentStatus,
   formatLocalDate,
   linkedMeasurementsForCheckin,
+  invalidCheckinKeyedAnswers,
   missingRequiredCheckinAnswers,
   nextCheckinLocalDate,
   parseCheckinFormFields,
@@ -1994,6 +1994,20 @@ checkinRoutes.post(
       );
     }
 
+    const invalidKeys = invalidCheckinKeyedAnswers(
+      pinned.fields,
+      parsed.data.answers,
+    );
+    if (invalidKeys.length > 0) {
+      return fail(
+        c,
+        422,
+        "CHECKIN_ANSWER_INVALID",
+        "A check-in answer is outside the allowed range.",
+        { invalid: invalidKeys },
+      );
+    }
+
     const nextVersion = loaded.checkin.recordVersion + 1;
     await db
       .update(checkins)
@@ -2017,7 +2031,7 @@ checkinRoutes.post(
         traineeUserId: actor.userId,
         type: measurement.type,
         value: measurement.value,
-        unit: defaultUnitForMeasurementType(measurement.type),
+        unit: measurement.unit,
         observedAt: now,
         source: "checkin",
         checkinId: loaded.checkin.id,

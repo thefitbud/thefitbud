@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "feadc88e-4633-4950-b97c-667d74ad3d64",
+  "id": "0a9a3567-0d19-4214-b3cd-e26f24b3b91d",
   "prevId": "5ffa4bcd-449f-4994-9f5e-214e38939329",
   "tables": {
     "auth_otps": {
@@ -6630,6 +6630,172 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "payment_records": {
+      "name": "payment_records",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "coaching_relationship_id": {
+          "name": "coaching_relationship_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subscription_version_id": {
+          "name": "subscription_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_paise": {
+          "name": "amount_paise",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "due_on": {
+          "name": "due_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "paid_on": {
+          "name": "paid_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "method": {
+          "name": "method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "payment_records_relationship_due_idx": {
+          "name": "payment_records_relationship_due_idx",
+          "columns": [
+            "coaching_relationship_id",
+            "due_on"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "payment_records_coaching_relationship_id_coaching_relationships_id_fk": {
+          "name": "payment_records_coaching_relationship_id_coaching_relationships_id_fk",
+          "tableFrom": "payment_records",
+          "tableTo": "coaching_relationships",
+          "columnsFrom": [
+            "coaching_relationship_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_records_created_by_users_id_fk": {
+          "name": "payment_records_created_by_users_id_fk",
+          "tableFrom": "payment_records",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_records_subscription_version_fk": {
+          "name": "payment_records_subscription_version_fk",
+          "tableFrom": "payment_records",
+          "tableTo": "subscription_versions",
+          "columnsFrom": [
+            "coaching_relationship_id",
+            "subscription_version_id"
+          ],
+          "columnsTo": [
+            "coaching_relationship_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "payment_records_amount_paise_chk": {
+          "name": "payment_records_amount_paise_chk",
+          "value": "typeof(\"payment_records\".\"amount_paise\") = 'integer' AND \"payment_records\".\"amount_paise\" > 0"
+        },
+        "payment_records_due_on_chk": {
+          "name": "payment_records_due_on_chk",
+          "value": "\"payment_records\".\"due_on\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'"
+        },
+        "payment_records_paid_on_chk": {
+          "name": "payment_records_paid_on_chk",
+          "value": "\"payment_records\".\"paid_on\" IS NULL OR \"payment_records\".\"paid_on\" GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'"
+        },
+        "payment_records_status_chk": {
+          "name": "payment_records_status_chk",
+          "value": "(\"payment_records\".\"status\" = 'paid' AND \"payment_records\".\"paid_on\" IS NOT NULL) OR (\"payment_records\".\"status\" = 'unpaid' AND \"payment_records\".\"paid_on\" IS NULL AND \"payment_records\".\"method\" IS NULL)"
+        },
+        "payment_records_method_chk": {
+          "name": "payment_records_method_chk",
+          "value": "\"payment_records\".\"method\" IS NULL OR \"payment_records\".\"method\" IN ('cash', 'upi', 'bank')"
+        }
+      }
+    },
     "plan_assignment_policies": {
       "name": "plan_assignment_policies",
       "columns": {
@@ -7769,6 +7935,27 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "amount_paise": {
+          "name": "amount_paise",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subscription_type": {
+          "name": "subscription_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "coaching_mode": {
+          "name": "coaching_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -7786,6 +7973,14 @@
             "coaching_relationship_id"
           ],
           "isUnique": false
+        },
+        "subscription_versions_relationship_id_uidx": {
+          "name": "subscription_versions_relationship_id_uidx",
+          "columns": [
+            "coaching_relationship_id",
+            "id"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -7805,7 +8000,20 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "subscription_versions_amount_paise_chk": {
+          "name": "subscription_versions_amount_paise_chk",
+          "value": "\"subscription_versions\".\"amount_paise\" IS NULL OR (typeof(\"subscription_versions\".\"amount_paise\") = 'integer' AND \"subscription_versions\".\"amount_paise\" >= 0)"
+        },
+        "subscription_versions_subscription_type_chk": {
+          "name": "subscription_versions_subscription_type_chk",
+          "value": "\"subscription_versions\".\"subscription_type\" IS NULL OR \"subscription_versions\".\"subscription_type\" IN ('weekly', 'monthly', 'quarterly', 'yearly', 'custom')"
+        },
+        "subscription_versions_coaching_mode_chk": {
+          "name": "subscription_versions_coaching_mode_chk",
+          "value": "\"subscription_versions\".\"coaching_mode\" IS NULL OR \"subscription_versions\".\"coaching_mode\" IN ('online', 'in_person', 'hybrid')"
+        }
+      }
     },
     "sync_mutations": {
       "name": "sync_mutations",

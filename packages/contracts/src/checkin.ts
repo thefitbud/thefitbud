@@ -3,6 +3,7 @@ import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { activeExceptionSummarySchema } from "./exception.js";
 import { measurementTypeSchema, mediaAssetSchema } from "./progress.js";
 import { localDateSchema } from "./workout.js";
+import { checkinStandardKeySchema } from "./checkin-form-v2.js";
 
 /** Persisted record state. Scheduled / Due / Overdue / Reviewed are never stored. */
 export const checkinRecordStatusSchema = z.enum(["draft", "submitted"]);
@@ -38,6 +39,8 @@ const checkinFieldBaseSchema = z.object({
   label: z.string().min(1).max(200),
   required: z.boolean(),
   helpText: z.string().min(1).max(500).optional(),
+  /** Standard question key (Z6-6). Absent on v1 and custom questions. */
+  key: checkinStandardKeySchema.optional(),
 });
 
 /**
@@ -129,7 +132,11 @@ const checkinFieldAnswerSchema = z.union([
 ]);
 
 export const checkinAnswersSchema = z.object({
-  wellbeing: z.string().trim().min(1).max(1000),
+  /**
+   * Legacy v1 answer. Optional in the contract: whether it is required comes
+   * from the pinned form's `required` fields (Z6-2b, D-W6-42). Non-blank when sent.
+   */
+  wellbeing: z.string().trim().min(1).max(1000).optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
   bodyWeightKg: z.number().positive().max(500).nullable().optional(),
   photoIntent: checkinPhotoIntentSchema.nullable().optional(),

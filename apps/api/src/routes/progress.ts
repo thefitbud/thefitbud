@@ -4,6 +4,7 @@ import {
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
 import {
+  coachEditMeasurementRequestSchema,
   createMeasurementRequestSchema,
   createProgressEntryRequestSchema,
   measurementListResponseSchema,
@@ -24,9 +25,21 @@ import {
   mapMediaAsset,
   mapProgressEntry,
 } from "../domain/mappers";
+import { formatLocalDate } from "@fitbud/core";
+import { loadTraineeTimezone } from "../domain/assignment-schedule";
+import { COACH_LOGGED_READ_ONLY_CODE } from "../domain/compliance-logging.js";
+import { measurementLogSnapshot, recordCoachLogChange } from "../domain/coach-log.js";
+import {
+  COACH_LOG_BACKDATE_ERROR,
+  LOG_TIME_ERROR_CODES,
+  LOG_TIME_ERROR_MESSAGES,
+  isInEndedPeriod,
+  isWithinCoachLogWindow,
+} from "../domain/log-time-bounds.js";
 import { appendChangeLog } from "../domain/sync";
+import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
-import { fail, ok } from "../lib/envelope";
+import { fail, ok, type AppContext } from "../lib/envelope";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import {
   findIdempotencyRecord,
@@ -70,6 +83,31 @@ function requireIdempotencyKey(c: {
 }): string | null {
   const key = c.req.header("Idempotency-Key")?.trim();
   return key && key.length > 0 ? key : null;
+}
+
+function coachPushConfig(env: Env) {
+  return {
+    pushProviderMode: resolvePushProviderMode(env.PUSH_PROVIDER_MODE),
+    expoAccessToken: env.EXPO_ACCESS_TOKEN,
+  };
+}
+
+function coachMeasurementVersionConflict(c: AppContext) {
+  return fail(
+    c,
+    409,
+    "VERSION_CONFLICT",
+    "This measurement changed since it was opened. Reload and try again.",
+  );
+}
+
+function coachLoggedReadOnlyError(c: AppContext) {
+  return fail(
+    c,
+    409,
+    COACH_LOGGED_READ_ONLY_CODE,
+    "This measurement was logged by your coach and cannot be changed.",
+  );
 }
 
 async function loadReadyOwnedMedia(
@@ -271,6 +309,17 @@ progressRoutes.post(
       actor,
     );
     if (!relationship) {
+      if (actor.selectedRole === "trainer") {
+        // Another trainer's client is 403 (Z6-20); an unknown id stays 404.
+        const [other] = await db
+          .select({ id: coachingRelationships.id })
+          .from(coachingRelationships)
+          .where(eq(coachingRelationships.id, c.req.param("relationshipId")))
+          .limit(1);
+        if (other) {
+          return fail(c, 403, "FORBIDDEN", "You cannot log measurements for this client.");
+        }
+      }
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
     const writableMeasurement = await requireWritableRelationship(
@@ -309,6 +358,10 @@ progressRoutes.post(
     }
 
     const now = nowIso();
+    const byCoach = actor.selectedRole === "trainer";
+    const observedAt = parsed.data.observedAt
+      ? new Date(parsed.data.observedAt).toISOString()
+      : now;
     const row = {
       id: parsed.data.id ?? createId(),
       coachingRelationshipId: relationship.id,
@@ -316,14 +369,18 @@ progressRoutes.post(
       type: parsed.data.type,
       value: parsed.data.value,
       unit: parsed.data.unit,
-      observedAt: parsed.data.observedAt ?? now,
-      source:
-        actor.selectedRole === "trainer"
-          ? ("trainer_entry" as const)
-          : ("trainee_entry" as const),
+      observedAt: byCoach ? observedAt : (parsed.data.observedAt ?? now),
+      source: byCoach ? ("trainer_entry" as const) : ("trainee_entry" as const),
       checkinId: null as string | null,
       mediaAssetId: parsed.data.mediaAssetId ?? null,
       recordVersion: 0,
+      // Z6-20 (D-W6-32 (3)): a trainer's entry is the coach's from now on and
+      // read-only to the trainee (R1). Earlier trainer_entry rows are not backfilled.
+      loggedByRole: byCoach ? ("coach" as const) : ("trainee" as const),
+      loggedByUserId: byCoach ? actor.userId : null,
+      lastEditedByRole: null,
+      lastEditedByUserId: null,
+      lastEditedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -343,6 +400,11 @@ progressRoutes.post(
             "Measurement id is already used by another relationship.",
           );
         }
+        // R1: a trainee write on a coach-created measurement is refused, on this
+        // route and so on sync push replays too.
+        if (actor.selectedRole === "trainee" && existing.loggedByRole === "coach") {
+          return coachLoggedReadOnlyError(c);
+        }
         const responseBody = {
           data: measurementSchema.parse(mapMeasurement(existing)),
         };
@@ -358,10 +420,59 @@ progressRoutes.post(
         return c.json(responseBody, 200);
       }
     }
-    await db.insert(measurements).values(row);
+    if (byCoach) {
+      // R2: the trainer skips the Z6-11 bounds, but the entry must be dated
+      // within the last 7 days and not in the future (trainee timezone).
+      const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+      if (
+        !isWithinCoachLogWindow({
+          localDates: [],
+          instants: [observedAt],
+          now,
+          timeZone,
+        })
+      ) {
+        return fail(c, 422, COACH_LOG_BACKDATE_ERROR.code, COACH_LOG_BACKDATE_ERROR.message);
+      }
+      const localDate = formatLocalDate(new Date(observedAt), timeZone);
+      if (
+        isInEndedPeriod({
+          reactivatedAt: relationship.reactivatedAt,
+          loggedAt: now,
+          localDate,
+          timeZone,
+        })
+      ) {
+        return fail(
+          c,
+          422,
+          LOG_TIME_ERROR_CODES.ended_period,
+          LOG_TIME_ERROR_MESSAGES.ended_period,
+        );
+      }
+      await db.insert(measurements).values(row);
+      await recordCoachLogChange(db, {
+        entity: {
+          type: "measurement",
+          id: row.id,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: relationship.traineeUserId,
+          serverVersion: row.recordVersion,
+          routing: { domainEntityType: "coaching_relationship", domainEntityId: relationship.id },
+        },
+        action: "create",
+        actorUserId: actor.userId,
+        before: null,
+        after: measurementLogSnapshot({ localDate, measurement: row }),
+        now,
+        push: coachPushConfig(c.env),
+      });
+    } else {
+      await db.insert(measurements).values(row);
+    }
 
     const mapped = measurementSchema.parse(mapMeasurement(row));
-    if (actor.selectedRole === "trainee") {
+    if (!byCoach) {
       await appendChangeLog(db, {
         entityType: "measurement",
         recordId: mapped.id,
@@ -385,6 +496,174 @@ progressRoutes.post(
       expiresAt: addDaysIso(7),
     });
     return c.json(responseBody, 200);
+  },
+);
+
+progressRoutes.patch(
+  "/measurements/:measurementId",
+  operation({
+    tag: "Progress",
+    summary: "Trainer edits a client's measurement",
+    description:
+      "Changes the value, unit or time of a measurement dated within the last 7 days (422 BACKDATE_LIMIT). recordVersion must match (409 VERSION_CONFLICT). Sets last_edited_* to the coach; a trainee-logged measurement stays the trainee's. A measurement that came from a check-in cannot be edited. Audited, shown in the activity feed and notifies the trainee when their coach-updates setting is on.",
+    roles: ["trainer"],
+    body: coachEditMeasurementRequestSchema,
+    response: measurementSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const parsed = coachEditMeasurementRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid measurement edit.", {
+        issues: parsed.error.issues,
+      });
+    }
+
+    const db = createDb(c.env.DB);
+    const [measurement] = await db
+      .select()
+      .from(measurements)
+      .where(eq(measurements.id, c.req.param("measurementId")))
+      .limit(1);
+    if (!measurement) {
+      return fail(c, 404, "MEASUREMENT_NOT_FOUND", "Measurement not found.");
+    }
+    const [relationship] = await db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, measurement.coachingRelationshipId))
+      .limit(1);
+    if (!relationship || relationship.trainerUserId !== actor.userId) {
+      return fail(c, 403, "FORBIDDEN", "You cannot edit measurements for this client.");
+    }
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
+
+    if (measurement.source === "checkin" || measurement.checkinId) {
+      // The client's own check-in answers are what the review is about.
+      return fail(
+        c,
+        409,
+        "INVALID_TRANSITION",
+        "A measurement from a check-in cannot be edited.",
+      );
+    }
+    if (measurement.recordVersion !== parsed.data.recordVersion) {
+      return coachMeasurementVersionConflict(c);
+    }
+
+    const now = nowIso();
+    const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const nextObservedAt = parsed.data.observedAt
+      ? new Date(parsed.data.observedAt).toISOString()
+      : measurement.observedAt;
+    // R2: the entry as it is and as it would be must both be within the last 7 days.
+    if (
+      !isWithinCoachLogWindow({
+        localDates: [],
+        instants:
+          nextObservedAt === measurement.observedAt
+            ? [measurement.observedAt]
+            : [measurement.observedAt, nextObservedAt],
+        now,
+        timeZone,
+      })
+    ) {
+      return fail(c, 422, COACH_LOG_BACKDATE_ERROR.code, COACH_LOG_BACKDATE_ERROR.message);
+    }
+    const nextLocalDate = formatLocalDate(new Date(nextObservedAt), timeZone);
+    // D-W6-20, D-W6-40: the entry as it is now and as it would be must both be
+    // outside the frozen period, so moving the date cannot unfreeze it.
+    if (
+      isInEndedPeriod({
+        reactivatedAt: relationship.reactivatedAt,
+        loggedAt: nextObservedAt,
+        localDate: nextLocalDate,
+        timeZone,
+      }) ||
+      isInEndedPeriod({
+        reactivatedAt: relationship.reactivatedAt,
+        loggedAt: measurement.observedAt,
+        localDate: formatLocalDate(new Date(measurement.observedAt), timeZone),
+        timeZone,
+      })
+    ) {
+      return fail(
+        c,
+        422,
+        LOG_TIME_ERROR_CODES.ended_period,
+        LOG_TIME_ERROR_MESSAGES.ended_period,
+      );
+    }
+
+    const nextValue = parsed.data.value ?? measurement.value;
+    const nextUnit = parsed.data.unit ?? measurement.unit;
+    if (
+      nextValue === measurement.value &&
+      nextUnit === measurement.unit &&
+      Date.parse(nextObservedAt) === Date.parse(measurement.observedAt)
+    ) {
+      // Nothing changed: no audit row, no notification, no new version.
+      return ok(c, measurementSchema.parse(mapMeasurement(measurement)));
+    }
+
+    // Claim the version first, so a concurrent edit with the same version writes nothing.
+    const claimed = await db
+      .update(measurements)
+      .set({
+        value: nextValue,
+        unit: nextUnit,
+        observedAt: nextObservedAt,
+        recordVersion: measurement.recordVersion + 1,
+        lastEditedByRole: "coach",
+        lastEditedByUserId: actor.userId,
+        lastEditedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(measurements.id, measurement.id),
+          eq(measurements.recordVersion, measurement.recordVersion),
+        ),
+      )
+      .returning({ id: measurements.id });
+    if (claimed.length === 0) {
+      return coachMeasurementVersionConflict(c);
+    }
+
+    const [saved] = await db
+      .select()
+      .from(measurements)
+      .where(eq(measurements.id, measurement.id))
+      .limit(1);
+    await recordCoachLogChange(db, {
+      entity: {
+        type: "measurement",
+        id: measurement.id,
+        coachingRelationshipId: relationship.id,
+        traineeUserId: relationship.traineeUserId,
+        serverVersion: saved!.recordVersion,
+        routing: { domainEntityType: "coaching_relationship", domainEntityId: relationship.id },
+      },
+      action: "edit",
+      actorUserId: actor.userId,
+      before: measurementLogSnapshot({
+        localDate: formatLocalDate(new Date(measurement.observedAt), timeZone),
+        measurement,
+      }),
+      after: measurementLogSnapshot({ localDate: nextLocalDate, measurement: saved! }),
+      now,
+      push: coachPushConfig(c.env),
+    });
+    return ok(c, measurementSchema.parse(mapMeasurement(saved!)));
   },
 );
 

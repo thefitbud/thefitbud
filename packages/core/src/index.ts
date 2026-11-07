@@ -114,6 +114,7 @@ export { greetingFor } from "./greeting.js";
 export {
   GLOBAL_CHECKIN_FORM_V2_DEFINITION_JSON,
   GLOBAL_CHECKIN_FORM_V2_FIELDS,
+  GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
   GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
   GLOBAL_CHECKIN_FORM_FIELDS,
   GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
@@ -123,6 +124,7 @@ export {
   canSaveCheckinDraft,
   canSubmitCheckin,
   canTrainerReadCheckinFormTemplate,
+  checkinAnswerEntries,
   daysForCheckinCadence,
   deriveCheckinStatus,
   latestCheckinFormVersion,
@@ -131,6 +133,14 @@ export {
   nextCheckinLocalDate,
   parseCheckinFormFields,
 } from "./checkin.js";
+
+export {
+  CHECKIN_STANDARD_KEYS,
+  findCheckinFormKeyProblem,
+  invalidCheckinKeyedAnswers,
+  validateCheckinAnswer,
+  type CheckinStandardKey,
+} from "./checkin-keys.js";
 
 export {
   addDaysToLocalDate,

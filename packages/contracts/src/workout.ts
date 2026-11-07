@@ -97,6 +97,14 @@ export const workoutExecutionSchema = z.object({
   completedAt: isoDateTimeSchema.nullable(),
   sessionRpe: z.number().min(1).max(10).nullable(),
   requireSessionRpe: z.boolean(),
+  /**
+   * Who logged the entry (Z6-19, R1): `coach` entries are read-only to the
+   * trainee ("Logged by your coach"). The API always sends it (REST reads and
+   * sync pull payloads, D-W6-36); optional so older clients' fixtures parse.
+   */
+  loggedByRole: z.enum(["trainee", "coach"]).optional(),
+  /** Set when a coach edited the entry ("Edited by your coach"). */
+  lastEditedByRole: z.enum(["trainee", "coach"]).nullable().optional(),
   exercises: z.array(exerciseExecutionSchema),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
@@ -160,6 +168,18 @@ export const completeSetRequestSchema = z.object({
   /** Omit or null to keep prescribed values (no re-entry). */
   actualReps: z.number().int().min(1).max(100).nullable().optional(),
   actualLoadLabel: z.string().trim().max(80).nullable().optional(),
+  /**
+   * Numeric load in kg (Z6-15, D-W6-21). When sent it wins over the label
+   * and the stored label is formatted from it ("40 kg").
+   */
+  actualLoadKg: z
+    .number()
+    .min(0)
+    .max(500)
+    .refine((kg) => Math.abs(kg * 100 - Math.round(kg * 100)) < 1e-6, {
+      message: "At most 2 decimals.",
+    })
+    .optional(),
 });
 export type CompleteSetRequest = z.infer<typeof completeSetRequestSchema>;
 

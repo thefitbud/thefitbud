@@ -6,6 +6,8 @@ const jobs = vi.hoisted(() => ({
   coachAsk: vi.fn(),
   pushReceipts: vi.fn(),
   queueBatch: vi.fn(),
+  // Z6-17 (D-W6-37): the real purge reads D1, so it is mocked like the other jobs.
+  accountPurge: vi.fn(),
 }));
 
 vi.mock("./jobs/reminders", async (importOriginal) => ({
@@ -15,6 +17,7 @@ vi.mock("./jobs/reminders", async (importOriginal) => ({
 }));
 vi.mock("./jobs/replenishment", () => ({ handleScheduledReplenishment: jobs.replenishment }));
 vi.mock("./jobs/push-receipts", () => ({ handleScheduledPushReceipts: jobs.pushReceipts }));
+vi.mock("./jobs/account-purge", () => ({ runAccountPurge: jobs.accountPurge }));
 vi.mock("./domain/coach-asks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./domain/coach-asks")>()),
   runCoachAskMaintenance: jobs.coachAsk,

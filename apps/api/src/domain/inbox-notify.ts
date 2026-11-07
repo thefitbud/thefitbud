@@ -36,7 +36,8 @@ export type InboxNotificationType =
   | "activity_nudge"
   | "checkin_reviewed"
   | "trainer_checkin_submitted"
-  | "trainer_intake_submitted";
+  | "trainer_intake_submitted"
+  | "coach_log_updated";
 
 export async function storeInboxNotification(
   db: Db,
@@ -51,6 +52,11 @@ export async function storeInboxNotification(
       | "checkin"
       | "meal_assignment"
       | "workout_assignment";
+    /**
+     * Groups events about one entry so the sender can merge repeats (Z6-19:
+     * the coach-edited log's id, merged within 10 minutes). Null when unset.
+     */
+    mergeGroup?: string;
   },
 ): Promise<StoredInboxNotification> {
   const now = nowIso();
@@ -71,7 +77,7 @@ export async function storeInboxNotification(
       readAt: null,
       openedAt: null,
       priority: 10,
-      mergeGroup: null,
+      mergeGroup: input.mergeGroup ?? null,
       payloadJson: null,
       expiresAt: null,
     })
@@ -117,6 +123,58 @@ export async function pushTrainerInboxEvent(
   config: TrainerPushConfig,
   now = nowIso(),
 ): Promise<void> {
+  await pushInboxEvent(db, notificationId, config, now, {
+    logScope: "trainer_inbox",
+    pushesType: (type) => TRAINER_PUSH_CATEGORY[type] !== undefined,
+    allowedByPreferences: (type, prefs) => {
+      const category = TRAINER_PUSH_CATEGORY[type];
+      return Boolean(
+        category &&
+          parseTrainerCategoriesJson(prefs?.trainerCategoriesJson ?? "[]")[category],
+      );
+    },
+  });
+}
+
+/**
+ * Pushes a stored `coach_log_updated` event to the trainee (Z6-19, R5). The
+ * delivery rules are the trainer push's (at-most-once, active relationship
+ * only, push on/off, quiet hours with no deferral, never throws); the gate is
+ * the trainee's "Coach updates to my logs" setting (`coach_log_updates`, on by
+ * default) instead of a trainer category. Any other type is not pushed here.
+ * Call only when `storeInboxNotification` reported `inserted: true`.
+ */
+export async function pushTraineeCoachLogEvent(
+  db: Db,
+  notificationId: string,
+  config: TrainerPushConfig,
+  now = nowIso(),
+): Promise<void> {
+  await pushInboxEvent(db, notificationId, config, now, {
+    logScope: "coach_log",
+    pushesType: (type) => type === "coach_log_updated",
+    allowedByPreferences: (_type, prefs) => prefs?.coachLogUpdates ?? true,
+  });
+}
+
+type InboxPushPolicy = {
+  logScope: "trainer_inbox" | "coach_log";
+  /** Which stored types this sender pushes at all. */
+  pushesType: (type: string) => boolean;
+  /** The recipient's per-type setting (checked after push on/off). */
+  allowedByPreferences: (
+    type: string,
+    prefs: typeof notificationPreferences.$inferSelect | undefined,
+  ) => boolean;
+};
+
+async function pushInboxEvent(
+  db: Db,
+  notificationId: string,
+  config: TrainerPushConfig,
+  now: string,
+  policy: InboxPushPolicy,
+): Promise<void> {
   try {
     const [notification] = await db
       .select()
@@ -124,8 +182,7 @@ export async function pushTrainerInboxEvent(
       .where(eq(notifications.id, notificationId))
       .limit(1);
     if (!notification) return;
-    const category = TRAINER_PUSH_CATEGORY[notification.notificationType];
-    if (!category) return;
+    if (!policy.pushesType(notification.notificationType)) return;
 
     // One push attempt per notification: any earlier delivery row means it already ran.
     const [earlier] = await db
@@ -150,7 +207,7 @@ export async function pushTrainerInboxEvent(
       .where(eq(notificationPreferences.userId, notification.recipientUserId))
       .limit(1);
     if (prefs && !prefs.pushEnabled) return;
-    if (!parseTrainerCategoriesJson(prefs?.trainerCategoriesJson ?? "[]")[category]) return;
+    if (!policy.allowedByPreferences(notification.notificationType, prefs)) return;
 
     const [user] = await db
       .select({ timezone: users.timezone })
@@ -238,11 +295,11 @@ export async function pushTrainerInboxEvent(
           )
           .where(eq(notificationDeliveries.id, deliveryId));
       } catch (error) {
-        logPushError("trainer_inbox.device", error);
+        logPushError(`${policy.logScope}.device`, error);
       }
     }
   } catch (error) {
-    logPushError("trainer_inbox.push", error);
+    logPushError(`${policy.logScope}.push`, error);
   }
 }
 

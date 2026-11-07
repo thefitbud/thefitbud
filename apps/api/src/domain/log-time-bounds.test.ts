@@ -3,6 +3,7 @@ import { mealWindowForLocalDate } from "@fitbud/core";
 import {
   LOG_TIME_FUTURE_DRIFT_MS,
   assertLogTimeWithinBounds,
+  isInEndedPeriod,
 } from "./log-time-bounds.js";
 
 const MIN = 60 * 1000;
@@ -114,5 +115,52 @@ describe("assertLogTimeWithinBounds across timezones", () => {
         now,
       }),
     ).toEqual({ ok: false, reason: "before_window" });
+  });
+});
+
+describe("isInEndedPeriod (EC1 rule 1)", () => {
+  // Thu 12 Nov 2026, 00:10 in Kolkata = Wed 11 Nov, 18:40 UTC.
+  const reactivatedAt = "2026-11-11T18:40:00.000Z";
+  const after = "2026-11-11T19:00:00.000Z";
+
+  it("has no frozen period for a relationship that was never reactivated", () => {
+    expect(
+      isInEndedPeriod({
+        reactivatedAt: null,
+        loggedAt: "2026-01-01T00:00:00.000Z",
+        localDate: "2026-01-01",
+        timeZone: "Asia/Kolkata",
+      }),
+    ).toBe(false);
+  });
+
+  it("freezes a log made before the reactivation, even on a later-dated item", () => {
+    expect(
+      isInEndedPeriod({
+        reactivatedAt,
+        loggedAt: "2026-11-11T18:39:59.999Z",
+        localDate: "2026-11-12",
+        timeZone: "Asia/Kolkata",
+      }),
+    ).toBe(true);
+    expect(
+      isInEndedPeriod({
+        reactivatedAt,
+        loggedAt: reactivatedAt,
+        localDate: "2026-11-12",
+        timeZone: "Asia/Kolkata",
+      }),
+    ).toBe(false);
+  });
+
+  it("freezes an item dated before the reactivation day in the trainee's timezone", () => {
+    const at = (localDate: string, timeZone: string) =>
+      isInEndedPeriod({ reactivatedAt, loggedAt: after, localDate, timeZone });
+    // In Kolkata the reactivation is on Thu 12 Nov: Wed is frozen, Thu is not.
+    expect(at("2026-11-11", "Asia/Kolkata")).toBe(true);
+    expect(at("2026-11-12", "Asia/Kolkata")).toBe(false);
+    // In New York the same instant is still Wed 11 Nov.
+    expect(at("2026-11-10", "America/New_York")).toBe(true);
+    expect(at("2026-11-11", "America/New_York")).toBe(false);
   });
 });

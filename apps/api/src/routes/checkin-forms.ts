@@ -13,7 +13,9 @@ import {
   forkCheckinFormTemplateRequestSchema,
 } from "@fitbud/contracts";
 import {
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
   canTrainerReadCheckinFormTemplate,
+  findCheckinFormKeyProblem,
   parseCheckinFormFields,
 } from "@fitbud/core";
 import { createDb, type Db } from "../db/client";
@@ -49,6 +51,24 @@ export const checkinFormTemplateRoutes = new Hono<{
 
 type TemplateRow = typeof checkinFormTemplates.$inferSelect;
 type VersionRow = typeof checkinFormVersions.$inferSelect;
+
+/** 422 for a duplicate or mismatched standard key. Static message; the key is a fixed enum value. */
+function keyProblemResponse(
+  c: Parameters<typeof fail>[0],
+  fields: Parameters<typeof findCheckinFormKeyProblem>[0],
+) {
+  const problem = findCheckinFormKeyProblem(fields);
+  if (!problem) return null;
+  return fail(
+    c,
+    422,
+    problem.code,
+    problem.code === "DUPLICATE_CHECKIN_KEY"
+      ? "A standard check-in question can be used only once."
+      : "A standard check-in question does not match its key.",
+    { key: problem.key, path: ["fields", problem.index, "key"] },
+  );
+}
 
 function definitionJson(fields: unknown): string {
   return JSON.stringify({ fields });
@@ -260,6 +280,8 @@ checkinFormTemplateRoutes.post(
         "Check-in form definition is invalid.",
       );
     }
+    const keyProblem = keyProblemResponse(c, fields.fields);
+    if (keyProblem) return keyProblem;
 
     const idempotencyKey = c.req.header("idempotency-key")?.trim();
     if (!idempotencyKey) {
@@ -392,7 +414,7 @@ checkinFormTemplateRoutes.post(
     tag: "Checkins",
     summary: "Fork a global check-in form into a trainer-owned template.",
     description:
-      "Copies the latest global version into a new trainer-owned template. The global base is not changed.",
+      "Copies the global version that new assignments use into a new trainer-owned template. The global base is not changed.",
     roles: ["trainer"],
     idempotency: true,
     body: forkCheckinFormTemplateRequestSchema,
@@ -465,8 +487,14 @@ checkinFormTemplateRoutes.post(
       );
     }
 
+    // Copy the version new assignments use (the core default), not the latest
+    // global version (D-W6-41). A global form without that default falls back
+    // to its latest version.
     const sourceVersions = await versionsForTemplates(db, [source.id]);
-    const latest = sourceVersions[sourceVersions.length - 1];
+    const latest =
+      sourceVersions.find(
+        (version) => version.id === GLOBAL_CHECKIN_FORM_VERSION_ID,
+      ) ?? sourceVersions[sourceVersions.length - 1];
     if (!latest) {
       return fail(
         c,
@@ -565,6 +593,8 @@ checkinFormTemplateRoutes.post(
         "Check-in form definition is invalid.",
       );
     }
+    const keyProblem = keyProblemResponse(c, fields.fields);
+    if (keyProblem) return keyProblem;
 
     const idempotencyKey = c.req.header("idempotency-key")?.trim();
     if (!idempotencyKey) {

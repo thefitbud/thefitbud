@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   GLOBAL_CHECKIN_FORM_FIELDS,
   GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
+  GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
+  GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
   formatLocalDate,
 } from "@fitbud/core";
@@ -335,7 +337,7 @@ describe("check-in loop", () => {
     expect(scheduledBody.data.checkin.checkinFormVersionId).toBe(
       GLOBAL_CHECKIN_FORM_VERSION_ID,
     );
-    expect(scheduledBody.data.checkin.definitionVersion).toBe(1);
+    expect(scheduledBody.data.checkin.definitionVersion).toBe(2);
     expect(["due", "scheduled", "overdue"]).toContain(
       scheduledBody.data.checkin.status,
     );
@@ -463,7 +465,7 @@ describe("check-in loop", () => {
     expect(contextBody.data.pinnedForm.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "body_weight",
+          id: "weight",
           type: "measurement",
           measurementType: "body_weight_kg",
         }),
@@ -649,7 +651,7 @@ describe("check-in loop", () => {
       data: { versions: Array<{ id: string; fields: unknown[] }> };
     };
     expect(globalBeforeBody.data.versions[0]?.id).toBe(
-      GLOBAL_CHECKIN_FORM_VERSION_ID,
+      GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
     );
     expect(globalBeforeBody.data.versions[0]?.fields).toEqual(
       GLOBAL_CHECKIN_FORM_FIELDS,
@@ -730,10 +732,13 @@ describe("check-in loop", () => {
     const globalAfterBody = (await globalAfter.json()) as {
       data: { versions: Array<{ id: string; fields: unknown[] }> };
     };
-    // Global v1 is untouched; migration 0036's v2 is the only other version.
+    // Global v1 is untouched; migration 0041's v2 is the only other version.
     expect(globalAfterBody.data.versions).toHaveLength(2);
     expect(globalAfterBody.data.versions[0]?.id).toBe(
-      GLOBAL_CHECKIN_FORM_VERSION_ID,
+      GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
+    );
+    expect(globalAfterBody.data.versions[1]?.id).toBe(
+      GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
     );
     expect(globalAfterBody.data.versions[0]?.fields).toEqual(
       GLOBAL_CHECKIN_FORM_FIELDS,

@@ -1,9 +1,132 @@
+import {
+  clientSettingsResponseSchema,
+  clientSettingsSubscriptionSchema,
+  createPaymentRecordRequestSchema,
+  paymentRecordSchema,
+  putClientSubscriptionRequestSchema,
+  updateClientBasicsRequestSchema,
+  updatePaymentRecordRequestSchema,
+  type ClientSettingsResponse,
+  type ClientSettingsSubscription,
+  type CreatePaymentRecordRequest,
+  type PaymentRecord,
+  type PutClientSubscriptionRequest,
+  type UpdateClientBasicsRequest,
+  type UpdatePaymentRecordRequest,
+} from "@fitbud/contracts";
 import type { FitBudApiClient } from "./index.js";
 
-// W6 Z6-8: scaffold from Z5-4. The owning W6 task adds its client methods here.
+// W6 Z6-8: client settings (subscription edit and payment records, tracking only).
+// Z6-8b: the trainer-owned client name and contact phone.
+declare module "./index.js" {
+  interface FitBudApiClient {
+    /** GET /client-settings/relationships/:id. */
+    getClientSettings(relationshipId: string): Promise<ClientSettingsResponse>;
+    /**
+     * PATCH /client-settings/relationships/:id/basic. Sets or clears (null) the
+     * trainer-owned client name and contact phone; returns the updated settings.
+     */
+    updateClientBasics(
+      relationshipId: string,
+      body: UpdateClientBasicsRequest,
+      idempotencyKey: string,
+    ): Promise<ClientSettingsResponse>;
+    /** PUT /client-settings/relationships/:id/subscription. Creates version N+1. */
+    saveClientSubscription(
+      relationshipId: string,
+      body: PutClientSubscriptionRequest,
+      idempotencyKey: string,
+    ): Promise<ClientSettingsSubscription>;
+    /** POST /client-settings/relationships/:id/payments. */
+    createPaymentRecord(
+      relationshipId: string,
+      body: CreatePaymentRecordRequest,
+      idempotencyKey: string,
+    ): Promise<PaymentRecord>;
+    /** PATCH /client-settings/relationships/:id/payments/:paymentId. */
+    updatePaymentRecord(
+      relationshipId: string,
+      paymentId: string,
+      body: UpdatePaymentRecordRequest,
+      idempotencyKey: string,
+    ): Promise<PaymentRecord>;
+  }
+}
+
+function base(relationshipId: string): string {
+  return `/client-settings/relationships/${encodeURIComponent(relationshipId)}`;
+}
+
 export function installClientSettingsClientMethods(
   Client: new (...args: never[]) => FitBudApiClient,
 ): void {
-  // Intentionally empty until the W6 task fills it in.
-  void Client;
+  const proto = Client.prototype as FitBudApiClient;
+
+  proto.getClientSettings = async function getClientSettings(
+    this: FitBudApiClient,
+    relationshipId: string,
+  ) {
+    return this.request("GET", base(relationshipId), clientSettingsResponseSchema, {
+      auth: true,
+    });
+  };
+
+  proto.updateClientBasics = async function updateClientBasics(
+    this: FitBudApiClient,
+    relationshipId: string,
+    body: UpdateClientBasicsRequest,
+    idempotencyKey: string,
+  ) {
+    const parsed = updateClientBasicsRequestSchema.parse(body);
+    return this.request("PATCH", `${base(relationshipId)}/basic`, clientSettingsResponseSchema, {
+      auth: true,
+      body: parsed,
+      idempotencyKey,
+    });
+  };
+
+  proto.saveClientSubscription = async function saveClientSubscription(
+    this: FitBudApiClient,
+    relationshipId: string,
+    body: PutClientSubscriptionRequest,
+    idempotencyKey: string,
+  ) {
+    const parsed = putClientSubscriptionRequestSchema.parse(body);
+    return this.request(
+      "PUT",
+      `${base(relationshipId)}/subscription`,
+      clientSettingsSubscriptionSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  };
+
+  proto.createPaymentRecord = async function createPaymentRecord(
+    this: FitBudApiClient,
+    relationshipId: string,
+    body: CreatePaymentRecordRequest,
+    idempotencyKey: string,
+  ) {
+    const parsed = createPaymentRecordRequestSchema.parse(body);
+    return this.request("POST", `${base(relationshipId)}/payments`, paymentRecordSchema, {
+      auth: true,
+      body: parsed,
+      idempotencyKey,
+    });
+  };
+
+  proto.updatePaymentRecord = async function updatePaymentRecord(
+    this: FitBudApiClient,
+    relationshipId: string,
+    paymentId: string,
+    body: UpdatePaymentRecordRequest,
+    idempotencyKey: string,
+  ) {
+    const parsed = updatePaymentRecordRequestSchema.parse(body);
+    return this.request(
+      "PATCH",
+      `${base(relationshipId)}/payments/${encodeURIComponent(paymentId)}`,
+      paymentRecordSchema,
+      { auth: true, body: parsed, idempotencyKey },
+    );
+  };
 }
