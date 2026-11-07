@@ -120,6 +120,7 @@ export {
   canSaveCheckinDraft,
   canSubmitCheckin,
   canTrainerReadCheckinFormTemplate,
+  checkinAnswerEntries,
   daysForCheckinCadence,
   deriveCheckinStatus,
   latestCheckinFormVersion,
