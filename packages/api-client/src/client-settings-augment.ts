@@ -4,21 +4,33 @@ import {
   createPaymentRecordRequestSchema,
   paymentRecordSchema,
   putClientSubscriptionRequestSchema,
+  updateClientBasicsRequestSchema,
   updatePaymentRecordRequestSchema,
   type ClientSettingsResponse,
   type ClientSettingsSubscription,
   type CreatePaymentRecordRequest,
   type PaymentRecord,
   type PutClientSubscriptionRequest,
+  type UpdateClientBasicsRequest,
   type UpdatePaymentRecordRequest,
 } from "@fitbud/contracts";
 import type { FitBudApiClient } from "./index.js";
 
 // W6 Z6-8: client settings (subscription edit and payment records, tracking only).
+// Z6-8b: the trainer-owned client name and contact phone.
 declare module "./index.js" {
   interface FitBudApiClient {
     /** GET /client-settings/relationships/:id. */
     getClientSettings(relationshipId: string): Promise<ClientSettingsResponse>;
+    /**
+     * PATCH /client-settings/relationships/:id/basic. Sets or clears (null) the
+     * trainer-owned client name and contact phone; returns the updated settings.
+     */
+    updateClientBasics(
+      relationshipId: string,
+      body: UpdateClientBasicsRequest,
+      idempotencyKey: string,
+    ): Promise<ClientSettingsResponse>;
     /** PUT /client-settings/relationships/:id/subscription. Creates version N+1. */
     saveClientSubscription(
       relationshipId: string,
@@ -56,6 +68,20 @@ export function installClientSettingsClientMethods(
   ) {
     return this.request("GET", base(relationshipId), clientSettingsResponseSchema, {
       auth: true,
+    });
+  };
+
+  proto.updateClientBasics = async function updateClientBasics(
+    this: FitBudApiClient,
+    relationshipId: string,
+    body: UpdateClientBasicsRequest,
+    idempotencyKey: string,
+  ) {
+    const parsed = updateClientBasicsRequestSchema.parse(body);
+    return this.request("PATCH", `${base(relationshipId)}/basic`, clientSettingsResponseSchema, {
+      auth: true,
+      body: parsed,
+      idempotencyKey,
     });
   };
 
