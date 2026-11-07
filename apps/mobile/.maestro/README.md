@@ -125,8 +125,8 @@ Names only here. Values never go in a flow, a PR, a log or a chat.
 | `QA_SLIPPING_EMAIL` | `suites.<suite>.accounts[key=slipping].email`, same file | workout-log, checkin |
 | `QA_OTP_CODE` | GitHub secret `QA_TEST_OTP_CODE` (the staging test-mode login code, QT1) | the code sign-in |
 | `QA_PASSWORD` | GitHub secret `FITBUD_QA_PASSWORD` | the password sign-in |
-| `QA_TODAY_WORKOUT_NAME` (optional) | `accounts[key=ontrack].today.workoutName` in the run's `apps/api/.qa-seed/<suite>/expectations.json` (`<suite>` is `android` or `ios`); leave unset or empty on a rest day | `trainee/today.yaml` |
-| `QA_TODAY_MEAL_NAME` (optional) | `accounts[key=ontrack].today.mealNames[0]`, same per-suite file | `trainee/today.yaml` |
+| `QA_TODAY_WORKOUT_NAME` (optional) | `suites.<suite>.accounts[key=ontrack].today.workoutName` in the run's `apps/api/.qa-seed/<suite>/expectations.json` (`<suite>` is `android` or `ios`); leave unset or empty on a rest day | `trainee/today.yaml` |
+| `QA_TODAY_MEAL_NAME` (optional) | `suites.<suite>.accounts[key=ontrack].today.mealNames[0]`, same file | `trainee/today.yaml` |
 
 The QA display names (`QA Aarav`, `QA Rohan`) are set as defaults in the header of
 the trainer flows; the runner may override them with `QA_ONTRACK_NAME` and
@@ -136,9 +136,24 @@ top-level `.accounts` array is a copy of `suites.android.accounts`, kept because
 `scripts/qa/run-maestro.sh` and `run-maestro-ios.sh` read `.accounts[]`. The
 `android` and `ios` jobs in `qa.yml` replace that array with the suite they are
 about to run before Maestro starts. No flow should be pointed at `suites.api`
-or `suites.web`. Anything dated (`today`, `rowCounts`, `referenceDate`,
-`loggableWorkout`) comes only from the **run's own**
-`.qa-seed/<suite>/expectations.json`, because it changes every night (D-QA1-3).
+or `suites.web`.
+
+Dated values come only from the **run's own**
+`apps/api/.qa-seed/<suite>/expectations.json` (D-QA1-3). `qa-seed.ts` writes that
+file with `qaExpectationsFile` for the one suite it was given: `$comment`,
+`referenceDate`, and `suites.<suite>`. There is **no** top-level `accounts` in
+it. Read:
+
+- `suites.<suite>.accounts[key=ontrack].today.workoutName`
+- `suites.<suite>.accounts[key=ontrack].today.mealNames[0]`
+- `suites.<suite>.accounts[key=slipping].loggableWorkout`
+- `suites.<suite>.rowCounts` and the file's `referenceDate`
+
+```bash
+jq -r --arg s "$SUITE" '.suites[$s].accounts[] | select(.key=="ontrack") | .today.workoutName' "apps/api/.qa-seed/$SUITE/expectations.json"
+jq -r --arg s "$SUITE" '.suites[$s].accounts[] | select(.key=="ontrack") | .today.mealNames[0]' "apps/api/.qa-seed/$SUITE/expectations.json"
+```
+
 The two optional variables above are the only dated values the suite reads, and
 the flows check structure only without them.
 
