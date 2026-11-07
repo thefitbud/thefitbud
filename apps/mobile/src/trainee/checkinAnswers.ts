@@ -191,12 +191,6 @@ export type CheckinFormLoadFailure = { code: string; message: string };
  */
 export function checkinFormLoadFailure(err: unknown): CheckinFormLoadFailure {
   if (err instanceof ApiClientError) {
-    if (err.status === 0) {
-      return {
-        code: "CHK-NET",
-        message: "Couldn't reach FitBud (CHK-NET). Check your connection and try again.",
-      };
-    }
     return { code: err.code, message: err.message };
   }
   if (err instanceof Error && err.name === "ZodError") {
@@ -205,7 +199,7 @@ export function checkinFormLoadFailure(err: unknown): CheckinFormLoadFailure {
       message: "Couldn't open the check-in (CHK-PARSE). Try again.",
     };
   }
-  if (err instanceof TypeError) {
+  if (isNetworkFailure(err)) {
     return {
       code: "CHK-NET",
       message: "Couldn't reach FitBud (CHK-NET). Check your connection and try again.",
@@ -215,4 +209,17 @@ export function checkinFormLoadFailure(err: unknown): CheckinFormLoadFailure {
     code: "CHK-UNK",
     message: "Couldn't open the check-in (CHK-UNK). Try again.",
   };
+}
+
+/** Same test as `authErrors.ts`: only a real request failure says "connection". */
+function isNetworkFailure(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.name === "AbortError" ||
+    err.name === "TimeoutError" ||
+    (err instanceof TypeError &&
+      /network request failed|failed to fetch|network error|load failed/i.test(
+        err.message,
+      ))
+  );
 }

@@ -410,7 +410,14 @@ function FieldControl({
                 }}
                 style={styles.lastWeightBtn}
               >
-                <Text style={styles.lastWeight}>Last: {lastWeight.label}</Text>
+                <Text
+                  style={[
+                    styles.lastWeight,
+                    answered ? null : styles.lastWeightLink,
+                  ]}
+                >
+                  Last: {lastWeight.label}
+                </Text>
               </Pressable>
             ) : null}
           </View>
@@ -1573,6 +1580,11 @@ const styles = StyleSheet.create({
   lastWeightBtn: {
     justifyContent: "center",
     minHeight: touchTargetMin,
+  },
+  lastWeightLink: {
+    color: colors.indigo,
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
   lastWeight: {
     color: colors.midGrey,

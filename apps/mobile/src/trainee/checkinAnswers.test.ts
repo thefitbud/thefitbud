@@ -151,11 +151,21 @@ describe("checkinFormLoadFailure", () => {
     expect(checkinFormLoadFailure(api).message).toBe("Check-in not found.");
   });
 
+  it("a programming TypeError is CHK-UNK, never a connection message", () => {
+    const failure = checkinFormLoadFailure(
+      new TypeError("Cannot read properties of undefined (reading 'label')"),
+    );
+    expect(failure.code).toBe("CHK-UNK");
+    expect(failure.message).not.toMatch(/connection|reach/i);
+  });
+
   it("never shows another error's message, and gives a code instead", () => {
     const zod = Object.assign(new Error("[{\"path\":[\"fields\"]}]"), { name: "ZodError" });
     expect(checkinFormLoadFailure(zod).message).toContain("CHK-PARSE");
     expect(checkinFormLoadFailure(zod).message).not.toContain("path");
     expect(checkinFormLoadFailure(new TypeError("Failed to fetch")).code).toBe("CHK-NET");
+    expect(checkinFormLoadFailure(new TypeError("Network request failed")).code).toBe("CHK-NET");
+    expect(checkinFormLoadFailure(Object.assign(new Error("x"), { name: "AbortError" })).code).toBe("CHK-NET");
     const other = checkinFormLoadFailure(new Error("secret detail"));
     expect(other.code).toBe("CHK-UNK");
     expect(other.message).not.toContain("secret");

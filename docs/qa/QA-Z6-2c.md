@@ -29,6 +29,10 @@ PASS means the answers shown are the real ones from the pinned form, in form ord
 
 Not captured: nothing in the spec's list was skipped except the saved-state toast of frame 75 (see above). Android renders of the trainee form steps are included for the iOS and Android sizes.
 
+## Fix round
+
+After review: the 75 shots (393×852 and 412×915) and `trainee-form-1-measurements-untouched-393x852.png` were re-captured on a fresh local seed (same v2-shaped form built the same way, Pooja's check-in submitted through the API, Meera's re-pinned with the local SQL update). Rating tiles now wrap at three per row at their normal size (Hunger no longer stretches full width) and the "Last: …" weight hint shows as an underlined indigo link while the weight is unanswered. The other Android trainee shots were not re-captured; they predate the hint styling and the 75 tile change does not touch them.
+
 ## Other screenshots
 
 `trainee-form-*` show the form: all 15 questions of the pinned form in order across the three steps (untouched weight shows "—" with the last weight as a "Last: Sat 31 Oct · 62.4 kg" hint; the steppers show "—" until the trainee presses them), and `trainee-review-before-send-*` shows only the answered questions with units.
