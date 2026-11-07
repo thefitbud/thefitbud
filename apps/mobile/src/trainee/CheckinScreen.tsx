@@ -12,13 +12,16 @@ import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   Checkin,
-  CheckinDraftAnswers,
   CheckinFieldDefinition,
   CheckinFormVersion,
   CheckinReviewOutcome,
   CoachingRelationship,
 } from "@fitbud/contracts";
-import { formatCivilDate, zonedDateTimeFormat } from "@fitbud/core";
+import {
+  checkinAnswerEntries,
+  formatCivilDate,
+  zonedDateTimeFormat,
+} from "@fitbud/core";
 import {
   colors,
   radii,
@@ -28,12 +31,24 @@ import {
 } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { reportError } from "../lib/reportError";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { addDays, localDateInTimezone } from "../lib/dates";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
+import {
+  answersToPayload,
+  checkinFormLoadFailure,
+  decodeChoiceList,
+  draftBody,
+  encodeChoiceList,
+  hasBodyWeightField,
+  lastWeightHint,
+  submitBody,
+  valuesFromStoredAnswers,
+} from "./checkinAnswers";
 import { messageFromSyncResults, subscribeAll } from "./dataCache";
 import {
   pickNextScheduledCheckin,
@@ -109,55 +124,88 @@ function canEditCheckin(status: Checkin["status"]): boolean {
   return status === "due" || status === "overdue";
 }
 
-function answersToPayload(
-  fields: CheckinFieldDefinition[],
-  values: Record<string, string>,
-): CheckinDraftAnswers {
-  const fieldAnswers: Record<string, string | number | boolean> = {};
-  let wellbeing: string | undefined;
-  let notes: string | null | undefined;
-  let bodyWeightKg: number | null | undefined;
+type SentEntry = ReturnType<typeof checkinAnswerEntries>[number];
 
-  for (const field of fields) {
-    const raw = values[field.id] ?? "";
-    if (
-      field.id === "wellbeing" ||
-      field.label.toLowerCase().includes("wellbeing") ||
-      field.label.toLowerCase().includes("feeling")
-    ) {
-      wellbeing = raw.trim() || undefined;
-    }
-    if (field.id === "notes") {
-      notes = raw.trim() || null;
-    }
-    if (
-      field.type === "measurement" &&
-      field.measurementType === "body_weight_kg"
-    ) {
-      const n = raw.trim() ? Number(raw) : null;
-      bodyWeightKg = n != null && Number.isFinite(n) ? n : null;
-    }
-    if (!raw.trim() && field.type !== "yes_no") continue;
-    if (
-      field.type === "number" ||
-      field.type === "measurement" ||
-      field.type === "scale_1_5"
-    ) {
-      const n = Number(raw);
-      if (Number.isFinite(n)) fieldAnswers[field.id] = n;
-    } else if (field.type === "yes_no") {
-      if (raw === "yes" || raw === "no") fieldAnswers[field.id] = raw === "yes";
-    } else {
-      fieldAnswers[field.id] = raw;
-    }
+/** One submitted answer as the trainee reads it. */
+function sentEntryText(
+  entry: SentEntry,
+  field: CheckinFieldDefinition | undefined,
+): string {
+  const { value } = entry;
+  if (entry.type === "photo_intent") return "Photo noted";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const optionLabel = (id: string) =>
+    field && (field.type === "single_choice" || field.type === "multiple_choice")
+      ? (field.options.find((o) => o.id === id)?.label ?? id)
+      : id;
+  if (Array.isArray(value)) return value.map(optionLabel).join(", ");
+  if (typeof value === "number") {
+    if (entry.type === "scale_1_5") return `${value} of 5`;
+    return entry.unit ? `${value} ${entry.unit}` : String(value);
   }
+  if (typeof value === "string") {
+    return entry.type === "single_choice" ? optionLabel(value) : value;
+  }
+  return "";
+}
 
-  return {
-    ...(wellbeing ? { wellbeing } : {}),
-    ...(notes !== undefined ? { notes } : {}),
-    ...(bodyWeightKg !== undefined ? { bodyWeightKg } : {}),
-    ...(Object.keys(fieldAnswers).length > 0 ? { fieldAnswers } : {}),
-  };
+/** Sent state (frame 100): weight and photo count from the real answers. */
+function SentTiles({ entries }: { entries: SentEntry[] }) {
+  const weight = entries.find(
+    (entry) =>
+      entry.type === "measurement" &&
+      entry.unit === "kg" &&
+      typeof entry.value === "number",
+  );
+  const photos = entries.filter((entry) => entry.type === "photo_intent").length;
+  if (!weight && photos === 0) return null;
+  return (
+    <View style={styles.sentTiles}>
+      {weight ? (
+        <View style={styles.sentTile}>
+          <Text style={styles.sentTileValue}>{String(weight.value)} kg</Text>
+          <Text style={styles.sentTileLabel}>Weight</Text>
+        </View>
+      ) : null}
+      {photos > 0 ? (
+        <View style={styles.sentTile}>
+          <Text style={styles.sentTileValue}>{photos}</Text>
+          <Text style={styles.sentTileLabel}>{photos === 1 ? "Photo" : "Photos"}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Reviewed state (frame 101): "What you sent", answered questions in form order. */
+function SentList({
+  entries,
+  fields,
+}: {
+  entries: SentEntry[];
+  fields: readonly CheckinFieldDefinition[];
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <View>
+      <Text style={styles.sentHeading} accessibilityRole="header">
+        What you sent
+      </Text>
+      <View style={styles.banner}>
+        {entries.map((entry) => (
+          <View key={entry.fieldId} style={styles.reviewRow}>
+            <Text style={styles.reviewLabel}>{entry.label}</Text>
+            <Text style={styles.reviewValue}>
+              {sentEntryText(
+                entry,
+                fields.find((f) => f.id === entry.fieldId),
+              )}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 function FieldControl({
@@ -165,13 +213,14 @@ function FieldControl({
   value,
   onChange,
   onBlur,
-  lastWeightLabel,
+  lastWeight,
 }: {
   field: CheckinFieldDefinition;
   value: string;
   onChange: (next: string) => void;
   onBlur: () => void;
-  lastWeightLabel?: string | null;
+  /** Last stored weight: a hint only, never an answer until confirmed or changed. */
+  lastWeight?: { value: number; label: string } | null;
 }) {
   const label = `${field.label}${field.required ? " *" : ""}`;
 
@@ -240,6 +289,48 @@ function FieldControl({
     );
   }
 
+  if (field.type === "single_choice" || field.type === "multiple_choice") {
+    const multiple = field.type === "multiple_choice";
+    const picked = multiple ? decodeChoiceList(value) : [value];
+    return (
+      <View style={styles.field}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.scaleRow}>
+          {field.options.map((option) => {
+            const on = picked.includes(option.id);
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`${field.label} ${option.label}`}
+                onPress={() => {
+                  if (multiple) {
+                    onChange(
+                      encodeChoiceList(
+                        on
+                          ? picked.filter((id) => id !== option.id)
+                          : [...picked, option.id],
+                      ),
+                    );
+                  } else {
+                    onChange(on ? "" : option.id);
+                  }
+                  onBlur();
+                }}
+                style={[styles.scaleChip, on ? styles.scaleChipOn : null]}
+              >
+                <Text style={on ? styles.scaleChipTextOn : styles.scaleChipText}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
   if (field.type === "photo_intent") {
     const slot =
       field.photoSlot === "front"
@@ -290,18 +381,37 @@ function FieldControl({
         : field.unit ?? "cm";
     const step = field.measurementType === "body_weight_kg" ? 0.1 : 0.5;
     const numeric = Number(value);
-    const current = Number.isFinite(numeric) && numeric > 0 ? numeric : 70;
+    const answered = value.trim() !== "" && Number.isFinite(numeric) && numeric > 0;
+    // Steppers start from the last weight (weight only) or 70, but nothing is
+    // an answer until the trainee presses a stepper button or confirms the hint.
+    const current = answered
+      ? numeric
+      : field.measurementType === "body_weight_kg" && lastWeight
+        ? lastWeight.value
+        : 70;
+    const shown = answered ? String(numeric) : "—";
     if (field.measurementType === "body_weight_kg") {
       return (
         <View style={styles.wbig}>
           <View>
             <Text style={styles.ov}>Weight</Text>
             <Text style={styles.wbigVal}>
-              {current}
+              {shown}
               <Text style={styles.wbigUnit}>kg</Text>
             </Text>
-            {lastWeightLabel ? (
-              <Text style={styles.lastWeight}>Last: {lastWeightLabel}</Text>
+            {lastWeight ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Use last weight, ${lastWeight.label}`}
+                disabled={answered}
+                onPress={() => {
+                  onChange(String(lastWeight.value));
+                  onBlur();
+                }}
+                style={styles.lastWeightBtn}
+              >
+                <Text style={styles.lastWeight}>Last: {lastWeight.label}</Text>
+              </Pressable>
             ) : null}
           </View>
           <View style={styles.rstp}>
@@ -339,9 +449,7 @@ function FieldControl({
           <Text style={styles.mrowTitle}>{field.label}</Text>
           {field.helpText ? (
             <Text style={styles.help}>{field.helpText}</Text>
-          ) : (
-            <Text style={styles.help}>Measure at the navel</Text>
-          )}
+          ) : null}
         </View>
         <View style={styles.stp}>
           <Pressable
@@ -357,7 +465,7 @@ function FieldControl({
             <Minus size={18} color={colors.indigo} strokeWidth={2.2} />
           </Pressable>
           <Text style={styles.stpVal}>
-            {current}
+            {shown}
             <Text style={styles.stpUnit}>{unit}</Text>
           </Text>
           <Pressable
@@ -414,7 +522,12 @@ export function CheckinScreen({
   const [values, setValues] = useState<Record<string, string>>({});
   const [recordVersion, setRecordVersion] = useState(checkin.recordVersion);
   const [wizardStep, setWizardStep] = useState(0);
-  const [lastWeightLabel, setLastWeightLabel] = useState<string | null>(null);
+  const [lastWeight, setLastWeight] = useState<{
+    value: number;
+    label: string;
+  } | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formNonce, setFormNonce] = useState(0);
   const [step, setStep] = useState<Step>(
     checkin.recordStatus === "submitted" || checkin.status === "reviewed"
       ? "done"
@@ -446,117 +559,54 @@ export function CheckinScreen({
     void (async () => {
       setLoading(true);
       setError(null);
+      setFormError(null);
       try {
         const loaded = await api.getCheckinForm(checkin.id);
         if (cancelled) return;
         setForm(loaded);
-        const initial: Record<string, string> = {};
-        for (const field of loaded.fields) {
-          const fromAnswers = checkin.answers?.fieldAnswers?.[field.id];
-          if (typeof fromAnswers === "string") initial[field.id] = fromAnswers;
-          else if (typeof fromAnswers === "number")
-            initial[field.id] = String(fromAnswers);
-          else if (typeof fromAnswers === "boolean")
-            initial[field.id] = fromAnswers ? "yes" : "no";
-          if (field.id === "wellbeing" && checkin.answers?.wellbeing) {
-            initial[field.id] = checkin.answers.wellbeing;
-          }
-          if (field.id === "notes" && checkin.answers?.notes) {
-            initial[field.id] = checkin.answers.notes;
-          }
-          if (
-            field.type === "measurement" &&
-            field.measurementType === "body_weight_kg" &&
-            checkin.answers?.bodyWeightKg != null
-          ) {
-            initial[field.id] = String(checkin.answers.bodyWeightKg);
-          }
-        }
+        const initial = valuesFromStoredAnswers(loaded.fields, checkin.answers);
 
-        const needsWeightPrefill = loaded.fields.some(
+        // The last stored weight is shown as a hint only. It is not put in
+        // `initial`, so it is not counted or sent until the trainee confirms
+        // or changes it (D-W6-34).
+        const weightAnswered = loaded.fields.some(
           (f) =>
             f.type === "measurement" &&
             f.measurementType === "body_weight_kg" &&
-            !initial[f.id],
+            Boolean(initial[f.id]),
         );
-        if (needsWeightPrefill) {
+        if (hasBodyWeightField(loaded.fields) && !weightAnswered) {
           try {
             const progress = await api.getProgressSummary(relationship.id);
-            const latest = progress.measurements
-              .filter((m) => m.type === "body_weight_kg")
-              .sort((a, b) => b.observedAt.localeCompare(a.observedAt))[0];
-            if (latest) {
+            const latest = lastWeightHint(progress.measurements);
+            if (latest && !cancelled) {
               const lastDate = formatCivilDate(
                 localDateInTimezone(timeZone, new Date(latest.observedAt)),
                 { includeWeekday: true },
               );
-              const rounded =
-                Math.round(latest.value * 10) / 10;
-              setLastWeightLabel(
-                `${lastDate} · ${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} kg`,
-              );
-              for (const field of loaded.fields) {
-                if (
-                  field.type === "measurement" &&
-                  field.measurementType === "body_weight_kg"
-                ) {
-                  initial[field.id] = String(latest.value);
-                }
-              }
+              const rounded = Math.round(latest.value * 10) / 10;
+              setLastWeight({
+                value: latest.value,
+                label: `${lastDate} · ${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} kg`,
+              });
             }
-          } catch {
-            // Prefill is best-effort.
+          } catch (err) {
+            // The hint is optional; the form works without it.
+            reportError("checkin.lastWeight", err);
           }
         }
 
+        if (cancelled) return;
         setValues(initial);
         setOffline(false);
       } catch (err) {
         if (cancelled) return;
-        setOffline(true);
-        setForm({
-          id: checkin.checkinFormVersionId,
-          templateId: checkin.checkinFormVersionId,
-          key: "fallback",
-          version: 1,
-          scope: "global",
-          fields: [
-            {
-              id: "wellbeing",
-              label: "How are you feeling?",
-              type: "short_text",
-              required: true,
-              maxLength: 1000,
-            },
-            {
-              id: "notes",
-              label: "Optional notes",
-              type: "long_text",
-              required: false,
-            },
-            {
-              id: "body_weight",
-              label: "Body weight",
-              type: "measurement",
-              measurementType: "body_weight_kg",
-              required: false,
-            },
-          ],
-          createdAt: new Date().toISOString(),
-        });
-        setValues({
-          wellbeing: checkin.answers?.wellbeing ?? "",
-          notes: checkin.answers?.notes ?? "",
-          body_weight:
-            checkin.answers?.bodyWeightKg != null
-              ? String(checkin.answers.bodyWeightKg)
-              : "",
-        });
-        setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Couldn't load the form. Showing a simple draft.",
-        );
+        // No invented form: the check-in cannot be filled in until the pinned
+        // form loads. A saved draft stays on the server and in the sync queue.
+        reportError("checkin.loadForm", err);
+        const failure = checkinFormLoadFailure(err);
+        setForm(null);
+        setFormError(failure.message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -564,10 +614,16 @@ export function CheckinScreen({
     return () => {
       cancelled = true;
     };
-  }, [api, checkin, relationship.id]);
+  }, [api, checkin, relationship.id, timeZone, formNonce]);
 
   const fields = useMemo(() => form?.fields ?? [], [form]);
   const sections = useMemo(() => groupFields(fields), [fields]);
+  // What was really answered, in the pinned form's order (never `wellbeing`
+  // "OK" or any other value the trainee did not enter).
+  const sentEntries = useMemo(
+    () => checkinAnswerEntries(fields, answersToPayload(fields, values)),
+    [fields, values],
+  );
   const visibleSections = useMemo(() => {
     const allowed = new Set(
       WIZARD_STEPS[wizardStep]?.sectionTitles ?? WIZARD_STEPS[0].sectionTitles,
@@ -584,7 +640,6 @@ export function CheckinScreen({
       await draftInFlight.current;
     }
     const expected = recordVersionRef.current;
-    const answers = answersToPayload(fields, valuesRef.current);
     const pushDraft = (etag: number) =>
       enqueueAndPush(sync, {
         recordId: checkin.id,
@@ -592,10 +647,7 @@ export function CheckinScreen({
         expectedServerVersion: etag,
         payload: {
           checkinId: checkin.id,
-          body: {
-            expectedVersion: etag,
-            answers,
-          },
+          body: draftBody(etag, fields, valuesRef.current),
         },
       });
     const run = (async () => {
@@ -711,26 +763,13 @@ export function CheckinScreen({
         // keep ref
       }
       const expected = recordVersionRef.current;
-      const answers = answersToPayload(fields, values);
-      const wellbeing =
-        answers.wellbeing ??
-        values[fields.find((f) => f.required)?.id ?? ""] ??
-        "OK";
       const { results } = await enqueueAndPush(sync, {
         recordId: checkin.id,
         operation: "checkin.submit",
         expectedServerVersion: expected,
         payload: {
           checkinId: checkin.id,
-          body: {
-            expectedVersion: expected,
-            answers: {
-              wellbeing,
-              notes: answers.notes ?? null,
-              bodyWeightKg: answers.bodyWeightKg ?? null,
-              fieldAnswers: answers.fieldAnswers,
-            },
-          },
+          body: submitBody(expected, fields, values),
         },
       });
       const conflict = results.some(
@@ -757,15 +796,7 @@ export function CheckinScreen({
             expectedServerVersion: fresh.recordVersion,
             payload: {
               checkinId: checkin.id,
-              body: {
-                expectedVersion: fresh.recordVersion,
-                answers: {
-                  wellbeing,
-                  notes: answers.notes ?? null,
-                  bodyWeightKg: answers.bodyWeightKg ?? null,
-                  fieldAnswers: answers.fieldAnswers,
-                },
-              },
+              body: submitBody(fresh.recordVersion, fields, values),
             },
           });
           const retryMsg = messageFromSyncResults(retry.results, coach);
@@ -860,6 +891,7 @@ export function CheckinScreen({
             </View>
           ) : null}
         </View>
+        <SentList entries={sentEntries} fields={fields} />
         <PrimaryButton label="Back to Today" onPress={onDone} />
       </Screen>
     );
@@ -880,6 +912,7 @@ export function CheckinScreen({
             Nothing else is required for this check-in.
           </Text>
         </View>
+        <SentTiles entries={sentEntries} />
         <PrimaryButton label="Back to Today" onPress={onDone} />
       </Screen>
     );
@@ -906,10 +939,22 @@ export function CheckinScreen({
                       : "No"
                     : field.type === "photo_intent"
                       ? "Photo noted"
-                      : field.type === "measurement" &&
-                          field.measurementType === "body_weight_kg"
-                        ? `${raw} kg`
-                        : raw}
+                      : field.type === "measurement"
+                        ? `${raw} ${
+                            field.measurementType === "body_weight_kg"
+                              ? "kg"
+                              : (field.unit ?? "cm")
+                          }`
+                        : field.type === "multiple_choice"
+                          ? decodeChoiceList(raw)
+                              .map(
+                                (id) =>
+                                  field.options.find((o) => o.id === id)?.label ?? id,
+                              )
+                              .join(", ")
+                          : field.type === "single_choice"
+                            ? (field.options.find((o) => o.id === raw)?.label ?? raw)
+                            : raw}
                 </Text>
               </View>
             );
@@ -1019,8 +1064,12 @@ export function CheckinScreen({
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Form unavailable</Text>
           <Text style={styles.bannerBody}>
-            Pull back to Today and try again when you're online.
+            {formError ?? "Couldn't open the check-in. Try again."}
           </Text>
+          <PrimaryButton
+            label="Try again"
+            onPress={() => setFormNonce((n) => n + 1)}
+          />
         </View>
       ) : null}
 
@@ -1066,7 +1115,7 @@ export function CheckinScreen({
                     key={field.id}
                     field={field}
                     value={values[field.id] ?? ""}
-                    lastWeightLabel={lastWeightLabel}
+                    lastWeight={lastWeight}
                     onChange={(next) => {
                       setValues((current) => ({ ...current, [field.id]: next }));
                       scheduleDraftSave();
@@ -1497,6 +1546,33 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 18,
     fontWeight: "600",
+  },
+  sentTiles: {
+    backgroundColor: colors.white,
+    borderColor: "#E7E9F2",
+    borderRadius: radii.card,
+    borderWidth: 1,
+    flexDirection: "row",
+    marginBottom: spacing.lg,
+    overflow: "hidden",
+  },
+  sentTile: {
+    borderRightColor: "#E7E9F2",
+    borderRightWidth: 1,
+    flex: 1,
+    padding: spacing.md,
+  },
+  sentTileValue: { color: colors.deepNavy, fontSize: 20 },
+  sentTileLabel: { color: colors.midGrey, fontSize: 14, marginTop: 4 },
+  sentHeading: {
+    color: colors.deepNavy,
+    fontSize: 17,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+  },
+  lastWeightBtn: {
+    justifyContent: "center",
+    minHeight: touchTargetMin,
   },
   lastWeight: {
     color: colors.midGrey,

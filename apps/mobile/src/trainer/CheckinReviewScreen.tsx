@@ -17,6 +17,7 @@ import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
 import { StatusChip } from "../components/StatusChip";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { checkinReviewRows, type ReviewMeasureTile } from "./checkinReviewRows";
 
 const OUTCOMES: Array<{ value: CheckinReviewOutcome; label: string }> = [
   { value: "acknowledged", label: labelFor("checkin_review_outcome", "acknowledged") },
@@ -31,22 +32,12 @@ type Props = {
   onOpenClient: (relationshipId: string) => void;
 };
 
-function answerText(answers: Record<string, unknown> | null, key: string): string {
-  const value = answers?.[key];
-  return typeof value === "string" ? value : "";
-}
-
-function answerNumber(answers: Record<string, unknown> | null, key: string): number | null {
-  const value = answers?.[key];
-  return typeof value === "number" ? value : null;
-}
-
 export function CheckinReviewScreen({
   checkinId,
   relationshipId,
   onBack,
 }: Props) {
-  const { api, me } = useAuth();
+  const { api } = useAuth();
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
   const [name, setName] = useState("Client");
   const [outcome, setOutcome] = useState<CheckinReviewOutcome>("needs_follow_up");
@@ -97,24 +88,14 @@ export function CheckinReviewScreen({
   }, [load]);
 
   const reviewed = Boolean(context?.checkin.review) || context?.checkin.status === "reviewed";
-  const answers = (context?.checkin.answers ?? null) as Record<string, unknown> | null;
   const first = name.split(" ")[0] || "them";
-  const scales = [
-    ["Energy", answerNumber(answers, "energy")],
-    ["Hunger", answerNumber(answers, "hunger")],
-    ["Stress", answerNumber(answers, "stress")],
-  ] as const;
-  const questions = [
-    ["What went well?", answerText(answers, "went_well") || answerText(answers, "wellbeing")],
-    ["What was hard?", answerText(answers, "was_hard") || answerText(answers, "notes")],
-    [
-      `Anything for ${formatPersonName(me?.email?.split("@")[0]?.split(".")[0] ?? "your coach").split(" ")[0]}?`,
-      answerText(answers, "for_coach"),
-    ],
-  ];
-
-  const weight = context?.measurements.filter((item) => item.type === "body_weight_kg") ?? [];
-  const waist = context?.measurements.filter((item) => item.type === "waist_cm") ?? [];
+  const rows = context
+    ? checkinReviewRows({
+        fields: context.pinnedForm.fields,
+        answers: context.checkin.answers,
+        measurements: context.measurements,
+      })
+    : { ratings: [], measures: [], texts: [] };
 
   async function save() {
     if (!context || reviewed || offline) return;
@@ -244,42 +225,37 @@ export function CheckinReviewScreen({
           ) : null}
         </View>
       ) : null}
-      {scales.some((item) => item[1] != null) ? (
+      {rows.ratings.length > 0 ? (
         <View style={styles.scales}>
-          {scales.map(([label, value]) =>
-            value == null ? null : (
-              <View key={label} style={styles.scale}>
-                <Text style={styles.scaleLabel}>{label}</Text>
-                <Text style={styles.scaleValue}>{value} of 5</Text>
-                <View style={styles.pips}>
-                  {Array.from({ length: 5 }, (_, index) => (
-                    <View
-                      key={index}
-                      style={[styles.pip, index < value ? styles.pipOn : null]}
-                    />
-                  ))}
-                </View>
+          {rows.ratings.map(({ fieldId, label, value }) => (
+            <View key={fieldId} style={styles.scale}>
+              <Text style={styles.scaleLabel}>{label}</Text>
+              <Text style={styles.scaleValue}>{value} of 5</Text>
+              <View style={styles.pips}>
+                {Array.from({ length: 5 }, (_, index) => (
+                  <View
+                    key={index}
+                    style={[styles.pip, index < value ? styles.pipOn : null]}
+                  />
+                ))}
               </View>
-            ),
-          )}
+            </View>
+          ))}
         </View>
       ) : null}
-      {questions.map(([label, value]) =>
-        value ? (
-          <View key={label} style={styles.block}>
-            <Text style={styles.q}>{label}</Text>
-            <Text style={styles.body}>{value}</Text>
-          </View>
-        ) : null,
-      )}
-      <View style={styles.measureRow}>
-        <Measure
-          label="Weight"
-          current={weight[0]}
-          previous={weight[1]}
-        />
-        <Measure label="Waist" current={waist[0]} previous={waist[1]} />
-      </View>
+      {rows.texts.map(({ fieldId, label, text }) => (
+        <View key={fieldId} style={styles.block}>
+          <Text style={styles.q}>{label}</Text>
+          <Text style={styles.body}>{text}</Text>
+        </View>
+      ))}
+      {rows.measures.length > 0 ? (
+        <View style={styles.measureRow}>
+          {rows.measures.map((item) => (
+            <Measure key={item.fieldId} item={item} />
+          ))}
+        </View>
+      ) : null}
       {(context?.photos.length ?? 0) > 0 ? (
         <Text style={styles.body}>{context?.photos.length} photos</Text>
       ) : null}
@@ -306,30 +282,18 @@ export function CheckinReviewScreen({
   );
 }
 
-function Measure({
-  label,
-  current,
-  previous,
-}: {
-  label: string;
-  current?: { value: string; unit?: string; observedAt: string };
-  previous?: { value: string; unit?: string; observedAt: string };
-}) {
-  if (!current) return <View style={styles.measure} />;
-  const delta =
-    previous && Number.isFinite(Number(current.value)) && Number.isFinite(Number(previous.value))
-      ? Number(current.value) - Number(previous.value)
-      : null;
+function Measure({ item }: { item: ReviewMeasureTile }) {
   return (
     <View style={styles.measure}>
-      <Text style={styles.scaleLabel}>{label}</Text>
+      <Text style={styles.scaleLabel}>{item.label}</Text>
       <Text style={styles.scaleValue}>
-        {current.value} {current.unit ?? ""}
+        {item.value} {item.unit}
       </Text>
-      {delta != null ? (
+      {item.since ? (
         <Text style={styles.delta}>
-          {delta > 0 ? "+" : ""}
-          {Number(delta.toFixed(1))} since {formatCivilDate(previous!.observedAt.slice(0, 10))}
+          {item.since.delta > 0 ? "+" : ""}
+          {item.since.delta} since{" "}
+          {formatCivilDate(item.since.previousObservedAt.slice(0, 10))}
         </Text>
       ) : null}
     </View>
@@ -339,13 +303,14 @@ function Measure({
 const styles = StyleSheet.create({
   back: { minHeight: 44, justifyContent: "center", width: 44 },
   backText: { color: colors.indigo, fontSize: 28 },
-  scales: { flexDirection: "row", gap: 8, marginTop: 8 },
+  scales: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   scale: {
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
     borderRadius: 16,
     borderWidth: 1,
-    flex: 1,
+    flexBasis: "30%",
+    flexGrow: 1,
     padding: 10,
   },
   scaleLabel: { color: colors.midGrey, fontSize: 13 },
@@ -361,13 +326,14 @@ const styles = StyleSheet.create({
   block: { marginTop: 16 },
   q: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 16 },
   body: { color: colors.nearBlack, fontSize: 16, lineHeight: 22, marginTop: 4 },
-  measureRow: { flexDirection: "row", gap: 8, marginTop: 16 },
+  measureRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
   measure: {
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
     borderRadius: 16,
     borderWidth: 1,
-    flex: 1,
+    flexBasis: "45%",
+    flexGrow: 1,
     padding: 12,
   },
   delta: { color: colors.midGrey, fontSize: 13, marginTop: 4 },
