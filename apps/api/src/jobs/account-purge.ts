@@ -3,6 +3,7 @@ import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core";
 import { createDb, type Db } from "../db/client.js";
 import {
   clientInvitations,
+  coachingRelationships,
   mediaAssets,
   traineeProfiles,
   trainerProfiles,
@@ -82,6 +83,11 @@ export type PersonValues = {
   emails: string[];
   mobile: string | null;
   names: string[];
+  /**
+   * Contact phones trainers keep for the person on their relationships
+   * (`coaching_relationships.contact_phone_e164`, Z6-8b), scrubbed like `mobile`.
+   */
+  contactPhones?: string[];
 };
 
 class PurgeStepError extends Error {
@@ -224,10 +230,25 @@ async function loadPersonValues(db: Db, userId: string): Promise<PersonValues> {
     .select({ name: clientInvitations.recipientDisplayName })
     .from(clientInvitations)
     .where(eq(clientInvitations.acceptedUserId, userId));
-  const names = unique([trainer?.name, trainee?.name, ...invited.map((row) => row.name)]).filter(
-    (name) => name !== DELETED_USER_NAME,
+  // Z6-8b: what the person's trainers set for them (a name and a contact phone).
+  const trainerSet = await db
+    .select({
+      name: coachingRelationships.clientDisplayName,
+      phone: coachingRelationships.contactPhoneE164,
+    })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.traineeUserId, userId));
+  const names = unique([
+    trainer?.name,
+    trainee?.name,
+    ...invited.map((row) => row.name),
+    ...trainerSet.map((row) => row.name),
+  ]).filter((name) => name !== DELETED_USER_NAME);
+  const mobile = identity?.mobile?.trim() || null;
+  const contactPhones = unique(trainerSet.map((row) => row.phone)).filter(
+    (phone) => phone !== mobile,
   );
-  return { emails, mobile: identity?.mobile?.trim() || null, names };
+  return { emails, mobile, names, contactPhones };
 }
 
 function unique(values: Array<string | null | undefined>): string[] {
@@ -286,14 +307,27 @@ function nationalDigits(mobile: string | null): { national: string; country: str
   return { national: digits.slice(-10), country: digits.slice(0, -10) };
 }
 
+/** The sign-in phone and every trainer-kept contact phone, split for matching. */
+function personPhones(values: PersonValues): Array<{ national: string; country: string }> {
+  const seen = new Set<string>();
+  const phones: Array<{ national: string; country: string }> = [];
+  for (const raw of [values.mobile, ...(values.contactPhones ?? [])]) {
+    const phone = nationalDigits(raw);
+    if (!phone || seen.has(`${phone.country}:${phone.national}`)) continue;
+    seen.add(`${phone.country}:${phone.national}`);
+    phones.push(phone);
+  }
+  return phones;
+}
+
 export function buildScrubber(values: PersonValues): Scrubber | null {
   const rules: Array<[RegExp, string]> = [];
   const emails = unique(values.emails.map((email) => email.toLowerCase()));
   for (const email of emails) {
     rules.push([new RegExp(escapeRegExp(email), "giu"), REMOVED_TEXT]);
   }
-  const phone = nationalDigits(values.mobile);
-  if (phone) {
+  const phones = personPhones(values);
+  for (const phone of phones) {
     const national = phone.national.split("").join("[\\s-]?");
     const country = phone.country ? `(?:\\+?${phone.country}[\\s-]?)?` : "";
     rules.push([new RegExp(`(?<![\\d+])${country}${national}(?!\\d)`, "gu"), REMOVED_TEXT]);
@@ -320,7 +354,7 @@ export function buildScrubber(values: PersonValues): Scrubber | null {
         ...emails.map((email) => sql`instr(lower(${column}), ${email}) > 0`),
         ...firstTokens.map((token) => sql`instr(lower(${column}), ${token}) > 0`),
       ];
-      if (phone) {
+      for (const phone of phones) {
         checks.push(sql`instr(replace(replace(${column}, ' ', ''), '-', ''), ${phone.national}) > 0`);
       }
       return sql.join(checks, sql` OR `);
@@ -407,8 +441,12 @@ async function purgeRows(
   const guard = sql`EXISTS (SELECT 1 FROM users g WHERE g.id = ${userId} AND g.account_state = 'archived' AND g.purge_after <= ${nowIso})`;
   const personRelationships = sql`SELECT r.id FROM coaching_relationships r WHERE r.trainer_user_id = ${userId} OR r.trainee_user_id = ${userId}`;
   const media = personMediaIds(userId);
-  const national = nationalDigits(values.mobile)?.national;
-  const contacts = unique([...values.emails, values.mobile, national]);
+  const contacts = unique([
+    ...values.emails,
+    values.mobile,
+    ...(values.contactPhones ?? []),
+    ...personPhones(values).map((phone) => phone.national),
+  ]);
   const otpHashes = await otpIdentifierHashes(values);
   const client = (db as Db & { $client?: D1Database }).$client;
   if (!client) throw new PurgeStepError("ACCOUNT_PURGE_DB_UNAVAILABLE");
@@ -467,6 +505,14 @@ async function purgeRows(
       WHERE user_id = ${userId} AND ${guard}`,
     sql`UPDATE trainer_profiles SET display_name = ${DELETED_USER_NAME}, whatsapp_e164 = NULL, updated_at = ${nowIso}
       WHERE user_id = ${userId} AND ${guard}`,
+
+    // Trainer-owned client basics on the relationship (Z6-8b, D-W6-34): a purged
+    // client's trainers see "Deleted user" and keep no contact phone; a purged
+    // trainer's copy of their clients' details goes (the clients' own data stays).
+    sql`UPDATE coaching_relationships SET client_display_name = ${DELETED_USER_NAME}, contact_phone_e164 = NULL
+      WHERE trainee_user_id = ${userId} AND ${guard}`,
+    sql`UPDATE coaching_relationships SET client_display_name = NULL, contact_phone_e164 = NULL
+      WHERE trainer_user_id = ${userId} AND ${guard}`,
   ];
 
   if (scrubber) {

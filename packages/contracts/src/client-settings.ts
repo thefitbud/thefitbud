@@ -1,4 +1,5 @@
 // W6 Z6-8: client settings (basic details read, subscription edit, payment records).
+// Z6-8b: the trainer-owned client name and contact phone (PATCH /basic).
 //
 // Tracking only (D-W6-5, PLAN-v2 D-P2-12): FitBud records what a client owes and
 // whether the trainer marked it paid. No collection, gateway, invoice or session
@@ -102,11 +103,53 @@ export const paymentRecordSchema = z.object({
 export type PaymentRecord = z.infer<typeof paymentRecordSchema>;
 
 export const clientSettingsBasicsSchema = z.object({
+  /** The client's own profile name (read only here). */
   displayName: z.string(),
-  /** As stored at sign-up; null when the client has no phone on file. */
+  /** The client's sign-in phone as stored at sign-up (read only); null when none. */
   phoneE164: z.string().nullable(),
+  /**
+   * Z6-8b (D-W6-42): the name this trainer set for the client on this
+   * relationship; null when not set. Never shown to the client.
+   */
+  clientDisplayName: z.string().nullable(),
+  /**
+   * Z6-8b (D-W6-42): the contact phone this trainer keeps for the client, as
+   * `+<digits>`; null when not set. Separate from the sign-in phone.
+   */
+  contactPhoneE164: z.string().nullable(),
 });
 export type ClientSettingsBasics = z.infer<typeof clientSettingsBasicsSchema>;
+
+/** Same bound as display names elsewhere (trainer profile, plan names). */
+export const CLIENT_DISPLAY_NAME_MAX_LENGTH = 120;
+
+/**
+ * PATCH /client-settings/relationships/:id/basic (Z6-8b, D-W6-42). Changes only
+ * the trainer-owned name and contact phone on the relationship; the client's
+ * profile name and sign-in phone never change. Each field is optional, `null`
+ * clears it, and at least one must be sent. The phone follows the trainer
+ * profile's WhatsApp rule: the server normalises it and stores `+<digits>`.
+ * There is no goal field: the goal stays in Coaching setup.
+ */
+export const updateClientBasicsRequestSchema = z
+  .object({
+    displayName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(CLIENT_DISPLAY_NAME_MAX_LENGTH)
+      .nullable()
+      .optional(),
+    contactPhone: z.string().trim().min(8).max(20).nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (value) => value.displayName !== undefined || value.contactPhone !== undefined,
+    { message: "Nothing to update" },
+  );
+export type UpdateClientBasicsRequest = z.infer<
+  typeof updateClientBasicsRequestSchema
+>;
 
 export const clientSettingsResponseSchema = z.object({
   relationshipId: uuidSchema,

@@ -278,5 +278,12 @@
     "when": 1730736000000,
     "tag": "0039_log_authorship",
     "breakpoints": true
+  },
+  {
+    "idx": 40,
+    "version": "7",
+    "when": 1730822400000,
+    "tag": "0040_client_basics",
+    "breakpoints": true
   }
 ]
