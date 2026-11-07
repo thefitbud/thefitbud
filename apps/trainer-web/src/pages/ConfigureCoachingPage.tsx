@@ -28,6 +28,7 @@ import {
   GLOBAL_CHECKIN_FORM_VERSION_ID,
   consistencyFingerprint,
   formatCivilDate,
+  formatRelative,
   labelFor,
   planConsistencyWarnings,
   possessivePronoun,
@@ -97,6 +98,31 @@ function checkinFormOptionValue(
 
 function firstNameOf(displayName: string): string {
   return displayName.trim().split(/\s+/)[0] || "Client";
+}
+
+/** Civil "Wed 21 Oct" for an ended-at instant, in the trainee's timezone. */
+function endedDateLabel(
+  endedAt: string | null | undefined,
+  timeZone: string | null | undefined,
+): string | null {
+  if (!endedAt) return null;
+  const instant = new Date(endedAt);
+  if (Number.isNaN(instant.getTime())) return null;
+  const zone = timeZone?.trim() || "Asia/Kolkata";
+  let civil: string;
+  try {
+    civil = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(instant);
+  } catch {
+    civil = endedAt.slice(0, 10);
+  }
+  const label = formatCivilDate(civil);
+  if (!label || /^\d{4}-\d{2}-\d{2}/.test(label)) return null;
+  return label;
 }
 
 
@@ -430,7 +456,13 @@ export function ConfigureCoachingPage() {
       (c) => !reminders[c.type],
     ).map((c) => c.label.toLowerCase() + "s");
     let reminderSummary = "All off";
-    if (onReminders.length && offReminders.length) {
+    if (relationshipEnded) {
+      if (onReminders.length && offReminders.length) {
+        reminderSummary = `${onReminders.join(" and ")} · off for ${offReminders.join(" and ")}`;
+      } else if (onReminders.length) {
+        reminderSummary = onReminders.join(" and ");
+      }
+    } else if (onReminders.length && offReminders.length) {
       reminderSummary = `On for ${onReminders.join(" and ")} · off for ${offReminders.join(" and ")}`;
     } else if (onReminders.length) {
       reminderSummary = `On for ${onReminders.join(" and ")}`;
@@ -458,10 +490,12 @@ export function ConfigureCoachingPage() {
         trackingBits.length > 0 ? trackingBits.join(" · ") : "Nothing required",
       reminders: reminderSummary,
       subscription: subscriptionForm.planName.trim()
-        ? `${freqLabel}${renewCivil ? ` · renews ${renewCivil}` : ""}`
+        ? relationshipEnded
+          ? freqLabel
+          : `${freqLabel}${renewCivil ? ` · renews ${renewCivil}` : ""}`
         : "No subscription yet",
     };
-  }, [checkinForms, form, reminders, subscriptionForm]);
+  }, [checkinForms, form, relationshipEnded, reminders, subscriptionForm]);
 
   async function onAcknowledgeDifference() {
     if (
@@ -730,10 +764,25 @@ export function ConfigureCoachingPage() {
     : null;
 
   const statusKey = status ?? "draft";
-  const statusLabel =
-    status == null
+  const statusLabel = relationshipEnded
+    ? "Ended"
+    : status == null
       ? "Draft"
       : labelFor("coaching_configuration_status", statusKey);
+  const endedOn = relationshipEnded
+    ? endedDateLabel(header?.endedAt, header?.traineeTimezone)
+    : null;
+  const pageTitle = relationshipEnded
+    ? "Coaching setup (ended)"
+    : "Configure coaching";
+  const pageLede = relationshipEnded
+    ? endedOn
+      ? `Coaching with ${firstName} ended on ${endedOn}. This is the setup you last used.`
+      : `Coaching with ${firstName} has ended. This is the setup you last used.`
+    : `Set the baseline for ${firstName}: goals, expectations, reminders, and subscription.`;
+  const pendingReactivation = relationshipEnded
+    ? (header?.pendingReactivation ?? null)
+    : null;
 
   const primaryAction = (() => {
     if (relationshipEnded) return null;
@@ -801,11 +850,8 @@ export function ConfigureCoachingPage() {
       data-testid="screen-TW-11"
     >
       <header className="configure-page-header">
-        <h2 className="configure-page-title">Configure coaching</h2>
-        <p className="lede">
-          Set the baseline for {firstName}: goals, expectations, reminders, and
-          subscription.
-        </p>
+        <h2 className="configure-page-title">{pageTitle}</h2>
+        <p className="lede">{pageLede}</p>
       </header>
 
       {header?.onboardingStatus !== "coaching_ready" &&
@@ -825,9 +871,17 @@ export function ConfigureCoachingPage() {
         </p>
       ) : null}
 
-      {header?.onboardingStatus === "ended" ? (
-        <p className="banner-info" role="status">
-          This coaching relationship has ended. Configuration is read-only.
+      {pendingReactivation ? (
+        <p
+          className="banner-info"
+          role="status"
+          data-testid="configure-pending-reactivation"
+        >
+          {`Waiting for ${firstName} to confirm${
+            pendingReactivation.sentAt
+              ? ` · sent ${formatRelative(pendingReactivation.sentAt)}`
+              : ""
+          }`}
         </p>
       ) : null}
 
@@ -1208,7 +1262,7 @@ export function ConfigureCoachingPage() {
                 {firstName} in the app for now.
               </p>
             )}
-            {openWhatsappHref ? (
+            {relationshipEnded ? null : openWhatsappHref ? (
               <a
                 className="button-secondary button-whatsapp"
                 href={openWhatsappHref}
@@ -1353,7 +1407,11 @@ export function ConfigureCoachingPage() {
 
       <footer className="screen-sticky-footer configure-sticky-footer">
         <span
-          className={`status-badge status-${statusKey}`}
+          className={
+            relationshipEnded
+              ? "status-badge"
+              : `status-badge status-${statusKey}`
+          }
           data-testid="configure-status-pill"
         >
           <span className="status-dot" aria-hidden="true" />
