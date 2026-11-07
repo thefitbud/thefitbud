@@ -441,6 +441,44 @@ describe("check-in submit follows the pinned form (Z6-2b)", () => {
     expect(successor.checkinFormVersionId).toBe(versionId);
   });
 
+  it("ensure-due after a submitted global v1 check-in creates the next one on v2 (Z6-2)", async () => {
+    const ctx = await reachActive("ensurev1");
+    const weekAgo = formatLocalDate(new Date(Date.now() - 7 * 86_400_000), TZ);
+    const scheduled = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule`,
+      "fr-sched-ensurev1",
+      { localDate: weekAgo, checkinFormVersionId: GLOBAL_CHECKIN_FORM_V1_VERSION_ID },
+    );
+    expect(scheduled.status).toBe(200);
+    const source = ((await scheduled.json()) as { data: { checkin: ScheduledCheckin } }).data
+      .checkin;
+    expect(source.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+    const submitted = await submit(ctx, source, "fr-submit-ensurev1", { wellbeing: "Steady" });
+    expect(submitted.status, await submitted.clone().text()).toBe(200);
+
+    const ensured = await asTrainee(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/ensure-due`,
+      "fr-ensure-ensurev1",
+      {},
+    );
+    expect(ensured.status, await ensured.clone().text()).toBe(200);
+    const body = (await ensured.json()) as {
+      data: { checkin: ScheduledCheckin; created: boolean };
+    };
+    expect(body.data.created).toBe(true);
+    expect(body.data.checkin.id).not.toBe(source.id);
+    expect(body.data.checkin.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V2_VERSION_ID);
+    const [stored] = await db
+      .select()
+      .from(schema.checkins)
+      .where(eq(schema.checkins.id, source.id));
+    expect(stored!.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+  });
+
   it("rejects a v1 submit without wellbeing with 422 CHECKIN_ANSWERS_INCOMPLETE", async () => {
     const ctx = await reachActive("v1missing");
     // v1 is no longer the default (Z6-2); a schedule that pins it keeps it.

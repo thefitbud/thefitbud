@@ -2,7 +2,7 @@
 --
 -- Insert-only. Version 1 and every check-in pinned to it are untouched, and the
 -- insert-only trigger from 0019 stays in place. New assignments pin v2 through
--- GLOBAL_CHECKIN_FORM_VERSION_ID in packages/core (D-W6-18); schedules that explicitly
+-- GLOBAL_CHECKIN_FORM_VERSION_ID in packages/core (D-W6-41, D-W6-42, D-W6-43); schedules that explicitly
 -- prefer a version keep it.
 INSERT INTO `checkin_form_versions` (
 	`id`,
