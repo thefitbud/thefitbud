@@ -1,0 +1,64 @@
+/* Week-day circle. Each state is a different shape, not colour alone. */
+
+.week-circle {
+  box-sizing: border-box;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+  color: var(--ink-400, #858b96);
+}
+
+.week-circle--done {
+  background: var(--deep-navy, #1a1248);
+  color: #fff;
+}
+
+.week-circle--missed {
+  border: 1.5px solid var(--semantic-critical-text, #b91c1c);
+  color: var(--semantic-critical-text, #b91c1c);
+  background: #fff;
+}
+
+/* Started, not finished — including a past day with real progress. */
+.week-circle--partial {
+  border: 1.5px solid var(--semantic-attention-text, #b45309);
+  background: #fff;
+  color: var(--semantic-attention-text, #b45309);
+}
+
+.week-circle__half {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 1.125rem 0 0 1.125rem;
+  background: var(--semantic-attention-text, #b45309);
+}
+
+/* Unlogged today: open ring. "To do", not the half circle. */
+.week-circle--due {
+  border: 1.5px solid var(--ink-400, #858b96);
+  background: #fff;
+}
+
+/* Later day: dashed ring, empty. */
+.week-circle--future {
+  border: 1.5px dashed #cfd3e0;
+  background: #fff;
+}
+
+/* No planned work: a short dash, not a ring. */
+.week-circle--rest {
+  background: transparent;
+  border: 0;
+}
+
+.week-circle__dash {
+  width: 0.75rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ink-200, #e6e8eb);
+}
