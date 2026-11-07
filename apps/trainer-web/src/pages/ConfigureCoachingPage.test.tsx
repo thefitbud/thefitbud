@@ -335,7 +335,7 @@ describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
 });
 
 describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
-  const NEWER_GLOBAL_VERSION_ID = "c1000001-0000-4000-8000-000000000012";
+  const NEWER_GLOBAL_VERSION_ID = "c1000001-0000-4000-8000-000000000013";
   const TRAINER_LATEST_VERSION_ID = "d2000002-0000-4000-8000-000000000022";
   const templates = {
     items: [
