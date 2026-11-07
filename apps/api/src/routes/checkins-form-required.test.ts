@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { GLOBAL_CHECKIN_FORM_VERSION_ID, formatLocalDate } from "@fitbud/core";
+import {
+  GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
+  GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
+  GLOBAL_CHECKIN_FORM_VERSION_ID,
+  formatLocalDate,
+} from "@fitbud/core";
 import * as schema from "../db/schema.js";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
@@ -362,10 +367,131 @@ describe("check-in submit follows the pinned form (Z6-2b)", () => {
     expect(res.status, await res.clone().text()).toBe(200);
   });
 
+  it("pins a new assignment to global v2 and accepts a v2 submit without wellbeing (Z6-2)", async () => {
+    const ctx = await reachActive("v2default");
+    const checkin = await scheduleCheckin(ctx, "v2default");
+    expect(GLOBAL_CHECKIN_FORM_VERSION_ID).toBe(GLOBAL_CHECKIN_FORM_V2_VERSION_ID);
+    expect(checkin.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V2_VERSION_ID);
+
+    const res = await submit(ctx, checkin, "fr-submit-v2default", {
+      fieldAnswers: { weight: 72.5, energy: 4 },
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
+  });
+
+  async function scheduleNextFrom(ctx: Ctx, fromCheckinId: string, idem: string) {
+    const next = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule-next`,
+      idem,
+      { fromCheckinId },
+    );
+    expect(next.status, await next.clone().text()).toBe(200);
+    return ((await next.json()) as { data: { checkin: ScheduledCheckin } }).data.checkin;
+  }
+
+  it("schedule-next from a global v1 check-in pins the v2 default and leaves the source on v1 (Z6-2)", async () => {
+    const ctx = await reachActive("nextv1");
+    const scheduled = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule`,
+      "fr-sched-nextv1",
+      { localDate: ctx.today, checkinFormVersionId: GLOBAL_CHECKIN_FORM_V1_VERSION_ID },
+    );
+    expect(scheduled.status).toBe(200);
+    const source = ((await scheduled.json()) as { data: { checkin: ScheduledCheckin } }).data
+      .checkin;
+    expect(source.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+
+    const successor = await scheduleNextFrom(ctx, source.id, "fr-next-nextv1");
+    expect(successor.id).not.toBe(source.id);
+    expect(successor.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V2_VERSION_ID);
+    const [stored] = await db
+      .select()
+      .from(schema.checkins)
+      .where(eq(schema.checkins.id, source.id));
+    expect(stored!.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+  });
+
+  it("schedule-next from a trainer-form check-in keeps continuing that version (Z6-2)", async () => {
+    const ctx = await reachActive("nexttrainer");
+    const created = await asTrainer(ctx, "POST", "/checkins/form-templates", "fr-form-nexttrainer", {
+      name: "My weekly",
+      fields: V2_FIELDS,
+    });
+    expect(created.status).toBe(201);
+    const versionId = (
+      (await created.json()) as { data: { versions: Array<{ id: string }> } }
+    ).data.versions[0]!.id;
+    const scheduled = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule`,
+      "fr-sched-nexttrainer",
+      { localDate: ctx.today, checkinFormVersionId: versionId },
+    );
+    expect(scheduled.status).toBe(200);
+    const source = ((await scheduled.json()) as { data: { checkin: ScheduledCheckin } }).data
+      .checkin;
+    expect(source.checkinFormVersionId).toBe(versionId);
+
+    const successor = await scheduleNextFrom(ctx, source.id, "fr-next-nexttrainer");
+    expect(successor.checkinFormVersionId).toBe(versionId);
+  });
+
+  it("ensure-due after a submitted global v1 check-in creates the next one on v2 (Z6-2)", async () => {
+    const ctx = await reachActive("ensurev1");
+    const weekAgo = formatLocalDate(new Date(Date.now() - 7 * 86_400_000), TZ);
+    const scheduled = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule`,
+      "fr-sched-ensurev1",
+      { localDate: weekAgo, checkinFormVersionId: GLOBAL_CHECKIN_FORM_V1_VERSION_ID },
+    );
+    expect(scheduled.status).toBe(200);
+    const source = ((await scheduled.json()) as { data: { checkin: ScheduledCheckin } }).data
+      .checkin;
+    expect(source.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+    const submitted = await submit(ctx, source, "fr-submit-ensurev1", { wellbeing: "Steady" });
+    expect(submitted.status, await submitted.clone().text()).toBe(200);
+
+    const ensured = await asTrainee(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/ensure-due`,
+      "fr-ensure-ensurev1",
+      {},
+    );
+    expect(ensured.status, await ensured.clone().text()).toBe(200);
+    const body = (await ensured.json()) as {
+      data: { checkin: ScheduledCheckin; created: boolean };
+    };
+    expect(body.data.created).toBe(true);
+    expect(body.data.checkin.id).not.toBe(source.id);
+    expect(body.data.checkin.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V2_VERSION_ID);
+    const [stored] = await db
+      .select()
+      .from(schema.checkins)
+      .where(eq(schema.checkins.id, source.id));
+    expect(stored!.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+  });
+
   it("rejects a v1 submit without wellbeing with 422 CHECKIN_ANSWERS_INCOMPLETE", async () => {
     const ctx = await reachActive("v1missing");
+    // v1 is no longer the default (Z6-2); a schedule that pins it keeps it.
+    const pinnedV1 = await asTrainer(
+      ctx,
+      "PUT",
+      `/checkins/relationships/${ctx.relationshipId}/preferred-form`,
+      null,
+      { checkinFormVersionId: GLOBAL_CHECKIN_FORM_V1_VERSION_ID },
+    );
+    expect(pinnedV1.status).toBe(200);
     const checkin = await scheduleCheckin(ctx, "v1missing");
-    expect(checkin.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID);
+    expect(checkin.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
 
     const res = await submit(ctx, checkin, "fr-submit-v1missing", {
       notes: "Busy week",

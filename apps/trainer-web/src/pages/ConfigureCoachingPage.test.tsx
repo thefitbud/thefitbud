@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { GLOBAL_CHECKIN_FORM_VERSION_ID } from "@fitbud/core";
 
 const REL_ID = "55555555-5555-4555-8555-555555555555";
 
@@ -330,5 +331,120 @@ describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
       ),
     ).toBeTruthy();
     expect(document.body.textContent).not.toContain("Edit and activate when ready");
+  });
+});
+
+describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
+  const NEWER_GLOBAL_VERSION_ID = "c1000001-0000-4000-8000-000000000013";
+  const TRAINER_LATEST_VERSION_ID = "d2000002-0000-4000-8000-000000000022";
+  const templates = {
+    items: [
+      {
+        id: "c1000001-0000-4000-8000-000000000001",
+        ownership: "global",
+        trainerUserId: null,
+        name: "FitBud weekly check-in",
+        description: null,
+        latestVersionId: NEWER_GLOBAL_VERSION_ID,
+        latestVersionNumber: 2,
+        createdAt: "2026-07-01T04:00:00.000Z",
+        updatedAt: "2026-07-01T04:00:00.000Z",
+      },
+      {
+        id: "d2000002-0000-4000-8000-000000000002",
+        ownership: "trainer",
+        trainerUserId: "77777777-7777-4777-8777-777777777777",
+        name: "Rahul weekly",
+        description: null,
+        latestVersionId: TRAINER_LATEST_VERSION_ID,
+        latestVersionNumber: 3,
+        createdAt: "2026-07-02T04:00:00.000Z",
+        updatedAt: "2026-07-02T04:00:00.000Z",
+      },
+    ],
+    nextCursor: null,
+  };
+
+  async function pickForm(
+    container: HTMLElement,
+    value: string,
+  ): Promise<HTMLSelectElement> {
+    await screen.findByText("Configure coaching");
+    const select = Array.from(
+      container.querySelectorAll<HTMLSelectElement>("select"),
+    ).find((el) => el.closest("label")?.textContent?.startsWith("Check-in form"))!;
+    fireEvent.change(select, { target: { value } });
+    return select;
+  }
+
+  it("global option pins GLOBAL_CHECKIN_FORM_VERSION_ID, not the template's newer latest version (draft)", async () => {
+    api.listCheckinFormTemplates.mockResolvedValue(templates);
+    const draft = configuration("draft");
+    api.saveConfigurationDraft.mockResolvedValue({ ...draft, recordVersion: 4 });
+    api.assignPreferredCheckinForm.mockResolvedValue({});
+    const { container } = renderPage("active", "draft", draft);
+    // Start from the trainer's form so choosing the global one is a real change.
+    await pickForm(container, TRAINER_LATEST_VERSION_ID);
+    await pickForm(container, GLOBAL_CHECKIN_FORM_VERSION_ID);
+    const options = Array.from(container.querySelectorAll("option")).map(
+      (o) => o.getAttribute("value"),
+    );
+    expect(options).toContain(GLOBAL_CHECKIN_FORM_VERSION_ID);
+    expect(options).not.toContain(NEWER_GLOBAL_VERSION_ID);
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(api.saveConfigurationDraft).toHaveBeenCalled());
+    expect(api.saveConfigurationDraft.mock.calls[0]![1].checkin.formVersionId).toBe(
+      GLOBAL_CHECKIN_FORM_VERSION_ID,
+    );
+    await waitFor(() => expect(api.assignPreferredCheckinForm).toHaveBeenCalled());
+    expect(api.assignPreferredCheckinForm.mock.calls[0]![1]).toEqual({
+      checkinFormVersionId: GLOBAL_CHECKIN_FORM_VERSION_ID,
+    });
+  });
+
+  it("a trainer form still pins its latest version (draft)", async () => {
+    api.listCheckinFormTemplates.mockResolvedValue(templates);
+    const draft = configuration("draft");
+    api.saveConfigurationDraft.mockResolvedValue({ ...draft, recordVersion: 4 });
+    api.assignPreferredCheckinForm.mockResolvedValue({});
+    const { container } = renderPage("active", "draft", draft);
+    await pickForm(container, TRAINER_LATEST_VERSION_ID);
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(api.saveConfigurationDraft).toHaveBeenCalled());
+    expect(api.saveConfigurationDraft.mock.calls[0]![1].checkin.formVersionId).toBe(
+      TRAINER_LATEST_VERSION_ID,
+    );
+    await waitFor(() => expect(api.assignPreferredCheckinForm).toHaveBeenCalled());
+    expect(api.assignPreferredCheckinForm.mock.calls[0]![1]).toEqual({
+      checkinFormVersionId: TRAINER_LATEST_VERSION_ID,
+    });
+  });
+
+  it("active configuration: choosing the global form calls the preferred-form route with GLOBAL_CHECKIN_FORM_VERSION_ID", async () => {
+    api.listCheckinFormTemplates.mockResolvedValue(templates);
+    api.assignPreferredCheckinForm.mockResolvedValue({});
+    const { container } = renderPage("active", "active");
+    await pickForm(container, GLOBAL_CHECKIN_FORM_VERSION_ID);
+    await waitFor(() => expect(api.assignPreferredCheckinForm).toHaveBeenCalled());
+    expect(api.assignPreferredCheckinForm.mock.calls[0]).toEqual([
+      REL_ID,
+      { checkinFormVersionId: GLOBAL_CHECKIN_FORM_VERSION_ID },
+    ]);
+  });
+
+  it("the check-ins summary names the global form when it is pinned", async () => {
+    api.listCheckinFormTemplates.mockResolvedValue(templates);
+    const withTrainer = configuration("draft");
+    withTrainer.checkin.formVersionId = TRAINER_LATEST_VERSION_ID as never;
+    const { container, unmount } = renderPage("active", "draft", withTrainer);
+    await screen.findByText("Configure coaching");
+    await waitFor(() => expect(container.textContent).toContain("Rahul weekly"));
+    unmount();
+    renderPage("active", "draft", configuration("draft"));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        "48 h window · FitBud weekly check-in",
+      ),
+    );
   });
 });

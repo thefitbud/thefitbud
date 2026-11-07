@@ -82,6 +82,19 @@ const REMINDER_CATEGORIES: Array<{
   { type: "checkin_reminder", label: "Check-in" },
 ];
 
+/**
+ * The version a form option pins. The FitBud global form pins the version new
+ * assignments use, never the global template's latest version (Z6-2c,
+ * D-W6-19); a trainer's own form pins its latest version.
+ */
+function checkinFormOptionValue(
+  item: Pick<CheckinFormTemplateSummary, "ownership" | "latestVersionId">,
+): string {
+  return item.ownership === "global"
+    ? GLOBAL_CHECKIN_FORM_VERSION_ID
+    : item.latestVersionId;
+}
+
 function firstNameOf(displayName: string): string {
   return displayName.trim().split(/\s+/)[0] || "Client";
 }
@@ -437,7 +450,7 @@ export function ConfigureCoachingPage() {
       checkins: `${cadenceLabel} · ${form.dueWindowHours} h window · ${
         checkinForms.find(
           (item) =>
-            item.latestVersionId ===
+            checkinFormOptionValue(item) ===
             (form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID),
         )?.name ?? "FitBud weekly check-in"
       }`,
@@ -1035,11 +1048,7 @@ export function ConfigureCoachingPage() {
                 value={form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID}
                 onChange={(event) => {
                   const next = event.target.value || null;
-                  setForm((current) => ({
-                    ...current,
-                    formVersionId:
-                      next === GLOBAL_CHECKIN_FORM_VERSION_ID ? null : next,
-                  }));
+                  setForm((current) => ({ ...current, formVersionId: next }));
                   if (
                     relationshipId &&
                     configuration?.status === "active" &&
@@ -1068,7 +1077,7 @@ export function ConfigureCoachingPage() {
                   </option>
                 ) : (
                   checkinForms.map((item) => (
-                    <option key={item.id} value={item.latestVersionId}>
+                    <option key={item.id} value={checkinFormOptionValue(item)}>
                       {item.ownership === "global"
                         ? `${item.name} (FitBud base)`
                         : `${item.name} (Mine)`}
