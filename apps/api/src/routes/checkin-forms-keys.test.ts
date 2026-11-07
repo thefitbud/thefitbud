@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  GLOBAL_CHECKIN_FORM_FIELDS,
+  GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
+  GLOBAL_CHECKIN_FORM_V2_FIELDS,
   GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
   formatLocalDate,
 } from "@fitbud/core";
@@ -485,13 +486,13 @@ describe("check-in form standard keys", () => {
     expect(res.status).toBe(200);
   });
 
-  it("submits against the default v1 form without keys", async () => {
+  it("submits against global v1 (pinned explicitly, no longer the default) without keys", async () => {
     const ctx = await reachActiveCheckinConfig("v1submit");
     const scheduled = await post(
       `/checkins/relationships/${ctx.relationshipId}/schedule`,
       ctx.trainerCookie,
       "sched-v1",
-      { localDate: ctx.today },
+      { localDate: ctx.today, checkinFormVersionId: GLOBAL_CHECKIN_FORM_V1_VERSION_ID },
     );
     const scheduledBody = (await scheduled.json()) as {
       data: { checkin: { id: string; recordVersion: number } };
@@ -518,12 +519,12 @@ describe("check-in form standard keys", () => {
 
   it("forks the default global version even when a later global version exists", async () => {
     const { trainerCookie } = await reachActiveCheckinConfig("forkdefault");
-    // A later global version (v2 fixture) with a distinguishable field list.
+    // A later global version (v3 fixture, after migration 0041's v2) with a distinguishable field list.
     await db.insert(schema.checkinFormVersions).values({
       id: "c1000001-0000-4000-8000-0000000000f2",
       templateId: GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
       key: GLOBAL_CHECKIN_FORM_TEMPLATE_ID,
-      version: 2,
+      version: 3,
       scope: "global",
       trainerUserId: null,
       schemaJson: JSON.stringify({ fields: [weightField, energyField] }),
@@ -539,6 +540,6 @@ describe("check-in form standard keys", () => {
     const body = (await fork.json()) as {
       data: { versions: Array<{ fields: unknown[] }> };
     };
-    expect(body.data.versions[0]!.fields).toEqual(GLOBAL_CHECKIN_FORM_FIELDS);
+    expect(body.data.versions[0]!.fields).toEqual(GLOBAL_CHECKIN_FORM_V2_FIELDS);
   });
 });

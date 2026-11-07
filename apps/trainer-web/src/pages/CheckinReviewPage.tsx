@@ -7,10 +7,12 @@ import {
 } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
+  CheckinFieldDefinition,
   CheckinReviewContext,
   CheckinReviewOutcome,
 } from "@fitbud/contracts";
 import {
+  checkinAnswerEntries,
   formatCivilDate,
   formatInstant,
   labelFor,
@@ -37,6 +39,43 @@ const OUTCOMES: Array<{ value: CheckinReviewOutcome; label: string }> = [
   { value: "needs_follow_up", label: "Needs follow-up" },
   { value: "adjust_coaching", label: "Adjust coaching" },
 ];
+
+type CheckinAnswerEntry = ReturnType<typeof checkinAnswerEntries>[number];
+
+/** Answer text as the trainer reads it: the stored value, with its unit. */
+function answerText(
+  entry: CheckinAnswerEntry,
+  field: CheckinFieldDefinition | undefined,
+): string {
+  const { value } = entry;
+  if (entry.type === "photo_intent") return "Photo noted";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    return value.map((id) => optionLabel(field, id)).join(", ");
+  }
+  if (typeof value === "number") {
+    return entry.type === "measurement" && entry.unit
+      ? `${value} ${entry.unit}`
+      : String(value);
+  }
+  if (typeof value === "string") {
+    return entry.type === "single_choice" ? optionLabel(field, value) : value;
+  }
+  return "";
+}
+
+function optionLabel(
+  field: CheckinFieldDefinition | undefined,
+  id: string,
+): string {
+  if (
+    field &&
+    (field.type === "single_choice" || field.type === "multiple_choice")
+  ) {
+    return field.options.find((option) => option.id === id)?.label ?? id;
+  }
+  return id;
+}
 
 export function CheckinReviewPage() {
   const navigate = useNavigate();
@@ -307,6 +346,21 @@ export function CheckinReviewPage() {
 
   const alreadyReviewed = Boolean(context?.checkin.review) && !editing;
   const photos = context?.photos ?? [];
+  // The pinned form's answered questions in form order (Z6-2b shared helper).
+  const answerRows = useMemo(() => {
+    if (!context) return [];
+    const fields = context.pinnedForm.fields;
+    return checkinAnswerEntries(fields, context.checkin.answers).map(
+      (entry) => ({
+        fieldId: entry.fieldId,
+        label: entry.label,
+        text: answerText(
+          entry,
+          fields.find((field) => field.id === entry.fieldId),
+        ),
+      }),
+    );
+  }, [context]);
 
   return (
     <div
@@ -380,45 +434,18 @@ export function CheckinReviewPage() {
                   </p>
                 ) : null}
                 {context.checkin.answers ? (
-                  <dl className="detail-list">
-                    {context.pinnedForm.fields.map((field) => {
-                      const answers = context.checkin.answers!;
-                      let value: string = "—";
-                      if (field.type === "measurement") {
-                        const raw =
-                          answers.fieldAnswers?.[field.id] ??
-                          answers.bodyWeightKg;
-                        value =
-                          raw != null && raw !== ""
-                            ? `${raw}${field.measurementType === "body_weight_kg" ? " kg" : ""}`
-                            : "—";
-                      } else if (field.type === "photo_intent") {
-                        value = answers.photoIntent
-                          ? "Photo noted"
-                          : answers.fieldAnswers?.[field.id]
-                            ? "Photo noted"
-                            : "—";
-                      } else {
-                        const raw =
-                          answers.fieldAnswers?.[field.id] ??
-                          (field.id === "wellbeing"
-                            ? answers.wellbeing
-                            : field.id === "notes"
-                              ? answers.notes
-                              : undefined);
-                        value =
-                          raw != null && String(raw).trim() !== ""
-                            ? String(raw)
-                            : "—";
-                      }
-                      return (
-                        <div key={field.id}>
-                          <dt>{field.label}</dt>
-                          <dd>{value}</dd>
+                  answerRows.length > 0 ? (
+                    <dl className="detail-list">
+                      {answerRows.map((row) => (
+                        <div key={row.fieldId}>
+                          <dt>{row.label}</dt>
+                          <dd>{row.text}</dd>
                         </div>
-                      );
-                    })}
-                  </dl>
+                      ))}
+                    </dl>
+                  ) : (
+                    <p className="workspace-empty">No answers submitted yet.</p>
+                  )
                 ) : (
                   <p className="workspace-empty">
                     {context.checkin.recordStatus === "draft"

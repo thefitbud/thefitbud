@@ -368,7 +368,10 @@ describe("trainer inbox events on submit (X4h)", () => {
       });
 
     expect((await submit("tse-cib-1", checkin.recordVersion + 5, CHECKIN_ANSWERS)).status).toBe(409);
-    expect([400, 422]).toContain((await submit("tse-cib-2", checkin.recordVersion, { notes: "x" })).status);
+    // The default form is v2 (all optional), so "invalid answers" is an out-of-range weight (20-300 kg).
+    expect([400, 422]).toContain(
+      (await submit("tse-cib-2", checkin.recordVersion, { fieldAnswers: { weight: 5 } })).status,
+    );
     expect(await events("trainer_checkin_submitted")).toHaveLength(0);
 
     await endRelationship(db, ctx.relationshipId);

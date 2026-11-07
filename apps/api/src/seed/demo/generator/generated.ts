@@ -382,7 +382,8 @@ export function addGeneratedPersona(input: WorldInput, cfg: PersonaConfig): void
   rows.add("workout_expectations", { id: demoUuid("workout-exp", relId), coaching_configuration_id: configId, sessions_per_week: sessions, completion_window_hours: 24, created_at: startedAt, updated_at: now });
   rows.add("nutrition_expectations", { id: demoUuid("nutrition-exp", relId), coaching_configuration_id: configId, meals_per_day: meals, confirmation_window_hours: 12, photo_requirement: "none", created_at: startedAt, updated_at: now });
   const scheduleId = demoUuid("checkin-schedule", relId);
-  rows.add("checkin_schedules", { id: scheduleId, coaching_configuration_id: configId, coaching_relationship_id: relId, cadence: cfg.checkin.cadence, due_window_hours: 48, created_at: startedAt, updated_at: now, preferred_checkin_form_version_id: checkinFormFor(cfg) });
+  // Global-form personas keep no preference, so new check-ins follow the global default (v2, Z6-2); seeded past and draft check-ins stay on v1.
+  rows.add("checkin_schedules", { id: scheduleId, coaching_configuration_id: configId, coaching_relationship_id: relId, cadence: cfg.checkin.cadence, due_window_hours: 48, created_at: startedAt, updated_at: now, preferred_checkin_form_version_id: checkinFormFor(cfg) === DEMO_CHECKIN_FORM_VERSION_ID ? null : checkinFormFor(cfg) });
   rows.add("tracking_requirements", { id: demoUuid("tracking", relId), coaching_configuration_id: configId, require_body_weight: 1, require_progress_photos: 0, require_session_rpe: 0, created_at: startedAt, updated_at: now });
   insertSubscriptionChain({ rows, cfg, relId, refDate, startDate });
   addPreferences(input, cfg, traineeId);
