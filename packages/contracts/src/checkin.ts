@@ -3,6 +3,7 @@ import { cursorPageSchema, isoDateTimeSchema, uuidSchema } from "./identity.js";
 import { activeExceptionSummarySchema } from "./exception.js";
 import { measurementTypeSchema, mediaAssetSchema } from "./progress.js";
 import { localDateSchema } from "./workout.js";
+import { checkinStandardKeySchema } from "./checkin-form-v2.js";
 
 /** Persisted record state. Scheduled / Due / Overdue / Reviewed are never stored. */
 export const checkinRecordStatusSchema = z.enum(["draft", "submitted"]);
@@ -38,6 +39,8 @@ const checkinFieldBaseSchema = z.object({
   label: z.string().min(1).max(200),
   required: z.boolean(),
   helpText: z.string().min(1).max(500).optional(),
+  /** Standard question key (Z6-6). Absent on v1 and custom questions. */
+  key: checkinStandardKeySchema.optional(),
 });
 
 /**
