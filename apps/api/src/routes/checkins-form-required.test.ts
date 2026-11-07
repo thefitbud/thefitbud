@@ -379,6 +379,68 @@ describe("check-in submit follows the pinned form (Z6-2b)", () => {
     expect(res.status, await res.clone().text()).toBe(200);
   });
 
+  async function scheduleNextFrom(ctx: Ctx, fromCheckinId: string, idem: string) {
+    const next = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule-next`,
+      idem,
+      { fromCheckinId },
+    );
+    expect(next.status, await next.clone().text()).toBe(200);
+    return ((await next.json()) as { data: { checkin: ScheduledCheckin } }).data.checkin;
+  }
+
+  it("schedule-next from a global v1 check-in pins the v2 default and leaves the source on v1 (Z6-2)", async () => {
+    const ctx = await reachActive("nextv1");
+    const scheduled = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule`,
+      "fr-sched-nextv1",
+      { localDate: ctx.today, checkinFormVersionId: GLOBAL_CHECKIN_FORM_V1_VERSION_ID },
+    );
+    expect(scheduled.status).toBe(200);
+    const source = ((await scheduled.json()) as { data: { checkin: ScheduledCheckin } }).data
+      .checkin;
+    expect(source.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+
+    const successor = await scheduleNextFrom(ctx, source.id, "fr-next-nextv1");
+    expect(successor.id).not.toBe(source.id);
+    expect(successor.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V2_VERSION_ID);
+    const [stored] = await db
+      .select()
+      .from(schema.checkins)
+      .where(eq(schema.checkins.id, source.id));
+    expect(stored!.checkinFormVersionId).toBe(GLOBAL_CHECKIN_FORM_V1_VERSION_ID);
+  });
+
+  it("schedule-next from a trainer-form check-in keeps continuing that version (Z6-2)", async () => {
+    const ctx = await reachActive("nexttrainer");
+    const created = await asTrainer(ctx, "POST", "/checkins/form-templates", "fr-form-nexttrainer", {
+      name: "My weekly",
+      fields: V2_FIELDS,
+    });
+    expect(created.status).toBe(201);
+    const versionId = (
+      (await created.json()) as { data: { versions: Array<{ id: string }> } }
+    ).data.versions[0]!.id;
+    const scheduled = await asTrainer(
+      ctx,
+      "POST",
+      `/checkins/relationships/${ctx.relationshipId}/schedule`,
+      "fr-sched-nexttrainer",
+      { localDate: ctx.today, checkinFormVersionId: versionId },
+    );
+    expect(scheduled.status).toBe(200);
+    const source = ((await scheduled.json()) as { data: { checkin: ScheduledCheckin } }).data
+      .checkin;
+    expect(source.checkinFormVersionId).toBe(versionId);
+
+    const successor = await scheduleNextFrom(ctx, source.id, "fr-next-nexttrainer");
+    expect(successor.checkinFormVersionId).toBe(versionId);
+  });
+
   it("rejects a v1 submit without wellbeing with 422 CHECKIN_ANSWERS_INCOMPLETE", async () => {
     const ctx = await reachActive("v1missing");
     // v1 is no longer the default (Z6-2); a schedule that pins it keeps it.

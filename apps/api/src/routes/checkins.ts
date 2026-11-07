@@ -27,6 +27,7 @@ import {
   type CheckinDraftAnswers,
 } from "@fitbud/contracts";
 import {
+  GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
   addDaysToLocalDate,
   canRecordCheckinReview,
@@ -597,7 +598,15 @@ checkinRoutes.post(
         .from(checkins)
         .where(eq(checkins.id, parsed.data.fromCheckinId))
         .limit(1);
-      if (source[0]) fallbackVersionId = source[0].formVersionId;
+      if (source[0]) {
+        // A successor of a global-v1 check-in moves to the current global
+        // default (v2); a trainer-owned form version keeps continuing. The
+        // source check-in itself is never repinned (Z6-2).
+        fallbackVersionId =
+          source[0].formVersionId === GLOBAL_CHECKIN_FORM_V1_VERSION_ID
+            ? GLOBAL_CHECKIN_FORM_VERSION_ID
+            : source[0].formVersionId;
+      }
     }
     const formPin = await resolveCheckinFormPin(db, {
       trainerUserId: actor.userId,
