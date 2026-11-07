@@ -39,6 +39,7 @@ import {
   deriveWorkoutAssignmentStatus,
   formatLocalDate,
   linkedMeasurementsForCheckin,
+  invalidCheckinKeyedAnswers,
   missingRequiredCheckinAnswers,
   nextCheckinLocalDate,
   parseCheckinFormFields,
@@ -1991,6 +1992,20 @@ checkinRoutes.post(
         "CHECKIN_ANSWERS_INCOMPLETE",
         "Required check-in answers are missing.",
         { missing },
+      );
+    }
+
+    const invalidKeys = invalidCheckinKeyedAnswers(
+      pinned.fields,
+      parsed.data.answers,
+    );
+    if (invalidKeys.length > 0) {
+      return fail(
+        c,
+        422,
+        "CHECKIN_ANSWER_INVALID",
+        "A check-in answer is outside the allowed range.",
+        { invalid: invalidKeys },
       );
     }
 

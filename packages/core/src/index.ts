@@ -130,6 +130,14 @@ export {
 } from "./checkin.js";
 
 export {
+  CHECKIN_STANDARD_KEYS,
+  findCheckinFormKeyProblem,
+  invalidCheckinKeyedAnswers,
+  validateCheckinAnswer,
+  type CheckinStandardKey,
+} from "./checkin-keys.js";
+
+export {
   addDaysToLocalDate,
   canCompleteWorkoutExecution,
   canMutateOpenWorkoutExecution,
