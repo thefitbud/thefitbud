@@ -32,10 +32,11 @@ Any other conflict between these sources: stop and report it; never silently pic
 
 There is **no mid-task human approval** (owner, 30 Oct 2026): if the spec decides it (a new provider, an auth change), build it. Stop and report (comment on the PR or end the session with a question) only when:
 - The spec has no task file, or a frame or decision it needs is missing or still **Open**.
-- The spec leaves open a question whose answer changes product behaviour, scope, architecture, auth, ownership or data.
 - The work would make a destructive or irreversible migration, rewrite historical coaching records, change published-plan immutability or discard user data, and the spec doesn't say so explicitly.
 - A file outside the spec's `files_owned` must change.
 - The work needs a remote or deploy command, a production credential or production data. Agents never have these.
+
+**Decide and note (Firoz, 7 Nov 2026):** when a decision comes up during implementation, proceed with the recommended option instead of waiting on Firoz/Lokesh. Record each such choice in the batch's final report: the question, the option taken, and why. Firoz/Lokesh will review after the work and can change it if needed. This does **not** weaken the hard stops above. Still stop and report when a spec, frame, or decision the task needs is missing or still **Open**; when the work would make a destructive or irreversible data change the spec does not explicitly allow; when a file outside `files_owned` must change; or when the work needs a remote/deploy command, a production credential, or production data. The older bullet that said to stop on every open product question is superseded for cases where the brief or batch already names a recommended option — take that option and record it.
 
 ## Before each task: check the spec against `main`
 
