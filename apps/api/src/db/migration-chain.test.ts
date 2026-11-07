@@ -11,6 +11,7 @@ import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { assertNoForeignKeyViolations } from "../test-support/foreign-key-check.js";
 import { createMemoryDb, yieldToEventLoop } from "../test-support/memory-db.js";
 import {
+  coachingRelationships,
   logEditEvents,
   mealCompliance,
   measurements,
@@ -263,7 +264,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0039 in order after 0029, with 0039 last", async () => {
+  it("places 0030 to 0040 in order after 0029, with 0040 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -280,7 +281,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 8]).toBe("0037_daily_steps");
     expect(tags[previous + 9]).toBe("0038_archived_account_state");
     expect(tags[previous + 10]).toBe("0039_log_authorship");
-    expect(tags.at(-1)).toBe("0039_log_authorship");
+    expect(tags[previous + 11]).toBe("0040_client_basics");
+    expect(tags.at(-1)).toBe("0040_client_basics");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -292,6 +294,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 8]?.idx).toBe(37);
     expect(journal[previous + 9]?.idx).toBe(38);
     expect(journal[previous + 10]?.idx).toBe(39);
+    expect(journal[previous + 11]?.idx).toBe(40);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -305,7 +308,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 8]).toBe("0037_daily_steps.sql");
     expect(files[previousFile + 9]).toBe("0038_archived_account_state.sql");
     expect(files[previousFile + 10]).toBe("0039_log_authorship.sql");
-    expect(files.at(-1)).toBe("0039_log_authorship.sql");
+    expect(files[previousFile + 11]).toBe("0040_client_basics.sql");
+    expect(files.at(-1)).toBe("0040_client_basics.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -1611,6 +1615,165 @@ describe("migration chain and seeds", () => {
           handle.sqlite.exec("SELECT * FROM notification_preferences ORDER BY user_id")[0]?.values ?? []
         ).map((row) => row.slice(0, -1));
         expect(preferencesAfter).toEqual(preferencesBefore);
+      } finally {
+        handle.close();
+      }
+    },
+    120_000,
+  );
+
+  it("keeps 0040 additive: two nullable relationship columns, no rebuild, backfill or goal", () => {
+    const sqlText = readFileSync(join(drizzleDir, "0040_client_basics.sql"), "utf8");
+    const code = sqlText.replace(/^--.*$/gm, "");
+    expect(code).not.toMatch(/DROP\s+(TABLE|INDEX)|\bUPDATE\b|\bDELETE\b|\bINSERT\b|RENAME|PRAGMA|CREATE TABLE/i);
+    expect(code).not.toMatch(/NOT NULL|DEFAULT|goal|user_identities|trainee_profiles/i);
+    expect(
+      [...code.matchAll(/ALTER TABLE `([a-z_]+)` ADD COLUMN `([a-z_0-9]+)`/g)].map(
+        (m) => `${m[1]}.${m[2]}`,
+      ),
+    ).toEqual([
+      "coaching_relationships.client_display_name",
+      "coaching_relationships.contact_phone_e164",
+    ]);
+  });
+
+  it("records 0040 in the drizzle snapshot chain after 0039", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0039_snapshot.json"), "utf8"),
+    ) as { id: string; tables: Record<string, unknown> };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0040_snapshot.json"), "utf8"),
+    ) as {
+      id: string;
+      prevId: string;
+      tables: Record<
+        string,
+        {
+          columns: Record<string, { type: string; notNull: boolean; default?: unknown }>;
+          checkConstraints: Record<string, { value: string }>;
+        }
+      >;
+    };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    const relationships = snapshot.tables.coaching_relationships!;
+    for (const column of ["client_display_name", "contact_phone_e164"]) {
+      expect(relationships.columns[column]).toEqual({
+        name: column,
+        type: "text",
+        primaryKey: false,
+        notNull: false,
+        autoincrement: false,
+      });
+    }
+    expect(Object.keys(relationships.checkConstraints).sort()).toEqual([
+      "coaching_relationships_client_display_name_chk",
+      "coaching_relationships_contact_phone_e164_chk",
+    ]);
+    // Only coaching_relationships changed.
+    const withoutRelationships = (tables: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(tables).filter(([name]) => name !== "coaching_relationships"),
+      );
+    expect(withoutRelationships(snapshot.tables)).toEqual(withoutRelationships(previous.tables));
+  });
+
+  it("matches schema.ts: both relationship columns are nullable, read NULL by default and are bounded by their CHECKs", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true });
+    try {
+      const described = (
+        handle.sqlite.exec(
+          `SELECT name, "notnull", dflt_value FROM pragma_table_info('coaching_relationships')`,
+        )[0]?.values ?? []
+      ).map((row) => ({ name: String(row[0]), notNull: row[1] === 1, dflt: row[2] }));
+      expect(
+        described.map(({ name, notNull }) => ({ name, notNull })).sort((a, b) => a.name.localeCompare(b.name)),
+      ).toEqual(
+        getTableConfig(coachingRelationships)
+          .columns.map((column) => ({ name: column.name, notNull: column.notNull }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      expect(tableColumns(handle.sqlite, "coaching_relationships").slice(-2)).toEqual([
+        "client_display_name",
+        "contact_phone_e164",
+      ]);
+      for (const column of ["client_display_name", "contact_phone_e164"]) {
+        expect(described.find((c) => c.name === column)).toEqual({ name: column, notNull: false, dflt: null });
+      }
+
+      insertPaymentFixtures(handle.sqlite);
+      expect(
+        handle.sqlite.exec(
+          "SELECT DISTINCT client_display_name, contact_phone_e164 FROM coaching_relationships",
+        )[0]?.values,
+      ).toEqual([[null, null]]);
+      const set = (column: string, value: string | null) =>
+        handle.sqlite.run(`UPDATE coaching_relationships SET ${column} = ? WHERE id = 'rel-asha'`, [value]);
+      // Values the API stores are accepted.
+      for (const value of ["Asha", "N".repeat(120), "आशा दीदी", null]) {
+        set("client_display_name", value);
+      }
+      for (const value of ["+919876543210", "+12025550123", "+447700900123", "+123456789012345", null]) {
+        set("contact_phone_e164", value);
+      }
+      // Anything else is refused by the column CHECKs.
+      for (const value of ["", " Asha", "Asha ", "N".repeat(121)]) {
+        expect(() => set("client_display_name", value), JSON.stringify(value)).toThrow(/CHECK constraint failed/);
+      }
+      for (const value of ["919876543210", "+91987654321a", "+91 98765 43210", "+123456789", "+1234567890123456", ""]) {
+        expect(() => set("contact_phone_e164", value), value).toThrow(/CHECK constraint failed/);
+      }
+      assertNoForeignKeyViolations(handle.sqlite);
+    } finally {
+      handle.close();
+    }
+  }, 60_000);
+
+  it(
+    "applies 0040 to a seeded database: every relationship reads NULL for both, other columns and row counts unchanged, foreign keys clean",
+    async () => {
+      const handle = await createMemoryDb({
+        foreignKeys: true,
+        librarySeed: true,
+        through: "0039_log_authorship.sql",
+      });
+      try {
+        expect(tableColumns(handle.sqlite, "coaching_relationships")).not.toContain("client_display_name");
+        const passwordHash = await hashPassword("FitBud-demo-2026");
+        handle.sqlite.exec(
+          withoutDeletesFromMissingTables(
+            handle.sqlite,
+            buildDemoSeedSql({
+              referenceInstant: new Date().toISOString(),
+              passwordHash,
+              libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+            }),
+          ),
+        );
+        await yieldToEventLoop();
+        const contentSql = "SELECT * FROM coaching_relationships ORDER BY id";
+        const before = handle.sqlite.exec(contentSql)[0]?.values ?? [];
+        expect(before.length).toBeGreaterThan(0);
+        const ownSql = (table: string) => `SELECT * FROM ${table} ORDER BY user_id`;
+        const identitiesBefore = handle.sqlite.exec(ownSql("user_identities"))[0]?.values ?? [];
+        const profilesBefore = handle.sqlite.exec(ownSql("trainee_profiles"))[0]?.values ?? [];
+        const countsBefore = tableRowCounts(handle.sqlite);
+
+        handle.applyMigrationsFrom("0040_client_basics.sql");
+        await yieldToEventLoop();
+
+        expect(tableRowCounts(handle.sqlite)).toEqual(countsBefore);
+        assertNoForeignKeyViolations(handle.sqlite);
+        expect(
+          handle.sqlite.exec(
+            "SELECT DISTINCT client_display_name, contact_phone_e164 FROM coaching_relationships",
+          )[0]?.values,
+        ).toEqual([[null, null]]);
+        const width = before[0]!.length;
+        const after = (handle.sqlite.exec(contentSql)[0]?.values ?? []).map((row) => row.slice(0, width));
+        expect(after).toEqual(before);
+        expect(handle.sqlite.exec(ownSql("user_identities"))[0]?.values ?? []).toEqual(identitiesBefore);
+        expect(handle.sqlite.exec(ownSql("trainee_profiles"))[0]?.values ?? []).toEqual(profilesBefore);
       } finally {
         handle.close();
       }

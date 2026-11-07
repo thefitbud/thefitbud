@@ -776,20 +776,249 @@ describe("Z6-8 client settings", () => {
     });
   });
 
-  it("basic details editing is not built: PATCH /basic answers the static scaffold 404", async () => {
-    const { trainer, relationshipId } = await reachActive("cs-basic@example.com", "basic");
-    const response = await send(
-      "PATCH",
-      `${base(relationshipId)}/basic`,
-      trainer,
-      { displayName: "Someone" },
-      "basic-1",
-    );
-    expect(response.status).toBe(404);
-    expect((await errorOf(response)).code).toBe("not_implemented");
+  describe("PATCH basic (Z6-8b, D-W6-42)", () => {
+    type Basics = {
+      displayName: string;
+      phoneE164: string | null;
+      clientDisplayName: string | null;
+      contactPhoneE164: string | null;
+    };
+
+    async function relationshipBasics(relationshipId: string) {
+      const [row] = await db
+        .select({
+          clientDisplayName: schema.coachingRelationships.clientDisplayName,
+          contactPhoneE164: schema.coachingRelationships.contactPhoneE164,
+          updatedAt: schema.coachingRelationships.updatedAt,
+        })
+        .from(schema.coachingRelationships)
+        .where(eq(schema.coachingRelationships.id, relationshipId));
+      return row!;
+    }
+
+    /** The client's own rows the PATCH must never write. */
+    async function clientOwnRows(traineeUserId: string) {
+      const [identity] = await db
+        .select()
+        .from(schema.userIdentities)
+        .where(eq(schema.userIdentities.userId, traineeUserId));
+      const [profile] = await db
+        .select()
+        .from(schema.traineeProfiles)
+        .where(eq(schema.traineeProfiles.userId, traineeUserId));
+      return { identity, profile };
+    }
+
+    it("stores a name and contact phone on the relationship only; GET returns them next to the client's own values", async () => {
+      const ctx = await reachActive("cs-basic@example.com", "basic");
+      await setPhone(db, ctx.traineeUserId, "+919000000123");
+      const ownBefore = await clientOwnRows(ctx.traineeUserId);
+      const relationshipBefore = await relationshipBasics(ctx.relationshipId);
+      expect(relationshipBefore).toMatchObject({ clientDisplayName: null, contactPhoneE164: null });
+
+      const response = await send(
+        "PATCH",
+        `${base(ctx.relationshipId)}/basic`,
+        ctx.trainer,
+        { displayName: "  Asha (Tuesday batch)  ", contactPhone: "+91 98765-43210" },
+        "basic-set",
+      );
+      expect(response.status).toBe(200);
+      const data = await dataOf<{ relationshipId: string; basics: Basics }>(response);
+      expect(data.relationshipId).toBe(ctx.relationshipId);
+      expect(data.basics).toEqual({
+        displayName: ownBefore.profile!.displayName,
+        phoneE164: "+919000000123",
+        clientDisplayName: "Asha (Tuesday batch)",
+        contactPhoneE164: "+919876543210",
+      });
+      expect(await relationshipBasics(ctx.relationshipId)).toEqual({
+        clientDisplayName: "Asha (Tuesday batch)",
+        contactPhoneE164: "+919876543210",
+        // Nothing the client sees changed, so the relationship's version time stays.
+        updatedAt: relationshipBefore.updatedAt,
+      });
+      // The sign-in identifier and the client's own profile are untouched.
+      expect(await clientOwnRows(ctx.traineeUserId)).toEqual(ownBefore);
+
+      const read = await dataOf<{ basics: Basics }>(
+        await send("GET", base(ctx.relationshipId), ctx.trainer),
+      );
+      expect(read.basics).toEqual(data.basics);
+    });
+
+    it("changes only the field sent, and null clears a value", async () => {
+      const ctx = await reachActive("cs-basicclear@example.com", "basicclear");
+      const ownBefore = await clientOwnRows(ctx.traineeUserId);
+      const patch = async (body: unknown, key: string) => {
+        const response = await send("PATCH", `${base(ctx.relationshipId)}/basic`, ctx.trainer, body, key);
+        expect(response.status, key).toBe(200);
+        return (await dataOf<{ basics: Basics }>(response)).basics;
+      };
+      expect(await patch({ displayName: "Asha", contactPhone: "9876543210" }, "clr-1")).toMatchObject({
+        clientDisplayName: "Asha",
+        contactPhoneE164: "+919876543210",
+      });
+      expect(await patch({ contactPhone: "+44 7700 900123" }, "clr-2")).toMatchObject({
+        clientDisplayName: "Asha",
+        contactPhoneE164: "+447700900123",
+      });
+      expect(await patch({ displayName: null }, "clr-3")).toMatchObject({
+        clientDisplayName: null,
+        contactPhoneE164: "+447700900123",
+      });
+      expect(await patch({ contactPhone: null }, "clr-4")).toMatchObject({
+        clientDisplayName: null,
+        contactPhoneE164: null,
+      });
+      expect(await relationshipBasics(ctx.relationshipId)).toMatchObject({
+        clientDisplayName: null,
+        contactPhoneE164: null,
+      });
+      const longest = "N".repeat(120);
+      expect(await patch({ displayName: longest }, "clr-5")).toMatchObject({ clientDisplayName: longest });
+      expect(await clientOwnRows(ctx.traineeUserId)).toEqual(ownBefore);
+    });
+
+    it("rejects an empty body, a blank or too long name, a phone that does not normalise and unknown fields with static 400s", async () => {
+      const ctx = await reachActive("cs-basicbad@example.com", "basicbad");
+      await send(
+        "PATCH",
+        `${base(ctx.relationshipId)}/basic`,
+        ctx.trainer,
+        { displayName: "Kept name", contactPhone: "9876543210" },
+        "bad-seed",
+      );
+      const before = await relationshipBasics(ctx.relationshipId);
+      const ownBefore = await clientOwnRows(ctx.traineeUserId);
+      const rejected: Array<[string, unknown, string]> = [
+        ["empty body", {}, "Invalid client details."],
+        ["blank name", { displayName: "    " }, "Invalid client details."],
+        ["name over 120", { displayName: "N".repeat(121) }, "Invalid client details."],
+        ["name not text", { displayName: 42 }, "Invalid client details."],
+        ["phone too short to send", { contactPhone: "98765" }, "Invalid client details."],
+        ["phone too long to send", { contactPhone: "9".repeat(21) }, "Invalid client details."],
+        ["phone without digits", { contactPhone: "call-me-later" }, "Contact phone is not a valid phone number."],
+        ["phone with too few digits", { contactPhone: "98-765-43" }, "Contact phone is not a valid phone number."],
+        ["phone with too many digits", { contactPhone: "+1234567890123456" }, "Contact phone is not a valid phone number."],
+        ["goal field", { displayName: "Asha", goal: "Lose 6 kg" }, "Invalid client details."],
+        ["sign-in phone field", { phoneE164: "+919999999999" }, "Invalid client details."],
+        ["not an object", "Asha", "Invalid client details."],
+      ];
+      for (const [index, [label, body, message]] of rejected.entries()) {
+        const response = await send(
+          "PATCH",
+          `${base(ctx.relationshipId)}/basic`,
+          ctx.trainer,
+          body,
+          `bad-${index}`,
+        );
+        expect(response.status, label).toBe(400);
+        const text = await response.text();
+        const error = (JSON.parse(text) as { error: { code: string; message: string } }).error;
+        expect(error, label).toMatchObject({ code: "INVALID_REQUEST", message });
+        // The rejected value is never echoed back.
+        for (const secret of ["call-me-later", "98-765-43", "Lose 6 kg", "+919999999999"]) {
+          expect(text, label).not.toContain(secret);
+        }
+      }
+      expect(await relationshipBasics(ctx.relationshipId)).toEqual(before);
+      expect(await clientOwnRows(ctx.traineeUserId)).toEqual(ownBefore);
+    });
+
+    it("needs an Idempotency-Key, replays a retry without a second write and rejects a reused key", async () => {
+      const ctx = await reachActive("cs-basickey@example.com", "basickey");
+      const path = `${base(ctx.relationshipId)}/basic`;
+      const missing = await send("PATCH", path, ctx.trainer, { displayName: "Asha" });
+      expect(missing.status).toBe(400);
+      expect(await errorOf(missing)).toMatchObject({
+        code: "IDEMPOTENCY_KEY_REQUIRED",
+        message: "Idempotency-Key header is required.",
+      });
+      expect(await relationshipBasics(ctx.relationshipId)).toMatchObject({ clientDisplayName: null });
+
+      const body = { displayName: "Asha", contactPhone: "9876543210" };
+      const first = await send("PATCH", path, ctx.trainer, body, "basic-key-1");
+      expect(first.status).toBe(200);
+      const firstJson = await first.json();
+      // A later change made elsewhere: a replay must not write the old values back.
+      await db
+        .update(schema.coachingRelationships)
+        .set({ clientDisplayName: "Changed later" })
+        .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+      const replay = await send("PATCH", path, ctx.trainer, body, "basic-key-1");
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toEqual(firstJson);
+      expect(await relationshipBasics(ctx.relationshipId)).toMatchObject({
+        clientDisplayName: "Changed later",
+      });
+
+      const reused = await send("PATCH", path, ctx.trainer, { displayName: "Someone else" }, "basic-key-1");
+      expect(reused.status).toBe(409);
+      expect(await errorOf(reused)).toMatchObject({
+        code: "IDEMPOTENCY_KEY_REUSE",
+        message: "Idempotency key was reused with a different request.",
+      });
+      expect(await relationshipBasics(ctx.relationshipId)).toMatchObject({
+        clientDisplayName: "Changed later",
+        contactPhoneE164: "+919876543210",
+      });
+      const receipts = await db
+        .select()
+        .from(schema.idempotencyRecords)
+        .where(eq(schema.idempotencyRecords.operation, "client_settings.basics.patch"));
+      expect(receipts).toHaveLength(1);
+    });
+
+    it("an ended relationship answers 409 and keeps its values; the owner still reads them", async () => {
+      const ctx = await reachActive("cs-basicend@example.com", "basicend");
+      const path = `${base(ctx.relationshipId)}/basic`;
+      const set = await send("PATCH", path, ctx.trainer, { displayName: "Asha", contactPhone: "9876543210" }, "end-set");
+      expect(set.status).toBe(200);
+      const ended = await send("POST", `/relationships/${ctx.relationshipId}/end`, ctx.trainer, { reason: "paused" }, "end-basic");
+      expect(ended.status).toBe(200);
+      for (const [index, body] of [{ displayName: "Other" }, { contactPhone: null }].entries()) {
+        const response = await send("PATCH", path, ctx.trainer, body, `end-w-${index}`);
+        expect(response.status).toBe(409);
+        expect(await errorOf(response)).toMatchObject({
+          code: "RELATIONSHIP_ENDED",
+          message: "Coaching relationship has ended.",
+        });
+      }
+      expect(await relationshipBasics(ctx.relationshipId)).toMatchObject({
+        clientDisplayName: "Asha",
+        contactPhoneE164: "+919876543210",
+      });
+      const read = await send("GET", base(ctx.relationshipId), ctx.trainer);
+      expect(read.status).toBe(200);
+      expect(await dataOf<{ readOnly: boolean; basics: Basics }>(read)).toMatchObject({
+        readOnly: true,
+        basics: { clientDisplayName: "Asha", contactPhoneE164: "+919876543210" },
+      });
+      // A retry of the PATCH that succeeded before the end replays its answer.
+      const retry = await send("PATCH", path, ctx.trainer, { displayName: "Asha", contactPhone: "9876543210" }, "end-set");
+      expect(retry.status).toBe(200);
+    });
+
+    it("other unknown paths keep the static 404", async () => {
+      const { trainer, relationshipId } = await reachActive("cs-unknown@example.com", "unknown");
+      for (const [method, path] of [
+        ["PATCH", `${base(relationshipId)}/goal`],
+        ["PUT", `${base(relationshipId)}/basic`],
+        ["GET", `${base(relationshipId)}/basic/extra`],
+      ] as const) {
+        const body = method === "GET" ? undefined : { displayName: "Asha" };
+        const response = await send(method, path, trainer, body, `unknown-${method}`);
+        expect(response.status, `${method} ${path}`).toBe(404);
+        expect(await errorOf(response)).toMatchObject({
+          code: "not_implemented",
+          message: "This endpoint is not available yet.",
+        });
+      }
+    });
   });
 
-  it("logs no name, phone, note or amount across every endpoint (log spy)", async () => {
+  it("logs no name, phone, note or amount across every endpoint, basics included (log spy)", async () => {
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((level) =>
       vi.spyOn(console, level).mockImplementation(() => {}),
     );
@@ -835,8 +1064,32 @@ describe("Z6-8 client settings", () => {
       { status: "paid", paidOn: today(), method: "upi", note },
       "logs-patch",
     );
+    const clientName = "Kavitha nightshift";
+    const contactPhone = "+91 90123 45678";
+    await send(
+      "PATCH",
+      `${base(ctx.relationshipId)}/basic`,
+      ctx.trainer,
+      { displayName: clientName, contactPhone },
+      "logs-basic",
+    );
+    // Rejected basics must not be echoed to the logs either.
+    await send(
+      "PATCH",
+      `${base(ctx.relationshipId)}/basic`,
+      ctx.trainer,
+      { displayName: clientName, contactPhone: "90123-45" },
+      "logs-basic-bad",
+    );
     await send("GET", base(ctx.relationshipId), ctx.trainer);
     await send("POST", `/relationships/${ctx.relationshipId}/end`, ctx.trainer, { reason: "paused" }, "logs-end");
+    await send(
+      "PATCH",
+      `${base(ctx.relationshipId)}/basic`,
+      ctx.trainer,
+      { displayName: clientName },
+      "logs-basic-ended",
+    );
     await send(
       "POST",
       `${base(ctx.relationshipId)}/payments`,
@@ -853,7 +1106,18 @@ describe("Z6-8 client settings", () => {
       .flatMap((spy) => spy.mock.calls)
       .map((args) => args.map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg) ?? String(arg))).join(" "))
       .join("\n");
-    for (const secret of [phone, "9876543210", note, planName, "4242400", profile!.displayName]) {
+    for (const secret of [
+      phone,
+      "9876543210",
+      note,
+      planName,
+      "4242400",
+      profile!.displayName,
+      clientName,
+      "9012345678",
+      "90123 45678",
+      "90123-45",
+    ]) {
       expect(logged).not.toContain(secret);
     }
   });

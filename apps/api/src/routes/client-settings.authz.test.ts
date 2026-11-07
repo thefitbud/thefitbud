@@ -186,6 +186,11 @@ async function errorOf(response: Response) {
 
 
 
+/** Trainer-set basics (Z6-8b) on the owner's relationship; never shown to anyone else. */
+const OWNER_SET_NAME = "Ravi early slot";
+const OWNER_SET_PHONE = "+91 91234 56789";
+const OWNER_SET_DIGITS = "919123456789";
+
 describe("Z6-8 client settings authorization", () => {
   let db: Db;
   let closeDb: () => void;
@@ -210,6 +215,15 @@ describe("Z6-8 client settings authorization", () => {
     return {
       subscriptions: byId(await db.select().from(schema.subscriptionVersions)),
       payments: byId(await db.select().from(schema.paymentRecords)),
+      // Z6-8b: the whole relationship rows, trainer-owned basics included.
+      relationships: byId(await db.select().from(schema.coachingRelationships)),
+      // The client's own name and sign-in identifier, which no write may touch.
+      profiles: [...(await db.select().from(schema.traineeProfiles))].sort((a, b) =>
+        a.userId.localeCompare(b.userId),
+      ),
+      identities: [...(await db.select().from(schema.userIdentities))].sort((a, b) =>
+        a.userId.localeCompare(b.userId),
+      ),
     };
   }
 
@@ -233,6 +247,14 @@ describe("Z6-8 client settings authorization", () => {
     );
     expect(created.status).toBe(201);
     const payment = ((await created.json()) as { data: { id: string } }).data;
+    const basics = await send(
+      "PATCH",
+      `${base(owner.relationshipId)}/basic`,
+      owner.trainer,
+      { displayName: OWNER_SET_NAME, contactPhone: OWNER_SET_PHONE },
+      `csz-basic-${suffix}`,
+    );
+    expect(basics.status).toBe(200);
     return { owner, stranger, paymentId: payment.id };
   }
 
@@ -249,6 +271,11 @@ describe("Z6-8 client settings authorization", () => {
         `${base(relationshipId)}/payments/${paymentId}`,
         { status: "paid", paidOn: today(), method: "cash" },
       ],
+      [
+        "PATCH",
+        `${base(relationshipId)}/basic`,
+        { displayName: "Taken over", contactPhone: "9000000001" },
+      ],
     ] as const;
   }
 
@@ -261,6 +288,8 @@ describe("Z6-8 client settings authorization", () => {
     expect(readText).toContain("RELATIONSHIP_NOT_FOUND");
     expect(readText).not.toContain(owner.relationshipId);
     expect(readText).not.toContain("Month 1");
+    expect(readText).not.toContain(OWNER_SET_NAME);
+    expect(readText).not.toContain(OWNER_SET_DIGITS);
     for (const [index, [method, path, body]] of writes(owner.relationshipId, paymentId).entries()) {
       const response = await send(method, path, stranger.trainer, body, `csz-cross-${index}`);
       expect(response.status, `${method} ${path}`).toBe(404);
@@ -317,6 +346,71 @@ describe("Z6-8 client settings authorization", () => {
     expect(await snapshot()).toEqual(before);
   });
 
+  it("an unrelated trainee (another trainer's client) cannot read or write (403)", async () => {
+    const { owner, stranger, paymentId } = await setup("unrelated");
+    const before = await snapshot();
+    const read = await send("GET", base(owner.relationshipId), stranger.trainee);
+    expect(read.status).toBe(403);
+    expect(await read.text()).not.toContain(OWNER_SET_NAME);
+    for (const [index, [method, path, body]] of writes(owner.relationshipId, paymentId).entries()) {
+      const response = await send(method, path, stranger.trainee, body, `csz-unrelated-${index}`);
+      expect(response.status, `${method} ${path}`).toBe(403);
+      expect((await errorOf(response)).code).toBe("FORBIDDEN_ROLE");
+    }
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("the trainee's own relationship reads and sync pull never carry the trainer-set name or contact phone", async () => {
+    const { owner } = await setup("traineeview");
+    // A logged measurement, so the pull has records of this relationship to return.
+    const measured = await send(
+      "POST",
+      `/progress/relationships/${owner.relationshipId}/measurements`,
+      owner.trainee,
+      { type: "body_weight_kg", value: 71.4, unit: "kg" },
+      "csz-traineeview-meas",
+    );
+    expect(measured.status).toBe(200);
+    const banned = [
+      OWNER_SET_NAME,
+      OWNER_SET_DIGITS,
+      "clientDisplayName",
+      "contactPhone",
+      "client_display_name",
+      "contact_phone",
+    ];
+    for (const path of ["/relationships", `/relationships/${owner.relationshipId}`]) {
+      const response = await send("GET", path, owner.trainee);
+      expect(response.status, path).toBe(200);
+      const text = await response.text();
+      // The read returns the trainee's own relationship, so the check is meaningful.
+      expect(text, path).toContain(owner.relationshipId);
+      for (const value of banned) {
+        expect(text, `${path} carries ${value}`).not.toContain(value);
+      }
+    }
+    // Every sync page, so no later page carries them either.
+    let cursor: string | null = null;
+    let pages = 0;
+    let changes = 0;
+    do {
+      const path = `/sync/pull?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      const response = await send("GET", path, owner.trainee);
+      expect(response.status, path).toBe(200);
+      const text = await response.text();
+      for (const value of banned) {
+        expect(text, `${path} carries ${value}`).not.toContain(value);
+      }
+      const body = JSON.parse(text) as {
+        data: { changes: unknown[]; nextCursor: string | null; hasMore: boolean };
+      };
+      changes += body.data.changes.length;
+      cursor = body.data.hasMore ? body.data.nextCursor : null;
+      pages += 1;
+    } while (cursor && pages < 50);
+    expect(changes).toBeGreaterThan(0);
+  });
+
   it("unauthenticated callers get 401 on read and every write", async () => {
     const { owner, paymentId } = await setup("anon");
     const before = await snapshot();
@@ -346,6 +440,16 @@ describe("Z6-8 client settings authorization", () => {
         "POST",
         `${base(owner.relationshipId)}/payments`,
         { amountPaise: 100, dueOn: today(), status: "unpaid", relationshipId: stranger.relationshipId },
+      ],
+      [
+        "PATCH",
+        `${base(owner.relationshipId)}/basic`,
+        { displayName: "Asha", coachingRelationshipId: stranger.relationshipId },
+      ],
+      [
+        "PATCH",
+        `${base(owner.relationshipId)}/basic`,
+        { displayName: "Asha", traineeUserId: stranger.traineeUserId },
       ],
     ] as const;
     for (const [index, [method, path, body]] of smuggled.entries()) {

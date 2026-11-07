@@ -1290,3 +1290,158 @@ describe("free-text scrubber (D-W6-39)", () => {
     expect(scrubStoredText("{ broken Priya Mehra", scrubber)).toBe("{ broken Deleted user");
   });
 });
+
+describe("account purge clears the trainer-owned client basics (Z6-8b, D-W6-42)", () => {
+  let handle: MemoryDbHandle;
+  let db: Db;
+
+  beforeEach(async () => {
+    media = createMemoryR2Bucket();
+    handle = await createMemoryDb();
+    db = handle.db;
+    setTestDbOverride(db);
+  });
+
+  afterEach(() => {
+    setTestDbOverride(null);
+    handle.close();
+    vi.restoreAllMocks();
+  });
+
+  async function setBasics(
+    trainer: { headers: Record<string, string> },
+    relationshipId: string,
+    body: { displayName?: string | null; contactPhone?: string | null },
+  ) {
+    const response = await call(`/client-settings/relationships/${relationshipId}/basic`, {
+      method: "PATCH",
+      headers: { ...trainer.headers, "Idempotency-Key": key("basic") },
+      body,
+    });
+    expect(response.status).toBe(200);
+  }
+
+  async function basicsOf(relationshipId: string) {
+    const [row] = await db
+      .select({
+        clientDisplayName: schema.coachingRelationships.clientDisplayName,
+        contactPhoneE164: schema.coachingRelationships.contactPhoneE164,
+      })
+      .from(schema.coachingRelationships)
+      .where(eq(schema.coachingRelationships.id, relationshipId));
+    return row!;
+  }
+
+  it("a purged client's relationships read \"Deleted user\" with no contact phone, and kept free text loses the trainer-set name and phone", async () => {
+    const trainer = await trainerSession("kavya.coach@example.com");
+    const person = await coachedTrainee(db, trainer, "bose");
+    // A nickname and a second number that appear nowhere else in the client's data.
+    const nickname = "Pinky Didi";
+    const contact = "+919988776655";
+    await setBasics(trainer, person.relationshipId, { displayName: nickname, contactPhone: "99887 76655" });
+    expect(await basicsOf(person.relationshipId)).toEqual({
+      clientDisplayName: nickname,
+      contactPhoneE164: contact,
+    });
+    const note = await call(`/checkins/relationships/${person.relationshipId}/notes`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("note") },
+      body: { body: `${nickname} prefers calls on 99887-76655 (${contact}) after 7 pm.`, visibility: "private" },
+    });
+    expect(note.status).toBe(200);
+
+    const purgeAfter = await deleteAccount(await signIn(person.email));
+    const logs = captureLogs();
+    let result;
+    try {
+      result = await runAccountPurge(testEnv(), plusMs(purgeAfter, 0));
+    } finally {
+      logs.restore();
+    }
+    expect(result).toEqual({ selected: 1, purged: 1, failed: 0 });
+
+    expect(await basicsOf(person.relationshipId)).toEqual({
+      clientDisplayName: DELETED_USER_NAME,
+      contactPhoneE164: null,
+    });
+    const notes = await db
+      .select({ body: schema.trainerNotes.body })
+      .from(schema.trainerNotes)
+      .where(eq(schema.trainerNotes.coachingRelationshipId, person.relationshipId));
+    expect(notes.map((row) => row.body)).toContain(
+      `${DELETED_USER_NAME} prefers calls on ${REMOVED_TEXT} (${REMOVED_TEXT}) after 7 pm.`,
+    );
+    // Nothing anywhere keeps the trainer-set name or phone, including the
+    // trainer's retry receipt for the PATCH.
+    expect(scanAllText(handle.sqlite, [nickname, contact, "9988776655"])).toEqual([]);
+    for (const line of logs.lines) {
+      for (const secret of [nickname, "9988776655"]) expect(line).not.toContain(secret);
+    }
+    assertNoForeignKeyViolations(handle.sqlite);
+  });
+
+  it("a purged trainer's relationships lose both values; the client's own name, sign-in phone and other trainers' values stay", async () => {
+    const trainer = await trainerSession("dev.coach@example.com");
+    const client = await coachedTrainee(db, trainer, "rao");
+    const otherTrainer = await trainerSession("isha.coach@example.com");
+    const otherClient = await coachedTrainee(db, otherTrainer, "nair");
+    await setBasics(trainer, client.relationshipId, {
+      displayName: "Rao from the gym",
+      contactPhone: "+91 90000 11111",
+    });
+    await setBasics(otherTrainer, otherClient.relationshipId, {
+      displayName: "Nair weekday batch",
+      contactPhone: "+91 90000 22222",
+    });
+
+    const ended = await call(`/relationships/${client.relationshipId}/end`, {
+      method: "POST",
+      headers: trainer.headers,
+      body: {},
+    });
+    expect(ended.status).toBe(200);
+    const purgeAfter = await deleteAccount(trainer.headers);
+    expect(await runAccountPurge(testEnv(), plusMs(purgeAfter, 1))).toEqual({
+      selected: 1,
+      purged: 1,
+      failed: 0,
+    });
+
+    expect(await basicsOf(client.relationshipId)).toEqual({
+      clientDisplayName: null,
+      contactPhoneE164: null,
+    });
+    expect(await basicsOf(otherClient.relationshipId)).toEqual({
+      clientDisplayName: "Nair weekday batch",
+      contactPhoneE164: "+919000022222",
+    });
+    const [profile] = await db
+      .select({ displayName: schema.traineeProfiles.displayName })
+      .from(schema.traineeProfiles)
+      .where(eq(schema.traineeProfiles.userId, client.userId));
+    expect(profile!.displayName).toBe(client.name);
+    const [identity] = await db
+      .select({ mobileE164: schema.userIdentities.mobileE164 })
+      .from(schema.userIdentities)
+      .where(eq(schema.userIdentities.userId, client.userId));
+    expect(identity!.mobileE164).toBe(client.mobile);
+    expect(scanAllText(handle.sqlite, ["Rao from the gym", "9000011111"])).toEqual([]);
+    assertNoForeignKeyViolations(handle.sqlite);
+  });
+});
+
+describe("free-text scrubber with trainer-kept contact phones (Z6-8b)", () => {
+  it("replaces every contact phone like the sign-in phone, and still works without a sign-in phone", () => {
+    const scrubber = buildScrubber({
+      emails: [],
+      mobile: null,
+      names: [],
+      contactPhones: ["+919988776655", "+447700900123"],
+    })!;
+    expect(scrubber.rewrite("call 99887 76655 or +91-99887-76655")).toBe(
+      "call [removed] or [removed]",
+    );
+    expect(scrubber.rewrite("UK +447700900123")).toBe("UK [removed]");
+    expect(scrubber.rewrite("order 1234")).toBe("order 1234");
+  });
+});

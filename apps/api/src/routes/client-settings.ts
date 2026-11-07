@@ -6,8 +6,10 @@ import {
   createPaymentRecordRequestSchema,
   paymentRecordSchema,
   putClientSubscriptionRequestSchema,
+  updateClientBasicsRequestSchema,
   updatePaymentRecordRequestSchema,
 } from "@fitbud/contracts";
+import { normalizeWhatsappE164 } from "@fitbud/core";
 import { operation } from "../openapi/document";
 import { createDb, type Db } from "../db/client";
 import { nowIso, sha256Hex } from "../lib/crypto";
@@ -18,6 +20,7 @@ import {
   requireRole,
 } from "../middleware/auth";
 import {
+  CLIENT_SETTINGS_BASICS_OPERATION,
   CLIENT_SETTINGS_PAYMENT_CREATE_OPERATION,
   CLIENT_SETTINGS_PAYMENT_UPDATE_OPERATION,
   CLIENT_SETTINGS_SUBSCRIPTION_OPERATION,
@@ -28,6 +31,7 @@ import {
   loadClientSettings,
   loadOwnedRelationship,
   loadRelationshipPayment,
+  saveClientBasics,
   saveSubscriptionVersion,
   updatePaymentRecord,
 } from "../domain/client-settings";
@@ -36,7 +40,8 @@ import type { Env, Variables } from "../types";
 /**
  * Z6-8 (v13 B3b): client settings for a trainer-owned relationship. Tracking only
  * (D-W6-5): subscription terms and payment records, never a collection, invoice,
- * reminder-to-pay or gateway. Only the owning trainer reads or writes; an ended
+ * reminder-to-pay or gateway. Z6-8b adds the trainer-owned client name and contact
+ * phone (PATCH /basic, D-W6-42). Only the owning trainer reads or writes; an ended
  * relationship stays readable and answers 409 to every write. Error messages are
  * static and nothing here is logged.
  */
@@ -353,8 +358,87 @@ clientSettingsRoutes.patch(
   },
 );
 
-// PATCH /relationships/:id/basic is not built yet (see the Z6-8 PR: the stored
-// fields it would write need a decision). Every other path stays a static 404.
+clientSettingsRoutes.patch(
+  "/relationships/:relationshipId/basic",
+  operation({
+    tag: "Subscriptions",
+    summary: "Sets or clears the name and contact phone the trainer keeps for this client.",
+    description:
+      "Changes only the trainer-owned client name and contact phone stored on this coaching relationship. Each field is optional and null clears it; at least one must be sent. The name is trimmed, 1 to 120 characters. The phone is normalised and stored as +<digits>; a number that does not normalise answers 400. The client's own profile name and sign-in phone never change, and the client never sees these values. Returns the updated client settings. An ended relationship answers 409 RELATIONSHIP_ENDED.",
+    roles: ["trainer"],
+    idempotency: true,
+    body: updateClientBasicsRequestSchema,
+    response: clientSettingsResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = idempotencyKeyOf(c);
+    if (!idempotencyKey) {
+      return fail(c, 400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required.");
+    }
+    const db = createDb(c.env.DB);
+    const relationship = await loadOwnedRelationship(
+      db,
+      c.req.param("relationshipId"),
+      actor.userId,
+    );
+    if (!relationship) return relationshipNotFound(c);
+    const parsed = await parseBody(c, updateClientBasicsRequestSchema);
+    if (!parsed.success) {
+      // For this schema the issues carry paths, codes and bounds, never the sent text.
+      return fail(c, 400, "INVALID_REQUEST", "Invalid client details.", {
+        issues: parsed.error.issues,
+      });
+    }
+    let contactPhoneE164 = relationship.contactPhoneE164;
+    if (parsed.data.contactPhone !== undefined) {
+      if (parsed.data.contactPhone === null) {
+        contactPhoneE164 = null;
+      } else {
+        const digits = normalizeWhatsappE164(parsed.data.contactPhone);
+        if (!digits) {
+          return fail(c, 400, "INVALID_REQUEST", "Contact phone is not a valid phone number.");
+        }
+        contactPhoneE164 = `+${digits}`;
+      }
+    }
+    const clientDisplayName =
+      parsed.data.displayName !== undefined
+        ? parsed.data.displayName
+        : relationship.clientDisplayName;
+    const fingerprint = await sha256Hex(
+      JSON.stringify({ relationshipId: relationship.id, ...parsed.data }),
+    );
+    return idempotentWrite(
+      c,
+      db,
+      {
+        actorUserId: actor.userId,
+        operation: CLIENT_SETTINGS_BASICS_OPERATION,
+        idempotencyKey,
+        fingerprint,
+      },
+      async () => {
+        if (relationship.status === "ended") return relationshipEnded(c);
+        const result = await saveClientBasics(
+          db,
+          relationship,
+          { clientDisplayName, contactPhoneE164 },
+          { actorUserId: actor.userId, idempotencyKey, fingerprint, now: nowIso() },
+        );
+        return c.json(result.body, result.status);
+      },
+    );
+  },
+);
+
+// Every other path stays a static 404.
 clientSettingsRoutes.all("*", (c) =>
   fail(c, 404, "not_implemented", "This endpoint is not available yet."),
 );
