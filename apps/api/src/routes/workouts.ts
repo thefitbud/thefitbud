@@ -12,6 +12,8 @@ import {
   generateWorkoutAssignmentsRequestSchema,
   generateWorkoutAssignmentsResponseSchema,
   localDateSchema,
+  skipWorkoutRequestSchema,
+  startWorkoutRequestSchema,
   workoutAdherenceResponseSchema,
   workoutAssignmentListResponseSchema,
   workoutAssignmentSchema,
@@ -64,6 +66,7 @@ import {
   assertLogTimeWithinBounds,
   isInEndedPeriod,
   isWithinCoachLogWindow,
+  resolveLogInstant,
 } from "../domain/log-time-bounds.js";
 import { recordCoachLogChange, workoutLogSnapshot } from "../domain/coach-log.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
@@ -739,6 +742,8 @@ workoutRoutes.post(
     description: "Workouts operation for POST /workouts/assignments/:assignmentId/start.",
     roles: ["trainee"],
     idempotency: true,
+    body: startWorkoutRequestSchema,
+    bodyRequired: false,
     response: workoutExecutionSchema,
   }),
   optionalAuthMiddleware,
@@ -760,9 +765,22 @@ workoutRoutes.post(
       );
     }
 
+    const parsed = startWorkoutRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid start request.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const clientLoggedAt = parsed.data.clientLoggedAt;
+
     const db = createDb(c.env.DB);
     const fingerprint = await sha256Hex(
-      JSON.stringify({ assignmentId: c.req.param("assignmentId") }),
+      JSON.stringify({
+        assignmentId: c.req.param("assignmentId"),
+        clientLoggedAt: clientLoggedAt ?? null,
+      }),
     );
     const existing = await findIdempotencyRecord(db, {
       actorUserId: actor.userId,
@@ -805,11 +823,12 @@ workoutRoutes.post(
     if (!writableStart.ok) return writableStart.response;
 
     const now = nowIso();
+    const logInstant = resolveLogInstant({ clientLoggedAt, now });
     if (
       await workoutInEndedPeriod(db, {
         relationship,
         localDate: loaded.assignment.localDate,
-        loggedAt: now,
+        loggedAt: logInstant,
       })
     ) {
       return endedPeriodError(c);
@@ -851,9 +870,8 @@ workoutRoutes.post(
       );
     }
 
-    // Workout requests carry no client time, so the instant is the server's.
     const startBounds = assertLogTimeWithinBounds({
-      clientLoggedAt: now,
+      clientLoggedAt: logInstant,
       windowStart: loaded.assignment.windowStartsAt,
       now,
     });
@@ -895,11 +913,12 @@ workoutRoutes.post(
       traineeUserId: actor.userId,
       status: "started",
       recordVersion: 0,
-      startedAt: now,
+      startedAt: logInstant,
       pausedAt: null,
       completedAt: null,
       sessionRpe: null,
       requireSessionRpe,
+      clientLoggedAt: clientLoggedAt ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -1487,6 +1506,8 @@ workoutRoutes.post(
     description: "Workouts operation for POST /workouts/assignments/:assignmentId/skip.",
     roles: ["trainee"],
     idempotency: true,
+    body: skipWorkoutRequestSchema,
+    bodyRequired: false,
     response: workoutExecutionSchema,
   }),
   optionalAuthMiddleware,
@@ -1508,9 +1529,22 @@ workoutRoutes.post(
       );
     }
 
+    const parsed = skipWorkoutRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid skip request.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const clientLoggedAt = parsed.data.clientLoggedAt;
+
     const db = createDb(c.env.DB);
     const fingerprint = await sha256Hex(
-      JSON.stringify({ assignmentId: c.req.param("assignmentId") }),
+      JSON.stringify({
+        assignmentId: c.req.param("assignmentId"),
+        clientLoggedAt: clientLoggedAt ?? null,
+      }),
     );
     const existing = await findIdempotencyRecord(db, {
       actorUserId: actor.userId,
@@ -1552,11 +1586,13 @@ workoutRoutes.post(
     );
     if (!writableSkip.ok) return writableSkip.response;
 
+    const now = nowIso();
+    const logInstant = resolveLogInstant({ clientLoggedAt, now });
     if (
       await workoutInEndedPeriod(db, {
         relationship,
         localDate: loaded.assignment.localDate,
-        loggedAt: loaded.execution?.startedAt ?? nowIso(),
+        loggedAt: clientLoggedAt ?? loaded.execution?.startedAt ?? now,
       })
     ) {
       return endedPeriodError(c);
@@ -1564,17 +1600,33 @@ workoutRoutes.post(
     if (loaded.execution?.loggedByRole === "coach") {
       return coachLoggedReadOnlyError(c);
     }
+    // Absent client time keeps today's skip, which does not apply the
+    // window bounds. A supplied time is judged with the same bounds as start.
+    if (clientLoggedAt) {
+      const skipBounds = assertLogTimeWithinBounds({
+        clientLoggedAt: logInstant,
+        windowStart: loaded.assignment.windowStartsAt,
+        now,
+      });
+      if (!skipBounds.ok) {
+        return fail(
+          c,
+          422,
+          LOG_TIME_ERROR_CODES[skipBounds.reason],
+          LOG_TIME_ERROR_MESSAGES[skipBounds.reason],
+        );
+      }
+    }
 
     if (loaded.execution && isOpenWorkoutExecution(loaded.execution.status)) {
       if (!canSkipOpenWorkoutExecution(loaded.execution.status)) {
         return fail(c, 409, "INVALID_TRANSITION", "Cannot skip this workout.");
       }
-      const now = nowIso();
       await db
         .update(workoutExecutions)
         .set({
           status: "skipped",
-          completedAt: now,
+          completedAt: logInstant,
           pausedAt: null,
           recordVersion: loaded.execution.recordVersion + 1,
           updatedAt: now,
@@ -1621,7 +1673,6 @@ workoutRoutes.post(
     }
 
     const config = await loadActiveWorkoutConfig(db, relationship.id);
-    const now = nowIso();
     const executionId = createId();
     await db.insert(workoutExecutions).values({
       id: executionId,
@@ -1631,11 +1682,12 @@ workoutRoutes.post(
       traineeUserId: actor.userId,
       status: "skipped",
       recordVersion: 0,
-      startedAt: now,
+      startedAt: logInstant,
       pausedAt: null,
-      completedAt: now,
+      completedAt: logInstant,
       sessionRpe: null,
       requireSessionRpe: config?.tracking.requireSessionRpe ?? false,
+      clientLoggedAt: clientLoggedAt ?? null,
       createdAt: now,
       updatedAt: now,
     });

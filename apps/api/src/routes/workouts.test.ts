@@ -37,6 +37,16 @@ function windowOpen(item: { windowStartsAt: string }): boolean {
   return Date.parse(item.windowStartsAt) <= Date.now();
 }
 
+function pinServerNow(iso: string): () => void {
+  const globals = globalThis as { FITBUD_NOW?: string };
+  const previous = globals.FITBUD_NOW;
+  globals.FITBUD_NOW = iso;
+  return () => {
+    if (previous === undefined) delete globals.FITBUD_NOW;
+    else globals.FITBUD_NOW = previous;
+  };
+}
+
 function testEnv(): Env {
   return {
     DB: dummyD1(),
@@ -108,6 +118,7 @@ async function reachEffectivePlan(
   suffix: string,
   requireSessionRpe = false,
   sessionToday = false,
+  horizonDays = 13,
 ) {
   const trainer = await createTrainerSession(`wo-coach-${suffix}@example.com`);
   const created = await app.request(
@@ -298,7 +309,7 @@ async function reachEffectivePlan(
   );
 
   const today = formatLocalDate(new Date(), "Asia/Kolkata");
-  const toDate = addDaysToLocalDate(today, 13);
+  const toDate = addDaysToLocalDate(today, horizonDays);
   const generated = await app.request(
     `/workouts/relationships/${relationshipId}/assignments/generate`,
     {
@@ -756,6 +767,206 @@ describe("workout assignment and execution", () => {
 
     const onTime = await start(todays.id, "lt-start-2");
     expect(onTime.status).toBe(200);
+  });
+
+  it("starts and skips on the client day when the log was made before Kolkata midnight", async () => {
+    const zone = "Asia/Kolkata";
+    const { traineeToken, relationshipId, today, toDate } =
+      await reachEffectivePlan("lt-midnight", false, true, 21);
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const items = (
+      (await listed.json()) as {
+        data: {
+          items: Array<{ id: string; localDate: string; windowEndsAt: string }>;
+        };
+      }
+    ).data.items.sort((a, b) => a.localDate.localeCompare(b.localDate));
+    const startTarget = items.find((item) => item.localDate === today);
+    const skipTarget = items.find((item) => item.localDate > today);
+    expect(startTarget).toBeTruthy();
+    expect(skipTarget).toBeTruthy();
+
+    const db = getTestDbOverride()!;
+    async function act(
+      path: "start" | "skip",
+      item: { id: string; localDate: string; windowEndsAt: string },
+      key: string,
+      withClientTime: boolean,
+    ) {
+      expect(formatLocalDate(new Date(item.windowEndsAt), zone)).toBe(
+        addDaysToLocalDate(item.localDate, 1),
+      );
+      const clientLoggedAt = new Date(
+        Date.parse(item.windowEndsAt) - 60_000,
+      ).toISOString();
+      const serverReceivedAt = new Date(
+        Date.parse(item.windowEndsAt) + 2 * 60_000,
+      ).toISOString();
+      expect(formatLocalDate(new Date(clientLoggedAt), zone)).toBe(item.localDate);
+      expect(formatLocalDate(new Date(serverReceivedAt), zone)).not.toBe(
+        item.localDate,
+      );
+      const restore = pinServerNow(serverReceivedAt);
+      let response: Response;
+      try {
+        response = await app.request(
+          `/workouts/assignments/${item.id}/${path}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": key,
+            },
+            body: JSON.stringify(
+              withClientTime ? { clientLoggedAt } : {},
+            ),
+          },
+          testEnv(),
+        );
+      } finally {
+        restore();
+      }
+      return { response, clientLoggedAt, serverReceivedAt };
+    }
+
+    const started = await act("start", startTarget!, "lt-midnight-start", true);
+    expect(started.response.status).toBe(200);
+    const startedBody = (await started.response.json()) as {
+      data: { startedAt: string; status: string };
+    };
+    expect(startedBody.data.status).toBe("started");
+    expect(startedBody.data.startedAt).toBe(started.clientLoggedAt);
+    expect(formatLocalDate(new Date(startedBody.data.startedAt), zone)).toBe(
+      startTarget!.localDate,
+    );
+    const [startRow] = await db
+      .select()
+      .from(schema.workoutExecutions)
+      .where(eq(schema.workoutExecutions.assignmentId, startTarget!.id));
+    expect(startRow?.clientLoggedAt).toBe(started.clientLoggedAt);
+    expect(startRow?.startedAt).toBe(started.clientLoggedAt);
+    expect(formatLocalDate(new Date(startRow!.createdAt), zone)).not.toBe(
+      startTarget!.localDate,
+    );
+
+    const skipped = await act("skip", skipTarget!, "lt-midnight-skip", true);
+    expect(skipped.response.status).toBe(200);
+    const skippedBody = (await skipped.response.json()) as {
+      data: { startedAt: string; completedAt: string; status: string };
+    };
+    expect(skippedBody.data.status).toBe("skipped");
+    expect(skippedBody.data.startedAt).toBe(skipped.clientLoggedAt);
+    expect(skippedBody.data.completedAt).toBe(skipped.clientLoggedAt);
+    expect(formatLocalDate(new Date(skippedBody.data.startedAt), zone)).toBe(
+      skipTarget!.localDate,
+    );
+
+    const later = items.find((item) => item.localDate > skipTarget!.localDate);
+    expect(later).toBeTruthy();
+    const serverSkip = await act("skip", later!, "lt-midnight-skip-server", false);
+    expect(serverSkip.response.status).toBe(200);
+    const serverBody = (await serverSkip.response.json()) as {
+      data: { startedAt: string };
+    };
+    expect(serverBody.data.startedAt).toBe(serverSkip.serverReceivedAt);
+    expect(formatLocalDate(new Date(serverBody.data.startedAt), zone)).not.toBe(
+      later!.localDate,
+    );
+    const [serverRow] = await db
+      .select()
+      .from(schema.workoutExecutions)
+      .where(eq(schema.workoutExecutions.assignmentId, later!.id));
+    expect(serverRow?.clientLoggedAt).toBeNull();
+  });
+
+  it("rejects a start client time outside the bounds and a non-timestamp", async () => {
+    const { traineeToken, relationshipId, today, toDate } =
+      await reachEffectivePlan("lt-client", false, true);
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const items = (
+      (await listed.json()) as {
+        data: {
+          items: Array<{ id: string; localDate: string; windowStartsAt: string }>;
+        };
+      }
+    ).data.items;
+    const todays = items.find((item) => item.localDate === today)!;
+    const future = items.find((item) => item.localDate > today)!;
+    const post = (id: string, key: string, body: Record<string, unknown>) =>
+      app.request(
+        `/workouts/assignments/${id}/start`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${traineeToken}`,
+            "x-fitbud-role": "trainee",
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify(body),
+        },
+        testEnv(),
+      );
+
+    const early = await post(todays.id, "lt-client-1", {
+      clientLoggedAt: new Date(
+        Date.parse(todays.windowStartsAt) - 1000,
+      ).toISOString(),
+    });
+    expect(early.status).toBe(422);
+    const earlyError = (
+      (await early.json()) as { error: { code: string; message: string } }
+    ).error;
+    expect(earlyError.code).toBe("LOG_TIME_BEFORE_WINDOW");
+    expect(earlyError.message).toBe(
+      "The log time is before this item's window opened.",
+    );
+
+    const ahead = await post(future.id, "lt-client-2", {
+      clientLoggedAt: new Date(Date.now() + 6 * 60_000).toISOString(),
+    });
+    expect(ahead.status).toBe(422);
+    expect(
+      ((await ahead.json()) as { error: { code: string; message: string } }).error
+        .code,
+    ).toBe("LOG_TIME_IN_FUTURE");
+
+    const bad = await post(todays.id, "lt-client-3", {
+      clientLoggedAt: "not-a-time",
+    });
+    expect(bad.status).toBe(400);
+    const badError = (
+      (await bad.json()) as { error: { code: string; message: string } }
+    ).error;
+    expect(badError.code).toBe("INVALID_REQUEST");
+    expect(badError.message).toBe("Invalid start request.");
+    expect(badError.message).not.toContain("not-a-time");
+
+    const executions = await getTestDbOverride()!
+      .select()
+      .from(schema.workoutExecutions)
+      .where(eq(schema.workoutExecutions.assignmentId, todays.id));
+    expect(executions).toEqual([]);
   });
 
   it("derives Missed when the window expires without execution", async () => {

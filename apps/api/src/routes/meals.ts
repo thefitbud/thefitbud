@@ -59,6 +59,7 @@ import {
   LOG_TIME_ERROR_MESSAGES,
   isInEndedPeriod,
   isWithinCoachLogWindow,
+  resolveLogInstant,
 } from "../domain/log-time-bounds.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { appendChangeLog } from "../domain/sync";
@@ -811,6 +812,7 @@ async function recordCompliance(
       deviationKind: input.deviationKind ?? null,
       notes: input.notes ?? null,
       photoIntent: input.photoIntent ?? null,
+      clientLoggedAt: input.clientLoggedAt ?? null,
     }),
   );
   const existing = await findIdempotencyRecord(db, {
@@ -858,6 +860,12 @@ async function recordCompliance(
   }
 
   const now = nowIso();
+  // Client time, when sent, is the instant bounds, late, and status use.
+  // createdAt stays the server receive time.
+  const logInstant = resolveLogInstant({
+    clientLoggedAt: input.clientLoggedAt,
+    now,
+  });
   const timeZone = await loadTraineeTimezone(db, actor.userId);
   const logGuard = await assertMealLogAllowed(db, {
     assignmentId,
@@ -959,7 +967,7 @@ async function recordCompliance(
     traineeUserId: actor.userId,
     outcome: input.outcome,
     recordVersion: 0,
-    loggedAt: now,
+    loggedAt: logInstant,
     localDate: loaded.assignment.localDate,
     deviationKind: input.deviationKind ?? null,
     notes: input.notes ?? null,
@@ -1057,6 +1065,7 @@ mealRoutes.post(
       outcome: "confirmed",
       photoIntent: parsed.data.photoIntent ?? null,
       requirePhotoWhenConfigured: true,
+      clientLoggedAt: parsed.data.clientLoggedAt,
     });
   },
 );
@@ -1128,6 +1137,7 @@ mealRoutes.post(
       notes: parsed.data.notes ?? null,
       photoIntent: null,
       requirePhotoWhenConfigured: false,
+      clientLoggedAt: parsed.data.clientLoggedAt,
     });
   },
 );

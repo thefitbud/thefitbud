@@ -36,6 +36,21 @@ export function assertLogTimeWithinBounds(input: {
 }
 
 /**
+ * Instant used to judge a trainee log (Z7-20).
+ *
+ * A client-supplied time is when the log was made, so a submit just before
+ * local midnight is judged on that civil day and not on the server-receive
+ * day. When the client omits it, the server receive time is used and
+ * behaviour matches the paths that used to stamp `now` only.
+ */
+export function resolveLogInstant(input: {
+  clientLoggedAt?: string | null;
+  now: string;
+}): string {
+  return input.clientLoggedAt ? input.clientLoggedAt : input.now;
+}
+
+/**
  * EC1 rule 1: the ended period stays frozen after a reactivation.
  *
  * `reactivatedAt` is the relationship's latest reactivation. Reactivation

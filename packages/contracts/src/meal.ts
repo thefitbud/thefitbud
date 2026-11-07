@@ -179,6 +179,11 @@ export type GenerateMealAssignmentsResponse = z.infer<
 
 export const confirmMealRequestSchema = z.object({
   photoIntent: mealPhotoIntentSchema.nullable().optional(),
+  /**
+   * When the trainee confirmed, for an offline or near-midnight submit
+   * (Z7-20). Omitted: the server receive time is used.
+   */
+  clientLoggedAt: isoDateTimeSchema.optional(),
 });
 export type ConfirmMealRequest = z.infer<typeof confirmMealRequestSchema>;
 
@@ -193,6 +198,11 @@ export type DeviateMealRequest = z.infer<typeof deviateMealRequestSchema>;
 
 export const skipMealRequestSchema = z.object({
   notes: z.string().trim().max(500).nullable().optional(),
+  /**
+   * When the trainee skipped, for an offline or near-midnight submit
+   * (Z7-20). Omitted: the server receive time is used.
+   */
+  clientLoggedAt: isoDateTimeSchema.optional(),
 });
 export type SkipMealRequest = z.infer<typeof skipMealRequestSchema>;
 
