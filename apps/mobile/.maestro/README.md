@@ -120,21 +120,27 @@ Names only here. Values never go in a flow, a PR, a log or a chat.
 
 | Name | Where the value comes from | Used by |
 |---|---|---|
-| `QA_TRAINER_EMAIL` | `accounts[key=trainer].email` in `apps/api/src/seed/qa/expectations.json` (committed) | trainer flows, role-select |
-| `QA_ONTRACK_EMAIL` | `accounts[key=ontrack].email`, same file | on-track flows |
-| `QA_SLIPPING_EMAIL` | `accounts[key=slipping].email`, same file | workout-log, checkin |
+| `QA_TRAINER_EMAIL` | `suites.<suite>.accounts[key=trainer].email` in `apps/api/src/seed/qa/expectations.json` (committed). `<suite>` is `android` or `ios` | trainer flows, role-select |
+| `QA_ONTRACK_EMAIL` | `suites.<suite>.accounts[key=ontrack].email`, same file | on-track flows |
+| `QA_SLIPPING_EMAIL` | `suites.<suite>.accounts[key=slipping].email`, same file | workout-log, checkin |
 | `QA_OTP_CODE` | GitHub secret `QA_TEST_OTP_CODE` (the staging test-mode login code, QT1) | the code sign-in |
 | `QA_PASSWORD` | GitHub secret `FITBUD_QA_PASSWORD` | the password sign-in |
-| `QA_TODAY_WORKOUT_NAME` (optional) | `accounts[key=ontrack].today.workoutName` in the run's `apps/api/.qa-seed/expectations.json`; leave unset or empty on a rest day | `trainee/today.yaml` |
-| `QA_TODAY_MEAL_NAME` (optional) | `accounts[key=ontrack].today.mealNames[0]`, same file | `trainee/today.yaml` |
+| `QA_TODAY_WORKOUT_NAME` (optional) | `accounts[key=ontrack].today.workoutName` in the run's `apps/api/.qa-seed/<suite>/expectations.json` (`<suite>` is `android` or `ios`); leave unset or empty on a rest day | `trainee/today.yaml` |
+| `QA_TODAY_MEAL_NAME` (optional) | `accounts[key=ontrack].today.mealNames[0]`, same per-suite file | `trainee/today.yaml` |
 
 The QA display names (`QA Aarav`, `QA Rohan`) are set as defaults in the header of
 the trainer flows; the runner may override them with `QA_ONTRACK_NAME` and
 `QA_SLIPPING_NAME`. Emails, names and ids come from the **committed**
-`expectations.json`. Anything dated (`today`, `rowCounts`, `referenceDate`,
-`loggableWorkout`) comes only from the **run's own** `.qa-seed/expectations.json`,
-because it changes every night (D-QA1-3). The two optional variables above are the
-only dated values the suite reads, and the flows check structure only without them.
+`expectations.json`, under `suites.android` or `suites.ios` (D-W5-14). The
+top-level `.accounts` array is a copy of `suites.android.accounts`, kept because
+`scripts/qa/run-maestro.sh` and `run-maestro-ios.sh` read `.accounts[]`. The
+`android` and `ios` jobs in `qa.yml` replace that array with the suite they are
+about to run before Maestro starts. No flow should be pointed at `suites.api`
+or `suites.web`. Anything dated (`today`, `rowCounts`, `referenceDate`,
+`loggableWorkout`) comes only from the **run's own**
+`.qa-seed/<suite>/expectations.json`, because it changes every night (D-QA1-3).
+The two optional variables above are the only dated values the suite reads, and
+the flows check structure only without them.
 
 The QA personas have rest days (Wed, Fri and Sun in the sample week), so
 `today.workoutName` being empty is a valid state, not a failure. For the same
@@ -143,13 +149,45 @@ workout" or "Log it" the Workout tab offers, rather than assuming today.
 
 ## Run
 
-From the repo root, with the emulator up and the APK installed:
+Prefer the runners. They install the app, pass the emails and secrets, and write
+the JUnit file the report builder expects. From the repo root, with the device
+up. `QA_TEST_OTP_CODE` and `FITBUD_QA_PASSWORD` come from your vault; do not echo
+them. `QA_MAESTRO_TAG` is `smoke` or `full` (default `full`).
+
+```bash
+QA_MAESTRO_TAG=smoke scripts/qa/run-maestro.sh
+QA_IOS_UDID=<udid> QA_MAESTRO_TAG=smoke scripts/qa/run-maestro-ios.sh
+```
+
+`run-maestro.sh` reads top-level `.accounts[]`, which on a fresh checkout is the
+**android** suite (`qa+android-…@thefitbud.com`). `run-maestro-ios.sh` reads the
+same array. Before a local iOS run, replace it with the iOS suite the way
+`qa.yml` does, or the simulator signs in as the Android personas:
 
 ```bash
 EXP=apps/api/src/seed/qa/expectations.json
-export QA_TRAINER_EMAIL=$(jq -r '.accounts[] | select(.key=="trainer").email' "$EXP")
-export QA_ONTRACK_EMAIL=$(jq -r '.accounts[] | select(.key=="ontrack").email' "$EXP")
-export QA_SLIPPING_EMAIL=$(jq -r '.accounts[] | select(.key=="slipping").email' "$EXP")
+jq --arg s ios \
+  'if (.suites[$s].accounts | length) > 0 then .accounts = .suites[$s].accounts else error("no ios suite") end' \
+  "$EXP" > "$EXP.tmp" && mv "$EXP.tmp" "$EXP"
+```
+
+That rewrite is local and must not be committed. The file generator for the
+platform you are driving is in `docs/runbooks/qa-nightly.md`:
+
+```bash
+FITBUD_QA_PASSWORD=… pnpm --filter @fitbud/api qa:seed -- --suite android --reference-date 2026-11-02
+# or --suite ios. qa:reset takes the same --suite. Neither command applies SQL.
+```
+
+A hand run that does not use the scripts selects the suite in `jq` and points
+Maestro at the workspace directory:
+
+```bash
+EXP=apps/api/src/seed/qa/expectations.json
+SUITE=android   # ios: also set --test-output-dir qa-results/ios and add --device "$QA_IOS_UDID"
+export QA_TRAINER_EMAIL=$(jq -r --arg s "$SUITE" '.suites[$s].accounts[] | select(.key=="trainer").email' "$EXP")
+export QA_ONTRACK_EMAIL=$(jq -r --arg s "$SUITE" '.suites[$s].accounts[] | select(.key=="ontrack").email' "$EXP")
+export QA_SLIPPING_EMAIL=$(jq -r --arg s "$SUITE" '.suites[$s].accounts[] | select(.key=="slipping").email' "$EXP")
 # QA_OTP_CODE and QA_PASSWORD: export them from your vault; do not echo them.
 
 maestro test \
@@ -164,8 +202,9 @@ maestro test \
   apps/mobile/.maestro
 ```
 
-On an iOS simulator, add `--device <udid>` and write to `qa-results/ios` instead;
-`scripts/qa/run-maestro-ios.sh` does exactly that.
+On an iOS simulator, add `--device <udid>`, set `SUITE=ios`, and write to
+`qa-results/ios`. Do not point this command at `.accounts[]`: that list is the
+Android copy.
 
 - `--include-tags smoke` runs the smoke set (auth, Today, trainer Clients).
   `--include-tags full`, or no filter, runs everything.
