@@ -3,10 +3,13 @@ import {
   type CheckinCadence,
   type CheckinDraftAnswers,
   type CheckinFieldDefinition,
+  type CheckinPhotoIntent,
   type CheckinRecordStatus,
+  type CheckinStandardKey,
   type CheckinStatus,
   type MeasurementType,
 } from "@fitbud/contracts";
+import { defaultUnitForMeasurementType } from "./progress.js";
 import { addDaysToLocalDate } from "./workout.js";
 
 export const MVP_CHECKIN_DEFINITION_VERSION = 1;
@@ -14,8 +17,24 @@ export const MVP_CHECKIN_DEFINITION_VERSION = 1;
 /** Seeded global weekly check-in. Migration 0019 inserts these ids. */
 export const GLOBAL_CHECKIN_FORM_TEMPLATE_ID =
   "c1000001-0000-4000-8000-000000000001";
-export const GLOBAL_CHECKIN_FORM_VERSION_ID =
+/** Global check-in form v1 (migration 0019/0029). History stays pinned to it. */
+export const GLOBAL_CHECKIN_FORM_V1_VERSION_ID =
   "c1000001-0000-4000-8000-000000000011";
+
+/**
+ * Global check-in form v2 (migration 0041, D-W6-17): standard `key` on every
+ * question, all optional.
+ */
+export const GLOBAL_CHECKIN_FORM_V2_VERSION_ID =
+  "c1000001-0000-4000-8000-000000000012";
+
+/**
+ * The global form version new assignments use (D-W6-18, D-W6-34). The API
+ * fallback pin, the fork route and web Configure all read this one constant,
+ * so flipping it moves them together. Existing check-ins keep the version they
+ * were pinned to (v1 for everything created before migration 0041).
+ */
+export const GLOBAL_CHECKIN_FORM_VERSION_ID = GLOBAL_CHECKIN_FORM_V2_VERSION_ID;
 
 /** Step 1 measurements/photos; step 2–3 reflection (mockup 14). */
 export const GLOBAL_CHECKIN_FORM_FIELDS: CheckinFieldDefinition[] = [
@@ -73,6 +92,30 @@ export const GLOBAL_CHECKIN_FORM_FIELDS: CheckinFieldDefinition[] = [
 /** JSON for checkin_form_versions.definition_json (seed + migration drift). */
 export const GLOBAL_CHECKIN_FORM_DEFINITION_JSON = JSON.stringify({
   fields: GLOBAL_CHECKIN_FORM_FIELDS,
+});
+
+/** Standard v2 questions. `key` equals `id`; all optional (D-W6-17). */
+export const GLOBAL_CHECKIN_FORM_V2_FIELDS: Array<
+  CheckinFieldDefinition & { key: string }
+> = [
+  { key: "weight", id: "weight", label: "Body weight", type: "measurement", measurementType: "body_weight_kg", required: false },
+  { key: "waist", id: "waist", label: "Waist", type: "measurement", measurementType: "waist_cm", required: false },
+  { key: "hips", id: "hips", label: "Hips", type: "measurement", measurementType: "hip_cm", required: false },
+  { key: "chest", id: "chest", label: "Chest", type: "measurement", measurementType: "chest_cm", required: false },
+  { key: "arm", id: "arm", label: "Arm", type: "measurement", measurementType: "other", unit: "cm", required: false },
+  { key: "thigh", id: "thigh", label: "Thigh", type: "measurement", measurementType: "other", unit: "cm", required: false },
+  { key: "photo_front", id: "photo_front", label: "Front", type: "photo_intent", photoSlot: "front", required: false },
+  { key: "photo_side", id: "photo_side", label: "Side", type: "photo_intent", photoSlot: "side", required: false },
+  { key: "photo_back", id: "photo_back", label: "Back", type: "photo_intent", photoSlot: "back", required: false },
+  { key: "energy", id: "energy", label: "Energy", type: "scale_1_5", required: false },
+  { key: "sleep_quality", id: "sleep_quality", label: "Sleep quality", type: "scale_1_5", required: false },
+  { key: "stress", id: "stress", label: "Stress", type: "scale_1_5", required: false },
+  { key: "hunger", id: "hunger", label: "Hunger", type: "scale_1_5", required: false },
+  { key: "notes", id: "notes", label: "Notes", type: "long_text", required: false, maxLength: 2000 },
+];
+
+export const GLOBAL_CHECKIN_FORM_V2_DEFINITION_JSON = JSON.stringify({
+  fields: GLOBAL_CHECKIN_FORM_V2_FIELDS,
 });
 
 const REQUIRED_DRAFT_KEYS = ["wellbeing"] as const;
@@ -237,35 +280,144 @@ function isBlankCheckinFieldAnswer(
     return typeof value !== "number" || !Number.isFinite(value);
   }
   if (field.type === "photo_intent") {
-    return typeof value !== "object";
+    // A file id (what mobile sends; Z6-6 accepts it) or a photo-intent object.
+    if (typeof value === "string") return value.length === 0;
+    return typeof value !== "object" || Array.isArray(value);
   }
   return true;
 }
 
+function isBodyWeightField(field: CheckinFieldDefinition): boolean {
+  return (
+    field.type === "measurement" && field.measurementType === "body_weight_kg"
+  );
+}
+
 /**
- * Measurement rows to insert from a submitted check-in.
- * The answer object is kept separately. bodyWeightKg still links body_weight_kg.
+ * Each question of the form once (first occurrence of an id), in form order,
+ * with its answer. Keyed `fieldAnswers` win; the legacy keys fill only the
+ * fields they belong to (see `answerForCheckinField`). The legacy
+ * `bodyWeightKg` fills at most one body-weight question, and none when any
+ * body-weight question is answered directly in `fieldAnswers`.
+ */
+function resolvedCheckinFieldAnswers(
+  fields: readonly CheckinFieldDefinition[],
+  answers: CheckinDraftAnswers | null | undefined,
+): Array<{ field: CheckinFieldDefinition; value: unknown }> {
+  const resolved: Array<{ field: CheckinFieldDefinition; value: unknown }> = [];
+  const seenFieldIds = new Set<string>();
+  let legacyWeightUsed = fields.some(
+    (field) =>
+      isBodyWeightField(field) &&
+      !isBlankCheckinFieldAnswer(field, answers?.fieldAnswers?.[field.id]),
+  );
+  for (const field of fields) {
+    if (seenFieldIds.has(field.id)) continue;
+    seenFieldIds.add(field.id);
+    const keyed = answers?.fieldAnswers?.[field.id];
+    if (keyed !== undefined) {
+      resolved.push({ field, value: keyed });
+      continue;
+    }
+    const isWeight = isBodyWeightField(field);
+    if (isWeight && legacyWeightUsed) {
+      resolved.push({ field, value: undefined });
+      continue;
+    }
+    const value = answerForCheckinField(field, answers);
+    if (isWeight && value !== undefined) legacyWeightUsed = true;
+    resolved.push({ field, value });
+  }
+  return resolved;
+}
+
+function unitForCheckinField(field: CheckinFieldDefinition): string | null {
+  if (field.type === "measurement") {
+    return field.unit ?? defaultUnitForMeasurementType(field.measurementType);
+  }
+  if (field.type === "number") return field.unit ?? null;
+  return null;
+}
+
+/** Measurement row derived from one answered measurement question. */
+export type LinkedCheckinMeasurement = {
+  type: MeasurementType;
+  value: number;
+  unit: string;
+};
+
+/**
+ * Measurement rows to insert from a submitted check-in (Z6-2b): one row per
+ * answered measurement question, de-duplicated by question id (not by type),
+ * each with the question's unit or else the type's default. Arm and thigh are
+ * both `other` in cm; which body part a row is lives in the check-in answer.
+ * The legacy `bodyWeightKg` adds a body_weight_kg row only when no question
+ * already produced one.
  */
 export function linkedMeasurementsForCheckin(input: {
   fields: readonly CheckinFieldDefinition[];
   answers: CheckinDraftAnswers;
-}): Array<{ type: MeasurementType; value: number }> {
-  const found: Array<{ type: MeasurementType; value: number }> = [];
-  const seen = new Set<string>();
-  for (const field of input.fields) {
+}): LinkedCheckinMeasurement[] {
+  const found: LinkedCheckinMeasurement[] = [];
+  for (const { field, value } of resolvedCheckinFieldAnswers(
+    input.fields,
+    input.answers,
+  )) {
     if (field.type !== "measurement") continue;
-    const raw = answerForCheckinField(field, input.answers);
-    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) continue;
-    if (seen.has(field.measurementType)) continue;
-    seen.add(field.measurementType);
-    found.push({ type: field.measurementType, value: raw });
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      continue;
+    }
+    found.push({
+      type: field.measurementType,
+      value,
+      unit: field.unit ?? defaultUnitForMeasurementType(field.measurementType),
+    });
   }
   if (
     typeof input.answers.bodyWeightKg === "number" &&
     input.answers.bodyWeightKg > 0 &&
-    !seen.has("body_weight_kg")
+    !found.some((row) => row.type === "body_weight_kg")
   ) {
-    found.push({ type: "body_weight_kg", value: input.answers.bodyWeightKg });
+    found.push({
+      type: "body_weight_kg",
+      value: input.answers.bodyWeightKg,
+      unit: defaultUnitForMeasurementType("body_weight_kg"),
+    });
   }
   return found;
+}
+
+/** One answered question of the pinned form, for the review screens. */
+export type CheckinAnswerEntry = {
+  fieldId: string;
+  key: CheckinStandardKey | null;
+  label: string;
+  type: CheckinFieldDefinition["type"];
+  unit: string | null;
+  value: string | number | boolean | string[] | CheckinPhotoIntent;
+};
+
+/**
+ * The pinned form's answered questions in form order (Z6-2b, D-W6-42). Reads
+ * `fieldAnswers` first and the legacy `wellbeing`, `notes` and `bodyWeightKg`
+ * only for the fields they belong to; skips unanswered questions and never
+ * adds an entry the form does not have. Shared by mobile and web review.
+ */
+export function checkinAnswerEntries(
+  fields: readonly CheckinFieldDefinition[],
+  answers: CheckinDraftAnswers | null | undefined,
+): CheckinAnswerEntry[] {
+  const entries: CheckinAnswerEntry[] = [];
+  for (const { field, value } of resolvedCheckinFieldAnswers(fields, answers)) {
+    if (isBlankCheckinFieldAnswer(field, value)) continue;
+    entries.push({
+      fieldId: field.id,
+      key: field.key ?? null,
+      label: field.label,
+      type: field.type,
+      unit: unitForCheckinField(field),
+      value: value as CheckinAnswerEntry["value"],
+    });
+  }
+  return entries;
 }

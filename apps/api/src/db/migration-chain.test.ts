@@ -5,6 +5,13 @@ import { fileURLToPath } from "node:url";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "../auth/password.js";
+import {
+  GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
+  GLOBAL_CHECKIN_FORM_V2_DEFINITION_JSON,
+  GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
+  findCheckinFormKeyProblem,
+  parseCheckinFormFields,
+} from "@fitbud/core";
 import { resolveSetLoad } from "../domain/load-parser.js";
 import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
@@ -264,7 +271,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0040 in order after 0029, with 0040 last", async () => {
+  it("places 0030 to 0041 in order after 0029, with 0041 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -282,7 +289,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 9]).toBe("0038_archived_account_state");
     expect(tags[previous + 10]).toBe("0039_log_authorship");
     expect(tags[previous + 11]).toBe("0040_client_basics");
-    expect(tags.at(-1)).toBe("0040_client_basics");
+    expect(tags[previous + 12]).toBe("0041_checkin_form_v2");
+    expect(tags.at(-1)).toBe("0041_checkin_form_v2");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -295,6 +303,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 9]?.idx).toBe(38);
     expect(journal[previous + 10]?.idx).toBe(39);
     expect(journal[previous + 11]?.idx).toBe(40);
+    expect(journal[previous + 12]?.idx).toBe(41);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -309,7 +318,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 9]).toBe("0038_archived_account_state.sql");
     expect(files[previousFile + 10]).toBe("0039_log_authorship.sql");
     expect(files[previousFile + 11]).toBe("0040_client_basics.sql");
-    expect(files.at(-1)).toBe("0040_client_basics.sql");
+    expect(files[previousFile + 12]).toBe("0041_checkin_form_v2.sql");
+    expect(files.at(-1)).toBe("0041_checkin_form_v2.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -807,6 +817,7 @@ describe("migration chain and seeds", () => {
 
         expect(tableRowCounts(handle.sqlite)).toEqual({
           ...countsBefore,
+          checkin_form_versions: countsBefore.checkin_form_versions! + 1, // 0041 inserts global v2
           payment_records: 0,
           daily_steps: 0,
           log_edit_events: 0,
@@ -1036,6 +1047,7 @@ describe("migration chain and seeds", () => {
 
         expect(tableRowCounts(handle.sqlite)).toEqual({
           ...countsBefore,
+          checkin_form_versions: countsBefore.checkin_form_versions! + 1, // 0041 inserts global v2
           daily_steps: 0,
           log_edit_events: 0,
         });
@@ -1221,7 +1233,11 @@ describe("migration chain and seeds", () => {
         handle.applyMigrationsFrom("0038_archived_account_state.sql");
         await yieldToEventLoop();
 
-        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, log_edit_events: 0 });
+        expect(tableRowCounts(handle.sqlite)).toEqual({
+          ...countsBefore,
+          checkin_form_versions: countsBefore.checkin_form_versions! + 1, // 0041 inserts global v2
+          log_edit_events: 0,
+        });
         assertNoForeignKeyViolations(handle.sqlite);
         expect(handle.sqlite.exec(usersSql)[0]?.values ?? []).toEqual(usersBefore);
         expect(
@@ -1590,7 +1606,11 @@ describe("migration chain and seeds", () => {
         handle.applyMigrationsFrom("0039_log_authorship.sql");
         await yieldToEventLoop();
 
-        expect(tableRowCounts(handle.sqlite)).toEqual({ ...countsBefore, log_edit_events: 0 });
+        expect(tableRowCounts(handle.sqlite)).toEqual({
+          ...countsBefore,
+          checkin_form_versions: countsBefore.checkin_form_versions! + 1, // 0041 inserts global v2
+          log_edit_events: 0,
+        });
         assertNoForeignKeyViolations(handle.sqlite);
         for (const table of logTables) {
           expect(
@@ -1762,7 +1782,10 @@ describe("migration chain and seeds", () => {
         handle.applyMigrationsFrom("0040_client_basics.sql");
         await yieldToEventLoop();
 
-        expect(tableRowCounts(handle.sqlite)).toEqual(countsBefore);
+        expect(tableRowCounts(handle.sqlite)).toEqual({
+          ...countsBefore,
+          checkin_form_versions: countsBefore.checkin_form_versions! + 1, // 0041 inserts global v2
+        });
         assertNoForeignKeyViolations(handle.sqlite);
         expect(
           handle.sqlite.exec(
@@ -1780,6 +1803,106 @@ describe("migration chain and seeds", () => {
     },
     120_000,
   );
+
+  it("records 0041 in the drizzle snapshot chain after 0040 with no schema change", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0040_snapshot.json"), "utf8"),
+    ) as { id: string; tables: unknown };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0041_snapshot.json"), "utf8"),
+    ) as { id: string; prevId: string; tables: unknown };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    expect(snapshot.tables).toEqual(previous.tables);
+  });
+
+  it("inserts global check-in form v2 insert-only when 0041 applies (Z6-2)", async () => {
+    const V1_ID = "c1000001-0000-4000-8000-000000000011";
+    const V2_ID = "c1000001-0000-4000-8000-000000000012";
+    expect(GLOBAL_CHECKIN_FORM_V1_VERSION_ID).toBe(V1_ID);
+    expect(GLOBAL_CHECKIN_FORM_V2_VERSION_ID).toBe(V2_ID);
+    const handle = await createMemoryDb({
+      foreignKeys: false,
+      through: "0040_client_basics.sql",
+    });
+    try {
+      const versionRows = () =>
+        handle.sqlite.exec(
+          "SELECT id, template_id, key, version, scope, trainer_user_id, schema_json, created_at FROM checkin_form_versions ORDER BY version",
+        )[0]?.values ?? [];
+      const before = versionRows();
+      expect(before).toHaveLength(1);
+      expect(before[0]![0]).toBe(V1_ID);
+      // A past check-in pinned to v1 must stay on v1.
+      handle.sqlite.run(
+        `INSERT INTO checkins (
+           id, coaching_relationship_id, local_date, window_starts_at, window_ends_at,
+           record_status, record_version, definition_version, checkin_form_version_id,
+           created_at, updated_at
+         ) VALUES (
+           'past-checkin', 'rel-1', '2026-10-20', '2026-10-20T02:30:00.000Z', '2026-10-21T02:30:00.000Z',
+           'draft', 0, 1, '${V1_ID}', '2026-10-20T02:30:00.000Z', '2026-10-20T02:30:00.000Z'
+         )`,
+      );
+      const countsBefore = tableRowCounts(handle.sqlite);
+
+      handle.applyMigrationsFrom("0041_checkin_form_v2.sql");
+
+      const after = versionRows();
+      expect(after).toHaveLength(2);
+      expect(after[0]).toEqual(before[0]); // v1 byte-for-byte untouched
+      const v2 = after[1]!;
+      expect(v2.slice(0, 6)).toEqual([
+        V2_ID,
+        "c1000001-0000-4000-8000-000000000001",
+        "mvp",
+        2,
+        "global",
+        null,
+      ]);
+      const fields = (JSON.parse(String(v2[6])) as { fields: Array<Record<string, unknown>> })
+        .fields;
+      expect(fields.map((f) => f.key)).toEqual([
+        "weight", "waist", "hips", "chest", "arm", "thigh",
+        "photo_front", "photo_side", "photo_back",
+        "energy", "sleep_quality", "stress", "hunger", "notes",
+      ]);
+      for (const field of fields) {
+        expect(field.id).toBe(field.key);
+        expect(field.required).toBe(false);
+      }
+      // The stored definition is exactly core's v2 list and passes Z6-6's key validation.
+      expect(fields).toEqual(JSON.parse(GLOBAL_CHECKIN_FORM_V2_DEFINITION_JSON).fields);
+      const parsed = parseCheckinFormFields(fields);
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(findCheckinFormKeyProblem(parsed.fields)).toBeNull();
+      // Row counts: only checkin_form_versions grew, by one.
+      const countsAfter = tableRowCounts(handle.sqlite);
+      expect(countsAfter).toEqual({
+        ...countsBefore,
+        checkin_form_versions: countsBefore.checkin_form_versions! + 1,
+      });
+      const pinned = handle.sqlite.exec(
+        "SELECT checkin_form_version_id FROM checkins WHERE id = 'past-checkin'",
+      )[0]?.values[0]?.[0];
+      expect(pinned).toBe(V1_ID);
+      // The insert-only trigger still rejects updates and 0041 never updates v1.
+      expect(() =>
+        handle.sqlite.run(
+          `UPDATE checkin_form_versions SET schema_json = '{}' WHERE id = '${V1_ID}'`,
+        ),
+      ).toThrow(/insert-only/);
+      expect(() =>
+        handle.sqlite.run(
+          `UPDATE checkin_form_versions SET schema_json = '{}' WHERE id = '${V2_ID}'`,
+        ),
+      ).toThrow(/insert-only/);
+      const sql = readFileSync(join(drizzleDir, "0041_checkin_form_v2.sql"), "utf8");
+      expect(sql).not.toMatch(/^[^-\n]*\b(UPDATE|DELETE|DROP|ALTER)\b/im);
+    } finally {
+      handle.close();
+    }
+  });
 
   it("backfills numeric set loads exactly like the load parser when 0035 applies", async () => {
     const handle = await createMemoryDb({
