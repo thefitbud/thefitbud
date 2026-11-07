@@ -199,6 +199,25 @@ describe("form-scoped required answers (Z6-2b)", () => {
     expect(
       missingRequiredCheckinAnswers({}, GLOBAL_CHECKIN_FORM_FIELDS),
     ).toEqual(["wellbeing"]);
+    // A required photo counts as answered by a file id or a photo-intent object.
+    const requiredPhoto = [
+      v2("photo_front", "Front", "photo_intent", { photoSlot: "front", required: true }),
+    ];
+    expect(
+      missingRequiredCheckinAnswers(
+        { fieldAnswers: { photo_front: "media-file-1" } },
+        requiredPhoto,
+      ),
+    ).toEqual([]);
+    expect(
+      missingRequiredCheckinAnswers(
+        { fieldAnswers: { photo_front: { notedAt: "2026-11-07T06:00:00.000Z" } } },
+        requiredPhoto,
+      ),
+    ).toEqual([]);
+    expect(
+      missingRequiredCheckinAnswers({ fieldAnswers: { photo_front: "" } }, requiredPhoto),
+    ).toEqual(["photo_front"]);
     // No pinned form: the fallback keeps requiring wellbeing.
     expect(
       missingRequiredCheckinAnswers({ fieldAnswers: { arm: 32 } }),
@@ -263,6 +282,32 @@ describe("linkedMeasurementsForCheckin (Z6-2b)", () => {
         answers: { bodyWeightKg: 74.2 },
       }),
     ).toEqual([{ type: "body_weight_kg", value: 74.2, unit: "kg" }]);
+  });
+
+  it("ignores legacy bodyWeightKg when any weight question is answered directly", () => {
+    const fields = [
+      ...V2_FIELDS,
+      v2("weight_pm", "Evening weight", "measurement", {
+        measurementType: "body_weight_kg",
+        key: undefined,
+      }),
+    ];
+    // The unkeyed second weight question answered, legacy weight also sent.
+    const pmOnly = { bodyWeightKg: 75, fieldAnswers: { weight_pm: 75 } };
+    expect(linkedMeasurementsForCheckin({ fields, answers: pmOnly })).toEqual([
+      { type: "body_weight_kg", value: 75, unit: "kg" },
+    ]);
+    expect(
+      checkinAnswerEntries(fields, pmOnly).map((e) => [e.fieldId, e.value]),
+    ).toEqual([["weight_pm", 75]]);
+    // The first weight question answered with a different value.
+    const amOnly = { bodyWeightKg: 75, fieldAnswers: { weight: 74 } };
+    expect(linkedMeasurementsForCheckin({ fields, answers: amOnly })).toEqual([
+      { type: "body_weight_kg", value: 74, unit: "kg" },
+    ]);
+    expect(
+      checkinAnswerEntries(fields, amOnly).map((e) => [e.fieldId, e.value]),
+    ).toEqual([["weight", 74]]);
   });
 
   it("skips zero and non-numeric measurement answers", () => {

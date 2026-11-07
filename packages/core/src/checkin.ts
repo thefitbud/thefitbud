@@ -240,16 +240,25 @@ function isBlankCheckinFieldAnswer(
     return typeof value !== "number" || !Number.isFinite(value);
   }
   if (field.type === "photo_intent") {
-    return typeof value !== "object";
+    // A file id (what mobile sends; Z6-6 accepts it) or a photo-intent object.
+    if (typeof value === "string") return value.length === 0;
+    return typeof value !== "object" || Array.isArray(value);
   }
   return true;
+}
+
+function isBodyWeightField(field: CheckinFieldDefinition): boolean {
+  return (
+    field.type === "measurement" && field.measurementType === "body_weight_kg"
+  );
 }
 
 /**
  * Each question of the form once (first occurrence of an id), in form order,
  * with its answer. Keyed `fieldAnswers` win; the legacy keys fill only the
- * fields they belong to (see `answerForCheckinField`), and the legacy
- * `bodyWeightKg` fills at most one body-weight question.
+ * fields they belong to (see `answerForCheckinField`). The legacy
+ * `bodyWeightKg` fills at most one body-weight question, and none when any
+ * body-weight question is answered directly in `fieldAnswers`.
  */
 function resolvedCheckinFieldAnswers(
   fields: readonly CheckinFieldDefinition[],
@@ -257,7 +266,11 @@ function resolvedCheckinFieldAnswers(
 ): Array<{ field: CheckinFieldDefinition; value: unknown }> {
   const resolved: Array<{ field: CheckinFieldDefinition; value: unknown }> = [];
   const seenFieldIds = new Set<string>();
-  let legacyWeightUsed = false;
+  let legacyWeightUsed = fields.some(
+    (field) =>
+      isBodyWeightField(field) &&
+      !isBlankCheckinFieldAnswer(field, answers?.fieldAnswers?.[field.id]),
+  );
   for (const field of fields) {
     if (seenFieldIds.has(field.id)) continue;
     seenFieldIds.add(field.id);
@@ -266,9 +279,7 @@ function resolvedCheckinFieldAnswers(
       resolved.push({ field, value: keyed });
       continue;
     }
-    const isWeight =
-      field.type === "measurement" &&
-      field.measurementType === "body_weight_kg";
+    const isWeight = isBodyWeightField(field);
     if (isWeight && legacyWeightUsed) {
       resolved.push({ field, value: undefined });
       continue;
@@ -358,7 +369,7 @@ export function checkinAnswerEntries(
 ): CheckinAnswerEntry[] {
   const entries: CheckinAnswerEntry[] = [];
   for (const { field, value } of resolvedCheckinFieldAnswers(fields, answers)) {
-    if (!isAnsweredCheckinEntry(field, value)) continue;
+    if (isBlankCheckinFieldAnswer(field, value)) continue;
     entries.push({
       fieldId: field.id,
       key: field.key ?? null,
@@ -369,16 +380,4 @@ export function checkinAnswerEntries(
     });
   }
   return entries;
-}
-
-function isAnsweredCheckinEntry(
-  field: CheckinFieldDefinition,
-  value: unknown,
-): boolean {
-  if (field.type === "photo_intent") {
-    // Mobile sends a photo answer as a file id today (Z6-6 accepts it).
-    if (typeof value === "string") return value.length > 0;
-    return value != null && typeof value === "object" && !Array.isArray(value);
-  }
-  return !isBlankCheckinFieldAnswer(field, value);
 }

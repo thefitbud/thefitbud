@@ -180,10 +180,14 @@ async function reachActive(suffix: string): Promise<Ctx> {
 type ScheduledCheckin = { id: string; recordVersion: number; checkinFormVersionId: string };
 
 /** Trainer saves the v2-shaped form, pins it as preferred, then schedules today's check-in. */
-async function scheduleV2Checkin(ctx: Ctx, suffix: string): Promise<ScheduledCheckin> {
+async function scheduleV2Checkin(
+  ctx: Ctx,
+  suffix: string,
+  fields: unknown[] = V2_FIELDS,
+): Promise<ScheduledCheckin> {
   const created = await asTrainer(ctx, "POST", "/checkins/form-templates", `fr-form-${suffix}`, {
     name: "Weekly check-in (standard questions)",
-    fields: V2_FIELDS,
+    fields,
   });
   expect(created.status).toBe(201);
   const versionId = ((await created.json()) as { data: { versions: Array<{ id: string }> } }).data
@@ -322,6 +326,40 @@ describe("check-in submit follows the pinned form (Z6-2b)", () => {
     expect(rows.map((row) => [row.type, row.value, row.unit])).toEqual([
       ["body_weight_kg", 74.2, "kg"],
     ]);
+  });
+
+  it("stores one body-weight row when a second, unkeyed weight question is answered alongside legacy bodyWeightKg", async () => {
+    const ctx = await reachActive("v2twoweights");
+    const checkin = await scheduleV2Checkin(ctx, "v2twoweights", [
+      ...V2_FIELDS,
+      {
+        id: "weight_pm",
+        label: "Evening weight",
+        type: "measurement",
+        measurementType: "body_weight_kg",
+        required: false,
+      },
+    ]);
+    const res = await submit(ctx, checkin, "fr-submit-v2twoweights", {
+      bodyWeightKg: 75,
+      fieldAnswers: { weight_pm: 75 },
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const rows = await measurementsFor(checkin.id);
+    expect(rows.map((row) => [row.type, row.value, row.unit])).toEqual([
+      ["body_weight_kg", 75, "kg"],
+    ]);
+  });
+
+  it("submits a required photo answered with a file id", async () => {
+    const ctx = await reachActive("v2photoid");
+    const checkin = await scheduleV2Checkin(ctx, "v2photoid", [
+      std("photo_front", "Front", "photo_intent", { photoSlot: "front", required: true }),
+    ]);
+    const res = await submit(ctx, checkin, "fr-submit-v2photoid", {
+      fieldAnswers: { photo_front: "media-file-1" },
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
   });
 
   it("rejects a v1 submit without wellbeing with 422 CHECKIN_ANSWERS_INCOMPLETE", async () => {
