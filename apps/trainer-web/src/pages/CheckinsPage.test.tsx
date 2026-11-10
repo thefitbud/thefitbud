@@ -117,6 +117,32 @@ describe("CheckinsPage (Z7-3)", () => {
   it("shows the empty state on To review with nothing waiting", async () => {
     api.listTrainerCheckinInbox.mockResolvedValue({ items: [] });
     renderAt("/checkins?tab=to-review");
-    expect(await screen.findByText("No check-ins waiting. Nice.")).toBeTruthy();
+    expect(await screen.findByText("No check-ins waiting")).toBeTruthy();
+    expect(screen.queryByText(/Next due/)).toBeNull();
+    expect(screen.getByText("Nothing to review")).toBeTruthy();
+  });
+
+  it("names the next due client and date in the empty state, from loaded Due rows", async () => {
+    const dueRow = (rid: string, name: string, id: string, localDate: string) => ({
+      ...item(rid, name, id, "due"),
+      checkin: { id, status: "due", localDate, submittedAt: null },
+    });
+    api.listTrainerCheckinInbox.mockResolvedValue({
+      items: [
+        dueRow(ACTIVE, "Rohan Mehta", "c1", "2026-10-21"),
+        dueRow("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "Arjun Kapoor", "c3", "2026-10-23"),
+        dueRow("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "Neha Reddy", "c4", "2026-10-21"),
+      ],
+    });
+    renderAt("/checkins?tab=to-review");
+    expect(
+      await screen.findByText("You're up to date. Next due: Rohan and Neha on Wed 21 Oct."),
+    ).toBeTruthy();
+  });
+
+  it("shows the lede and a weekday in the When column", async () => {
+    renderAt("/checkins");
+    expect(await screen.findByText("1 to review")).toBeTruthy();
+    expect(screen.getAllByText("Wed 21 Oct, 10:00 am").length).toBeGreaterThan(0);
   });
 });

@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Inbox } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
   formatCivilDate,
-  formatInstant,
+  formatClockTime,
   formatLocalDate,
   whatsappHref,
 } from "@fitbud/core";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusChip";
 import {
-  EmptyState,
   ErrorState,
   LoadingBlock,
 } from "../components/StatePanels";
@@ -48,9 +48,22 @@ type Row = TrainerCheckinInboxItem & {
   formLabel: string;
 };
 
+function avatarTone(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash + name.charCodeAt(i) * (i + 1)) % 8;
+  }
+  return `av-c${(hash % 8) + 1}`;
+}
+
 function whenLabel(row: Row): string {
   if (row.checkin.status === "submitted" && row.checkin.submittedAt) {
-    return formatInstant(row.checkin.submittedAt, row.traineeTimezone);
+    const tz = row.traineeTimezone;
+    // "Wed 21 Oct, 9:00 am"
+    const day = formatCivilDate(
+      formatLocalDate(new Date(row.checkin.submittedAt), tz),
+    );
+    return `${day}, ${formatClockTime(row.checkin.submittedAt, tz)}`;
   }
   return formatCivilDate(row.checkin.localDate);
 }
@@ -177,6 +190,34 @@ export function CheckinsPage() {
     };
   }, [items]);
 
+  const ledeText =
+    counts["to-review"] === 0 && counts.overdue === 0
+      ? "Nothing to review"
+      : [
+          counts["to-review"] > 0 ? `${counts["to-review"]} to review` : null,
+          counts.overdue > 0 ? `${counts.overdue} overdue` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+  // Earliest due date among loaded Due rows; every client due that day.
+  const nextDue = useMemo(() => {
+    const due = items.filter((row) => row.checkin.status === "due");
+    if (due.length === 0) return null;
+    const first = due.reduce(
+      (min, row) => (row.checkin.localDate < min ? row.checkin.localDate : min),
+      due[0]!.checkin.localDate,
+    );
+    const names = due
+      .filter((row) => row.checkin.localDate === first)
+      .map((row) => row.traineeDisplayName.split(/\s+/)[0] ?? "Client");
+    const list =
+      names.length <= 1
+        ? (names[0] ?? "")
+        : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return { list, date: formatCivilDate(first) };
+  }, [items]);
+
   async function nudge(row: Row) {
     setNudgingId(row.checkin.id);
     try {
@@ -236,11 +277,16 @@ export function CheckinsPage() {
   return (
     <section className="page checkins-page" data-testid="screen-TW-22">
       <header className="page-header">
-        <h1>Check-ins</h1>
+        <div>
+          <h1>Check-ins</h1>
+          {!loading && !error ? (
+            <p className="lede muted">{ledeText}</p>
+          ) : null}
+        </div>
       </header>
 
       <div className="roster-toolbar">
-        <div className="segment" role="tablist" aria-label="Check-in inbox tabs">
+        <div className="segment-control" role="tablist" aria-label="Check-in inbox tabs">
           {(
             [
               ["to-review", "To review"],
@@ -254,7 +300,7 @@ export function CheckinsPage() {
               type="button"
               role="tab"
               aria-selected={tab === value}
-              className={tab === value ? "segment-btn is-on" : "segment-btn"}
+              className={tab === value ? "segment-tab is-selected" : "segment-tab"}
               data-filter={apiTabParam(value)}
               onClick={() => setTab(value)}
             >
@@ -275,7 +321,33 @@ export function CheckinsPage() {
           />
         ) : null}
         {!loading && tab === "to-review" && filtered.length === 0 ? (
-          <EmptyState title="No check-ins waiting. Nice." />
+          <div
+            className="state-panel is-empty"
+            data-testid="empty-state"
+            style={{ textAlign: "center" }}
+          >
+            <span
+              className="av av-c6"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                margin: "0 auto 8px",
+              }}
+              aria-hidden="true"
+            >
+              <Inbox size={24} strokeWidth={1.75} />
+            </span>
+            <h2>No check-ins waiting</h2>
+            {nextDue ? (
+              <div className="state-panel-body">
+                {`You're up to date. Next due: ${nextDue.list} on ${nextDue.date}.`}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {!loading && filtered.length > 0 ? (
           <>
@@ -295,7 +367,7 @@ export function CheckinsPage() {
                     <tr key={row.checkin.id}>
                       <td>
                         <div className="roster-person">
-                          <span className="avatar" aria-hidden="true">
+                          <span className={`av ${avatarTone(row.traineeDisplayName)}`} aria-hidden="true">
                             {relationshipInitials(row.traineeDisplayName)}
                           </span>
                           <span className="client-name">
@@ -323,7 +395,7 @@ export function CheckinsPage() {
                 <li key={row.checkin.id} className="inbox-card">
                   <div className="inbox-card-top">
                     <div className="roster-person">
-                      <span className="avatar" aria-hidden="true">
+                      <span className={`av ${avatarTone(row.traineeDisplayName)}`} aria-hidden="true">
                         {relationshipInitials(row.traineeDisplayName)}
                       </span>
                       <div>
