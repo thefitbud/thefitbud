@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { coachLogDedupeKey, parseCoachLogDedupeKey } from "@fitbud/contracts";
 import {
+  classifyCoachLogWriteFailure,
   describeCoachLogEvent,
   workoutChangeLines,
   type WorkoutLogSnapshot,
@@ -91,6 +92,36 @@ describe("R2 window (trainer log and edit)", () => {
       isWithinCoachLogWindow({ localDates: [], instants: ["2026-11-05T06:06:00.000Z"], now, timeZone: tz }),
     ).toBe(false);
     expect(isWithinCoachLogWindow({ localDates: [], instants: ["not a time"], now, timeZone: tz })).toBe(false);
+  });
+});
+
+describe("coach log write conflicts (Z7-22)", () => {
+  it("classifies a rolled-back batch as entry, version or sequence", () => {
+    expect(
+      classifyCoachLogWriteFailure(
+        new Error("UNIQUE constraint failed: change_log.sequence"),
+      ),
+    ).toBe("sequence");
+    expect(
+      classifyCoachLogWriteFailure(
+        new Error("UNIQUE constraint failed: workout_executions.assignment_id"),
+      ),
+    ).toBe("entry");
+    expect(
+      classifyCoachLogWriteFailure(
+        new Error("UNIQUE constraint failed: meal_compliance.assignment_id"),
+      ),
+    ).toBe("entry");
+    expect(
+      classifyCoachLogWriteFailure(new Error("UNIQUE constraint failed: measurements.id")),
+    ).toBe("entry");
+    const wrapped = new Error("Failed query: update coaching_relationships", {
+      cause: new Error(
+        "NOT NULL constraint failed: coaching_relationships.trainer_user_id",
+      ),
+    });
+    expect(classifyCoachLogWriteFailure(wrapped)).toBe("version");
+    expect(classifyCoachLogWriteFailure(new Error("no such table: log_edit_events"))).toBeNull();
   });
 });
 
