@@ -9,8 +9,10 @@
  * - Payment records follow 0036's rules: amount > 0, paid ⇔ paid date and method,
  *   unpaid ⇒ neither (D-W6-22). The API rejects a bad state with 400 before the
  *   CHECK constraint can turn it into a 500.
- * - Every write is stored together with its idempotency receipt in one D1 batch,
- *   so a retry replays the first answer and never writes twice.
+ * - Every subscription and payment write is stored together with its
+ *   idempotency receipt in one D1 batch, so a retry replays the first answer and
+ *   never writes twice. Basics (Z7-25) write one conditional UPDATE first and the
+ *   receipt after it; see `saveClientBasics`.
  *
  * - Basic details (Z6-8b, D-W6-42): the trainer-owned client name and contact
  *   phone live on the coaching relationship only. This module never writes
@@ -399,46 +401,80 @@ export async function updatePaymentRecord(
   return { status: 200, body };
 }
 
-/** The trainer-owned basics after a PATCH: each value is the new one or the stored one. */
-export type ClientBasicsValues = Pick<RelationshipRow, "clientDisplayName" | "contactPhoneE164">;
+/**
+ * Z7-25: the trainer-owned basics a PATCH sends. A field left out is left out of
+ * the write too, so a concurrent PATCH of the other field is never overwritten
+ * with a stale read; `null` clears the field.
+ */
+export type ClientBasicsPatch = Partial<
+  Pick<RelationshipRow, "clientDisplayName" | "contactPhoneE164">
+>;
+
+export type SaveClientBasicsResult =
+  | { kind: "saved"; status: 200; body: { data: ClientSettingsResponse } }
+  /** The relationship was not active at write time; nothing was written. */
+  | { kind: "ended" }
+  /** The relationship no longer belongs to this trainer; nothing was written. */
+  | { kind: "not_found" };
 
 /**
  * Z6-8b: stores the trainer-owned client name and contact phone on the
- * relationship, with the receipt, in one batch. Only these two columns of
- * `coaching_relationships` change: `updated_at` is left alone because nothing
- * the client sees changed, and no other table is written.
+ * relationship. Only these two columns of `coaching_relationships` change:
+ * `updated_at` is left alone because nothing the client sees changed, and
+ * `user_identities` and `trainee_profiles` are never written.
+ *
+ * Z7-25: the write is one conditional UPDATE that sets only the sent fields and
+ * matches only while the relationship is this trainer's and `active`, so
+ *  - two overlapping single-field PATCHes both persist (field merge in SQL, not a
+ *    read-modify-write of both columns from a row read earlier), and
+ *  - a relationship that ended after the route read it is refused with no change.
+ * The answer is built from the row the UPDATE returned, then stored as the
+ * receipt. The receipt insert is a plain insert: a concurrent request with the
+ * same key fails it, and the route replays the winner's answer. Re-applying the
+ * same field values on such a race writes nothing new.
  */
 export async function saveClientBasics(
   db: Db,
   relationship: RelationshipRow,
-  next: ClientBasicsValues,
+  patch: ClientBasicsPatch,
   context: WriteContext,
-): Promise<{ status: 200; body: { data: ClientSettingsResponse } }> {
-  const updated: RelationshipRow = { ...relationship, ...next };
+): Promise<SaveClientBasicsResult> {
+  const set: ClientBasicsPatch = {};
+  if (patch.clientDisplayName !== undefined) set.clientDisplayName = patch.clientDisplayName;
+  if (patch.contactPhoneE164 !== undefined) set.contactPhoneE164 = patch.contactPhoneE164;
+  if (Object.keys(set).length === 0) {
+    // The request schema needs at least one field; never issue an empty SET.
+    throw new Error("saveClientBasics needs at least one field");
+  }
+  const [updated] = await db
+    .update(coachingRelationships)
+    .set(set)
+    .where(
+      and(
+        eq(coachingRelationships.id, relationship.id),
+        eq(coachingRelationships.trainerUserId, relationship.trainerUserId),
+        eq(coachingRelationships.status, "active"),
+      ),
+    )
+    .returning();
+  if (!updated) {
+    const current = await loadOwnedRelationship(
+      db,
+      relationship.id,
+      relationship.trainerUserId,
+    );
+    return current ? { kind: "ended" } : { kind: "not_found" };
+  }
   const body = { data: await loadClientSettings(db, updated, context.now) };
   const keyHash = await sha256Hex(context.idempotencyKey);
-  await db.batch([
-    db
-      .update(coachingRelationships)
-      .set({
-        clientDisplayName: next.clientDisplayName,
-        contactPhoneE164: next.contactPhoneE164,
-      })
-      .where(
-        and(
-          eq(coachingRelationships.id, relationship.id),
-          eq(coachingRelationships.trainerUserId, relationship.trainerUserId),
-        ),
-      ),
-    receiptInsert(db, {
-      actorUserId: context.actorUserId,
-      operation: CLIENT_SETTINGS_BASICS_OPERATION,
-      keyHash,
-      fingerprint: context.fingerprint,
-      status: 200,
-      body,
-      now: context.now,
-    }),
-  ]);
-  return { status: 200, body };
+  await receiptInsert(db, {
+    actorUserId: context.actorUserId,
+    operation: CLIENT_SETTINGS_BASICS_OPERATION,
+    keyHash,
+    fingerprint: context.fingerprint,
+    status: 200,
+    body,
+    now: context.now,
+  });
+  return { kind: "saved", status: 200, body };
 }
