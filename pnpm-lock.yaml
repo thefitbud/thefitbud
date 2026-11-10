@@ -448,6 +448,9 @@ importers:
 
   packages/ui-mobile:
     dependencies:
+      '@fitbud/core':
+        specifier: workspace:*
+        version: link:../core
       '@fitbud/tokens':
         specifier: workspace:*
         version: link:../tokens
