@@ -1,22 +1,29 @@
 /**
- * Trainer log and edit of a client's log entries (Z6-19, Z6-20, PLAN-v2 D-P2-21,
- * D-W6-IP R1–R5, D-W6-32, D-W6-33). Shared with Z6-20 (meals, measurements).
+ * Trainer log and edit of a client's log entries (Z6-19, Z6-20, Z7-22,
+ * PLAN-v2 D-P2-21, D-W6-IP R1–R5, D-W6-32, D-W6-33). Shared by workouts,
+ * meals and measurements.
  *
  * `recordCoachLogChange` is the one place a trainer create or edit is
- * recorded. It writes:
- * 1. one `log_edit_events` row (who, what, when, before and after; R4), which
- *    the trainer activity feed reads;
- * 2. one change-log upsert, so the trainee's next sync pull carries the entry;
- * 3. one `coach_log_updated` inbox notification for the trainee through
- *    `inbox-notify.ts`, with `merge_group` = the entry id: a second change to
- *    the same entry within 10 minutes merges into the first (no new row, no
- *    second push). It is skipped when the trainee turned "Coach updates to my
- *    logs" off. The push itself is gated in `pushTraineeCoachLogEvent` (push
- *    on/off, the same setting, quiet hours) and carries routing only (R5).
+ * recorded. The caller's domain writes and the rows below commit in one D1
+ * batch (one transaction). A failure rolls every one of them back:
+ * 1. the entry itself (passed in as `domainWrites`);
+ * 2. one `log_edit_events` row (who, what, when, before and after; R4), which
+ *    is the activity-feed event the trainer feed reads;
+ * 3. one change-log upsert, so the trainee's next sync pull carries the entry;
+ * 4. one `coach_log_updated` inbox notification for the trainee, with
+ *    `merge_group` = the entry id: a second change to the same entry within
+ *    10 minutes merges into the first (no new row, no second push). It is
+ *    skipped when the trainee turned "Coach updates to my logs" off.
+ *
+ * The push itself runs only after that batch commits. It is gated in
+ * `pushTraineeCoachLogEvent` (push on/off, the same setting, quiet hours),
+ * carries routing only (R5), and never throws, so a push failure cannot
+ * orphan or roll back the entry.
  *
  * Nothing here logs entry content or personal data.
  */
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import {
   coachLogDedupeKey,
   type CoachLogAction,
@@ -25,6 +32,8 @@ import {
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
+  changeLog,
+  coachingRelationships,
   logEditEvents,
   notificationPreferences,
   notifications,
@@ -32,13 +41,127 @@ import {
 import { createId } from "../lib/crypto.js";
 import {
   pushTraineeCoachLogEvent,
-  storeInboxNotification,
   type TrainerPushConfig,
 } from "./inbox-notify.js";
-import { appendChangeLog } from "./sync.js";
 
 /** R5: changes to one entry within this window share one notification. */
 export const COACH_LOG_MERGE_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * A change-log sequence collision (or any other write collision that is not
+ * the entry's own unique key or the version claim) after the batch has rolled
+ * back. The entry is not stored. The client retries.
+ */
+export const LOG_WRITE_CONFLICT = {
+  code: "LOG_WRITE_CONFLICT",
+  message: "Another log was saved at the same time. Try again.",
+} as const;
+
+/** How many times a rolled-back sequence collision is tried again in this call. */
+const COACH_LOG_WRITE_ATTEMPTS = 3;
+
+/** One statement inside the coach-log batch. */
+export type CoachLogWrite = BatchItem<"sqlite">;
+
+/**
+ * Set on an edit. `update` is the versioned UPDATE (`WHERE record_version` is
+ * the snapshot the route read). The batch runs it after every other domain
+ * write and aborts unless that statement itself changed one row. A row that
+ * is already at `snapshot + 1` because the other writer committed is not
+ * success: this writer's UPDATE matched nothing, so the entry, set or
+ * exercise writes, audit and change log all roll back.
+ */
+export type CoachLogClaim = {
+  entity: "workout_execution" | "meal_compliance" | "measurement";
+  id: string;
+  /** The version `update` writes (the snapshot plus one). */
+  recordVersion: number;
+  update: () => CoachLogWrite;
+};
+
+export type CoachLogConflictKind = "entry" | "version" | "sequence";
+
+/** The batch rolled back. `kind` tells the route which stable code to return. */
+export class CoachLogConflict extends Error {
+  readonly name = "CoachLogConflict";
+  readonly kind: CoachLogConflictKind;
+
+  constructor(kind: CoachLogConflictKind) {
+    super(
+      kind === "version"
+        ? "The log changed since it was opened."
+        : kind === "entry"
+          ? "This log was already saved."
+          : LOG_WRITE_CONFLICT.message,
+    );
+    this.kind = kind;
+  }
+}
+
+/**
+ * One coach-log batch at a time in this isolate. The change-log sequence is
+ * global, and the local test database runs every batch on one connection
+ * whose savepoints are not re-entrant. The unique constraints still decide
+ * a race between isolates: the loser rolls back and returns a conflict.
+ */
+let coachLogTail: Promise<void> = Promise.resolve();
+
+function withCoachLogTurn<T>(run: () => Promise<T>): Promise<T> {
+  const turn = coachLogTail.then(run, run);
+  coachLogTail = turn.then(
+    () => undefined,
+    () => undefined,
+  );
+  return turn;
+}
+
+function errorText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    if (current instanceof Error) {
+      parts.push(current.message);
+      current = current.cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  return parts.join("\n");
+}
+
+/** Maps a failed batch to a conflict, or null when the failure is not one. */
+export function classifyCoachLogWriteFailure(error: unknown): CoachLogConflictKind | null {
+  const text = errorText(error);
+  if (/UNIQUE constraint failed: change_log\.sequence\b/.test(text)) return "sequence";
+  if (
+    /UNIQUE constraint failed: (?:workout_executions\.assignment_id|meal_compliance\.assignment_id|measurements\.id)\b/.test(
+      text,
+    )
+  ) {
+    return "entry";
+  }
+  if (/NOT NULL constraint failed: coaching_relationships\.trainer_user_id\b/.test(text)) {
+    return "version";
+  }
+  return null;
+}
+
+/**
+ * Aborts the batch unless the statement immediately before this one changed
+ * exactly one row. That statement is the edit's versioned UPDATE. Writes NULL
+ * into the relationship's NOT NULL trainer id only when `changes()` is not 1,
+ * which fails the statement; a landed update matches no row here. The batch
+ * rolls back when the statement fails, so the trainer id never stays NULL.
+ */
+function versionClaimGuard(db: Db, relationshipId: string) {
+  return db
+    .update(coachingRelationships)
+    .set({ trainerUserId: sql`null` })
+    .where(and(eq(coachingRelationships.id, relationshipId), sql`changes() != 1`));
+}
 
 export type CoachLogEntity = {
   type: CoachLogEntityType;
@@ -70,74 +193,146 @@ export async function recordCoachLogChange(
     after: unknown;
     now: string;
     push: TrainerPushConfig;
+    /**
+     * The entry writes, other than the versioned update on an edit. Called
+     * again on a sequence retry, so it must only build statements (ids and
+     * values are fixed by the caller).
+     */
+    domainWrites: () => readonly CoachLogWrite[];
+    /** Present on an edit; absent on a create (the unique key is the claim). */
+    claim?: CoachLogClaim;
+    /**
+     * Runs after the batch commits, before the turn releases. The response
+     * read and any idempotency insert finish before the next coach log starts,
+     * so they cannot land between that log's versioned update and its guard.
+     * A failure here does not retry the batch.
+     */
+    afterCommit?: () => Promise<void>;
   },
 ): Promise<{ eventId: string; notification: CoachLogNotificationOutcome }> {
   const { entity, action, now } = input;
   const eventId = createId();
-  await db.insert(logEditEvents).values({
-    id: eventId,
-    coachingRelationshipId: entity.coachingRelationshipId,
-    traineeUserId: entity.traineeUserId,
-    actorUserId: input.actorUserId,
-    actorRole: "coach",
-    entityType: entity.type,
-    entityId: entity.id,
-    action,
-    beforeJson: action === "create" ? null : JSON.stringify(input.before),
-    afterJson: JSON.stringify(input.after),
-    createdAt: now,
+  const committed = await withCoachLogTurn(async () => {
+    const [prefs] = await db
+      .select({ coachLogUpdates: notificationPreferences.coachLogUpdates })
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, entity.traineeUserId))
+      .limit(1);
+    const settingOff = Boolean(prefs && !prefs.coachLogUpdates);
+
+    const mergeSince = new Date(Date.parse(now) - COACH_LOG_MERGE_WINDOW_MS).toISOString();
+    const [recent] = settingOff
+      ? []
+      : await db
+          .select({ id: notifications.id })
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.recipientUserId, entity.traineeUserId),
+              eq(notifications.notificationType, "coach_log_updated"),
+              eq(notifications.mergeGroup, entity.id),
+              gte(notifications.createdAt, mergeSince),
+            ),
+          )
+          .orderBy(desc(notifications.createdAt))
+          .limit(1);
+    const notification: CoachLogNotificationOutcome = settingOff
+      ? "setting_off"
+      : recent
+        ? "merged"
+        : "stored";
+    const notificationId = notification === "stored" ? createId() : null;
+
+    let lastSequence: unknown;
+    for (let attempt = 0; attempt < COACH_LOG_WRITE_ATTEMPTS; attempt += 1) {
+      const domain = input.domainWrites();
+      const versionedUpdate = input.claim?.update();
+      if (domain.length === 0 && !versionedUpdate) {
+        throw new Error("Coach log transaction needs the entry write.");
+      }
+      // The versioned UPDATE sits immediately before the guard, so changes()
+      // is that statement and not a set or exercise write.
+      const writes: CoachLogWrite[] = [...domain];
+      if (versionedUpdate) {
+        writes.push(versionedUpdate);
+        writes.push(versionClaimGuard(db, entity.coachingRelationshipId));
+      }
+      // The audit row is the activity-feed event (the feed reads this table).
+      writes.push(
+        db.insert(logEditEvents).values({
+          id: eventId,
+          coachingRelationshipId: entity.coachingRelationshipId,
+          traineeUserId: entity.traineeUserId,
+          actorUserId: input.actorUserId,
+          actorRole: "coach",
+          entityType: entity.type,
+          entityId: entity.id,
+          action,
+          beforeJson: action === "create" ? null : JSON.stringify(input.before),
+          afterJson: JSON.stringify(input.after),
+          createdAt: now,
+        }),
+      );
+      // Allocated in the statement, so a batch that runs after another commit
+      // sees that commit's sequence. A leftover collision retries the batch.
+      writes.push(
+        db.insert(changeLog).values({
+          id: createId(),
+          sequence: sql<number>`(select coalesce(max(${changeLog.sequence}), 0) + 1 from ${changeLog})`,
+          entityType: entity.type,
+          recordId: entity.id,
+          changeKind: "upsert",
+          serverVersion: entity.serverVersion,
+          coachingRelationshipId: entity.coachingRelationshipId,
+          traineeUserId: entity.traineeUserId,
+          changedAt: now,
+        }),
+      );
+      if (notificationId) {
+        writes.push(
+          db.insert(notifications).values({
+            id: notificationId,
+            recipientUserId: entity.traineeUserId,
+            coachingRelationshipId: entity.coachingRelationshipId,
+            notificationType: "coach_log_updated",
+            domainEntityType: entity.routing.domainEntityType,
+            domainEntityId: entity.routing.domainEntityId,
+            state: "delivered",
+            dedupeKey: coachLogDedupeKey({ action, entityType: entity.type, eventId }),
+            createdAt: now,
+            readAt: null,
+            openedAt: null,
+            priority: 10,
+            mergeGroup: entity.id,
+            payloadJson: null,
+            expiresAt: null,
+          }),
+        );
+      }
+      try {
+        await db.batch(writes as [CoachLogWrite, ...CoachLogWrite[]]);
+      } catch (error) {
+        const kind = classifyCoachLogWriteFailure(error);
+        if (kind === "sequence" && attempt < COACH_LOG_WRITE_ATTEMPTS - 1) {
+          lastSequence = error;
+          continue;
+        }
+        if (kind) throw new CoachLogConflict(kind);
+        throw error;
+      }
+      // The batch has committed. A failure here must not retry it.
+      if (input.afterCommit) await input.afterCommit();
+      return { eventId, notification, notificationId };
+    }
+    throw lastSequence instanceof Error
+      ? lastSequence
+      : new CoachLogConflict("sequence");
   });
 
-  await appendChangeLog(db, {
-    entityType: entity.type,
-    recordId: entity.id,
-    changeKind: "upsert",
-    serverVersion: entity.serverVersion,
-    coachingRelationshipId: entity.coachingRelationshipId,
-    traineeUserId: entity.traineeUserId,
-    changedAt: now,
-  });
-
-  const [prefs] = await db
-    .select({ coachLogUpdates: notificationPreferences.coachLogUpdates })
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.userId, entity.traineeUserId))
-    .limit(1);
-  if (prefs && !prefs.coachLogUpdates) {
-    return { eventId, notification: "setting_off" };
+  if (committed.notificationId) {
+    await pushTraineeCoachLogEvent(db, committed.notificationId, input.push, now);
   }
-
-  const mergeSince = new Date(Date.parse(now) - COACH_LOG_MERGE_WINDOW_MS).toISOString();
-  const [recent] = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.recipientUserId, entity.traineeUserId),
-        eq(notifications.notificationType, "coach_log_updated"),
-        eq(notifications.mergeGroup, entity.id),
-        gte(notifications.createdAt, mergeSince),
-      ),
-    )
-    .orderBy(desc(notifications.createdAt))
-    .limit(1);
-  if (recent) {
-    return { eventId, notification: "merged" };
-  }
-
-  const stored = await storeInboxNotification(db, {
-    recipientUserId: entity.traineeUserId,
-    relationshipId: entity.coachingRelationshipId,
-    notificationType: "coach_log_updated",
-    domainEntityType: entity.routing.domainEntityType,
-    domainEntityId: entity.routing.domainEntityId,
-    dedupeKey: coachLogDedupeKey({ action, entityType: entity.type, eventId }),
-    mergeGroup: entity.id,
-  });
-  if (stored.inserted) {
-    await pushTraineeCoachLogEvent(db, stored.notificationId, input.push, now);
-  }
-  return { eventId, notification: "stored" };
+  return { eventId: committed.eventId, notification: committed.notification };
 }
 
 /** What `log_edit_events` keeps for a workout entry (before and after). */

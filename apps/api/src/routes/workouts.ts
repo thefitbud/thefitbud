@@ -12,6 +12,8 @@ import {
   generateWorkoutAssignmentsRequestSchema,
   generateWorkoutAssignmentsResponseSchema,
   localDateSchema,
+  skipWorkoutRequestSchema,
+  startWorkoutRequestSchema,
   workoutAdherenceResponseSchema,
   workoutAssignmentListResponseSchema,
   workoutAssignmentSchema,
@@ -64,8 +66,15 @@ import {
   assertLogTimeWithinBounds,
   isInEndedPeriod,
   isWithinCoachLogWindow,
+  resolveLogInstant,
 } from "../domain/log-time-bounds.js";
-import { recordCoachLogChange, workoutLogSnapshot } from "../domain/coach-log.js";
+import {
+  CoachLogConflict,
+  LOG_WRITE_CONFLICT,
+  recordCoachLogChange,
+  workoutLogSnapshot,
+  type CoachLogWrite,
+} from "../domain/coach-log.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import type { AppContext } from "../lib/envelope";
@@ -739,6 +748,8 @@ workoutRoutes.post(
     description: "Workouts operation for POST /workouts/assignments/:assignmentId/start.",
     roles: ["trainee"],
     idempotency: true,
+    body: startWorkoutRequestSchema,
+    bodyRequired: false,
     response: workoutExecutionSchema,
   }),
   optionalAuthMiddleware,
@@ -760,9 +771,22 @@ workoutRoutes.post(
       );
     }
 
+    const parsed = startWorkoutRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid start request.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const clientLoggedAt = parsed.data.clientLoggedAt;
+
     const db = createDb(c.env.DB);
     const fingerprint = await sha256Hex(
-      JSON.stringify({ assignmentId: c.req.param("assignmentId") }),
+      JSON.stringify({
+        assignmentId: c.req.param("assignmentId"),
+        clientLoggedAt: clientLoggedAt ?? null,
+      }),
     );
     const existing = await findIdempotencyRecord(db, {
       actorUserId: actor.userId,
@@ -805,11 +829,12 @@ workoutRoutes.post(
     if (!writableStart.ok) return writableStart.response;
 
     const now = nowIso();
+    const logInstant = resolveLogInstant({ clientLoggedAt, now });
     if (
       await workoutInEndedPeriod(db, {
         relationship,
         localDate: loaded.assignment.localDate,
-        loggedAt: now,
+        loggedAt: logInstant,
       })
     ) {
       return endedPeriodError(c);
@@ -851,9 +876,8 @@ workoutRoutes.post(
       );
     }
 
-    // Workout requests carry no client time, so the instant is the server's.
     const startBounds = assertLogTimeWithinBounds({
-      clientLoggedAt: now,
+      clientLoggedAt: logInstant,
       windowStart: loaded.assignment.windowStartsAt,
       now,
     });
@@ -895,11 +919,12 @@ workoutRoutes.post(
       traineeUserId: actor.userId,
       status: "started",
       recordVersion: 0,
-      startedAt: now,
+      startedAt: logInstant,
       pausedAt: null,
       completedAt: null,
       sessionRpe: null,
       requireSessionRpe,
+      clientLoggedAt: clientLoggedAt ? logInstant : null,
       createdAt: now,
       updatedAt: now,
     });
@@ -1487,6 +1512,8 @@ workoutRoutes.post(
     description: "Workouts operation for POST /workouts/assignments/:assignmentId/skip.",
     roles: ["trainee"],
     idempotency: true,
+    body: skipWorkoutRequestSchema,
+    bodyRequired: false,
     response: workoutExecutionSchema,
   }),
   optionalAuthMiddleware,
@@ -1508,9 +1535,22 @@ workoutRoutes.post(
       );
     }
 
+    const parsed = skipWorkoutRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid skip request.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const clientLoggedAt = parsed.data.clientLoggedAt;
+
     const db = createDb(c.env.DB);
     const fingerprint = await sha256Hex(
-      JSON.stringify({ assignmentId: c.req.param("assignmentId") }),
+      JSON.stringify({
+        assignmentId: c.req.param("assignmentId"),
+        clientLoggedAt: clientLoggedAt ?? null,
+      }),
     );
     const existing = await findIdempotencyRecord(db, {
       actorUserId: actor.userId,
@@ -1552,11 +1592,15 @@ workoutRoutes.post(
     );
     if (!writableSkip.ok) return writableSkip.response;
 
+    const now = nowIso();
+    const logInstant = resolveLogInstant({ clientLoggedAt, now });
     if (
       await workoutInEndedPeriod(db, {
         relationship,
         localDate: loaded.assignment.localDate,
-        loggedAt: loaded.execution?.startedAt ?? nowIso(),
+        loggedAt: clientLoggedAt
+          ? logInstant
+          : (loaded.execution?.startedAt ?? now),
       })
     ) {
       return endedPeriodError(c);
@@ -1564,17 +1608,33 @@ workoutRoutes.post(
     if (loaded.execution?.loggedByRole === "coach") {
       return coachLoggedReadOnlyError(c);
     }
+    // Absent client time keeps today's skip, which does not apply the
+    // window bounds. A supplied time is judged with the same bounds as start.
+    if (clientLoggedAt) {
+      const skipBounds = assertLogTimeWithinBounds({
+        clientLoggedAt: logInstant,
+        windowStart: loaded.assignment.windowStartsAt,
+        now,
+      });
+      if (!skipBounds.ok) {
+        return fail(
+          c,
+          422,
+          LOG_TIME_ERROR_CODES[skipBounds.reason],
+          LOG_TIME_ERROR_MESSAGES[skipBounds.reason],
+        );
+      }
+    }
 
     if (loaded.execution && isOpenWorkoutExecution(loaded.execution.status)) {
       if (!canSkipOpenWorkoutExecution(loaded.execution.status)) {
         return fail(c, 409, "INVALID_TRANSITION", "Cannot skip this workout.");
       }
-      const now = nowIso();
       await db
         .update(workoutExecutions)
         .set({
           status: "skipped",
-          completedAt: now,
+          completedAt: logInstant,
           pausedAt: null,
           recordVersion: loaded.execution.recordVersion + 1,
           updatedAt: now,
@@ -1621,7 +1681,6 @@ workoutRoutes.post(
     }
 
     const config = await loadActiveWorkoutConfig(db, relationship.id);
-    const now = nowIso();
     const executionId = createId();
     await db.insert(workoutExecutions).values({
       id: executionId,
@@ -1631,11 +1690,12 @@ workoutRoutes.post(
       traineeUserId: actor.userId,
       status: "skipped",
       recordVersion: 0,
-      startedAt: now,
+      startedAt: logInstant,
       pausedAt: null,
-      completedAt: now,
+      completedAt: logInstant,
       sessionRpe: null,
       requireSessionRpe: config?.tracking.requireSessionRpe ?? false,
+      clientLoggedAt: clientLoggedAt ? logInstant : null,
       createdAt: now,
       updatedAt: now,
     });
@@ -1763,6 +1823,38 @@ function versionConflictError(c: AppContext) {
     "VERSION_CONFLICT",
     "This workout changed since it was opened. Reload and try again.",
   );
+}
+
+function logWriteConflict(c: AppContext) {
+  return fail(c, 409, LOG_WRITE_CONFLICT.code, LOG_WRITE_CONFLICT.message);
+}
+
+async function workoutCreateConflict(c: AppContext, db: Db, assignmentId: string) {
+  const [row] = await db
+    .select({ status: workoutExecutions.status })
+    .from(workoutExecutions)
+    .where(eq(workoutExecutions.assignmentId, assignmentId))
+    .limit(1);
+  if (!row) return logWriteConflict(c);
+  return isOpenWorkoutExecution(row.status)
+    ? fail(c, 409, "WORKOUT_IN_PROGRESS", "The client is doing this workout now.")
+    : fail(
+        c,
+        409,
+        "WORKOUT_ALREADY_FINISHED",
+        "This assignment already has a finished execution.",
+      );
+}
+
+async function responseForCoachLogConflict(
+  c: AppContext,
+  error: unknown,
+  entry: () => Promise<Response>,
+): Promise<Response | null> {
+  if (!(error instanceof CoachLogConflict)) return null;
+  if (error.kind === "version") return versionConflictError(c);
+  if (error.kind === "entry") return entry();
+  return logWriteConflict(c);
 }
 
 function coachPushConfig(env: Env) {
@@ -1962,9 +2054,20 @@ workoutRoutes.post(
       plannedExercises.flatMap((planned) => planned.sets.map((set) => set.status)),
     );
 
-    // The execution row claims the assignment first (unique per assignment).
+    // One transaction: the execution, its exercises and sets, the audit (the
+    // activity-feed event) and the change log. The assignment unique key is
+    // the claim; a concurrent log rolls this batch back.
     const executionId = createId();
-    await db.insert(workoutExecutions).values({
+    const sessionRpe = parsed.data.sessionRpe ?? null;
+    const exerciseRows = plannedExercises.map((planned) => {
+      const exerciseExecutionId = createId();
+      return {
+        exerciseExecutionId,
+        exercise: planned.exercise,
+        sets: planned.sets.map((set) => ({ ...set, id: createId() })),
+      };
+    });
+    const executionRow = {
       id: executionId,
       assignmentId: loaded.assignment.id,
       coachingRelationshipId: relationship.id,
@@ -1975,65 +2078,93 @@ workoutRoutes.post(
       startedAt: performedAt,
       pausedAt: null,
       completedAt: performedAt,
-      sessionRpe: parsed.data.sessionRpe ?? null,
+      sessionRpe,
       requireSessionRpe: config?.tracking.requireSessionRpe ?? false,
-      loggedByRole: "coach",
+      loggedByRole: "coach" as const,
       loggedByUserId: actor.userId,
       createdAt: now,
       updatedAt: now,
-    });
-    for (const planned of plannedExercises) {
-      const exerciseExecutionId = createId();
-      await db.insert(exerciseExecutions).values({
-        id: exerciseExecutionId,
-        workoutExecutionId: executionId,
-        exerciseId: planned.exercise.id,
-        name: planned.exercise.name,
-        order: planned.exercise.order,
-        status: "completed",
-        createdAt: now,
-        updatedAt: now,
-      });
-      for (const set of planned.sets) {
-        await db.insert(setExecutions).values({
-          id: createId(),
-          exerciseExecutionId,
-          setTargetId: set.target.id,
-          order: set.target.order,
-          status: set.status,
-          prescribedReps: set.target.reps,
-          prescribedLoadLabel: set.target.loadLabel,
-          actualReps: set.actualReps,
-          actualLoadLabel: set.actualLoadLabel,
-          ...set.loadColumns,
-          completedAt: performedAt,
+    };
+    const domainWrites = (): CoachLogWrite[] => [
+      db.insert(workoutExecutions).values(executionRow),
+      ...exerciseRows.flatMap((planned) => [
+        db.insert(exerciseExecutions).values({
+          id: planned.exerciseExecutionId,
+          workoutExecutionId: executionId,
+          exerciseId: planned.exercise.id,
+          name: planned.exercise.name,
+          order: planned.exercise.order,
+          status: "completed" as const,
           createdAt: now,
           updatedAt: now,
-        });
-      }
+        }),
+        ...planned.sets.map((set) =>
+          db.insert(setExecutions).values({
+            id: set.id,
+            exerciseExecutionId: planned.exerciseExecutionId,
+            setTargetId: set.target.id,
+            order: set.target.order,
+            status: set.status,
+            prescribedReps: set.target.reps,
+            prescribedLoadLabel: set.target.loadLabel,
+            actualReps: set.actualReps,
+            actualLoadLabel: set.actualLoadLabel,
+            ...set.loadColumns,
+            completedAt: performedAt,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        ),
+      ]),
+    ];
+    try {
+      await recordCoachLogChange(db, {
+        domainWrites,
+        entity: {
+          type: "workout_execution",
+          id: executionId,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: relationship.traineeUserId,
+          serverVersion: 0,
+          routing: {
+            domainEntityType: "workout_assignment",
+            domainEntityId: loaded.assignment.id,
+          },
+        },
+        action: "create",
+        actorUserId: actor.userId,
+        before: null,
+        after: workoutLogSnapshot({
+          assignment: loaded.assignment,
+          execution: { status: executionStatus, completedAt: performedAt, sessionRpe },
+          exercises: exerciseRows.map((planned) => ({
+            id: planned.exerciseExecutionId,
+            name: planned.exercise.name,
+            order: planned.exercise.order,
+          })),
+          sets: exerciseRows.flatMap((planned) =>
+            planned.sets.map((set) => ({
+              id: set.id,
+              exerciseExecutionId: planned.exerciseExecutionId,
+              order: set.target.order,
+              status: set.status,
+              actualReps: set.actualReps,
+              actualLoadLabel: set.actualLoadLabel,
+            })),
+          ),
+        }),
+        now,
+        push: coachPushConfig(c.env),
+      });
+    } catch (error) {
+      const conflict = await responseForCoachLogConflict(c, error, () =>
+        workoutCreateConflict(c, db, loaded.assignment.id),
+      );
+      if (conflict) return conflict;
+      throw error;
     }
 
     const bundle = (await loadExecutionBundle(db, executionId))!;
-    await recordCoachLogChange(db, {
-      entity: {
-        type: "workout_execution",
-        id: executionId,
-        coachingRelationshipId: relationship.id,
-        traineeUserId: relationship.traineeUserId,
-        serverVersion: bundle.execution.recordVersion,
-        routing: {
-          domainEntityType: "workout_assignment",
-          domainEntityId: loaded.assignment.id,
-        },
-      },
-      action: "create",
-      actorUserId: actor.userId,
-      before: null,
-      after: workoutLogSnapshot({ assignment: loaded.assignment, ...bundle }),
-      now,
-      push: coachPushConfig(c.env),
-    });
-
     const responseBody = { data: workoutExecutionSchema.parse(mapExecution(bundle)) };
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
@@ -2221,73 +2352,105 @@ workoutRoutes.patch(
     const nextStatuses = bundle.sets.map(
       (set) => setUpdates.get(set.id)?.status ?? set.status,
     );
-    // Claim the version first, so a concurrent edit with the same version writes nothing.
-    const claimed = await db
-      .update(workoutExecutions)
-      .set({
-        status: resolveCompletedWorkoutStatus(nextStatuses),
-        sessionRpe: nextSessionRpe,
-        completedAt: nextCompletedAt,
-        startedAt: nextStartedAt,
-        recordVersion: execution.recordVersion + 1,
-        lastEditedByRole: "coach",
-        lastEditedByUserId: actor.userId,
-        lastEditedAt: now,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(workoutExecutions.id, execution.id),
-          eq(workoutExecutions.recordVersion, execution.recordVersion),
-        ),
-      )
-      .returning({ id: workoutExecutions.id });
-    if (claimed.length === 0) {
-      return versionConflictError(c);
-    }
-    for (const [id, values] of setUpdates) {
-      await db
-        .update(setExecutions)
-        .set({ ...values, updatedAt: now })
-        .where(eq(setExecutions.id, id));
-    }
-    // An exercise whose sets are now all recorded is complete (as on set complete).
-    const touchedExercises = new Set(
+    const nextStatus = resolveCompletedWorkoutStatus(nextStatuses);
+    const nextVersion = execution.recordVersion + 1;
+    const touchedExercises = [...new Set(
       bundle.sets.filter((set) => setUpdates.has(set.id)).map((set) => set.exerciseExecutionId),
-    );
-    for (const exerciseExecutionId of touchedExercises) {
+    )].filter((exerciseExecutionId) => {
       const allRecorded = bundle.sets
         .filter((set) => set.exerciseExecutionId === exerciseExecutionId)
         .every((set) => (setUpdates.get(set.id)?.status ?? set.status) !== "pending");
       const exercise = bundle.exercises.find((row) => row.id === exerciseExecutionId);
-      if (allRecorded && exercise?.status === "pending") {
-        await db
-          .update(exerciseExecutions)
-          .set({ status: "completed", updatedAt: now })
-          .where(eq(exerciseExecutions.id, exerciseExecutionId));
-      }
-    }
-
-    const refreshed = (await loadExecutionBundle(db, execution.id))!;
-    await recordCoachLogChange(db, {
-      entity: {
-        type: "workout_execution",
-        id: execution.id,
-        coachingRelationshipId: relationship.id,
-        traineeUserId: relationship.traineeUserId,
-        serverVersion: refreshed.execution.recordVersion,
-        routing: {
-          domainEntityType: "workout_assignment",
-          domainEntityId: assignment.id,
-        },
-      },
-      action: "edit",
-      actorUserId: actor.userId,
-      before: workoutLogSnapshot({ assignment, ...bundle }),
-      after: workoutLogSnapshot({ assignment, ...refreshed }),
-      now,
-      push: coachPushConfig(c.env),
+      return allRecorded && exercise?.status === "pending";
     });
+    const afterSets = bundle.sets.map((set) => {
+      const values = setUpdates.get(set.id);
+      return values ? { ...set, ...values } : set;
+    });
+    let refreshed: NonNullable<Awaited<ReturnType<typeof loadExecutionBundle>>> | undefined;
+    try {
+      await recordCoachLogChange(db, {
+        afterCommit: async () => {
+          refreshed = (await loadExecutionBundle(db, execution.id)) ?? undefined;
+        },
+        domainWrites: () => [
+          ...[...setUpdates].map(([id, values]) =>
+            db
+              .update(setExecutions)
+              .set({ ...values, updatedAt: now })
+              .where(eq(setExecutions.id, id)),
+          ),
+          ...touchedExercises.map((exerciseExecutionId) =>
+            db
+              .update(exerciseExecutions)
+              .set({ status: "completed", updatedAt: now })
+              .where(eq(exerciseExecutions.id, exerciseExecutionId)),
+          ),
+        ],
+        claim: {
+          entity: "workout_execution",
+          id: execution.id,
+          recordVersion: nextVersion,
+          // Last statement in the batch before the guard, so a missed version
+          // rolls the set and exercise writes back with it.
+          update: () =>
+            db
+              .update(workoutExecutions)
+              .set({
+                status: nextStatus,
+                sessionRpe: nextSessionRpe,
+                completedAt: nextCompletedAt,
+                startedAt: nextStartedAt,
+                recordVersion: nextVersion,
+                lastEditedByRole: "coach",
+                lastEditedByUserId: actor.userId,
+                lastEditedAt: now,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(workoutExecutions.id, execution.id),
+                  eq(workoutExecutions.recordVersion, execution.recordVersion),
+                ),
+              ),
+        },
+        entity: {
+          type: "workout_execution",
+          id: execution.id,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: relationship.traineeUserId,
+          serverVersion: nextVersion,
+          routing: {
+            domainEntityType: "workout_assignment",
+            domainEntityId: assignment.id,
+          },
+        },
+        action: "edit",
+        actorUserId: actor.userId,
+        before: workoutLogSnapshot({ assignment, ...bundle }),
+        after: workoutLogSnapshot({
+          assignment,
+          execution: {
+            status: nextStatus,
+            completedAt: nextCompletedAt,
+            sessionRpe: nextSessionRpe,
+          },
+          exercises: bundle.exercises,
+          sets: afterSets,
+        }),
+        now,
+        push: coachPushConfig(c.env),
+      });
+    } catch (error) {
+      const conflict = await responseForCoachLogConflict(c, error, async () =>
+        versionConflictError(c),
+      );
+      if (conflict) return conflict;
+      throw error;
+    }
+    if (!refreshed) {
+      return fail(c, 404, "EXECUTION_NOT_FOUND", "Execution not found.");
+    }
     emitWorkoutExecutionChanged(c.env, {
       id: execution.id,
       coachingRelationshipId: relationship.id,

@@ -125,6 +125,7 @@ export {
   canSubmitCheckin,
   canTrainerReadCheckinFormTemplate,
   checkinAnswerEntries,
+  type CheckinAnswerEntry,
   daysForCheckinCadence,
   deriveCheckinStatus,
   latestCheckinFormVersion,

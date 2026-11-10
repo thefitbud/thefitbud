@@ -1,4 +1,4 @@
-import { and, asc, eq, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, lte, sql, type SQL } from "drizzle-orm";
 import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core";
 import { createDb, type Db } from "../db/client.js";
 import {
@@ -173,26 +173,29 @@ async function purgeOneUser(
 }
 
 /**
- * Media that is the person's: everything they uploaded, and everything in a
- * relationship where they are the trainee (their meal, check-in and progress
- * photos, even when the coach logged them). A purged trainer's clients keep
- * the photos they uploaded themselves.
+ * Media that is the person's (Z7-26 ownership rule, documented in
+ * `docs/runbooks/account-deletion.md`):
+ * - everything in a relationship where they are the trainee (their meal,
+ *   check-in and progress photos, whoever uploaded them, the coach included);
+ * - an avatar they uploaded themselves (a picture of them).
+ * Photos a purged trainer uploaded into a client's relationship are the
+ * client's coaching history and stay, like the rest of that history; the
+ * client loses nothing when their trainer is purged.
  */
+function personMediaCondition(userId: string): SQL {
+  return sql`(coaching_relationship_id IN (SELECT r.id FROM coaching_relationships r WHERE r.trainee_user_id = ${userId})
+    OR (uploader_user_id = ${userId} AND media_type = 'avatar'))`;
+}
+
 function personMediaIds(userId: string): SQL {
-  return sql`SELECT m.id FROM media_assets m WHERE m.uploader_user_id = ${userId}
-    OR m.coaching_relationship_id IN (SELECT r.id FROM coaching_relationships r WHERE r.trainee_user_id = ${userId})`;
+  return sql`SELECT id FROM media_assets WHERE ${personMediaCondition(userId)}`;
 }
 
 async function deleteMedia(db: Db, env: Env, userId: string): Promise<void> {
   const rows = await db
     .select({ objectKey: mediaAssets.objectKey })
     .from(mediaAssets)
-    .where(
-      or(
-        eq(mediaAssets.uploaderUserId, userId),
-        sql`${mediaAssets.coachingRelationshipId} IN (SELECT r.id FROM coaching_relationships r WHERE r.trainee_user_id = ${userId})`,
-      ),
-    );
+    .where(personMediaCondition(userId));
   if (rows.length === 0) return;
   const keys = rows.map((row) => mediaKey(env, row.objectKey));
   try {
@@ -259,14 +262,17 @@ function unique(values: Array<string | null | undefined>): string[] {
  * Free text kept for the other party (and written by either side) in the
  * person's relationships. The text stays, because it is the other party's
  * coaching history, but inside it (D-W6-39):
- * - the person's email (any letter case) becomes `[removed]`;
- * - their phone, as stored (E.164) or in the national form with or without
- *   spaces or dashes ("98123 12345", "98123-12345", "9812312345"), becomes
- *   `[removed]`;
+ * - the person's email (any letter case, never part of a longer address)
+ *   becomes `[removed]`;
+ * - their phone, as stored (E.164) or in the national form, with or without
+ *   the country code or a trunk 0, and with any spaces or dashes between the
+ *   digits ("98123 12345", "98123  12345", "98123-12345", "09812312345",
+ *   "+91 98123 12345"), becomes `[removed]` (Z7-26);
  * - their full display name, as a whole name in any letter case (never part of
- *   another word), becomes "Deleted user".
- * JSON columns are parsed and only their string values are rewritten, so the
- * JSON stays valid.
+ *   another word), becomes "Deleted user". One-word and short names ("Om") are scrubbed too:
+ *   matching is by whole word only, so "Omelette" and "room" stay.
+ * JSON columns are parsed and only their string values, and numbers that are
+ * the person's phone, are rewritten, so the JSON stays valid.
  */
 const RELATIONSHIP_FREE_TEXT: ReadonlyArray<{
   table: string;
@@ -294,7 +300,17 @@ const RELATIONSHIP_FREE_TEXT: ReadonlyArray<{
   { table: "log_edit_events", column: "after_json", scope: "coaching_relationship_id" },
 ];
 
-export type Scrubber = { rewrite(text: string): string; prefilter(column: SQL): SQL };
+export type Scrubber = {
+  rewrite(text: string): string;
+  prefilter(column: SQL): SQL;
+  /** Which of the person's values the text holds (same rules as `rewrite`). */
+  mentions(text: string): { contact: boolean; name: boolean };
+};
+
+/** Names to match in free text: every non-empty name, as a whole word. */
+export function scrubbableNames(names: string[]): string[] {
+  return names.filter((name) => name.trim().length > 0);
+}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -321,32 +337,50 @@ function personPhones(values: PersonValues): Array<{ national: string; country: 
 }
 
 export function buildScrubber(values: PersonValues): Scrubber | null {
-  const rules: Array<[RegExp, string]> = [];
+  const contactRules: RegExp[] = [];
   const emails = unique(values.emails.map((email) => email.toLowerCase()));
   for (const email of emails) {
-    rules.push([new RegExp(escapeRegExp(email), "giu"), REMOVED_TEXT]);
+    // Never inside a longer address: "a@b.co" must not hit "xa@b.co" or "a@b.com".
+    contactRules.push(
+      new RegExp(`(?<![\\w.%+-])${escapeRegExp(email)}(?![\\w-]|\\.\\w)`, "giu"),
+    );
   }
   const phones = personPhones(values);
   for (const phone of phones) {
-    const national = phone.national.split("").join("[\\s-]?");
-    const country = phone.country ? `(?:\\+?${phone.country}[\\s-]?)?` : "";
-    rules.push([new RegExp(`(?<![\\d+])${country}${national}(?!\\d)`, "gu"), REMOVED_TEXT]);
+    // Any run of spaces or dashes between digits; an optional country code
+    // (with or without "+") or trunk 0 in front; never inside a longer number.
+    const national = phone.national.split("").join("[\\s-]*");
+    const prefixes = [`0[\\s-]*`];
+    if (phone.country) prefixes.unshift(`\\+?${phone.country}[\\s-]*`);
+    contactRules.push(
+      new RegExp(`(?<![\\d+])(?:${prefixes.join("|")})?${national}(?!\\d)`, "gu"),
+    );
   }
-  const names = values.names.map((name) => name.trim().split(/\s+/u)).filter((parts) => parts.length > 0);
+  const nameRules: RegExp[] = [];
+  const names = scrubbableNames(values.names)
+    .map((name) => name.trim().split(/\s+/u))
+    .filter((parts) => parts.length > 0);
   for (const parts of names) {
     const pattern = parts.map(escapeRegExp).join("\\s+");
-    rules.push([
+    nameRules.push(
       new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${pattern}(?![\\p{L}\\p{M}\\p{N}])`, "giu"),
-      DELETED_USER_NAME,
-    ]);
+    );
   }
-  if (rules.length === 0) return null;
+  if (contactRules.length + nameRules.length === 0) return null;
   const firstTokens = unique(names.map((parts) => parts[0]!.toLowerCase()));
   return {
     rewrite(text) {
       let out = text;
-      for (const [pattern, replacement] of rules) out = out.replace(pattern, replacement);
+      for (const pattern of contactRules) out = out.replace(pattern, REMOVED_TEXT);
+      for (const pattern of nameRules) out = out.replace(pattern, DELETED_USER_NAME);
       return out;
+    },
+    // `search` ignores the global flag's lastIndex, so the shared rules stay stateless.
+    mentions(text) {
+      return {
+        contact: contactRules.some((pattern) => text.search(pattern) >= 0),
+        name: nameRules.some((pattern) => text.search(pattern) >= 0),
+      };
     },
     // A cheap SQL superset of the rows the rules can match; the rules decide.
     prefilter(column) {
@@ -355,7 +389,9 @@ export function buildScrubber(values: PersonValues): Scrubber | null {
         ...firstTokens.map((token) => sql`instr(lower(${column}), ${token}) > 0`),
       ];
       for (const phone of phones) {
-        checks.push(sql`instr(replace(replace(${column}, ' ', ''), '-', ''), ${phone.national}) > 0`);
+        checks.push(
+          sql`instr(replace(replace(replace(replace(replace(${column}, ' ', ''), '-', ''), char(9), ''), char(10), ''), char(13), ''), ${phone.national}) > 0`,
+        );
       }
       return sql.join(checks, sql` OR `);
     },
@@ -370,6 +406,11 @@ export function scrubStoredText(raw: string, scrubber: Scrubber): string {
       const parsed: unknown = JSON.parse(raw);
       const walk = (value: unknown): unknown => {
         if (typeof value === "string") return scrubber.rewrite(value);
+        // A phone saved as a JSON number (9812312345) becomes the "[removed]" string.
+        if (typeof value === "number" && Number.isInteger(value)) {
+          const text = String(value);
+          return scrubber.rewrite(text) === text ? value : REMOVED_TEXT;
+        }
         if (Array.isArray(value)) return value.map(walk);
         if (value && typeof value === "object") {
           return Object.fromEntries(
@@ -522,15 +563,13 @@ async function purgeRows(
   // Other actors' retry receipts that echo the person's contact details or
   // name (for example the invitation a trainer sent them). They are short-lived
   // replay records, not history.
-  const receiptNeedles = [...contacts, ...values.names.map((name) => JSON.stringify(name))];
-  if (receiptNeedles.length > 0) {
+  if (scrubber) {
     statements.push(
-      sql`DELETE FROM idempotency_records WHERE (${containsAny(sql.raw("response_body"), receiptNeedles)}) AND ${guard}`,
-      sql`DELETE FROM sync_mutations WHERE (${containsAny(sql.raw("result_body"), receiptNeedles)}) AND ${guard}`,
+      ...(await receiptDeleteStatements(client, userId, scrubber, personRelationships, values, guard)),
     );
   }
   // Local dev mail sink (never written outside ENVIRONMENT=local).
-  const mailNeedles = [...contacts, ...values.names];
+  const mailNeedles = [...contacts, ...scrubbableNames(values.names)];
   if (mailNeedles.length > 0) {
     statements.push(
       sql`DELETE FROM dev_mail_outbox WHERE (${containsAny(sql.raw("to_address"), mailNeedles)}
@@ -568,6 +607,72 @@ async function purgeRows(
   );
   const last = results[results.length - 1];
   return (last?.meta?.changes ?? 0) === 1;
+}
+
+/**
+ * Other actors' receipts (idempotency replays and sync results) that hold the
+ * person's details. Z7-26: a receipt is deleted only when it really is about
+ * the person, never on a bare substring hit:
+ * - it holds their email or phone, matched with the scrubber's rules (whole
+ *   address, whole number), or
+ * - it holds their name (whole name, any length) AND
+ *   names one of their records: their user id, one of their relationships or
+ *   an invitation sent to them. A common name alone ("Rahul") never deletes
+ *   another user's receipt.
+ * The SQL prefilter only narrows the rows read; each delete is by id, guarded
+ * on the stored body being unchanged and the account still due.
+ */
+async function receiptDeleteStatements(
+  client: D1Database,
+  userId: string,
+  scrubber: Scrubber,
+  personRelationships: SQL,
+  values: PersonValues,
+  guard: SQL,
+): Promise<SQL[]> {
+  const emailMatch =
+    values.emails.length > 0
+      ? sql` OR lower(recipient_email) IN (${sql.join(
+          values.emails.map((email) => sql`${email.toLowerCase()}`),
+          sql`, `,
+        )})`
+      : sql``;
+  const idQuery = dialect.sqlToQuery(
+    sql`SELECT id FROM coaching_relationships WHERE id IN (${personRelationships})
+      UNION SELECT id FROM client_invitations WHERE accepted_user_id = ${userId}${emailMatch}`,
+  );
+  const { results: idRows } = await client
+    .prepare(idQuery.sql)
+    .bind(...idQuery.params)
+    .all<{ id: string }>();
+  const personIds = [userId, ...(idRows ?? []).map((row) => row.id)].map((id) => id.toLowerCase());
+
+  const statements: SQL[] = [];
+  for (const target of [
+    { table: "idempotency_records", column: "response_body" },
+    { table: "sync_mutations", column: "result_body" },
+  ]) {
+    const table = sql.raw(`"${target.table}"`);
+    const column = sql.raw(`"${target.column}"`);
+    const query = dialect.sqlToQuery(
+      sql`SELECT id, ${column} AS value FROM ${table} WHERE actor_user_id <> ${userId} AND (${scrubber.prefilter(column)})`,
+    );
+    const { results } = await client
+      .prepare(query.sql)
+      .bind(...query.params)
+      .all<{ id: string; value: string }>();
+    for (const row of results ?? []) {
+      const found = scrubber.mentions(row.value);
+      const lower = row.value.toLowerCase();
+      const aboutPerson = found.contact || (found.name && personIds.some((id) => lower.includes(id)));
+      if (aboutPerson) {
+        statements.push(
+          sql`DELETE FROM ${table} WHERE id = ${row.id} AND ${column} = ${row.value} AND ${guard}`,
+        );
+      }
+    }
+  }
+  return statements;
 }
 
 /** Case-insensitive substring match against any needle. */

@@ -7,6 +7,7 @@ import { createTestIdToken } from "../auth/firebase.js";
 import { hashPassword } from "../auth/password.js";
 import { createWebSession } from "../auth/identity.js";
 import { addCalendarMonthsUtc } from "../domain/account-deletion.js";
+import { nowIso } from "../lib/crypto.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
 import type { Env } from "../types.js";
@@ -784,6 +785,24 @@ describe("account deletion, archived access and reactivation (Z6-14)", () => {
 
   it("archives once when two deletes arrive together: one 200, one 403, dates not restamped (D-W6-35)", async () => {
     const trainer = await trainerSession("ishaan.coach@example.com");
+    // Something for the winner's batch to revoke and cancel: a pending
+    // reactivation request on an ended relationship and an active device token
+    // (the cookie session above is the web session).
+    const trainee = await coachedTrainee(db, trainer, "concurrent");
+    const requestId = await endAndRequestReactivation(trainer, trainee.relationshipId);
+    const deviceAt = new Date().toISOString();
+    await db.insert(schema.deviceTokens).values({
+      id: "device-ishaan-concurrent",
+      userId: trainer.userId,
+      platform: "android",
+      provider: "expo",
+      token: "ExponentPushToken[ishaan-concurrent]",
+      installationId: "install-ishaan-concurrent",
+      status: "active",
+      lastSeenAt: deviceAt,
+      createdAt: deviceAt,
+      updatedAt: deviceAt,
+    });
     // Hold each archive batch until both requests have reached it, then run them
     // one after the other, as D1 would.
     const realBatch = db.batch.bind(db);
@@ -806,10 +825,22 @@ describe("account deletion, archived access and reactivation (Z6-14)", () => {
       lines.push(args.map(String).join(" "));
     });
 
-    const results = await Promise.all([
-      call("/account/deletion", { method: "POST", headers: trainer.headers }),
-      call("/account/deletion", { method: "POST", headers: trainer.headers }),
-    ]);
+    // Both requests read the same instant (Z7-30): the worst case, where the
+    // loser's own `now` equals the stored archived_at. Without the pin this only
+    // happened when the two requests shared a millisecond, which flaked CI.
+    const globals = globalThis as { FITBUD_NOW?: string };
+    const previousNow = globals.FITBUD_NOW;
+    const pinnedNow = nowIso();
+    globals.FITBUD_NOW = pinnedNow;
+    let results: Awaited<ReturnType<typeof call>>[];
+    try {
+      results = await Promise.all([
+        call("/account/deletion", { method: "POST", headers: trainer.headers }),
+        call("/account/deletion", { method: "POST", headers: trainer.headers }),
+      ]);
+    } finally {
+      globals.FITBUD_NOW = previousNow;
+    }
     expect(arrived).toBe(2);
     const statuses = results.map((result) => result.status).sort();
     expect(statuses).toEqual([200, 403]);
@@ -819,6 +850,7 @@ describe("account deletion, archived access and reactivation (Z6-14)", () => {
       archivedAt: string;
       purgeAfter: string;
     };
+    expect(archivedAt).toBe(pinnedNow);
     // The static archived body only: no internal error, ids or request data.
     expect(loser.body.error).toEqual({
       code: "ACCOUNT_ARCHIVED",
@@ -830,6 +862,28 @@ describe("account deletion, archived access and reactivation (Z6-14)", () => {
     expect(user.accountState).toBe("archived");
     expect(user.archivedAt).toBe(archivedAt);
     expect(user.purgeAfter).toBe(purgeAfter);
+
+    // The winner's batch still signed the account out everywhere and cancelled
+    // the pending reactivation request.
+    const sessions = await db
+      .select()
+      .from(schema.webSessions)
+      .where(eq(schema.webSessions.userId, trainer.userId));
+    expect(sessions.length).toBeGreaterThan(0);
+    expect(sessions.every((session) => session.revokedAt === archivedAt)).toBe(true);
+    const tokens = await db
+      .select()
+      .from(schema.deviceTokens)
+      .where(eq(schema.deviceTokens.userId, trainer.userId));
+    expect(tokens.map((token) => [token.status, token.updatedAt])).toEqual([
+      ["revoked", archivedAt],
+    ]);
+    const [request] = await db
+      .select()
+      .from(schema.reactivationRequests)
+      .where(eq(schema.reactivationRequests.id, requestId));
+    expect(request!.status).toBe("cancelled");
+    expect(request!.resolvedAt).toBe(archivedAt);
     expect(lines).toEqual([]);
   });
 

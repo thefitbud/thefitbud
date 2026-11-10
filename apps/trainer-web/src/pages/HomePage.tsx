@@ -9,28 +9,26 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  CalendarDays,
+  Wallet,
+  ChevronRight,
+  CircleCheck,
   ClipboardCheck,
   Info,
+  MessageCircle,
   OctagonAlert,
   Sun,
 } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
 import {
   formatCivilDate,
   formatLocalDate,
   formatRelative,
   labelFor,
 } from "@fitbud/core";
-import type {
-  CoachAsk,
-  ReengagementCandidatesResponse,
-  SubscriptionAttentionItem,
-  TrainerCheckinInboxItem,
-} from "@fitbud/contracts";
+import type { ClientDirectoryItem, CoachAsk } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
@@ -38,11 +36,7 @@ import { CoachAskDrawer } from "../components/CoachAskDrawer";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { useOnlineStatus } from "../components/OfflineBanner";
 import { StatusChip } from "../components/StatusChip";
-import {
-  ErrorState,
-  errorKindFromFailure,
-  type ErrorKind,
-} from "../components/StatePanels";
+import { ErrorState } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
 import {
   issueLine,
@@ -50,27 +44,41 @@ import {
   type AttentionItem,
 } from "../lib/attentionIssueLine";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { stage1Api } from "../lib/stage1-api";
 import {
   isEditableTarget,
   isDeliberatePointerDown,
   useRowShortcutGuard,
 } from "../hooks/useRowShortcutGuard";
-import { useRealtimeHints } from "../realtime/useRealtimeHints";
-
-type ReengagementCandidate = ReengagementCandidatesResponse["items"][number];
-type ActivityEvent = {
-  id: string;
-  traineeDisplayName: string | null;
-  summary: string;
-  occurredAt: string;
-  traineeLocalTime: string | null;
-};
+import { useHomeSections } from "./home/useHomeSections";
 
 const ATTENTION_CAP = 8;
 const SECTION_CAP = 5;
+/** All-clear next-due read is refreshed when older than this. */
+const NEXT_DUE_STALE_MS = 5 * 60_000;
 
-type FilterKey = "all" | "attention" | "checkins" | "renewals";
+/** Clicks and Enter on a row's own buttons stay on that control (Z7-2). */
+function isRowControlTarget(target: EventTarget | null): boolean {
+  const el =
+    target instanceof Element
+      ? target
+      : target instanceof Node
+        ? target.parentElement
+        : null;
+  if (!el) return false;
+  return Boolean(
+    el.closest("button, a, input, textarea, select, [role='menu'], [role='menuitem']"),
+  );
+}
+
+/**
+ * Keep Enter/Space on a row's own control. Clicks are not stopped here: the
+ * row's onClick already skips controls (isRowControlTarget), and stopping the
+ * click would also hide it from the grid's touch-select handler (HM5).
+ */
+function stopRowControl(event: ReactKeyboardEvent): void {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.stopPropagation();
+}
 
 function severityRank(severity: "critical" | "attention"): number {
   return severity === "critical" ? 0 : 1;
@@ -137,6 +145,122 @@ function askDateLabel(ask: CoachAsk): string | null {
   return null;
 }
 
+/**
+ * All-clear "Next due" (frame 135): the earliest upcoming check-in among
+ * coached clients, from the directory's nextCheckin. null when there is none
+ * or the list is incomplete (more pages), so the copy never guesses.
+ */
+export function nextCheckinDue(
+  items: ClientDirectoryItem[],
+  today: string,
+  complete: boolean,
+): { firstName: string; localDate: string } | null {
+  if (!complete) return null;
+  let best: { name: string; localDate: string } | null = null;
+  for (const row of items) {
+    if (!row.relationshipId || row.endedAt) continue;
+    if (row.status !== "active" && row.status !== "coaching_ready") continue;
+    const next = row.nextCheckin;
+    if (!next) continue;
+    if (next.status !== "scheduled" && next.status !== "due") continue;
+    if (next.localDate < today) continue;
+    if (
+      !best ||
+      next.localDate < best.localDate ||
+      (next.localDate === best.localDate &&
+        row.traineeDisplayName.localeCompare(best.name) < 0)
+    ) {
+      best = { name: row.traineeDisplayName, localDate: next.localDate };
+    }
+  }
+  if (!best) return null;
+  const firstName = best.name.split(" ").filter(Boolean)[0] ?? best.name;
+  return { firstName, localDate: best.localDate };
+}
+
+function CountCard({
+  label,
+  count,
+  href,
+  pending,
+  iconBg,
+  iconColor,
+  icon,
+}: {
+  label: string;
+  count: number;
+  href: string;
+  pending: boolean;
+  iconBg: string;
+  iconColor: string;
+  icon: ReactNode;
+}) {
+  const zero = !pending && count <= 0;
+  const quiet = pending || zero;
+  const body = (
+    <>
+      <span
+        className="home-tile-icon"
+        style={{
+          background: quiet ? "#F3F4F6" : iconBg,
+          color: quiet ? "#858B96" : iconColor,
+        }}
+      >
+        {icon}
+      </span>
+      <span className="home-tile-copy">
+        <span className="home-tile-lbl">{label}</span>
+        <span className="home-tile-num">{pending ? "—" : String(count)}</span>
+      </span>
+      {zero ? (
+        <span className="home-tile-zero">Nothing new</span>
+      ) : pending ? null : (
+        <ChevronRight
+          className="home-tile-arrow"
+          size={18}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+      )}
+    </>
+  );
+  // Zero and still-loading cards are not links and stay out of tab order (DS4).
+  // A disabled button keeps the count readable for the existing count assertion.
+  if (quiet) {
+    return (
+      <button
+        type="button"
+        className={`home-tile${zero ? " is-zero" : ""}`}
+        disabled
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <Link className="home-tile" to={href}>
+      {body}
+    </Link>
+  );
+}
+
+function useMediaQuery(query: string): boolean {
+  const get = () =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false;
+  const [matches, setMatches] = useState(get);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
 export function HomePage() {
   const { me } = useAuth();
   const online = useOnlineStatus();
@@ -144,48 +268,38 @@ export function HomePage() {
     me?.timezone ??
     Intl.DateTimeFormat().resolvedOptions().timeZone ??
     "UTC";
-  const todayLabel = formatCivilDate(formatLocalDate(new Date(), timeZone));
+  const todayLocal = formatLocalDate(new Date(), timeZone);
+  const todayLabel = formatCivilDate(todayLocal);
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const drawerExceptionId = params.get("exception");
   const drawerAskId = params.get("ask");
+  const clientPanelId = params.get("client");
+  // HB1: closeDrawer reads this so a second close (Escape landing right after
+  // a close, before the URL commits) never pushes an extra history entry.
+  const drawerOpenRef = useRef(false);
+  drawerOpenRef.current = Boolean(drawerExceptionId || drawerAskId);
   const showAllParam = params.get("all") === "1";
-  const groupParam = params.get("group");
 
-  const [groups, setGroups] = useState<AttentionGroup[]>([]);
-  const [coachAsks, setCoachAsks] = useState<CoachAsk[]>([]);
-  const [reengage, setReengage] = useState<ReengagementCandidate[]>([]);
-  const [renewals, setRenewals] = useState<SubscriptionAttentionItem[]>([]);
-  const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
-  const [gettingStarted, setGettingStarted] = useState<
-    Array<{
-      id: string;
-      kind: "intake" | "invite";
-      name: string;
-      subtitle: string;
-      href?: string;
-      inviteId?: string;
-    }>
-  >([]);
-  const [nameByRid, setNameByRid] = useState<Map<string, string>>(new Map());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<{
-    message: string;
-    requestId?: string | null;
-    kind?: ErrorKind;
-  } | null>(null);
-  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>(
-    {},
-  );
-  const [filter, setFilter] = useState<FilterKey>(
-    groupParam === "attention"
-      ? "attention"
-      : groupParam === "checkins"
-        ? "checkins"
-        : groupParam === "renewals"
-          ? "renewals"
-          : "all",
-  );
+  const {
+    groups,
+    coachAsks,
+    reengage,
+    renewals,
+    checkins,
+    activity,
+    gettingStarted,
+    nameByRid,
+    loading,
+    error,
+    sectionErrors,
+    refreshAll,
+    refreshSection,
+    mutateSection,
+    holdException,
+    releaseException,
+    clearHold,
+  } = useHomeSections({ timeZone });
   const [showAllAttention, setShowAllAttention] = useState(showAllParam);
   const [reviewedOpen, setReviewedOpen] = useState(false);
   // HM5: the selected "Needs attention" row is held by relationshipId (the
@@ -220,225 +334,6 @@ export function HomePage() {
   } = useRowShortcutGuard();
   const undoTimer = useRef<number | null>(null);
 
-  // One fetch at a time. A quiet refresh requested while another load is in
-  // flight is coalesced into a single follow-up run (no double-fetch).
-  const inFlight = useRef<Promise<void> | null>(null);
-  const rerunQueued = useRef(false);
-
-  const runLoad = useCallback(async (opts?: { quiet?: boolean }) => {
-    const quiet = opts?.quiet === true;
-    if (!quiet) {
-      setLoading(true);
-      setError(null);
-      setSectionErrors({});
-    }
-    const nextErrors: Record<string, string> = {};
-    try {
-      const results = await Promise.allSettled([
-        stage1Api.getAttentionGroups(),
-        stage1Api.listCoachAsks({ status: "open" }) as Promise<{
-          items: CoachAsk[];
-        }>,
-        stage1Api.getReengagementCandidates(),
-        apiClient.listSubscriptionAttention(),
-        apiClient.listTrainerCheckinInbox(),
-        apiClient.listClients({ limit: 100 }),
-        apiClient.listInvitations(),
-        stage1Api.getActivityFeed({ limit: 8 }) as Promise<{
-          events: ActivityEvent[];
-        }>,
-      ]);
-
-      const attention =
-        results[0].status === "fulfilled" ? results[0].value : null;
-      if (!attention) {
-        nextErrors.attention = "Couldn't load needs attention";
-        if (!quiet) setGroups([]);
-      } else {
-        setGroups(attention.groups);
-      }
-
-      if (results[1].status === "fulfilled") {
-        setCoachAsks(results[1].value.items);
-      } else {
-        nextErrors.asks = "Couldn't load asked-coach items";
-        if (!quiet) setCoachAsks([]);
-      }
-
-      if (results[2].status === "fulfilled") {
-        setReengage(results[2].value.items);
-      } else if (!quiet) {
-        setReengage([]);
-      }
-
-      if (results[3].status === "fulfilled") {
-        setRenewals(results[3].value.items);
-      } else {
-        nextErrors.renewals = "Couldn't load renewals";
-        if (!quiet) setRenewals([]);
-      }
-
-      if (results[4].status === "fulfilled") {
-        setCheckins(
-          results[4].value.items.filter(
-            (i) => i.checkin.status === "submitted",
-          ),
-        );
-      } else {
-        nextErrors.checkins = "Couldn't load check-ins";
-        if (!quiet) setCheckins([]);
-      }
-
-      const names = new Map<string, string>();
-      const started: typeof gettingStarted = [];
-      if (results[5].status === "fulfilled") {
-        for (const row of results[5].value.items) {
-          if (row.relationshipId && row.traineeDisplayName) {
-            names.set(row.relationshipId, row.traineeDisplayName);
-          }
-          if (row.status === "onboarding_submitted") {
-            started.push({
-              id: `intake-${row.relationshipId}`,
-              kind: "intake",
-              name: row.traineeDisplayName,
-              subtitle: "Intake submitted",
-              href: `/clients/${row.relationshipId}/onboarding`,
-            });
-          }
-        }
-      }
-      if (results[6].status === "fulfilled") {
-        for (const inv of results[6].value.items) {
-          if (inv.status !== "pending") continue;
-          started.push({
-            id: `invite-${inv.id}`,
-            kind: "invite",
-            name: inv.recipientDisplayName || inv.recipientEmail || "Invite",
-            subtitle: inv.createdAt
-              ? `Invite sent ${formatCivilDate(formatLocalDate(new Date(inv.createdAt), timeZone))} · not accepted yet`
-              : "Invite not accepted yet",
-            inviteId: inv.id,
-          });
-        }
-      }
-      setGettingStarted(started.slice(0, SECTION_CAP));
-
-      if (attention) {
-        for (const g of attention.groups) {
-          names.set(g.relationshipId, g.traineeDisplayName);
-        }
-      }
-      if (!quiet) {
-        setNameByRid(names);
-      } else if (names.size > 0) {
-        setNameByRid((prev) => {
-          const merged = new Map(prev);
-          for (const [k, v] of names) merged.set(k, v);
-          return merged;
-        });
-      }
-
-      if (results[7].status === "fulfilled") {
-        setActivity(results[7].value.events.slice(0, 6));
-      } else if (!quiet) {
-        setActivity([]);
-      }
-
-      if (!quiet) {
-        setSectionErrors(nextErrors);
-        if (!attention) {
-          const attentionErr =
-            results[0].status === "rejected" ? results[0].reason : null;
-          const kind =
-            attentionErr instanceof ApiClientError
-              ? errorKindFromFailure({
-                  status: attentionErr.status,
-                  code: attentionErr.code,
-                  message: attentionErr.message,
-                })
-              : "server";
-          setError({
-            message:
-              attentionErr instanceof ApiClientError
-                ? attentionErr.message
-                : "Could not load your home feed.",
-            requestId:
-              attentionErr instanceof ApiClientError
-                ? attentionErr.requestId
-                : null,
-            kind,
-          });
-        }
-      }
-    } catch (err) {
-      if (!quiet) {
-        const kind =
-          err instanceof ApiClientError
-            ? errorKindFromFailure({
-                status: err.status,
-                code: err.code,
-                message: err.message,
-              })
-            : "server";
-        setError({
-          message:
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load your home feed.",
-          requestId: err instanceof ApiClientError ? err.requestId : null,
-          kind,
-        });
-      }
-    } finally {
-      if (!quiet) setLoading(false);
-    }
-  }, [timeZone]);
-
-  /**
-   * Full load (skeleton) only for the first paint and explicit Retry. Every
-   * action-driven refresh passes `quiet: true` so rows stay mounted, header
-   * counts stay visible and scroll position is kept.
-   */
-  const load = useCallback(
-    async (opts?: { quiet?: boolean }): Promise<void> => {
-      if (inFlight.current) {
-        if (opts?.quiet) {
-          rerunQueued.current = true;
-          return inFlight.current;
-        }
-      }
-      const run = (async () => {
-        try {
-          await runLoad(opts);
-        } finally {
-          inFlight.current = null;
-          if (rerunQueued.current) {
-            rerunQueued.current = false;
-            void load({ quiet: true });
-          }
-        }
-      })();
-      inFlight.current = run;
-      return run;
-    },
-    [runLoad],
-  );
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Quiet poll so new coach asks / attention appear within ~5s.
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      void load({ quiet: true });
-    }, 4000);
-    return () => window.clearInterval(id);
-  }, [load]);
-
-  useRealtimeHints(apiClient, [...nameByRid.keys()], () => {
-    void load({ quiet: true });
-  });
 
   const openGroups = useMemo(() => {
     return groups
@@ -508,7 +403,21 @@ export function HomePage() {
     });
   }
 
+  // D-W7-2: the panel lane reads ?client=. Row navigation closes a drawer.
+  function openClientPanel(relationshipId: string) {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("client", relationshipId);
+      next.delete("exception");
+      next.delete("ask");
+      return next;
+    });
+  }
+
   const closeDrawer = useCallback(() => {
+    if (!drawerOpenRef.current) return;
+    // Mark closed now: a second close before React re-renders is a no-op.
+    drawerOpenRef.current = false;
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("exception");
@@ -534,8 +443,18 @@ export function HomePage() {
 
   const markAskChanged = useCallback(() => {
     answeredAskIdRef.current = drawerAskId;
-    void load({ quiet: true });
-  }, [drawerAskId, load]);
+    const id = drawerAskId;
+    if (!id) {
+      void refreshSection("asks");
+      return;
+    }
+    // The drawer already saved the answer. Hide the row, then refetch asks only.
+    void mutateSection(
+      "asks",
+      (prev) => prev.filter((ask) => ask.id !== id),
+      () => Promise.resolve(),
+    );
+  }, [drawerAskId, mutateSection, refreshSection]);
 
   const closeAskDrawerWithFocus = useCallback(() => {
     const askId = drawerAskId;
@@ -573,41 +492,35 @@ export function HomePage() {
     undoTimer.current = window.setTimeout(() => setToast(null), 5000);
   }
 
-  async function acknowledgeFromOverflow(
-    exceptionId: string,
-    relationshipId: string,
-  ) {
+  function acknowledgeFromOverflow(exceptionId: string) {
     const key = createIdempotencyKey();
-    // Optimistic: delay POST 5s for Undo (TW-05).
+    // Optimistic: delay POST 5s for Undo (TW-05). A poll inside that window
+    // must not put the row back; the hold survives section refreshes.
     let cancelled = false;
+    let commitTimer = 0;
+    holdException(exceptionId);
     showToast("Marked reviewed", () => {
       cancelled = true;
+      window.clearTimeout(commitTimer);
       setToast(null);
-      void load({ quiet: true });
+      releaseException(exceptionId);
+      void refreshSection("attention");
     });
-    // Move visually by refetch after delay unless undone
-    window.setTimeout(() => {
+    commitTimer = window.setTimeout(() => {
       if (cancelled) return;
       void apiClient
         .acknowledgeException(exceptionId, { note: null }, key)
-        .then(() => load({ quiet: true }))
-        .catch(() => load({ quiet: true }));
+        .then(async () => {
+          // Refresh while the hold is still in place so a poll that started
+          // before the write cannot put the row back, then drop the hold.
+          await refreshSection("attention");
+          clearHold(exceptionId);
+        })
+        .catch(() => {
+          releaseException(exceptionId);
+          return refreshSection("attention");
+        });
     }, 5000);
-    // Immediate optimistic UI: remove from open by soft-filtering locally
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.relationshipId !== relationshipId
-          ? g
-          : {
-              ...g,
-              items: g.items.map((i) =>
-                i.id === exceptionId
-                  ? { ...i, status: "acknowledged" as const }
-                  : i,
-              ),
-            },
-      ),
-    );
   }
 
   async function nudgeClient(relationshipId: string, exceptionId: string) {
@@ -656,15 +569,21 @@ export function HomePage() {
       ev.preventDefault();
       selectIdx(max);
     } else if (key === "enter") {
+      // Buttons keep their own Enter (Review opens the drawer). The row opens
+      // that client's panel (Z7-2).
+      if (isRowControlTarget(ev.target)) return;
       ev.preventDefault();
-      const row = visibleOpen[focusIdx];
-      if (row?.primary) openException(row.primary.id);
+      const fromTarget = ridFromTarget(ev.target);
+      const row = fromTarget
+        ? visibleOpen.find((item) => item.group.relationshipId === fromTarget)
+        : visibleOpen[focusIdx];
+      if (row) openClientPanel(row.group.relationshipId);
     } else if (key === "a") {
       ev.preventDefault();
       if (!online) return;
       const row = visibleOpen[focusIdx];
       if (row?.primary) {
-        void acknowledgeFromOverflow(row.primary.id, row.group.relationshipId);
+        void acknowledgeFromOverflow(row.primary.id);
       }
     } else if (key === "o") {
       ev.preventDefault();
@@ -803,36 +722,183 @@ export function HomePage() {
     .slice(0, 2)
     .map((r) => r.group.traineeDisplayName.split(" ")[0])
     .filter(Boolean);
-  const summary = error
-    ? null
-    : loading
-      ? "Loading your day…"
-      : attentionCount === 0
-        ? "You're all caught up. Nothing needs your attention right now."
-        : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
-            firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
-          }`;
-
-  const showAttention = filter === "all" || filter === "attention";
-  const showCheckinsRail = filter === "all" || filter === "checkins";
-  const showRenewalsRail = filter === "all" || filter === "renewals";
-
+  // Z7-4 / frame 135: nothing in any "needs you" list. Getting started and
+  // Reviewed, still open can still show below; a failed section never reads
+  // as all clear.
   const allClear =
     !loading &&
     !error &&
+    Object.keys(sectionErrors).length === 0 &&
     openGroups.length === 0 &&
     coachAsks.length === 0 &&
     reengage.length === 0 &&
     renewals.length === 0 &&
-    checkins.length === 0 &&
-    gettingStarted.length === 0 &&
-    reviewedGroups.length === 0;
+    checkins.length === 0;
+  const panelOpen = Boolean(drawerExceptionId || clientPanelId);
+  // The side panel docks at >= 1024 px, where the row's Review cell is hidden.
+  const wideViewport = useMediaQuery("(min-width: 1024px)");
+  const panelDocked = panelOpen && wideViewport;
 
-  const tileNum = (n: number) =>
-    loading || error ? "—" : String(n);
+  // Next check-in due for the all-clear card (frame 135), from the client
+  // directory's nextCheckin. Read on mount and on a new day, and again when
+  // Home turns all clear with a read older than NEXT_DUE_STALE_MS, so a
+  // mutation that empties Home does not refetch other sections (Z7-1).
+  const [directory, setDirectory] = useState<{
+    items: ClientDirectoryItem[];
+    complete: boolean;
+    at: number;
+  } | null>(null);
+  const directoryReqRef = useRef(0);
+  const loadDirectory = useCallback(() => {
+    const req = ++directoryReqRef.current;
+    apiClient
+      .listClients({ limit: 100 })
+      .then((res) => {
+        if (req !== directoryReqRef.current) return;
+        setDirectory({
+          items: res.items,
+          complete: !res.nextCursor,
+          at: Date.now(),
+        });
+      })
+      // Optional copy: on failure the next-due part is left out and the card
+      // still reads "No check-ins waiting." (no cause is claimed).
+      .catch(() => {
+        if (req === directoryReqRef.current) setDirectory(null);
+      });
+  }, []);
+  useEffect(() => {
+    loadDirectory();
+    return () => {
+      directoryReqRef.current += 1;
+    };
+  }, [loadDirectory, todayLocal]);
+  const directoryAt = directory?.at ?? null;
+  useEffect(() => {
+    if (!allClear || directoryAt == null) return;
+    if (Date.now() - directoryAt > NEXT_DUE_STALE_MS) loadDirectory();
+  }, [allClear, directoryAt, loadDirectory]);
+  const nextDue = directory
+    ? nextCheckinDue(directory.items, todayLocal, directory.complete)
+    : null;
+
+  const summary = error
+    ? null
+    : loading
+      ? "Loading your day…"
+      : allClear
+        ? "Nobody needs you right now."
+        : attentionCount === 0
+        ? "You're all caught up. Nothing needs your attention right now."
+        : `${attentionCount} client${attentionCount === 1 ? " needs" : "s need"} you.${
+            firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
+          }`;
+
+  const reviewedSection = (
+    reviewedGroups.length > 0 ? (
+      <section className="home-card">
+        <button
+          type="button"
+          className="home-collapsed"
+          aria-expanded={reviewedOpen}
+          onClick={() => setReviewedOpen((v) => !v)}
+        >
+          <span aria-hidden>{reviewedOpen ? "▾" : "▸"}</span>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+            Reviewed, still open
+          </h2>
+          <span className="home-count">{reviewedGroups.length}</span>
+          <span className="muted" style={{ fontSize: 13 }}>
+            {reviewedGroups.length} reviewed item
+            {reviewedGroups.length === 1 ? "" : "s"} still open
+          </span>
+        </button>
+        {reviewedOpen ? (
+          <div className="home-list">
+            {reviewedGroups.slice(0, SECTION_CAP).map(({ group, items }) => (
+              <div key={group.relationshipId} className="home-li">
+                <span className={avatarClass(group.traineeDisplayName)}>
+                  {initials(group.traineeDisplayName)}
+                </span>
+                <div className="home-li-tx">
+                  <b>{group.traineeDisplayName}</b>
+                  <span>
+                    Reviewed ·{" "}
+                    {items[0]?.summary ||
+                      labelFor("exception_type", items[0]!.type)}
+                  </span>
+                </div>
+                <Button
+                  variant="tinted"
+                  className="button-sm"
+                  disabled={!online}
+                  onClick={() => items[0] && openException(items[0].id)}
+                >
+                  Resolve
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    ) : null
+  );
+
+  const gettingStartedSection = (
+    gettingStarted.length > 0 ? (
+      <section className="home-card" aria-labelledby="gs">
+        <div className="home-card-h">
+          <div className="home-card-ttl">
+            <h2 id="gs">Getting started</h2>
+            <span className="home-count">{gettingStarted.length}</span>
+          </div>
+        </div>
+        <div className="home-list">
+          {gettingStarted.map((row) => (
+            <div key={row.id} className="home-li">
+              <span className={avatarClass(row.name)}>
+                {initials(row.name)}
+              </span>
+              <div className="home-li-tx">
+                <b>{row.name}</b>
+                <span>{row.subtitle}</span>
+              </div>
+              <StatusChip
+                kind="lifecycle"
+                value={
+                  row.kind === "intake"
+                    ? "onboarding_submitted"
+                    : "invited"
+                }
+                label={
+                  row.kind === "intake" ? "Awaiting review" : "Invited"
+                }
+              />
+              {row.kind === "intake" && row.href ? (
+                <Link className="button-tinted button-sm" to={row.href}>
+                  Review intake
+                </Link>
+              ) : (
+                <Button
+                  variant="tinted"
+                  className="button-sm"
+                  disabled={!online}
+                >
+                  Resend invite
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+    ) : null
+  );
 
   return (
-    <div className="home-triage" data-testid="screen-TW-04">
+    <div
+      className={`home-triage${allClear ? " is-all-clear" : ""}${panelOpen ? " has-panel" : ""}`}
+      data-testid="screen-TW-04"
+    >
       <header className="home-hdr">
         <div>
           <div className="home-eyebrow">
@@ -844,61 +910,43 @@ export function HomePage() {
           </h1>
           {summary ? <p className="home-summary">{summary}</p> : null}
         </div>
-        <div className="home-tiles" role="group" aria-label="Filter by">
-          <button
-            type="button"
-            className={`home-tile${filter === "attention" ? " is-active" : ""}`}
-            onClick={() =>
-              setFilter((f) => (f === "attention" ? "all" : "attention"))
-            }
-          >
-            <span
-              className="home-tile-icon"
-              style={{ background: "#FEF2F2", color: "#B91C1C" }}
-            >
-              <OctagonAlert size={18} strokeWidth={1.75} aria-hidden />
-            </span>
-            <span>
-              <span className="home-tile-lbl">Needs attention</span>
-              <span className="home-tile-num">{tileNum(attentionCount)}</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`home-tile${filter === "checkins" ? " is-active" : ""}`}
-            onClick={() =>
-              setFilter((f) => (f === "checkins" ? "all" : "checkins"))
-            }
-          >
-            <span
-              className="home-tile-icon"
-              style={{ background: "#EFF6FF", color: "#1D4ED8" }}
-            >
-              <ClipboardCheck size={18} strokeWidth={1.75} aria-hidden />
-            </span>
-            <span>
-              <span className="home-tile-lbl">Check-ins to review</span>
-              <span className="home-tile-num">{tileNum(checkinCount)}</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`home-tile${filter === "renewals" ? " is-active" : ""}`}
-            onClick={() =>
-              setFilter((f) => (f === "renewals" ? "all" : "renewals"))
-            }
-          >
-            <span
-              className="home-tile-icon"
-              style={{ background: "#FFFBEB", color: "#B45309" }}
-            >
-              <CalendarDays size={18} strokeWidth={1.75} aria-hidden />
-            </span>
-            <span>
-              <span className="home-tile-lbl">Renewals due</span>
-              <span className="home-tile-num">{tileNum(renewalCount)}</span>
-            </span>
-          </button>
+        <div className="home-tiles" role="group" aria-label="Open a full list">
+          <CountCard
+            label="Needs attention"
+            count={attentionCount}
+            href="/home/attention"
+            pending={loading || Boolean(error)}
+            iconBg="#FEF2F2"
+            iconColor="#B91C1C"
+            icon={<OctagonAlert size={20} strokeWidth={1.75} aria-hidden />}
+          />
+          <CountCard
+            label="Check-ins to review"
+            count={checkinCount}
+            href="/checkins?tab=to-review"
+            pending={loading || Boolean(error)}
+            iconBg="#EDEAFF"
+            iconColor="#4527C6"
+            icon={<ClipboardCheck size={20} strokeWidth={1.75} aria-hidden />}
+          />
+          <CountCard
+            label="Renewals due"
+            count={renewalCount}
+            href="/home/renewals"
+            pending={loading || Boolean(error)}
+            iconBg="#FFFBEB"
+            iconColor="#B45309"
+            icon={<Wallet size={20} strokeWidth={1.75} aria-hidden />}
+          />
+          <CountCard
+            label="Asked you"
+            count={coachAsks.length}
+            href="/home/asks"
+            pending={loading || Boolean(error)}
+            iconBg="#F3F4F6"
+            iconColor="#3F4654"
+            icon={<MessageCircle size={20} strokeWidth={1.75} aria-hidden />}
+          />
         </div>
       </header>
 
@@ -907,7 +955,7 @@ export function HomePage() {
           kind={error.kind}
           message={error.message}
           requestId={error.requestId}
-          onRetry={() => void load()}
+          onRetry={() => void refreshAll()}
         />
       ) : null}
 
@@ -952,24 +1000,51 @@ export function HomePage() {
         </div>
       ) : null}
 
-      {!error && allClear ? (
-        <div className="home-card" style={{ padding: 24 }}>
-          <h2 className="home-title" style={{ fontSize: 18 }}>
-            All clear
-          </h2>
-          <p className="home-summary">
-            You&apos;re all caught up. Nothing needs your attention right now.
-          </p>
-          <Link className="button-primary" to="/clients/add">
-            Invite a client
-          </Link>
+      {allClear ? (
+        <div className="home-col home-clear-col">
+          <section className="home-card" aria-labelledby="na">
+            <div className="home-card-h">
+              <div className="home-card-ttl">
+                <h2 id="na">Needs attention</h2>
+              </div>
+              <span className="home-count">0</span>
+            </div>
+            <div className="home-clear" role="status">
+              <span className="home-clear-icon" aria-hidden>
+                <CircleCheck size={24} strokeWidth={1.75} />
+              </span>
+              <h3 className="home-clear-ttl">All clear</h3>
+              <p className="home-clear-copy">
+                New items appear here as clients log or miss a log. Reviewed
+                items that are still open stay in their own list.
+              </p>
+            </div>
+          </section>
+
+          <section className="home-card" aria-labelledby="ck-clear">
+            <div className="home-card-h">
+              <div className="home-card-ttl">
+                <h2 id="ck-clear">Check-ins to review</h2>
+              </div>
+            </div>
+            <p className="home-clear-line">
+              No check-ins waiting.
+              {nextDue
+                ? ` Next due: ${nextDue.firstName} on ${formatCivilDate(nextDue.localDate)}.`
+                : ""}
+            </p>
+          </section>
+
+          {reviewedSection}
+
+          {gettingStartedSection}
         </div>
       ) : null}
 
-      {!error && !loading ? (
+      {!error && !loading && !allClear ? (
       <div className="home-grid">
         <div className="home-col">
-          {showAttention && openGroups.length > 0 ? (
+          {openGroups.length > 0 ? (
             <section className="home-card" aria-labelledby="na">
               <div className="home-card-h">
                 <div className="home-card-ttl">
@@ -987,7 +1062,7 @@ export function HomePage() {
               {sectionErrors.attention ? (
                 <p className="form-error" role="alert">
                   {sectionErrors.attention} ·{" "}
-                  <button type="button" className="text-link" onClick={() => void load()}>
+                  <button type="button" className="text-link" onClick={() => void refreshSection("attention")}>
                     Retry
                   </button>
                 </p>
@@ -1023,7 +1098,12 @@ export function HomePage() {
                         if (el) rowRefs.current.set(group.relationshipId, el);
                         else rowRefs.current.delete(group.relationshipId);
                       }}
-                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}. Review button.`}
+                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}.${panelDocked ? "" : " Review button."}`}
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        openClientPanel(group.relationshipId);
+                      }}
                     >
                       <div className="home-who" role="gridcell">
                         <span className={avatarClass(group.traineeDisplayName)}>
@@ -1047,16 +1127,20 @@ export function HomePage() {
                       <div className="home-age" role="gridcell" title={absTitle}>
                         {age}
                       </div>
-                      <div role="gridcell">
+                      <div className="home-review-cell" role="gridcell">
                         <Button
                           variant="tinted"
                           className="button-sm"
                           onClick={() => openException(primary.id)}
+                          onKeyDown={stopRowControl}
                         >
                           Review
                         </Button>
                       </div>
-                      <div role="gridcell">
+                      <div
+                        role="gridcell"
+                        onKeyDown={stopRowControl}
+                      >
                         <OverflowMenu
                           label={`More actions for ${group.traineeDisplayName}`}
                           items={[
@@ -1065,10 +1149,7 @@ export function HomePage() {
                               label: "Mark reviewed",
                               disabled: !online,
                               onSelect: () =>
-                                void acknowledgeFromOverflow(
-                                  primary.id,
-                                  group.relationshipId,
-                                ),
+                                void acknowledgeFromOverflow(primary.id),
                             },
                             {
                               id: "nudge",
@@ -1135,7 +1216,7 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {filter === "all" && coachAsks.length > 0 ? (
+          {coachAsks.length > 0 ? (
             <section
               className="home-card"
               aria-labelledby="asks-heading"
@@ -1153,14 +1234,28 @@ export function HomePage() {
                   const item = askItemLabel(ask);
                   const date = askDateLabel(ask);
                   return (
-                    <div key={ask.id} className="home-li">
+                    <div
+                      key={ask.id}
+                      className="home-li is-target"
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        openAsk(ask.id);
+                      }}
+                    >
                       <span className={avatarClass(name)}>
                         {initials(name)}
                       </span>
                       <div className="home-li-tx">
                         <b>
-                          {name} asked about {item}
-                          {date ? ` · ${date}` : ""}{" "}
+                          <button
+                            type="button"
+                            className="home-li-name"
+                            onClick={() => openAsk(ask.id)}
+                          >
+                            {name} asked about {item}
+                            {date ? ` · ${date}` : ""}
+                          </button>{" "}
                           <StatusChip
                             kind="ask"
                             value="open"
@@ -1181,6 +1276,7 @@ export function HomePage() {
                         disabled={!online}
                         data-ask-answer={ask.id}
                         onClick={() => openAsk(ask.id)}
+                        onKeyDown={stopRowControl}
                       >
                         Mark answered
                       </Button>
@@ -1200,103 +1296,11 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {filter === "all" && reviewedGroups.length > 0 ? (
-            <section className="home-card">
-              <button
-                type="button"
-                className="home-collapsed"
-                aria-expanded={reviewedOpen}
-                onClick={() => setReviewedOpen((v) => !v)}
-              >
-                <span aria-hidden>{reviewedOpen ? "▾" : "▸"}</span>
-                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-                  Reviewed, still open
-                </h2>
-                <span className="home-count">{reviewedGroups.length}</span>
-                <span className="muted" style={{ fontSize: 13 }}>
-                  {reviewedGroups.length} reviewed item
-                  {reviewedGroups.length === 1 ? "" : "s"} still open
-                </span>
-              </button>
-              {reviewedOpen ? (
-                <div className="home-list">
-                  {reviewedGroups.slice(0, SECTION_CAP).map(({ group, items }) => (
-                    <div key={group.relationshipId} className="home-li">
-                      <span className={avatarClass(group.traineeDisplayName)}>
-                        {initials(group.traineeDisplayName)}
-                      </span>
-                      <div className="home-li-tx">
-                        <b>{group.traineeDisplayName}</b>
-                        <span>
-                          Reviewed ·{" "}
-                          {items[0]?.summary ||
-                            labelFor("exception_type", items[0]!.type)}
-                        </span>
-                      </div>
-                      <Button
-                        variant="tinted"
-                        className="button-sm"
-                        disabled={!online}
-                        onClick={() => items[0] && openException(items[0].id)}
-                      >
-                        Resolve
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          ) : null}
+          {reviewedSection}
 
-          {filter === "all" && gettingStarted.length > 0 ? (
-            <section className="home-card" aria-labelledby="gs">
-              <div className="home-card-h">
-                <div className="home-card-ttl">
-                  <h2 id="gs">Getting started</h2>
-                  <span className="home-count">{gettingStarted.length}</span>
-                </div>
-              </div>
-              <div className="home-list">
-                {gettingStarted.map((row) => (
-                  <div key={row.id} className="home-li">
-                    <span className={avatarClass(row.name)}>
-                      {initials(row.name)}
-                    </span>
-                    <div className="home-li-tx">
-                      <b>{row.name}</b>
-                      <span>{row.subtitle}</span>
-                    </div>
-                    <StatusChip
-                      kind="lifecycle"
-                      value={
-                        row.kind === "intake"
-                          ? "onboarding_submitted"
-                          : "invited"
-                      }
-                      label={
-                        row.kind === "intake" ? "Awaiting review" : "Invited"
-                      }
-                    />
-                    {row.kind === "intake" && row.href ? (
-                      <Link className="button-tinted button-sm" to={row.href}>
-                        Review intake
-                      </Link>
-                    ) : (
-                      <Button
-                        variant="tinted"
-                        className="button-sm"
-                        disabled={!online}
-                      >
-                        Resend invite
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          {gettingStartedSection}
 
-          {filter === "all" && reengage.length > 0 ? (
+          {reengage.length > 0 ? (
             <section className="home-card" aria-labelledby="re">
               <div className="home-card-h">
                 <div className="home-card-ttl">
@@ -1340,14 +1344,14 @@ export function HomePage() {
         </div>
 
         <div className="home-col home-rail">
-          {showCheckinsRail && checkins.length > 0 ? (
+          {checkins.length > 0 ? (
             <section className="home-card">
               <div className="home-card-h">
                 <div className="home-card-ttl h3">
                   <h2>Check-ins to review</h2>
                   <span className="home-count">{checkinCount}</span>
                 </div>
-                <Link className="link" to="/checkins" style={{ fontSize: 13 }}>
+                <Link className="link" to="/checkins?tab=to-review" style={{ fontSize: 13 }}>
                   All
                 </Link>
               </div>
@@ -1356,12 +1360,29 @@ export function HomePage() {
                   const name =
                     nameByRid.get(row.coachingRelationshipId) ?? "Client";
                   return (
-                    <div key={row.checkin.id} className="home-li">
+                    <div
+                      key={row.checkin.id}
+                      className="home-li is-target"
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        navigate(
+                          `/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`,
+                        );
+                      }}
+                    >
                       <span className={avatarClass(name)}>
                         {initials(name)}
                       </span>
                       <div className="home-li-tx">
-                        <b>{name}</b>
+                        <b>
+                          <Link
+                            className="home-li-name"
+                            to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
+                          >
+                            {name}
+                          </Link>
+                        </b>
                         <span>
                           Submitted{" "}
                           {row.checkin.submittedAt
@@ -1372,6 +1393,7 @@ export function HomePage() {
                       <Link
                         className="button-tinted button-sm"
                         to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
+                        onKeyDown={stopRowControl}
                       >
                         Review
                       </Link>
@@ -1382,7 +1404,7 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {showRenewalsRail && renewals.length > 0 ? (
+          {renewals.length > 0 ? (
             <section className="home-card">
               <div className="home-card-h">
                 <div className="home-card-ttl h3">
@@ -1396,9 +1418,26 @@ export function HomePage() {
                     nameByRid.get(item.coachingRelationshipId) ??
                     item.planName;
                   return (
-                    <div key={item.coachingRelationshipId} className="home-li">
+                    <div
+                      key={item.coachingRelationshipId}
+                      className="home-li is-target"
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        navigate(
+                          `/clients/${item.coachingRelationshipId}/configure#subscription`,
+                        );
+                      }}
+                    >
                       <div className="home-li-tx">
-                        <b>{name}</b>
+                        <b>
+                          <Link
+                            className="home-li-name"
+                            to={`/clients/${item.coachingRelationshipId}/configure#subscription`}
+                          >
+                            {name}
+                          </Link>
+                        </b>
                         <span>
                           {item.renewalState === "expired" ? "Ended" : "Due"}{" "}
                           {formatCivilDate(item.renewsOn)}
@@ -1415,19 +1454,11 @@ export function HomePage() {
               </div>
               <div className="home-foot" style={{ padding: "10px 16px" }}>
                 <span className="muted">Open settings to renew</span>
-                {renewals[0] ? (
-                  <Link
-                    className="link"
-                    to={`/clients/${renewals[0].coachingRelationshipId}/configure`}
-                  >
-                    Open settings
-                  </Link>
-                ) : null}
               </div>
             </section>
           ) : null}
 
-          {filter === "all" && activity.length > 0 ? (
+          {activity.length > 0 ? (
             <section className="home-card">
               <div className="home-card-h">
                 <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
@@ -1456,13 +1487,14 @@ export function HomePage() {
       </div>
       ) : null}
 
-      {drawerExceptionId ? (
+      {drawerExceptionId || clientPanelId ? (
         <ExceptionDrawer
-          key={drawerExceptionId}
+          key={drawerExceptionId ?? `client:${clientPanelId}`}
           exceptionId={drawerExceptionId}
+          relationshipId={clientPanelId}
           openSeq={drawerOpenSeq}
           onClose={closeDrawerWithFocus}
-          onChanged={() => void load({ quiet: true })}
+          onChanged={() => void refreshSection("attention")}
         />
       ) : null}
 

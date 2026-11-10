@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
+import { drizzle } from "drizzle-orm/d1";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
@@ -10,11 +11,63 @@ import * as schema from "../db/schema.js";
 
 
 
-import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+import {
+  createMemoryDb as createSharedMemoryDb,
+  type SqlJsCompatDatabase,
+} from "../test-support/memory-db.js";
 
-async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
+
+/**
+ * Concurrent-edit ordering for this file's tests only (Z7-22). Returns a copy
+ * of `db` whose first `parties` reads of `table` each run, then hold their
+ * result until all `parties` have read. Every handler has its recordVersion
+ * snapshot before any of them writes, so a 409 can only come from the
+ * versioned update missing the row. Later reads pass straight through.
+ */
+function holdFirstReadsOf(db: Db, table: string, parties: number): Db {
+  // drizzle() keeps the D1 binding on `$client`; the `Db` type omits it.
+  const d1 = (db as Db & { $client: D1Database }).$client;
+  const reads = new RegExp(`^select\\b[\\s\\S]*\\bfrom "${table}"`, "i");
+  let arrived = 0;
+  let open: () => void = () => {};
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  async function hold<T>(result: T): Promise<T> {
+    if (arrived >= parties) return result;
+    arrived += 1;
+    if (arrived >= parties) open();
+    await opened;
+    return result;
+  }
+  function wrap(statement: D1PreparedStatement): D1PreparedStatement {
+    return {
+      bind: (...values: unknown[]) => wrap(statement.bind(...values)),
+      all: async () => hold(await statement.all()),
+      raw: async () => hold(await statement.raw()),
+      first: async (column?: string) => hold(await statement.first(column as string)),
+      run: () => statement.run(),
+    } as unknown as D1PreparedStatement;
+  }
+  const gated = {
+    prepare: (query: string) => {
+      const statement = d1.prepare(query);
+      return reads.test(query) ? wrap(statement) : statement;
+    },
+    batch: (statements: D1PreparedStatement[]) => d1.batch(statements),
+    exec: (query: string) => d1.exec(query),
+    dump: () => d1.dump(),
+  } as unknown as D1Database;
+  return drizzle(gated, { schema });
+}
+
+async function createMemoryDb(): Promise<{
+  db: Db;
+  close: () => void;
+  sqlite: SqlJsCompatDatabase;
+}> {
   const handle = await createSharedMemoryDb();
-  return { db: handle.db, close: handle.close };
+  return { db: handle.db, close: handle.close, sqlite: handle.sqlite };
 }
 
 function dummyD1(): D1Database {
@@ -344,11 +397,13 @@ async function reachEffectiveMealPlan(
 describe("meal assignment and compliance", () => {
   let closeDb: () => void;
   let db: Db;
+  let sqlite: SqlJsCompatDatabase;
 
   beforeEach(async () => {
     const memory = await createMemoryDb();
     closeDb = memory.close;
     db = memory.db;
+    sqlite = memory.sqlite;
     setTestDbOverride(memory.db);
   });
 
@@ -665,6 +720,475 @@ describe("meal assignment and compliance", () => {
         .from(schema.mealCompliance)
         .where(eq(schema.mealCompliance.assignmentId, dinner.id));
       expect(row?.clientLoggedAt).toBe(madeAt);
+      // Z7-20 moves confirm and skip only; a deviation keeps the receive time.
+      expect(row?.loggedAt).toBe(row?.createdAt);
+    });
+
+    function pinServerNow(iso: string): () => void {
+      const globals = globalThis as { FITBUD_NOW?: string };
+      const previous = globals.FITBUD_NOW;
+      globals.FITBUD_NOW = iso;
+      return () => {
+        if (previous === undefined) delete globals.FITBUD_NOW;
+        else globals.FITBUD_NOW = previous;
+      };
+    }
+
+    it("accepts confirm and skip made just before Kolkata midnight when the server receives them the next day", async () => {
+      const { plan, meal } = await setup("lt-midnight");
+      const zone = "Asia/Kolkata";
+      const breakfast = meal("Breakfast");
+      const lunch = meal("Lunch");
+      const [windowRow] = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.id, breakfast.id));
+      expect(windowRow).toBeTruthy();
+      const windowEndsAt = windowRow!.windowEndsAt;
+      expect(formatLocalDate(new Date(windowEndsAt), zone)).toBe(
+        addDaysToLocalDate(breakfast.localDate, 1),
+      );
+      const clientLoggedAt = new Date(
+        Date.parse(windowEndsAt) - 60_000,
+      ).toISOString();
+      const serverReceivedAt = new Date(
+        Date.parse(windowEndsAt) + 2 * 60_000,
+      ).toISOString();
+      expect(formatLocalDate(new Date(clientLoggedAt), zone)).toBe(
+        breakfast.localDate,
+      );
+      expect(formatLocalDate(new Date(serverReceivedAt), zone)).not.toBe(
+        breakfast.localDate,
+      );
+
+      const send = (path: "confirm" | "skip", id: string, key: string, body: Record<string, unknown>) =>
+        app.request(
+          `/meals/assignments/${id}/${path}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": key,
+            },
+            body: JSON.stringify(body),
+          },
+          testEnv(),
+        );
+
+      const restore = pinServerNow(serverReceivedAt);
+      try {
+        const confirmed = await send("confirm", breakfast.id, "lt-midnight-confirm", {
+          clientLoggedAt,
+        });
+        expect(confirmed.status).toBe(200);
+        const skipped = await send("skip", lunch.id, "lt-midnight-skip", {
+          clientLoggedAt,
+        });
+        expect(skipped.status).toBe(200);
+      } finally {
+        restore();
+      }
+
+      for (const [assignmentId, outcome] of [
+        [breakfast.id, "confirmed"],
+        [lunch.id, "skipped"],
+      ] as const) {
+        const [row] = await db
+          .select()
+          .from(schema.mealCompliance)
+          .where(eq(schema.mealCompliance.assignmentId, assignmentId));
+        expect(row?.clientLoggedAt).toBe(clientLoggedAt);
+        expect(row?.loggedAt).toBe(clientLoggedAt);
+        expect(row?.loggedLate).toBe(false);
+        expect(row?.localDate).toBe(breakfast.localDate);
+        expect(formatLocalDate(new Date(row!.loggedAt), zone)).toBe(
+          breakfast.localDate,
+        );
+        expect(row?.outcome).toBe(outcome);
+
+        const viewed = await app.request(
+          `/meals/assignments/${assignmentId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+            },
+          },
+          testEnv(),
+        );
+        expect(viewed.status).toBe(200);
+        expect(
+          ((await viewed.json()) as { data: { status: string } }).data.status,
+        ).toBe(outcome);
+      }
+    });
+
+    it("stores an offset near-midnight client time as UTC so late status stays on the client day", async () => {
+      const { plan, meal } = await setup("lt-offset-status");
+      const zone = "Asia/Kolkata";
+      const breakfast = meal("Breakfast");
+      const [windowRow] = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.id, breakfast.id));
+      const windowEndsAt = windowRow!.windowEndsAt;
+      const clientMs = Date.parse(windowEndsAt) - 60_000;
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(clientMs));
+      const part = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find((item) => item.type === type)!.value;
+      const offset = `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}+05:30`;
+      const canonical = new Date(offset).toISOString();
+      const serverReceivedAt = new Date(
+        Date.parse(windowEndsAt) + 2 * 60_000,
+      ).toISOString();
+      // The raw offset sorts after the Zulu window end even though it is earlier.
+      expect(offset > windowEndsAt).toBe(true);
+      expect(canonical <= windowEndsAt).toBe(true);
+      expect(formatLocalDate(new Date(canonical), zone)).toBe(breakfast.localDate);
+
+      const restore = pinServerNow(serverReceivedAt);
+      let response: Response;
+      try {
+        response = await app.request(
+          `/meals/assignments/${breakfast.id}/confirm`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": "lt-offset-1",
+            },
+            body: JSON.stringify({ clientLoggedAt: offset }),
+          },
+          testEnv(),
+        );
+      } finally {
+        restore();
+      }
+      expect(response.status).toBe(200);
+      const [row] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, breakfast.id));
+      expect(row?.loggedAt).toBe(canonical);
+      expect(row?.clientLoggedAt).toBe(canonical);
+      expect(row!.loggedAt <= windowEndsAt).toBe(true);
+      expect(row?.loggedLate).toBe(false);
+      expect(formatLocalDate(new Date(row!.loggedAt), zone)).toBe(
+        breakfast.localDate,
+      );
+      const viewed = await app.request(
+        `/meals/assignments/${breakfast.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${plan.traineeToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      expect(
+        ((await viewed.json()) as { data: { status: string } }).data.status,
+      ).toBe("confirmed");
+    });
+
+    it("without a client log time, a post-midnight receive is judged on the server day", async () => {
+      const { plan, meal } = await setup("lt-midnight-server");
+      const zone = "Asia/Kolkata";
+      const dinner = meal("Dinner");
+      const [windowRow] = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.id, dinner.id));
+      const serverReceivedAt = new Date(
+        Date.parse(windowRow!.windowEndsAt) + 2 * 60_000,
+      ).toISOString();
+      const restore = pinServerNow(serverReceivedAt);
+      let response: Response;
+      try {
+        response = await app.request(
+          `/meals/assignments/${dinner.id}/confirm`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": "lt-midnight-server-1",
+            },
+            body: JSON.stringify({}),
+          },
+          testEnv(),
+        );
+      } finally {
+        restore();
+      }
+      expect(response.status).toBe(200);
+      const [row] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, dinner.id));
+      expect(row?.clientLoggedAt).toBeNull();
+      expect(row?.loggedAt).toBe(serverReceivedAt);
+      expect(row?.loggedLate).toBe(true);
+      expect(formatLocalDate(new Date(row!.loggedAt), zone)).not.toBe(
+        dinner.localDate,
+      );
+      const viewed = await app.request(
+        `/meals/assignments/${dinner.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${plan.traineeToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      expect(
+        ((await viewed.json()) as { data: { status: string } }).data.status,
+      ).toBe("logged_later");
+    });
+
+    it("rejects confirm and skip client times outside the bounds", async () => {
+      const { plan, meal } = await setup("lt-client-bounds");
+      const breakfast = meal("Breakfast");
+      const lunch = meal("Lunch");
+      const send = (
+        path: "confirm" | "skip",
+        id: string,
+        key: string,
+        clientLoggedAt: string,
+      ) =>
+        app.request(
+          `/meals/assignments/${id}/${path}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": key,
+            },
+            body: JSON.stringify({ clientLoggedAt }),
+          },
+          testEnv(),
+        );
+      const early = await send(
+        "confirm",
+        breakfast.id,
+        "lt-client-bounds-1",
+        new Date(Date.parse(breakfast.windowStartsAt) - 1000).toISOString(),
+      );
+      expect(early.status).toBe(422);
+      const earlyError = (
+        (await early.json()) as { error: { code: string; message: string } }
+      ).error;
+      expect(earlyError.code).toBe("LOG_TIME_BEFORE_WINDOW");
+      expect(earlyError.message).toBe(
+        "The log time is before this item's window opened.",
+      );
+      const ahead = await send(
+        "skip",
+        lunch.id,
+        "lt-client-bounds-2",
+        new Date(Date.now() + 6 * MIN).toISOString(),
+      );
+      expect(ahead.status).toBe(422);
+      expect(
+        ((await ahead.json()) as { error: { code: string } }).error.code,
+      ).toBe("LOG_TIME_IN_FUTURE");
+      const stored = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, breakfast.id));
+      expect(stored).toEqual([]);
+    });
+
+    it("rejects a confirm client log time that is not a timestamp", async () => {
+      const { plan, meal } = await setup("lt-bad-time");
+      const breakfast = meal("Breakfast");
+      const response = await app.request(
+        `/meals/assignments/${breakfast.id}/confirm`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${plan.traineeToken}`,
+            "x-fitbud-role": "trainee",
+            "Content-Type": "application/json",
+            "Idempotency-Key": "lt-bad-time-1",
+          },
+          body: JSON.stringify({ clientLoggedAt: "not-a-time" }),
+        },
+        testEnv(),
+      );
+      expect(response.status).toBe(400);
+      const error = (
+        (await response.json()) as { error: { code: string; message: string } }
+      ).error;
+      expect(error.code).toBe("INVALID_REQUEST");
+      expect(error.message).toBe("Invalid confirm request.");
+      expect(error.message).not.toContain("not-a-time");
+      const stored = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, breakfast.id));
+      expect(stored).toEqual([]);
+    });
+
+    async function midnightTimes(assignmentId: string) {
+      const [windowRow] = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.id, assignmentId));
+      const windowEndsAt = windowRow!.windowEndsAt;
+      return {
+        clientLoggedAt: new Date(Date.parse(windowEndsAt) - 60_000).toISOString(),
+        serverReceivedAt: new Date(
+          Date.parse(windowEndsAt) + 2 * 60_000,
+        ).toISOString(),
+      };
+    }
+
+    function sender(traineeToken: string) {
+      return (
+        path: "confirm" | "skip",
+        id: string,
+        key: string,
+        body: Record<string, unknown>,
+      ) =>
+        app.request(
+          `/meals/assignments/${id}/${path}`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": key,
+            },
+            body: JSON.stringify(body),
+          },
+          testEnv(),
+        );
+    }
+
+    it("replays a confirm or skip retry with the same client time and rejects a changed one", async () => {
+      const { plan, meal } = await setup("lt-idem");
+      const breakfast = meal("Breakfast");
+      const lunch = meal("Lunch");
+      const { clientLoggedAt, serverReceivedAt } = await midnightTimes(
+        breakfast.id,
+      );
+      const otherTime = new Date(
+        Date.parse(clientLoggedAt) - 60_000,
+      ).toISOString();
+      const send = sender(plan.traineeToken);
+
+      const restore = pinServerNow(serverReceivedAt);
+      try {
+        for (const [path, id] of [
+          ["confirm", breakfast.id],
+          ["skip", lunch.id],
+        ] as const) {
+          const key = `lt-idem-${path}`;
+          const first = await send(path, id, key, { clientLoggedAt });
+          expect(first.status).toBe(200);
+          const firstBody = await first.json();
+
+          const replay = await send(path, id, key, { clientLoggedAt });
+          expect(replay.status).toBe(200);
+          expect(await replay.json()).toEqual(firstBody);
+
+          for (const changed of [{ clientLoggedAt: otherTime }, {}]) {
+            const conflict = await send(path, id, key, changed);
+            expect(conflict.status).toBe(409);
+            expect(
+              ((await conflict.json()) as { error: { code: string } }).error
+                .code,
+            ).toBe("IDEMPOTENCY_KEY_REUSE");
+          }
+
+          const rows = await db
+            .select()
+            .from(schema.mealCompliance)
+            .where(eq(schema.mealCompliance.assignmentId, id));
+          expect(rows).toHaveLength(1);
+          // Stored log time follows the client; createdAt is the receive time.
+          expect(rows[0]?.loggedAt).toBe(clientLoggedAt);
+          expect(rows[0]?.createdAt).toBe(serverReceivedAt);
+        }
+      } finally {
+        restore();
+      }
+    });
+
+    it("stores an offset client time as the same UTC instant", async () => {
+      const { plan, meal } = await setup("lt-offset");
+      const breakfast = meal("Breakfast");
+      const { clientLoggedAt, serverReceivedAt } = await midnightTimes(
+        breakfast.id,
+      );
+      // The same instant written as Kolkata wall time (UTC+05:30).
+      const kolkataWall = new Date(Date.parse(clientLoggedAt) + 330 * 60_000)
+        .toISOString()
+        .replace("Z", "+05:30");
+      const restore = pinServerNow(serverReceivedAt);
+      let response: Response;
+      try {
+        response = await sender(plan.traineeToken)(
+          "confirm",
+          breakfast.id,
+          "lt-offset-1",
+          { clientLoggedAt: kolkataWall },
+        );
+      } finally {
+        restore();
+      }
+      expect(response.status).toBe(200);
+      const [row] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, breakfast.id));
+      expect(row?.loggedAt).toBe(clientLoggedAt);
+      expect(row?.loggedLate).toBe(false);
+      expect(row?.createdAt).toBe(serverReceivedAt);
+    });
+
+    it("keeps an ended relationship read-only when a client time is sent", async () => {
+      const { plan, meal } = await setup("lt-ended");
+      const breakfast = meal("Breakfast");
+      const endedAt = new Date().toISOString();
+      await db
+        .update(schema.coachingRelationships)
+        .set({ status: "ended", endedAt, updatedAt: endedAt })
+        .where(eq(schema.coachingRelationships.id, plan.relationshipId));
+      const response = await sender(plan.traineeToken)(
+        "confirm",
+        breakfast.id,
+        "lt-ended-1",
+        { clientLoggedAt: breakfast.windowStartsAt },
+      );
+      expect(response.status).toBe(409);
+      expect(
+        ((await response.json()) as { error: { code: string } }).error.code,
+      ).toBe("RELATIONSHIP_ENDED");
+      const stored = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, breakfast.id));
+      expect(stored).toEqual([]);
     });
   });
 
@@ -1392,5 +1916,201 @@ describe("meal assignment and compliance", () => {
     expect(lunch).toBeTruthy();
     expect(lunch!.id).not.toBe(lunchBefore.id);
     expect(lunch!.planVersionId).toBe(next.data.id);
+  });
+
+  describe("coach log is one transaction (Z7-22)", () => {
+    async function putMeal(
+      assignmentId: string,
+      date: string,
+      cookie: string,
+      key: string,
+      body: Record<string, unknown>,
+    ) {
+      const response = await app.request(
+        `/meals/compliance/${assignmentId}/${date}`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify(body),
+        },
+        testEnv(),
+      );
+      const text = await response.text();
+      return {
+        status: response.status,
+        body: (text ? JSON.parse(text) : null) as {
+          data?: { id: string; recordVersion: number; outcome: string };
+          error?: { code: string };
+        },
+      };
+    }
+
+    async function todayMeal(relationshipId: string, today: string) {
+      const rows = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.coachingRelationshipId, relationshipId));
+      const assignment = rows.find((row) => row.localDate === today);
+      expect(assignment).toBeTruthy();
+      return assignment!;
+    }
+
+    it("concurrent creates return a stable conflict and one audit", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectiveMealPlan("z722-race");
+      const assignment = await todayMeal(relationshipId, today);
+      const [first, second] = await Promise.all([
+        putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-a", {
+          outcome: "confirmed",
+        }),
+        putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-b", {
+          outcome: "skipped",
+        }),
+      ]);
+      const statuses = [first.status, second.status].sort((a, b) => a - b);
+      expect(statuses).toEqual([201, 409]);
+      const conflict = first.status === 409 ? first : second;
+      // The loser either hits the assignment unique key, or reads the winner's
+      // row and is missing recordVersion. Both are stable conflicts, never 500.
+      expect(["COMPLIANCE_ALREADY_RECORDED", "VERSION_CONFLICT"]).toContain(
+        conflict.body.error?.code,
+      );
+      const rows = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, assignment.id));
+      expect(rows).toHaveLength(1);
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, rows[0]!.id));
+      expect(audits).toHaveLength(1);
+      const feed = await app.request(
+        "/activity/feed?limit=50",
+        { headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+      expect(feed.status).toBe(200);
+      const events = (
+        (await feed.json()) as { data: { events: Array<{ id: string; type: string }> } }
+      ).data.events;
+      expect(
+        events.some((event) => event.id === `log_edit:${audits[0]!.id}` && event.type === "coach_logged"),
+      ).toBe(true);
+    });
+
+    it("rolls an edit back when the audit write fails", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectiveMealPlan("z722-rollback");
+      const assignment = await todayMeal(relationshipId, today);
+      const created = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-create",
+        { outcome: "confirmed" },
+      );
+      expect(created.status).toBe(201);
+      sqlite.exec(
+        "CREATE TRIGGER z722_fail_meal_audit BEFORE INSERT ON log_edit_events BEGIN SELECT RAISE(ABORT, 'z722 injected failure'); END",
+      );
+      const failed = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-edit",
+        { outcome: "skipped", recordVersion: 0 },
+      );
+      sqlite.exec("DROP TRIGGER z722_fail_meal_audit");
+      expect(failed.status).toBe(500);
+      const [row] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.id, created.body.data!.id));
+      expect(row).toMatchObject({ outcome: "confirmed", recordVersion: 0 });
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
+      expect(audits.map((audit) => audit.action)).toEqual(["create"]);
+
+      const retried = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-edit-2",
+        { outcome: "skipped", recordVersion: 0 },
+      );
+      expect(retried.status).toBe(200);
+      const [edited] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.id, created.body.data!.id));
+      expect(edited).toMatchObject({ outcome: "skipped", recordVersion: 1 });
+      const after = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
+      expect(after.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+    });
+
+    it("concurrent edits with the same version return VERSION_CONFLICT and one edit audit", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectiveMealPlan("z722-edit");
+      const assignment = await todayMeal(relationshipId, today);
+      const created = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-edit-create",
+        { outcome: "confirmed" },
+      );
+      expect(created.status).toBe(201);
+      const [before] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.id, created.body.data!.id));
+      const recordVersion = before!.recordVersion;
+      // Both handlers read this version before either write. The 409 comes
+      // from the versioned update missing the row, not from a later read.
+      setTestDbOverride(holdFirstReadsOf(db, "meal_compliance", 2));
+      try {
+        const [first, second] = await Promise.all([
+          putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-edit-a", {
+            outcome: "skipped",
+            recordVersion,
+          }),
+          putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-edit-b", {
+            outcome: "modified",
+            deviationKind: "other",
+            recordVersion,
+          }),
+        ]);
+        const statuses = [first.status, second.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 409]);
+        const conflict = first.status === 409 ? first : second;
+        const winner = first.status === 200 ? first : second;
+        expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
+        const [row] = await db
+          .select()
+          .from(schema.mealCompliance)
+          .where(eq(schema.mealCompliance.id, created.body.data!.id));
+        expect(row!.recordVersion).toBe(recordVersion + 1);
+        expect(row!.outcome).toBe(winner.body.data!.outcome);
+        const audits = await db
+          .select()
+          .from(schema.logEditEvents)
+          .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
+        expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+        const changes = await db
+          .select()
+          .from(schema.changeLog)
+          .where(eq(schema.changeLog.recordId, created.body.data!.id));
+        expect(changes).toHaveLength(2);
+      } finally {
+        setTestDbOverride(db);
+      }
+    });
   });
 });

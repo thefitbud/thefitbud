@@ -34,7 +34,12 @@ import {
   resolveMetricsWindow,
 } from "../domain/progress-metrics";
 import { COACH_LOGGED_READ_ONLY_CODE } from "../domain/compliance-logging.js";
-import { measurementLogSnapshot, recordCoachLogChange } from "../domain/coach-log.js";
+import {
+  CoachLogConflict,
+  LOG_WRITE_CONFLICT,
+  measurementLogSnapshot,
+  recordCoachLogChange,
+} from "../domain/coach-log.js";
 import {
   COACH_LOG_BACKDATE_ERROR,
   LOG_TIME_ERROR_CODES,
@@ -105,6 +110,33 @@ function coachMeasurementVersionConflict(c: AppContext) {
     "VERSION_CONFLICT",
     "This measurement changed since it was opened. Reload and try again.",
   );
+}
+
+function measurementLogWriteConflict(c: AppContext) {
+  return fail(c, 409, LOG_WRITE_CONFLICT.code, LOG_WRITE_CONFLICT.message);
+}
+
+async function measurementCreateConflict(
+  c: AppContext,
+  db: Db,
+  measurementId: string,
+  relationshipId: string,
+) {
+  const [existing] = await db
+    .select()
+    .from(measurements)
+    .where(eq(measurements.id, measurementId))
+    .limit(1);
+  if (!existing) return measurementLogWriteConflict(c);
+  if (existing.coachingRelationshipId !== relationshipId) {
+    return fail(
+      c,
+      409,
+      "MEASUREMENT_ID_CONFLICT",
+      "Measurement id is already used by another relationship.",
+    );
+  }
+  return c.json({ data: measurementSchema.parse(mapMeasurement(existing)) }, 200);
 }
 
 function coachLoggedReadOnlyError(c: AppContext) {
@@ -568,23 +600,36 @@ progressRoutes.post(
           LOG_TIME_ERROR_MESSAGES.ended_period,
         );
       }
-      await db.insert(measurements).values(row);
-      await recordCoachLogChange(db, {
-        entity: {
-          type: "measurement",
-          id: row.id,
-          coachingRelationshipId: relationship.id,
-          traineeUserId: relationship.traineeUserId,
-          serverVersion: row.recordVersion,
-          routing: { domainEntityType: "coaching_relationship", domainEntityId: relationship.id },
-        },
-        action: "create",
-        actorUserId: actor.userId,
-        before: null,
-        after: measurementLogSnapshot({ localDate, measurement: row }),
-        now,
-        push: coachPushConfig(c.env),
-      });
+      try {
+        await recordCoachLogChange(db, {
+          domainWrites: () => [db.insert(measurements).values(row)],
+          entity: {
+            type: "measurement",
+            id: row.id,
+            coachingRelationshipId: relationship.id,
+            traineeUserId: relationship.traineeUserId,
+            serverVersion: row.recordVersion,
+            routing: {
+              domainEntityType: "coaching_relationship",
+              domainEntityId: relationship.id,
+            },
+          },
+          action: "create",
+          actorUserId: actor.userId,
+          before: null,
+          after: measurementLogSnapshot({ localDate, measurement: row }),
+          now,
+          push: coachPushConfig(c.env),
+        });
+      } catch (error) {
+        if (error instanceof CoachLogConflict) {
+          if (error.kind === "entry") {
+            return measurementCreateConflict(c, db, row.id, relationship.id);
+          }
+          return measurementLogWriteConflict(c);
+        }
+        throw error;
+      }
     } else {
       await db.insert(measurements).values(row);
     }
@@ -733,55 +778,86 @@ progressRoutes.patch(
       return ok(c, measurementSchema.parse(mapMeasurement(measurement)));
     }
 
-    // Claim the version first, so a concurrent edit with the same version writes nothing.
-    const claimed = await db
-      .update(measurements)
-      .set({
-        value: nextValue,
-        unit: nextUnit,
-        observedAt: nextObservedAt,
-        recordVersion: measurement.recordVersion + 1,
-        lastEditedByRole: "coach",
-        lastEditedByUserId: actor.userId,
-        lastEditedAt: now,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(measurements.id, measurement.id),
-          eq(measurements.recordVersion, measurement.recordVersion),
-        ),
-      )
-      .returning({ id: measurements.id });
-    if (claimed.length === 0) {
-      return coachMeasurementVersionConflict(c);
+    const nextVersion = measurement.recordVersion + 1;
+    const saved = {
+      ...measurement,
+      value: nextValue,
+      unit: nextUnit,
+      observedAt: nextObservedAt,
+      recordVersion: nextVersion,
+      lastEditedByRole: "coach" as const,
+      lastEditedByUserId: actor.userId,
+      lastEditedAt: now,
+      updatedAt: now,
+    };
+    let stored: typeof measurement | undefined;
+    try {
+      await recordCoachLogChange(db, {
+        afterCommit: async () => {
+          const [row] = await db
+            .select()
+            .from(measurements)
+            .where(eq(measurements.id, measurement.id))
+            .limit(1);
+          stored = row;
+        },
+        domainWrites: () => [],
+        claim: {
+          entity: "measurement",
+          id: measurement.id,
+          recordVersion: nextVersion,
+          update: () =>
+            db
+              .update(measurements)
+              .set({
+                value: nextValue,
+                unit: nextUnit,
+                observedAt: nextObservedAt,
+                recordVersion: nextVersion,
+                lastEditedByRole: "coach",
+                lastEditedByUserId: actor.userId,
+                lastEditedAt: now,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(measurements.id, measurement.id),
+                  eq(measurements.recordVersion, measurement.recordVersion),
+                ),
+              ),
+        },
+        entity: {
+          type: "measurement",
+          id: measurement.id,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: relationship.traineeUserId,
+          serverVersion: nextVersion,
+          routing: {
+            domainEntityType: "coaching_relationship",
+            domainEntityId: relationship.id,
+          },
+        },
+        action: "edit",
+        actorUserId: actor.userId,
+        before: measurementLogSnapshot({
+          localDate: formatLocalDate(new Date(measurement.observedAt), timeZone),
+          measurement,
+        }),
+        after: measurementLogSnapshot({ localDate: nextLocalDate, measurement: saved }),
+        now,
+        push: coachPushConfig(c.env),
+      });
+    } catch (error) {
+      if (error instanceof CoachLogConflict) {
+        if (error.kind === "version") return coachMeasurementVersionConflict(c);
+        return measurementLogWriteConflict(c);
+      }
+      throw error;
     }
-
-    const [saved] = await db
-      .select()
-      .from(measurements)
-      .where(eq(measurements.id, measurement.id))
-      .limit(1);
-    await recordCoachLogChange(db, {
-      entity: {
-        type: "measurement",
-        id: measurement.id,
-        coachingRelationshipId: relationship.id,
-        traineeUserId: relationship.traineeUserId,
-        serverVersion: saved!.recordVersion,
-        routing: { domainEntityType: "coaching_relationship", domainEntityId: relationship.id },
-      },
-      action: "edit",
-      actorUserId: actor.userId,
-      before: measurementLogSnapshot({
-        localDate: formatLocalDate(new Date(measurement.observedAt), timeZone),
-        measurement,
-      }),
-      after: measurementLogSnapshot({ localDate: nextLocalDate, measurement: saved! }),
-      now,
-      push: coachPushConfig(c.env),
-    });
-    return ok(c, measurementSchema.parse(mapMeasurement(saved!)));
+    if (!stored) {
+      return fail(c, 404, "MEASUREMENT_NOT_FOUND", "Measurement not found.");
+    }
+    return ok(c, measurementSchema.parse(mapMeasurement(stored)));
   },
 );
 
