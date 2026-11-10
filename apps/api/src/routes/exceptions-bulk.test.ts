@@ -10,6 +10,7 @@ import { sha256Hex } from "../lib/crypto.js";
 import * as schema from "../db/schema.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
 import {
+  BULK_IDEMPOTENCY_REPLAY_WINDOW_MS,
   BULK_UNDONE_OPERATION,
   classifyBulkResolve,
 } from "../domain/exception-bulk.js";
@@ -958,6 +959,345 @@ describe("Z6-10 bulk resolve and undo", () => {
         "shared-key-2",
       );
       expect(bAsA.status).toBe(404);
+    });
+  });
+
+  describe("Z7-21 replay window and same-millisecond guard", () => {
+    afterEach(() => {
+      raceHook.fn = null;
+    });
+
+    type ErrorBody = { error: { code: string; message: string } };
+    type UndoBody = {
+      data: { bulkId: string; restoredCount: number; items: Array<{ id: string; status: string }> };
+    };
+
+    async function singleResolveNow(trainer: Record<string, string>, exceptionId: string, key: string) {
+      const acked = await post(`/exceptions/${exceptionId}/acknowledge`, trainer, { note: null }, `${key}-ack`);
+      expect(acked.status).toBe(200);
+      const resolved = await post(
+        `/exceptions/${exceptionId}/resolve`,
+        trainer,
+        { outcome: "no_action" },
+        `${key}-resolve`,
+      );
+      expect(resolved.status).toBe(200);
+    }
+
+    const countBy = <T,>(list: T[], keyOf: (item: T) => string) =>
+      list.reduce<Record<string, number>>((acc, item) => {
+        const k = keyOf(item);
+        acc[k] = (acc[k] ?? 0) + 1;
+        return acc;
+      }, {});
+
+    it("a resolve key replays inside the window and is rejected with IDEMPOTENCY_KEY_EXPIRED after it, writing nothing", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("window");
+      const t0 = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      const request = {
+        relationshipId,
+        exceptionIds: [rows.activeWorkout.id, rows.detectedMeal.id],
+        outcome: "talked",
+      };
+      const first = await post("/exceptions/bulk/resolve", trainer, request, "window-bulk");
+      expect(first.status).toBe(200);
+      const firstBody = await first.json();
+      const afterFirst = await snapshot([relationshipId]);
+
+      vi.setSystemTime(t0 + BULK_IDEMPOTENCY_REPLAY_WINDOW_MS - 1);
+      const inside = await post("/exceptions/bulk/resolve", trainer, request, "window-bulk");
+      expect(inside.status).toBe(200);
+      expect(await inside.json()).toEqual(firstBody);
+      expect(await snapshot([relationshipId])).toEqual(afterFirst);
+
+      vi.setSystemTime(t0 + BULK_IDEMPOTENCY_REPLAY_WINDOW_MS + 1);
+      for (const body of [request, { ...request, outcome: "no_action" }]) {
+        const outside = await post("/exceptions/bulk/resolve", trainer, body, "window-bulk");
+        expect(outside.status).toBe(409);
+        const error = ((await outside.json()) as ErrorBody).error;
+        expect(error.code).toBe("IDEMPOTENCY_KEY_EXPIRED");
+        expect(error.message).toBe("Idempotency key has expired. Send the request with a new key.");
+      }
+      expect(await snapshot([relationshipId])).toEqual(afterFirst);
+
+      // A new key still works and skips what is already resolved.
+      const fresh = await post("/exceptions/bulk/resolve", trainer, request, "window-bulk-2");
+      expect(fresh.status).toBe(200);
+      expect(((await fresh.json()) as ResolveBody).data.resolvedCount).toBe(0);
+      expect(await snapshot([relationshipId])).toEqual(afterFirst);
+    });
+
+    it("an undo key replays inside the window and is rejected with IDEMPOTENCY_KEY_EXPIRED after it", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("undowindow");
+      const t0 = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      const resolved = await post(
+        "/exceptions/bulk/resolve",
+        trainer,
+        { relationshipId, exceptionIds: [rows.activeWorkout.id], outcome: "talked" },
+        "undowindow-bulk",
+      );
+      const { bulkId } = ((await resolved.json()) as ResolveBody).data;
+      vi.setSystemTime(t0 + 1_000);
+      const undo = await post("/exceptions/bulk/undo", trainer, { bulkId }, "undowindow-undo");
+      expect(undo.status).toBe(200);
+      const undoBody = await undo.json();
+      const afterUndo = await snapshot([relationshipId]);
+
+      vi.setSystemTime(t0 + 1_000 + BULK_IDEMPOTENCY_REPLAY_WINDOW_MS - 1);
+      const inside = await post("/exceptions/bulk/undo", trainer, { bulkId }, "undowindow-undo");
+      expect(inside.status).toBe(200);
+      expect(await inside.json()).toEqual(undoBody);
+
+      vi.setSystemTime(t0 + 1_000 + BULK_IDEMPOTENCY_REPLAY_WINDOW_MS + 1);
+      const outside = await post("/exceptions/bulk/undo", trainer, { bulkId }, "undowindow-undo");
+      expect(outside.status).toBe(409);
+      expect(((await outside.json()) as ErrorBody).error.code).toBe("IDEMPOTENCY_KEY_EXPIRED");
+      expect(await snapshot([relationshipId])).toEqual(afterUndo);
+    });
+
+    it("a single Resolve committed in the same millisecond is not written twice by the bulk", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("samems");
+      const t0 = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      const before = await snapshot([relationshipId]);
+      raceHook.fn = async () => {
+        // The clock does not move: the single resolve and the bulk share a millisecond.
+        await singleResolveNow(trainer, rows.activeWorkout.id, "samems-single");
+      };
+      const response = await post(
+        "/exceptions/bulk/resolve",
+        trainer,
+        {
+          relationshipId,
+          exceptionIds: [rows.activeWorkout.id, rows.overdueCheckin.id],
+          outcome: "talked",
+          note: "Weekly call",
+        },
+        "samems-bulk",
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as ResolveBody;
+      expect(raceHook.fn).toBeNull();
+      expect(body.data.resolvedAt).toBe(new Date(t0).toISOString());
+      expect(body.data.items).toEqual([
+        { id: rows.activeWorkout.id, status: "skipped", reason: "already_resolved" },
+        { id: rows.overdueCheckin.id, status: "resolved" },
+      ]);
+
+      const after = await snapshot([relationshipId]);
+      const single = after.exceptions.find((r) => r.id === rows.activeWorkout.id)!;
+      expect(single).toMatchObject({ status: "resolved", resolutionOutcome: "no_action", resolutionNote: null });
+      // Only the single requests' rows: one review and one resolve, no bulk note.
+      expect(countBy(after.actions.filter((a) => a.exceptionId === single.id), (a) => a.action)).toEqual({
+        acknowledge: 1,
+        resolve: 1,
+      });
+      expect(
+        countBy(after.interventions.filter((i) => i.exceptionId === single.id), (i) => i.kind),
+      ).toEqual({ acknowledge: 1, resolve: 1 });
+
+      // Undo restores the bulk's item only and keeps every row of the single resolve.
+      vi.setSystemTime(t0 + 1_000);
+      const undo = await post("/exceptions/bulk/undo", trainer, { bulkId: body.data.bulkId }, "samems-undo");
+      expect(undo.status).toBe(200);
+      expect(((await undo.json()) as UndoBody).data.items).toEqual([
+        { id: rows.overdueCheckin.id, status: "active" },
+      ]);
+      const undone = await snapshot([relationshipId]);
+      expect(undone.exceptions.find((r) => r.id === single.id)).toEqual(single);
+      const of = (list: Array<{ exceptionId: string | null }>, exceptionId: string) =>
+        list.filter((r) => r.exceptionId === exceptionId);
+      expect(of(undone.actions, single.id)).toEqual(of(after.actions, single.id));
+      expect(of(undone.interventions, single.id)).toEqual(of(after.interventions, single.id));
+      expect(of(undone.actions, rows.overdueCheckin.id)).toEqual(of(before.actions, rows.overdueCheckin.id));
+      expect(of(undone.interventions, rows.overdueCheckin.id)).toEqual([]);
+    });
+
+    it("a second bulk under another key in the same millisecond does not double-write, and each undo restores only its own items", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("samemsbulk");
+      const t0 = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      const before = await snapshot([relationshipId]);
+      let innerBody: ResolveBody | null = null;
+      raceHook.fn = async () => {
+        const inner = await post(
+          "/exceptions/bulk/resolve",
+          trainer,
+          {
+            relationshipId,
+            exceptionIds: [rows.activeWorkout.id, rows.detectedMeal.id],
+            outcome: "no_action",
+          },
+          "samemsbulk-inner",
+        );
+        expect(inner.status).toBe(200);
+        innerBody = (await inner.json()) as ResolveBody;
+      };
+      const outer = await post(
+        "/exceptions/bulk/resolve",
+        trainer,
+        {
+          relationshipId,
+          exceptionIds: [rows.activeWorkout.id, rows.detectedMeal.id, rows.overdueCheckin.id],
+          outcome: "talked",
+          note: "Weekly call",
+        },
+        "samemsbulk-outer",
+      );
+      expect(outer.status).toBe(200);
+      const outerBody = (await outer.json()) as ResolveBody;
+      const innerData = innerBody!.data;
+      expect(innerData.resolvedAt).toBe(outerBody.data.resolvedAt);
+      expect(innerData.resolvedCount).toBe(2);
+      expect(outerBody.data.items).toEqual([
+        { id: rows.activeWorkout.id, status: "skipped", reason: "already_resolved" },
+        { id: rows.detectedMeal.id, status: "skipped", reason: "already_resolved" },
+        { id: rows.overdueCheckin.id, status: "resolved" },
+      ]);
+
+      const after = await snapshot([relationshipId]);
+      for (const exceptionId of [rows.activeWorkout.id, rows.detectedMeal.id, rows.overdueCheckin.id]) {
+        // Exactly one review and one resolve per item, whoever won it.
+        expect(
+          countBy(after.actions.filter((a) => a.exceptionId === exceptionId), (a) => a.action),
+        ).toEqual({ acknowledge: 1, resolve: 1 });
+      }
+      expect(after.exceptions.find((r) => r.id === rows.activeWorkout.id)!.resolutionOutcome).toBe("no_action");
+      expect(after.exceptions.find((r) => r.id === rows.overdueCheckin.id)!.resolutionOutcome).toBe("talked");
+      // The outer bulk's note went only to its own item.
+      expect(after.interventions.filter((i) => i.kind === "note").map((i) => i.exceptionId)).toEqual([
+        rows.overdueCheckin.id,
+      ]);
+
+      vi.setSystemTime(t0 + 1_000);
+      const undoOuter = await post(
+        "/exceptions/bulk/undo",
+        trainer,
+        { bulkId: outerBody.data.bulkId },
+        "samemsbulk-undo-outer",
+      );
+      expect(((await undoOuter.json()) as UndoBody).data.items).toEqual([
+        { id: rows.overdueCheckin.id, status: "active" },
+      ]);
+      const afterOuterUndo = await snapshot([relationshipId]);
+      for (const exceptionId of [rows.activeWorkout.id, rows.detectedMeal.id]) {
+        expect(afterOuterUndo.exceptions.find((r) => r.id === exceptionId)).toEqual(
+          after.exceptions.find((r) => r.id === exceptionId),
+        );
+        expect(afterOuterUndo.actions.filter((a) => a.exceptionId === exceptionId)).toEqual(
+          after.actions.filter((a) => a.exceptionId === exceptionId),
+        );
+      }
+
+      const undoInner = await post(
+        "/exceptions/bulk/undo",
+        trainer,
+        { bulkId: innerData.bulkId },
+        "samemsbulk-undo-inner",
+      );
+      expect(((await undoInner.json()) as UndoBody).data.restoredCount).toBe(2);
+      const undone = await snapshot([relationshipId]);
+      const strip = <T extends { updatedAt: string }>(list: T[]) =>
+        list.map((row) => ({ ...row, updatedAt: undefined }));
+      expect(strip(undone.exceptions)).toEqual(strip(before.exceptions));
+      expect(undone.actions).toEqual(before.actions);
+      expect(undone.interventions).toEqual(before.interventions);
+    });
+
+    it("two concurrent resolves with the same key in the same millisecond write once and answer the same", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("samekey");
+      vi.useFakeTimers({ toFake: ["Date"], now: Date.now() });
+      const request = {
+        relationshipId,
+        exceptionIds: [rows.activeWorkout.id, rows.detectedMeal.id],
+        outcome: "talked",
+        note: "Weekly call",
+      };
+      // Deterministic: the duplicate commits between the first request's read and write.
+      let innerJson: unknown = null;
+      raceHook.fn = async () => {
+        const inner = await post("/exceptions/bulk/resolve", trainer, request, "samekey-bulk");
+        expect(inner.status).toBe(200);
+        innerJson = await inner.json();
+      };
+      const outer = await post("/exceptions/bulk/resolve", trainer, request, "samekey-bulk");
+      expect(outer.status).toBe(200);
+      expect(await outer.json()).toEqual(innerJson);
+      // And interleaved at random.
+      const [a, b] = await Promise.all([
+        post("/exceptions/bulk/resolve", trainer, request, "samekey-bulk"),
+        post("/exceptions/bulk/resolve", trainer, request, "samekey-bulk"),
+      ]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      expect(await a.json()).toEqual(innerJson);
+      expect(await b.json()).toEqual(innerJson);
+
+      const after = await snapshot([relationshipId]);
+      expect(countBy(after.actions, (x) => `${x.exceptionId}:${x.action}`)).toEqual({
+        [`${rows.activeWorkout.id}:acknowledge`]: 1,
+        [`${rows.activeWorkout.id}:resolve`]: 1,
+        [`${rows.detectedMeal.id}:acknowledge`]: 1,
+        [`${rows.detectedMeal.id}:resolve`]: 1,
+      });
+      expect(after.interventions.filter((i) => i.kind === "note")).toHaveLength(2);
+      const receipts = await db
+        .select()
+        .from(schema.idempotencyRecords)
+        .where(eq(schema.idempotencyRecords.operation, "exception.bulk_resolve.state"));
+      expect(receipts).toHaveLength(1);
+    });
+
+    it("two concurrent undos in the same millisecond restore once: the other replays or answers BULK_ALREADY_UNDONE", async () => {
+      const { trainer, relationshipId, rows } = await seedClient("undorace");
+      const t0 = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+      const before = await snapshot([relationshipId]);
+      const resolved = await post(
+        "/exceptions/bulk/resolve",
+        trainer,
+        {
+          relationshipId,
+          exceptionIds: [rows.activeWorkout.id, rows.reviewedSkippedMeal.id],
+          outcome: "talked",
+          note: "Weekly call",
+        },
+        "undorace-bulk",
+      );
+      const { bulkId } = ((await resolved.json()) as ResolveBody).data;
+      vi.setSystemTime(t0 + 1_000);
+
+      const [a, b] = await Promise.all([
+        post("/exceptions/bulk/undo", trainer, { bulkId }, "undorace-a"),
+        post("/exceptions/bulk/undo", trainer, { bulkId }, "undorace-b"),
+      ]);
+      const results = [
+        { status: a.status, body: (await a.json()) as UndoBody & ErrorBody },
+        { status: b.status, body: (await b.json()) as UndoBody & ErrorBody },
+      ].sort((x, y) => x.status - y.status);
+      expect(results.map((r) => r.status)).toEqual([200, 409]);
+      expect(results[0]!.body.data.restoredCount).toBe(2);
+      expect(results[1]!.body.error.code).toBe("BULK_ALREADY_UNDONE");
+
+      // Same key twice at once: both get the one stored answer.
+      const [c, d] = await Promise.all([
+        post("/exceptions/bulk/undo", trainer, { bulkId }, "undorace-a"),
+        post("/exceptions/bulk/undo", trainer, { bulkId }, "undorace-a"),
+      ]);
+      expect([c.status, d.status]).toEqual([a.status, a.status]);
+
+      const undone = await snapshot([relationshipId]);
+      const strip = <T extends { updatedAt: string }>(list: T[]) =>
+        list.map((row) => ({ ...row, updatedAt: undefined }));
+      expect(strip(undone.exceptions)).toEqual(strip(before.exceptions));
+      expect(undone.actions).toEqual(before.actions);
+      expect(undone.interventions).toEqual(before.interventions);
+      const log = await db
+        .select()
+        .from(schema.idempotencyRecords)
+        .where(eq(schema.idempotencyRecords.operation, BULK_UNDONE_OPERATION));
+      expect(log).toHaveLength(1);
     });
   });
 
