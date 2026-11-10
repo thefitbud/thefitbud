@@ -185,7 +185,8 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     fireEvent.click(within(grid).getByText("Rohan Mehta"));
     expect(loc()).toContain(`client=${ROHAN}`);
     expect(loc()).not.toContain("exception=");
-    expect(screen.queryByRole("dialog", { name: "Exception" })).toBeNull();
+    // Z7-3 (D-W7-2): ?client= mounts the side panel.
+    expect(screen.getByRole("dialog", { name: "Exception" })).toBeTruthy();
 
     cleanup();
     seedPopulated();
@@ -194,7 +195,8 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     act(() => row.focus());
     fireEvent.keyDown(row, { key: "Enter" });
     expect(loc()).toContain(`client=${ROHAN}`);
-    expect(screen.queryByRole("dialog", { name: "Exception" })).toBeNull();
+    // Z7-3 (D-W7-2): ?client= mounts the side panel.
+    expect(screen.getByRole("dialog", { name: "Exception" })).toBeTruthy();
 
     cleanup();
     seedPopulated();
