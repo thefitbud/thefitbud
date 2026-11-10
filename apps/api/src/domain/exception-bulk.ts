@@ -1,4 +1,4 @@
-import { and, eq, exists, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import {
   BULK_RESOLVE_UNDO_WINDOW_MS,
@@ -32,12 +32,21 @@ import { createId, sha256Hex } from "../lib/crypto";
  * Mark reviewed writes, so history never shows a review time without a review
  * action (D-W6-15). The API never resolves anything the trainer did not select.
  *
- * Race safety: the exception update only applies to a still-open row, and every
- * insert for an item runs only if that item's row now carries this bulk's
- * resolution (status resolved, resolved_at and updated_at equal to this bulk's
- * time). If another resolve committed between the read and the batch, the item
- * gets no rows, is reported `already_resolved`, and is left out of the undo
- * receipt.
+ * Race safety (Z7-21): each item is claimed by this bulk's own `resolve`
+ * exception action, inserted first in the batch and only while the exception
+ * is still open. The exception update and every other row for the item are
+ * guarded on that action id existing, never on timestamps, so another resolve
+ * that committed in the same millisecond (a single Resolve, or a second bulk
+ * under another key) cannot make this bulk write a second set of rows. If
+ * another resolve committed between the read and the batch, the item gets no
+ * rows, is reported `already_resolved`, and is left out of the undo receipt.
+ * D1 runs the batch as one transaction, so nothing can land between the claim
+ * and the update.
+ *
+ * Replay window (Z7-21): a stored response replays for
+ * `BULK_IDEMPOTENCY_REPLAY_WINDOW_MS` after the first request. A key used
+ * again after that is rejected with 409 `IDEMPOTENCY_KEY_EXPIRED` (the old
+ * record still holds the key, so it is never run a second time).
  *
  * Undo state lives in D1 as a server-held receipt in `idempotency_records`
  * (actor-scoped, keyed by the bulk id; D-W6-15), so no new table is needed: it
@@ -54,8 +63,61 @@ export const BULK_UNDO_STATE_OPERATION = "exception.bulk_resolve.state";
 /** Receipt written when a bulk resolve is undone (the undo action log). */
 export const BULK_UNDONE_OPERATION = "exception.bulk_resolve.undone";
 
-/** How long the receipts are kept. Undo itself closes after 5 s. */
+/** How long the undo receipts are kept. Undo itself closes after 5 s. */
 const RECEIPT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a bulk resolve or undo response replays under its Idempotency-Key
+ * (7 days). After that the same key answers 409 `IDEMPOTENCY_KEY_EXPIRED`.
+ */
+export const BULK_IDEMPOTENCY_REPLAY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type BulkIdempotencyLookup =
+  | { kind: "none" }
+  | { kind: "replay"; status: number; body: unknown }
+  | { kind: "reuse" }
+  | { kind: "expired" };
+
+/**
+ * Looks up this actor's stored response for the key, including one whose
+ * replay window has passed (the shared helper hides those, which would let the
+ * request run again and fail on the unique index).
+ */
+export async function findBulkIdempotencyRecord(
+  db: Db,
+  input: {
+    actorUserId: string;
+    operation: string;
+    idempotencyKey: string;
+    fingerprint: string;
+    now: string;
+  },
+): Promise<BulkIdempotencyLookup> {
+  const [existing] = await db
+    .select({
+      responseStatus: idempotencyRecords.responseStatus,
+      responseBody: idempotencyRecords.responseBody,
+      requestFingerprint: idempotencyRecords.requestFingerprint,
+      expiresAt: idempotencyRecords.expiresAt,
+    })
+    .from(idempotencyRecords)
+    .where(
+      and(
+        eq(idempotencyRecords.actorUserId, input.actorUserId),
+        eq(idempotencyRecords.operation, input.operation),
+        eq(idempotencyRecords.keyHash, await sha256Hex(input.idempotencyKey)),
+      ),
+    )
+    .limit(1);
+  if (!existing) return { kind: "none" };
+  if (existing.expiresAt <= input.now) return { kind: "expired" };
+  if (existing.requestFingerprint !== input.fingerprint) return { kind: "reuse" };
+  return {
+    kind: "replay",
+    status: existing.responseStatus,
+    body: JSON.parse(existing.responseBody),
+  };
+}
 
 type ExceptionRow = typeof exceptions.$inferSelect;
 type Write = BatchItem<"sqlite">;
@@ -181,30 +243,17 @@ export async function loadRelationshipExceptions(
     );
 }
 
-/** True when the row carries this bulk's resolution. */
-function resolvedByThisBulk(row: ExceptionRow | undefined, now: string): boolean {
-  return (
-    row?.status === "resolved" &&
-    row.resolvedAt === now &&
-    row.updatedAt === now &&
-    row.closedReason === "trainer"
+/** SQL guard: this bulk's claim (its own resolve action row) exists. */
+function claimed(db: Db, resolveActionId: string) {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(exceptionActions)
+      .where(eq(exceptionActions.id, resolveActionId)),
   );
 }
 
-/**
- * SQL guard for the same check: the item's row carries this bulk's resolution
- * (and, for the review rows, this bulk's review time).
- */
-function resolvedHereWhere(exceptionId: string, now: string, reviewedHere = false) {
-  return and(
-    eq(exceptions.id, exceptionId),
-    eq(exceptions.status, "resolved"),
-    eq(exceptions.resolvedAt, now),
-    eq(exceptions.updatedAt, now),
-    eq(exceptions.closedReason, "trainer"),
-    reviewedHere ? eq(exceptions.acknowledgedAt, now) : undefined,
-  );
-}
+const OPEN_STATUSES = ["detected", "active", "acknowledged"] as const;
 
 const constant = <T>(value: T, alias: string) => sql<T>`${value}`.as(alias);
 
@@ -221,7 +270,7 @@ function guardedAction(
     action: "acknowledge" | "resolve";
     note: string | null;
     now: string;
-    reviewedHere?: boolean;
+    guard: SQL | undefined;
   },
 ): Write {
   return db.insert(exceptionActions).select(
@@ -235,7 +284,7 @@ function guardedAction(
         createdAt: constant(input.now, "created_at"),
       })
       .from(exceptions)
-      .where(resolvedHereWhere(input.exceptionId, input.now, input.reviewedHere)),
+      .where(and(eq(exceptions.id, input.exceptionId), input.guard)),
   );
 }
 
@@ -249,7 +298,7 @@ function guardedIntervention(
     kind: "acknowledge" | "resolve" | "note";
     summary: string;
     now: string;
-    reviewedHere?: boolean;
+    guard: SQL | undefined;
   },
 ): Write {
   return db.insert(interventions).select(
@@ -267,7 +316,7 @@ function guardedIntervention(
         updatedAt: constant(input.now, "updated_at"),
       })
       .from(exceptions)
-      .where(resolvedHereWhere(input.exceptionId, input.now, input.reviewedHere)),
+      .where(and(eq(exceptions.id, input.exceptionId), input.guard)),
   );
 }
 
@@ -373,6 +422,46 @@ export async function performBulkResolve(
   const writes: Write[] = [];
   for (const plan of plans) {
     const { row } = plan;
+    const isClaimed = claimed(db, plan.resolveActionId);
+    // 1. The claim: this bulk's resolve action, only while the item is open.
+    writes.push(
+      guardedAction(db, {
+        id: plan.resolveActionId,
+        exceptionId: row.id,
+        trainerUserId: actorUserId,
+        action: "resolve",
+        note: noteText,
+        now,
+        guard: inArray(exceptions.status, [...OPEN_STATUSES]),
+      }),
+    );
+    if (plan.review) {
+      // 2. The same rows Mark reviewed writes, only if this bulk claimed the
+      // item and it is still not reviewed (the update below sets the time).
+      const reviewGuard = and(isClaimed, isNull(exceptions.acknowledgedAt));
+      writes.push(
+        guardedAction(db, {
+          id: plan.review.actionId,
+          exceptionId: row.id,
+          trainerUserId: actorUserId,
+          action: "acknowledge",
+          note: null,
+          now,
+          guard: reviewGuard,
+        }),
+        guardedIntervention(db, {
+          id: plan.review.interventionId,
+          relationshipId,
+          trainerUserId: actorUserId,
+          exceptionId: row.id,
+          kind: "acknowledge",
+          summary: `Acknowledged: ${row.summary}`,
+          now,
+          guard: reviewGuard,
+        }),
+      );
+    }
+    // 3. The resolution itself, only on the item this bulk claimed.
     writes.push(
       db
         .update(exceptions)
@@ -389,43 +478,10 @@ export async function performBulkResolve(
         .where(
           and(
             eq(exceptions.id, row.id),
-            inArray(exceptions.status, ["detected", "active", "acknowledged"]),
+            inArray(exceptions.status, [...OPEN_STATUSES]),
+            isClaimed,
           ),
         ),
-    );
-    if (plan.review) {
-      // The same rows Mark reviewed writes, only if this bulk set the review time.
-      writes.push(
-        guardedAction(db, {
-          id: plan.review.actionId,
-          exceptionId: row.id,
-          trainerUserId: actorUserId,
-          action: "acknowledge",
-          note: null,
-          now,
-          reviewedHere: true,
-        }),
-        guardedIntervention(db, {
-          id: plan.review.interventionId,
-          relationshipId,
-          trainerUserId: actorUserId,
-          exceptionId: row.id,
-          kind: "acknowledge",
-          summary: `Acknowledged: ${row.summary}`,
-          now,
-          reviewedHere: true,
-        }),
-      );
-    }
-    writes.push(
-      guardedAction(db, {
-        id: plan.resolveActionId,
-        exceptionId: row.id,
-        trainerUserId: actorUserId,
-        action: "resolve",
-        note: noteText,
-        now,
-      }),
       guardedIntervention(db, {
         id: plan.resolveInterventionId,
         relationshipId,
@@ -434,6 +490,7 @@ export async function performBulkResolve(
         kind: "resolve",
         summary: `Resolved (${outcome}): ${row.summary}`,
         now,
+        guard: isClaimed,
       }),
     );
     if (plan.noteInterventionId && noteText) {
@@ -446,6 +503,7 @@ export async function performBulkResolve(
           kind: "note",
           summary: noteText,
           now,
+          guard: isClaimed,
         }),
       );
     }
@@ -478,7 +536,7 @@ export async function performBulkResolve(
       fingerprint: input.fingerprint,
       body: optimisticBody,
       createdAt: now,
-      expiresAt: plusMs(now, 7 * RECEIPT_TTL_MS),
+      expiresAt: plusMs(now, BULK_IDEMPOTENCY_REPLAY_WINDOW_MS),
     }),
   );
   if (bulkId && stateKeyHash && optimisticState) {
@@ -501,22 +559,33 @@ export async function performBulkResolve(
     return { body: optimisticBody, resolvedIds: [] };
   }
 
-  // What actually happened, from the committed rows.
+  // What actually happened: an item is this bulk's only if its claim exists.
+  const written = await existingActionIds(
+    db,
+    plans.flatMap((plan) =>
+      plan.review ? [plan.resolveActionId, plan.review.actionId] : [plan.resolveActionId],
+    ),
+  );
   const after = await loadRelationshipExceptions(
     db,
     relationshipId,
     plans.map((plan) => plan.row.id),
   );
   const afterById = new Map(after.map((row) => [row.id, row]));
-  const applied = plans.filter((plan) => resolvedByThisBulk(afterById.get(plan.row.id), now));
+  const applied = plans.filter(
+    (plan) => written.has(plan.resolveActionId) && afterById.has(plan.row.id),
+  );
   const state: UndoState = {
     bulkId,
     relationshipId,
     resolvedAt: now,
-    items: applied.map((plan) => {
-      const row = afterById.get(plan.row.id)!;
-      return undoItemFor(plan, plan.review !== null && row.acknowledgedAt === now, row);
-    }),
+    items: applied.map((plan) =>
+      undoItemFor(
+        plan,
+        plan.review !== null && written.has(plan.review.actionId),
+        afterById.get(plan.row.id)!,
+      ),
+    ),
   };
   const body = responseFor({
     relationshipId,
@@ -563,6 +632,15 @@ export async function performBulkResolve(
     await db.batch(corrections as [Write, ...Write[]]);
   }
   return { body, resolvedIds: applied.map((plan) => plan.row.id) };
+}
+
+async function existingActionIds(db: Db, ids: readonly string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: exceptionActions.id })
+    .from(exceptionActions)
+    .where(inArray(exceptionActions.id, [...ids]));
+  return new Set(rows.map((row) => row.id));
 }
 
 async function findReceipt(
@@ -635,7 +713,10 @@ function restoredHere(db: Db, item: UndoStateItem, now: string) {
  * Restores each item's prior status and review time and removes the rows the
  * bulk wrote, in one batch with the undo receipt (the undo action log) and the
  * idempotency record. Items whose row no longer carries this bulk's resolution
- * are left alone, and their rows are kept.
+ * (or whose claim, the bulk's resolve action, is gone) are left alone, and
+ * their rows are kept. Every write is guarded on the claim, so a concurrent
+ * undo in the same millisecond cannot restore or delete twice; the undo
+ * receipt's unique key rolls the loser back.
  */
 export async function performBulkUndo(
   db: Db,
@@ -654,13 +735,26 @@ export async function performBulkUndo(
     state.items.map((item) => item.id),
   );
   const currentById = new Map(current.map((row) => [row.id, row]));
+  const claims = await existingActionIds(
+    db,
+    state.items.flatMap((item) => item.actionIds.slice(0, 1)),
+  );
   const restorable = state.items.filter((item) => {
     const row = currentById.get(item.id);
-    return row?.status === "resolved" && row.resolvedAt === state.resolvedAt;
+    const claimId = item.actionIds[0];
+    return (
+      row?.status === "resolved" &&
+      row.resolvedAt === state.resolvedAt &&
+      claimId !== undefined &&
+      claims.has(claimId)
+    );
   });
 
   const writes: Write[] = [];
   for (const item of restorable) {
+    const [claimId, ...otherActionIds] = item.actionIds as [string, ...string[]];
+    const isClaimed = claimed(db, claimId);
+    const restored = and(restoredHere(db, item, now), isClaimed);
     writes.push(
       db
         .update(exceptions)
@@ -678,15 +772,7 @@ export async function performBulkUndo(
             eq(exceptions.id, item.id),
             eq(exceptions.status, "resolved"),
             eq(exceptions.resolvedAt, state.resolvedAt),
-          ),
-        ),
-      db
-        .delete(exceptionActions)
-        .where(
-          and(
-            eq(exceptionActions.exceptionId, item.id),
-            inArray(exceptionActions.id, item.actionIds),
-            restoredHere(db, item, now),
+            isClaimed,
           ),
         ),
       db
@@ -695,6 +781,31 @@ export async function performBulkUndo(
           and(
             eq(interventions.exceptionId, item.id),
             inArray(interventions.id, item.interventionIds),
+            restored,
+          ),
+        ),
+    );
+    if (otherActionIds.length > 0) {
+      writes.push(
+        db
+          .delete(exceptionActions)
+          .where(
+            and(
+              eq(exceptionActions.exceptionId, item.id),
+              inArray(exceptionActions.id, otherActionIds),
+              restored,
+            ),
+          ),
+      );
+    }
+    // The claim goes last: the guards above read it.
+    writes.push(
+      db
+        .delete(exceptionActions)
+        .where(
+          and(
+            eq(exceptionActions.exceptionId, item.id),
+            eq(exceptionActions.id, claimId),
             restoredHere(db, item, now),
           ),
         ),
@@ -729,7 +840,7 @@ export async function performBulkUndo(
       fingerprint: input.fingerprint,
       body,
       createdAt: now,
-      expiresAt: plusMs(now, 7 * RECEIPT_TTL_MS),
+      expiresAt: plusMs(now, BULK_IDEMPOTENCY_REPLAY_WINDOW_MS),
     }),
   );
 
