@@ -176,8 +176,12 @@ export async function archiveAccount(
 
     const archivedAt = input.now;
     const purgeAfter = addCalendarMonthsUtc(archivedAt, ACCOUNT_ARCHIVE_MONTHS);
-    // The revokes run only when this batch archived the account (archived_at is
-    // this call's instant), so a refused archive signs nobody out.
+    // The revokes run only when the account is archived at this call's instant,
+    // so a refused archive signs nobody out. Two calls that read the same
+    // millisecond both pass this guard; the loser's revokes then match nothing,
+    // because each statement skips rows that are already revoked or cancelled.
+    // Whether this call archived the account is decided from the UPDATE's row
+    // count below, never from the timestamp.
     const archivedByThisCall = exists(
       db
         .select({ one: sql`1` })
@@ -190,7 +194,7 @@ export async function archiveAccount(
           ),
         ),
     );
-    await db.batch([
+    const [archived] = await db.batch([
       // State and both dates in one write: the 0038 CHECKs need all three (D-W6-27).
       db
         .update(users)
@@ -225,14 +229,17 @@ export async function archiveAccount(
       cancelPendingReactivations(db, input.userId, archivedAt, archivedByThisCall),
     ]);
 
-    const after = await loadAccountState(db, input.userId);
-    if (
-      after?.accountState === "archived" &&
-      after.archivedAt === archivedAt &&
-      after.purgeAfter
-    ) {
-      return { kind: "archived", archivedAt, purgeAfter: after.purgeAfter };
+    // D1 runs the batch as one transaction, so exactly one of two concurrent
+    // calls changes the users row; the other gets zero changes and answers
+    // `not_active` (403 ACCOUNT_ARCHIVED) even when both read the same
+    // millisecond (D-W6-35, Z7-30).
+    if (archived.meta.changes === 1) {
+      return { kind: "archived", archivedAt, purgeAfter };
     }
+    if (archived.meta.changes !== 0) {
+      throw new Error("archiveAccount changed more than one users row");
+    }
+    const after = await loadAccountState(db, input.userId);
     if (after?.accountState !== "active") {
       // Archived (or disabled) by a concurrent request; this call changed nothing.
       return { kind: "not_active" };
