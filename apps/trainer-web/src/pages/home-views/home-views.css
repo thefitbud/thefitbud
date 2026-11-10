@@ -418,7 +418,7 @@ button.hv-row:focus-visible {
 }
 
 .hv-row-ask {
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) 104px 156px 18px;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) 124px 156px 18px;
   min-height: 64px;
 }
 
@@ -485,6 +485,10 @@ a.hv-row-rn:hover .hv-open {
   color: #a3243f;
 }
 
+.hv-nowrap {
+  white-space: nowrap;
+}
+
 .hv-note {
   display: flex;
   align-items: center;
@@ -509,7 +513,7 @@ a.hv-row-rn:hover .hv-open {
   }
 
   .hv-row-ask {
-    grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 96px 136px 18px;
+    grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 124px 136px 18px;
   }
 }
 

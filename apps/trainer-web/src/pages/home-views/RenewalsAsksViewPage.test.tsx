@@ -304,6 +304,7 @@ describe("AsksViewPage", () => {
       expect.stringContaining("Neha Reddy"),
     ]);
     expect(rows[0]?.textContent).toContain("Asked about Lower body A · Mon 2 Nov");
+    expect(within(rows[0]!).getByText("Mon 2 Nov").className).toBe("hv-nowrap");
     expect(rows[0]?.textContent).toContain("Pain");
     expect(rows[0]?.textContent).toContain("Yesterday, 9:05 pm");
     expect(rows[1]?.textContent).toContain("Asked about Breakfast · Tue 3 Nov");
@@ -344,6 +345,24 @@ describe("AsksViewPage", () => {
     fireEvent.click(within(drawer).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByTestId("location").textContent).toBe("/home/asks");
+  });
+
+  it("names clients from every page of the directory (cursor follow)", async () => {
+    const all = clients().items;
+    api.listClients.mockImplementation(async (query?: { cursor?: string }) =>
+      query?.cursor === "page-2"
+        ? { items: all.slice(2), facets: { status: {}, adherence: {}, renewal: {} }, nextCursor: null }
+        : { items: all.slice(0, 2), facets: { status: {}, adherence: {}, renewal: {} }, nextCursor: "page-2" },
+    );
+    api.listCoachAsks.mockResolvedValue({ items: asks() });
+    renderAt("/home/asks");
+
+    // Priya and Neha are only on the second page.
+    expect(await screen.findByRole("button", { name: /^Priya Sharma\./ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Neha Reddy\./ })).toBeTruthy();
+    expect(screen.queryByText("Client")).toBeNull();
+    expect(api.listClients).toHaveBeenCalledTimes(2);
+    expect(api.listClients.mock.calls[1]?.[0]).toMatchObject({ cursor: "page-2" });
   });
 
   it("shows the empty state", async () => {

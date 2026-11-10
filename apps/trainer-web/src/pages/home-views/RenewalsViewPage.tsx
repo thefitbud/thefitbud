@@ -15,6 +15,7 @@ import { ErrorState, errorKindFromFailure } from "../../components/StatePanels";
 import type { ErrorKind } from "../../components/StatePanels";
 import { StatusChip } from "../../components/StatusChip";
 import { apiClient } from "../../lib/api";
+import { pageClientDirectory } from "../../lib/clients";
 import "./home-views.css";
 
 /* ------------------------------------------------------------------ */
@@ -158,11 +159,11 @@ export function useVisiblePoll(tick: () => void): void {
   }, []);
 }
 
-/** relationshipId → client name, from the trainer's client directory. */
+/** relationshipId → client name, from every page of the client directory. */
 export async function loadClientNames(): Promise<Map<string, string>> {
-  const res = await apiClient.listClients({ limit: 100 });
+  const items = await pageClientDirectory((query) => apiClient.listClients(query));
   const map = new Map<string, string>();
-  for (const row of res.items) {
+  for (const row of items) {
     if (row.relationshipId && row.traineeDisplayName) {
       map.set(row.relationshipId, row.traineeDisplayName);
     }

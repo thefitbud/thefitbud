@@ -38,6 +38,21 @@ export function askLine(ask: CoachAsk): string {
   return `Asked about ${askItemLabel(ask)}${date}`;
 }
 
+/** The ask line with the date kept on one line when it wraps. */
+function AskLineText({ ask }: { ask: CoachAsk }) {
+  return (
+    <>
+      Asked about {askItemLabel(ask)}
+      {ask.itemDate ? (
+        <>
+          {" · "}
+          <span className="hv-nowrap">{formatCivilDate(ask.itemDate)}</span>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 /** "Today, 8:12 am", "Yesterday, 9:05 pm", else "Sun 1 Nov". */
 export function askedWhen(iso: string, timeZone: string, now = new Date()): string {
   const at = new Date(iso);
@@ -211,7 +226,7 @@ export function AsksViewPage() {
           <p className="hv-sub">
             {empty
               ? "Questions clients sent from the app."
-              : "Questions clients sent from the app. Click one to reply on WhatsApp or mark it answered."}
+              : "Questions clients sent from the app. Open one to reply on WhatsApp or mark it answered."}
           </p>
         </div>
       </header>
@@ -292,7 +307,9 @@ export function AsksViewPage() {
                         <b>{name}</b>
                       </span>
                       <span className="hv-issue">
-                        <span className="hv-issue-txt">{line}</span>
+                        <span className="hv-issue-txt">
+                          <AskLineText ask={ask} />
+                        </span>
                       </span>
                       <span className="hv-sev">
                         <span
