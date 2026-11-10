@@ -457,11 +457,8 @@ export function ConfigureCoachingPage() {
     ).map((c) => c.label.toLowerCase() + "s");
     let reminderSummary = "All off";
     if (relationshipEnded) {
-      if (onReminders.length && offReminders.length) {
-        reminderSummary = `${onReminders.join(" and ")} · off for ${offReminders.join(" and ")}`;
-      } else if (onReminders.length) {
-        reminderSummary = onReminders.join(" and ");
-      }
+      // Reminders are only evaluated for active relationships (D-W7-7).
+      reminderSummary = "Off while coaching is ended";
     } else if (onReminders.length && offReminders.length) {
       reminderSummary = `On for ${onReminders.join(" and ")} · off for ${offReminders.join(" and ")}`;
     } else if (onReminders.length) {
@@ -1340,7 +1337,8 @@ export function ConfigureCoachingPage() {
               />
             </label>
             <label className="field">
-              <span>Renews on</span>
+              {/* Ended: no live "renews" wording (Z7-11); the stored date was the due date. */}
+              <span>{relationshipEnded ? "Due on" : "Renews on"}</span>
               <input
                 type="date"
                 name="renewsOn"

@@ -363,9 +363,9 @@ function endedLede(firstName: string): string {
 
 describe("ConfigureCoachingPage ended copy (Z7-11, D-W7-6)", () => {
   function liveWording(text: string) {
-    expect(text).not.toContain("renews");
+    expect(text).not.toMatch(/renew/i);
     expect(text).not.toContain("Open WhatsApp");
-    expect(text).not.toContain("On for");
+    expect(text).not.toMatch(/on for/i);
   }
 
   it("Kavya (ended): ended title, lede, and status, with no live wording", async () => {
@@ -383,6 +383,8 @@ describe("ConfigureCoachingPage ended copy (Z7-11, D-W7-6)", () => {
     expect(screen.queryByTestId("configure-pending-reactivation")).toBeNull();
     liveWording(container.textContent ?? "");
     expect(container.textContent).toContain("Monthly");
+    expect(container.textContent).toContain("Due on");
+    expect(container.textContent).toContain("Off while coaching is ended");
     expect(container.textContent).not.toContain("Configure coaching");
     expect(container.textContent).not.toContain("Set the baseline");
   });
@@ -431,6 +433,8 @@ describe("ConfigureCoachingPage ended copy (Z7-11, D-W7-6)", () => {
     );
     const text = container.textContent ?? "";
     expect(text).toContain("renews");
+    expect(text).toContain("Renews on");
+    expect(text).not.toContain("Due on");
     expect(text).toContain("Open WhatsApp");
     expect(text).toContain("On for");
     expect(text).not.toContain("Coaching setup (ended)");
