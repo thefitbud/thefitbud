@@ -163,13 +163,19 @@ async function seedSession(
   who: { relationshipId: string; traineeUserId: string },
   input: {
     localDate: string;
-    status: "completed" | "modified" | "skipped" | "started";
+    /** `planned`: an assignment with nothing logged yet. */
+    status: "completed" | "modified" | "skipped" | "started" | "planned";
     exercises?: ExerciseFixture[];
+    /** Exercise ids the planned day holds (the snapshot); defaults to the logged exercises. */
+    plannedExerciseIds?: string[];
+    scheduleStatus?: "scheduled" | "superseded";
   },
 ): Promise<void> {
   const now = nowIso();
   const assignmentId = createId();
   const workoutDayId = createId();
+  const plannedIds =
+    input.plannedExerciseIds ?? (input.exercises ?? []).map((exercise) => exercise.exerciseId);
   await db.insert(schema.workoutAssignments).values({
     id: assignmentId,
     coachingRelationshipId: who.relationshipId,
@@ -177,14 +183,26 @@ async function seedSession(
     planVersionId: plan.versionId,
     workoutDayId,
     workoutDayName: "Lower",
-    workoutDayJson: JSON.stringify({ id: workoutDayId, order: 1, name: "Lower", exercises: [] }),
+    workoutDayJson: JSON.stringify({
+      id: workoutDayId,
+      order: 1,
+      name: "Lower",
+      exercises: plannedIds.map((id, index) => ({
+        id,
+        order: index + 1,
+        name: id,
+        instructions: null,
+        setTargets: [],
+      })),
+    }),
     localDate: input.localDate,
     windowStartsAt: `${input.localDate}T00:00:00.000Z`,
     windowEndsAt: `${input.localDate}T23:59:59.000Z`,
-    scheduleStatus: "scheduled",
+    scheduleStatus: input.scheduleStatus ?? "scheduled",
     createdAt: now,
     updatedAt: now,
   });
+  if (input.status === "planned") return;
   const executionId = createId();
   await db.insert(schema.workoutExecutions).values({
     id: executionId,
@@ -343,11 +361,28 @@ describe("GET /strength/relationships/:relationshipId", () => {
     return strengthReadModelSchema.parse(body.data);
   }
 
-  const pt = (localDate: string, topLoadKg: number, reps: number) => ({
+  /** A kg point; totalReps and volumeKg default to a single set. */
+  const pt = (
+    localDate: string,
+    topLoadKg: number,
+    reps: number,
+    totalReps = reps,
+    volumeKg = topLoadKg * reps,
+  ) => ({ localDate, topLoadKg, reps, totalReps, volumeKg });
+  /** A reps point: no kg at all that day. */
+  const repsPt = (localDate: string, reps: number, totalReps = reps) => ({
     localDate,
-    topLoadKg,
+    topLoadKg: null,
     reps,
+    totalReps,
+    volumeKg: null,
   });
+  const HEAVY = {
+    localDate: "2026-10-12",
+    exerciseName: "Back Squat",
+    loadLabel: "heavy",
+    reps: 3,
+  };
 
   it("12w (the default): top set per day, bodyweight-plus added kg, uncharted text sets", async () => {
     const client = await setup();
@@ -359,33 +394,53 @@ describe("GET /strength/relationships/:relationshipId", () => {
       {
         exerciseId: SQUAT,
         name: "Back Squat",
-        points: [pt("2026-09-01", 70, 5), pt("2026-10-12", 80, 5), pt("2026-10-14", 85, 3)],
+        chartBy: "load_kg",
+        sessions: 3,
+        // 1 Sep, 12 Oct, 14 Oct and the skipped 15 Oct were all planned with the squat.
+        plannedSessions: 4,
+        points: [
+          pt("2026-09-01", 70, 5),
+          // 60×5 + 80×3 + 80×5: the text set and the pending set are not in the totals.
+          pt("2026-10-12", 80, 5, 13, 940),
+          pt("2026-10-14", 85, 3),
+        ],
       },
       {
         exerciseId: BENCH,
         name: "Bench Press",
+        chartBy: "load_kg",
+        sessions: 2,
+        plannedSessions: 2,
         points: [pt("2026-09-20", 40, 8), pt("2026-09-21", 42.5, 8)],
       },
-      { exerciseId: PULL, name: "Pull-up", points: [pt("2026-10-12", 10, 8)] },
+      {
+        exerciseId: PULL,
+        name: "Pull-up",
+        chartBy: "load_kg",
+        sessions: 1,
+        plannedSessions: 1,
+        // BW+10 × 8 is the top set; the BW × 12 set adds its reps but no kg.
+        points: [pt("2026-10-12", 10, 8, 20, 80)],
+      },
     ]);
-    // Only "heavy" (kind text) is counted. "BW" (plain bodyweight) is neither charted nor
-    // counted; the pending and
-    // skipped sets were never logged.
-    expect(explicit.notCharted).toEqual({ sets: 1 });
+    // Only "heavy" (kind text) is not charted; the pending and skipped sets were never logged.
+    expect(explicit.notCharted).toEqual({ sets: 1, items: [HEAVY] });
   });
 
-  it("counts finished workouts per Monday week, filling empty weeks, started and skipped excluded", async () => {
+  it("counts finished and planned workouts per Monday week, filling empty weeks", async () => {
     const client = await setup();
     const { workoutsPerWeek } = await model(client, "?range=12w");
-    const counts = Object.fromEntries(workoutsPerWeek.map((w) => [w.weekStart, w.count]));
+    const byWeek = Object.fromEntries(
+      workoutsPerWeek.map((w) => [w.weekStart, [w.count, w.planned]]),
+    );
     // Trainee-local today is Sun 18 Oct, so the 84-day window starts Mon 27 Jul.
-    expect(workoutsPerWeek[0]).toEqual({ weekStart: "2026-07-27", count: 0 });
-    expect(workoutsPerWeek.at(-1)).toEqual({ weekStart: "2026-10-12", count: 2 });
+    expect(workoutsPerWeek[0]).toEqual({ weekStart: "2026-07-27", count: 0, planned: 0 });
     expect(workoutsPerWeek).toHaveLength(12);
-    expect(counts["2026-08-31"]).toBe(1);
-    expect(counts["2026-09-14"]).toBe(1); // Sun 20 Sep belongs to the week of Mon 14 Sep
-    expect(counts["2026-09-21"]).toBe(1);
-    expect(counts["2026-10-12"]).toBe(2); // 12 Oct completed + 14 Oct modified; 15 Oct skipped and 16 Oct started not counted
+    expect(byWeek["2026-08-31"]).toEqual([1, 1]);
+    expect(byWeek["2026-09-14"]).toEqual([1, 1]); // Sun 20 Sep belongs to the week of Mon 14 Sep
+    expect(byWeek["2026-09-21"]).toEqual([1, 1]);
+    // 12 Oct completed + 14 Oct modified; the skipped 15 Oct and started 16 Oct are planned only.
+    expect(workoutsPerWeek.at(-1)).toEqual({ weekStart: "2026-10-12", count: 2, planned: 4 });
   });
 
   it("4w uses the trainee's local date: 20 Sep is out, 21 Sep is in", async () => {
@@ -397,12 +452,12 @@ describe("GET /strength/relationships/:relationshipId", () => {
       [PULL, ["2026-10-12"]],
     ]);
     expect(body.workoutsPerWeek).toEqual([
-      { weekStart: "2026-09-21", count: 1 },
-      { weekStart: "2026-09-28", count: 0 },
-      { weekStart: "2026-10-05", count: 0 },
-      { weekStart: "2026-10-12", count: 2 },
+      { weekStart: "2026-09-21", count: 1, planned: 1 },
+      { weekStart: "2026-09-28", count: 0, planned: 0 },
+      { weekStart: "2026-10-05", count: 0, planned: 0 },
+      { weekStart: "2026-10-12", count: 2, planned: 4 },
     ]);
-    expect(body.notCharted).toEqual({ sets: 1 });
+    expect(body.notCharted).toEqual({ sets: 1, items: [HEAVY] });
   });
 
   it("all: starts at the first workout week and includes the oldest set", async () => {
@@ -411,8 +466,8 @@ describe("GET /strength/relationships/:relationshipId", () => {
     expect(body.exercises.find((e) => e.exerciseId === SQUAT)?.points[0]).toEqual(
       pt("2026-05-04", 50, 5),
     );
-    expect(body.workoutsPerWeek[0]).toEqual({ weekStart: "2026-05-04", count: 1 });
-    expect(body.workoutsPerWeek.at(-1)).toEqual({ weekStart: "2026-10-12", count: 2 });
+    expect(body.workoutsPerWeek[0]).toEqual({ weekStart: "2026-05-04", count: 1, planned: 1 });
+    expect(body.workoutsPerWeek.at(-1)).toEqual({ weekStart: "2026-10-12", count: 2, planned: 4 });
     expect(body.workoutsPerWeek).toHaveLength(24);
   });
 
@@ -420,16 +475,86 @@ describe("GET /strength/relationships/:relationshipId", () => {
     const client = await setup();
     const body = await model(client, "?range=4w&from=2026-10-12&to=2026-10-12");
     expect(body.exercises.map((e) => [e.exerciseId, e.points])).toEqual([
-      [SQUAT, [pt("2026-10-12", 80, 5)]],
-      [PULL, [pt("2026-10-12", 10, 8)]],
+      [SQUAT, [pt("2026-10-12", 80, 5, 13, 940)]],
+      [PULL, [pt("2026-10-12", 10, 8, 20, 80)]],
     ]);
-    expect(body.workoutsPerWeek).toEqual([{ weekStart: "2026-10-12", count: 1 }]);
-    expect(body.notCharted).toEqual({ sets: 1 });
+    // An explicit end before today stops the planned count there, even in the current week.
+    expect(body.workoutsPerWeek).toEqual([{ weekStart: "2026-10-12", count: 1, planned: 1 }]);
+    expect(body.notCharted).toEqual({ sets: 1, items: [HEAVY] });
   });
 
-  it("plain bodyweight sets are neither charted nor counted as not charted", async () => {
+  it("D-W8-7: a bodyweight-only lift is charted by reps, not counted as not charted", async () => {
     const client = await reachCoachingReady("bw");
     const plan = await seedPlan(db, client.relationshipId);
+    const pullUps = (reps: number[]) => ({
+      exerciseId: PULL,
+      name: "Pull-up",
+      sets: reps.map((r): SetFixture => ({ label: "BW", kg: null, kind: "bodyweight", reps: r })),
+    });
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-05",
+      status: "completed",
+      exercises: [pullUps([8, 6])],
+    });
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-12",
+      status: "completed",
+      exercises: [pullUps([12, 10])],
+    });
+    const body = await model(client, "?range=all");
+    expect(body.exercises).toEqual([
+      {
+        exerciseId: PULL,
+        name: "Pull-up",
+        chartBy: "reps",
+        sessions: 2,
+        plannedSessions: 2,
+        points: [repsPt("2026-10-05", 8, 14), repsPt("2026-10-12", 12, 22)],
+      },
+    ]);
+    expect(body.notCharted).toEqual({ sets: 0, items: [] });
+  });
+
+  it("D-W8-7: reps logged with no load at all are charted by reps", async () => {
+    const client = await reachCoachingReady("reps-only");
+    const plan = await seedPlan(db, client.relationshipId);
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-12",
+      status: "completed",
+      exercises: [
+        {
+          exerciseId: "ex-push-up",
+          name: "Push-up",
+          // What the logging flow stores for a set prescribed and logged without a load.
+          sets: [
+            { label: null, kg: null, kind: "text", reps: 15 },
+            { label: null, kg: null, kind: "text", reps: 12 },
+            { label: null, kg: null, kind: "text", reps: null }, // nothing logged at all
+          ],
+        },
+      ],
+    });
+    const body = await model(client, "?range=all");
+    expect(body.exercises).toEqual([
+      expect.objectContaining({
+        exerciseId: "ex-push-up",
+        chartBy: "reps",
+        points: [repsPt("2026-10-12", 15, 27)],
+      }),
+    ]);
+    expect(body.notCharted).toEqual({ sets: 0, items: [] });
+  });
+
+  it("a lift with kg on some days keeps its bodyweight-only days as points without kg", async () => {
+    const client = await reachCoachingReady("mixed");
+    const plan = await seedPlan(db, client.relationshipId);
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-05",
+      status: "completed",
+      exercises: [
+        { exerciseId: PULL, name: "Pull-up", sets: [{ label: "BW", kg: null, kind: "bodyweight", reps: 9 }] },
+      ],
+    });
     await seedSession(db, plan, client, {
       localDate: "2026-10-12",
       status: "completed",
@@ -437,16 +562,72 @@ describe("GET /strength/relationships/:relationshipId", () => {
         {
           exerciseId: PULL,
           name: "Pull-up",
-          sets: [
-            { label: "BW", kg: null, kind: "bodyweight", reps: 12 },
-            { label: "BW", kg: null, kind: "bodyweight", reps: 10 },
-          ],
+          sets: [{ label: "BW + 5 kg", kg: 5, kind: "bodyweight_plus", reps: 6 }],
         },
       ],
     });
     const body = await model(client, "?range=all");
+    expect(body.exercises[0]).toMatchObject({
+      chartBy: "load_kg",
+      points: [repsPt("2026-10-05", 9), pt("2026-10-12", 5, 6)],
+    });
+  });
+
+  it("planned counts leave superseded days out and take the rest of the current week", async () => {
+    // Wed 14 Oct in Kolkata.
+    vi.setSystemTime(new Date("2026-10-14T06:00:00.000Z"));
+    const client = await reachCoachingReady("planned");
+    await db
+      .update(schema.users)
+      .set({ timezone: "Asia/Kolkata" })
+      .where(eq(schema.users.id, client.traineeUserId));
+    const plan = await seedPlan(db, client.relationshipId);
+    const squat = { exerciseId: SQUAT, name: "Back Squat", sets: [kg(60, 5)] };
+    await seedSession(db, plan, client, { localDate: "2026-10-05", status: "planned", plannedExerciseIds: [SQUAT] });
+    await seedSession(db, plan, client, { localDate: "2026-10-07", status: "completed", exercises: [squat] });
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-09",
+      status: "planned",
+      plannedExerciseIds: [SQUAT],
+      scheduleStatus: "superseded",
+    });
+    await seedSession(db, plan, client, { localDate: "2026-10-12", status: "completed", exercises: [squat] });
+    // Fri 16 Oct is still ahead: planned this week, not yet a planned squat session.
+    await seedSession(db, plan, client, { localDate: "2026-10-16", status: "planned", plannedExerciseIds: [SQUAT] });
+    // Next week is outside the window.
+    await seedSession(db, plan, client, { localDate: "2026-10-19", status: "planned", plannedExerciseIds: [SQUAT] });
+
+    const body = await model(client, "?range=4w");
+    expect(body.workoutsPerWeek.slice(-2)).toEqual([
+      { weekStart: "2026-10-05", count: 1, planned: 2 },
+      { weekStart: "2026-10-12", count: 1, planned: 2 },
+    ]);
+    expect(body.exercises[0]).toMatchObject({ sessions: 2, plannedSessions: 3 });
+  });
+
+  it("lists uncharted sets newest first", async () => {
+    const client = await reachCoachingReady("text");
+    const plan = await seedPlan(db, client.relationshipId);
+    const band = (label: string): SetFixture => ({ label, kg: null, kind: "text", reps: 10 });
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-05",
+      status: "completed",
+      exercises: [{ exerciseId: "ex-row", name: "Band row", sets: [band("red band")] }],
+    });
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-12",
+      status: "completed",
+      exercises: [{ exerciseId: "ex-row", name: "Band row", sets: [band("RPE 8")] }],
+    });
+    const body = await model(client, "?range=all");
     expect(body.exercises).toEqual([]);
-    expect(body.notCharted).toEqual({ sets: 0 });
+    expect(body.notCharted).toEqual({
+      sets: 2,
+      items: [
+        { localDate: "2026-10-12", exerciseName: "Band row", loadLabel: "RPE 8", reps: 10 },
+        { localDate: "2026-10-05", exerciseName: "Band row", loadLabel: "red band", reps: 10 },
+      ],
+    });
   });
 
   it("another client's sets never appear", async () => {
@@ -467,7 +648,7 @@ describe("GET /strength/relationships/:relationshipId", () => {
     const empty = await reachCoachingReady("empty");
     const body = await model(empty, "?range=4w");
     expect(body.exercises).toEqual([]);
-    expect(body.notCharted).toEqual({ sets: 0 });
+    expect(body.notCharted).toEqual({ sets: 0, items: [] });
     expect(body.workoutsPerWeek.every((w) => w.count === 0)).toBe(true);
   });
 

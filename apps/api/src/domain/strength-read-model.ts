@@ -1,9 +1,12 @@
-import { and, asc, eq, gte, inArray, isNotNull, lte, type SQL } from "drizzle-orm";
-import type {
-  StrengthExercise,
-  StrengthQuery,
-  StrengthReadModel,
-  StrengthWeekCount,
+import { and, asc, eq, gte, inArray, isNotNull, lte, or, type SQL } from "drizzle-orm";
+import {
+  STRENGTH_UNCHARTED_LIST_MAX,
+  type StrengthExercise,
+  type StrengthPoint,
+  type StrengthQuery,
+  type StrengthReadModel,
+  type StrengthUnchartedSet,
+  type StrengthWeekCount,
 } from "@fitbud/contracts";
 import type { Db } from "../db/client.js";
 import {
@@ -14,9 +17,11 @@ import {
   workoutAssignments,
   workoutExecutions,
 } from "../db/schema.js";
+import { isBlankLoadLabel } from "./load-parser.js";
 
 /** Load kinds whose `actual_load_kg` is a chartable number (bodyweight-plus counts its added kg). */
-const CHARTABLE_KINDS = new Set(["kg", "bodyweight_plus"]);
+const KG_KINDS = new Set(["kg", "bodyweight_plus"]);
+const FINISHED = new Set(["completed", "modified"]);
 const DAY_MS = 86_400_000;
 const MAX_WEEKS = 520;
 
@@ -31,17 +36,26 @@ export type StrengthSetRow = {
   exerciseId: string;
   name: string;
   localDate: string;
+  assignmentId: string;
   actualLoadKg: number | null;
   loadKind: string;
   actualReps: number | null;
+  actualLoadLabel: string | null;
 };
 
-export type StrengthWorkoutRow = { localDate: string };
+/** One assignment with its execution's status (null when nothing was logged). */
+export type StrengthAssignmentRow = {
+  assignmentId: string;
+  localDate: string;
+  scheduleStatus: string;
+  workoutDayJson: string;
+  executionStatus: string | null;
+};
 
 export type StrengthRawData = {
   relationship: StrengthRelationship | null;
   sets: StrengthSetRow[];
-  workouts: StrengthWorkoutRow[];
+  assignments: StrengthAssignmentRow[];
 };
 
 export function addDaysToLocalDate(localDate: string, days: number): string {
@@ -90,10 +104,11 @@ export function resolveStrengthWindow(
 
 /**
  * One D1 batch of three statements: the relationship (with the trainee's timezone),
- * the logged sets and the finished workouts. The sets and workouts are filtered by
- * relationship and by a coarse date bound only; the caller authorises the
- * relationship row before it uses either, and refines to the exact window in
- * `buildStrengthReadModel` (the trainee's timezone is only known from statement one).
+ * the logged sets and the assignments with their execution status. The sets and
+ * assignments are filtered by relationship and by a coarse date bound only; the
+ * caller authorises the relationship row before it uses either, and refines to the
+ * exact window in `buildStrengthReadModel` (the trainee's timezone is only known from
+ * statement one).
  */
 export async function loadStrengthRawData(
   db: Db,
@@ -115,12 +130,14 @@ export async function loadStrengthRawData(
       : addDaysToLocalDate(coarse.to, 1)
     : null;
 
-  const dateBounds = (): SQL[] => [
+  const dateBounds = (extraDaysAtEnd = 0): SQL[] => [
     ...(coarseFrom ? [gte(workoutAssignments.localDate, coarseFrom)] : []),
-    ...(coarseTo ? [lte(workoutAssignments.localDate, coarseTo)] : []),
+    ...(coarseTo
+      ? [lte(workoutAssignments.localDate, addDaysToLocalDate(coarseTo, extraDaysAtEnd))]
+      : []),
   ];
 
-  const [relationshipRows, setRows, workoutRows] = await db.batch([
+  const [relationshipRows, setRows, assignmentRows] = await db.batch([
     db
       .select({
         id: coachingRelationships.id,
@@ -137,9 +154,11 @@ export async function loadStrengthRawData(
         exerciseId: exerciseExecutions.exerciseId,
         name: exerciseExecutions.name,
         localDate: workoutAssignments.localDate,
+        assignmentId: workoutAssignments.id,
         actualLoadKg: setExecutions.actualLoadKg,
         loadKind: setExecutions.loadKind,
         actualReps: setExecutions.actualReps,
+        actualLoadLabel: setExecutions.actualLoadLabel,
       })
       .from(setExecutions)
       .innerJoin(
@@ -158,23 +177,30 @@ export async function loadStrengthRawData(
         and(
           eq(workoutExecutions.coachingRelationshipId, relationshipId),
           inArray(setExecutions.status, ["completed", "modified"]),
-          isNotNull(setExecutions.actualLoadLabel),
+          // A logged load, or reps logged with no load at all (reps-only lifts).
+          or(isNotNull(setExecutions.actualLoadLabel), isNotNull(setExecutions.actualReps)),
           ...dateBounds(),
         ),
       )
       .orderBy(asc(workoutAssignments.localDate)),
     db
-      .select({ localDate: workoutAssignments.localDate })
-      .from(workoutExecutions)
-      .innerJoin(
-        workoutAssignments,
-        eq(workoutAssignments.id, workoutExecutions.assignmentId),
+      .select({
+        assignmentId: workoutAssignments.id,
+        localDate: workoutAssignments.localDate,
+        scheduleStatus: workoutAssignments.scheduleStatus,
+        workoutDayJson: workoutAssignments.workoutDayJson,
+        executionStatus: workoutExecutions.status,
+      })
+      .from(workoutAssignments)
+      .leftJoin(
+        workoutExecutions,
+        eq(workoutExecutions.assignmentId, workoutAssignments.id),
       )
       .where(
         and(
-          eq(workoutExecutions.coachingRelationshipId, relationshipId),
-          inArray(workoutExecutions.status, ["completed", "modified"]),
-          ...dateBounds(),
+          eq(workoutAssignments.coachingRelationshipId, relationshipId),
+          // A week past the end so the current week's later planned days are read.
+          ...dateBounds(7),
         ),
       )
       .orderBy(asc(workoutAssignments.localDate)),
@@ -183,13 +209,38 @@ export async function loadStrengthRawData(
   return {
     relationship: relationshipRows[0] ?? null,
     sets: setRows,
-    workouts: workoutRows,
+    assignments: assignmentRows,
   };
 }
 
+/** Exercise ids a planned workout day holds; empty when the snapshot cannot be read. */
+function plannedExerciseIds(workoutDayJson: string): Set<string> {
+  try {
+    const day = JSON.parse(workoutDayJson) as { exercises?: Array<{ id?: unknown }> };
+    return new Set(
+      (day.exercises ?? [])
+        .map((exercise) => exercise.id)
+        .filter((id): id is string => typeof id === "string"),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+type Day = {
+  /** Best kg set: highest kg, ties broken by reps. */
+  load: { kg: number; reps: number | null } | null;
+  /** Most reps in one bodyweight or reps-only set. */
+  bodyweightReps: number | null;
+  totalReps: number;
+  volumeKg: number | null;
+};
+
 /** Pure: raw rows in, the contract's read model out. */
 export function buildStrengthReadModel(
-  raw: Pick<StrengthRawData, "sets" | "workouts">,
+  raw: Pick<StrengthRawData, "sets" | "assignments">,
   window: StrengthWindow,
   localToday: string,
 ): StrengthReadModel {
@@ -197,88 +248,188 @@ export function buildStrengthReadModel(
     (!window.from || localDate >= window.from) &&
     (!window.to || localDate <= window.to);
 
-  type Top = { localDate: string; topLoadKg: number; reps: number | null };
   const byExercise = new Map<
     string,
-    { name: string; nameDate: string; days: Map<string, Top> }
+    {
+      name: string;
+      nameDate: string;
+      days: Map<string, Day>;
+      sessionDates: Set<string>;
+      loggedAssignments: Set<string>;
+      hasKg: boolean;
+    }
   >();
-  let notChartedSets = 0;
+  const uncharted: StrengthUnchartedSet[] = [];
 
   for (const set of raw.sets) {
     if (!inWindow(set.localDate)) continue;
-    if (set.loadKind === "text") {
-      // Load logged as free text ("RPE 8", "red band"): shown as "not charted".
-      notChartedSets += 1;
-      continue;
-    }
-    // Plain `bodyweight` sets are neither charted nor counted (charting them by reps
-    // needs a contract decision). A `kg` / `bodyweight_plus` row without a kg value is
-    // inconsistent data (Z6-1 always fills it), so it is left out of both as well.
-    if (
-      !CHARTABLE_KINDS.has(set.loadKind) ||
-      set.actualLoadKg === null ||
-      !Number.isFinite(set.actualLoadKg)
-    ) {
-      continue;
-    }
     let entry = byExercise.get(set.exerciseId);
     if (!entry) {
-      entry = { name: set.name, nameDate: set.localDate, days: new Map() };
+      entry = {
+        name: set.name,
+        nameDate: set.localDate,
+        days: new Map(),
+        sessionDates: new Set(),
+        loggedAssignments: new Set(),
+        hasKg: false,
+      };
       byExercise.set(set.exerciseId, entry);
     }
     if (set.localDate >= entry.nameDate) {
       entry.name = set.name;
       entry.nameDate = set.localDate;
     }
-    const kg = set.actualLoadKg as number;
-    const current = entry.days.get(set.localDate);
-    const beats =
-      !current ||
-      kg > current.topLoadKg ||
-      (kg === current.topLoadKg && (set.actualReps ?? -1) > (current.reps ?? -1));
-    if (beats) {
-      entry.days.set(set.localDate, {
+    entry.sessionDates.add(set.localDate);
+    entry.loggedAssignments.add(set.assignmentId);
+
+    const noLoad = isBlankLoadLabel(set.actualLoadLabel);
+    if (!noLoad && set.loadKind === "text") {
+      // Load logged as free text ("RPE 8", "red band"): shown as "not charted".
+      uncharted.push({
         localDate: set.localDate,
-        topLoadKg: kg,
+        exerciseName: set.name,
+        loadLabel: set.actualLoadLabel!.trim(),
         reps: set.actualReps,
+      });
+      continue;
+    }
+
+    const day: Day = entry.days.get(set.localDate) ?? {
+      load: null,
+      bodyweightReps: null,
+      totalReps: 0,
+      volumeKg: null,
+    };
+    const kg = set.actualLoadKg;
+    if (!noLoad && KG_KINDS.has(set.loadKind)) {
+      // A kg / bodyweight-plus row without a kg value is inconsistent data (Z6-1
+      // always fills it), so it is left out.
+      if (kg === null || !Number.isFinite(kg)) continue;
+      entry.hasKg = true;
+      const beats =
+        !day.load ||
+        kg > day.load.kg ||
+        (kg === day.load.kg && (set.actualReps ?? -1) > (day.load.reps ?? -1));
+      if (beats) day.load = { kg, reps: set.actualReps };
+      day.volumeKg = round2((day.volumeKg ?? 0) + kg * (set.actualReps ?? 0));
+    } else if (noLoad || set.loadKind === "bodyweight") {
+      // Plain bodyweight ("BW") or reps with no load: charted by reps (D-W8-7).
+      if (set.actualReps === null) continue;
+      day.bodyweightReps = Math.max(day.bodyweightReps ?? 0, set.actualReps);
+    } else {
+      continue;
+    }
+    day.totalReps += set.actualReps ?? 0;
+    entry.days.set(set.localDate, day);
+  }
+
+  // Planned workouts: scheduled assignments (superseded ones left out) and every
+  // assignment that was finished.
+  const lastWeek = weekStartOf(
+    window.to && window.to < localToday ? window.to : localToday,
+  );
+  const exerciseEnd = window.to && window.to < localToday ? window.to : localToday;
+  // A window that reaches today counts all of the current week's planned days; an
+  // earlier end stops there.
+  const plannedEnd =
+    exerciseEnd === localToday ? addDaysToLocalDate(weekStartOf(localToday), 6) : exerciseEnd;
+  const finishedPerWeek = new Map<string, number>();
+  const plannedPerWeek = new Map<string, number>();
+  const plannedToDate: StrengthAssignmentRow[] = [];
+  for (const row of raw.assignments) {
+    if (window.from && row.localDate < window.from) continue;
+    const finished = row.executionStatus !== null && FINISHED.has(row.executionStatus);
+    const week = weekStartOf(row.localDate);
+    if (finished && inWindow(row.localDate)) {
+      finishedPerWeek.set(week, (finishedPerWeek.get(week) ?? 0) + 1);
+    }
+    if (!finished && row.scheduleStatus !== "scheduled") continue;
+    if (row.localDate <= plannedEnd) {
+      plannedPerWeek.set(week, (plannedPerWeek.get(week) ?? 0) + 1);
+    }
+    if (row.localDate <= exerciseEnd) plannedToDate.push(row);
+  }
+
+  const plannedIds = new Map<string, Set<string>>();
+  const plannedFor = (exerciseId: string, logged: Set<string>): number => {
+    const ids = new Set(logged);
+    for (const row of plannedToDate) {
+      let held = plannedIds.get(row.assignmentId);
+      if (!held) {
+        held = plannedExerciseIds(row.workoutDayJson);
+        plannedIds.set(row.assignmentId, held);
+      }
+      if (held.has(exerciseId)) ids.add(row.assignmentId);
+    }
+    return ids.size;
+  };
+
+  const byDate = (a: { localDate: string }, b: { localDate: string }) =>
+    a.localDate < b.localDate ? -1 : a.localDate > b.localDate ? 1 : 0;
+
+  const exercises: StrengthExercise[] = [];
+  for (const [exerciseId, entry] of byExercise) {
+    const chartBy = entry.hasKg ? ("load_kg" as const) : ("reps" as const);
+    const points: StrengthPoint[] = [];
+    for (const [localDate, day] of entry.days) {
+      if (chartBy === "load_kg") {
+        if (!day.load && day.bodyweightReps === null) continue;
+        points.push({
+          localDate,
+          topLoadKg: day.load?.kg ?? null,
+          reps: day.load ? day.load.reps : day.bodyweightReps,
+          totalReps: day.totalReps,
+          volumeKg: day.volumeKg,
+        });
+      } else {
+        if (day.bodyweightReps === null) continue;
+        points.push({
+          localDate,
+          topLoadKg: null,
+          reps: day.bodyweightReps,
+          totalReps: day.totalReps,
+          volumeKg: null,
+        });
+      }
+    }
+    if (points.length === 0) continue;
+    exercises.push({
+      exerciseId,
+      name: entry.name,
+      chartBy,
+      sessions: entry.sessionDates.size,
+      plannedSessions: plannedFor(exerciseId, entry.loggedAssignments),
+      points: points.sort(byDate),
+    });
+  }
+  exercises.sort(
+    (a, b) => a.name.localeCompare(b.name) || a.exerciseId.localeCompare(b.exerciseId),
+  );
+
+  const workoutsPerWeek: StrengthWeekCount[] = [];
+  const knownWeeks = [...finishedPerWeek.keys(), ...plannedPerWeek.keys()].sort();
+  const earliest = window.from ? weekStartOf(window.from) : knownWeeks[0];
+  if (earliest) {
+    // Weeks run from the window start (or the first workout) to the window end or
+    // today, whichever is earlier, and never more than MAX_WEEKS back.
+    const floor = addDaysToLocalDate(lastWeek, -7 * (MAX_WEEKS - 1));
+    const firstWeek = earliest > floor ? earliest : floor;
+    for (let week = firstWeek; week <= lastWeek; week = addDaysToLocalDate(week, 7)) {
+      workoutsPerWeek.push({
+        weekStart: week,
+        count: finishedPerWeek.get(week) ?? 0,
+        planned: plannedPerWeek.get(week) ?? 0,
       });
     }
   }
 
-  const exercises: StrengthExercise[] = [...byExercise.entries()]
-    .map(([exerciseId, entry]) => ({
-      exerciseId,
-      name: entry.name,
-      points: [...entry.days.values()].sort((a, b) =>
-        a.localDate < b.localDate ? -1 : a.localDate > b.localDate ? 1 : 0,
-      ),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name) || a.exerciseId.localeCompare(b.exerciseId));
-
-  const perWeek = new Map<string, number>();
-  for (const workout of raw.workouts) {
-    if (!inWindow(workout.localDate)) continue;
-    const week = weekStartOf(workout.localDate);
-    perWeek.set(week, (perWeek.get(week) ?? 0) + 1);
-  }
-  const workoutsPerWeek: StrengthWeekCount[] = [];
-  if (perWeek.size > 0 || window.from) {
-    // Weeks run from the window start (or the first workout) to the window end or today,
-    // whichever is earlier, and never more than MAX_WEEKS back.
-    const lastWeek = weekStartOf(
-      window.to && window.to < localToday ? window.to : localToday,
-    );
-    const earliest = window.from
-      ? weekStartOf(window.from)
-      : [...perWeek.keys()].sort()[0];
-    const floor = addDaysToLocalDate(lastWeek, -7 * (MAX_WEEKS - 1));
-    const firstWeek = earliest && earliest > floor ? earliest : floor;
-    if (earliest) {
-      for (let week = firstWeek; week <= lastWeek; week = addDaysToLocalDate(week, 7)) {
-        workoutsPerWeek.push({ weekStart: week, count: perWeek.get(week) ?? 0 });
-      }
-    }
-  }
-
-  return { exercises, workoutsPerWeek, notCharted: { sets: notChartedSets } };
+  uncharted.sort((a, b) => -byDate(a, b));
+  return {
+    exercises,
+    workoutsPerWeek,
+    notCharted: {
+      sets: uncharted.length,
+      items: uncharted.slice(0, STRENGTH_UNCHARTED_LIST_MAX),
+    },
+  };
 }
