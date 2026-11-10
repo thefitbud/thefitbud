@@ -189,6 +189,8 @@ describe("AttentionViewPage", () => {
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(text).not.toMatch(/overdue_meal|missed_workout|overdue_checkin/);
     expect(text).not.toContain("%");
+    // The active-client count is only for the empty state.
+    expect(api.listClients).not.toHaveBeenCalled();
   });
 
   it("filters by severity with the chips", async () => {

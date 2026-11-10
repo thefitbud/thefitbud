@@ -214,7 +214,6 @@ export function AttentionViewPage() {
 
   useEffect(() => {
     void load();
-    void loadActiveCount();
     let timer: number | null = null;
     const start = () => {
       if (timer != null) window.clearInterval(timer);
@@ -237,7 +236,7 @@ export function AttentionViewPage() {
       if (timer != null) window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [load, loadActiveCount]);
+  }, [load]);
 
   const rows = useMemo(() => {
     if (!groups) return [];
@@ -253,6 +252,12 @@ export function AttentionViewPage() {
         );
       });
   }, [groups]);
+
+  // The count only appears in the empty state; fetch it only then.
+  const isEmpty = groups !== null && rows.length === 0;
+  useEffect(() => {
+    if (isEmpty) void loadActiveCount();
+  }, [isEmpty, loadActiveCount]);
 
   const relationshipIds = useMemo(
     () => (groups ?? []).map((g) => g.relationshipId),
@@ -304,7 +309,7 @@ export function AttentionViewPage() {
   }
 
   const loading = groups === null && !error;
-  const empty = groups !== null && rows.length === 0;
+  const empty = isEmpty;
 
   return (
     <div className="hv-page" data-testid="screen-home-attention">
