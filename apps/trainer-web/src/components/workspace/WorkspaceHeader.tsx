@@ -195,9 +195,7 @@ export function WorkspaceHeader({
 
   // Ended relationships: Configure is read-only (CE1) and the reminders
   // drawer only reports history (D-W7-7). Order and labels follow frames 208
-  // and 208b: Client settings first. The page it opens is titled
-  // "Configure coaching" (ConfigureCoachingPage); the menu label is
-  // "Coaching setup".
+  // and 208b: Client settings first.
   const overflowItems = [
     {
       id: "client-settings",
