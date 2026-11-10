@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { RealtimeEvent, RealtimeEventType, RealtimeEntityType } from "@fitbud/contracts";
-import { HOME_POLL_MS } from "./home/useHomeSections";
+import { HOME_POLL_MS, VISIBLE_REFRESH_GAP_MS } from "./home/useHomeSections";
 
 const REL = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const EXC = "11111111-1111-4111-8111-111111111111";
@@ -282,6 +282,57 @@ describe("HomePage section refresh (Z7-1)", () => {
     expect(shown.renewals).toBe(whileHidden.renewals + 1);
     expect(shown.clients).toBe(whileHidden.clients + 1);
     expect(shown.invitations).toBe(whileHidden.invitations + 1);
+  });
+
+  it("restarts the poll when a return inside the gap skips the refetch", async () => {
+    await renderHome();
+    const loaded = counts();
+
+    setHidden(true);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    setHidden(false);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    const afterReturn = counts();
+    expect(afterReturn.attention).toBe(loaded.attention + 1);
+
+    setHidden(true);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(VISIBLE_REFRESH_GAP_MS - 500);
+    });
+    setHidden(false);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    expect(counts().attention).toBe(afterReturn.attention);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HOME_POLL_MS);
+    });
+    expect(counts().attention).toBe(afterReturn.attention + 1);
+  });
+
+  it("keeps the open rows when a section refetch fails", async () => {
+    await renderHome();
+    api.getAttentionGroups.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => {
+      hints.onHint?.();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Couldn't load needs attention",
+    );
+    expect(screen.queryByRole("heading", { name: "All clear" })).toBeNull();
+    expect(screen.queryByText(/You're all caught up/)).toBeNull();
   });
 
   it("refetches once when visibilitychange and focus arrive in separate tasks", async () => {

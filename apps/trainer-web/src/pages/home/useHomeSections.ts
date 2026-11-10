@@ -25,8 +25,11 @@ export const HOME_POLL_MS = 45_000;
 
 const SECTION_CAP = 5;
 
-/** visibilitychange + focus from one return to the tab count as one refresh. */
-const VISIBLE_REFRESH_GAP_MS = 2_000;
+/**
+ * visibilitychange and focus from one return to the tab count as one refresh.
+ * A return inside this window skips the refetch, but the poll must still be running.
+ */
+export const VISIBLE_REFRESH_GAP_MS = 2_000;
 
 export const HOME_SECTIONS = [
   "attention",
@@ -252,15 +255,13 @@ export function useHomeSections(options: { timeZone: string }) {
               if (reportPageError) setError(null);
             }
           } catch (err) {
+            // Keep the rows already on screen. Clearing them makes Home look
+            // all clear, and the attention error only renders while rows remain.
             if (isQuiet) return;
             setSectionErrors((prev) => ({
               ...prev,
               attention: "Couldn't load needs attention",
             }));
-            if (id === "attention") {
-              groupsRef.current = [];
-              setGroups([]);
-            }
             if (reportPageError) setError(pageErrorFrom(err));
           }
           return;
@@ -287,8 +288,6 @@ export function useHomeSections(options: { timeZone: string }) {
               ...prev,
               asks: "Couldn't load asked-coach items",
             }));
-            asksRef.current = [];
-            setCoachAsks([]);
           }
           return;
         }
@@ -315,8 +314,6 @@ export function useHomeSections(options: { timeZone: string }) {
               ...prev,
               checkins: "Couldn't load check-ins",
             }));
-            checkinsRef.current = [];
-            setCheckins([]);
           }
           return;
         }
@@ -340,8 +337,6 @@ export function useHomeSections(options: { timeZone: string }) {
               ...prev,
               renewals: "Couldn't load renewals",
             }));
-            renewalsRef.current = [];
-            setRenewals([]);
           }
           return;
         }
@@ -385,7 +380,7 @@ export function useHomeSections(options: { timeZone: string }) {
             });
           }
         }
-        if (!anyOk && isQuiet) return;
+        if (!anyOk) return;
         const capped = started.slice(0, SECTION_CAP);
         gettingStartedRef.current = capped;
         setGettingStarted(capped);
@@ -395,23 +390,23 @@ export function useHomeSections(options: { timeZone: string }) {
     [adoptGroups, mergeNames, requestGroups, timeZone],
   );
 
-  const loadActivity = useCallback(async (quiet: boolean) => {
+  const loadActivity = useCallback(async () => {
     try {
       const res = (await stage1Api.getActivityFeed({ limit: 8 })) as {
         events: HomeActivityEvent[];
       };
       setActivity(res.events.slice(0, 6));
     } catch {
-      if (!quiet) setActivity([]);
+      // Keep the previous feed. A failed refetch must not blank the section.
     }
   }, []);
 
-  const loadReengage = useCallback(async (quiet: boolean) => {
+  const loadReengage = useCallback(async () => {
     try {
       const res = await stage1Api.getReengagementCandidates();
       setReengage(res.items);
     } catch {
-      if (!quiet) setReengage([]);
+      // Keep the previous candidates. A failed refetch must not blank the section.
     }
   }, []);
 
@@ -450,8 +445,8 @@ export function useHomeSections(options: { timeZone: string }) {
             refreshSection("renewals", { quiet }),
             refreshSection("gettingStarted", { quiet }),
             refreshSection("reviewed", { quiet }),
-            loadActivity(quiet),
-            loadReengage(quiet),
+            loadActivity(),
+            loadReengage(),
           ]);
         } finally {
           if (!quiet) setLoading(false);
@@ -497,7 +492,12 @@ export function useHomeSections(options: { timeZone: string }) {
         return;
       }
       if (visibleCoalesce) return;
-      if (Date.now() - lastVisibleRefreshAt < VISIBLE_REFRESH_GAP_MS) return;
+      if (Date.now() - lastVisibleRefreshAt < VISIBLE_REFRESH_GAP_MS) {
+        // Hide already cleared the interval. Skipping the refetch must not
+        // leave the 45s poll stopped until a later return outside this window.
+        startPoll();
+        return;
+      }
       visibleCoalesce = Promise.resolve().then(() => {
         visibleCoalesce = null;
         if (stopped || document.hidden) return;
