@@ -750,6 +750,52 @@ describe("steps API", () => {
       expect(((await range.json()) as { data: { target: number } }).data.target).toBe(16000);
     });
 
+    it("a copy still succeeds when the source's open draft is discarded mid-copy (Z8-18)", async () => {
+      const trainer = await trainerSession("gone");
+      const source = await addClient(trainer, "gone-src");
+      const target = await addClient(trainer, "gone-dst");
+      await saveDraft(trainer, source.relationshipId, 0);
+
+      const realInsert = db.insert.bind(db);
+      let interleaved = false;
+      const spy = vi.spyOn(db, "insert").mockImplementation(((table: unknown) => {
+        if (!interleaved && table === schema.coachingConfigurations) {
+          interleaved = true;
+          spy.mockRestore();
+          return {
+            values: async (values: unknown) => {
+              const discard = await app.request(
+                `/configurations/relationships/${source.relationshipId}/draft`,
+                { method: "DELETE", headers: trainerJson(trainer) },
+                testEnv(),
+              );
+              expect(discard.status).toBe(200);
+              return (realInsert(table as never) as unknown as { values: (v: unknown) => Promise<unknown> }).values(values);
+            },
+          };
+        }
+        return realInsert(table as never);
+      }) as never);
+
+      const copied = await app.request(
+        `/configurations/relationships/${target.relationshipId}/copy`,
+        {
+          method: "POST",
+          headers: trainerJson(trainer, "copy-gone"),
+          body: JSON.stringify({ sourceRelationshipId: source.relationshipId }),
+        },
+        testEnv(),
+      );
+      expect(interleaved).toBe(true);
+      expect(copied.status).toBe(201);
+      const copiedId = ((await copied.json()) as { data: { id: string } }).data.id;
+      const [row] = await db
+        .select()
+        .from(schema.coachingConfigurations)
+        .where(eq(schema.coachingConfigurations.id, copiedId));
+      expect(row?.stepsTarget).toBeGreaterThan(0);
+    });
+
     it("answers 404 CONFIGURATION_NOT_FOUND when the client has no configuration yet", async () => {
       const trainer = await trainerSession("nocfg");
       const client = await addClient(trainer, "nocfg");

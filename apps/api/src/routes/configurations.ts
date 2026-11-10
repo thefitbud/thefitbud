@@ -115,8 +115,10 @@ async function listConfigurations(db: Db, relationshipId: string) {
  * so either the PUT sees the new draft and updates it too, or the draft copies
  * the value the PUT already wrote.
  */
-function carriedStepsTarget(sourceConfigurationId: string) {
-  return sql<number>`(select ${coachingConfigurations.stepsTarget} from ${coachingConfigurations} where ${coachingConfigurations.id} = ${sourceConfigurationId})`;
+function carriedStepsTarget(sourceConfigurationId: string, loadedValue: number) {
+  // coalesce: if the source row vanished after the bundle load (a discarded
+  // draft), fall back to the loaded value instead of inserting NULL.
+  return sql<number>`coalesce((select ${coachingConfigurations.stepsTarget} from ${coachingConfigurations} where ${coachingConfigurations.id} = ${sourceConfigurationId}), ${loadedValue})`;
 }
 
 async function loadConfigurationBundle(
@@ -1327,7 +1329,7 @@ configurationRoutes.post(
       goalShort: source.configuration.goalShort,
       goalDescription: source.configuration.goalDescription,
       notes: source.configuration.notes,
-      stepsTarget: carriedStepsTarget(source.configuration.id),
+      stepsTarget: carriedStepsTarget(source.configuration.id, source.configuration.stepsTarget),
       configuredAt: null,
       activatedAt: null,
       createdAt: timestamp,
@@ -1572,7 +1574,7 @@ configurationRoutes.post(
       goalShort: source.configuration.goalShort,
       goalDescription: source.configuration.goalDescription,
       notes: source.configuration.notes,
-      stepsTarget: carriedStepsTarget(source.configuration.id),
+      stepsTarget: carriedStepsTarget(source.configuration.id, source.configuration.stepsTarget),
       configuredAt: null,
       activatedAt: null,
       createdAt: timestamp,
