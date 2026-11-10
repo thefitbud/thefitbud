@@ -107,6 +107,18 @@ async function listConfigurations(db: Db, relationshipId: string) {
     .where(eq(coachingConfigurations.coachingRelationshipId, relationshipId));
 }
 
+/**
+ * Z8-18: the steps target is a setting written in place (D-W6-29). A copy must
+ * read it in the same statement that inserts the draft, not from the bundle
+ * loaded earlier: a PUT that lands in between would otherwise be reverted when
+ * the draft activates. SQLite runs the insert and its subquery as one statement,
+ * so either the PUT sees the new draft and updates it too, or the draft copies
+ * the value the PUT already wrote.
+ */
+function carriedStepsTarget(sourceConfigurationId: string) {
+  return sql<number>`(select ${coachingConfigurations.stepsTarget} from ${coachingConfigurations} where ${coachingConfigurations.id} = ${sourceConfigurationId})`;
+}
+
 async function loadConfigurationBundle(
   db: Db,
   relationshipId: string,
@@ -1315,7 +1327,7 @@ configurationRoutes.post(
       goalShort: source.configuration.goalShort,
       goalDescription: source.configuration.goalDescription,
       notes: source.configuration.notes,
-      stepsTarget: source.configuration.stepsTarget,
+      stepsTarget: carriedStepsTarget(source.configuration.id),
       configuredAt: null,
       activatedAt: null,
       createdAt: timestamp,
@@ -1560,7 +1572,7 @@ configurationRoutes.post(
       goalShort: source.configuration.goalShort,
       goalDescription: source.configuration.goalDescription,
       notes: source.configuration.notes,
-      stepsTarget: source.configuration.stepsTarget,
+      stepsTarget: carriedStepsTarget(source.configuration.id),
       configuredAt: null,
       activatedAt: null,
       createdAt: timestamp,
