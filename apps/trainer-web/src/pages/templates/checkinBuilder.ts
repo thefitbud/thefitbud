@@ -87,7 +87,9 @@ export function blankCheckinField(
     required: false,
     helpText: "",
     options: [newOption(), newOption()],
-    measurementType: "body_weight_kg",
+    // Own measurement questions use "other": the charted types belong to
+    // the standard questions (frame 171).
+    measurementType: "other",
     unit: "",
     photoSlot: "any",
     lowLabel: "Very low",
@@ -122,8 +124,10 @@ export function draftsFromCheckinFields(
       base.photoSlot = field.photoSlot ?? "any";
     }
     if (field.type === "scale_1_5") {
-      base.lowLabel = field.lowLabel ?? "Very low";
-      base.highLabel = field.highLabel ?? "Very high";
+      // A standard rating keeps its end labels exactly as stored (none on
+      // global v2), so an unchanged question saves unchanged.
+      base.lowLabel = field.lowLabel ?? (field.key ? "" : "Very low");
+      base.highLabel = field.highLabel ?? (field.key ? "" : "Very high");
     }
     if (field.type === "number") {
       base.unit = field.unit ?? "";
@@ -150,16 +154,41 @@ export function duplicateCheckinFieldDraft(
   };
 }
 
-export function measurementTypeOptions(): Array<{
+/**
+ * Metric choices for an own measurement question: "other" only, plus the
+ * question's current type when a loaded form already uses another one.
+ */
+export function measurementTypeOptions(
+  current: MeasurementType = "other",
+): Array<{
   value: MeasurementType;
   label: string;
 }> {
-  return (
-    ["body_weight_kg", "waist_cm", "hip_cm", "chest_cm", "other"] as const
-  ).map((value) => ({
+  const values: MeasurementType[] =
+    current === "other" ? ["other"] : [current, "other"];
+  return values.map((value) => ({
     value,
     label: labelFor("measurement_type", value),
   }));
+}
+
+/** Stored measurement types that Progress charts (the API's metric map). */
+const CHARTED_MEASUREMENT_TYPES: readonly MeasurementType[] = [
+  "body_weight_kg",
+  "waist_cm",
+  "hip_cm",
+  "chest_cm",
+];
+
+/**
+ * Whether an own (unkeyed) question still feeds a Progress chart: an answer
+ * to a measurement of a charted type is stored as a measurement and charted.
+ */
+export function ownQuestionFeedsChart(draft: CheckinFieldDraft): boolean {
+  return (
+    draft.type === "measurement" &&
+    CHARTED_MEASUREMENT_TYPES.includes(draft.measurementType)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,8 +226,10 @@ function buildStandardField(
   delete field.helpText;
   if (helpText) field.helpText = helpText;
   if (field.type === "scale_1_5") {
-    field.lowLabel = draft.lowLabel.trim() || "Very low";
-    field.highLabel = draft.highLabel.trim() || "Very high";
+    const low = draft.lowLabel.trim();
+    const high = draft.highLabel.trim();
+    if (low) field.lowLabel = low;
+    if (high) field.highLabel = high;
   }
   return field;
 }
@@ -349,11 +380,22 @@ export function setStandardGroupKeys(
     (draft) => draft.key && group.keys.includes(draft.key),
   );
   const template = existing[0];
+  const converted = new Set<string>();
   const added = wanted
     .filter((key) => !existing.some((draft) => draft.key === key))
     .map((key) => {
       const draft = standardCheckinDraft(key);
-      if (template) {
+      // An own question that already asks this (a v1 fork's "waist" or
+      // "body_weight") becomes the standard one, keeping required and tip,
+      // instead of being asked twice.
+      const own = drafts.find(
+        (row) => !row.key && !converted.has(row.id) && ownMatchesKey(row, key),
+      );
+      if (own) {
+        converted.add(own.id);
+        draft.required = own.required;
+        draft.helpText = own.helpText;
+      } else if (template) {
         draft.required = template.required;
         draft.helpText = template.helpText;
       }
@@ -363,6 +405,7 @@ export function setStandardGroupKeys(
   const kept: CheckinFieldDraft[] = [];
   let placed = false;
   for (const draft of drafts) {
+    if (converted.has(draft.id)) continue;
     if (draft.key && group.keys.includes(draft.key)) {
       if (!placed) {
         kept.push(...added);
@@ -383,6 +426,25 @@ export function setStandardGroupKeys(
     kept.splice(firstCustom === -1 ? kept.length : firstCustom, 0, ...added);
   }
   return normalizeCheckinDraftOrder(kept);
+}
+
+/** An own question that asks exactly what a standard key asks. */
+function ownMatchesKey(draft: CheckinFieldDraft, key: CheckinStandardKey): boolean {
+  const standard = standardCheckinDefinition(key);
+  if (draft.type !== standard.type) return false;
+  switch (standard.type) {
+    case "measurement":
+      if (draft.measurementType !== standard.measurementType) return false;
+      // Arm and thigh are "other" in cm: only the same id is the same question.
+      if (standard.measurementType === "other") {
+        return draft.id === key && draft.unit.trim() === standard.unit;
+      }
+      return true;
+    case "photo_intent":
+      return draft.id === key && draft.photoSlot === standard.photoSlot;
+    default:
+      return draft.id === key;
+  }
 }
 
 /** Changes required / tip on every key of a standard group. */

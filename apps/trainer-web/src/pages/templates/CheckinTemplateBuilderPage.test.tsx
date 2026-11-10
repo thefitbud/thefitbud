@@ -182,6 +182,44 @@ describe("CheckinTemplateBuilderPage", () => {
     expect(fields.at(-1)?.id).toBe("went-well");
   });
 
+  it("v1 fork: own charted measurement is not marked Not charted, and adding the standard one converts it", async () => {
+    api.getCheckinFormTemplate.mockResolvedValue(
+      detail([
+        { id: "waist", label: "Waist", type: "measurement", measurementType: "waist_cm", required: true },
+        { id: "wellbeing", label: "Wellbeing", type: "short_text", required: true },
+      ] as CheckinFieldDefinition[]),
+    );
+    renderPage();
+    const own = await screen.findByRole("list", { name: "Your own questions" });
+    const waistRow = within(own).getByText("Waist").closest("li")!;
+    expect(within(waistRow).getByText("Charted")).toBeTruthy();
+    expect(within(waistRow).queryByText("Not charted")).toBeNull();
+    const wellbeingRow = within(own).getByText("Wellbeing").closest("li")!;
+    expect(within(wellbeingRow).getByText("Not charted")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Add a standard question"), {
+      target: { value: "body" },
+    });
+    expect(screen.queryByText("Another question uses this label.")).toBeNull();
+    expect(within(screen.getByRole("list", { name: "Your own questions" })).queryByText("Waist")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save version" }));
+    await waitFor(() => expect(api.createCheckinFormTemplateVersion).toHaveBeenCalled());
+    const waists = savedFields().filter(
+      (field) => field.type === "measurement" && field.measurementType === "waist_cm",
+    );
+    expect(waists).toHaveLength(1);
+    expect(waists[0]).toMatchObject({ id: "waist", key: "waist", required: true });
+  });
+
+  it("own measurement question offers only the Other metric", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /What went well this week/ }));
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "measurement" } });
+    const metric = screen.getByLabelText("Metric") as HTMLSelectElement;
+    expect([...metric.options].map((option) => option.value)).toEqual(["other"]);
+  });
+
   it("global form is read-only with Fork to edit", async () => {
     api.getCheckinFormTemplate.mockResolvedValue(detail(forkFields(), 2, "global"));
     renderPage();

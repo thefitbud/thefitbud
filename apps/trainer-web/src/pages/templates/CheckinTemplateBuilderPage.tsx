@@ -34,6 +34,7 @@ import {
   moveCustomDraft,
   moveStandardGroup,
   normalizeCheckinDraftOrder,
+  ownQuestionFeedsChart,
   setStandardGroupKeys,
   STANDARD_KEY_PICKER_COPY,
   updateStandardGroup,
@@ -606,7 +607,11 @@ export function CheckinTemplateBuilderPage() {
             <strong>{draft.label.trim() || "Untitled question"}</strong>
             <span style={rowSubStyle}>{ownSubtitle(draft)}</span>
           </button>
-          <span style={mutedBadgeStyle}>Not charted</span>
+          {ownQuestionFeedsChart(draft) ? (
+            <span style={badgeStyle}>Charted</span>
+          ) : (
+            <span style={mutedBadgeStyle}>Not charted</span>
+          )}
         </div>
         {isOpen ? (
           <div id={panelId} style={{ marginTop: "0.75rem" }}>
@@ -675,7 +680,7 @@ export function CheckinTemplateBuilderPage() {
                       })
                     }
                   >
-                    {measurementTypeOptions().map((option) => (
+                    {measurementTypeOptions(draft.measurementType).map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>

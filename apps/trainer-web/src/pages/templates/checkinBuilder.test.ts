@@ -14,10 +14,12 @@ import {
   checkinDraftSections,
   draftsFromCheckinFields,
   duplicateCheckinFieldDraft,
+  measurementTypeOptions,
   missingStandardGroups,
   moveCustomDraft,
   moveStandardGroup,
   normalizeCheckinDraftOrder,
+  ownQuestionFeedsChart,
   setStandardGroupKeys,
   updateStandardGroup,
 } from "./checkinBuilder";
@@ -120,12 +122,8 @@ describe("standard key preservation (D-W8-6)", () => {
     for (const key of CHECKIN_STANDARD_KEYS) {
       const saved = fields.find((field) => field.key === key)!;
       const original = loaded.find((field) => field.key === key)!;
-      expect(saved).toEqual(
-        // The builder fills scale end labels; everything else is unchanged.
-        saved.type === "scale_1_5"
-          ? { ...original, lowLabel: "Very low", highLabel: "Very high" }
-          : original,
-      );
+      // Unchanged questions save exactly as loaded (no default scale labels).
+      expect(saved).toEqual(original);
     }
     // Own questions stay unkeyed with their ids.
     expect(fields.find((field) => field.id === "went-well")?.key).toBeUndefined();
@@ -253,19 +251,81 @@ describe("measurement picker (frame 171b)", () => {
     expect(missingStandardGroups(drafts).map((group) => group.id)).toEqual(["photos"]);
   });
 
-  it("re-ids an own question that already uses a standard id (v1 fork)", () => {
-    // v1 forks carry unkeyed questions with ids like "waist".
+  it("turns a v1 fork's own waist / weight / photo questions into the standard ones", () => {
+    // v1 forks carry unkeyed questions with ids like "waist" and "body_weight".
     let drafts = draftsFromCheckinFields([
-      { id: "waist", label: "Waist", type: "measurement", measurementType: "waist_cm", required: false },
+      { id: "body_weight", label: "Body weight", type: "measurement", measurementType: "body_weight_kg", required: true },
+      { id: "waist", label: "Waist", type: "measurement", measurementType: "waist_cm", required: true, helpText: "At the navel" },
+      { id: "photo_front", label: "Front", type: "photo_intent", photoSlot: "front", required: false },
       { id: "wellbeing", label: "Wellbeing", type: "short_text", required: true, maxLength: 1000 },
+    ]);
+    drafts = setStandardGroupKeys(drafts, "weight", ["weight"]);
+    drafts = setStandardGroupKeys(drafts, "body", ["waist", "hips"]);
+    drafts = setStandardGroupKeys(drafts, "photos", ["photo_front"]);
+    const fields = build(drafts);
+    // Each quantity is asked once: no duplicate body_weight_kg / waist_cm rows.
+    const measurementTypes = fields.flatMap((field) =>
+      field.type === "measurement" ? [field.measurementType] : [],
+    );
+    expect(measurementTypes.filter((type) => type === "body_weight_kg")).toHaveLength(1);
+    expect(measurementTypes.filter((type) => type === "waist_cm")).toHaveLength(1);
+    expect(fields.filter((field) => field.type === "photo_intent")).toHaveLength(1);
+    // Converted questions keep required and tip, and are keyed.
+    expect(fields.find((field) => field.key === "weight")).toMatchObject({ id: "weight", required: true });
+    expect(fields.find((field) => field.key === "waist")).toMatchObject({
+      id: "waist",
+      required: true,
+      helpText: "At the navel",
+    });
+    expect(fields.find((field) => field.id === "body_weight")).toBeUndefined();
+    // No two questions share a label (the builder's "Another question uses this label").
+    const labels = fields.map((field) => field.label.toLowerCase());
+    expect(new Set(labels).size).toBe(labels.length);
+    // maxLength on own text questions survives the round trip.
+    expect(fields.find((field) => field.id === "wellbeing")).toMatchObject({ maxLength: 1000 });
+  });
+
+  it("re-ids an own question with a standard id that asks something else", () => {
+    let drafts = draftsFromCheckinFields([
+      { id: "waist", label: "Waist feel", type: "short_text", required: false },
     ]);
     drafts = setStandardGroupKeys(drafts, "body", ["waist"]);
     const fields = build(drafts);
-    expect(fields.filter((field) => field.id === "waist")).toHaveLength(1);
     expect(fields.find((field) => field.id === "waist")?.key).toBe("waist");
-    expect(fields.find((field) => field.key !== "waist" && field.label === "Waist")).toBeDefined();
-    // maxLength on own text questions survives the round trip.
-    expect(fields.find((field) => field.id === "wellbeing")).toMatchObject({ maxLength: 1000 });
+    expect(fields.find((field) => field.label === "Waist feel")?.id).not.toBe("waist");
+  });
+
+  it("own measurement questions default to and offer only Other (not a charted type)", () => {
+    expect(blankCheckinField("measurement").measurementType).toBe("other");
+    expect(measurementTypeOptions().map((option) => option.value)).toEqual(["other"]);
+    // A loaded v1 own question keeps its type selectable so it is not changed silently.
+    expect(measurementTypeOptions("waist_cm").map((option) => option.value)).toEqual([
+      "waist_cm",
+      "other",
+    ]);
+  });
+
+  it("only own measurements of a charted type count as feeding a chart", () => {
+    const [weight, armOther, text] = draftsFromCheckinFields([
+      { id: "body_weight", label: "Body weight", type: "measurement", measurementType: "body_weight_kg", required: false },
+      { id: "neck", label: "Neck", type: "measurement", measurementType: "other", unit: "cm", required: false },
+      { id: "hard", label: "What was hard?", type: "long_text", required: false },
+    ]);
+    expect(ownQuestionFeedsChart(weight!)).toBe(true);
+    expect(ownQuestionFeedsChart(armOther!)).toBe(false);
+    expect(ownQuestionFeedsChart(text!)).toBe(false);
+  });
+
+  it("keeps stored scale end labels on a standard rating and adds none", () => {
+    const fields = build(
+      draftsFromCheckinFields([
+        { key: "energy", id: "energy", label: "Energy", type: "scale_1_5", required: false, lowLabel: "Flat", highLabel: "Buzzing" },
+        { key: "stress", id: "stress", label: "Stress", type: "scale_1_5", required: false },
+      ]),
+    );
+    expect(fields[0]).toMatchObject({ lowLabel: "Flat", highLabel: "Buzzing" });
+    expect(fields[1]).not.toHaveProperty("lowLabel");
+    expect(fields[1]).not.toHaveProperty("highLabel");
   });
 
   it("groups drafts into standard rows and own questions", () => {
