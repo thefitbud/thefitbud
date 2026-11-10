@@ -1,0 +1,402 @@
+/* Z8-12 Progress: metric rail, range control and charts (frames 160, 160b, 160c). */
+
+.pg-page {
+  gap: 1rem;
+}
+
+.pg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.pg-toolbar-note {
+  margin: 0;
+  align-self: center;
+  font-size: 13px;
+  color: var(--ink-500, #5b616b);
+}
+
+.pg-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.pg-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: #e9ebf3;
+  border-radius: 12px;
+}
+
+.pg-segment-btn {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-500, #5b616b);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pg-segment-btn.is-on {
+  background: #ffffff;
+  color: var(--deep-navy, #1a1248);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 8%);
+}
+
+.pg-segment-btn:focus-visible,
+.pg-rail-tab:focus-visible,
+.pg-rail-check:focus-visible,
+.pg-outline-btn:focus-visible,
+.pg-apply:focus-visible,
+.pg-rail-link-row:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+.pg-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.pg-custom .field input {
+  padding: 0.5rem 0.75rem;
+  min-height: 44px;
+}
+
+.pg-apply,
+.pg-outline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ink-900, #0f1115);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pg-custom-problem {
+  flex-basis: 100%;
+  margin: 0;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.pg-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Rail */
+.pg-rail.workspace-card {
+  padding: 0.75rem 0.625rem 0.875rem;
+}
+
+.pg-rail-heading {
+  margin: 0.5rem 0.625rem 0.25rem;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-500, #5b616b);
+}
+
+.pg-rail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 8px;
+}
+
+.pg-rail-row.is-selected {
+  background: var(--pale-lavender, #edeaff);
+}
+
+.pg-rail-checkwrap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 37px;
+  margin-left: 0.25rem;
+  cursor: pointer;
+}
+
+.pg-rail-check {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--indigo, #4527c6);
+  cursor: pointer;
+}
+
+.pg-rail-tab,
+.pg-rail-link-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 37px;
+  padding: 0 0.625rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-900, #0f1115);
+  font-size: 14px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pg-rail-row.is-selected .pg-rail-label {
+  color: var(--indigo, #4527c6);
+}
+
+.pg-rail-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-700, #25262b);
+  white-space: nowrap;
+}
+
+.pg-rail-foot {
+  margin-top: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border, #e7e9f2);
+}
+
+.pg-rail-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin: 0 0.625rem;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+/* Panel */
+.pg-panel.workspace-card {
+  padding: 1.25rem 1.25rem 1rem;
+  min-width: 0;
+}
+
+.pg-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.pg-panel-head h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+}
+
+.pg-subtitle {
+  display: flex;
+  gap: 0.375rem;
+  align-items: flex-start;
+  margin: 0.125rem 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-subtitle-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ink-500, #5b616b);
+}
+
+.pg-chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.pg-chevron.is-up {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+.pg-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.75rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.pg-stats-below {
+  margin-top: 0.5rem;
+}
+
+.pg-stats dt {
+  font-size: 12px;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-stats dd {
+  margin: 0;
+}
+
+.pg-stat-num {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--deep-navy, #1a1248);
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-stat-note {
+  font-size: 12px;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--ink-900, #0f1115);
+}
+
+.pg-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.pg-chart {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.pg-chart svg {
+  display: block;
+  overflow: visible;
+}
+
+.pg-chart-grid line {
+  stroke: #e9ebf1;
+  stroke-width: 1;
+}
+
+.pg-chart-grid text {
+  fill: var(--ink-700, #25262b);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-table-heading {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.pg-table th,
+.pg-table td {
+  padding: 0.5rem 0.625rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border, #e7e9f2);
+}
+
+.pg-table thead th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-table tbody th {
+  font-weight: 400;
+  color: var(--deep-navy, #1a1248);
+}
+
+.pg-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-cell-date {
+  font-size: 12px;
+  color: var(--ink-500, #5b616b);
+}
+
+.pg-change-table {
+  margin-top: 1rem;
+}
+
+.pg-empty {
+  margin: 1.5rem 0 0.5rem;
+  color: var(--ink-700, #25262b);
+}
+
+/* Tablet and touch: 44 px targets; rail above the chart on narrow screens. */
+@media (max-width: 1024px), (pointer: coarse) {
+  .pg-segment-btn,
+  .pg-rail-tab,
+  .pg-rail-link-row,
+  .pg-rail-foot a {
+    min-height: 44px;
+  }
+
+  .pg-rail-checkwrap {
+    width: 44px;
+    height: 44px;
+    margin-left: 0;
+  }
+
+  /* The 44 px target is the wrapping label; the box itself stays at its drawn size. */
+  .pg-rail-checkwrap input[type="checkbox"].pg-rail-check {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .pg-layout {
+    grid-template-columns: minmax(12.5rem, 15rem) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .pg-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
