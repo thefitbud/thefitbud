@@ -200,7 +200,11 @@ export function ClientsPage() {
     ...goalOptions.map((goalShort) => ({ goalShort })),
     ...filters.goal.map((goalShort) => ({ goalShort })),
   ]);
-  const filtersActive = hasClientDirectoryFilters(filters);
+  // The Ended segment pins status=ended; that is the segment, not a filter.
+  const filtersActive = hasClientDirectoryFilters({
+    ...filters,
+    status: filters.status.filter((s) => s !== "ended"),
+  });
   const isEnded = filters.segment === "ended";
   // Facets count every directory row regardless of filters (API directory).
   const statusFacets = facets?.status ?? null;
@@ -376,7 +380,7 @@ export function ClientsPage() {
 
       {!loading && !error && items.length === 0 ? (
         <div className="empty-state" data-testid="clients-empty">
-          {filtersActive ? (
+          {filtersActive || isEnded ? (
             <>
               <h2>No clients match these filters</h2>
               <Button
@@ -416,6 +420,7 @@ export function ClientsPage() {
                 }
                 item={item}
                 layout="card"
+                variant={isEnded ? "ended" : "current"}
                 selected={index === selectedIndex}
               />
             ))}

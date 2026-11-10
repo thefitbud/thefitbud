@@ -122,17 +122,24 @@ export function ClientRow({
         </div>
         <div className="client-card-chips">
           {lifecycleChip}
-          <StatusChip kind="adherence" value={item.adherenceState} />
-          {item.renewalState &&
+          {variant === "ended" ? null : (
+            <StatusChip kind="adherence" value={item.adherenceState} />
+          )}
+          {variant !== "ended" &&
+          item.renewalState &&
           (item.renewalState === "upcoming" ||
             item.renewalState === "due" ||
             item.renewalState === "expired") ? (
             <StatusChip kind="renewal" value={item.renewalState} />
           ) : null}
         </div>
-        <p className="client-card-meta">
-          Next check-in: {checkinLabel ?? "—"}
-        </p>
+        {variant === "ended" ? (
+          <p className="client-card-meta">Last plan: {planTitle ?? "—"}</p>
+        ) : (
+          <p className="client-card-meta">
+            Next check-in: {checkinLabel ?? "—"}
+          </p>
+        )}
         <div className="client-card-action">{primaryAction}</div>
       </article>
     );

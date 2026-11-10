@@ -639,7 +639,7 @@
 }
 
 .filter-bar {
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
   min-width: 0;
   max-width: 100%;
 }
@@ -657,6 +657,14 @@
 .filter-bar-row > .filter-search {
   flex: 0 1 280px;
   min-width: 180px;
+}
+
+/* Icon-rail widths (1024–1279): a narrower search keeps the switch on the
+   same row at 1024. */
+@media (max-width: 1279px) {
+  .filter-bar-row > .filter-search {
+    flex-basis: 180px;
+  }
 }
 
 .filter-search {
@@ -896,80 +904,6 @@
 }
 
 
-.filter-bar-more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  overflow: visible;
-  max-width: 100%;
-}
-
-.filter-more {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border, #e7e9f2);
-  background: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-700, #25262b);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.filter-more.is-active {
-  background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
-  border-color: transparent;
-}
-
-.filter-search {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  min-width: 120px;
-  max-width: 168px;
-  padding: 0 10px;
-  border-radius: 10px;
-  background: #fff;
-  border: 1px solid var(--border, #e7e9f2);
-}
-
-.filter-search input {
-  border: 0;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-  min-width: 0;
-  width: 100%;
-}
-
-.filter-pill-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-  max-width: 100%;
-}
-
-.filter-pill-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #5c6578;
-}
-
-.filter-pills {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-width: 100%;
-}
-
 .filter-pill {
   display: inline-flex;
   align-items: center;
@@ -995,12 +929,6 @@
 .filter-pill-count {
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
-}
-
-.filter-clear {
-  flex: 0 0 auto;
-  margin-left: 4px;
-  white-space: nowrap;
 }
 
 .clients-table-wrap {
@@ -1036,7 +964,7 @@
 
 .clients-table th:last-child,
 .clients-table td:last-child {
-  padding-right: 20px;
+  padding-right: 16px;
 }
 
 .clients-table th {
@@ -1044,19 +972,19 @@
   font-weight: 600;
   color: #5c6578;
   background: #fafbfe;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-/* Current: Client, Status, Adherence, Next check-in, Plan, Renewal, Action. */
-.clients-table .col-client { width: 22%; }
-.clients-table .col-status { width: 14%; }
-.clients-table .col-adherence { width: 15%; }
+/* Current: Client, Status, Adherence, Next check-in, Plan, Renewal, Action.
+   Action is a fixed width wide enough for "Review intake" / "Resend invite";
+   the rest share what is left (Renewal takes the remainder). */
+.clients-table .col-client { width: 18%; }
+.clients-table .col-status { width: 13%; }
+.clients-table .col-adherence { width: 16%; }
 .clients-table .col-checkin { width: 11%; }
-.clients-table .col-plan { width: 15%; }
+.clients-table .col-plan { width: 13%; }
 .clients-table .col-renewal { width: auto; }
 .clients-table .col-action {
-  width: 150px;
+  width: 144px;
   text-align: right;
 }
 
@@ -1064,6 +992,11 @@
 .clients-table-ended .col-client { width: 30%; }
 .clients-table-ended .col-status { width: 28%; }
 .clients-table-ended .col-plan { width: auto; }
+
+.clients-table .roster-plan {
+  font-weight: 400;
+  color: var(--deep-navy, #1a1248);
+}
 
 .clients-table .client-name,
 .clients-table .client-subtitle,
