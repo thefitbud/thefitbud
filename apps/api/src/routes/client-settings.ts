@@ -222,7 +222,7 @@ clientSettingsRoutes.post(
     tag: "Subscriptions",
     summary: "Records a payment against the client's current subscription (tracking only).",
     description:
-      "Adds a payment record to the newest subscription version: amount in paise (more than 0), due date, status paid or unpaid, and for paid records the paid date and method (cash, UPI or bank). An unpaid record has no paid date or method. Without a subscription the call answers 409 SUBSCRIPTION_REQUIRED; an ended relationship answers 409 RELATIONSHIP_ENDED. FitBud never collects the payment.",
+      "Adds a payment record to the newest subscription version: amount in paise (more than 0), due date, status paid or unpaid, and for paid records the paid date and method (cash, UPI or bank). An unpaid record has no paid date or method. Without a subscription the call answers 409 SUBSCRIPTION_REQUIRED; an ended relationship answers 409 RELATIONSHIP_ENDED, including one that ends while the request is in flight, and nothing is recorded. FitBud never collects the payment.",
     roles: ["trainer"],
     idempotency: true,
     body: createPaymentRecordRequestSchema,
@@ -284,6 +284,9 @@ clientSettingsRoutes.post(
           parsed.data,
           { actorUserId: actor.userId, idempotencyKey, fingerprint, now: nowIso() },
         );
+        // Z8-17: the insert re-checks ownership and `active` at write time.
+        if (result.kind === "ended") return relationshipEnded(c);
+        if (result.kind === "not_found") return relationshipNotFound(c);
         return c.json(result.body, result.status);
       },
     );

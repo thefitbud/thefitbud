@@ -206,37 +206,6 @@ export async function findReceipt(
   return { kind: "replay", status: row.responseStatus, body: JSON.parse(row.responseBody) };
 }
 
-/**
- * A plain insert (no "on conflict do nothing"): a concurrent request with the same
- * key fails the whole batch, so two identical requests can never both write.
- */
-function receiptInsert(
-  db: Db,
-  input: {
-    actorUserId: string;
-    operation: string;
-    keyHash: string;
-    fingerprint: string;
-    status: number;
-    body: unknown;
-    now: string;
-  },
-): Write {
-  return db.insert(idempotencyRecords).values({
-    id: createId(),
-    actorUserId: input.actorUserId,
-    operation: input.operation,
-    keyHash: input.keyHash,
-    requestFingerprint: input.fingerprint,
-    responseStatus: input.status,
-    responseBody: JSON.stringify(input.body),
-    createdAt: input.now,
-    expiresAt: new Date(
-      Date.parse(input.now) + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000,
-    ).toISOString(),
-  });
-}
-
 /** This trainer's relationship, and only while it is still active. */
 function activeOwnedRelationship(relationship: Pick<RelationshipRow, "id" | "trainerUserId">) {
   return and(
@@ -253,7 +222,9 @@ const sqlValue = <T>(value: T, alias: string) => sql<T>`${value}`.as(alias);
  * changed exactly one row and the relationship is still this trainer's and
  * active. A zero-row write (lost a race, already ended, or not this trainer)
  * stores nothing. A duplicate key fails this insert and rolls the write back
- * with it. Basics (Z7-25), subscription saves and payment updates (Z8-17).
+ * with it (a plain insert, no "on conflict do nothing", so two identical
+ * requests can never both write). Basics (Z7-25), subscription saves, payment
+ * creates and payment updates (Z8-17).
  */
 function conditionalReceiptInsert(
   db: Db,
@@ -394,14 +365,28 @@ export async function saveSubscriptionVersion(
   return { kind: "conflict", currentVersion: latest?.versionNumber ?? 0 };
 }
 
-/** Records a payment against the given (newest) subscription version. */
+export type CreatePaymentResult =
+  | { kind: "saved"; status: 201; body: { data: PaymentRecord } }
+  /** The relationship was not active at write time; nothing was written. */
+  | { kind: "ended" }
+  /** The relationship no longer belongs to this trainer; nothing was written. */
+  | { kind: "not_found" };
+
+/**
+ * Records a payment against the given (newest) subscription version.
+ *
+ * Z8-17: the insert is an INSERT ... SELECT that matches only while the
+ * relationship is this trainer's and active, so a POST that overlaps the
+ * relationship ending inserts nothing and stores no receipt (ended clients are
+ * read-only on the server). The answer then comes from a fresh read.
+ */
 export async function createPaymentRecord(
   db: Db,
   relationship: RelationshipRow,
   subscriptionVersionId: string,
   request: CreatePaymentRecordRequest,
   context: WriteContext,
-): Promise<{ status: 201; body: { data: PaymentRecord } }> {
+): Promise<CreatePaymentResult> {
   const paid = request.status === "paid";
   const row: PaymentRow = {
     id: createId(),
@@ -419,19 +404,45 @@ export async function createPaymentRecord(
   };
   const body = { data: presentPayment(row) };
   const keyHash = await sha256Hex(context.idempotencyKey);
-  await db.batch([
-    db.insert(paymentRecords).values(row),
-    receiptInsert(db, {
-      actorUserId: context.actorUserId,
+  const [written] = await db.batch([
+    // drizzle's INSERT ... SELECT lists every column in table order.
+    db.insert(paymentRecords).select(
+      db
+        .select({
+          id: sqlValue(row.id, "id"),
+          coachingRelationshipId: sqlValue(row.coachingRelationshipId, "coaching_relationship_id"),
+          subscriptionVersionId: sqlValue(row.subscriptionVersionId, "subscription_version_id"),
+          amountPaise: sqlValue(row.amountPaise, "amount_paise"),
+          dueOn: sqlValue(row.dueOn, "due_on"),
+          paidOn: sqlValue(row.paidOn, "paid_on"),
+          status: sqlValue(row.status, "status"),
+          method: sqlValue(row.method, "method"),
+          note: sqlValue(row.note, "note"),
+          createdBy: sqlValue(row.createdBy, "created_by"),
+          createdAt: sqlValue(row.createdAt, "created_at"),
+          updatedAt: sqlValue(row.updatedAt, "updated_at"),
+        })
+        .from(coachingRelationships)
+        .where(activeOwnedRelationship(relationship)),
+    ),
+    conditionalReceiptInsert(db, {
+      relationship,
       operation: CLIENT_SETTINGS_PAYMENT_CREATE_OPERATION,
+      status: 201,
+      actorUserId: context.actorUserId,
       keyHash,
       fingerprint: context.fingerprint,
-      status: 201,
       body,
       now: context.now,
     }),
   ]);
-  return { status: 201, body };
+  if (written.meta.changes === 1) return { kind: "saved", status: 201, body };
+  if (written.meta.changes !== 0) {
+    throw new Error("createPaymentRecord inserted more than one row");
+  }
+  const refused = await whyRefused(db, relationship);
+  if (refused) return refused;
+  throw new Error("createPaymentRecord matched no row on an active relationship");
 }
 
 export async function loadRelationshipPayment(

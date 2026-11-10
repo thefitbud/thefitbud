@@ -16,6 +16,7 @@ import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
 import { demoUuid } from "../seed/demo/ids.js";
 import {
+  createPaymentRecord,
   loadOwnedRelationship,
   saveClientBasics,
   savePaymentPatch,
@@ -1534,6 +1535,41 @@ describe("Z6-8 client settings", () => {
       });
     });
 
+    describe("POST payment", () => {
+      it("a relationship that ends before the batched insert answers 409 RELATIONSHIP_ENDED and records nothing", async () => {
+        const ctx = await withSubscription("pcreateend");
+        landFirst(async () => {
+          const ended = await send(
+            "POST",
+            `/relationships/${ctx.relationshipId}/end`,
+            ctx.trainer,
+            { reason: "paused" },
+            "pcreateend-end",
+          );
+          expect(ended.status).toBe(200);
+        });
+        const response = await send(
+          "POST",
+          `${base(ctx.relationshipId)}/payments`,
+          ctx.trainer,
+          { amountPaise: 1_200_000, dueOn: today(), status: "paid", paidOn: today(), method: "upi" },
+          "pcreateend-pay",
+        );
+        expect(response.status).toBe(409);
+        expect(await errorOf(response)).toMatchObject({
+          code: "RELATIONSHIP_ENDED",
+          message: "Coaching relationship has ended.",
+        });
+        expect(
+          await db
+            .select()
+            .from(schema.paymentRecords)
+            .where(eq(schema.paymentRecords.coachingRelationshipId, ctx.relationshipId)),
+        ).toHaveLength(0);
+        expect(await receiptsFor("client_settings.payment.create")).toHaveLength(0);
+      });
+    });
+
     describe("PATCH payment", () => {
       it("a note PATCH built from a stale read does not undo a concurrent mark-unpaid (merge rule)", async () => {
         const { trainer, path, payment } = await paidPayment("pmerge");
@@ -1694,8 +1730,22 @@ describe("Z6-8 client settings", () => {
       expect(saved).toEqual({ kind: "not_found" });
       const patched = await savePaymentPatch(db, stale, payment.id, { note: "Taken over" }, context("pstale-pay"));
       expect(patched).toEqual({ kind: "not_found" });
+      const created = await createPaymentRecord(
+        db,
+        stale,
+        payment.subscriptionVersionId,
+        { amountPaise: 100, dueOn: today(), status: "unpaid" },
+        context("pstale-create"),
+      );
+      expect(created).toEqual({ kind: "not_found" });
       expect((await subscriptionRows(relationshipId)).map((r) => r.versionNumber)).toEqual([1]);
       expect(await paymentRow(payment.id)).toEqual(before);
+      expect(
+        await db
+          .select()
+          .from(schema.paymentRecords)
+          .where(eq(schema.paymentRecords.coachingRelationshipId, relationshipId)),
+      ).toHaveLength(1);
       expect((await db.select().from(schema.idempotencyRecords)).length).toBe(receiptsBefore);
     });
   });
