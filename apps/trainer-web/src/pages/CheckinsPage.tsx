@@ -21,7 +21,6 @@ import { apiClient } from "../lib/api";
 type InboxTab = "to-review" | "due" | "overdue" | "reviewed";
 
 const PAGE_SIZE = 12;
-const ENDED_NAMES = new Set(["Kavya", "Nikhil"]);
 
 function tabFromParam(raw: string | null): InboxTab {
   if (raw === "due" || raw === "overdue" || raw === "reviewed") return raw;
@@ -76,8 +75,11 @@ export function CheckinsPage() {
         apiClient.listTrainerCheckinInbox(),
       ]);
       const names = new Map<string, string>();
+      // Ended comes from the relationship status the API returns, never names.
+      const endedIds = new Set<string>();
       for (const row of clients.items) {
         if (!row.relationshipId) continue;
+        if (row.status === "ended") endedIds.add(row.relationshipId);
         names.set(row.relationshipId, row.traineeDisplayName ?? "Client");
       }
 
@@ -96,10 +98,7 @@ export function CheckinsPage() {
         const active = clients.items.filter(
           (row) =>
             row.relationshipId &&
-            row.status !== "ended" &&
-            !ENDED_NAMES.has(
-              (row.traineeDisplayName ?? "").split(/\s+/)[0] ?? "",
-            ),
+            row.status !== "ended",
         );
         const since = addDaysToLocalDate(
           formatLocalDate(new Date(), "UTC"),
@@ -131,10 +130,7 @@ export function CheckinsPage() {
         rows = reviewedLists.flat();
       }
 
-      rows = rows.filter((row) => {
-        const first = row.traineeDisplayName.split(/\s+/)[0] ?? "";
-        return !ENDED_NAMES.has(first);
-      });
+      rows = rows.filter((row) => !endedIds.has(row.coachingRelationshipId));
 
       setItems(rows);
       setVisibleCount(PAGE_SIZE);
