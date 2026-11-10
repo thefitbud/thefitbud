@@ -486,4 +486,33 @@ describe("Z6-8 client settings authorization", () => {
     expect((await send("GET", base(owner.relationshipId), owner.trainer)).status).toBe(200);
     expect((await send("GET", base(owner.relationshipId), stranger.trainer)).status).toBe(404);
   });
+
+  it("Z7-25: on an ended relationship basics are refused for everyone, without disclosure or change", async () => {
+    const { owner, stranger } = await setup("endbasic");
+    const ended = await send(
+      "POST",
+      `/relationships/${owner.relationshipId}/end`,
+      owner.trainer,
+      { reason: "paused" },
+      "csz-endbasic-end",
+    );
+    expect(ended.status).toBe(200);
+    const before = await snapshot();
+    const path = `${base(owner.relationshipId)}/basic`;
+    const body = { displayName: "Taken over", contactPhone: "9000000001" };
+    const asOwner = await send("PATCH", path, owner.trainer, body, "csz-endbasic-owner");
+    expect(asOwner.status).toBe(409);
+    expect(await errorOf(asOwner)).toMatchObject({
+      code: "RELATIONSHIP_ENDED",
+      message: "Coaching relationship has ended.",
+    });
+    // Another trainer still learns nothing, not even that it ended.
+    const asStranger = await send("PATCH", path, stranger.trainer, body, "csz-endbasic-other");
+    expect(asStranger.status).toBe(404);
+    expect((await errorOf(asStranger)).code).toBe("RELATIONSHIP_NOT_FOUND");
+    // The trainee cannot reach the trainer route at all.
+    const asTrainee = await send("PATCH", path, owner.trainee, body, "csz-endbasic-trainee");
+    expect(asTrainee.status).toBe(403);
+    expect(await snapshot()).toEqual(before);
+  });
 });

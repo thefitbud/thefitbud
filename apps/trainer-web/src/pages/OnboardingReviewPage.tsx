@@ -208,12 +208,15 @@ export function OnboardingReviewPage() {
     Boolean(markedReadyAt);
   const readOnly = alreadyReady && onboardingStatus !== "onboarding_submitted";
 
-  const thanksHref = clientWhatsapp
-    ? whatsappHref({
-        phoneE164: clientWhatsapp,
-        draftText: `Thanks for filling your intake, ${firstName}. I'll review it and set up your coaching next.`,
-      })
-    : null;
+  const coachingEnded = onboardingStatus === "ended";
+  // Ended clients are read-only (D-W7-7): no intake WhatsApp draft.
+  const thanksHref =
+    clientWhatsapp && !coachingEnded
+      ? whatsappHref({
+          phoneE164: clientWhatsapp,
+          draftText: `Thanks for filling your intake, ${firstName}. I'll review it and set up your coaching next.`,
+        })
+      : null;
 
   const remindHref = clientWhatsapp
     ? whatsappHref({
@@ -437,7 +440,7 @@ export function OnboardingReviewPage() {
                 : "Open configure"}
             </Button>
           ) : null}
-          {thanksHref && submitted ? (
+          {!coachingEnded && thanksHref && submitted ? (
             <a
               className="button-secondary button-whatsapp"
               href={thanksHref}
@@ -447,7 +450,7 @@ export function OnboardingReviewPage() {
               <WhatsAppGlyph />
               WhatsApp client
             </a>
-          ) : submitted ? (
+          ) : !coachingEnded && submitted ? (
             <Button variant="whatsapp" disabled>
               <WhatsAppGlyph />
               WhatsApp client

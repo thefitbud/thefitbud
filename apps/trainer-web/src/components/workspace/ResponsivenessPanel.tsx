@@ -105,6 +105,7 @@ export function ResponsivenessPanel({
   traineeFirstName = "Client",
   clientWhatsappE164,
   refreshEpoch = 0,
+  ended = false,
 }: {
   relationshipId: string;
   compact?: boolean;
@@ -113,6 +114,8 @@ export function ResponsivenessPanel({
   clientWhatsappE164?: string | null;
   /** Workspace refresh counter: the panel refetches on a refresh, keeping its data on screen. */
   refreshEpoch?: number;
+  /** Ended coaching: reminders stay off (D-W7-7). Active clients keep the Configure footer. */
+  ended?: boolean;
 }) {
   const pronoun = possessivePronoun(gender);
   const [data, setData] = useState<ResponsivenessResponse | null>(null);
@@ -217,8 +220,9 @@ export function ResponsivenessPanel({
       </p>
 
       <p className="responsiveness-footer muted">
-        Reminders are timed by FitBud and respect {traineeFirstName}&apos;s settings
-        and meal times. You can switch categories on or off in Configure.
+        {ended
+          ? "Reminders are off while coaching is ended."
+          : `Reminders are timed by FitBud and respect ${traineeFirstName}'s settings and meal times. You can switch categories on or off in Configure.`}
       </p>
     </div>
   );
