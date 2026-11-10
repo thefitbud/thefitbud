@@ -43,9 +43,9 @@ export function assertLogTimeWithinBounds(input: {
  * day. When the client omits it, the server receive time is used and
  * behaviour matches the paths that used to stamp `now` only.
  *
- * The result is always UTC with millisecond precision (`toISOString`). Late
- * status compares this string to Zulu window ends, so an offset such as
- * `+05:30` or a Zulu value without fractional seconds must not be stored raw.
+ * The contract accepts an offset (`+05:30`) and Zulu without milliseconds, but
+ * late status compares this string to Zulu window ends. The result is always
+ * UTC with millisecond precision (`toISOString`).
  */
 export function resolveLogInstant(input: {
   clientLoggedAt?: string | null;
