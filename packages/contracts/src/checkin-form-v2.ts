@@ -121,6 +121,3 @@ export const progressMetricsResponseSchema = z.object({
   series: z.array(progressMetricSeriesSchema),
 });
 export type ProgressMetricsResponse = z.infer<typeof progressMetricsResponseSchema>;
-
-/** Z5-4 scaffold placeholder, still referenced by `w6-scaffold.test.ts`. Kept: that test is outside Z6-7 files_owned. */
-export type W6CheckinFormV2Contract = Record<string, never>;
