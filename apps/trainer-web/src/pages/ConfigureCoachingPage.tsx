@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -45,6 +46,10 @@ import { stage1Api } from "../lib/stage1-api";
 import { whatsappHref } from "../lib/whatsapp";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
+
+/** Shown when coaching ends while this page is open (Z7-12). */
+const ENDED_ELSEWHERE_MESSAGE =
+  "Coaching ended. Your unsaved changes were not saved.";
 
 const DEFAULT_FORM = {
   goalShort: "",
@@ -200,6 +205,7 @@ export function ConfigureCoachingPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [endedNotice, setEndedNotice] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [goalError, setGoalError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -383,6 +389,56 @@ export function ConfigureCoachingPage() {
     void load();
   }, [load]);
 
+  // Z7-12: coaching can end in another tab. Realtime hints already reload the
+  // workspace in the layout; on focus or visibility, refetch it too so the
+  // page does not depend on realtime. The form state is never reset by this.
+  useEffect(() => {
+    // Offline: a failed refetch would make the layout drop the workspace and
+    // unmount this page, losing unsaved text.
+    if (relationshipEnded || !online) return;
+    let last = 0;
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      // One tab return fires both visibilitychange and focus: one reload.
+      const now = Date.now();
+      if (now - last < 1000) return;
+      last = now;
+      reloadWorkspace();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [relationshipEnded, online, reloadWorkspace]);
+
+  // Ended while open (not already ended at load): tell the trainer. Unsaved
+  // text stays in the form, which is now read-only.
+  const wasEndedRef = useRef(relationshipEnded);
+  useEffect(() => {
+    if (relationshipEnded && !wasEndedRef.current) {
+      setEndedNotice(true);
+    }
+    wasEndedRef.current = relationshipEnded;
+  }, [relationshipEnded]);
+
+  /** A save refused with 409 RELATIONSHIP_ENDED: same message, then refetch status. */
+  function noteEndedElsewhere(err: unknown): boolean {
+    if (
+      err instanceof ApiClientError &&
+      err.status === 409 &&
+      err.code === "RELATIONSHIP_ENDED"
+    ) {
+      setEndedNotice(true);
+      setError(null);
+      setMessage(null);
+      reloadWorkspace();
+      return true;
+    }
+    return false;
+  }
+
   const status = configuration?.status ?? null;
   const expectedVersion = configuration?.recordVersion ?? 0;
   const canEdit =
@@ -517,6 +573,7 @@ export function ConfigureCoachingPage() {
         "The difference is acknowledged. Assignments and exceptions are unchanged.",
       );
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       setError(
         err instanceof ApiClientError
           ? err.message
@@ -578,6 +635,7 @@ export function ConfigureCoachingPage() {
       showToast("Draft saved");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       if (
         err instanceof ApiClientError &&
         err.code === "CONFIGURATION_INCOMPLETE"
@@ -626,6 +684,7 @@ export function ConfigureCoachingPage() {
       showToast("Configuration activated");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       if (
         err instanceof ApiClientError &&
         err.code === "CONFIGURATION_INCOMPLETE"
@@ -675,6 +734,7 @@ export function ConfigureCoachingPage() {
       showToast("New version created");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       setError(
         err instanceof ApiClientError
           ? err.message
@@ -705,6 +765,7 @@ export function ConfigureCoachingPage() {
       showToast("Subscription saved");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       setSubscriptionError(
         err instanceof ApiClientError
           ? err.message
@@ -742,6 +803,7 @@ export function ConfigureCoachingPage() {
       );
     } catch (err) {
       setReminders((current) => ({ ...current, [type]: previous ?? true }));
+      if (noteEndedElsewhere(err)) return;
       showToast(
         err instanceof ApiClientError
           ? err.message
@@ -865,6 +927,16 @@ export function ConfigureCoachingPage() {
       {status === "active" && !relationshipEnded ? (
         <p className="banner-info" role="status">
           This version is active. Create a new version to change it.
+        </p>
+      ) : null}
+
+      {endedNotice ? (
+        <p
+          className="banner-attention"
+          role="status"
+          data-testid="configure-ended-elsewhere"
+        >
+          {ENDED_ELSEWHERE_MESSAGE}
         </p>
       ) : null}
 
