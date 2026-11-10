@@ -775,7 +775,7 @@ describe("rawEnumGuard: web", () => {
         },
       }),
     );
-    fireEvent.click(await screen.findByRole("button", { name: /Versions/ }));
+    // Versions are open by default (Z8-8, frame 150).
     await waitFor(() => expect(withPlan.container.querySelector(".versions-table")).not.toBeNull());
     expect(rawEnumHits(withPlan.container)).toEqual([]);
     expect(withPlan.container.querySelectorAll(".status-pill")).toHaveLength(

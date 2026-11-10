@@ -67,10 +67,11 @@ test.describe("TW-D plan and builders", () => {
     await page.getByRole("button", { name: /more plan actions/i }).click();
     await expect(page.getByRole("menuitem", { name: /Duplicate as template/ })).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page.locator(".versions-table")).toBeHidden();
-    await page.getByRole("button", { name: /Versions/ }).click();
+    // Z8-8 (frame 150): versions are open by default; the toggle collapses them.
     await expect(page.locator(".versions-table")).toBeVisible();
     await expectNoBannedStrings(page);
+    await page.getByRole("button", { name: /Versions/ }).click();
+    await expect(page.locator(".versions-table")).toBeHidden();
   });
 
   test("Deepak plan tab renders in the client's timezone", async ({ page }) => {
