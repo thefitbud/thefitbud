@@ -1355,7 +1355,7 @@
   border-top: 1px dashed var(--border, #e7e9f2);
 }
 
-.pp-open {
+.pp-parts .pp-open {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1377,7 +1377,7 @@
 .pp-cell {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.125rem;
   min-width: 0;
   min-height: 3rem;
@@ -1389,6 +1389,7 @@
 
 .pp-cell-workout {
   grid-row: 1;
+  align-self: stretch;
 }
 
 .pp-cell-nutrition {
@@ -1423,12 +1424,11 @@
 
 .pp-cell .week-strip-session,
 .pp-cell-value {
-  overflow: hidden;
   color: var(--deep-navy);
   font-size: 0.875rem;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .pp-cell .week-strip-session.is-rest {
@@ -1461,8 +1461,8 @@
     grid-row: 4;
   }
 
-  .pp-open-workout,
-  .pp-open-nutrition {
+  .pp-parts .pp-open-workout,
+  .pp-parts .pp-open-nutrition {
     grid-column: 6 / 8;
     justify-self: end;
     margin-left: 0;
@@ -1542,7 +1542,8 @@
   justify-content: center;
 }
 
-.pp-empty .plan-empty-actions button {
+.pp-empty .plan-empty-actions .button-primary,
+.pp-empty .plan-empty-actions .button-secondary {
   min-height: 44px;
 }
 
@@ -1586,6 +1587,8 @@
 
 /* Versions card. */
 .pp-versions {
+  /* Ignore the table's width when sizing, so .table-scroll scrolls instead of widening the page. */
+  contain: inline-size;
   padding: 0;
   overflow: hidden;
 }
@@ -1722,6 +1725,12 @@
 
 .versions-table td.pp-version-action {
   text-align: right;
+}
+
+/* Positioned, so the link's sr-only text stays inside the scrolling table instead of widening the page. */
+.pp-versions .table-scroll,
+.pp-view-link {
+  position: relative;
 }
 
 .pp-view-link {
