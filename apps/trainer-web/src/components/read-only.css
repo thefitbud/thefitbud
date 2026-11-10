@@ -1,0 +1,113 @@
+/* Frame 179 / DS7 read-only fields (Z7-13). Plain values, no input boxes. */
+
+.readonly-card {
+  background: #fff;
+  border: 1px solid #e7e9f2;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 1.5rem 1.5rem 1.75rem;
+}
+
+.readonly-field-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 2rem;
+  row-gap: 1.25rem;
+  margin: 0;
+}
+
+.readonly-field {
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.readonly-field-wide {
+  grid-column: 1 / -1;
+}
+
+.readonly-field-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink-500, #5b616b);
+}
+
+.readonly-field-value {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--deep-navy, #1a1248);
+  font-variant-numeric: tabular-nums;
+  /* Long values wrap, never truncate (DS7 iPad note). */
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+@media (max-width: 640px) {
+  .readonly-card {
+    padding: 1.25rem 1rem 1.5rem;
+  }
+
+  .readonly-field-list {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 1rem;
+  }
+}
+
+/* Ended Configure header (DS7): icon, title + lede, status pill. */
+.readonly-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  background: #f3f4f7;
+  border: 1px solid #e7e9f2;
+  border-radius: 16px;
+}
+
+.readonly-banner-icon {
+  color: var(--deep-navy, #1a1248);
+}
+
+.readonly-banner-copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.readonly-banner .configure-page-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.readonly-banner .lede {
+  margin: 0;
+}
+
+/* Two classes so the shared .status-badge sizes (styles.css, clients.css) never win. */
+.readonly-banner .readonly-banner-pill {
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--deep-navy, #1a1248);
+  background: #fff;
+  border: 1px solid #e7e9f2;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .readonly-banner {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 1rem;
+  }
+
+  .readonly-banner .readonly-banner-pill {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
