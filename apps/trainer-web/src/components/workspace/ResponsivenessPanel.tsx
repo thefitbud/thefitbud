@@ -408,9 +408,8 @@ export function RemindersDrawer({
       >
         <header className="drawer-head">
           <span
-            className="avatar"
+            className="avatar workspace-avatar"
             aria-hidden="true"
-            style={{ width: 40, height: 40, flexShrink: 0 }}
           >
             {initials}
           </span>
