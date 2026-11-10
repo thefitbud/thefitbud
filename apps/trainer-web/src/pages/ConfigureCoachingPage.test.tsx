@@ -191,19 +191,70 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("ConfigureCoachingPage on an ended relationship (CE1)", () => {
-  it("renders every input, select, switch and button disabled", async () => {
+  it("shows plain read-only values, not greyed inputs (Z7-13, frame 179 / DS7)", async () => {
     const { container } = renderPage("ended", "active");
     await screen.findByText("Coaching setup (ended)");
-    const all = controls(container);
-    // goal 2 + workouts 2 + nutrition 3 + check-ins 3 + tracking 3 + reminders 3 + subscription 4
-    expect(all.length).toBeGreaterThanOrEqual(20);
-    // The control's own disabled property, not just an ancestor fieldset:
-    // fieldset[disabled] leaves it false, which reads as editable to tools.
-    const enabled = all.filter((el) => !el.disabled).map(describeControl);
-    expect(enabled).toEqual([]);
+    // No input boxes at all: no inputs, selects, textareas or switches.
     expect(
-      container.querySelectorAll('input[role="switch"]:not([disabled])'),
+      container.querySelectorAll("input, select, textarea, [role=switch]"),
     ).toHaveLength(0);
+    // Nothing greyed: greyed controls are only for briefly unavailable ones.
+    expect(container.querySelector("[disabled]")).toBeNull();
+    expect(screen.getByTestId("configure-readonly")).toBeTruthy();
+  });
+
+  it("names every value by its label alone: no counters, no doubled date parts", async () => {
+    renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    const names = screen
+      .getAllByRole("definition")
+      .map((el) => el.getAttribute("aria-labelledby"))
+      .map((id) => document.getElementById(id ?? "")?.textContent);
+    expect(names).toEqual([
+      "Short goal",
+      "Goal description",
+      "Workouts",
+      "Meals",
+      "Check-ins",
+      "Reminders",
+      "Tracking",
+      "Subscription",
+      "Starts on",
+      "Due on",
+    ]);
+    for (const name of names) {
+      expect(name).not.toMatch(/\d+\/\d+/);
+      expect(name).not.toMatch(/(\b\w+\b) \1/);
+    }
+    const value = (name: string) =>
+      screen.getByRole("definition", { name }).textContent;
+    expect(value("Short goal")).toBe("Postpartum strength return");
+    expect(value("Goal description")).toBe(
+      "Rebuild core and lower-body strength.",
+    );
+    expect(value("Workouts")).toBe("3 a week · log within 24 h");
+    expect(value("Check-ins")).toBe(
+      "Weekly · 48 h window · FitBud weekly check-in",
+    );
+    expect(value("Reminders")).toBe("Off while coaching is ended");
+    expect(value("Tracking")).toBe("Weight");
+    expect(value("Subscription")).toBe("Monthly coaching · Monthly");
+  });
+
+  it("dates read like 'Wed 21 Oct', never numeric or ISO", async () => {
+    const { container } = renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    expect(screen.getByRole("definition", { name: "Starts on" }).textContent).toBe(
+      formatCivilDate("2026-07-06"),
+    );
+    expect(screen.getByRole("definition", { name: "Due on" }).textContent).toBe(
+      formatCivilDate("2026-11-17"),
+    );
+    expect(formatCivilDate("2026-11-17")).toMatch(/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}/);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(text).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
+    expect(text).not.toContain("Renews on");
   });
 
   it("offers no save, configure or activate actions", async () => {
@@ -285,6 +336,7 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
     expect(container.textContent).not.toContain("has ended");
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Activate" })).toBeTruthy();
+    expect(screen.queryByTestId("configure-readonly")).toBeNull();
   });
 });
 
@@ -622,10 +674,11 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
     view.rerender(tree("ended"));
     await screen.findByText(MESSAGE);
     await screen.findByText("Coaching setup (ended)");
+    // Read-only now (Z7-13), but the unsaved text stays visible.
     expect(
-      view.container.querySelector<HTMLInputElement>("input[name=goalShort]")!
-        .value,
+      screen.getByRole("definition", { name: "Short goal" }).textContent,
     ).toBe("Unsaved new goal");
+    expect(view.container.querySelector("input[name=goalShort]")).toBeNull();
     expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
   });
 
