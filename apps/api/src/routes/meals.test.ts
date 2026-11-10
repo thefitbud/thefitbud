@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
+import { armCoachLogWriteBarrier } from "../domain/coach-log.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
@@ -10,11 +11,18 @@ import * as schema from "../db/schema.js";
 
 
 
-import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+import {
+  createMemoryDb as createSharedMemoryDb,
+  type SqlJsCompatDatabase,
+} from "../test-support/memory-db.js";
 
-async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
+async function createMemoryDb(): Promise<{
+  db: Db;
+  close: () => void;
+  sqlite: SqlJsCompatDatabase;
+}> {
   const handle = await createSharedMemoryDb();
-  return { db: handle.db, close: handle.close };
+  return { db: handle.db, close: handle.close, sqlite: handle.sqlite };
 }
 
 function dummyD1(): D1Database {
@@ -344,11 +352,13 @@ async function reachEffectiveMealPlan(
 describe("meal assignment and compliance", () => {
   let closeDb: () => void;
   let db: Db;
+  let sqlite: SqlJsCompatDatabase;
 
   beforeEach(async () => {
     const memory = await createMemoryDb();
     closeDb = memory.close;
     db = memory.db;
+    sqlite = memory.sqlite;
     setTestDbOverride(memory.db);
   });
 
@@ -1861,5 +1871,201 @@ describe("meal assignment and compliance", () => {
     expect(lunch).toBeTruthy();
     expect(lunch!.id).not.toBe(lunchBefore.id);
     expect(lunch!.planVersionId).toBe(next.data.id);
+  });
+
+  describe("coach log is one transaction (Z7-22)", () => {
+    async function putMeal(
+      assignmentId: string,
+      date: string,
+      cookie: string,
+      key: string,
+      body: Record<string, unknown>,
+    ) {
+      const response = await app.request(
+        `/meals/compliance/${assignmentId}/${date}`,
+        {
+          method: "PUT",
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify(body),
+        },
+        testEnv(),
+      );
+      const text = await response.text();
+      return {
+        status: response.status,
+        body: (text ? JSON.parse(text) : null) as {
+          data?: { id: string; recordVersion: number; outcome: string };
+          error?: { code: string };
+        },
+      };
+    }
+
+    async function todayMeal(relationshipId: string, today: string) {
+      const rows = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.coachingRelationshipId, relationshipId));
+      const assignment = rows.find((row) => row.localDate === today);
+      expect(assignment).toBeTruthy();
+      return assignment!;
+    }
+
+    it("concurrent creates return a stable conflict and one audit", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectiveMealPlan("z722-race");
+      const assignment = await todayMeal(relationshipId, today);
+      const [first, second] = await Promise.all([
+        putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-a", {
+          outcome: "confirmed",
+        }),
+        putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-b", {
+          outcome: "skipped",
+        }),
+      ]);
+      const statuses = [first.status, second.status].sort((a, b) => a - b);
+      expect(statuses).toEqual([201, 409]);
+      const conflict = first.status === 409 ? first : second;
+      // The loser either hits the assignment unique key, or reads the winner's
+      // row and is missing recordVersion. Both are stable conflicts, never 500.
+      expect(["COMPLIANCE_ALREADY_RECORDED", "VERSION_CONFLICT"]).toContain(
+        conflict.body.error?.code,
+      );
+      const rows = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, assignment.id));
+      expect(rows).toHaveLength(1);
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, rows[0]!.id));
+      expect(audits).toHaveLength(1);
+      const feed = await app.request(
+        "/activity/feed?limit=50",
+        { headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+      expect(feed.status).toBe(200);
+      const events = (
+        (await feed.json()) as { data: { events: Array<{ id: string; type: string }> } }
+      ).data.events;
+      expect(
+        events.some((event) => event.id === `log_edit:${audits[0]!.id}` && event.type === "coach_logged"),
+      ).toBe(true);
+    });
+
+    it("rolls an edit back when the audit write fails", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectiveMealPlan("z722-rollback");
+      const assignment = await todayMeal(relationshipId, today);
+      const created = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-create",
+        { outcome: "confirmed" },
+      );
+      expect(created.status).toBe(201);
+      sqlite.exec(
+        "CREATE TRIGGER z722_fail_meal_audit BEFORE INSERT ON log_edit_events BEGIN SELECT RAISE(ABORT, 'z722 injected failure'); END",
+      );
+      const failed = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-edit",
+        { outcome: "skipped", recordVersion: 0 },
+      );
+      sqlite.exec("DROP TRIGGER z722_fail_meal_audit");
+      expect(failed.status).toBe(500);
+      const [row] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.id, created.body.data!.id));
+      expect(row).toMatchObject({ outcome: "confirmed", recordVersion: 0 });
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
+      expect(audits.map((audit) => audit.action)).toEqual(["create"]);
+
+      const retried = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-edit-2",
+        { outcome: "skipped", recordVersion: 0 },
+      );
+      expect(retried.status).toBe(200);
+      const [edited] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.id, created.body.data!.id));
+      expect(edited).toMatchObject({ outcome: "skipped", recordVersion: 1 });
+      const after = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
+      expect(after.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+    });
+
+    it("concurrent edits with the same version return VERSION_CONFLICT and one edit audit", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectiveMealPlan("z722-edit");
+      const assignment = await todayMeal(relationshipId, today);
+      const created = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-edit-create",
+        { outcome: "confirmed" },
+      );
+      expect(created.status).toBe(201);
+      const [before] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.id, created.body.data!.id));
+      const recordVersion = before!.recordVersion;
+      // Both handlers read this version before either write. The 409 comes
+      // from the versioned update missing the row, not from a later read.
+      const disarm = armCoachLogWriteBarrier(2);
+      try {
+        const [first, second] = await Promise.all([
+          putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-edit-a", {
+            outcome: "skipped",
+            recordVersion,
+          }),
+          putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-edit-b", {
+            outcome: "modified",
+            deviationKind: "other",
+            recordVersion,
+          }),
+        ]);
+        const statuses = [first.status, second.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 409]);
+        const conflict = first.status === 409 ? first : second;
+        const winner = first.status === 200 ? first : second;
+        expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
+        const [row] = await db
+          .select()
+          .from(schema.mealCompliance)
+          .where(eq(schema.mealCompliance.id, created.body.data!.id));
+        expect(row!.recordVersion).toBe(recordVersion + 1);
+        expect(row!.outcome).toBe(winner.body.data!.outcome);
+        const audits = await db
+          .select()
+          .from(schema.logEditEvents)
+          .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
+        expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+        const changes = await db
+          .select()
+          .from(schema.changeLog)
+          .where(eq(schema.changeLog.recordId, created.body.data!.id));
+        expect(changes).toHaveLength(2);
+      } finally {
+        disarm();
+      }
+    });
   });
 });

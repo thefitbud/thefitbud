@@ -1,6 +1,9 @@
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
+import { armCoachLogWriteBarrier } from "../domain/coach-log.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
+import * as schema from "../db/schema.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
@@ -17,11 +20,18 @@ const PNG_BYTES = Uint8Array.from([
 ]);
 
 
-import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+import {
+  createMemoryDb as createSharedMemoryDb,
+  type SqlJsCompatDatabase,
+} from "../test-support/memory-db.js";
 
-async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
+async function createMemoryDb(): Promise<{
+  db: Db;
+  close: () => void;
+  sqlite: SqlJsCompatDatabase;
+}> {
   const handle = await createSharedMemoryDb();
-  return { db: handle.db, close: handle.close };
+  return { db: handle.db, close: handle.close, sqlite: handle.sqlite };
 }
 
 function dummyD1(): D1Database {
@@ -165,10 +175,14 @@ async function reachCoachingReady(suffix: string) {
 
 describe("progress and R2 media", () => {
   let closeDb: () => void;
+  let db: Db;
+  let sqlite: SqlJsCompatDatabase;
 
   beforeEach(async () => {
     const memory = await createMemoryDb();
     closeDb = memory.close;
+    db = memory.db;
+    sqlite = memory.sqlite;
     setTestDbOverride(memory.db);
   });
 
@@ -406,5 +420,182 @@ describe("progress and R2 media", () => {
     expect(summaryBody.data.media.some((m) => m.id === targetBody.data.mediaAsset.id)).toBe(
       true,
     );
+  });
+
+  describe("coach log is one transaction (Z7-22)", () => {
+    async function postMeasurement(
+      relationshipId: string,
+      cookie: string,
+      key: string,
+      value: number,
+    ) {
+      const response = await app.request(
+        `/progress/relationships/${relationshipId}/measurements`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify({ type: "body_weight_kg", value, unit: "kg" }),
+        },
+        testEnv(),
+      );
+      const text = await response.text();
+      return {
+        status: response.status,
+        body: (text ? JSON.parse(text) : null) as {
+          data?: { id: string; recordVersion: number };
+          error?: { code: string };
+        },
+      };
+    }
+
+    it("concurrent creates on one relationship both store an audit and distinct sequences", async () => {
+      const { trainerCookie, relationshipId } = await reachCoachingReady("z722-race");
+      const [first, second] = await Promise.all([
+        postMeasurement(relationshipId, trainerCookie, "z722-m-a", 72.5),
+        postMeasurement(relationshipId, trainerCookie, "z722-m-b", 73.1),
+      ]);
+      expect([first.status, second.status]).toEqual([200, 200]);
+      const rows = await db
+        .select()
+        .from(schema.measurements)
+        .where(eq(schema.measurements.coachingRelationshipId, relationshipId));
+      expect(rows).toHaveLength(2);
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.coachingRelationshipId, relationshipId));
+      expect(audits).toHaveLength(2);
+      expect(audits.every((audit) => audit.action === "create")).toBe(true);
+      const changes = await db
+        .select()
+        .from(schema.changeLog)
+        .where(eq(schema.changeLog.coachingRelationshipId, relationshipId));
+      const sequences = changes
+        .filter((change) => change.entityType === "measurement")
+        .map((change) => change.sequence);
+      expect(sequences).toHaveLength(2);
+      expect(new Set(sequences).size).toBe(2);
+
+      const feed = await app.request(
+        "/activity/feed?limit=50",
+        { headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+      expect(feed.status).toBe(200);
+      const events = (
+        (await feed.json()) as { data: { events: Array<{ id: string; type: string }> } }
+      ).data.events;
+      for (const audit of audits) {
+        expect(events.some((event) => event.id === `log_edit:${audit.id}` && event.type === "coach_logged")).toBe(
+          true,
+        );
+      }
+    });
+
+    it("rolls the measurement back when the audit write fails", async () => {
+      const { trainerCookie, relationshipId } = await reachCoachingReady("z722-rollback");
+      sqlite.exec(
+        "CREATE TRIGGER z722_fail_measurement_audit BEFORE INSERT ON log_edit_events BEGIN SELECT RAISE(ABORT, 'z722 injected failure'); END",
+      );
+      const failed = await postMeasurement(relationshipId, trainerCookie, "z722-m-fail", 70);
+      sqlite.exec("DROP TRIGGER z722_fail_measurement_audit");
+      expect(failed.status).toBe(500);
+      const rows = await db
+        .select()
+        .from(schema.measurements)
+        .where(eq(schema.measurements.coachingRelationshipId, relationshipId));
+      expect(rows).toHaveLength(0);
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.coachingRelationshipId, relationshipId));
+      expect(audits).toHaveLength(0);
+
+      const retried = await postMeasurement(relationshipId, trainerCookie, "z722-m-retry", 70);
+      expect(retried.status).toBe(200);
+      const stored = await db
+        .select()
+        .from(schema.measurements)
+        .where(eq(schema.measurements.coachingRelationshipId, relationshipId));
+      expect(stored).toHaveLength(1);
+      const audit = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, stored[0]!.id));
+      expect(audit).toHaveLength(1);
+    });
+
+    it("concurrent edits return VERSION_CONFLICT and a single new version", async () => {
+      const { trainerCookie, relationshipId } = await reachCoachingReady("z722-edit");
+      const created = await postMeasurement(relationshipId, trainerCookie, "z722-m-create", 70);
+      expect(created.status).toBe(200);
+      const measurementId = created.body.data!.id;
+
+      async function patch(value: number, recordVersion: number) {
+        const response = await app.request(
+          `/progress/measurements/${measurementId}`,
+          {
+            method: "PATCH",
+            headers: {
+              Cookie: trainerCookie,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ recordVersion, value }),
+          },
+          testEnv(),
+        );
+        const text = await response.text();
+        return {
+          status: response.status,
+          body: (text ? JSON.parse(text) : null) as {
+            data?: { value: number; recordVersion: number };
+            error?: { code: string };
+          },
+        };
+      }
+
+      const [before] = await db
+        .select()
+        .from(schema.measurements)
+        .where(eq(schema.measurements.id, measurementId));
+      const recordVersion = before!.recordVersion;
+      // Both handlers read this version before either write. The 409 comes
+      // from the versioned update missing the row, not from a later read.
+      const disarm = armCoachLogWriteBarrier(2);
+      try {
+        const [first, second] = await Promise.all([
+          patch(71, recordVersion),
+          patch(72, recordVersion),
+        ]);
+        const statuses = [first.status, second.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 409]);
+        const conflict = first.status === 409 ? first : second;
+        const winner = first.status === 200 ? first : second;
+        expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
+        const [row] = await db
+          .select()
+          .from(schema.measurements)
+          .where(eq(schema.measurements.id, measurementId));
+        expect(row!.recordVersion).toBe(recordVersion + 1);
+        expect(row!.value).toBe(winner.body.data!.value);
+        expect([71, 72]).toContain(row!.value);
+        const audits = await db
+          .select()
+          .from(schema.logEditEvents)
+          .where(eq(schema.logEditEvents.entityId, measurementId));
+        expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+        const changes = await db
+          .select()
+          .from(schema.changeLog)
+          .where(eq(schema.changeLog.recordId, measurementId));
+        expect(changes).toHaveLength(2);
+      } finally {
+        disarm();
+      }
+    });
   });
 });
