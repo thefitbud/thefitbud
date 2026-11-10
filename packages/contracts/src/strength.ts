@@ -56,6 +56,10 @@ export const strengthPointSchema = z.object({
 export type StrengthPoint = z.infer<typeof strengthPointSchema>;
 
 export const strengthExerciseSchema = z.object({
+  /**
+   * The newest plan exercise id the lift was logged under. Each plan version gives its
+   * exercises new ids, so logs are grouped by exercise name (case and spacing ignored).
+   */
   exerciseId: z.string().min(1),
   name: z.string(),
   chartBy: strengthChartBySchema,

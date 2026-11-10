@@ -166,16 +166,16 @@ async function seedSession(
     /** `planned`: an assignment with nothing logged yet. */
     status: "completed" | "modified" | "skipped" | "started" | "planned";
     exercises?: ExerciseFixture[];
-    /** Exercise ids the planned day holds (the snapshot); defaults to the logged exercises. */
-    plannedExerciseIds?: string[];
+    /** Exercise names the planned day holds (the snapshot); defaults to the logged exercises. */
+    plannedExercises?: string[];
     scheduleStatus?: "scheduled" | "superseded";
   },
 ): Promise<void> {
   const now = nowIso();
   const assignmentId = createId();
   const workoutDayId = createId();
-  const plannedIds =
-    input.plannedExerciseIds ?? (input.exercises ?? []).map((exercise) => exercise.exerciseId);
+  const plannedNames =
+    input.plannedExercises ?? (input.exercises ?? []).map((exercise) => exercise.name);
   await db.insert(schema.workoutAssignments).values({
     id: assignmentId,
     coachingRelationshipId: who.relationshipId,
@@ -187,10 +187,10 @@ async function seedSession(
       id: workoutDayId,
       order: 1,
       name: "Lower",
-      exercises: plannedIds.map((id, index) => ({
-        id,
+      exercises: plannedNames.map((name, index) => ({
+        id: createId(),
         order: index + 1,
-        name: id,
+        name,
         instructions: null,
         setTargets: [],
       })),
@@ -583,19 +583,19 @@ describe("GET /strength/relationships/:relationshipId", () => {
       .where(eq(schema.users.id, client.traineeUserId));
     const plan = await seedPlan(db, client.relationshipId);
     const squat = { exerciseId: SQUAT, name: "Back Squat", sets: [kg(60, 5)] };
-    await seedSession(db, plan, client, { localDate: "2026-10-05", status: "planned", plannedExerciseIds: [SQUAT] });
+    await seedSession(db, plan, client, { localDate: "2026-10-05", status: "planned", plannedExercises: ["Back Squat"] });
     await seedSession(db, plan, client, { localDate: "2026-10-07", status: "completed", exercises: [squat] });
     await seedSession(db, plan, client, {
       localDate: "2026-10-09",
       status: "planned",
-      plannedExerciseIds: [SQUAT],
+      plannedExercises: ["Back Squat"],
       scheduleStatus: "superseded",
     });
     await seedSession(db, plan, client, { localDate: "2026-10-12", status: "completed", exercises: [squat] });
     // Fri 16 Oct is still ahead: planned this week, not yet a planned squat session.
-    await seedSession(db, plan, client, { localDate: "2026-10-16", status: "planned", plannedExerciseIds: [SQUAT] });
+    await seedSession(db, plan, client, { localDate: "2026-10-16", status: "planned", plannedExercises: ["Back Squat"] });
     // Next week is outside the window.
-    await seedSession(db, plan, client, { localDate: "2026-10-19", status: "planned", plannedExerciseIds: [SQUAT] });
+    await seedSession(db, plan, client, { localDate: "2026-10-19", status: "planned", plannedExercises: ["Back Squat"] });
 
     const body = await model(client, "?range=4w");
     expect(body.workoutsPerWeek.slice(-2)).toEqual([
@@ -603,6 +603,30 @@ describe("GET /strength/relationships/:relationshipId", () => {
       { weekStart: "2026-10-12", count: 1, planned: 2 },
     ]);
     expect(body.exercises[0]).toMatchObject({ sessions: 2, plannedSessions: 3 });
+  });
+
+  it("one lift keeps one line across plan versions (new exercise ids, same name)", async () => {
+    const client = await reachCoachingReady("versions");
+    const plan = await seedPlan(db, client.relationshipId);
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-05",
+      status: "completed",
+      exercises: [{ exerciseId: "ex-squat-v1", name: "Back Squat", sets: [kg(60, 5)] }],
+    });
+    await seedSession(db, plan, client, {
+      localDate: "2026-10-12",
+      status: "completed",
+      exercises: [{ exerciseId: "ex-squat-v2", name: "back  squat ", sets: [kg(62.5, 5)] }],
+    });
+    const body = await model(client, "?range=all");
+    expect(body.exercises).toHaveLength(1);
+    expect(body.exercises[0]).toMatchObject({
+      exerciseId: "ex-squat-v2",
+      name: "back  squat ",
+      sessions: 2,
+      plannedSessions: 2,
+      points: [pt("2026-10-05", 60, 5), pt("2026-10-12", 62.5, 5)],
+    });
   });
 
   it("lists uncharted sets newest first", async () => {

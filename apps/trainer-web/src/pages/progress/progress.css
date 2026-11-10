@@ -431,6 +431,11 @@
 }
 
 /* Z8-13: compare (frame 160d) and workouts from logs (frame 160e). */
+.pg-panel-head .pg-outline-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
 .pg-toolbar-left {
   display: flex;
   flex-wrap: wrap;
@@ -519,7 +524,17 @@
   font-size: 11px;
 }
 
+.pg-panel-head:has(.pg-head-controls) {
+  flex-wrap: wrap;
+}
+
+.pg-panel-head:has(.pg-head-controls) > div:first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
 .pg-head-controls {
+  flex: 0 1 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

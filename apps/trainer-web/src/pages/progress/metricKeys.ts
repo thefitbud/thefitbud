@@ -60,7 +60,7 @@ export function metricLabel(key: ProgressMetricKey): string {
   return METRIC_LABELS[key];
 }
 
-const NUMBER = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 });
+const NUMBER = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 
 /** A value as entered, with its unit: "86.4 kg", "94 cm", "3 of 5". */
 export function formatMetricValue(

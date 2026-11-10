@@ -21,7 +21,8 @@ type Props = {
   onExercise: (exerciseId: string) => void;
 };
 
-const NUMBER = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 });
+// Loads keep their hundredths ("18.75 kg"): logged kg are stored to two decimals.
+const NUMBER = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 
 /** "67.5 kg × 6", "Bodyweight × 9", "12 reps". */
 export function formatSet(point: StrengthPoint, exercise: StrengthExercise): string {
@@ -328,7 +329,7 @@ export function StrengthPanel({ model, range, today, exerciseId, onExercise }: P
                 },
               ]}
               gaps={{}}
-              height={230}
+              height={200}
             />
           ) : null}
           {chart.left > 0 ? (

@@ -213,14 +213,24 @@ export async function loadStrengthRawData(
   };
 }
 
-/** Exercise ids a planned workout day holds; empty when the snapshot cannot be read. */
-function plannedExerciseIds(workoutDayJson: string): Set<string> {
+/**
+ * The key one lift is grouped by. Each plan version gives its exercises new ids, so
+ * logs are grouped by the exercise name (case and spacing ignored): a lift keeps one
+ * line across plan versions.
+ */
+export function liftKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/** Lift keys a planned workout day holds; empty when the snapshot cannot be read. */
+function plannedLiftKeys(workoutDayJson: string): Set<string> {
   try {
-    const day = JSON.parse(workoutDayJson) as { exercises?: Array<{ id?: unknown }> };
+    const day = JSON.parse(workoutDayJson) as { exercises?: Array<{ name?: unknown }> };
     return new Set(
       (day.exercises ?? [])
-        .map((exercise) => exercise.id)
-        .filter((id): id is string => typeof id === "string"),
+        .map((exercise) => exercise.name)
+        .filter((name): name is string => typeof name === "string")
+        .map(liftKey),
     );
   } catch {
     return new Set();
@@ -251,6 +261,8 @@ export function buildStrengthReadModel(
   const byExercise = new Map<
     string,
     {
+      /** The newest plan exercise id and name the lift was logged under. */
+      exerciseId: string;
       name: string;
       nameDate: string;
       days: Map<string, Day>;
@@ -263,9 +275,11 @@ export function buildStrengthReadModel(
 
   for (const set of raw.sets) {
     if (!inWindow(set.localDate)) continue;
-    let entry = byExercise.get(set.exerciseId);
+    const key = liftKey(set.name);
+    let entry = byExercise.get(key);
     if (!entry) {
       entry = {
+        exerciseId: set.exerciseId,
         name: set.name,
         nameDate: set.localDate,
         days: new Map(),
@@ -273,9 +287,10 @@ export function buildStrengthReadModel(
         loggedAssignments: new Set(),
         hasKg: false,
       };
-      byExercise.set(set.exerciseId, entry);
+      byExercise.set(key, entry);
     }
     if (set.localDate >= entry.nameDate) {
+      entry.exerciseId = set.exerciseId;
       entry.name = set.name;
       entry.nameDate = set.localDate;
     }
@@ -350,16 +365,16 @@ export function buildStrengthReadModel(
     if (row.localDate <= exerciseEnd) plannedToDate.push(row);
   }
 
-  const plannedIds = new Map<string, Set<string>>();
-  const plannedFor = (exerciseId: string, logged: Set<string>): number => {
+  const plannedLifts = new Map<string, Set<string>>();
+  const plannedFor = (key: string, logged: Set<string>): number => {
     const ids = new Set(logged);
     for (const row of plannedToDate) {
-      let held = plannedIds.get(row.assignmentId);
+      let held = plannedLifts.get(row.assignmentId);
       if (!held) {
-        held = plannedExerciseIds(row.workoutDayJson);
-        plannedIds.set(row.assignmentId, held);
+        held = plannedLiftKeys(row.workoutDayJson);
+        plannedLifts.set(row.assignmentId, held);
       }
-      if (held.has(exerciseId)) ids.add(row.assignmentId);
+      if (held.has(key)) ids.add(row.assignmentId);
     }
     return ids.size;
   };
@@ -368,7 +383,7 @@ export function buildStrengthReadModel(
     a.localDate < b.localDate ? -1 : a.localDate > b.localDate ? 1 : 0;
 
   const exercises: StrengthExercise[] = [];
-  for (const [exerciseId, entry] of byExercise) {
+  for (const [key, entry] of byExercise) {
     const chartBy = entry.hasKg ? ("load_kg" as const) : ("reps" as const);
     const points: StrengthPoint[] = [];
     for (const [localDate, day] of entry.days) {
@@ -394,11 +409,11 @@ export function buildStrengthReadModel(
     }
     if (points.length === 0) continue;
     exercises.push({
-      exerciseId,
+      exerciseId: entry.exerciseId,
       name: entry.name,
       chartBy,
       sessions: entry.sessionDates.size,
-      plannedSessions: plannedFor(exerciseId, entry.loggedAssignments),
+      plannedSessions: plannedFor(key, entry.loggedAssignments),
       points: points.sort(byDate),
     });
   }
