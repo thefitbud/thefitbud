@@ -13,7 +13,7 @@ import {
 } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  CalendarDays,
+  Wallet,
   ChevronRight,
   ClipboardCheck,
   Info,
@@ -63,14 +63,17 @@ function isRowControlTarget(target: EventTarget | null): boolean {
         : null;
   if (!el) return false;
   return Boolean(
-    el.closest("button, a, input, textarea, select, [role='menuitem']"),
+    el.closest("button, a, input, textarea, select, [role='menu'], [role='menuitem']"),
   );
 }
 
-function stopRowControl(
-  event: ReactMouseEvent | ReactKeyboardEvent,
-): void {
-  if ("key" in event && event.key !== "Enter" && event.key !== " ") return;
+/**
+ * Keep Enter/Space on a row's own control. Clicks are not stopped here: the
+ * row's onClick already skips controls (isRowControlTarget), and stopping the
+ * click would also hide it from the grid's touch-select handler (HM5).
+ */
+function stopRowControl(event: ReactKeyboardEvent): void {
+  if (event.key !== "Enter" && event.key !== " ") return;
   event.stopPropagation();
 }
 
@@ -663,7 +666,7 @@ export function HomePage() {
       ? "Loading your day…"
       : attentionCount === 0
         ? "You're all caught up. Nothing needs your attention right now."
-        : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
+        : `${attentionCount} client${attentionCount === 1 ? " needs" : "s need"} you.${
             firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
           }`;
 
@@ -717,7 +720,7 @@ export function HomePage() {
             pending={loading || Boolean(error)}
             iconBg="#FFFBEB"
             iconColor="#B45309"
-            icon={<CalendarDays size={20} strokeWidth={1.75} aria-hidden />}
+            icon={<Wallet size={20} strokeWidth={1.75} aria-hidden />}
           />
           <CountCard
             label="Asked you"
@@ -885,10 +888,7 @@ export function HomePage() {
                         <Button
                           variant="tinted"
                           className="button-sm"
-                          onClick={(event) => {
-                            stopRowControl(event);
-                            openException(primary.id);
-                          }}
+                          onClick={() => openException(primary.id)}
                           onKeyDown={stopRowControl}
                         >
                           Review
@@ -896,7 +896,6 @@ export function HomePage() {
                       </div>
                       <div
                         role="gridcell"
-                        onClick={stopRowControl}
                         onKeyDown={stopRowControl}
                       >
                         <OverflowMenu
@@ -995,17 +994,9 @@ export function HomePage() {
                     <div
                       key={ask.id}
                       className="home-li is-target"
-                      tabIndex={0}
-                      aria-label={`${name} asked about ${item}. Open the ask.`}
                       onClick={(event) => {
                         if (event.button !== 0) return;
                         if (isRowControlTarget(event.target)) return;
-                        openAsk(ask.id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        if (isRowControlTarget(event.target)) return;
-                        event.preventDefault();
                         openAsk(ask.id);
                       }}
                     >
@@ -1014,8 +1005,14 @@ export function HomePage() {
                       </span>
                       <div className="home-li-tx">
                         <b>
-                          {name} asked about {item}
-                          {date ? ` · ${date}` : ""}{" "}
+                          <button
+                            type="button"
+                            className="home-li-name"
+                            onClick={() => openAsk(ask.id)}
+                          >
+                            {name} asked about {item}
+                            {date ? ` · ${date}` : ""}
+                          </button>{" "}
                           <StatusChip
                             kind="ask"
                             value="open"
@@ -1035,10 +1032,7 @@ export function HomePage() {
                         className="button-sm"
                         disabled={!online}
                         data-ask-answer={ask.id}
-                        onClick={(event) => {
-                          stopRowControl(event);
-                          openAsk(ask.id);
-                        }}
+                        onClick={() => openAsk(ask.id)}
                         onKeyDown={stopRowControl}
                       >
                         Mark answered
@@ -1218,19 +1212,9 @@ export function HomePage() {
                     <div
                       key={row.checkin.id}
                       className="home-li is-target"
-                      tabIndex={0}
-                      aria-label={`${name}. Open check-in review.`}
                       onClick={(event) => {
                         if (event.button !== 0) return;
                         if (isRowControlTarget(event.target)) return;
-                        navigate(
-                          `/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`,
-                        );
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        if (isRowControlTarget(event.target)) return;
-                        event.preventDefault();
                         navigate(
                           `/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`,
                         );
@@ -1240,7 +1224,14 @@ export function HomePage() {
                         {initials(name)}
                       </span>
                       <div className="home-li-tx">
-                        <b>{name}</b>
+                        <b>
+                          <Link
+                            className="home-li-name"
+                            to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
+                          >
+                            {name}
+                          </Link>
+                        </b>
                         <span>
                           Submitted{" "}
                           {row.checkin.submittedAt
@@ -1251,7 +1242,6 @@ export function HomePage() {
                       <Link
                         className="button-tinted button-sm"
                         to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
-                        onClick={stopRowControl}
                         onKeyDown={stopRowControl}
                       >
                         Review
@@ -1280,8 +1270,6 @@ export function HomePage() {
                     <div
                       key={item.coachingRelationshipId}
                       className="home-li is-target"
-                      tabIndex={0}
-                      aria-label={`${name}. Open subscription settings.`}
                       onClick={(event) => {
                         if (event.button !== 0) return;
                         if (isRowControlTarget(event.target)) return;
@@ -1289,17 +1277,16 @@ export function HomePage() {
                           `/clients/${item.coachingRelationshipId}/configure#subscription`,
                         );
                       }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        if (isRowControlTarget(event.target)) return;
-                        event.preventDefault();
-                        navigate(
-                          `/clients/${item.coachingRelationshipId}/configure#subscription`,
-                        );
-                      }}
                     >
                       <div className="home-li-tx">
-                        <b>{name}</b>
+                        <b>
+                          <Link
+                            className="home-li-name"
+                            to={`/clients/${item.coachingRelationshipId}/configure#subscription`}
+                          >
+                            {name}
+                          </Link>
+                        </b>
                         <span>
                           {item.renewalState === "expired" ? "Ended" : "Due"}{" "}
                           {formatCivilDate(item.renewsOn)}
