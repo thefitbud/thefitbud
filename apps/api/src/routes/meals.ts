@@ -59,6 +59,7 @@ import {
   LOG_TIME_ERROR_MESSAGES,
   isInEndedPeriod,
   isWithinCoachLogWindow,
+  resolveLogInstant,
 } from "../domain/log-time-bounds.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { appendChangeLog } from "../domain/sync";
@@ -811,6 +812,7 @@ async function recordCompliance(
       deviationKind: input.deviationKind ?? null,
       notes: input.notes ?? null,
       photoIntent: input.photoIntent ?? null,
+      clientLoggedAt: input.clientLoggedAt ?? null,
     }),
   );
   const existing = await findIdempotencyRecord(db, {
@@ -858,6 +860,13 @@ async function recordCompliance(
   }
 
   const now = nowIso();
+  // Client time, when sent, is the instant bounds, late, and status use,
+  // normalised to UTC. createdAt stays the server receive time.
+  const logInstant = resolveLogInstant({
+    clientLoggedAt: input.clientLoggedAt,
+    now,
+  });
+  const clientInstant = input.clientLoggedAt ? logInstant : undefined;
   const timeZone = await loadTraineeTimezone(db, actor.userId);
   const logGuard = await assertMealLogAllowed(db, {
     assignmentId,
@@ -865,7 +874,7 @@ async function recordCompliance(
     relationshipEnded: relationship.status === "ended",
     traineeUserId: actor.userId,
     traineeTimezone: timeZone,
-    clientLoggedAt: input.clientLoggedAt,
+    clientLoggedAt: clientInstant,
     nowIso: now,
     alreadyLogged: Boolean(loaded.compliance),
     existingLoggedByRole: loaded.compliance?.loggedByRole ?? null,
@@ -959,7 +968,9 @@ async function recordCompliance(
     traineeUserId: actor.userId,
     outcome: input.outcome,
     recordVersion: 0,
-    loggedAt: now,
+    // Z7-20 covers confirm and skip; a deviation keeps the receive time it
+    // stored before (its client time still drives bounds and late).
+    loggedAt: input.operation === DEVIATE_OPERATION ? now : logInstant,
     localDate: loaded.assignment.localDate,
     deviationKind: input.deviationKind ?? null,
     notes: input.notes ?? null,
@@ -973,7 +984,7 @@ async function recordCompliance(
     fatScaled: macroFields.fatScaled,
     loggedLate: logGuard.loggedLate,
     loggedAfterResolve: logGuard.loggedAfterResolve,
-    clientLoggedAt: input.clientLoggedAt ?? null,
+    clientLoggedAt: input.clientLoggedAt ? logInstant : null,
     loggedByRole: "trainee" as const,
     loggedByUserId: null,
     lastEditedByRole: null,
@@ -1057,6 +1068,7 @@ mealRoutes.post(
       outcome: "confirmed",
       photoIntent: parsed.data.photoIntent ?? null,
       requirePhotoWhenConfigured: true,
+      clientLoggedAt: parsed.data.clientLoggedAt,
     });
   },
 );
@@ -1128,6 +1140,7 @@ mealRoutes.post(
       notes: parsed.data.notes ?? null,
       photoIntent: null,
       requirePhotoWhenConfigured: false,
+      clientLoggedAt: parsed.data.clientLoggedAt,
     });
   },
 );

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mealWindowForLocalDate } from "@fitbud/core";
+import { formatLocalDate, mealWindowForLocalDate } from "@fitbud/core";
 import {
   LOG_TIME_FUTURE_DRIFT_MS,
   assertLogTimeWithinBounds,
   isInEndedPeriod,
+  resolveLogInstant,
 } from "./log-time-bounds.js";
 
 const MIN = 60 * 1000;
@@ -115,6 +116,74 @@ describe("assertLogTimeWithinBounds across timezones", () => {
         now,
       }),
     ).toEqual({ ok: false, reason: "before_window" });
+  });
+});
+
+describe("resolveLogInstant near local midnight", () => {
+  it.each(["Asia/Kolkata", "America/New_York"])(
+    "keeps a log made one minute before midnight on that civil day in %s",
+    (timeZone) => {
+      const { windowStartsAt, windowEndsAt } = mealWindowForLocalDate({
+        localDate: "2026-11-10",
+        timeZone,
+        confirmationWindowHours: 24,
+      });
+      const clientLoggedAt = new Date(
+        Date.parse(windowEndsAt) - 60_000,
+      ).toISOString();
+      const receivedAt = new Date(
+        Date.parse(windowEndsAt) + 2 * 60_000,
+      ).toISOString();
+
+      const judged = resolveLogInstant({ clientLoggedAt, now: receivedAt });
+      expect(formatLocalDate(new Date(judged), timeZone)).toBe("2026-11-10");
+      expect(formatLocalDate(new Date(receivedAt), timeZone)).toBe("2026-11-11");
+      expect(
+        assertLogTimeWithinBounds({
+          clientLoggedAt: judged,
+          windowStart: windowStartsAt,
+          now: receivedAt,
+        }),
+      ).toEqual({ ok: true });
+
+      const shifted = resolveLogInstant({ now: receivedAt });
+      expect(shifted).toBe(receivedAt);
+      expect(formatLocalDate(new Date(shifted), timeZone)).toBe("2026-11-11");
+    },
+  );
+
+  it("canonicalizes an offset and a Zulu time without milliseconds before string compare", () => {
+    const { windowEndsAt } = mealWindowForLocalDate({
+      localDate: "2026-11-10",
+      timeZone: "Asia/Kolkata",
+      confirmationWindowHours: 24,
+    });
+    // 23:59 IST is one minute before local midnight, and one minute before the
+    // Zulu window end. The raw offset sorts after that window end.
+    const offset = "2026-11-10T23:59:00+05:30";
+    const receivedAt = new Date(Date.parse(windowEndsAt) + 2 * 60_000).toISOString();
+    const judged = resolveLogInstant({ clientLoggedAt: offset, now: receivedAt });
+    expect(judged).toBe("2026-11-10T18:29:00.000Z");
+    expect(offset > windowEndsAt).toBe(true);
+    expect(judged <= windowEndsAt).toBe(true);
+    expect(formatLocalDate(new Date(judged), "Asia/Kolkata")).toBe("2026-11-10");
+    expect(
+      assertLogTimeWithinBounds({
+        clientLoggedAt: judged,
+        windowStart: mealWindowForLocalDate({
+          localDate: "2026-11-10",
+          timeZone: "Asia/Kolkata",
+          confirmationWindowHours: 24,
+        }).windowStartsAt,
+        now: receivedAt,
+      }),
+    ).toEqual({ ok: true });
+
+    const bareZulu = "2026-11-10T18:30:00Z";
+    const atEnd = resolveLogInstant({ clientLoggedAt: bareZulu, now: receivedAt });
+    expect(bareZulu > windowEndsAt).toBe(true);
+    expect(atEnd).toBe(windowEndsAt);
+    expect(atEnd > windowEndsAt).toBe(false);
   });
 });
 
