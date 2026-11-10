@@ -21,6 +21,9 @@ import { ClientsPage } from "./pages/ClientsPage";
 import { ConfigureCoachingPage } from "./pages/ConfigureCoachingPage";
 import { ExceptionDetailPage } from "./pages/ExceptionDetailPage";
 import { HomePage } from "./pages/HomePage";
+import { AsksViewPage } from "./pages/home-views/AsksViewPage";
+import { AttentionViewPage } from "./pages/home-views/AttentionViewPage";
+import { RenewalsViewPage } from "./pages/home-views/RenewalsViewPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingReviewPage } from "./pages/OnboardingReviewPage";
 import { PendingInvitationPage } from "./pages/PendingInvitationPage";
@@ -51,6 +54,9 @@ export function App() {
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<WelcomePage />} />
           <Route path="/" element={<HomePage />} />
+          <Route path="/home/attention" element={<AttentionViewPage />} />
+          <Route path="/home/renewals" element={<RenewalsViewPage />} />
+          <Route path="/home/asks" element={<AsksViewPage />} />
           <Route path="/exceptions/:exceptionId" element={<ExceptionDetailPage />} />
           <Route path="/checkins" element={<CheckinsPage />} />
           <Route path="/links/resolve" element={<GoResolverPage />} />

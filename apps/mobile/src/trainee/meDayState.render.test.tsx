@@ -24,6 +24,7 @@ import {
   type WeekDayState,
   type WeekReadModel,
 } from "@fitbud/contracts";
+import { formatCivilDate } from "@fitbud/core";
 import { DateNavigator, colors } from "@fitbud/ui-mobile";
 import { mockAuth, render, screen, waitFor } from "../test/render";
 import {
@@ -136,14 +137,17 @@ const labels = {
   dayOfMonthOf: (_tz: string, date: string) => date.slice(8),
 };
 
-/** What the native strip says for each server state (BT13's phrases). */
+/**
+ * What the native strip says for each server state (Z7-18, D-W7-13).
+ * `missed` is spoken as "Missed" (the strip's `open` maps to it).
+ */
 const SPOKEN: Record<WeekDayState, string> = {
-  done: "done",
-  partial: "partial",
-  due: "to do",
-  missed: "open",
-  rest: "rest",
-  future: "future",
+  done: "Done",
+  partial: "Partial",
+  due: "To do",
+  missed: "Missed",
+  rest: "Rest",
+  future: "Upcoming",
 };
 const STATES = Object.keys(SPOKEN) as WeekDayState[];
 
@@ -203,7 +207,7 @@ describe("navigatorDaysFor reads MeDayResponse.state", () => {
       );
       expect(
         screen.getByRole("button", {
-          name: `Wed ${date.slice(8)}, ${SPOKEN[state]}`,
+          name: `${formatCivilDate(date)}, ${SPOKEN[state]}`,
         }),
       ).toBeTruthy();
     },

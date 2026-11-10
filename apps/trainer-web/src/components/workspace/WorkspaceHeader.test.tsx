@@ -96,11 +96,12 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
     expect(openMenu()).toEqual([
       "View coaching setup",
       "Onboarding answers",
-      "View reminder settings",
+      "View reminder history",
     ]);
     expect(screen.queryByRole("menuitem", { name: /configure/i })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "View reminder settings" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "View reminder settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "View reminder history" }));
     expect(onOpenModal).toHaveBeenCalledWith({ type: "responsiveness" });
 
     openMenu();
@@ -113,7 +114,7 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
     expect(openMenu()).toEqual([
       "View coaching setup",
       "Onboarding answers",
-      "View reminder settings",
+      "View reminder history",
     ]);
   });
 
@@ -128,6 +129,21 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
         "Add note",
         "End coaching",
       ]);
+    },
+  );
+});
+
+describe("WorkspaceHeader Message on WhatsApp (D-W7-7, read-only when ended)", () => {
+  it("ended client: no Message on WhatsApp link or disabled button", () => {
+    renderHeader(workspace("ended"));
+    expect(screen.queryByText("Message on WhatsApp")).toBeNull();
+  });
+
+  it.each(["active", "coaching_ready", "onboarding_submitted"] as const)(
+    "%s client: Message on WhatsApp is shown",
+    (status) => {
+      renderHeader(workspace(status));
+      expect(screen.getByText("Message on WhatsApp")).toBeTruthy();
     },
   );
 });

@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { FitText as Text } from "./FitText.js";
 import { colors, radii, spacing, touchTargetMin } from "./theme.js";
 import { typeScale } from "./typography.js";
@@ -41,23 +42,19 @@ function dotColor(state: DateNavigatorDay["state"]): string {
   }
 }
 
-/** Spoken day state. One static phrase per member; nothing is inferred. */
+/**
+ * Spoken day state from `labelFor("week_day_state")` (D-W7-13). The strip's
+ * `open` is the server's `missed`. `unknown` is not a server state, so it has
+ * no shared label: it is the fixed phrase the web strip also speaks.
+ */
 function stateLabel(state: DateNavigatorDay["state"]): string {
   switch (state) {
-    case "done":
-      return "done";
-    case "partial":
-      return "partial";
-    case "due":
-      return "to do";
     case "open":
-      return "open";
-    case "rest":
-      return "rest";
-    case "future":
-      return "future";
+      return labelFor("week_day_state", "missed");
     case "unknown":
-      return "unknown";
+      return "State not known";
+    default:
+      return labelFor("week_day_state", state);
   }
 }
 
@@ -100,7 +97,7 @@ export function DateNavigator({
                   key={day.localDate}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
-                  accessibilityLabel={`${day.weekdayLabel} ${day.dayLabel}, ${stateLabel(day.state)}`}
+                  accessibilityLabel={`${formatCivilDate(day.localDate)}, ${stateLabel(day.state)}`}
                   onPress={() => onSelect(day.localDate)}
                   style={[styles.day, selected ? styles.daySelected : null]}
                 >

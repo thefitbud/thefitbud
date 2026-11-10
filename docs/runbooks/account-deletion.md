@@ -16,8 +16,15 @@ Run commands from `apps/api`, signed in to the FitBud Cloudflare account (`pnpm 
 - **"Delete it now"** is this runbook: support sets the account's purge time to now, and the next purge run deletes it. There is no admin endpoint and no extra secret (D-W6-8).
 
 What the purge does to an account:
-- Deletes their sign-in (email, phone, password), the Firebase user, every session and device token, their notifications, settings and sign-in codes, their photos (R2 objects and records), and payment records in their coaching relationships (D-W6-22).
+- Deletes their sign-in (email, phone, password), the Firebase user, every session and device token, their notifications, settings and sign-in codes, their photos (R2 objects and records, see "Whose photos" below), and payment records in their coaching relationships (D-W6-22).
 - Keeps what the other person's history needs: the coaching relationship, logs, check-ins, the coach's notes and reviews. The person's name shows as **Deleted user**. Their email and phone are removed from intake and check-in answers and from notes.
+- Deletes other people's short-lived retry records (idempotency and sync receipts) only when they hold the person's email or phone, or hold the person's name together with one of the person's records (their account, a coaching relationship or an invitation to them). Someone else who happens to share the name keeps theirs (Z7-26).
+
+**Whose photos (Z7-26).** A photo belongs to the client whose coaching relationship it is in, whoever uploaded it, with one exception: a `media_type='avatar'` photo a trainer uploaded is deleted when that trainer is purged, even inside a client's relationship.
+- Purging a **client** deletes every photo in their relationships, including photos their coach uploaded for them.
+- Purging a **trainer** deletes the avatars they uploaded (see the exception above). Other photos they uploaded into a client's relationship stay with that client, as part of the client's coaching history, and the client loses nothing.
+
+**How names and phone numbers are found in kept text (Z7-26).** Email: the whole address in any letter case. Phone: the number as stored, the 10-digit national number, with or without the country code (with or without `+`) or a leading 0, with any spaces, dashes or tabs between digits (and real line breaks inside a JSON answer's text; a typed backslash-n is not treated as a line break), and a number saved as a plain number inside answers. Name: the whole name in any letter case, one-word names included, never part of a longer word. Short names are included ("Om" is replaced in "Om missed Tuesday" but "Omelette" and "room" stay), because matching is by whole word.
 - The account row stays as an anonymous `disabled` row with no email, phone or name (D-W6-27, D-W6-28). Once purged, the account cannot be reactivated. If the person signs up again with the same email, they start a new, empty account.
 - D1 Time Travel keeps 30 days of database history (`docs/runbooks/d1-restore.md`), so purged rows stay in those backups until the 30 days have passed. Never restore a backup just to undo one person's deletion.
 

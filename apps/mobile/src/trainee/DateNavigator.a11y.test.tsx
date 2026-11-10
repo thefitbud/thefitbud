@@ -7,6 +7,7 @@
  * (D-W4-17).
  */
 import { describe, expect, it } from "vitest";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import {
   colors,
   DateNavigator,
@@ -15,6 +16,13 @@ import {
 import { render, screen } from "../test/render";
 
 const STATES = ["done", "partial", "due", "open", "rest", "future", "unknown"] as const;
+
+/** `open` is the server's missed state; `unknown` has no shared label. */
+function spokenState(state: DateNavigatorDay["state"]): string {
+  if (state === "open") return labelFor("week_day_state", "missed");
+  if (state === "unknown") return "State not known";
+  return labelFor("week_day_state", state);
+}
 
 function day(state: DateNavigatorDay["state"], index: number): DateNavigatorDay {
   return {
@@ -37,9 +45,9 @@ describe("DateNavigator accessible names", () => {
         onToday={() => {}}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: `Wed ${12 + index}, ${state === "due" ? "to do" : state}` }),
-    ).toBeTruthy();
+    const spoken = `${formatCivilDate(`2026-10-${12 + index}`)}, ${spokenState(state)}`;
+    expect(screen.getByRole("button", { name: spoken })).toBeTruthy();
+    expect(spoken).not.toContain(`2026-10-${12 + index}`);
   });
 });
 
@@ -68,9 +76,15 @@ describe("DateNavigator dot colours", () => {
         onToday={() => {}}
       />,
     );
-    const due = dotColourOf(screen.getByRole("button", { name: "Wed 12, to do" }));
+    const due = dotColourOf(
+      screen.getByRole("button", {
+        name: `${formatCivilDate("2026-10-12")}, ${labelFor("week_day_state", "due")}`,
+      }),
+    );
     const partial = dotColourOf(
-      screen.getByRole("button", { name: "Wed 13, partial" }),
+      screen.getByRole("button", {
+        name: `${formatCivilDate("2026-10-13")}, ${labelFor("week_day_state", "partial")}`,
+      }),
     );
     expect(due).toBe(rgba(colors.darkGrey));
     expect(partial).toBe(rgba(colors.warning));

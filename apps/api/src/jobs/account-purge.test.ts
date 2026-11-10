@@ -25,6 +25,7 @@ import {
   buildScrubber,
   runAccountPurge,
   scrubStoredText,
+  scrubbableNames,
 } from "./account-purge.js";
 
 /**
@@ -1443,5 +1444,374 @@ describe("free-text scrubber with trainer-kept contact phones (Z6-8b)", () => {
     );
     expect(scrubber.rewrite("UK +447700900123")).toBe("UK [removed]");
     expect(scrubber.rewrite("order 1234")).toBe("order 1234");
+  });
+});
+
+describe("free-text scrubber hardening (Z7-26)", () => {
+  const scrubber = buildScrubber({
+    emails: ["priya.mehra@example.com"],
+    mobile: "+919812345678",
+    names: ["Priya Mehra"],
+  })!;
+
+  it("replaces the phone with a trunk 0, extra spaces or dashes, tabs and line breaks", () => {
+    for (const phone of [
+      "09812345678",
+      "0 98123 45678",
+      "098123-45678",
+      "98123  45678",
+      "98 123   456 78",
+      "98123 - 45678",
+      "98123\t45678",
+      "+91  98123  45678",
+      "91 9812345678",
+    ]) {
+      expect(scrubber.rewrite(`call ${phone} now`), phone).toBe("call [removed] now");
+    }
+    // Still never inside a longer number, and a trunk 0 only directly in front.
+    for (const kept of ["109812345678", "198123 45678", "98123456780", "00 1 98123"]) {
+      expect(scrubber.rewrite(kept), kept).toBe(kept);
+    }
+  });
+
+  it("replaces a phone without a country code, with or without a trunk 0", () => {
+    const local = buildScrubber({ emails: [], mobile: "9812345678", names: [] })!;
+    expect(local.rewrite("0 98123 45678 or 9812345678")).toBe("[removed] or [removed]");
+  });
+
+  it("replaces a phone stored as a JSON number, and leaves other numbers alone", () => {
+    const raw = JSON.stringify({ phone: 9812345678, full: 919812345678, weight: 70.8, longer: 98123456789, n: 3 });
+    expect(JSON.parse(scrubStoredText(raw, scrubber))).toEqual({
+      phone: REMOVED_TEXT,
+      full: REMOVED_TEXT,
+      weight: 70.8,
+      longer: 98123456789,
+      n: 3,
+    });
+    const untouched = '{"weight": 70.8, "reps": [10, 12]}';
+    expect(scrubStoredText(untouched, scrubber)).toBe(untouched);
+  });
+
+  it("scrubs a one-word name as a whole word only", () => {
+    const one = buildScrubber({ emails: [], mobile: null, names: ["Ishaan"] })!;
+    expect(one.rewrite("ishaan said ISHAAN is fine; Ishaan.")).toBe(
+      "Deleted user said Deleted user is fine; Deleted user.",
+    );
+    for (const kept of ["Ishaank", "Ishaani", "Abhishaan"]) {
+      expect(one.rewrite(kept)).toBe(kept);
+    }
+  });
+
+  it("scrubs short names as whole words only (D-W6-39)", () => {
+    expect(scrubbableNames(["Om", "A", " Jo ", "Raj", "Al B", "  "])).toEqual(["Om", "A", " Jo ", "Raj", "Al B"]);
+    const om = buildScrubber({ emails: [], mobile: null, names: ["Om"] })!;
+    expect(om.rewrite("Om missed Tuesday; om and OM.")).toBe(
+      `${DELETED_USER_NAME} missed Tuesday; ${DELETED_USER_NAME} and ${DELETED_USER_NAME}.`,
+    );
+    for (const kept of ["Omelette", "room", "Omar", "zoom"]) expect(om.rewrite(kept)).toBe(kept);
+  });
+
+  it("returns no scrubber when the person has no email, phone or name", () => {
+    expect(buildScrubber({ emails: [], mobile: null, names: [] })).toBeNull();
+    expect(buildScrubber({ emails: [], mobile: "12345", names: [], contactPhones: ["999"] })).toBeNull();
+  });
+
+  it("matches the email only as a whole address", () => {
+    expect(scrubber.rewrite("mail PRIYA.MEHRA@EXAMPLE.COM. Or <priya.mehra@example.com>")).toBe(
+      `mail ${REMOVED_TEXT}. Or <${REMOVED_TEXT}>`,
+    );
+    for (const kept of ["xpriya.mehra@example.com", "priya.mehra@example.com.au", "priya.mehra@example.comx", "a.priya.mehra@example.com"]) {
+      expect(scrubber.rewrite(kept), kept).toBe(kept);
+    }
+  });
+
+  it("reports whether text holds the person's contact details or name", () => {
+    expect(scrubber.mentions('{"recipientEmail":"priya.mehra@example.com"}')).toEqual({ contact: true, name: false });
+    expect(scrubber.mentions('{"name":"Priya Mehra"}')).toEqual({ contact: false, name: true });
+    expect(scrubber.mentions('{"name":"Priya Mehrotra","phone":"98123456789"}')).toEqual({ contact: false, name: false });
+    // Stateless across calls (the rules carry the global flag).
+    expect(scrubber.mentions("Priya Mehra").name).toBe(true);
+    expect(scrubber.mentions("Priya Mehra").name).toBe(true);
+  });
+});
+
+describe("account purge hardening (Z7-26)", () => {
+  let handle: MemoryDbHandle;
+  let db: Db;
+
+  beforeEach(async () => {
+    media = createMemoryR2Bucket();
+    handle = await createMemoryDb();
+    db = handle.db;
+    setTestDbOverride(db);
+  });
+
+  afterEach(() => {
+    setTestDbOverride(null);
+    handle.close();
+    vi.restoreAllMocks();
+  });
+
+  const receiptsWith = (actorUserId: string, needle: string) =>
+    count(
+      handle.sqlite,
+      `SELECT count(*) FROM idempotency_records WHERE actor_user_id = '${actorUserId}' AND instr(response_body, '${needle.replace(/'/g, "''")}') > 0`,
+    );
+
+  it("a common name alone never deletes another user's receipts; receipts about the person still go", async () => {
+    const trainer = await trainerSession("nisha.coach@example.com");
+    const unrelated = await trainerSession("farhan.coach@example.com");
+    const person = await coachedTrainee(db, trainer, "rao");
+
+    // Two other people who share the person's exact name: one invited by an
+    // unrelated trainer, one by the person's own trainer.
+    const elsewhere = await call("/invitations", {
+      method: "POST",
+      headers: { ...unrelated.headers, "Idempotency-Key": key("inv") },
+      body: { recipientEmail: "priya.elsewhere@example.com", recipientDisplayName: person.name },
+    });
+    expect(elsewhere.status).toBe(200);
+    const twin = await call("/invitations", {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("inv") },
+      body: { recipientEmail: "priya.twin@example.com", recipientDisplayName: person.name },
+    });
+    expect(twin.status).toBe(200);
+    // A coach note about the person: its receipt names them and their relationship.
+    const note = await call(`/checkins/relationships/${person.relationshipId}/notes`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("note") },
+      body: { body: `${person.name} moved her sessions to evenings.` },
+    });
+    expect(note.status).toBe(200);
+
+    expect(receiptsWith(unrelated.userId, person.name)).toBe(1);
+    expect(receiptsWith(trainer.userId, "priya.twin@example.com")).toBe(1);
+    expect(receiptsWith(trainer.userId, person.emailNorm)).toBeGreaterThan(0);
+    expect(receiptsWith(trainer.userId, person.relationshipId)).toBeGreaterThan(0);
+    const noteReceipts = count(
+      handle.sqlite,
+      `SELECT count(*) FROM idempotency_records WHERE actor_user_id = '${trainer.userId}' AND instr(response_body, '${person.relationshipId}') > 0 AND instr(response_body, '${person.name}') > 0`,
+    );
+    expect(noteReceipts).toBe(1);
+
+    const purgeAfter = await deleteAccount(await signIn(person.email));
+    expect(await runAccountPurge(testEnv(), plusMs(purgeAfter, 0))).toEqual({ selected: 1, purged: 1, failed: 0 });
+
+    // Other people's receipts with the same name stay.
+    expect(receiptsWith(unrelated.userId, person.name)).toBe(1);
+    expect(receiptsWith(trainer.userId, "priya.twin@example.com")).toBe(1);
+    // Receipts about the person go: by contact detail, and by name plus their relationship.
+    expect(receiptsWith(trainer.userId, person.emailNorm)).toBe(0);
+    expect(
+      count(
+        handle.sqlite,
+        `SELECT count(*) FROM idempotency_records WHERE instr(response_body, '${person.relationshipId}') > 0 AND instr(response_body, '${person.name}') > 0`,
+      ),
+    ).toBe(0);
+    // The twin's invitation itself is another person's and is untouched.
+    const [twinInvite] = await db
+      .select()
+      .from(schema.clientInvitations)
+      .where(eq(schema.clientInvitations.recipientEmail, "priya.twin@example.com"));
+    expect(twinInvite).toMatchObject({ status: "pending", recipientDisplayName: person.name });
+    expect(scanAllText(handle.sqlite, [person.email, person.mobile, person.mobile.slice(1)])).toEqual([]);
+    assertNoForeignKeyViolations(handle.sqlite);
+  });
+
+  it("scrubs a one-word name and the phone with a trunk 0, extra spaces or as a JSON number; a two-letter name is scrubbed as a whole word", async () => {
+    const trainer = await trainerSession("dev.coach@example.com");
+    const person = await coachedTrainee(db, trainer, "seth");
+    const national = person.mobile.slice(-10);
+    // The person's own name is one word; the trainer calls them "Ad" on the relationship.
+    await db
+      .update(schema.traineeProfiles)
+      .set({ displayName: "Ishaan" })
+      .where(eq(schema.traineeProfiles.userId, person.userId));
+    const basics = await call(`/client-settings/relationships/${person.relationshipId}/basic`, {
+      method: "PATCH",
+      headers: { ...trainer.headers, "Idempotency-Key": key("basic") },
+      body: { displayName: "Ad" },
+    });
+    expect(basics.status).toBe(200);
+    const text = `Ad hoc call: ishaan prefers 0${national} or ${national.slice(0, 5)}   ${national.slice(5)}.`;
+    const note = await call(`/checkins/relationships/${person.relationshipId}/notes`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("note") },
+      body: { body: text },
+    });
+    expect(note.status).toBe(200);
+    const logEventId = crypto.randomUUID();
+    await db.insert(schema.logEditEvents).values({
+      id: logEventId,
+      coachingRelationshipId: person.relationshipId,
+      traineeUserId: person.userId,
+      actorUserId: trainer.userId,
+      actorRole: "coach",
+      entityType: "measurement",
+      entityId: crypto.randomUUID(),
+      action: "edit",
+      beforeJson: JSON.stringify({ value: 71.2, phone: Number(national) }),
+      afterJson: JSON.stringify({ value: 71.0, who: "Ishaan" }),
+      createdAt: new Date().toISOString(),
+    });
+
+    const purgeAfter = await deleteAccount(await signIn(person.email));
+    expect(await runAccountPurge(testEnv(), plusMs(purgeAfter, 0))).toEqual({ selected: 1, purged: 1, failed: 0 });
+
+    const s = handle.sqlite;
+    const one = (query: string) => String(s.exec(query)[0]?.values[0]?.[0] ?? "");
+    expect(one(`SELECT body FROM trainer_notes WHERE body LIKE '%hoc call%'`)).toBe(
+      `${DELETED_USER_NAME} hoc call: ${DELETED_USER_NAME} prefers ${REMOVED_TEXT} or ${REMOVED_TEXT}.`,
+    );
+    expect(JSON.parse(one(`SELECT before_json FROM log_edit_events WHERE id = '${logEventId}'`))).toEqual({
+      value: 71.2,
+      phone: REMOVED_TEXT,
+    });
+    expect(JSON.parse(one(`SELECT after_json FROM log_edit_events WHERE id = '${logEventId}'`))).toEqual({
+      value: 71.0,
+      who: DELETED_USER_NAME,
+    });
+    // The relationship name column itself is still replaced.
+    expect(one(`SELECT client_display_name FROM coaching_relationships WHERE id = '${person.relationshipId}'`)).toBe(
+      DELETED_USER_NAME,
+    );
+    expect(scanAllText(s, [national, "Ishaan", person.email])).toEqual([]);
+    assertNoForeignKeyViolations(s);
+  });
+
+  it("purging a client named Om scrubs the name from the trainer's note, not Omelette or room", async () => {
+    const trainer = await trainerSession("meena.coach@example.com");
+    const person = await coachedTrainee(db, trainer, "om");
+    await db
+      .update(schema.traineeProfiles)
+      .set({ displayName: "Om" })
+      .where(eq(schema.traineeProfiles.userId, person.userId));
+    const basics = await call(`/client-settings/relationships/${person.relationshipId}/basic`, {
+      method: "PATCH",
+      headers: { ...trainer.headers, "Idempotency-Key": key("basic") },
+      body: { displayName: "Om" },
+    });
+    expect(basics.status).toBe(200);
+    for (const body of ["Om missed Tuesday", "Omelette for breakfast", "The room was busy"]) {
+      const note = await call(`/checkins/relationships/${person.relationshipId}/notes`, {
+        method: "POST",
+        headers: { ...trainer.headers, "Idempotency-Key": key("note") },
+        body: { body },
+      });
+      expect(note.status).toBe(200);
+    }
+
+    const purgeAfter = await deleteAccount(await signIn(person.email));
+    expect(await runAccountPurge(testEnv(), plusMs(purgeAfter, 0))).toEqual({ selected: 1, purged: 1, failed: 0 });
+
+    const bodies = handle.sqlite
+      .exec(`SELECT body FROM trainer_notes WHERE coaching_relationship_id = '${person.relationshipId}'`)[0]!
+      .values.map((row) => String(row[0]));
+    expect(bodies).toContain(`${DELETED_USER_NAME} missed Tuesday`);
+    expect(bodies).toContain("Omelette for breakfast");
+    expect(bodies).toContain("The room was busy");
+    expect(bodies.some((body) => /^Om missed/.test(body))).toBe(false);
+    assertNoForeignKeyViolations(handle.sqlite);
+  });
+
+  it("a purged trainer's photos in a client's relationship stay with the client; purging the client then removes them", async () => {
+    const trainer = await trainerSession("rekha.coach@example.com");
+    const client = await coachedTrainee(db, trainer, "khan");
+    const target = await call("/files/upload-targets", {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("upload") },
+      body: {
+        coachingRelationshipId: client.relationshipId,
+        mediaType: "progress_photo",
+        contentType: "image/png",
+        originalFilename: "side.png",
+      },
+    });
+    expect(target.status, JSON.stringify(target.body)).toBe(200);
+    const targetData = target.body.data as { mediaAsset: { id: string }; uploadUrl: string };
+    const put = await app.request(
+      targetData.uploadUrl,
+      { method: "PUT", headers: { "Content-Type": "image/png" }, body: PNG_BYTES },
+      testEnv(),
+    );
+    expect(put.status).toBe(200);
+    const [coachAsset] = await db
+      .select()
+      .from(schema.mediaAssets)
+      .where(eq(schema.mediaAssets.id, targetData.mediaAsset.id));
+    expect(coachAsset!.uploaderUserId).toBe(trainer.userId);
+    const coachKey = mediaKey(testEnv(), coachAsset!.objectKey);
+    expect(await media.head(coachKey)).not.toBeNull();
+
+    const ended = await call(`/relationships/${client.relationshipId}/end`, {
+      method: "POST",
+      headers: trainer.headers,
+      body: {},
+    });
+    expect(ended.status).toBe(200);
+    const trainerPurgeAfter = await deleteAccount(trainer.headers);
+    expect(await runAccountPurge(testEnv(), plusMs(trainerPurgeAfter, 1))).toEqual({
+      selected: 1,
+      purged: 1,
+      failed: 0,
+    });
+
+    // The client loses nothing: both photos in their relationship, rows and objects.
+    const s = handle.sqlite;
+    expect(
+      count(s, `SELECT count(*) FROM media_assets WHERE coaching_relationship_id = '${client.relationshipId}'`),
+    ).toBe(2);
+    expect(await media.head(coachKey)).not.toBeNull();
+    assertNoForeignKeyViolations(s);
+
+    // When the client is purged too, every photo in their relationship goes.
+    const clientPurgeAfter = await deleteAccount(await signIn(client.email));
+    expect(await runAccountPurge(testEnv(), plusMs(clientPurgeAfter, 1))).toEqual({
+      selected: 1,
+      purged: 1,
+      failed: 0,
+    });
+    expect(
+      count(s, `SELECT count(*) FROM media_assets WHERE coaching_relationship_id = '${client.relationshipId}'`),
+    ).toBe(0);
+    expect(await media.head(coachKey)).toBeNull();
+    assertNoForeignKeyViolations(s);
+  });
+
+  it("an edit made after the scrub read wins over the scrub (guarded on the old value)", async () => {
+    const trainer = await trainerSession("om.coach@example.com");
+    const person = await coachedTrainee(db, trainer, "das");
+    const note = await call(`/checkins/relationships/${person.relationshipId}/notes`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("note") },
+      body: { body: `Check on ${person.name} next week.` },
+    });
+    expect(note.status).toBe(200);
+    const other = await call(`/checkins/relationships/${person.relationshipId}/notes`, {
+      method: "POST",
+      headers: { ...trainer.headers, "Idempotency-Key": key("note") },
+      body: { body: `Second note for ${person.name}.` },
+    });
+    expect(other.status).toBe(200);
+    const purgeAfter = await deleteAccount(await signIn(person.email));
+
+    const edited = `Edited meanwhile: ${person.name}`;
+    const client = (db as Db & { $client: D1Database }).$client;
+    const original = client.batch.bind(client);
+    vi.spyOn(client, "batch").mockImplementationOnce(async (statements) => {
+      handle.sqlite.run("UPDATE trainer_notes SET body = ? WHERE body LIKE 'Check on%'", [edited]);
+      return original(statements);
+    });
+    expect(await runAccountPurge(testEnv(), plusMs(purgeAfter, 0))).toEqual({ selected: 1, purged: 1, failed: 0 });
+
+    const s = handle.sqlite;
+    const bodies = (s.exec(`SELECT body FROM trainer_notes WHERE coaching_relationship_id = '${person.relationshipId}' ORDER BY body`)[0]?.values ?? []).map(
+      (row) => String(row[0]),
+    );
+    // The concurrent edit is kept as written; the note it did not touch is scrubbed.
+    expect(bodies).toContain(edited);
+    expect(bodies).toContain(`Second note for ${DELETED_USER_NAME}.`);
+    expect((await userRow(db, person.userId)).accountState).toBe("disabled");
   });
 });

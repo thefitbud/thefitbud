@@ -6,6 +6,7 @@ import {
   GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
   GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
+  addDaysToLocalDate,
   formatLocalDate,
 } from "@fitbud/core";
 import * as schema from "../db/schema.js";
@@ -852,5 +853,156 @@ describe("check-in loop", () => {
       data: { checkin: { checkinFormVersionId: string } };
     };
     expect(nextBody.data.checkin.checkinFormVersionId).toBe(pinnedVersionId);
+  });
+
+  it("rejects a zero measurement at submit on the global v2 and a trainer form, storing nothing (D-W7-9)", async () => {
+    const { trainerCookie, traineeToken, relationshipId, today } =
+      await reachActiveCheckinConfig("zero");
+
+    const traineeHeaders = (key: string) => ({
+      Authorization: `Bearer ${traineeToken}`,
+      "x-fitbud-role": "trainee",
+      "Content-Type": "application/json",
+      "Idempotency-Key": key,
+    });
+    const schedule = async (
+      key: string,
+      localDate: string,
+      formVersionId?: string,
+    ) => {
+      const res = await app.request(
+        `/checkins/relationships/${relationshipId}/schedule`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: trainerCookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify({
+            localDate,
+            ...(formVersionId ? { checkinFormVersionId: formVersionId } : {}),
+          }),
+        },
+        testEnv(),
+      );
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { data: { checkin: { id: string } } }).data
+        .checkin.id;
+    };
+    const submit = (id: string, key: string, answers: unknown) =>
+      app.request(
+        `/checkins/${id}/submit`,
+        {
+          method: "POST",
+          headers: traineeHeaders(key),
+          body: JSON.stringify({ expectedVersion: 0, answers }),
+        },
+        testEnv(),
+      );
+    const storedRows = () =>
+      db
+        .select()
+        .from(schema.measurements)
+        .where(eq(schema.measurements.coachingRelationshipId, relationshipId));
+
+    // Global v2 (keyed waist).
+    const yesterday = addDaysToLocalDate(today, -1);
+    const globalId = await schedule("zero-global", yesterday);
+    const zeroGlobal = await submit(globalId, "zero-global-1", {
+      fieldAnswers: { waist: 0 },
+    });
+    expect(zeroGlobal.status).toBe(422);
+    const zeroGlobalBody = (await zeroGlobal.json()) as {
+      error: { code: string; message: string };
+    };
+    expect(zeroGlobalBody.error.code).toBe("CHECKIN_ANSWER_INVALID");
+    expect(zeroGlobalBody.error.message).toBe(
+      "A check-in answer is outside the allowed range.",
+    );
+    expect(await storedRows()).toHaveLength(0);
+    const okGlobal = await submit(globalId, "zero-global-2", {
+      fieldAnswers: { waist: 81 },
+    });
+    expect(okGlobal.status).toBe(200);
+    const afterGlobal = await storedRows();
+    expect(afterGlobal.map((row) => [row.type, row.value])).toEqual([
+      ["waist_cm", 81],
+    ]);
+
+    // Trainer-specific form with an unkeyed (custom) measurement question.
+    const fork = await app.request(
+      `/checkins/form-templates/${GLOBAL_CHECKIN_FORM_TEMPLATE_ID}/fork`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "zero-fork",
+        },
+        body: JSON.stringify({ name: "Studio weekly check-in" }),
+      },
+      testEnv(),
+    );
+    const forkId = ((await fork.json()) as { data: { id: string } }).data.id;
+    const version = await app.request(
+      `/checkins/form-templates/${forkId}/versions`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: trainerCookie,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "zero-fork-v2",
+        },
+        body: JSON.stringify({
+          fields: [
+            ...GLOBAL_CHECKIN_FORM_FIELDS,
+            {
+              id: "calf",
+              label: "Calf",
+              type: "measurement",
+              measurementType: "other",
+              unit: "cm",
+              required: false,
+            },
+          ],
+        }),
+      },
+      testEnv(),
+    );
+    expect(version.status).toBe(201);
+    const versionId = (
+      (await version.json()) as {
+        data: { versions: Array<{ id: string; version: number }> };
+      }
+    ).data.versions.find((v) => v.version === 2)!.id;
+
+    const nextId = await schedule("zero-custom", today, versionId);
+
+    const zeroCustom = await submit(nextId, "zero-custom-1", {
+      wellbeing: "Steady",
+      fieldAnswers: { calf: 0 },
+    });
+    expect(zeroCustom.status).toBe(422);
+    const zeroCustomBody = (await zeroCustom.json()) as {
+      error: { code: string; details?: { invalidFieldIds?: string[] } };
+    };
+    expect(zeroCustomBody.error.code).toBe("CHECKIN_ANSWER_INVALID");
+    expect(await storedRows()).toHaveLength(1);
+
+    const negative = await submit(nextId, "zero-custom-neg", {
+      wellbeing: "Steady",
+      fieldAnswers: { calf: -4 },
+    });
+    expect(negative.status).toBe(422);
+
+    const ok = await submit(nextId, "zero-custom-2", {
+      wellbeing: "Steady",
+      fieldAnswers: { calf: 38 },
+    });
+    expect(ok.status).toBe(200);
+    expect((await storedRows()).map((row) => row.value).sort()).toEqual([
+      38, 81,
+    ]);
   });
 });
