@@ -69,15 +69,33 @@ export function valueTicks(
   return { min, max, ticks };
 }
 
-/** Up to `count` distinct point dates, always the first and the last. */
-export function dateTicks(dates: string[], count = 5): string[] {
+/**
+ * Axis dates: real point dates spread evenly in time, the first and the last always
+ * kept, and none closer than `minGap` (in the same units as `position`).
+ */
+export function dateTicks(
+  dates: string[],
+  position: (localDate: string) => number,
+  minGap = 90,
+): string[] {
   const sorted = [...new Set(dates)].sort();
-  if (sorted.length <= count) return sorted;
-  const out: string[] = [];
-  for (let index = 0; index < count; index += 1) {
-    out.push(sorted[Math.round((index * (sorted.length - 1)) / (count - 1))]!);
+  if (sorted.length <= 1) return sorted;
+  const kept: string[] = [sorted[0]!];
+  const last = sorted.at(-1)!;
+  for (const date of sorted.slice(1, -1)) {
+    if (
+      position(date) - position(kept.at(-1)!) >= minGap &&
+      position(last) - position(date) >= minGap
+    ) {
+      kept.push(date);
+    }
   }
-  return [...new Set(out)];
+  if (position(last) - position(kept.at(-1)!) >= minGap || kept.length === 1) {
+    kept.push(last);
+  } else {
+    kept[kept.length - 1] = last;
+  }
+  return kept;
 }
 
 function useWidth(fallback: number) {
@@ -113,7 +131,6 @@ export function MetricLineChart({
     fixedDomain,
   );
   const dates = allPoints.map((point) => point.localDate);
-  const xTicks = dateTicks(dates);
   const firstDay = dates.length ? Math.min(...dates.map(dayNumber)) : 0;
   const lastDay = dates.length ? Math.max(...dates.map(dayNumber)) : 1;
   const innerW = Math.max(40, width - PAD.left - PAD.right);
@@ -126,6 +143,7 @@ export function MetricLineChart({
       ((dayNumber(localDate) - firstDay) / (lastDay - firstDay)) * innerW
     );
   };
+  const xTicks = dateTicks(dates, x, Math.max(90, innerW / 6));
   const y = (value: number) =>
     PAD.top + innerH - ((value - min) / (max - min || 1)) * innerH;
   const tickLabel = (value: number) =>

@@ -109,7 +109,11 @@ export function MetricRail({
       <a className="pg-rail-link-row" href="#progress-photos">
         <span>Progress photos</span>
         <span className="pg-rail-value">
-          {photoDates === 1 ? "1 date" : `${photoDates} dates`}
+          {photoDates === 0
+            ? "None yet"
+            : photoDates === 1
+              ? "1 date"
+              : `${photoDates} dates`}
         </span>
       </a>
       <div className="pg-rail-foot">
