@@ -1,16 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type { Measurement, MeasurementType, ProgressEntry } from "@fitbud/contracts";
-import { formatCivilDate, labelFor } from "@fitbud/core";
-import { LinkedMedia } from "../components/LinkedMedia";
-import {
-  MEASUREMENT_SERIES,
-  TrendChart,
-  type TrendPoint,
-  type TrendRange,
-  measurementTypeLabel,
-} from "../components/MeasurementTrend";
+import type { ProgressEntry, ProgressMetricKey } from "@fitbud/contracts";
 import {
   EmptyState,
   ErrorState,
@@ -21,126 +12,185 @@ import { apiClient } from "../lib/api";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
 import { todayInTimezone } from "../components/activity/activityUtils";
 import type { WorkspaceOutletContext } from "./workspaceContext";
+import {
+  ALL_METRIC_KEYS,
+  BODY_KEYS,
+  RATING_KEYS,
+  type MetricGroup,
+} from "./progress/metricKeys";
+import { MetricRail, hasPoints, type RailView } from "./progress/MetricRail";
+import { MultiSeriesPanel } from "./progress/MultiSeriesPanel";
+import { PhotosSection } from "./progress/PhotosSection";
+import { RangeControl } from "./progress/RangeControl";
+import { WeightPanel } from "./progress/WeightPanel";
+import {
+  useProgressMetrics,
+  type MetricRange,
+} from "./progress/useProgressMetrics";
+import "./progress/progress.css";
 
-const TAB_LABELS: Record<MeasurementType | "other", string> = {
-  body_weight_kg: "Weight",
-  waist_cm: "Waist",
-  hip_cm: "Hip",
-  chest_cm: "Chest",
-  other: "Other",
-};
+const ALL_TIME: MetricRange = { range: "all" };
+/** How many lines a multi-series chart starts with (frames 160b, 160c show three). */
+const DEFAULT_LINES = 3;
+
+type Checked = Record<"body" | "ratings", ProgressMetricKey[]>;
 
 export function ClientProgressPage() {
   const { relationshipId = "" } = useParams();
-  const { workspace, refreshEpoch = 0, online = true } =
-    useOutletContext<WorkspaceOutletContext>();
+  const {
+    workspace,
+    refreshEpoch = 0,
+    online = true,
+  } = useOutletContext<WorkspaceOutletContext>();
   const ended = isWorkspaceReadOnly(workspace);
-  const clientTz = resolveTraineeTimezone(
-    workspace?.header ?? {
-      relationshipId,
-      traineeDisplayName: "Client",
-      onboardingStatus: "coaching_ready",
-      effectivePlan: null,
-      goalShort: null,
-      renewalState: null,
-      adherenceState: "on_track",
-      traineeProfile: { displayName: "Client", age: null, gender: null },
-      traineeTimezone: "Asia/Kolkata",
-      hasCustomMealTimes: false,
-      trainerWhatsappE164: null,
-      clientWhatsappE164: null,
-    },
-  ).timezone;
+  const header = workspace?.header;
+  const clientTz = header
+    ? resolveTraineeTimezone(header).timezone
+    : "Asia/Kolkata";
+  const clientFirstName =
+    (header?.traineeDisplayName ?? "Client").trim().split(/\s+/)[0] || "Client";
+  const today = useMemo(() => todayInTimezone(clientTz), [clientTz]);
 
-  const [measurements, setMeasurements] = useState<Measurement[]>([]);
+  const [range, setRange] = useState<MetricRange>({ range: "12w" });
+  const [view, setView] = useState<RailView | null>(null);
+  const [checked, setChecked] = useState<Checked | null>(null);
+
+  // All-time series for every standard key: the rail's latest values and which keys have data.
+  const rail = useProgressMetrics({
+    relationshipId,
+    keys: ALL_METRIC_KEYS,
+    range: ALL_TIME,
+    refreshEpoch,
+  });
+  const railSeries = useMemo(() => rail.data?.series ?? {}, [rail.data]);
+  const anyData = ALL_METRIC_KEYS.some((key) => hasPoints(railSeries[key]));
+
+  // Photos stay on the existing progress entries list.
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [metric, setMetric] = useState<MeasurementType>("body_weight_kg");
-  const [range, setRange] = useState<TrendRange>("12w");
-  const [compareA, setCompareA] = useState<string>("");
-  const [compareB, setCompareB] = useState<string>("");
-
-  const load = useCallback(async () => {
+  const [entriesLoading, setEntriesLoading] = useState(true);
+  const [entriesError, setEntriesError] = useState<string | null>(null);
+  const loadEntries = useCallback(async () => {
     if (!relationshipId) return;
-    setLoading(true);
-    setError(null);
+    setEntriesLoading(true);
+    setEntriesError(null);
     try {
-      const [measurementPage, entryPage] = await Promise.all([
-        apiClient.listMeasurements(relationshipId, { limit: 200 }),
-        apiClient.listProgressEntries(relationshipId, { limit: 100 }),
-      ]);
-      setMeasurements(measurementPage.items);
-      setEntries(entryPage.items);
+      const page = await apiClient.listProgressEntries(relationshipId, {
+        limit: 100,
+      });
+      setEntries(page.items);
     } catch (err) {
-      setError(
+      setEntriesError(
         err instanceof ApiClientError
           ? err.message
           : "Could not load progress.",
       );
     } finally {
-      setLoading(false);
+      setEntriesLoading(false);
     }
   }, [relationshipId]);
-
   useEffect(() => {
-    void load();
-  }, [load, refreshEpoch]);
+    void loadEntries();
+  }, [loadEntries, refreshEpoch]);
 
-  const today = useMemo(() => todayInTimezone(clientTz), [clientTz]);
-
-  const metricsWithData = useMemo(() => {
-    const types = new Set(measurements.map((row) => row.type));
-    const tabs: Array<MeasurementType | "other"> = ["body_weight_kg"];
-    for (const type of MEASUREMENT_SERIES) {
-      if (type !== "body_weight_kg" && types.has(type)) tabs.push(type);
-    }
-    if (types.has("other")) tabs.push("other");
-    return tabs;
-  }, [measurements]);
-
+  // First load: start on weight (or the first group with data) and tick up to three lines per group.
   useEffect(() => {
-    if (!metricsWithData.includes(metric)) {
-      setMetric(metricsWithData[0] ?? "body_weight_kg");
-    }
-  }, [metric, metricsWithData]);
+    if (!rail.data) return;
+    const series = rail.data.series;
+    const body = BODY_KEYS.filter((key) => hasPoints(series[key]));
+    const ratings = RATING_KEYS.filter((key) => hasPoints(series[key]));
+    setChecked(
+      (current) =>
+        current ?? {
+          body: body.slice(0, DEFAULT_LINES),
+          ratings: ratings.slice(0, DEFAULT_LINES),
+        },
+    );
+    setView((current) => {
+      if (current) return current;
+      if (hasPoints(series.weight) || (!body.length && !ratings.length)) {
+        return { group: "weight", focus: "weight" };
+      }
+      if (body.length) return { group: "body", focus: body[0]! };
+      return { group: "ratings", focus: ratings[0]! };
+    });
+  }, [rail.data]);
 
-  const pointsForMetric = useMemo((): TrendPoint[] => {
-    return measurements
-      .filter((row) => row.type === metric)
-      .map((row) => ({
-        id: row.id,
-        value: row.value,
-        unit: row.unit,
-        observedAt: row.observedAt,
-        source: row.source,
-        checkinId: row.checkinId,
-        localDate: row.observedAt.slice(0, 10),
-      }));
-  }, [measurements, metric]);
+  const activeView: RailView = view ?? { group: "weight", focus: "weight" };
+  const chartKeys = useMemo((): ProgressMetricKey[] => {
+    if (activeView.group === "weight" || !checked) return ["weight"];
+    const ticked = checked[activeView.group];
+    return [
+      activeView.focus,
+      ...ticked.filter((key) => key !== activeView.focus),
+    ];
+  }, [activeView.group, activeView.focus, checked]);
+
+  const chart = useProgressMetrics({
+    relationshipId,
+    keys: chartKeys,
+    range,
+    refreshEpoch,
+    enabled: range.range !== "all" && Boolean(rail.data),
+  });
+  const chartSeries =
+    range.range === "all" ? railSeries : (chart.data?.series ?? {});
+
+  function selectKey(group: MetricGroup, key: ProgressMetricKey) {
+    setView({ group, focus: key });
+    if (group === "weight") return;
+    setChecked((current) => {
+      const base = current ?? { body: [], ratings: [] };
+      if (base[group].includes(key)) return base;
+      return { ...base, [group]: [...base[group], key] };
+    });
+  }
+
+  function toggleKey(group: "body" | "ratings", key: ProgressMetricKey) {
+    const base = checked ?? { body: [], ratings: [] };
+    const ticked = base[group];
+    if (ticked.includes(key)) {
+      if (ticked.length === 1) return; // a chart always keeps one line
+      const next = ticked.filter((item) => item !== key);
+      setChecked({ ...base, [group]: next });
+      if (activeView.group === group && activeView.focus === key) {
+        setView({ group, focus: next[0]! });
+      }
+    } else {
+      setChecked({ ...base, [group]: [...ticked, key] });
+    }
+  }
 
   const photoEntries = entries
     .filter((row) => row.entryType === "progress_photo" && row.mediaAssetId)
     .sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+  const photoDates = new Set(
+    photoEntries.map((row) => row.observedAt.slice(0, 10)),
+  ).size;
 
-  const compareLeft = photoEntries.find((row) => row.id === compareA) ?? null;
-  const compareRight = photoEntries.find((row) => row.id === compareB) ?? null;
-
-  const weightEmpty =
-    metric === "body_weight_kg" && pointsForMetric.length === 0 && !loading;
+  const error = rail.error ?? chart.error ?? entriesError;
+  const loading = rail.loading && !rail.data;
 
   return (
-    <div className="workspace-page progress-page" data-testid="screen-TW-18">
-      <header className="workspace-page-head">
-        <h1>Progress</h1>
-      </header>
+    <div
+      className="workspace-page progress-page pg-page"
+      data-testid="screen-TW-18"
+    >
+      <h1 className="sr-only">Progress</h1>
 
       {error ? (
-        <ErrorState message={error} onRetry={() => void load()} screenId="TW-18" />
+        <ErrorState
+          message={error}
+          onRetry={() => {
+            rail.reload();
+            chart.reload();
+            void loadEntries();
+          }}
+          screenId="TW-18"
+        />
       ) : null}
       {loading ? <LoadingBlock label="Loading progress…" /> : null}
 
-      {!loading && weightEmpty ? (
+      {!loading && rail.data && !anyData ? (
         <EmptyState title="No weigh-ins yet. Weight is collected in check-ins.">
           {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
           <Link to={`/clients/${relationshipId}/configure`}>
@@ -149,174 +199,63 @@ export function ClientProgressPage() {
         </EmptyState>
       ) : null}
 
-      {!loading && !weightEmpty ? (
+      {!loading && rail.data && anyData && checked ? (
         <>
-          <div
-            className="progress-metric-tabs"
-            role="tablist"
-            aria-label="Measurement"
-          >
-            {metricsWithData.map((type) => (
-              <button
-                key={type}
-                type="button"
-                role="tab"
-                aria-selected={metric === type}
-                className={
-                  metric === type ? "segment-btn is-on" : "segment-btn"
-                }
-                onClick={() => setMetric(type)}
-              >
-                {TAB_LABELS[type]}
-              </button>
-            ))}
+          <div className="pg-toolbar">
+            <RangeControl value={range} today={today} onChange={setRange} />
+            <p className="pg-toolbar-note">
+              Check-in dates · values as entered
+            </p>
           </div>
-
-          <div
-            className="progress-range-tabs segment"
-            role="group"
-            aria-label="Trend range"
-          >
-            {(
-              [
-                ["4w", "4 w"],
-                ["12w", "12 w"],
-                ["all", "All"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={range === value ? "segment-btn is-on" : "segment-btn"}
-                aria-pressed={range === value}
-                onClick={() => setRange(value)}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="pg-layout">
+            <MetricRail
+              series={railSeries}
+              view={activeView}
+              checked={checked}
+              photoDates={photoDates}
+              relationshipId={relationshipId}
+              onSelect={selectKey}
+              onToggle={toggleKey}
+            />
+            <section
+              id="pg-panel"
+              role="tabpanel"
+              className="pg-panel workspace-card"
+              aria-labelledby="pg-panel-title"
+              aria-busy={chart.loading}
+            >
+              {range.range !== "all" && !chart.data && chart.loading ? (
+                <LoadingBlock label="Loading chart…" />
+              ) : activeView.group === "weight" ? (
+                <WeightPanel
+                  series={chartSeries.weight}
+                  renderSource={(point) =>
+                    point.checkinId ? (
+                      <Link
+                        className="progress-checkin-link"
+                        to={`/clients/${relationshipId}/check-ins/${point.checkinId}`}
+                      >
+                        From check-in
+                      </Link>
+                    ) : (
+                      "Measurement entry"
+                    )
+                  }
+                />
+              ) : (
+                <MultiSeriesPanel
+                  kind={activeView.group}
+                  keys={chartKeys}
+                  series={chartSeries}
+                  clientFirstName={clientFirstName}
+                />
+              )}
+            </section>
           </div>
-
-          <TrendChart
-            label={measurementTypeLabel(metric)}
-            points={pointsForMetric}
-            range={range}
-            today={today}
-            timeZone={clientTz}
-          />
-
-          <details className="progress-data-table">
-            <summary>Measurement history</summary>
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Date</th>
-                  <th scope="col">Value</th>
-                  <th scope="col">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pointsForMetric.map((row) => (
-                  <tr key={row.id}>
-                    <td>{formatCivilDate(row.localDate ?? row.observedAt.slice(0, 10))}</td>
-                    <td>
-                      {row.value} {row.unit}
-                    </td>
-                    <td>
-                      {row.source === "checkin" && row.checkinId ? (
-                        <Link
-                          className="progress-checkin-link"
-                          to={`/clients/${relationshipId}/check-ins/${row.checkinId}`}
-                        >
-                          From check-in ·{" "}
-                          {formatCivilDate(row.localDate ?? row.observedAt.slice(0, 10))}
-                        </Link>
-                      ) : (
-                        labelFor("measurement_source", row.source ?? "trainee_entry")
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </details>
         </>
       ) : null}
 
-      <section className="workspace-card" aria-labelledby="photos-heading">
-        <div className="workspace-card-head">
-          <h2 id="photos-heading">Photos</h2>
-          <div className="progress-compare-controls">
-            <label className="field">
-              <span>Compare</span>
-              <select
-                value={compareA}
-                onChange={(event) => setCompareA(event.target.value)}
-              >
-                <option value="">Pick a date</option>
-                {photoEntries.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {formatCivilDate(row.observedAt.slice(0, 10))}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>With</span>
-              <select
-                value={compareB}
-                onChange={(event) => setCompareB(event.target.value)}
-              >
-                <option value="">Pick a date</option>
-                {photoEntries.map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {formatCivilDate(row.observedAt.slice(0, 10))}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
-
-        {compareLeft?.mediaAssetId && compareRight?.mediaAssetId ? (
-          <div className="progress-compare" data-testid="photo-compare">
-            <figure className="progress-photo">
-              <figcaption>
-                {formatCivilDate(compareLeft.observedAt.slice(0, 10))}
-              </figcaption>
-              <LinkedMedia
-                mediaAssetId={compareLeft.mediaAssetId}
-                label="Earlier progress photo"
-              />
-            </figure>
-            <figure className="progress-photo">
-              <figcaption>
-                {formatCivilDate(compareRight.observedAt.slice(0, 10))}
-              </figcaption>
-              <LinkedMedia
-                mediaAssetId={compareRight.mediaAssetId}
-                label="Later progress photo"
-              />
-            </figure>
-          </div>
-        ) : null}
-
-        <ul className="progress-photo-grid">
-          {photoEntries.map((row) => (
-            <li key={row.id}>
-              <p>{formatCivilDate(row.observedAt.slice(0, 10))}</p>
-              {row.mediaAssetId ? (
-                <LinkedMedia
-                  mediaAssetId={row.mediaAssetId}
-                  label={row.title?.trim() || "Progress photo"}
-                />
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        {!loading && photoEntries.length === 0 ? (
-          <p className="workspace-empty" role="status">No progress photos yet</p>
-        ) : null}
-      </section>
+      <PhotosSection photoEntries={photoEntries} loading={entriesLoading} />
 
       {!online ? (
         <p className="muted" role="status">
