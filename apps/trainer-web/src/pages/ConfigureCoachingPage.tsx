@@ -36,6 +36,10 @@ import {
 } from "@fitbud/core";
 import { Button } from "../components/Button";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
+import {
+  ReadOnlyField,
+  ReadOnlyFieldList,
+} from "../components/ReadOnlyField";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { quietHoursText } from "../components/workspace/ResponsivenessPanel";
 import { apiClient } from "../lib/api";
@@ -130,6 +134,12 @@ function endedDateLabel(
   return label;
 }
 
+
+/** "Wed 21 Oct" for a stored civil date; never the raw ISO value. */
+function civilDateOrNotSet(localDate: string): string {
+  const label = localDate ? formatCivilDate(localDate) : "";
+  return label && !/^\d{4}-\d{2}-\d{2}/.test(label) ? label : "Not set";
+}
 
 function objectPronoun(gender: string | null | undefined): string {
   const g = (gender ?? "").trim().toLowerCase();
@@ -520,6 +530,12 @@ export function ConfigureCoachingPage() {
     } else if (onReminders.length) {
       reminderSummary = `On for ${onReminders.join(" and ")}`;
     }
+    const checkinFormName =
+      checkinForms.find(
+        (item) =>
+          checkinFormOptionValue(item) ===
+          (form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID),
+      )?.name ?? "FitBud weekly check-in";
     const freqLabel = labelFor(
       "payment_frequency",
       subscriptionForm.paymentFrequency,
@@ -532,13 +548,7 @@ export function ConfigureCoachingPage() {
       goal: goalBits.join(" · "),
       workouts: `${form.sessionsPerWeek} sessions/week · log within ${form.completionWindowHours} h`,
       nutrition: `${form.mealsPerDay} meals/day · photo: ${photoLabel.toLowerCase()}`,
-      checkins: `${cadenceLabel} · ${form.dueWindowHours} h window · ${
-        checkinForms.find(
-          (item) =>
-            checkinFormOptionValue(item) ===
-            (form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID),
-        )?.name ?? "FitBud weekly check-in"
-      }`,
+      checkins: `${cadenceLabel} · ${form.dueWindowHours} h window · ${checkinFormName}`,
       tracking:
         trackingBits.length > 0 ? trackingBits.join(" · ") : "Nothing required",
       reminders: reminderSummary,
@@ -908,10 +918,37 @@ export function ConfigureCoachingPage() {
       className="workspace-page plan-config-page configure-page"
       data-testid="screen-TW-11"
     >
-      <header className="configure-page-header">
-        <h2 className="configure-page-title">{pageTitle}</h2>
-        <p className="lede">{pageLede}</p>
-      </header>
+      {relationshipEnded ? (
+        // Z7-13 (DS7): ended title, lede and status in one quiet banner.
+        <header className="configure-page-header readonly-banner">
+          <svg
+            className="readonly-banner-icon"
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M5.6 5.6l12.8 12.8" stroke="currentColor" strokeWidth="1.8" />
+          </svg>
+          <div className="readonly-banner-copy">
+            <h2 className="configure-page-title">{pageTitle}</h2>
+            <p className="lede">{pageLede}</p>
+          </div>
+          <span
+            className="status-badge readonly-banner-pill"
+            data-testid="configure-status-pill"
+          >
+            {statusLabel}
+          </span>
+        </header>
+      ) : (
+        <header className="configure-page-header">
+          <h2 className="configure-page-title">{pageTitle}</h2>
+          <p className="lede">{pageLede}</p>
+        </header>
+      )}
 
       {header?.onboardingStatus !== "coaching_ready" &&
       header?.onboardingStatus !== "active" &&
@@ -954,13 +991,90 @@ export function ConfigureCoachingPage() {
         </p>
       ) : null}
 
-      {notificationsOff ? (
+      {/* Ended: reminders are off anyway (D-W7-7), so this would mislead. */}
+      {notificationsOff && !relationshipEnded ? (
         <p className="banner-attention" role="status">
           {firstName} has turned off app notifications. Reminders can&apos;t
           reach {objPronoun}.
         </p>
       ) : null}
 
+      {relationshipEnded ? (
+        <>
+          {/* Z7-13: frame 179 / DS7 read-only values, never greyed inputs. */}
+          <section
+            className="readonly-card"
+            aria-label="Setup you last used"
+            data-testid="configure-readonly"
+          >
+            <ReadOnlyFieldList>
+              <ReadOnlyField
+                label="Short goal"
+                value={form.goalShort.trim() || "Not set"}
+                wide
+              />
+              <ReadOnlyField
+                label="Goal description"
+                value={form.goalDescription.trim() || "Not set"}
+                wide
+              />
+              <ReadOnlyField
+                label="Workouts"
+                value={`${form.sessionsPerWeek} a week · log within ${form.completionWindowHours} h`}
+              />
+              <ReadOnlyField
+                label="Meals"
+                value={`${form.mealsPerDay} a day · confirm within ${form.confirmationWindowHours} h · photos: ${labelFor(
+                  "meal_photo_requirement",
+                  form.photoRequirement,
+                ).toLowerCase()}`}
+              />
+              <ReadOnlyField label="Check-ins" value={summaries.checkins} />
+              <ReadOnlyField label="Reminders" value={summaries.reminders} />
+              <ReadOnlyField label="Tracking" value={summaries.tracking} />
+              <ReadOnlyField
+                label="Subscription"
+                value={
+                  subscriptionForm.planName.trim()
+                    ? `${subscriptionForm.planName.trim()} · ${labelFor(
+                        "payment_frequency",
+                        subscriptionForm.paymentFrequency,
+                      )}`
+                    : "No subscription yet"
+                }
+              />
+              {subscriptionForm.planName.trim() ? (
+                <>
+                  <ReadOnlyField
+                    label="Starts on"
+                    value={civilDateOrNotSet(subscriptionForm.startsOn)}
+                  />
+                  {/* No live "renews" wording (Z7-11): the stored date was the due date. */}
+                  <ReadOnlyField
+                    label="Due on"
+                    value={civilDateOrNotSet(subscriptionForm.renewsOn)}
+                  />
+                </>
+              ) : null}
+            </ReadOnlyFieldList>
+          </section>
+          <PlanConsistencyNotice
+            warnings={consistencyWarnings}
+            acknowledged={
+              acknowledgedFingerprint === consistencyFingerprintValue
+            }
+            planTo={`/clients/${relationshipId}/plan`}
+            configureTo={`/clients/${relationshipId}/configure`}
+            showPlanLink={false}
+            showConfigureLink={false}
+          />
+          {error ? (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </>
+      ) : (
       <form
         className="configure-accordion-list"
         onSubmit={(event) => {
@@ -1474,14 +1588,13 @@ export function ConfigureCoachingPage() {
           </p>
         ) : null}
       </form>
+      )}
 
+      {/* Ended: no actions, and the status sits in the banner (DS7). */}
+      {relationshipEnded ? null : (
       <footer className="screen-sticky-footer configure-sticky-footer">
         <span
-          className={
-            relationshipEnded
-              ? "status-badge"
-              : `status-badge status-${statusKey}`
-          }
+          className={`status-badge status-${statusKey}`}
           data-testid="configure-status-pill"
         >
           <span className="status-dot" aria-hidden="true" />
@@ -1510,6 +1623,7 @@ export function ConfigureCoachingPage() {
           ) : null}
         </div>
       </footer>
+      )}
 
       {toast ? (
         <div className="configure-toast" role="status">
