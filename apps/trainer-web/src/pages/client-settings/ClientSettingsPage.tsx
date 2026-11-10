@@ -270,7 +270,7 @@ export function ClientSettingsPage() {
                 <table className="cs-table">
                   <thead>
                     <tr>
-                      <th scope="col">Date</th>
+                      <th scope="col">Due</th>
                       <th scope="col">Amount</th>
                       <th scope="col">Status</th>
                       <th scope="col">Method</th>
@@ -299,10 +299,6 @@ export function ClientSettingsPage() {
                 </table>
               </div>
             )}
-            <p className="cs-footnote">
-              Payment records are for your own tracking. FitBud doesn't collect payments,
-              send invoices or remind clients to pay.
-            </p>
           </div>
         </section>
 

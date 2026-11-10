@@ -44,6 +44,9 @@ export function EditBasicsDrawer({
   const [saving, setSaving] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  // Read by the key handler: Escape must not close the drawer mid-save.
+  const savingRef = useRef(false);
   // One key per logical save: a retry of the same change reuses it.
   const keyRef = useRef<{ body: string; key: string } | null>(null);
   const titleId = useId();
@@ -60,7 +63,7 @@ export function EditBasicsDrawer({
     function onKey(ev: KeyboardEvent) {
       if (ev.key === "Escape") {
         ev.preventDefault();
-        onClose();
+        if (!savingRef.current) onClose();
         return;
       }
       if (ev.key !== "Tab" || !panelRef.current) return;
@@ -130,6 +133,8 @@ export function EditBasicsDrawer({
     const result = buildBody();
     if (result.kind === "errors") {
       setErrors(result.errors);
+      // Move focus to the first invalid field so its error is announced.
+      (result.errors.name ? nameRef : phoneRef).current?.focus();
       return;
     }
     setErrors({});
@@ -143,6 +148,7 @@ export function EditBasicsDrawer({
       keyRef.current = { body: bodyKey, key: createIdempotencyKey() };
     }
     setSaving(true);
+    savingRef.current = true;
     try {
       const next = await apiClient.updateClientBasics(
         relationshipId,
@@ -159,6 +165,7 @@ export function EditBasicsDrawer({
           : "Couldn't save. Try again. (CS-SAVE)",
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -186,6 +193,7 @@ export function EditBasicsDrawer({
             type="button"
             className="cs-icon-button"
             onClick={onClose}
+            disabled={saving}
             aria-label="Close"
           >
             <X size={18} strokeWidth={1.75} aria-hidden />
@@ -220,6 +228,7 @@ export function EditBasicsDrawer({
                   </span>
                 )}
                 <input
+                  ref={phoneRef}
                   id={phoneId}
                   type="tel"
                   inputMode="tel"
@@ -251,7 +260,12 @@ export function EditBasicsDrawer({
             ) : null}
           </div>
           <footer className="cs-drawer-foot">
-            <button type="button" className="button-secondary" onClick={onClose}>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={onClose}
+              disabled={saving}
+            >
               Cancel
             </button>
             <button

@@ -326,12 +326,6 @@
   border-color: var(--border);
 }
 
-.cs-footnote {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--mid-grey);
-}
-
 /* Drawer (frame 210) */
 .cs-drawer.drawer-panel {
   width: min(560px, 100vw);

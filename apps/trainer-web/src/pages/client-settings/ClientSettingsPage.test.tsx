@@ -152,6 +152,8 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     expect(text).not.toMatch(/sessions? (left|used|remaining)|Add package|Renew package/i);
     expect(text).not.toMatch(/Collect|Pay now|Invoice/);
     expect(text).not.toMatch(/Add payment record/);
+    expect(text).not.toMatch(/collect payments|invoice|remind clients to pay/i);
+    expect(within(payments).getByRole("columnheader", { name: "Due" })).toBeTruthy();
   });
 
   it("shows the trainer-set name and contact phone over the profile values", async () => {
@@ -281,7 +283,19 @@ describe("Edit basic details drawer (frame 210)", () => {
     expect(await within(dialog).findByText("Enter a name.")).toBeTruthy();
     expect(within(dialog).getByText(/10-digit mobile number/)).toBeTruthy();
     expect(within(dialog).getByLabelText("Name").getAttribute("aria-invalid")).toBe("true");
+    // Focus moves to the first invalid field.
+    expect(document.activeElement).toBe(within(dialog).getByLabelText("Name"));
     expect(api.updateClientBasics).not.toHaveBeenCalled();
+  });
+
+  it("focuses the phone field when only the phone is invalid", async () => {
+    const dialog = await openDrawer();
+    fireEvent.change(within(dialog).getByLabelText("Contact phone"), {
+      target: { value: "12345" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await within(dialog).findByText(/10-digit mobile number/);
+    expect(document.activeElement).toBe(within(dialog).getByLabelText("Contact phone"));
   });
 
   it("clears a saved contact phone with null", async () => {
@@ -319,6 +333,47 @@ describe("Edit basic details drawer (frame 210)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(api.updateClientBasics).toHaveBeenCalledTimes(2));
     expect(api.updateClientBasics.mock.calls[1]![2]).toBe(api.updateClientBasics.mock.calls[0]![2]);
+  });
+
+  it("uses a new idempotency key when the body changes after a failed save", async () => {
+    api.updateClientBasics.mockRejectedValue(
+      new ApiClientError({
+        status: 503,
+        code: "UNAVAILABLE",
+        message: "Service unavailable. Try again.",
+        requestId: "req-3",
+      }),
+    );
+    const dialog = await openDrawer();
+    const name = within(dialog).getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Rohan" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.updateClientBasics).toHaveBeenCalledTimes(1));
+    await within(dialog).findByText("Service unavailable. Try again.");
+    fireEvent.change(name, { target: { value: "Rohan M" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.updateClientBasics).toHaveBeenCalledTimes(2));
+    expect(api.updateClientBasics.mock.calls[1]![1]).toEqual({ displayName: "Rohan M" });
+    expect(api.updateClientBasics.mock.calls[1]![2]).not.toBe(
+      api.updateClientBasics.mock.calls[0]![2],
+    );
+  });
+
+  it("does not close on Escape while a save is in flight", async () => {
+    let resolveSave: (value: ClientSettingsResponse) => void = () => {};
+    api.updateClientBasics.mockReturnValue(
+      new Promise<ClientSettingsResponse>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const dialog = await openDrawer();
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Rohan" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await within(dialog).findByRole("button", { name: "Saving…" });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    resolveSave(settings());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("closes on Escape and traps Tab inside the drawer", async () => {
