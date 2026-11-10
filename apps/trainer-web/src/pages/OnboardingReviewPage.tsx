@@ -437,7 +437,7 @@ export function OnboardingReviewPage() {
                 : "Open configure"}
             </Button>
           ) : null}
-          {thanksHref && submitted ? (
+          {onboardingStatus === "ended" ? null : thanksHref && submitted ? (
             <a
               className="button-secondary button-whatsapp"
               href={thanksHref}

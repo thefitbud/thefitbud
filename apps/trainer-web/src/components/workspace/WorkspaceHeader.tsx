@@ -1,6 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
 import { formatCivilDate, formatRelative, labelFor } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
@@ -142,9 +147,7 @@ export function WorkspaceHeader({
     metaNodes.push({
       key: "checkin",
       node: (
-        <span>
-          Next check-in {formatCivilDate(nextScheduled.localDate)}
-        </span>
+        <span>Next check-in {formatCivilDate(nextScheduled.localDate)}</span>
       ),
     });
   }
@@ -162,9 +165,7 @@ export function WorkspaceHeader({
     });
   }
   if (header.renewalState && header.renewalState !== "current") {
-    const renewsOn = header.renewsOn
-      ? formatCivilDate(header.renewsOn)
-      : null;
+    const renewsOn = header.renewsOn ? formatCivilDate(header.renewsOn) : null;
     const stateLabel = labelFor("renewal_state", header.renewalState);
     metaNodes.push({
       key: "renewal",
@@ -187,7 +188,9 @@ export function WorkspaceHeader({
     }
     if (primary.kind === "review_exception" && primary.exceptionId) {
       setParams({ exception: primary.exceptionId });
-      navigate(`/clients/${relationshipId}/overview?exception=${primary.exceptionId}`);
+      navigate(
+        `/clients/${relationshipId}/overview?exception=${primary.exceptionId}`,
+      );
       return;
     }
     navigate(primary.to);
@@ -209,7 +212,7 @@ export function WorkspaceHeader({
     {
       id: "reminders",
       label: ended
-        ? "View reminder settings"
+        ? "View reminder history"
         : "Reminder settings for this client",
       onSelect: () => onOpenModal({ type: "responsiveness" }),
     },
@@ -239,7 +242,10 @@ export function WorkspaceHeader({
           {pendingReactivation ? (
             <>
               <p className="banner-neutral" role="status">
-                Waiting for {header.traineeDisplayName.split(/\s+/)[0] ?? header.traineeDisplayName} to confirm
+                Waiting for{" "}
+                {header.traineeDisplayName.split(/\s+/)[0] ??
+                  header.traineeDisplayName}{" "}
+                to confirm
                 {pendingReactivation.sentAt
                   ? ` · sent ${formatRelative(pendingReactivation.sentAt)}`
                   : null}
@@ -326,7 +332,7 @@ export function WorkspaceHeader({
             </div>
           </div>
           <div className="wsh-acts">
-            {whatsappHrefValue ? (
+            {ended ? null : whatsappHrefValue ? (
               <a
                 className="button-secondary button-whatsapp"
                 href={whatsappHrefValue}

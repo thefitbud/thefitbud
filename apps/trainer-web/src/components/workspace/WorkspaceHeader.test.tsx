@@ -96,11 +96,11 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
     expect(openMenu()).toEqual([
       "View coaching setup",
       "Onboarding answers",
-      "View reminder settings",
+      "View reminder history",
     ]);
     expect(screen.queryByRole("menuitem", { name: /configure/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "View reminder settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "View reminder history" }));
     expect(onOpenModal).toHaveBeenCalledWith({ type: "responsiveness" });
 
     openMenu();
@@ -113,7 +113,7 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
     expect(openMenu()).toEqual([
       "View coaching setup",
       "Onboarding answers",
-      "View reminder settings",
+      "View reminder history",
     ]);
   });
 
@@ -128,6 +128,22 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
         "Add note",
         "End coaching",
       ]);
+    },
+  );
+});
+
+describe("WorkspaceHeader WhatsApp message button (read-only ended clients)", () => {
+  it("ended client: no Message on WhatsApp button", () => {
+    renderHeader(workspace("ended"));
+    expect(screen.queryByText("Message on WhatsApp")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reactivate coaching" })).toBeTruthy();
+  });
+
+  it.each(["active", "coaching_ready", "onboarding_submitted"] as const)(
+    "%s client keeps Message on WhatsApp",
+    (status) => {
+      renderHeader(workspace(status));
+      expect(screen.getByText("Message on WhatsApp")).toBeTruthy();
     },
   );
 });

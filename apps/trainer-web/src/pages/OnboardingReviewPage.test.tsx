@@ -121,3 +121,16 @@ describe("OnboardingReviewPage refresh", () => {
     expect(screen.getByRole("button", { name: "Mark ready & configure" })).toBeTruthy();
   });
 });
+
+describe("OnboardingReviewPage WhatsApp client button", () => {
+  it("ended client: no WhatsApp client button", async () => {
+    renderPage("ended");
+    await screen.findByRole("button", { name: "View coaching setup" });
+    expect(screen.queryByText("WhatsApp client")).toBeNull();
+  });
+
+  it("active client keeps the WhatsApp client button", async () => {
+    renderPage("active");
+    expect(await screen.findByText("WhatsApp client")).toBeTruthy();
+  });
+});
