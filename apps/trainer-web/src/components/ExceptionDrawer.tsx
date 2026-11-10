@@ -369,6 +369,8 @@ export function ExceptionDrawer({
   bulkModeRef.current = bulkMode;
   /** Bulk confirm dialog takes Escape first (true when it handled it). */
   const bulkEscapeRef = useRef<(() => boolean) | null>(null);
+  /** Reloading the client's items after a bulk write failed. */
+  const [listRefreshFailed, setListRefreshFailed] = useState(false);
   /** True while Resolve is optimistic and Undo can cancel before POST. */
   const [resolveUndoPending, setResolveUndoPending] = useState(false);
   const [reminderLine, setReminderLine] = useState<string | null>(null);
@@ -546,8 +548,11 @@ export function ExceptionDrawer({
       const res = await apiClient.listExceptions(rid);
       if (!mountedRef.current || listRidRef.current !== rid) return;
       setList(buildPanelList(res.items));
+      setListRefreshFailed(false);
     } catch {
-      /* keep the list on screen; the bulk result already shows per item */
+      // The write itself succeeded; only the refreshed list is missing, so
+      // say that (static text, no guessed cause) instead of failing silently.
+      if (mountedRef.current) setListRefreshFailed(true);
     }
   }, []);
 
@@ -1407,6 +1412,7 @@ export function ExceptionDrawer({
               if (currentId) void load(currentId, { quiet: true });
             }}
             onClose={requestClose}
+            listRefreshFailed={listRefreshFailed}
           />
         ) : null}
         {!bulkMode && loading ? <LoadingBlock label="Loading…" /> : null}

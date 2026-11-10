@@ -89,6 +89,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
   onRestored,
   onEnded,
   onClose,
+  listRefreshFailed = false,
 }: {
   relationshipId: string;
   firstName: string;
@@ -111,6 +112,8 @@ export function BulkPanel<T extends BulkResolveOutcome>({
   /** A write came back RELATIONSHIP_ENDED. */
   onEnded: () => void;
   onClose: () => void;
+  /** The drawer could not reload this client's items after a write. */
+  listRefreshFailed?: boolean;
 }) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => {
     const first = items.find((item) => item.id === initialSelectedId);
@@ -152,6 +155,14 @@ export function BulkPanel<T extends BulkResolveOutcome>({
   const count = selectedIds.length;
   const allSelected = compatible.length > 0 && count === compatible.length;
   const hint = individualOnlyHint(items);
+  // DS2: compatible items first, individual-only rows last (stable order).
+  const orderedItems = useMemo(
+    () => [
+      ...items.filter(isBulkCompatible),
+      ...items.filter((item) => !isBulkCompatible(item)),
+    ],
+    [items],
+  );
 
   useLayoutEffect(() => {
     if (selectAllRef.current) {
@@ -270,7 +281,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
       const canUndo = Boolean(res.bulkId && res.resolvedCount > 0);
       setPhase({
         kind: "result",
-        snapshot: items.slice(),
+        snapshot: orderedItems.slice(),
         results: res.items,
         bulkId: res.bulkId,
         outcome,
@@ -377,6 +388,11 @@ export function BulkPanel<T extends BulkResolveOutcome>({
               {error}
             </p>
           ) : null}
+          {listRefreshFailed ? (
+            <p className="form-error" role="alert" data-testid="bulk-list-refresh-failed">
+              Couldn't refresh the list.
+            </p>
+          ) : null}
           <section className="sp-section" aria-labelledby="sp-bulk-result">
             <h3 id="sp-bulk-result" className="sp-section-title">
               Result
@@ -477,6 +493,11 @@ export function BulkPanel<T extends BulkResolveOutcome>({
   return (
     <div ref={rootRef} className="sp-bulk">
       <div className="drawer-body sp-body">
+        {listRefreshFailed ? (
+          <p className="form-error" role="alert" data-testid="bulk-list-refresh-failed">
+            Couldn't refresh the list.
+          </p>
+        ) : null}
         {error && phase.kind !== "confirm" ? (
           <p className="form-error" role="alert">
             {error}
@@ -514,7 +535,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
             {hint ? <span className="sp-bulk-hint">{hint}</span> : null}
           </div>
           <ul className="sp-bulk-list" data-testid="bulk-select-list">
-            {items.map((item) => {
+            {orderedItems.map((item) => {
               const ok = isBulkCompatible(item);
               const on = ok && selected.has(item.id);
               const inner = (

@@ -37,10 +37,12 @@ export function individualOnlyHint(items: readonly Row[]): string | null {
   if (others.length === 0) return null;
   const types = new Set(others.map((item) => item.type));
   if (types.size > 1) return "Some items are resolved on their own";
+  // Count-safe for every label: "Meal change · resolved on its own" (1) or
+  // "Meal change · 2 resolved on their own".
   const label = labelFor("exception_type", others[0]!.type);
   return others.length === 1
-    ? `${label} is resolved on its own`
-    : `${label}s are resolved on their own`;
+    ? `${label} · resolved on its own`
+    : `${label} · ${others.length} resolved on their own`;
 }
 
 function detailString(item: Row, key: string): string | null {

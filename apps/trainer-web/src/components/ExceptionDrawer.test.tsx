@@ -1377,7 +1377,11 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
     )!;
     expect(mealChange.querySelector("input")).toBeNull();
     expect(mealChange.textContent).toMatch(/resolve on its own/);
-    expect(screen.getByText("Meal change is resolved on its own")).toBeTruthy();
+    expect(screen.getByText("Meal change · resolved on its own")).toBeTruthy();
+    // DS2: compatible rows first, the individual-only row last.
+    const rowsText = Array.from(list.querySelectorAll("li")).map((li) => li.textContent ?? "");
+    expect(rowsText.at(-1)).toMatch(/Meal change/);
+    expect(rowsText.slice(0, -1).every((t) => !/Meal change/.test(t))).toBe(true);
     // The item on screen starts selected.
     expect(screen.getByTestId("bulk-count").textContent).toBe("1 of 5 selected");
     // No arrows, no item nav while selecting.
@@ -1531,6 +1535,10 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resolve 5 items…" }));
     fireEvent.click(await screen.findByRole("button", { name: "Resolve 5 items" }));
     await screen.findByRole("button", { name: "Undo" });
+    // Let React run the passive effect that starts the 5 s window.
+    await act(async () => {
+      await Promise.resolve();
+    });
     act(() => {
       vi.advanceTimersByTime(4900);
     });
@@ -1586,6 +1594,38 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
       "Too late to undo. These items stay resolved.",
     );
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("a failed list refresh after Undo says so instead of failing silently", async () => {
+    const ids = [itemId(1), itemId(2)];
+    api.bulkResolveExceptions.mockResolvedValue(resolvedBody(ids));
+    api.undoBulkResolveExceptions.mockResolvedValue({
+      bulkId: BULK_ID,
+      relationshipId: REL_ID,
+      restoredCount: 2,
+      items: ids.map((id) => ({ id, status: "active" })),
+    });
+    await openBulk();
+    fireEvent.click(screen.getAllByRole("checkbox")[2]!);
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items…" }));
+    api.listExceptions.mockRejectedValue(new TypeError("Failed to fetch"));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await screen.findByTestId("bulk-select-list");
+    expect((await screen.findByTestId("bulk-list-refresh-failed")).textContent).toBe(
+      "Couldn't refresh the list.",
+    );
+  });
+
+  it("the individual-only hint is count-safe", async () => {
+    const { individualOnlyHint } = await import("./side-panel/bulkModel");
+    const change = (n: number) =>
+      openItem(n, { type: "meal_deviation", sourceEntityType: "meal_assignment" });
+    expect(individualOnlyHint([openItem(1)])).toBeNull();
+    expect(individualOnlyHint([change(1)])).toBe("Meal change · resolved on its own");
+    expect(individualOnlyHint([change(1), change(2)])).toBe(
+      "Meal change · 2 resolved on their own",
+    );
   });
 
   it("an ended client gets no bulk action", async () => {
