@@ -130,6 +130,11 @@ export const CLIENT_DISPLAY_NAME_MAX_LENGTH = 120;
  * clears it, and at least one must be sent. The phone follows the trainer
  * profile's WhatsApp rule: the server normalises it and stores `+<digits>`.
  * There is no goal field: the goal stays in Coaching setup.
+ *
+ * Z7-25: a field left out is not written, so two overlapping PATCHes of
+ * different fields both persist. A relationship that is not active (or ends
+ * while the request is in flight) answers 409 `RELATIONSHIP_ENDED` and nothing
+ * changes.
  */
 export const updateClientBasicsRequestSchema = z
   .object({

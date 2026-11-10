@@ -96,11 +96,12 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
     expect(openMenu()).toEqual([
       "View coaching setup",
       "Onboarding answers",
-      "View reminder settings",
+      "View reminder history",
     ]);
     expect(screen.queryByRole("menuitem", { name: /configure/i })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "View reminder settings" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "View reminder settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "View reminder history" }));
     expect(onOpenModal).toHaveBeenCalledWith({ type: "responsiveness" });
 
     openMenu();
@@ -113,7 +114,7 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
     expect(openMenu()).toEqual([
       "View coaching setup",
       "Onboarding answers",
-      "View reminder settings",
+      "View reminder history",
     ]);
   });
 

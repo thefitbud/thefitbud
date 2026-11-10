@@ -52,7 +52,14 @@ import {
   assertMealLogAllowed,
   buildLoggedFoodsCompliance,
 } from "../domain/compliance-logging.js";
-import { recordCoachLogChange, mealLogSnapshot } from "../domain/coach-log.js";
+import {
+  CoachLogConflict,
+  LOG_WRITE_CONFLICT,
+  mealLogSnapshot,
+  recordCoachLogChange,
+  type CoachLogClaim,
+  type CoachLogWrite,
+} from "../domain/coach-log.js";
 import {
   COACH_LOG_BACKDATE_ERROR,
   LOG_TIME_ERROR_CODES,
@@ -1167,6 +1174,25 @@ function coachMealVersionConflict(c: AppContext) {
   );
 }
 
+function mealLogWriteConflict(c: AppContext) {
+  return fail(c, 409, LOG_WRITE_CONFLICT.code, LOG_WRITE_CONFLICT.message);
+}
+
+async function mealAlreadyRecorded(c: AppContext, db: Db, assignmentId: string) {
+  const [raced] = await db
+    .select({ id: mealCompliance.id })
+    .from(mealCompliance)
+    .where(eq(mealCompliance.assignmentId, assignmentId))
+    .limit(1);
+  if (!raced) return mealLogWriteConflict(c);
+  return fail(
+    c,
+    409,
+    "COMPLIANCE_ALREADY_RECORDED",
+    "This meal already has a compliance record.",
+  );
+}
+
 mealRoutes.put(
   "/compliance/:assignmentId/:date",
   operation({
@@ -1339,10 +1365,15 @@ mealRoutes.put(
     let entryId: string;
     let status: 200 | 201;
     let action: "create" | "edit";
+    let serverVersion: number;
+    let domainWrites: () => readonly CoachLogWrite[];
+    let claim: CoachLogClaim | undefined;
+    let afterCompliance: Parameters<typeof mealLogSnapshot>[0]["compliance"];
     if (!before) {
       action = "create";
       status = 201;
       entryId = createId();
+      serverVersion = 0;
       const row = {
         id: entryId,
         assignmentId: assignment.id,
@@ -1371,25 +1402,9 @@ mealRoutes.put(
         createdAt: now,
         updatedAt: now,
       };
-      try {
-        await db.insert(mealCompliance).values(row);
-      } catch (error) {
-        // One entry per meal (unique per assignment): a concurrent log won.
-        const [raced] = await db
-          .select({ id: mealCompliance.id })
-          .from(mealCompliance)
-          .where(eq(mealCompliance.assignmentId, assignment.id))
-          .limit(1);
-        if (raced) {
-          return fail(
-            c,
-            409,
-            "COMPLIANCE_ALREADY_RECORDED",
-            "This meal already has a compliance record.",
-          );
-        }
-        throw error;
-      }
+      afterCompliance = row;
+      domainWrites = () => [db.insert(mealCompliance).values(row)];
+      claim = undefined;
     } else {
       action = "edit";
       status = 200;
@@ -1414,72 +1429,94 @@ mealRoutes.put(
         });
         return c.json(unchanged, 200);
       }
-      // Claim the version first, so a concurrent edit with the same version writes nothing.
-      const claimed = await db
-        .update(mealCompliance)
-        .set({
-          outcome: body.outcome,
-          deviationKind: nextDeviationKind,
-          notes: nextNotes,
-          ...macros,
-          recordVersion: before.recordVersion + 1,
-          lastEditedByRole: "coach",
-          lastEditedByUserId: actor.userId,
-          lastEditedAt: now,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(mealCompliance.id, before.id),
-            eq(mealCompliance.recordVersion, before.recordVersion),
-          ),
-        )
-        .returning({ id: mealCompliance.id });
-      if (claimed.length === 0) {
-        return coachMealVersionConflict(c);
-      }
+      serverVersion = before.recordVersion + 1;
+      const edited = {
+        outcome: body.outcome,
+        deviationKind: nextDeviationKind,
+        notes: nextNotes,
+        ...macros,
+        recordVersion: serverVersion,
+        lastEditedByRole: "coach" as const,
+        lastEditedByUserId: actor.userId,
+        lastEditedAt: now,
+        updatedAt: now,
+      };
+      afterCompliance = { ...before, ...edited };
+      claim = {
+        entity: "meal_compliance",
+        id: entryId,
+        recordVersion: serverVersion,
+        update: () =>
+          db
+            .update(mealCompliance)
+            .set(edited)
+            .where(
+              and(
+                eq(mealCompliance.id, before.id),
+                eq(mealCompliance.recordVersion, before.recordVersion),
+              ),
+            ),
+      };
+      domainWrites = () => [];
     }
 
-    const [saved] = await db
-      .select()
-      .from(mealCompliance)
-      .where(eq(mealCompliance.id, entryId))
-      .limit(1);
-    await recordCoachLogChange(db, {
-      entity: {
-        type: "meal_compliance",
-        id: entryId,
-        coachingRelationshipId: relationship.id,
-        traineeUserId: relationship.traineeUserId,
-        serverVersion: saved!.recordVersion,
-        routing: { domainEntityType: "meal_assignment", domainEntityId: assignment.id },
-      },
-      action,
-      actorUserId: actor.userId,
-      before: before ? mealLogSnapshot({ assignment, compliance: before }) : null,
-      after: mealLogSnapshot({ assignment, compliance: saved! }),
-      now,
-      push: coachPushConfig(c.env),
-    });
+    let responseBody: { data: ReturnType<typeof mealComplianceSchema.parse> } | undefined;
+    try {
+      await recordCoachLogChange(db, {
+        domainWrites,
+        claim,
+        afterCommit: async () => {
+          const [saved] = await db
+            .select()
+            .from(mealCompliance)
+            .where(eq(mealCompliance.id, entryId))
+            .limit(1);
+          responseBody = {
+            data: mealComplianceSchema.parse(mapMealCompliance(saved!)),
+          };
+          await saveIdempotencyRecord(db, {
+            actorUserId: actor.userId,
+            operation: COACH_LOG_OPERATION,
+            idempotencyKey,
+            requestFingerprint: fingerprint,
+            responseStatus: status,
+            responseBody,
+            expiresAt: addDaysIso(7),
+          });
+        },
+        entity: {
+          type: "meal_compliance",
+          id: entryId,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: relationship.traineeUserId,
+          serverVersion,
+          routing: { domainEntityType: "meal_assignment", domainEntityId: assignment.id },
+        },
+        action,
+        actorUserId: actor.userId,
+        before: before ? mealLogSnapshot({ assignment, compliance: before }) : null,
+        after: mealLogSnapshot({ assignment, compliance: afterCompliance }),
+        now,
+        push: coachPushConfig(c.env),
+      });
+    } catch (error) {
+      if (error instanceof CoachLogConflict) {
+        if (error.kind === "version") return coachMealVersionConflict(c);
+        if (error.kind === "entry") return mealAlreadyRecorded(c, db, assignment.id);
+        return mealLogWriteConflict(c);
+      }
+      throw error;
+    }
 
-    const responseBody = {
-      data: mealComplianceSchema.parse(mapMealCompliance(saved!)),
-    };
-    await saveIdempotencyRecord(db, {
-      actorUserId: actor.userId,
-      operation: COACH_LOG_OPERATION,
-      idempotencyKey,
-      requestFingerprint: fingerprint,
-      responseStatus: status,
-      responseBody,
-      expiresAt: addDaysIso(7),
-    });
+    if (!responseBody) {
+      throw new Error("Coach log committed without a stored meal entry.");
+    }
     queueRealtimeHint(c.env, {
       eventType: "meal_compliance_changed",
       entityType: "meal_compliance",
       entityId: entryId,
       coachingRelationshipId: relationship.id,
-      serverVersion: saved!.recordVersion,
+      serverVersion: responseBody.data.recordVersion,
     });
     return c.json(responseBody, status);
   },

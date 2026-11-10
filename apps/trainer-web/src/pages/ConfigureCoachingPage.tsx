@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -28,6 +29,7 @@ import {
   GLOBAL_CHECKIN_FORM_VERSION_ID,
   consistencyFingerprint,
   formatCivilDate,
+  formatRelative,
   labelFor,
   planConsistencyWarnings,
   possessivePronoun,
@@ -44,6 +46,10 @@ import { stage1Api } from "../lib/stage1-api";
 import { whatsappHref } from "../lib/whatsapp";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
+
+/** Shown when coaching ends while this page is open (Z7-12). */
+const ENDED_ELSEWHERE_MESSAGE =
+  "Coaching ended. Your unsaved changes were not saved.";
 
 const DEFAULT_FORM = {
   goalShort: "",
@@ -97,6 +103,31 @@ function checkinFormOptionValue(
 
 function firstNameOf(displayName: string): string {
   return displayName.trim().split(/\s+/)[0] || "Client";
+}
+
+/** Civil "Wed 21 Oct" for an ended-at instant, in the trainee's timezone. */
+function endedDateLabel(
+  endedAt: string | null | undefined,
+  timeZone: string | null | undefined,
+): string | null {
+  if (!endedAt) return null;
+  const instant = new Date(endedAt);
+  if (Number.isNaN(instant.getTime())) return null;
+  const zone = timeZone?.trim() || "Asia/Kolkata";
+  let civil: string;
+  try {
+    civil = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(instant);
+  } catch {
+    civil = endedAt.slice(0, 10);
+  }
+  const label = formatCivilDate(civil);
+  if (!label || /^\d{4}-\d{2}-\d{2}/.test(label)) return null;
+  return label;
 }
 
 
@@ -174,6 +205,7 @@ export function ConfigureCoachingPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [endedNotice, setEndedNotice] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [goalError, setGoalError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -357,6 +389,56 @@ export function ConfigureCoachingPage() {
     void load();
   }, [load]);
 
+  // Z7-12: coaching can end in another tab. Realtime hints already reload the
+  // workspace in the layout; on focus or visibility, refetch it too so the
+  // page does not depend on realtime. The form state is never reset by this.
+  useEffect(() => {
+    // Offline: a failed refetch would make the layout drop the workspace and
+    // unmount this page, losing unsaved text.
+    if (relationshipEnded || !online) return;
+    let last = 0;
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      // One tab return fires both visibilitychange and focus: one reload.
+      const now = Date.now();
+      if (now - last < 1000) return;
+      last = now;
+      reloadWorkspace();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [relationshipEnded, online, reloadWorkspace]);
+
+  // Ended while open (not already ended at load): tell the trainer. Unsaved
+  // text stays in the form, which is now read-only.
+  const wasEndedRef = useRef(relationshipEnded);
+  useEffect(() => {
+    if (relationshipEnded && !wasEndedRef.current) {
+      setEndedNotice(true);
+    }
+    wasEndedRef.current = relationshipEnded;
+  }, [relationshipEnded]);
+
+  /** A save refused with 409 RELATIONSHIP_ENDED: same message, then refetch status. */
+  function noteEndedElsewhere(err: unknown): boolean {
+    if (
+      err instanceof ApiClientError &&
+      err.status === 409 &&
+      err.code === "RELATIONSHIP_ENDED"
+    ) {
+      setEndedNotice(true);
+      setError(null);
+      setMessage(null);
+      reloadWorkspace();
+      return true;
+    }
+    return false;
+  }
+
   const status = configuration?.status ?? null;
   const expectedVersion = configuration?.recordVersion ?? 0;
   const canEdit =
@@ -430,7 +512,10 @@ export function ConfigureCoachingPage() {
       (c) => !reminders[c.type],
     ).map((c) => c.label.toLowerCase() + "s");
     let reminderSummary = "All off";
-    if (onReminders.length && offReminders.length) {
+    if (relationshipEnded) {
+      // Reminders are only evaluated for active relationships (D-W7-7).
+      reminderSummary = "Off while coaching is ended";
+    } else if (onReminders.length && offReminders.length) {
       reminderSummary = `On for ${onReminders.join(" and ")} · off for ${offReminders.join(" and ")}`;
     } else if (onReminders.length) {
       reminderSummary = `On for ${onReminders.join(" and ")}`;
@@ -458,10 +543,12 @@ export function ConfigureCoachingPage() {
         trackingBits.length > 0 ? trackingBits.join(" · ") : "Nothing required",
       reminders: reminderSummary,
       subscription: subscriptionForm.planName.trim()
-        ? `${freqLabel}${renewCivil ? ` · renews ${renewCivil}` : ""}`
+        ? relationshipEnded
+          ? freqLabel
+          : `${freqLabel}${renewCivil ? ` · renews ${renewCivil}` : ""}`
         : "No subscription yet",
     };
-  }, [checkinForms, form, reminders, subscriptionForm]);
+  }, [checkinForms, form, relationshipEnded, reminders, subscriptionForm]);
 
   async function onAcknowledgeDifference() {
     if (
@@ -486,6 +573,7 @@ export function ConfigureCoachingPage() {
         "The difference is acknowledged. Assignments and exceptions are unchanged.",
       );
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       setError(
         err instanceof ApiClientError
           ? err.message
@@ -547,6 +635,7 @@ export function ConfigureCoachingPage() {
       showToast("Draft saved");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       if (
         err instanceof ApiClientError &&
         err.code === "CONFIGURATION_INCOMPLETE"
@@ -595,6 +684,7 @@ export function ConfigureCoachingPage() {
       showToast("Configuration activated");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       if (
         err instanceof ApiClientError &&
         err.code === "CONFIGURATION_INCOMPLETE"
@@ -644,6 +734,7 @@ export function ConfigureCoachingPage() {
       showToast("New version created");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       setError(
         err instanceof ApiClientError
           ? err.message
@@ -674,6 +765,7 @@ export function ConfigureCoachingPage() {
       showToast("Subscription saved");
       reloadWorkspace();
     } catch (err) {
+      if (noteEndedElsewhere(err)) return;
       setSubscriptionError(
         err instanceof ApiClientError
           ? err.message
@@ -711,6 +803,7 @@ export function ConfigureCoachingPage() {
       );
     } catch (err) {
       setReminders((current) => ({ ...current, [type]: previous ?? true }));
+      if (noteEndedElsewhere(err)) return;
       showToast(
         err instanceof ApiClientError
           ? err.message
@@ -730,10 +823,25 @@ export function ConfigureCoachingPage() {
     : null;
 
   const statusKey = status ?? "draft";
-  const statusLabel =
-    status == null
+  const statusLabel = relationshipEnded
+    ? "Ended"
+    : status == null
       ? "Draft"
       : labelFor("coaching_configuration_status", statusKey);
+  const endedOn = relationshipEnded
+    ? endedDateLabel(header?.endedAt, header?.traineeTimezone)
+    : null;
+  const pageTitle = relationshipEnded
+    ? "Coaching setup (ended)"
+    : "Configure coaching";
+  const pageLede = relationshipEnded
+    ? endedOn
+      ? `Coaching with ${firstName} ended on ${endedOn}. This is the setup you last used.`
+      : `Coaching with ${firstName} has ended. This is the setup you last used.`
+    : `Set the baseline for ${firstName}: goals, expectations, reminders, and subscription.`;
+  const pendingReactivation = relationshipEnded
+    ? (header?.pendingReactivation ?? null)
+    : null;
 
   const primaryAction = (() => {
     if (relationshipEnded) return null;
@@ -801,11 +909,8 @@ export function ConfigureCoachingPage() {
       data-testid="screen-TW-11"
     >
       <header className="configure-page-header">
-        <h2 className="configure-page-title">Configure coaching</h2>
-        <p className="lede">
-          Set the baseline for {firstName}: goals, expectations, reminders, and
-          subscription.
-        </p>
+        <h2 className="configure-page-title">{pageTitle}</h2>
+        <p className="lede">{pageLede}</p>
       </header>
 
       {header?.onboardingStatus !== "coaching_ready" &&
@@ -825,9 +930,27 @@ export function ConfigureCoachingPage() {
         </p>
       ) : null}
 
-      {header?.onboardingStatus === "ended" ? (
-        <p className="banner-info" role="status">
-          This coaching relationship has ended. Configuration is read-only.
+      {endedNotice ? (
+        <p
+          className="banner-attention"
+          role="status"
+          data-testid="configure-ended-elsewhere"
+        >
+          {ENDED_ELSEWHERE_MESSAGE}
+        </p>
+      ) : null}
+
+      {pendingReactivation ? (
+        <p
+          className="banner-info"
+          role="status"
+          data-testid="configure-pending-reactivation"
+        >
+          {`Waiting for ${firstName} to confirm${
+            pendingReactivation.sentAt
+              ? ` · sent ${formatRelative(pendingReactivation.sentAt)}`
+              : ""
+          }`}
         </p>
       ) : null}
 
@@ -1208,7 +1331,7 @@ export function ConfigureCoachingPage() {
                 {firstName} in the app for now.
               </p>
             )}
-            {openWhatsappHref ? (
+            {relationshipEnded ? null : openWhatsappHref ? (
               <a
                 className="button-secondary button-whatsapp"
                 href={openWhatsappHref}
@@ -1286,7 +1409,8 @@ export function ConfigureCoachingPage() {
               />
             </label>
             <label className="field">
-              <span>Renews on</span>
+              {/* Ended: no live "renews" wording (Z7-11); the stored date was the due date. */}
+              <span>{relationshipEnded ? "Due on" : "Renews on"}</span>
               <input
                 type="date"
                 name="renewsOn"
@@ -1353,7 +1477,11 @@ export function ConfigureCoachingPage() {
 
       <footer className="screen-sticky-footer configure-sticky-footer">
         <span
-          className={`status-badge status-${statusKey}`}
+          className={
+            relationshipEnded
+              ? "status-badge"
+              : `status-badge status-${statusKey}`
+          }
           data-testid="configure-status-pill"
         >
           <span className="status-dot" aria-hidden="true" />

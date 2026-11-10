@@ -154,7 +154,9 @@ activityFeedRoutes.get(
         summary: `Coach ask: ${topicLabel}`,
       });
     }
-    // R4 (Z6-19): one event per trainer create or edit, from the audit table.
+    // R4 (Z6-19, Z7-22): one event per trainer create or edit. The audit row is
+    // written in the same transaction as the entry, so a failed coach log
+    // leaves neither this event nor the entry.
     const coachChanges = await db
       .select()
       .from(logEditEvents)
