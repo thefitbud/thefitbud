@@ -248,6 +248,51 @@ describe("auth login routes", () => {
     });
   });
 
+  it.each(["", " ", "   \t  ", "ab"])(
+    "rejects reset OTP start for a blank or too-short identifier (%j) before any OTP work",
+    async (identifier) => {
+      await seedPasswordUser(db, "reset-guard@example.com", "Str0ng-enough");
+      const res = await app.request(
+        "/auth/otp/start",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier, purpose: "reset" }),
+        },
+        testEnv(),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "INVALID_REQUEST", message: "Invalid request." },
+      });
+      expect(await db.select().from(schema.authOtps)).toHaveLength(0);
+      expect(await db.select().from(schema.devMailOutbox)).toHaveLength(0);
+    },
+  );
+
+  it("still starts a reset for a known identifier and keeps the generic 202 for an unknown one", async () => {
+    await seedPasswordUser(db, "reset-ok@example.com", "Str0ng-enough");
+    const start = (identifier: string) =>
+      app.request(
+        "/auth/otp/start",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier, purpose: "reset" }),
+        },
+        testEnv(),
+      );
+    const known = await start("  reset-ok@example.com  ");
+    expect(known.status).toBe(202);
+    expect(await known.json()).toEqual({ data: { sent: true, channels: ["email"] } });
+    expect(await db.select().from(schema.authOtps)).toHaveLength(1);
+
+    const unknown = await start("reset-nobody@example.com");
+    expect(unknown.status).toBe(202);
+    expect(await unknown.json()).toEqual({ data: { sent: true, channels: ["email"] } });
+    expect(await db.select().from(schema.authOtps)).toHaveLength(1);
+  });
+
   it("keeps the generic OTP start response when ZeptoMail fails for a known user", async () => {
     await seedPasswordUser(db, "otp-mailfail@example.com", "Str0ng-enough");
     const fetchMock = vi.fn(async () => new Response("{}", { status: 500 }));
