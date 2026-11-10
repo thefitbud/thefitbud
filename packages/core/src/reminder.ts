@@ -719,6 +719,11 @@ export function notificationInboxRoute(payload: PushPayload): string {
       if (payload.notificationType === "reactivation_requested") {
         return routeForLinkKind("reactivate", payload.domainEntityId);
       }
+      // A coach-logged measurement is stored against the relationship and opens
+      // Progress (same target as the mobile router, Z6-20 / D-W7-13).
+      if (payload.notificationType === "coach_log_updated") {
+        return routeForLinkKind("progress", payload.domainEntityId);
+      }
       return routeForLinkKind("today", payload.domainEntityId);
     default:
       return routeForLinkKind("today", payload.domainEntityId);
@@ -726,7 +731,7 @@ export function notificationInboxRoute(payload: PushPayload): string {
 }
 
 export function routeTargetFromPushPayload(payload: PushPayload): {
-  tab: "workout" | "diet" | "today";
+  tab: "workout" | "diet" | "today" | "progress";
   domainEntityType: NotificationDomainEntityType;
   domainEntityId: string;
 } {
@@ -754,6 +759,9 @@ export function routeTargetFromPushPayload(payload: PushPayload): {
     case "coach_log_updated":
       if (payload.domainEntityType === "workout_assignment") {
         return { tab: "workout", ...target };
+      }
+      if (payload.domainEntityType === "coaching_relationship") {
+        return { tab: "progress", ...target };
       }
       return { tab: "today", ...target };
     case "plan_published":
