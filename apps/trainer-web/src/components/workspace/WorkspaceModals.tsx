@@ -84,6 +84,7 @@ export function WorkspaceModals({
             gender={traineeGender}
             traineeFirstName={traineeName.trim().split(/\s+/)[0] ?? traineeName}
             clientWhatsappE164={clientWhatsappE164}
+            ended={ended}
           />
         </aside>
       </div>
