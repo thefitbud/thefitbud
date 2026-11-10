@@ -59,6 +59,7 @@ vi.mock("../lib/config", () => ({
   isWhatsAppAutomationEnabled: () => false,
 }));
 
+import { ApiClientError } from "@fitbud/api-client";
 import { ConfigureCoachingPage } from "./ConfigureCoachingPage";
 
 type ConfigStatus = "draft" | "active";
@@ -555,5 +556,115 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
         "48 h window · FitBud weekly check-in",
       ),
     );
+  });
+});
+
+describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
+  const MESSAGE = "Coaching ended. Your unsaved changes were not saved.";
+
+  function ctx(onboardingStatus: Onboarding, reloadWorkspace: () => void) {
+    return {
+      workspace: {
+        header: {
+          traineeDisplayName: "Kavya Menon",
+          traineeProfile: { gender: "female" },
+          onboardingStatus,
+          clientWhatsappE164: null,
+          hasCustomMealTimes: false,
+          traineeTimezone: "Asia/Kolkata",
+          endedAt: onboardingStatus === "ended" ? "2026-10-21T04:00:00.000Z" : null,
+          pendingReactivation: null,
+        },
+      },
+      workspaceLoading: false,
+      workspaceError: null,
+      notFound: false,
+      refreshEpoch: 0,
+      reloadWorkspace,
+      openWorkspaceModal: () => {},
+      relationshipId: REL_ID,
+      online: true,
+      ended: onboardingStatus === "ended",
+    };
+  }
+
+  function mount(reload: () => void) {
+    api.getCoachingConfiguration.mockResolvedValue(configuration("draft"));
+    const tree = (status: Onboarding) => (
+      <MemoryRouter initialEntries={[`/clients/${REL_ID}/configure`]}>
+        <Routes>
+          <Route
+            path="/clients/:relationshipId"
+            element={<Outlet context={ctx(status, reload)} />}
+          >
+            <Route path="configure" element={<ConfigureCoachingPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    const view = render(tree("coaching_ready"));
+    return { view, tree };
+  }
+
+  it("a realtime hint that flips the header to ended shows the message and keeps unsaved text", async () => {
+    const { view, tree } = mount(() => {});
+    await screen.findByText("Configure coaching");
+    const goal = view.container.querySelector<HTMLInputElement>(
+      "input[name=goalShort]",
+    )!;
+    fireEvent.change(goal, { target: { value: "Unsaved new goal" } });
+    expect(screen.queryByText(MESSAGE)).toBeNull();
+
+    view.rerender(tree("ended"));
+    await screen.findByText(MESSAGE);
+    await screen.findByText("Coaching setup (ended)");
+    expect(
+      view.container.querySelector<HTMLInputElement>("input[name=goalShort]")!
+        .value,
+    ).toBe("Unsaved new goal");
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+  });
+
+  it("an ended relationship at load does not show the message", async () => {
+    renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    expect(screen.queryByText(MESSAGE)).toBeNull();
+  });
+
+  it("refetches the workspace on window focus and when the tab becomes visible", async () => {
+    const reload = vi.fn();
+    mount(reload);
+    await screen.findByText("Configure coaching");
+    fireEvent(window, new Event("focus"));
+    expect(reload).toHaveBeenCalledTimes(1);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(reload).toHaveBeenCalledTimes(2);
+  });
+
+  it("a save refused with 409 RELATIONSHIP_ENDED shows the same message and refetches", async () => {
+    const reload = vi.fn();
+    const { view } = mount(reload);
+    await screen.findByText("Configure coaching");
+    api.saveConfigurationDraft.mockRejectedValue(
+      new ApiClientError({
+        code: "RELATIONSHIP_ENDED",
+        message: "Coaching relationship has ended.",
+        requestId: "req-1",
+        status: 409,
+      }),
+    );
+    fireEvent.change(
+      view.container.querySelector<HTMLInputElement>("input[name=goalShort]")!,
+      { target: { value: "Unsaved new goal" } },
+    );
+    reload.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText(MESSAGE);
+    expect(reload).toHaveBeenCalled();
+    expect(screen.queryByText("Coaching relationship has ended.")).toBeNull();
+    expect(
+      view.container.querySelector<HTMLInputElement>("input[name=goalShort]")!
+        .value,
+    ).toBe("Unsaved new goal");
   });
 });
