@@ -104,7 +104,7 @@ describe("sectionForRealtimeEvent", () => {
     ["meal_compliance_changed", "meal_compliance", "attention"],
     ["checkin_submitted", "checkin", "checkins"],
     ["checkin_reviewed", "checkin", "checkins"],
-    ["effective_plan_changed", "plan_version", "renewals"],
+    ["effective_plan_changed", "plan_version", "attention"],
   ];
 
   it.each(cases)("%s (%s) refreshes %s", (eventType, entityType, section) => {

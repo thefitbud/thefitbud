@@ -284,6 +284,71 @@ describe("HomePage section refresh (Z7-1)", () => {
     expect(shown.invitations).toBe(whileHidden.invitations + 1);
   });
 
+  it("refetches once when visibilitychange and focus arrive in separate tasks", async () => {
+    await renderHome();
+    setHidden(true);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const whileHidden = counts();
+
+    // Hold the attention request open so the focus event lands mid-refresh.
+    let releaseAttention: () => void = () => undefined;
+    api.getAttentionGroups.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseAttention = () => resolve({ groups: [group()] });
+        }),
+    );
+    setHidden(false);
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      releaseAttention();
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    // A focus right after the refresh finished does not start another one.
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    const shown = counts();
+    for (const key of Object.keys(shown) as Array<keyof typeof shown>) {
+      expect(shown[key], key).toBe(whileHidden[key] + 1);
+    }
+  });
+
+  it("puts the row back on Undo without writing or refetching other sections", async () => {
+    await renderHome();
+    const before = counts();
+    markReviewed();
+    expect(screen.queryByText("Rohan Mehta")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(api.acknowledgeException).not.toHaveBeenCalled();
+    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
+    const after = counts();
+    for (const key of Object.keys(after) as Array<keyof typeof after>) {
+      expect(after[key], key).toBe(before[key] + (key === "attention" ? 1 : 0));
+    }
+  });
+
   it("sends a realtime hint to the matching section only", async () => {
     await renderHome();
 
@@ -294,7 +359,7 @@ describe("HomePage section refresh (Z7-1)", () => {
     }> = [
       { eventType: "checkin_submitted", entityType: "checkin", key: "checkins" },
       { eventType: "exception_created", entityType: "exception", key: "attention" },
-      { eventType: "effective_plan_changed", entityType: "plan_version", key: "renewals" },
+      { eventType: "effective_plan_changed", entityType: "plan_version", key: "attention" },
       {
         eventType: "workout_execution_changed",
         entityType: "workout_execution",

@@ -25,6 +25,9 @@ export const HOME_POLL_MS = 45_000;
 
 const SECTION_CAP = 5;
 
+/** visibilitychange + focus from one return to the tab count as one refresh. */
+const VISIBLE_REFRESH_GAP_MS = 2_000;
+
 export const HOME_SECTIONS = [
   "attention",
   "asks",
@@ -79,7 +82,8 @@ type RefreshOpts = {
 /**
  * Realtime hints name one Home section. Exception hints refresh attention;
  * reviewed is the acknowledged slice of that same payload, so one response
- * updates both counts. Asks have no hint type and stay on the poll.
+ * updates both counts. Asks, renewals and getting started have no hint type
+ * and stay on the poll.
  */
 export function sectionForRealtimeEvent(event: RealtimeEvent): HomeSectionId {
   switch (event.eventType) {
@@ -89,12 +93,14 @@ export function sectionForRealtimeEvent(event: RealtimeEvent): HomeSectionId {
     case "exception_changed":
     case "workout_execution_changed":
     case "meal_compliance_changed":
+    case "effective_plan_changed":
+      // A published plan changes what is expected of the client, and so the
+      // derived missed/overdue exceptions. It has nothing to do with renewals,
+      // which come from the subscription, not the training plan.
       return "attention";
     case "checkin_submitted":
     case "checkin_reviewed":
       return "checkins";
-    case "effective_plan_changed":
-      return "renewals";
     default: {
       const unreachable: never = event.eventType;
       return unreachable;
@@ -411,16 +417,22 @@ export function useHomeSections(options: { timeZone: string }) {
 
   const refreshAll = useCallback(
     async (opts?: { quiet?: boolean }): Promise<void> => {
+      const quiet = opts?.quiet === true;
       if (allInflightRef.current) {
+        // A quiet refresh (poll, tab shown, focus) joins the one in flight:
+        // it would fetch the same data. A loud Retry runs again afterwards.
+        if (quiet) {
+          await allInflightRef.current;
+          return;
+        }
         allRerunRef.current = true;
         await allInflightRef.current;
         if (allRerunRef.current) {
           allRerunRef.current = false;
-          await refreshAll({ quiet: true });
+          await refreshAll({ quiet: false });
         }
         return;
       }
-      const quiet = opts?.quiet === true;
       const run = (async () => {
         if (!quiet) {
           setLoading(true);
@@ -459,6 +471,9 @@ export function useHomeSections(options: { timeZone: string }) {
     let stopped = false;
     let timer: number | null = null;
     let visibleCoalesce: Promise<void> | null = null;
+    // visibilitychange and focus usually both fire when the trainer comes
+    // back to the tab, not always in the same task. One refresh covers both.
+    let lastVisibleRefreshAt = Number.NEGATIVE_INFINITY;
 
     const stopPoll = () => {
       if (timer != null) {
@@ -482,9 +497,11 @@ export function useHomeSections(options: { timeZone: string }) {
         return;
       }
       if (visibleCoalesce) return;
+      if (Date.now() - lastVisibleRefreshAt < VISIBLE_REFRESH_GAP_MS) return;
       visibleCoalesce = Promise.resolve().then(() => {
         visibleCoalesce = null;
         if (stopped || document.hidden) return;
+        lastVisibleRefreshAt = Date.now();
         startPoll();
         return refreshAll({ quiet: true });
       });
