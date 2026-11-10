@@ -316,6 +316,17 @@ export function ExceptionDrawer({
   const clientParam = searchParams.get("client");
   const listRid = relationshipId ?? clientParam ?? null;
 
+  const listRidRef = useRef(listRid);
+  listRidRef.current = listRid;
+  /**
+   * Control to focus once the next render has it (Resolve → Undo, Undo →
+   * Resolve, commit → Next item / Close), so focus never drops to <body>.
+   */
+  const pendingFocusRef = useRef<"undo" | "resolve" | "after-commit" | null>(
+    null,
+  );
+  /** Item as it was before an optimistic Resolve, restored by Undo. */
+  const preResolveDetailRef = useRef<ExceptionDetail | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(
     exceptionId ?? null,
   );
@@ -395,10 +406,16 @@ export function ExceptionDrawer({
   // the only signal: if the URL it lands on shows this item, it is a fresh
   // open. A traversal to a URL without this item leaves the flag set, so the
   // drawer stays inert until it unmounts.
+  // In `?client=`-only mode (no preselected item) the URL names the client,
+  // so landing back on this client is the fresh open.
   useEffect(() => {
     function onPopState() {
-      const shown = new URLSearchParams(window.location.search).get("exception");
-      if (shown && shown === exceptionId) closingRef.current = false;
+      const params = new URLSearchParams(window.location.search);
+      const shown = params.get("exception");
+      const shownClient = params.get("client");
+      if (exceptionId ? shown === exceptionId : Boolean(shownClient && shownClient === listRidRef.current)) {
+        closingRef.current = false;
+      }
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -584,6 +601,18 @@ export function ExceptionDrawer({
         createIdempotencyKey(),
       );
       if (isCurrent()) {
+        // Undo leaves the screen: if it (or nothing) held focus, move it to
+        // the footer's Next item / Close.
+        const activeEl = document.activeElement;
+        const panel = panelRef.current;
+        if (
+          !activeEl ||
+          activeEl === document.body ||
+          (activeEl instanceof HTMLElement && activeEl.classList.contains("sp-undo")) ||
+          (panel && !panel.contains(activeEl))
+        ) {
+          pendingFocusRef.current = "after-commit";
+        }
         setResolveUndoPending(false);
         await loadRef.current(p.id, { quiet: true });
       }
@@ -600,12 +629,22 @@ export function ExceptionDrawer({
         delete next[p.id];
         return next;
       });
-      setError(
-        err instanceof ApiClientError ? err.message : "Could not resolve.",
-      );
       if (isCurrent()) {
+        pendingFocusRef.current = "resolve";
         setResolveUndoPending(false);
         await loadRef.current(p.id, { quiet: true });
+        setError(
+          err instanceof ApiClientError ? err.message : "Could not resolve.",
+        );
+      } else {
+        // The trainer already moved on: name the item instead of blaming
+        // the one on screen. It is back in Also open.
+        const idx = itemsRef.current.findIndex((item) => item.id === p.id);
+        setError(
+          idx >= 0
+            ? `Could not resolve item ${idx + 1}. It is still open.`
+            : "Could not resolve the previous item. It is still open.",
+        );
       }
     } finally {
       if (mountedRef.current) setActing(false);
@@ -697,6 +736,11 @@ export function ExceptionDrawer({
     resolveGenRef.current += 1;
     pendingRef.current = null;
     setResolveUndoPending(false);
+    // Show the item as it was straight away so Resolve is there to focus.
+    const before = preResolveDetailRef.current;
+    preResolveDetailRef.current = null;
+    if (before && pending && before.id === pending.id) setDetail(before);
+    pendingFocusRef.current = "resolve";
     if (pending) {
       setResolvedIds((prev) => {
         const next = new Set(prev);
@@ -724,6 +768,8 @@ export function ExceptionDrawer({
     const id = detail.id;
 
     // Frame 02: optimistic resolved banner + Undo before the POST commits.
+    preResolveDetailRef.current = detail;
+    pendingFocusRef.current = "undo";
     setSessionOutcomes((prev) => ({ ...prev, [id]: chosenOutcome }));
     setResolvedIds((prev) => new Set(prev).add(id));
     setResolveUndoPending(true);
@@ -756,6 +802,8 @@ export function ExceptionDrawer({
   }
 
   const items = list?.items ?? [];
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const listIndex = currentId
     ? items.findIndex((item) => item.id === currentId)
     : -1;
@@ -925,6 +973,26 @@ export function ExceptionDrawer({
       closeRef.current;
     next?.focus();
   }, [active, acting, acknowledged, detail]);
+
+  // Resolve → Undo, Undo → Resolve, commit → Next item (or Close).
+  useLayoutEffect(() => {
+    const want = pendingFocusRef.current;
+    if (!want) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const target =
+      want === "undo"
+        ? panel.querySelector<HTMLButtonElement>(".sp-undo")
+        : want === "resolve"
+          ? panel.querySelector<HTMLButtonElement>(".sp-resolve")
+          : (panel.querySelector<HTMLButtonElement>(
+              ".sp-foot-resolved .button-primary",
+            ) ?? closeRef.current);
+    if (target && !target.disabled) {
+      pendingFocusRef.current = null;
+      target.focus();
+    }
+  });
 
   // Stepping replaces the body (an Also open row or Next may unmount, an
   // arrow may disable at the end): keep focus inside on the item title.

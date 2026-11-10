@@ -630,3 +630,145 @@ describe("Side panel v3 list (Z7-5)", () => {
     expect(api.listExceptions).toHaveBeenCalledWith(REL_ID);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Z7-5 review fix round: focus on Resolve / Undo / commit, popstate in
+// ?client=-only mode, and a failed commit after stepping away.
+// ---------------------------------------------------------------------------
+
+describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
+  beforeEach(() => {
+    stubWorkspaceApis();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("Resolve focuses Undo; Undo focuses Resolve again", async () => {
+    renderPanel([openItem(1), openItem(2)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    const undo = screen.getByRole("button", { name: "Undo" });
+    expect(document.activeElement).toBe(undo);
+
+    fireEvent.click(undo);
+    const resolveBtn = screen.getByRole("button", { name: "Resolve…" });
+    expect(document.activeElement).toBe(resolveBtn);
+    expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
+    expect(api.resolveException).not.toHaveBeenCalled();
+  });
+
+  it("the 5 s timer commits and moves focus from Undo to Next item", async () => {
+    api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
+    api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
+    renderPanel([openItem(1), openItem(2)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo" }));
+
+    // After the commit the server returns the item resolved.
+    const committed = openItem(1, {
+      status: "resolved",
+      resolvedAt: "2026-10-22T12:30:00.000Z",
+      closedReason: "trainer",
+    });
+    const second = openItem(2);
+    api.getException.mockImplementation(async (id: string) =>
+      id === committed.id ? committed : second,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(api.resolveException).toHaveBeenCalledTimes(1);
+    expect(api.resolveException.mock.calls[0]![0]).toBe(itemId(1));
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /Next item · 2 of 2/ }),
+    );
+  });
+
+  it("without a list the commit moves focus to Close", async () => {
+    api.getException.mockResolvedValue(detail);
+    api.resolveException.mockResolvedValue(resolvedDetail("trainer"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(await screen.findByRole("textbox")).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo" }));
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(api.resolveException).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
+  });
+
+  it("a failed commit after stepping away names that item, not the one on screen", async () => {
+    api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
+    api.resolveException.mockRejectedValue(new Error("network down"));
+    renderPanel([openItem(1), openItem(2), openItem(3)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: /Next item · 2 of 3/ }));
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    expect(
+      await screen.findByText("Could not resolve item 1. It is still open."),
+    ).toBeTruthy();
+    // Item 1 is open again: back in Also open, and nothing reads resolved.
+    const also = screen.getByRole("region", { name: "Also open for Rohan" });
+    expect(also.textContent).toContain("1 · Missed workout");
+    expect(screen.queryByText(/resolved · /)).toBeNull();
+  });
+
+  it("Esc then Back in ?client=-only mode makes the shortcuts work again", async () => {
+    const items = [openItem(1), openItem(2)];
+    api.listExceptions.mockResolvedValue({ items, nextCursor: null });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    api.getException.mockImplementation(async (id: string) => byId.get(id)!);
+    const onClose = vi.fn();
+    // The parent's close is a pending transition, so the panel stays mounted
+    // for the same client (relationshipId prop) while the URL moves.
+    render(
+      <MemoryRouter initialEntries={[`/?client=${REL_ID}`]}>
+        <ExceptionDrawer relationshipId={REL_ID} onClose={onClose} />
+      </MemoryRouter>,
+    );
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Closing: keys are inert.
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(screen.getByText("1 of 2")).toBeTruthy();
+
+    // Back to a URL without this client: still inert.
+    window.history.pushState(null, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(screen.getByText("1 of 2")).toBeTruthy();
+
+    // Back to ?client=<this client>: a fresh open, keys work again.
+    window.history.pushState(null, "", `/?client=${REL_ID}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    expect(screen.getByText("2 of 2")).toBeTruthy();
+  });
+});

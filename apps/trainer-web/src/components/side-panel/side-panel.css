@@ -406,8 +406,12 @@
   background: #fff;
 }
 
-.sp-actions .sp-resolve {
+/* Frame 02: Mark reviewed · Nudge … spacer … ⋯ · Resolve… */
+.sp-actions > .overflow-menu {
   margin-left: auto;
+}
+
+.sp-actions .sp-resolve {
   min-width: 120px;
 }
 
