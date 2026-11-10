@@ -166,7 +166,6 @@ function clientNote(item: Checkin): string | null {
   const note =
     answers.notes?.trim() ||
     (typeof fromField === "string" ? fromField.trim() : "") ||
-    answers.wellbeing?.trim() ||
     "";
   return note || null;
 }
@@ -386,7 +385,6 @@ export function ClientCheckinsPage() {
         aside = `Submitted ${formatDayTime(item.submittedAt, clientTz, now)}${
           lateDays >= 1 ? ` · ${lateDays} d late` : ""
         }`;
-        if (!measurements && !note) detail = "Submitted";
       }
 
       built.push({
@@ -785,9 +783,13 @@ export function ClientCheckinsPage() {
                             target="_blank"
                             rel="noreferrer"
                             title="Opens WhatsApp with a draft. You press Send."
+                            aria-label="Remind on WhatsApp"
                           >
                             <WhatsAppGlyph />
-                            Remind on WhatsApp
+                            <span>
+                              Remind
+                              <span className="client-checkins-remind-long"> on WhatsApp</span>
+                            </span>
                           </a>
                         ) : row.aside ? (
                           <span>{row.aside}</span>
