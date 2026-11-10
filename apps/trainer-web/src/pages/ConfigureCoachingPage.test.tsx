@@ -562,7 +562,11 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
 describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
   const MESSAGE = "Coaching ended. Your unsaved changes were not saved.";
 
-  function ctx(onboardingStatus: Onboarding, reloadWorkspace: () => void) {
+  function ctx(
+    onboardingStatus: Onboarding,
+    reloadWorkspace: () => void,
+    online = true,
+  ) {
     return {
       workspace: {
         header: {
@@ -583,19 +587,19 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
       reloadWorkspace,
       openWorkspaceModal: () => {},
       relationshipId: REL_ID,
-      online: true,
+      online,
       ended: onboardingStatus === "ended",
     };
   }
 
-  function mount(reload: () => void) {
+  function mount(reload: () => void, online = true) {
     api.getCoachingConfiguration.mockResolvedValue(configuration("draft"));
     const tree = (status: Onboarding) => (
       <MemoryRouter initialEntries={[`/clients/${REL_ID}/configure`]}>
         <Routes>
           <Route
             path="/clients/:relationshipId"
-            element={<Outlet context={ctx(status, reload)} />}
+            element={<Outlet context={ctx(status, reload, online)} />}
           >
             <Route path="configure" element={<ConfigureCoachingPage />} />
           </Route>
@@ -631,14 +635,42 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
     expect(screen.queryByText(MESSAGE)).toBeNull();
   });
 
-  it("refetches the workspace on window focus and when the tab becomes visible", async () => {
+  it("one tab return (visibilitychange then focus) triggers one reload", async () => {
     const reload = vi.fn();
     mount(reload);
     await screen.findByText("Configure coaching");
+    document.dispatchEvent(new Event("visibilitychange"));
     fireEvent(window, new Event("focus"));
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refetch on focus while offline", async () => {
+    const reload = vi.fn();
+    mount(reload, false);
+    await screen.findByText("Configure coaching");
+    fireEvent(window, new Event("focus"));
     document.dispatchEvent(new Event("visibilitychange"));
-    expect(reload).toHaveBeenCalledTimes(2);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("a reminder toggle refused with 409 RELATIONSHIP_ENDED reverts and shows the message", async () => {
+    mount(() => {});
+    await screen.findByText("Configure coaching");
+    api.saveReminderRules.mockRejectedValue(
+      new ApiClientError({
+        code: "RELATIONSHIP_ENDED",
+        message: "Coaching relationship has ended.",
+        requestId: "req-2",
+        status: 409,
+      }),
+    );
+    const box = (screen.getByText("Workout", { selector: "span" })
+      .closest("label")!
+      .querySelector("input") as HTMLInputElement);
+    const before = box.checked;
+    fireEvent.click(box);
+    await screen.findByText(MESSAGE);
+    await waitFor(() => expect(box.checked).toBe(before));
   });
 
   it("a save refused with 409 RELATIONSHIP_ENDED shows the same message and refetches", async () => {

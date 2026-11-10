@@ -393,9 +393,16 @@ export function ConfigureCoachingPage() {
   // workspace in the layout; on focus or visibility, refetch it too so the
   // page does not depend on realtime. The form state is never reset by this.
   useEffect(() => {
-    if (relationshipEnded) return;
+    // Offline: a failed refetch would make the layout drop the workspace and
+    // unmount this page, losing unsaved text.
+    if (relationshipEnded || !online) return;
+    let last = 0;
     const refresh = () => {
       if (document.visibilityState === "hidden") return;
+      // One tab return fires both visibilitychange and focus: one reload.
+      const now = Date.now();
+      if (now - last < 1000) return;
+      last = now;
       reloadWorkspace();
     };
     window.addEventListener("focus", refresh);
@@ -404,7 +411,7 @@ export function ConfigureCoachingPage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [relationshipEnded, reloadWorkspace]);
+  }, [relationshipEnded, online, reloadWorkspace]);
 
   // Ended while open (not already ended at load): tell the trainer. Unsaved
   // text stays in the form, which is now read-only.
@@ -795,8 +802,8 @@ export function ConfigureCoachingPage() {
         enabled ? `${label} reminders on` : `${label} reminders off`,
       );
     } catch (err) {
-      if (noteEndedElsewhere(err)) return;
       setReminders((current) => ({ ...current, [type]: previous ?? true }));
+      if (noteEndedElsewhere(err)) return;
       showToast(
         err instanceof ApiClientError
           ? err.message
