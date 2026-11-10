@@ -175,6 +175,8 @@ export type ClientSettingsResponse = z.infer<typeof clientSettingsResponseSchema
  * PUT /client-settings/relationships/:id/subscription. Always creates version
  * `expectedVersion + 1`; earlier versions are never edited. Amount, type and mode
  * are sent explicitly (null for "not set") so nothing is carried over silently.
+ * Z8-17: when two saves of the same version overlap, one succeeds and the other
+ * answers 409 `SUBSCRIPTION_VERSION_CONFLICT` with nothing written.
  */
 export const putClientSubscriptionRequestSchema = z
   .object({
@@ -252,6 +254,11 @@ export type CreatePaymentRecordRequest = z.infer<
  * PATCH /client-settings/relationships/:id/payments/:paymentId. Only status,
  * paid date, method and note change. Going back to unpaid clears the paid date
  * and method (D-W6-22); marking paid needs both (sent now or already stored).
+ *
+ * Z8-17 merge rule: only the fields sent change, applied to the newest stored
+ * record, so two overlapping PATCHes of different fields both persist. A PATCH
+ * that no longer fits the newer record answers the usual 400; a record that
+ * keeps changing while it is applied answers 409 `PAYMENT_CONFLICT`.
  */
 export const updatePaymentRecordRequestSchema = z
   .object({
