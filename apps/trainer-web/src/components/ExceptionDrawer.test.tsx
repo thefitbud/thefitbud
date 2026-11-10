@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { ReactElement } from "react";
 import type { ExceptionDetail } from "@fitbud/contracts";
 
@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   getResponsiveness: vi.fn(),
   acknowledgeException: vi.fn(),
   resolveException: vi.fn(),
+  listExceptions: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -26,6 +27,7 @@ vi.mock("../lib/api", () => ({
     getClientWorkspace: api.getClientWorkspace,
     acknowledgeException: api.acknowledgeException,
     resolveException: api.resolveException,
+    listExceptions: api.listExceptions,
   },
 }));
 vi.mock("../lib/stage1-api", () => ({
@@ -359,5 +361,414 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
 
     expect(api.resolveException).not.toHaveBeenCalled();
     expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Z7-5 side panel v3: one client's open items, arrows, n of m, Undo and Next.
+// ---------------------------------------------------------------------------
+
+const OTHER_REL = "77777777-7777-4777-8777-777777777777";
+
+function itemId(n: number): string {
+  return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+
+/** Open item n of the client, detected n hours before a fixed instant. */
+function openItem(n: number, overrides: Partial<ExceptionDetail> = {}): ExceptionDetail {
+  const detectedAt = new Date(Date.UTC(2026, 9, 22, 12) - n * 3_600_000).toISOString();
+  return {
+    ...activeDetail,
+    id: itemId(n),
+    summary: `Missed workout ${n}`,
+    details: { localDate: "2026-10-21" },
+    detectedAt,
+    activatedAt: detectedAt,
+    createdAt: detectedAt,
+    updatedAt: detectedAt,
+    ...overrides,
+  };
+}
+
+let lastSearch = "";
+function SearchProbe() {
+  lastSearch = useLocation().search;
+  return null;
+}
+
+function renderPanel(
+  items: ExceptionDetail[],
+  opts: { exceptionId?: string; onClose?: () => void; onChanged?: () => void } = {},
+) {
+  api.listExceptions.mockResolvedValue({ items, nextCursor: null });
+  const byId = new Map(items.map((item) => [item.id, item]));
+  api.getException.mockImplementation(async (id: string) => {
+    const found = byId.get(id);
+    if (!found) throw new Error("not found");
+    return found;
+  });
+  const query = opts.exceptionId
+    ? `/?client=${REL_ID}&exception=${opts.exceptionId}`
+    : `/?client=${REL_ID}`;
+  return render(
+    <MemoryRouter initialEntries={[query]}>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <>
+              <SearchProbe />
+              <ExceptionDrawer
+                exceptionId={opts.exceptionId ?? null}
+                onClose={opts.onClose ?? (() => undefined)}
+                onChanged={opts.onChanged}
+              />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+async function findTitle(text: RegExp) {
+  return screen.findByRole("heading", { level: 3, name: text });
+}
+
+describe("Side panel v3 list (Z7-5)", () => {
+  beforeEach(() => {
+    stubWorkspaceApis();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("lists only this client's open items, newest first", async () => {
+    // API order is not trusted: oldest first, plus a reviewed and a resolved row.
+    const rows = [
+      openItem(3),
+      openItem(1),
+      openItem(4, { status: "acknowledged", acknowledgedAt: "2026-10-22T09:00:00.000Z" }),
+      openItem(5, { status: "resolved", resolvedAt: "2026-10-22T09:00:00.000Z" }),
+      openItem(2),
+    ];
+    renderPanel(rows);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    expect(api.listExceptions).toHaveBeenCalledWith(REL_ID);
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+    const also = screen.getByRole("region", { name: "Also open for Rohan" });
+    expect(also.textContent).toContain("2 · Missed workout");
+    expect(also.textContent).toContain("3 · Missed workout");
+    expect(also.textContent).not.toContain("4 ·");
+    expect(screen.getByText(/Rohan Mehta/)).toBeTruthy();
+  });
+
+  it("walks at most 10 items and says how many more", async () => {
+    const rows = Array.from({ length: 13 }, (_, i) => openItem(i + 1));
+    renderPanel(rows);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    expect(screen.getByText("1 of 10")).toBeTruthy();
+    expect(screen.getByText(/3 more open items/)).toBeTruthy();
+    expect(screen.getByText(/13 open items/)).toBeTruthy();
+  });
+
+  it("preselects &exception= and steps with arrows and the ←/→ keys", async () => {
+    renderPanel([openItem(1), openItem(2), openItem(3)], {
+      exceptionId: itemId(2),
+    });
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    expect(screen.getByText("2 of 3")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next item" }));
+    expect(await findTitle(/Missed workout 3/)).toBeTruthy();
+    expect(screen.getByText("3 of 3")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Next item" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    fireEvent.keyDown(document, { key: "ArrowLeft" });
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    fireEvent.keyDown(document, { key: "ArrowLeft" });
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+    // At the first item ← does nothing.
+    fireEvent.keyDown(document, { key: "ArrowLeft" });
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+
+    // Focus never leaves the dialog while stepping.
+    const dialog = screen.getByRole("dialog", { name: "Needs attention detail" });
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+  });
+
+  it("ignores ←/→ while typing in the note", async () => {
+    renderPanel([
+      openItem(1, { status: "acknowledged", acknowledgedAt: null }),
+      openItem(2),
+    ]);
+    // Acknowledged rows are not open: the client has one walkable item.
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    cleanup();
+    renderPanel([openItem(1), openItem(2)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    const note = screen.getByRole("textbox");
+    fireEvent.keyDown(note, { key: "ArrowRight" });
+    expect(screen.getByText("1 of 2")).toBeTruthy();
+  });
+
+  it("an Also open row jumps to that item", async () => {
+    renderPanel([openItem(1), openItem(2), openItem(3)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^3 · Missed workout/ }));
+    expect(await findTitle(/Missed workout 3/)).toBeTruthy();
+    expect(screen.getByText("3 of 3")).toBeTruthy();
+  });
+
+  it("Resolve shows the resolved state with Undo and Next; Next commits and moves", async () => {
+    const onChanged = vi.fn();
+    renderPanel([openItem(1), openItem(2), openItem(3)], { onChanged });
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
+    api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+
+    expect(screen.getByTestId("exception-resolve-banner").textContent).toContain(
+      "Resolved by you · just now · Talked to client",
+    );
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+    expect(screen.getByText("Resolved just now")).toBeTruthy();
+    expect(screen.getByText("1 of 3 resolved · 2 still open")).toBeTruthy();
+    expect(screen.getByText("1 of 3 resolved")).toBeTruthy();
+    expect(api.resolveException).not.toHaveBeenCalled();
+    const next = screen.getByRole("button", { name: /Next item · 2 of 3/ });
+
+    fireEvent.click(next);
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    // Moving on keeps the resolve: it commits now, not after the Undo window.
+    await waitFor(() => expect(api.resolveException).toHaveBeenCalledTimes(1));
+    expect(api.resolveException.mock.calls[0]![0]).toBe(itemId(1));
+    expect(api.acknowledgeException.mock.calls[0]![0]).toBe(itemId(1));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    const also = screen.getByRole("region", { name: "Also open for Rohan" });
+    expect(also.textContent).not.toContain("1 · ");
+    expect(also.textContent).toContain("3 · ");
+  });
+
+  it("Undo within 5 s keeps the item open and never POSTs", async () => {
+    renderPanel([openItem(1), openItem(2)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(screen.getByText("1 of 2 resolved · 1 still open")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    vi.useRealTimers();
+    expect(api.resolveException).not.toHaveBeenCalled();
+    expect(api.acknowledgeException).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "Resolve…" })).toBeTruthy();
+    expect(screen.queryByText(/resolved · /)).toBeNull();
+  });
+
+  it("after the last item is resolved the footer offers Close", async () => {
+    renderPanel([openItem(1)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(screen.getByText("All 1 resolved")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Next item ·/ })).toBeNull();
+    const closes = screen.getAllByRole("button", { name: "Close" });
+    expect(closes.length).toBe(2);
+    // Undo so no resolve is left to commit after this test unmounts.
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(api.resolveException).not.toHaveBeenCalled();
+  });
+
+  it("Escape closes, clears ?client= and keeps a pending resolve", async () => {
+    const onClose = vi.fn();
+    api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
+    api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
+    renderPanel([openItem(1), openItem(2)], { onClose });
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    expect(lastSearch).toContain(`client=${REL_ID}`);
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(lastSearch).not.toContain("client="));
+    await waitFor(() => expect(api.resolveException).toHaveBeenCalledTimes(1));
+  });
+
+  it("without ?client= it shows the single item and no list", async () => {
+    api.getException.mockResolvedValue(activeDetail);
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(await screen.findByRole("button", { name: "Mark reviewed" })).toBeTruthy();
+    expect(api.listExceptions).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Next item" })).toBeNull();
+    expect(screen.queryByText(/Also open/)).toBeNull();
+  });
+
+  it("does not list another client's items", async () => {
+    renderPanel([openItem(1), openItem(2, { coachingRelationshipId: OTHER_REL })]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    // The API scopes the list by relationship; the panel asks for this one only.
+    expect(api.listExceptions).toHaveBeenCalledTimes(1);
+    expect(api.listExceptions).toHaveBeenCalledWith(REL_ID);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Z7-5 review fix round: focus on Resolve / Undo / commit, popstate in
+// ?client=-only mode, and a failed commit after stepping away.
+// ---------------------------------------------------------------------------
+
+describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
+  beforeEach(() => {
+    stubWorkspaceApis();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("Resolve focuses Undo; Undo focuses Resolve again", async () => {
+    renderPanel([openItem(1), openItem(2)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    const undo = screen.getByRole("button", { name: "Undo" });
+    expect(document.activeElement).toBe(undo);
+
+    fireEvent.click(undo);
+    const resolveBtn = screen.getByRole("button", { name: "Resolve…" });
+    expect(document.activeElement).toBe(resolveBtn);
+    expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
+    expect(api.resolveException).not.toHaveBeenCalled();
+  });
+
+  it("the 5 s timer commits and moves focus from Undo to Next item", async () => {
+    api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
+    api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
+    renderPanel([openItem(1), openItem(2)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo" }));
+
+    // After the commit the server returns the item resolved.
+    const committed = openItem(1, {
+      status: "resolved",
+      resolvedAt: "2026-10-22T12:30:00.000Z",
+      closedReason: "trainer",
+    });
+    const second = openItem(2);
+    api.getException.mockImplementation(async (id: string) =>
+      id === committed.id ? committed : second,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(api.resolveException).toHaveBeenCalledTimes(1);
+    expect(api.resolveException.mock.calls[0]![0]).toBe(itemId(1));
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /Next item · 2 of 2/ }),
+    );
+  });
+
+  it("without a list the commit moves focus to Close", async () => {
+    api.getException.mockResolvedValue(detail);
+    api.resolveException.mockResolvedValue(resolvedDetail("trainer"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(await screen.findByRole("textbox")).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo" }));
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(api.resolveException).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
+  });
+
+  it("a failed commit after stepping away names that item, not the one on screen", async () => {
+    api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
+    api.resolveException.mockRejectedValue(new Error("network down"));
+    renderPanel([openItem(1), openItem(2), openItem(3)]);
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: /Next item · 2 of 3/ }));
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    expect(
+      await screen.findByText("Could not resolve item 1. It is still open."),
+    ).toBeTruthy();
+    // Item 1 is open again: back in Also open, and nothing reads resolved.
+    const also = screen.getByRole("region", { name: "Also open for Rohan" });
+    expect(also.textContent).toContain("1 · Missed workout");
+    expect(screen.queryByText(/resolved · /)).toBeNull();
+  });
+
+  it("Esc then Back in ?client=-only mode makes the shortcuts work again", async () => {
+    const items = [openItem(1), openItem(2)];
+    api.listExceptions.mockResolvedValue({ items, nextCursor: null });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    api.getException.mockImplementation(async (id: string) => byId.get(id)!);
+    const onClose = vi.fn();
+    // The parent's close is a pending transition, so the panel stays mounted
+    // for the same client (relationshipId prop) while the URL moves.
+    render(
+      <MemoryRouter initialEntries={[`/?client=${REL_ID}`]}>
+        <ExceptionDrawer relationshipId={REL_ID} onClose={onClose} />
+      </MemoryRouter>,
+    );
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Closing: keys are inert.
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(screen.getByText("1 of 2")).toBeTruthy();
+
+    // Back to a URL without this client: still inert.
+    window.history.pushState(null, "", "/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(screen.getByText("1 of 2")).toBeTruthy();
+
+    // Back to ?client=<this client>: a fresh open, keys work again.
+    window.history.pushState(null, "", `/?client=${REL_ID}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    expect(screen.getByText("2 of 2")).toBeTruthy();
   });
 });
