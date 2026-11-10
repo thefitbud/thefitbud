@@ -179,27 +179,26 @@ describe("resolveSetLoad", () => {
   });
 });
 
-// Z7-28: regression pins for known Z6-1 behaviour. These document what the
-// parser does today (and what migration 0035 does in SQL); a later intentional
-// change needs a new decision and must update these on purpose.
-describe("space collapsing (Z6-1 known behaviour)", () => {
+// Z7-28 pinned the old space collapsing; D-W8-14 (Firoz, 10 Nov 2026) changed
+// it on purpose: digits split by any run of spaces or tabs are never joined
+// into one number. Migration 0035 (applied) keeps its own backfill result.
+describe("space handling between digits (D-W8-14)", () => {
   const gap = (n: number) => " ".repeat(n);
 
-  it("rejects digits split by 1 to 8 spaces as text", () => {
-    for (let n = 1; n <= 8; n++) {
+  it("rejects digits split by any number of spaces as text", () => {
+    for (let n = 1; n <= 40; n++) {
       expect(parseLoadLabel(`4${gap(n)}0 kg`), `${n} spaces`).toEqual(TEXT);
     }
+    expect(parseLoadLabel(`1${gap(9)}2${gap(9)}5 kg`)).toEqual(TEXT);
+    expect(parseLoadLabel(`40${gap(9)}.5 kg`)).toEqual(TEXT);
+    expect(parseLoadLabel(`40.${gap(12)}5 kg`)).toEqual(TEXT);
+    expect(parseLoadLabel(`4${gap(9)}0`, { bareNumberUnit: "kg" })).toEqual(TEXT);
   });
 
-  it("joins digits separated by 9 or more spaces into one number", () => {
-    // Three passes of "  " -> " " leave 2 spaces from a 9-space run, which the
-    // digit-gap check (exactly one space) no longer sees; all spaces are then dropped.
-    for (const n of [9, 10, 12, 20, 40]) {
-      expect(parseLoadLabel(`4${gap(n)}0 kg`), `${n} spaces`).toEqual(kg(40));
-    }
-    expect(parseLoadLabel(`1${gap(9)}2${gap(9)}5 kg`)).toEqual(kg(125));
-    expect(parseLoadLabel(`40${gap(9)}.5 kg`)).toEqual(kg(40.5));
-    expect(parseLoadLabel(`4${gap(9)}0`, { bareNumberUnit: "kg" })).toEqual(kg(40));
+  it("rejects digits split by tabs and line breaks as text", () => {
+    expect(parseLoadLabel("4\t0 kg")).toEqual(TEXT);
+    expect(parseLoadLabel("4\t\t\t\t\t\t\t\t\t\t0 kg")).toEqual(TEXT);
+    expect(parseLoadLabel("4 \n 0 kg")).toEqual(TEXT);
   });
 
   it("still reads a run of spaces around words and units as one load", () => {
@@ -238,10 +237,10 @@ describe("one load_kind for prescribed and actual (Z6-1 known behaviour)", () =>
     ).toEqual({ prescribedLoadKg: null, actualLoadKg: null, loadKind: "text" });
   });
 
-  it("applies the 9-space join to both labels while the kind follows the actual label", () => {
+  it("reads a wide digit gap as text in both labels while the kind follows the actual label", () => {
     const wide = `4${" ".repeat(9)}0 kg`;
     expect(
       resolveSetLoad({ prescribedLoadLabel: wide, actualLoadLabel: "BW" }),
-    ).toEqual({ prescribedLoadKg: 40, actualLoadKg: null, loadKind: "bodyweight" });
+    ).toEqual({ prescribedLoadKg: null, actualLoadKg: null, loadKind: "bodyweight" });
   });
 });
