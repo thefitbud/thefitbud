@@ -123,7 +123,15 @@ function activeHistory(): Checkin[] {
 
 type Status = "active" | "ended";
 
-function renderPage(status: Status, opts?: { phone?: string | null; endedAt?: string }) {
+function renderPage(
+  status: Status,
+  opts?: {
+    phone?: string | null;
+    endedAt?: string;
+    configStatus?: "active" | "draft" | null;
+  },
+) {
+  const configStatus = opts?.configStatus === undefined ? "active" : opts.configStatus;
   const context = {
     workspace: {
       header: {
@@ -144,9 +152,12 @@ function renderPage(status: Status, opts?: { phone?: string | null; endedAt?: st
       },
       overview: { nextCheckin: null },
       configuration: {
-        configuration: {
-          checkin: { cadence: "weekly", dueWindowHours: 48, formVersionId: null },
-        },
+        configuration: configStatus
+          ? {
+              status: configStatus,
+              checkin: { cadence: "weekly", dueWindowHours: 48, formVersionId: null },
+            }
+          : null,
         subscription: null,
       },
     },
@@ -213,22 +224,17 @@ afterEach(() => {
 });
 
 describe("checkinRowState", () => {
-  const base = { windowEndsAt: "2026-10-17T18:30:00.000Z" };
-  const nowMs = NOW.getTime();
   it("maps server statuses to tab states", () => {
-    expect(checkinRowState({ ...base, status: "scheduled" }, { nowMs, cadenceDays: 7, ended: false })).toBe("upcoming");
-    expect(checkinRowState({ ...base, status: "submitted" }, { nowMs, cadenceDays: 7, ended: false })).toBe("to_review");
-    expect(checkinRowState({ ...base, status: "reviewed" }, { nowMs, cadenceDays: 7, ended: false })).toBe("reviewed");
+    expect(checkinRowState({ status: "scheduled" }, { ended: false })).toBe("upcoming");
+    expect(checkinRowState({ status: "due" }, { ended: false })).toBe("due");
+    expect(checkinRowState({ status: "submitted" }, { ended: false })).toBe("to_review");
+    expect(checkinRowState({ status: "reviewed" }, { ended: false })).toBe("reviewed");
   });
-  it("overdue stays overdue inside one cadence period, then reads Missed", () => {
-    expect(checkinRowState({ ...base, status: "overdue" }, { nowMs, cadenceDays: 7, ended: false })).toBe("overdue");
-    const later = nowMs + 6 * 86_400_000;
-    expect(checkinRowState({ ...base, status: "overdue" }, { nowMs: later, cadenceDays: 7, ended: false })).toBe("missed");
-    // Monthly cadence keeps it overdue longer.
-    expect(checkinRowState({ ...base, status: "overdue" }, { nowMs: later, cadenceDays: 28, ended: false })).toBe("overdue");
+  it("an active client's overdue check-in always reads Overdue, however old", () => {
+    expect(checkinRowState({ status: "overdue" }, { ended: false })).toBe("overdue");
   });
-  it("an ended client never has an overdue row", () => {
-    expect(checkinRowState({ ...base, status: "overdue" }, { nowMs, cadenceDays: 7, ended: true })).toBe("missed");
+  it("an ended client never has an overdue row: it reads Missed", () => {
+    expect(checkinRowState({ status: "overdue" }, { ended: true })).toBe("missed");
   });
 });
 
@@ -237,9 +243,10 @@ describe("ClientCheckinsPage chips (162)", () => {
     renderPage("active");
     expect(await screen.findByRole("button", { name: /^All 7$/ })).toBeTruthy();
     expect(chip(/^To review 1$/)).toBeTruthy();
-    expect(chip(/^Overdue 1$/)).toBeTruthy();
+    expect(chip(/^Overdue 2$/)).toBeTruthy();
     expect(chip(/^Reviewed 3$/)).toBeTruthy();
-    expect(chip(/^Missed 1$/)).toBeTruthy();
+    // No server missed status: an active client's Missed chip reads 0.
+    expect(chip(/^Missed 0$/)).toBeTruthy();
     expect(chip(/^All 7$/).getAttribute("aria-pressed")).toBe("true");
 
     expect(screen.getByText("Cadence")).toBeTruthy();
@@ -256,6 +263,7 @@ describe("ClientCheckinsPage chips (162)", () => {
     expect(screen.getByText('You: "Let\'s move leg day to Saturday."')).toBeTruthy();
     expect(screen.getByText("Reviewed · Needs follow-up")).toBeTruthy();
     expect(screen.getByText("Overdue · 1 d")).toBeTruthy();
+    expect(screen.getByText("Overdue · 13 d")).toBeTruthy();
     expect(screen.getByText(/Submitted Wed 23 Sep, 10:30 am · 1 d late/)).toBeTruthy();
     // The v1 pin still reads its template name.
     expect(screen.getAllByText("Weekly check-in").length).toBeGreaterThan(1);
@@ -274,11 +282,15 @@ describe("ClientCheckinsPage chips (162)", () => {
     expect(rows).toHaveLength(3);
     rows.forEach((row) => expect(row.getAttribute("data-state")).toBe("reviewed"));
 
-    fireEvent.click(chip(/^Missed 1$/));
-    const missed = document.querySelectorAll(".client-checkins-row");
-    expect(missed).toHaveLength(1);
-    expect(within(missed[0] as HTMLElement).getByText("Sun 4 Oct")).toBeTruthy();
-    expect(within(missed[0] as HTMLElement).getByText("Not submitted")).toBeTruthy();
+    fireEvent.click(chip(/^Overdue 2$/));
+    const overdue = document.querySelectorAll(".client-checkins-row");
+    expect(overdue).toHaveLength(2);
+    expect(within(overdue[1] as HTMLElement).getByText("Sun 4 Oct")).toBeTruthy();
+    expect(within(overdue[1] as HTMLElement).getByText("Due Sun 4 Oct · not submitted yet")).toBeTruthy();
+
+    fireEvent.click(chip(/^Missed 0$/));
+    expect(document.querySelectorAll(".client-checkins-row")).toHaveLength(0);
+    expect(screen.getByText("No check-ins match this filter.")).toBeTruthy();
 
     fireEvent.click(chip(/^To review 1$/));
     expect(document.querySelectorAll(".client-checkins-row")).toHaveLength(1);
@@ -300,9 +312,11 @@ describe("ClientCheckinsPage chips (162)", () => {
 });
 
 describe("ClientCheckinsPage overdue WhatsApp draft", () => {
-  it("offers a wa.me prefill on the overdue row only", async () => {
+  it("offers a wa.me prefill on overdue rows only", async () => {
     renderPage("active");
-    const remind = await screen.findByRole("link", { name: /Remind on WhatsApp/ });
+    const reminders = await screen.findAllByRole("link", { name: /Remind on WhatsApp/ });
+    expect(reminders).toHaveLength(2);
+    const remind = reminders[0] as HTMLElement;
     const href = remind.getAttribute("href") ?? "";
     expect(href.startsWith("https://wa.me/919812345678?text=")).toBe(true);
     expect(decodeURIComponent(href.split("text=")[1] ?? "")).toBe(
@@ -311,9 +325,9 @@ describe("ClientCheckinsPage overdue WhatsApp draft", () => {
     expect(remind.getAttribute("title")).toBe(
       "Opens WhatsApp with a draft. You press Send.",
     );
-    expect(screen.getAllByRole("link", { name: /Remind on WhatsApp/ })).toHaveLength(1);
-    const row = remind.closest(".client-checkins-row");
-    expect(row?.getAttribute("data-state")).toBe("overdue");
+    for (const link of reminders) {
+      expect(link.closest(".client-checkins-row")?.getAttribute("data-state")).toBe("overdue");
+    }
   });
 
   it("no number on file: no reminder link", async () => {
@@ -357,7 +371,27 @@ describe("ClientCheckinsPage empty (162b)", () => {
     expect(chip(/^Missed 0$/)).toBeTruthy();
     expect(screen.getByText("None scheduled")).toBeTruthy();
     expect(screen.getByText("0 of 0")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Arjun's first weekly check-in shows here once it's scheduled. Submitted check-ins show up here, newest first.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: /Schedule check-in/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Change schedule" })).toBeTruthy();
+  });
+
+  it("no active configuration: no Schedule check-in or Change schedule (API would refuse)", async () => {
+    api.listCheckins.mockResolvedValue({ items: [], nextCursor: null });
+    renderPage("active", { configStatus: "draft" });
+    expect(await screen.findByText("No check-ins yet")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Schedule check-in/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Change schedule" })).toBeNull();
+    expect(screen.queryByText("Cadence")).toBeNull();
+    expect(
+      screen.getByText(
+        "Check-ins start once his coaching setup is active. Submitted check-ins show up here, newest first.",
+      ),
+    ).toBeTruthy();
   });
 
   it("scheduling without picking a form sends no form id (preferred, else global v2)", async () => {
@@ -375,5 +409,38 @@ describe("ClientCheckinsPage empty (162b)", () => {
     await vi.waitFor(() => expect(api.scheduleCheckin).toHaveBeenCalled());
     const body = api.scheduleCheckin.mock.calls[0]?.[1] as Record<string, unknown>;
     expect(body).not.toHaveProperty("checkinFormVersionId");
+  });
+});
+
+describe("ClientCheckinsPage paging", () => {
+  it("loads every page before counting (more than 30 check-ins)", async () => {
+    // 35 weekly check-ins back from Sun 18 Oct: 1 to review, 34 reviewed.
+    const all: Checkin[] = [];
+    for (let i = 0; i < 35; i += 1) {
+      const d = new Date(Date.UTC(2026, 9, 18) - i * 7 * 86_400_000);
+      const localDate = d.toISOString().slice(0, 10);
+      all.push(
+        checkin({
+          localDate,
+          status: i === 0 ? "submitted" : "reviewed",
+          submittedAt: new Date(d.getTime() + 15 * 3600_000).toISOString(),
+          ...(i === 0 ? {} : { review: { outcome: "acknowledged" as const } }),
+        }),
+      );
+    }
+    api.listCheckins.mockImplementation(
+      async (_rid: string, query?: { cursor?: string }) =>
+        query?.cursor === "page-2"
+          ? { items: all.slice(30), nextCursor: null }
+          : { items: all.slice(0, 30), nextCursor: "page-2" },
+    );
+    renderPage("active");
+    expect(await screen.findByRole("button", { name: /^All 35$/ })).toBeTruthy();
+    expect(chip(/^To review 1$/)).toBeTruthy();
+    expect(chip(/^Reviewed 34$/)).toBeTruthy();
+    expect(document.querySelectorAll(".client-checkins-row")).toHaveLength(35);
+    expect(api.listCheckins).toHaveBeenCalledTimes(2);
+    expect(api.listCheckins.mock.calls[1]?.[1]).toMatchObject({ cursor: "page-2" });
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
 });

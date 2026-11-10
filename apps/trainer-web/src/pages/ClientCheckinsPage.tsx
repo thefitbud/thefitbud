@@ -14,7 +14,6 @@ import {
   GLOBAL_CHECKIN_FORM_V2_FIELDS,
   GLOBAL_CHECKIN_FORM_V2_VERSION_ID,
   checkinAnswerEntries,
-  daysForCheckinCadence,
   formatCivilDate,
   formatClockTime,
   formatTimeDiff,
@@ -33,6 +32,9 @@ import type { WorkspaceOutletContext } from "./workspaceContext";
 import "./client-checkins.css";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PAGE_SIZE = 30;
+/** Safety cap on paging (1,500 check-ins). */
+const MAX_PAGES = 50;
 
 /** Row state shown on the Check-ins tab (frames 162, 162c). */
 export type CheckinRowState =
@@ -69,14 +71,14 @@ const MONTHS = [
 ];
 
 /**
- * Tab state from the server-derived status. An overdue check-in reads as
- * Missed once a whole cadence period has passed since its window closed (the
- * next one is due by then), or always when coaching has ended. Nothing is
- * written: a late submission still turns it into To review.
+ * Tab state from the server-derived status. The API has no missed status, so
+ * an active client's overdue check-in always reads Overdue. Once coaching has
+ * ended (persisted on the relationship) an unsubmitted check-in can no longer
+ * come in, so it reads Missed (frame 162c).
  */
 export function checkinRowState(
-  item: Pick<Checkin, "status" | "windowEndsAt">,
-  input: { nowMs: number; cadenceDays: number; ended: boolean },
+  item: Pick<Checkin, "status">,
+  input: { ended: boolean },
 ): CheckinRowState {
   switch (item.status) {
     case "scheduled":
@@ -87,11 +89,8 @@ export function checkinRowState(
       return "to_review";
     case "reviewed":
       return "reviewed";
-    case "overdue": {
-      if (input.ended) return "missed";
-      const closedFor = input.nowMs - Date.parse(item.windowEndsAt);
-      return closedFor >= input.cadenceDays * DAY_MS ? "missed" : "overdue";
-    }
+    case "overdue":
+      return input.ended ? "missed" : "overdue";
     default:
       return "due";
   }
@@ -216,15 +215,17 @@ export function ClientCheckinsPage() {
   const firstName = clientName.trim().split(/\s+/)[0] || clientName;
   const pronoun = possessivePronoun(workspace?.header.traineeProfile.gender);
   const configuration = workspace?.configuration?.configuration ?? null;
+  // Scheduling needs an active configuration (API: NO_ACTIVE_CONFIGURATION).
+  const configurationActive = configuration?.status === "active";
   const cadence: CheckinCadence | null = configuration?.checkin.cadence ?? null;
   const preferredVersionId = configuration?.checkin.formVersionId ?? null;
   const clientPhone = workspace?.header.clientWhatsappE164 ?? null;
   const endedAt = workspace?.header.endedAt ?? null;
 
   const [items, setItems] = useState<Checkin[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  /** True only if the page cap was hit with more pages left: counts are then hidden. */
+  const [partial, setPartial] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [scheduling, setScheduling] = useState(false);
@@ -236,22 +237,28 @@ export function ClientCheckinsPage() {
   const [filter, setFilter] = useState<CheckinFilter>("all");
   const [nowMs, setNowMs] = useState(() => Date.now());
 
+  // Counts and "This month" need the whole history, so every page is loaded
+  // before the list shows.
   const load = useCallback(
-    async (cursor?: string | null) => {
+    async () => {
       if (!relationshipId) return;
-      const appending = Boolean(cursor);
-      if (appending) setLoadingMore(true);
-      else setLoading(true);
+      setLoading(true);
       setError(null);
       try {
-        const result = await apiClient.listCheckins(relationshipId, {
-          cursor: cursor ?? undefined,
-          limit: 30,
-        });
-        setItems((current) =>
-          appending ? [...current, ...result.items] : result.items,
-        );
-        setNextCursor(result.nextCursor);
+        const all: Checkin[] = [];
+        let cursor: string | null = null;
+        let pages = 0;
+        do {
+          const result = await apiClient.listCheckins(relationshipId, {
+            cursor: cursor ?? undefined,
+            limit: PAGE_SIZE,
+          });
+          all.push(...result.items);
+          cursor = result.nextCursor;
+          pages += 1;
+        } while (cursor && pages < MAX_PAGES);
+        setItems(all);
+        setPartial(Boolean(cursor));
         setNowMs(Date.now());
       } catch (err) {
         setError(
@@ -261,7 +268,6 @@ export function ClientCheckinsPage() {
         );
       } finally {
         setLoading(false);
-        setLoadingMore(false);
       }
     },
     [relationshipId],
@@ -300,7 +306,6 @@ export function ClientCheckinsPage() {
   }, [formNameFor, preferredVersionId]);
 
   const now = useMemo(() => new Date(nowMs), [nowMs]);
-  const cadenceDays = cadence ? daysForCheckinCadence(cadence) : 7;
 
   const rows: Row[] = useMemo(() => {
     const sorted = [...items].sort((a, b) =>
@@ -310,7 +315,7 @@ export function ClientCheckinsPage() {
     );
     const built: Row[] = [];
     sorted.forEach((item, index) => {
-      const state = checkinRowState(item, { nowMs, cadenceDays, ended });
+      const state = checkinRowState(item, { ended });
       // Ended: no upcoming or open rows (frame 162c).
       if (ended && (state === "upcoming" || state === "due")) return;
       const overdueDays = Math.max(0, wholeDays(Date.parse(item.windowEndsAt), nowMs));
@@ -400,7 +405,7 @@ export function ClientCheckinsPage() {
       });
     });
     return built;
-  }, [items, nowMs, cadenceDays, ended, clientTz, now, formNameFor]);
+  }, [items, nowMs, ended, clientTz, now, formNameFor]);
 
   const counts = useMemo(() => {
     const result: Record<CheckinFilter, number> = {
@@ -468,11 +473,17 @@ export function ClientCheckinsPage() {
     return { expected, submitted };
   }, [items, nowMs, clientTz]);
 
-  const cadenceValue = cadence
+  const cadenceValue = configurationActive && cadence
     ? [labelFor("checkin_cadence", cadence), defaultFormName]
         .filter(Boolean)
         .join(" · ")
     : null;
+
+  // "weekly" / "monthly" from the configuration's cadence label (frame 162b).
+  const cadenceWord =
+    cadence && cadence !== "biweekly"
+      ? `${labelFor("checkin_cadence", cadence).toLowerCase()} `
+      : "";
 
   const preview = useMemo(() => {
     if (!scheduleDate) return null;
@@ -533,7 +544,7 @@ export function ClientCheckinsPage() {
   }
 
   const scheduleButton =
-    !ended ? (
+    !ended && configurationActive ? (
       <Button
         variant="primary"
         disabled={!online}
@@ -585,14 +596,16 @@ export function ClientCheckinsPage() {
                 : "None scheduled"}
             </dd>
           </div>
-          <div>
-            <dt>This month</dt>
-            <dd>
-              {thisMonth.expected > 0
-                ? `${thisMonth.submitted} of ${thisMonth.expected} submitted`
-                : `${thisMonth.submitted} of ${thisMonth.expected}`}
-            </dd>
-          </div>
+          {!partial ? (
+            <div>
+              <dt>This month</dt>
+              <dd>
+                {thisMonth.expected > 0
+                  ? `${thisMonth.submitted} of ${thisMonth.expected} submitted`
+                  : `${thisMonth.submitted} of ${thisMonth.expected}`}
+              </dd>
+            </div>
+          ) : null}
         </dl>
       )}
 
@@ -615,12 +628,17 @@ export function ClientCheckinsPage() {
               aria-pressed={activeFilter === entry.id}
               onClick={() => setFilter(entry.id)}
             >
-              {entry.label}{" "}
-              <span className="client-checkins-count">{counts[entry.id]}</span>
+              {entry.label}
+              {!partial ? (
+                <>
+                  {" "}
+                  <span className="client-checkins-count">{counts[entry.id]}</span>
+                </>
+              ) : null}
             </button>
           ))}
         </div>
-        {!ended ? (
+        {!ended && configurationActive ? (
           <div className="client-checkins-actions">
             <Link
               className="button-secondary"
@@ -701,8 +719,10 @@ export function ClientCheckinsPage() {
               ? `${firstName} has no check-ins from ${pronoun} coaching.`
               : `${
                   nextCheckin
-                    ? `${firstName}'s first check-in opens ${formatCivilDate(nextCheckin.localDate, { now })}.`
-                    : `${firstName}'s check-ins follow ${pronoun} check-in schedule.`
+                    ? `${firstName}'s first ${cadenceWord}check-in opens ${formatCivilDate(nextCheckin.localDate, { now })}.`
+                    : configurationActive
+                      ? `${firstName}'s first ${cadenceWord}check-in shows here once it's scheduled.`
+                      : `Check-ins start once ${pronoun} coaching setup is active.`
                 } Submitted check-ins show up here, newest first.`}
           </p>
           {scheduleButton}
@@ -807,15 +827,6 @@ export function ClientCheckinsPage() {
           ))
         : null}
 
-      {nextCursor ? (
-        <Button
-          variant="secondary"
-          disabled={loadingMore}
-          onClick={() => void load(nextCursor)}
-        >
-          {loadingMore ? "Loading…" : "Load more"}
-        </Button>
-      ) : null}
     </div>
   );
 }
