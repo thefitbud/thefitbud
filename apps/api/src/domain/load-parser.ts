@@ -22,6 +22,9 @@
  * rules in SQL. Every step below has a SQL twin there, and
  * `migration-chain.test.ts` checks both agree on the labels of
  * `load-parser.test.ts` (its LOAD_LABELS list). Change both together.
+ *
+ * One intended difference (D-W8-14): digits split by 9 or more spaces were
+ * joined by the applied 0035 backfill; the runtime parser reads them as text.
  */
 
 export const LOAD_KINDS = ["kg", "bodyweight", "bodyweight_plus", "text"] as const;
@@ -119,10 +122,10 @@ export function parseLoadLabel(
     s = s.replace(",", ".");
   }
 
-  // Collapse runs of spaces the way the SQL does (three passes of "  " → " ").
-  s = s.replaceAll("  ", " ").replaceAll("  ", " ").replaceAll("  ", " ");
-  // "4 0 kg", "40 .5 kg": numbers split by spaces are not read as one number.
-  if (/[0-9.] [0-9.]/.test(s)) return TEXT;
+  // "4 0 kg", "40 .5 kg": numbers split by any run of spaces are never read
+  // as one number (D-W8-14). Checked on the whole run, so a long gap cannot
+  // slip past the way it did with the old three-pass collapse (Z7-28 pin).
+  if (/[0-9.] +[0-9.]/.test(s)) return TEXT;
   s = s.replaceAll(" ", "");
 
   if (s === "bw" || s === "bodyweight") return { kind: "bodyweight", kg: null };
