@@ -18,19 +18,13 @@ import {
   OctagonAlert,
   Sun,
 } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
 import {
   formatCivilDate,
   formatLocalDate,
   formatRelative,
   labelFor,
 } from "@fitbud/core";
-import type {
-  CoachAsk,
-  ReengagementCandidatesResponse,
-  SubscriptionAttentionItem,
-  TrainerCheckinInboxItem,
-} from "@fitbud/contracts";
+import type { CoachAsk } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
@@ -38,11 +32,7 @@ import { CoachAskDrawer } from "../components/CoachAskDrawer";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { useOnlineStatus } from "../components/OfflineBanner";
 import { StatusChip } from "../components/StatusChip";
-import {
-  ErrorState,
-  errorKindFromFailure,
-  type ErrorKind,
-} from "../components/StatePanels";
+import { ErrorState } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
 import {
   issueLine,
@@ -50,22 +40,12 @@ import {
   type AttentionItem,
 } from "../lib/attentionIssueLine";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { stage1Api } from "../lib/stage1-api";
 import {
   isEditableTarget,
   isDeliberatePointerDown,
   useRowShortcutGuard,
 } from "../hooks/useRowShortcutGuard";
-import { useRealtimeHints } from "../realtime/useRealtimeHints";
-
-type ReengagementCandidate = ReengagementCandidatesResponse["items"][number];
-type ActivityEvent = {
-  id: string;
-  traineeDisplayName: string | null;
-  summary: string;
-  occurredAt: string;
-  traineeLocalTime: string | null;
-};
+import { useHomeSections } from "./home/useHomeSections";
 
 const ATTENTION_CAP = 8;
 const SECTION_CAP = 5;
@@ -151,32 +131,25 @@ export function HomePage() {
   const showAllParam = params.get("all") === "1";
   const groupParam = params.get("group");
 
-  const [groups, setGroups] = useState<AttentionGroup[]>([]);
-  const [coachAsks, setCoachAsks] = useState<CoachAsk[]>([]);
-  const [reengage, setReengage] = useState<ReengagementCandidate[]>([]);
-  const [renewals, setRenewals] = useState<SubscriptionAttentionItem[]>([]);
-  const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
-  const [gettingStarted, setGettingStarted] = useState<
-    Array<{
-      id: string;
-      kind: "intake" | "invite";
-      name: string;
-      subtitle: string;
-      href?: string;
-      inviteId?: string;
-    }>
-  >([]);
-  const [nameByRid, setNameByRid] = useState<Map<string, string>>(new Map());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<{
-    message: string;
-    requestId?: string | null;
-    kind?: ErrorKind;
-  } | null>(null);
-  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>(
-    {},
-  );
+  const {
+    groups,
+    coachAsks,
+    reengage,
+    renewals,
+    checkins,
+    activity,
+    gettingStarted,
+    nameByRid,
+    loading,
+    error,
+    sectionErrors,
+    refreshAll,
+    refreshSection,
+    mutateSection,
+    holdException,
+    releaseException,
+    clearHold,
+  } = useHomeSections({ timeZone });
   const [filter, setFilter] = useState<FilterKey>(
     groupParam === "attention"
       ? "attention"
@@ -220,225 +193,6 @@ export function HomePage() {
   } = useRowShortcutGuard();
   const undoTimer = useRef<number | null>(null);
 
-  // One fetch at a time. A quiet refresh requested while another load is in
-  // flight is coalesced into a single follow-up run (no double-fetch).
-  const inFlight = useRef<Promise<void> | null>(null);
-  const rerunQueued = useRef(false);
-
-  const runLoad = useCallback(async (opts?: { quiet?: boolean }) => {
-    const quiet = opts?.quiet === true;
-    if (!quiet) {
-      setLoading(true);
-      setError(null);
-      setSectionErrors({});
-    }
-    const nextErrors: Record<string, string> = {};
-    try {
-      const results = await Promise.allSettled([
-        stage1Api.getAttentionGroups(),
-        stage1Api.listCoachAsks({ status: "open" }) as Promise<{
-          items: CoachAsk[];
-        }>,
-        stage1Api.getReengagementCandidates(),
-        apiClient.listSubscriptionAttention(),
-        apiClient.listTrainerCheckinInbox(),
-        apiClient.listClients({ limit: 100 }),
-        apiClient.listInvitations(),
-        stage1Api.getActivityFeed({ limit: 8 }) as Promise<{
-          events: ActivityEvent[];
-        }>,
-      ]);
-
-      const attention =
-        results[0].status === "fulfilled" ? results[0].value : null;
-      if (!attention) {
-        nextErrors.attention = "Couldn't load needs attention";
-        if (!quiet) setGroups([]);
-      } else {
-        setGroups(attention.groups);
-      }
-
-      if (results[1].status === "fulfilled") {
-        setCoachAsks(results[1].value.items);
-      } else {
-        nextErrors.asks = "Couldn't load asked-coach items";
-        if (!quiet) setCoachAsks([]);
-      }
-
-      if (results[2].status === "fulfilled") {
-        setReengage(results[2].value.items);
-      } else if (!quiet) {
-        setReengage([]);
-      }
-
-      if (results[3].status === "fulfilled") {
-        setRenewals(results[3].value.items);
-      } else {
-        nextErrors.renewals = "Couldn't load renewals";
-        if (!quiet) setRenewals([]);
-      }
-
-      if (results[4].status === "fulfilled") {
-        setCheckins(
-          results[4].value.items.filter(
-            (i) => i.checkin.status === "submitted",
-          ),
-        );
-      } else {
-        nextErrors.checkins = "Couldn't load check-ins";
-        if (!quiet) setCheckins([]);
-      }
-
-      const names = new Map<string, string>();
-      const started: typeof gettingStarted = [];
-      if (results[5].status === "fulfilled") {
-        for (const row of results[5].value.items) {
-          if (row.relationshipId && row.traineeDisplayName) {
-            names.set(row.relationshipId, row.traineeDisplayName);
-          }
-          if (row.status === "onboarding_submitted") {
-            started.push({
-              id: `intake-${row.relationshipId}`,
-              kind: "intake",
-              name: row.traineeDisplayName,
-              subtitle: "Intake submitted",
-              href: `/clients/${row.relationshipId}/onboarding`,
-            });
-          }
-        }
-      }
-      if (results[6].status === "fulfilled") {
-        for (const inv of results[6].value.items) {
-          if (inv.status !== "pending") continue;
-          started.push({
-            id: `invite-${inv.id}`,
-            kind: "invite",
-            name: inv.recipientDisplayName || inv.recipientEmail || "Invite",
-            subtitle: inv.createdAt
-              ? `Invite sent ${formatCivilDate(formatLocalDate(new Date(inv.createdAt), timeZone))} · not accepted yet`
-              : "Invite not accepted yet",
-            inviteId: inv.id,
-          });
-        }
-      }
-      setGettingStarted(started.slice(0, SECTION_CAP));
-
-      if (attention) {
-        for (const g of attention.groups) {
-          names.set(g.relationshipId, g.traineeDisplayName);
-        }
-      }
-      if (!quiet) {
-        setNameByRid(names);
-      } else if (names.size > 0) {
-        setNameByRid((prev) => {
-          const merged = new Map(prev);
-          for (const [k, v] of names) merged.set(k, v);
-          return merged;
-        });
-      }
-
-      if (results[7].status === "fulfilled") {
-        setActivity(results[7].value.events.slice(0, 6));
-      } else if (!quiet) {
-        setActivity([]);
-      }
-
-      if (!quiet) {
-        setSectionErrors(nextErrors);
-        if (!attention) {
-          const attentionErr =
-            results[0].status === "rejected" ? results[0].reason : null;
-          const kind =
-            attentionErr instanceof ApiClientError
-              ? errorKindFromFailure({
-                  status: attentionErr.status,
-                  code: attentionErr.code,
-                  message: attentionErr.message,
-                })
-              : "server";
-          setError({
-            message:
-              attentionErr instanceof ApiClientError
-                ? attentionErr.message
-                : "Could not load your home feed.",
-            requestId:
-              attentionErr instanceof ApiClientError
-                ? attentionErr.requestId
-                : null,
-            kind,
-          });
-        }
-      }
-    } catch (err) {
-      if (!quiet) {
-        const kind =
-          err instanceof ApiClientError
-            ? errorKindFromFailure({
-                status: err.status,
-                code: err.code,
-                message: err.message,
-              })
-            : "server";
-        setError({
-          message:
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load your home feed.",
-          requestId: err instanceof ApiClientError ? err.requestId : null,
-          kind,
-        });
-      }
-    } finally {
-      if (!quiet) setLoading(false);
-    }
-  }, [timeZone]);
-
-  /**
-   * Full load (skeleton) only for the first paint and explicit Retry. Every
-   * action-driven refresh passes `quiet: true` so rows stay mounted, header
-   * counts stay visible and scroll position is kept.
-   */
-  const load = useCallback(
-    async (opts?: { quiet?: boolean }): Promise<void> => {
-      if (inFlight.current) {
-        if (opts?.quiet) {
-          rerunQueued.current = true;
-          return inFlight.current;
-        }
-      }
-      const run = (async () => {
-        try {
-          await runLoad(opts);
-        } finally {
-          inFlight.current = null;
-          if (rerunQueued.current) {
-            rerunQueued.current = false;
-            void load({ quiet: true });
-          }
-        }
-      })();
-      inFlight.current = run;
-      return run;
-    },
-    [runLoad],
-  );
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Quiet poll so new coach asks / attention appear within ~5s.
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      void load({ quiet: true });
-    }, 4000);
-    return () => window.clearInterval(id);
-  }, [load]);
-
-  useRealtimeHints(apiClient, [...nameByRid.keys()], () => {
-    void load({ quiet: true });
-  });
 
   const openGroups = useMemo(() => {
     return groups
@@ -534,8 +288,18 @@ export function HomePage() {
 
   const markAskChanged = useCallback(() => {
     answeredAskIdRef.current = drawerAskId;
-    void load({ quiet: true });
-  }, [drawerAskId, load]);
+    const id = drawerAskId;
+    if (!id) {
+      void refreshSection("asks");
+      return;
+    }
+    // The drawer already saved the answer. Hide the row, then refetch asks only.
+    void mutateSection(
+      "asks",
+      (prev) => prev.filter((ask) => ask.id !== id),
+      () => Promise.resolve(),
+    );
+  }, [drawerAskId, mutateSection, refreshSection]);
 
   const closeAskDrawerWithFocus = useCallback(() => {
     const askId = drawerAskId;
@@ -573,41 +337,35 @@ export function HomePage() {
     undoTimer.current = window.setTimeout(() => setToast(null), 5000);
   }
 
-  async function acknowledgeFromOverflow(
-    exceptionId: string,
-    relationshipId: string,
-  ) {
+  function acknowledgeFromOverflow(exceptionId: string) {
     const key = createIdempotencyKey();
-    // Optimistic: delay POST 5s for Undo (TW-05).
+    // Optimistic: delay POST 5s for Undo (TW-05). A poll inside that window
+    // must not put the row back; the hold survives section refreshes.
     let cancelled = false;
+    let commitTimer = 0;
+    holdException(exceptionId);
     showToast("Marked reviewed", () => {
       cancelled = true;
+      window.clearTimeout(commitTimer);
       setToast(null);
-      void load({ quiet: true });
+      releaseException(exceptionId);
+      void refreshSection("attention");
     });
-    // Move visually by refetch after delay unless undone
-    window.setTimeout(() => {
+    commitTimer = window.setTimeout(() => {
       if (cancelled) return;
       void apiClient
         .acknowledgeException(exceptionId, { note: null }, key)
-        .then(() => load({ quiet: true }))
-        .catch(() => load({ quiet: true }));
+        .then(async () => {
+          // Refresh while the hold is still in place so a poll that started
+          // before the write cannot put the row back, then drop the hold.
+          await refreshSection("attention");
+          clearHold(exceptionId);
+        })
+        .catch(() => {
+          releaseException(exceptionId);
+          return refreshSection("attention");
+        });
     }, 5000);
-    // Immediate optimistic UI: remove from open by soft-filtering locally
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.relationshipId !== relationshipId
-          ? g
-          : {
-              ...g,
-              items: g.items.map((i) =>
-                i.id === exceptionId
-                  ? { ...i, status: "acknowledged" as const }
-                  : i,
-              ),
-            },
-      ),
-    );
   }
 
   async function nudgeClient(relationshipId: string, exceptionId: string) {
@@ -664,7 +422,7 @@ export function HomePage() {
       if (!online) return;
       const row = visibleOpen[focusIdx];
       if (row?.primary) {
-        void acknowledgeFromOverflow(row.primary.id, row.group.relationshipId);
+        void acknowledgeFromOverflow(row.primary.id);
       }
     } else if (key === "o") {
       ev.preventDefault();
@@ -907,7 +665,7 @@ export function HomePage() {
           kind={error.kind}
           message={error.message}
           requestId={error.requestId}
-          onRetry={() => void load()}
+          onRetry={() => void refreshAll()}
         />
       ) : null}
 
@@ -987,7 +745,7 @@ export function HomePage() {
               {sectionErrors.attention ? (
                 <p className="form-error" role="alert">
                   {sectionErrors.attention} ·{" "}
-                  <button type="button" className="text-link" onClick={() => void load()}>
+                  <button type="button" className="text-link" onClick={() => void refreshSection("attention")}>
                     Retry
                   </button>
                 </p>
@@ -1065,10 +823,7 @@ export function HomePage() {
                               label: "Mark reviewed",
                               disabled: !online,
                               onSelect: () =>
-                                void acknowledgeFromOverflow(
-                                  primary.id,
-                                  group.relationshipId,
-                                ),
+                                void acknowledgeFromOverflow(primary.id),
                             },
                             {
                               id: "nudge",
@@ -1462,7 +1217,7 @@ export function HomePage() {
           exceptionId={drawerExceptionId}
           openSeq={drawerOpenSeq}
           onClose={closeDrawerWithFocus}
-          onChanged={() => void load({ quiet: true })}
+          onChanged={() => void refreshSection("attention")}
         />
       ) : null}
 
