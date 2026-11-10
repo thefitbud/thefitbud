@@ -15,7 +15,13 @@ import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
 import { demoUuid } from "../seed/demo/ids.js";
-import { loadOwnedRelationship, saveClientBasics } from "../domain/client-settings.js";
+import {
+  createPaymentRecord,
+  loadOwnedRelationship,
+  saveClientBasics,
+  savePaymentPatch,
+  saveSubscriptionVersion,
+} from "../domain/client-settings.js";
 
 /**
  * Z6-8 client settings: every endpoint, validation (D-W6-22), versioning, ended
@@ -1358,6 +1364,390 @@ describe("Z6-8 client settings", () => {
     ]) {
       expect(logged).not.toContain(secret);
     }
+  });
+
+  describe("write races (Z8-17)", () => {
+    type BatchQueries = Parameters<Db["batch"]>[0];
+
+    /**
+     * Runs `interloper` inside the next db.batch call, before that batch
+     * executes: a concurrent request that read the same state and commits first.
+     * `times` repeats it for that many batch calls; a batch the interloper issues
+     * itself, and every call after `times`, runs untouched.
+     */
+    function landFirst(interloper: (call: number) => Promise<void>, times = 1) {
+      const realBatch = db.batch.bind(db);
+      let calls = 0;
+      let busy = false;
+      vi.spyOn(db, "batch").mockImplementation((async (queries: BatchQueries) => {
+        if (busy || calls >= times) return realBatch(queries);
+        calls += 1;
+        busy = true;
+        try {
+          await interloper(calls);
+        } finally {
+          busy = false;
+        }
+        return realBatch(queries);
+      }) as unknown as Db["batch"]);
+      return { calls: () => calls };
+    }
+
+    async function subscriptionRows(relationshipId: string) {
+      return db
+        .select()
+        .from(schema.subscriptionVersions)
+        .where(eq(schema.subscriptionVersions.coachingRelationshipId, relationshipId));
+    }
+
+    async function receiptsFor(operation: string) {
+      return db
+        .select()
+        .from(schema.idempotencyRecords)
+        .where(eq(schema.idempotencyRecords.operation, operation));
+    }
+
+    async function paymentRow(id: string) {
+      const [row] = await db
+        .select()
+        .from(schema.paymentRecords)
+        .where(eq(schema.paymentRecords.id, id));
+      return row!;
+    }
+
+    async function paidPayment(suffix: string) {
+      const ctx = await withSubscription(suffix);
+      const created = await send(
+        "POST",
+        `${base(ctx.relationshipId)}/payments`,
+        ctx.trainer,
+        {
+          amountPaise: 1_200_000,
+          dueOn: today(),
+          status: "paid",
+          paidOn: today(),
+          method: "cash",
+          note: "Month 1",
+        },
+        `race-pay-${suffix}`,
+      );
+      expect(created.status).toBe(201);
+      const payment = await dataOf<PaymentOut>(created);
+      return { ...ctx, payment, path: `${base(ctx.relationshipId)}/payments/${payment.id}` };
+    }
+
+    describe("PUT subscription", () => {
+      it("a save that loses the version race answers 409 SUBSCRIPTION_VERSION_CONFLICT, never a 500", async () => {
+        const ctx = await withSubscription("subrace");
+        const path = `${base(ctx.relationshipId)}/subscription`;
+        // Both requests read v1; the other one commits v2 first.
+        let winner: Response | undefined;
+        landFirst(async () => {
+          winner = await send(
+            "PUT",
+            path,
+            ctx.trainer,
+            subscriptionBody({ expectedVersion: 1, planName: "Winner" }),
+            "subrace-winner",
+          );
+        });
+        const loser = await send(
+          "PUT",
+          path,
+          ctx.trainer,
+          subscriptionBody({ expectedVersion: 1, planName: "Loser" }),
+          "subrace-loser",
+        );
+        expect(winner!.status).toBe(200);
+        expect(loser.status).toBe(409);
+        expect(await errorOf(loser)).toMatchObject({
+          code: "SUBSCRIPTION_VERSION_CONFLICT",
+          message: "Subscription was changed after this version was loaded.",
+        });
+        const rows = await subscriptionRows(ctx.relationshipId);
+        expect(rows.map((row) => [row.versionNumber, row.planName]).sort()).toEqual([
+          [1, "Fat loss 12-week"],
+          [2, "Winner"],
+        ]);
+        // The refusal stores no receipt (v1 and the winner only).
+        expect(await receiptsFor("client_settings.subscription.put")).toHaveLength(2);
+      });
+
+      it("three overlapping saves of the same version: one 200, two 409, one new version", async () => {
+        const ctx = await withSubscription("subpair");
+        const path = `${base(ctx.relationshipId)}/subscription`;
+        const responses = await Promise.all(
+          ["A", "B", "C"].map((name) =>
+            send(
+              "PUT",
+              path,
+              ctx.trainer,
+              subscriptionBody({ expectedVersion: 1, planName: `Plan ${name}` }),
+              `subpair-${name}`,
+            ),
+          ),
+        );
+        expect(responses.map((response) => response.status).sort()).toEqual([200, 409, 409]);
+        for (const response of responses.filter((r) => r.status === 409)) {
+          expect((await errorOf(response)).code).toBe("SUBSCRIPTION_VERSION_CONFLICT");
+        }
+        expect((await subscriptionRows(ctx.relationshipId)).map((r) => r.versionNumber).sort()).toEqual([1, 2]);
+      });
+
+      it("a same-key retry that overlaps the first request replays its answer with one version", async () => {
+        const ctx = await withSubscription("subsame");
+        const path = `${base(ctx.relationshipId)}/subscription`;
+        const body = subscriptionBody({ expectedVersion: 1, planName: "Same" });
+        let first: Response | undefined;
+        landFirst(async () => {
+          first = await send("PUT", path, ctx.trainer, body, "subsame-key");
+        });
+        const retry = await send("PUT", path, ctx.trainer, body, "subsame-key");
+        expect(first!.status).toBe(200);
+        expect(retry.status).toBe(200);
+        expect(await retry.json()).toEqual(await first!.json());
+        expect((await subscriptionRows(ctx.relationshipId)).map((r) => r.versionNumber).sort()).toEqual([1, 2]);
+      });
+
+      it("a relationship that ends before the batched write answers 409 RELATIONSHIP_ENDED and writes nothing", async () => {
+        const ctx = await withSubscription("subend");
+        const path = `${base(ctx.relationshipId)}/subscription`;
+        landFirst(async () => {
+          await db
+            .update(schema.coachingRelationships)
+            .set({ status: "ended", endedAt: new Date().toISOString() })
+            .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+        });
+        const response = await send(
+          "PUT",
+          path,
+          ctx.trainer,
+          subscriptionBody({ expectedVersion: 1, planName: "Too late" }),
+          "subend-late",
+        );
+        expect(response.status).toBe(409);
+        expect(await errorOf(response)).toMatchObject({
+          code: "RELATIONSHIP_ENDED",
+          message: "Coaching relationship has ended.",
+        });
+        expect((await subscriptionRows(ctx.relationshipId)).map((r) => r.versionNumber)).toEqual([1]);
+        expect(await receiptsFor("client_settings.subscription.put")).toHaveLength(1);
+      });
+    });
+
+    describe("POST payment", () => {
+      it("a relationship that ends before the batched insert answers 409 RELATIONSHIP_ENDED and records nothing", async () => {
+        const ctx = await withSubscription("pcreateend");
+        landFirst(async () => {
+          const ended = await send(
+            "POST",
+            `/relationships/${ctx.relationshipId}/end`,
+            ctx.trainer,
+            { reason: "paused" },
+            "pcreateend-end",
+          );
+          expect(ended.status).toBe(200);
+        });
+        const response = await send(
+          "POST",
+          `${base(ctx.relationshipId)}/payments`,
+          ctx.trainer,
+          { amountPaise: 1_200_000, dueOn: today(), status: "paid", paidOn: today(), method: "upi" },
+          "pcreateend-pay",
+        );
+        expect(response.status).toBe(409);
+        expect(await errorOf(response)).toMatchObject({
+          code: "RELATIONSHIP_ENDED",
+          message: "Coaching relationship has ended.",
+        });
+        expect(
+          await db
+            .select()
+            .from(schema.paymentRecords)
+            .where(eq(schema.paymentRecords.coachingRelationshipId, ctx.relationshipId)),
+        ).toHaveLength(0);
+        expect(await receiptsFor("client_settings.payment.create")).toHaveLength(0);
+      });
+    });
+
+    describe("PATCH payment", () => {
+      it("a note PATCH built from a stale read does not undo a concurrent mark-unpaid (merge rule)", async () => {
+        const { trainer, path, payment } = await paidPayment("pmerge");
+        let other: Response | undefined;
+        landFirst(async () => {
+          other = await send("PATCH", path, trainer, { status: "unpaid" }, "pmerge-unpaid");
+        });
+        const noted = await send("PATCH", path, trainer, { note: "Asked on call" }, "pmerge-note");
+        expect(other!.status).toBe(200);
+        expect(noted.status).toBe(200);
+        // The note PATCH re-applied only its own field to the newer row.
+        const expected = { status: "unpaid", paidOn: null, method: null, note: "Asked on call" };
+        expect(await dataOf(noted)).toMatchObject(expected);
+        expect(await paymentRow(payment.id)).toMatchObject({ ...expected, amountPaise: 1_200_000 });
+      });
+
+      it("a mark-paid PATCH built from a stale read keeps a concurrent note (merge rule)", async () => {
+        const ctx = await withSubscription("ppaid");
+        const created = await send(
+          "POST",
+          `${base(ctx.relationshipId)}/payments`,
+          ctx.trainer,
+          { amountPaise: 500_000, dueOn: today(), status: "unpaid" },
+          "ppaid-create",
+        );
+        const payment = await dataOf<PaymentOut>(created);
+        const path = `${base(ctx.relationshipId)}/payments/${payment.id}`;
+        landFirst(async () => {
+          const noted = await send("PATCH", path, ctx.trainer, { note: "Will pay Friday" }, "ppaid-note");
+          expect(noted.status).toBe(200);
+        });
+        const paid = await send(
+          "PATCH",
+          path,
+          ctx.trainer,
+          { status: "paid", paidOn: today(), method: "upi" },
+          "ppaid-paid",
+        );
+        expect(paid.status).toBe(200);
+        expect(await paymentRow(payment.id)).toMatchObject({
+          status: "paid",
+          paidOn: today(),
+          method: "upi",
+          note: "Will pay Friday",
+        });
+      });
+
+      it("a method PATCH and a note PATCH that overlap both persist", async () => {
+        const { trainer, path, payment } = await paidPayment("ppair");
+        const [method, note] = await Promise.all([
+          send("PATCH", path, trainer, { method: "upi" }, "ppair-method"),
+          send("PATCH", path, trainer, { note: "Paid at the gym" }, "ppair-note"),
+        ]);
+        expect(method.status).toBe(200);
+        expect(note.status).toBe(200);
+        expect(await paymentRow(payment.id)).toMatchObject({
+          status: "paid",
+          paidOn: today(),
+          method: "upi",
+          note: "Paid at the gym",
+        });
+      });
+
+      it("a PATCH that no longer fits the newer row is refused with its static 400, never written", async () => {
+        const { trainer, path, payment } = await paidPayment("pinvalid");
+        landFirst(async () => {
+          const unpaid = await send("PATCH", path, trainer, { status: "unpaid" }, "pinvalid-unpaid");
+          expect(unpaid.status).toBe(200);
+        });
+        // Sent while the record was paid; it lands after the record went unpaid.
+        const response = await send("PATCH", path, trainer, { method: "bank" }, "pinvalid-method");
+        expect(response.status).toBe(400);
+        expect(await errorOf(response)).toMatchObject({
+          code: "PAYMENT_UNPAID_HAS_DETAILS",
+          message: "An unpaid record has no paid date or method.",
+        });
+        expect(await paymentRow(payment.id)).toMatchObject({ status: "unpaid", paidOn: null, method: null });
+      });
+
+      it("a record that keeps changing under the write answers 409 PAYMENT_CONFLICT and writes nothing", async () => {
+        const { trainer, path, payment } = await paidPayment("pbusy");
+        const notes = ["one", "two", "three", "four", "five"];
+        const race = landFirst(async (call) => {
+          const changed = await send("PATCH", path, trainer, { note: notes[call - 1] }, `pbusy-${call}`);
+          expect(changed.status).toBe(200);
+        }, notes.length);
+        const response = await send("PATCH", path, trainer, { method: "bank" }, "pbusy-method");
+        expect(response.status).toBe(409);
+        expect(await errorOf(response)).toMatchObject({
+          code: "PAYMENT_CONFLICT",
+          message: "Payment record was changed by another request.",
+        });
+        const row = await paymentRow(payment.id);
+        expect(row.method).toBe("cash");
+        expect(row.note).toBe(notes[race.calls() - 1]);
+        const receipts = await receiptsFor("client_settings.payment.update");
+        expect(receipts).toHaveLength(race.calls());
+        expect(receipts.map((r) => JSON.parse(r.responseBody).data.method)).not.toContain("bank");
+      });
+
+      it("a same-key retry that overlaps the first PATCH replays its answer", async () => {
+        const { trainer, path, payment } = await paidPayment("psame");
+        let first: Response | undefined;
+        landFirst(async () => {
+          first = await send("PATCH", path, trainer, { note: "Once" }, "psame-key");
+        });
+        const retry = await send("PATCH", path, trainer, { note: "Once" }, "psame-key");
+        expect(first!.status).toBe(200);
+        expect(retry.status).toBe(200);
+        expect(await retry.json()).toEqual(await first!.json());
+        expect(await receiptsFor("client_settings.payment.update")).toHaveLength(1);
+        expect(await paymentRow(payment.id)).toMatchObject({ note: "Once" });
+      });
+
+      it("a relationship that ends before the batched write answers 409 RELATIONSHIP_ENDED and changes nothing", async () => {
+        const { trainer, path, payment, relationshipId } = await paidPayment("pend");
+        const before = await paymentRow(payment.id);
+        landFirst(async () => {
+          await db
+            .update(schema.coachingRelationships)
+            .set({ status: "ended", endedAt: new Date().toISOString() })
+            .where(eq(schema.coachingRelationships.id, relationshipId));
+        });
+        const response = await send("PATCH", path, trainer, { status: "unpaid" }, "pend-late");
+        expect(response.status).toBe(409);
+        expect((await errorOf(response)).code).toBe("RELATIONSHIP_ENDED");
+        expect(await paymentRow(payment.id)).toEqual(before);
+        expect(await receiptsFor("client_settings.payment.update")).toHaveLength(0);
+      });
+    });
+
+    it("the write-time guard refuses a relationship row that is not this trainer's: no version, no payment change, no receipt", async () => {
+      const { payment, relationshipId } = await paidPayment("pstale");
+      const [owner] = await db
+        .select({ id: schema.coachingRelationships.trainerUserId })
+        .from(schema.coachingRelationships)
+        .where(eq(schema.coachingRelationships.id, relationshipId));
+      const row = await loadOwnedRelationship(db, relationshipId, owner!.id);
+      const intruder = "00000000-0000-4000-8000-000000000000";
+      const stale = { ...row!, trainerUserId: intruder };
+      const context = (key: string) => ({
+        actorUserId: intruder,
+        idempotencyKey: key,
+        fingerprint: `fp-${key}`,
+        now: new Date().toISOString(),
+      });
+      const before = await paymentRow(payment.id);
+      const receiptsBefore = (await db.select().from(schema.idempotencyRecords)).length;
+      const saved = await saveSubscriptionVersion(
+        db,
+        stale,
+        1,
+        subscriptionBody({ expectedVersion: 1, planName: "Taken over" }) as unknown as Parameters<
+          typeof saveSubscriptionVersion
+        >[3],
+        context("pstale-sub"),
+      );
+      expect(saved).toEqual({ kind: "not_found" });
+      const patched = await savePaymentPatch(db, stale, payment.id, { note: "Taken over" }, context("pstale-pay"));
+      expect(patched).toEqual({ kind: "not_found" });
+      const created = await createPaymentRecord(
+        db,
+        stale,
+        payment.subscriptionVersionId,
+        { amountPaise: 100, dueOn: today(), status: "unpaid" },
+        context("pstale-create"),
+      );
+      expect(created).toEqual({ kind: "not_found" });
+      expect((await subscriptionRows(relationshipId)).map((r) => r.versionNumber)).toEqual([1]);
+      expect(await paymentRow(payment.id)).toEqual(before);
+      expect(
+        await db
+          .select()
+          .from(schema.paymentRecords)
+          .where(eq(schema.paymentRecords.coachingRelationshipId, relationshipId)),
+      ).toHaveLength(1);
+      expect((await db.select().from(schema.idempotencyRecords)).length).toBe(receiptsBefore);
+    });
   });
 });
 
