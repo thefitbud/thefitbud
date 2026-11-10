@@ -326,27 +326,31 @@ export function WorkspaceHeader({
             </div>
           </div>
           <div className="wsh-acts">
-            {whatsappHrefValue ? (
-              <a
-                className="button-secondary button-whatsapp"
-                href={whatsappHrefValue}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <WhatsAppGlyph />
-                Message on WhatsApp
-              </a>
-            ) : (
-              <button
-                type="button"
-                className="button-secondary button-whatsapp"
-                disabled
-                title="No WhatsApp number on file for this client"
-              >
-                <WhatsAppGlyph />
-                Message on WhatsApp
-              </button>
-            )}
+            {!ended ? (
+              <>
+              {whatsappHrefValue ? (
+                <a
+                  className="button-secondary button-whatsapp"
+                  href={whatsappHrefValue}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <WhatsAppGlyph />
+                  Message on WhatsApp
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="button-secondary button-whatsapp"
+                  disabled
+                  title="No WhatsApp number on file for this client"
+                >
+                  <WhatsAppGlyph />
+                  Message on WhatsApp
+                </button>
+              )}
+              </>
+            ) : null}
             {ended && !pendingReactivation ? (
               <Button
                 variant="primary"
