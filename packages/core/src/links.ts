@@ -7,6 +7,7 @@ export type LinkKind =
   | "plan"
   | "client"
   | "today"
+  | "progress"
   | "note"
   | "reactivate";
 
@@ -19,6 +20,7 @@ const ROUTES: Record<LinkKind, string> = {
   plan: "/plans/:id",
   client: "/clients/:id",
   today: "/me/day/today",
+  progress: "/me/progress",
   note: "/me/coach-notes/:id",
   reactivate: "/relationships/:id/reactivate/confirm",
 };
